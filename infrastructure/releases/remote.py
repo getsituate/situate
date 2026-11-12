@@ -107,14 +107,15 @@ def read_pending(path):
         return json.load(stream)
 
 
-def history():
+def history(*, include_qualifications=False):
     releases = ROOT / 'releases'
     if entry(releases) is None:
         if entry(ROOT / 'current-release') is not None or entry(ROOT / 'release-pending.json') is not None:
             raise ValueError('Missing stored release directory')
-        return []
+        return ([], []) if include_qualifications else []
     require_directory(releases)
     result = []
+    qualifications = []
     for directory in sorted(releases.iterdir(), key=lambda path: path.name):
         with os.fdopen(open_regular(directory / 'manifest.json', os.O_RDONLY), 'rb') as stream:
             data = stream.read(1024 * 1024 + 1)
@@ -128,9 +129,27 @@ def history():
                 or not isinstance(manifest.get('revision'), str)
                 or not re.fullmatch(r'[a-f0-9]{40}', manifest['revision'])):
             raise ValueError('Invalid stored release manifest')
-        result.append({'version': directory.name, 'revision': manifest['revision'],
-                       'manifestSha256': hashlib.sha256(data).hexdigest()})
-    return result
+        release = {'version': directory.name, 'revision': manifest['revision'],
+                   'manifestSha256': hashlib.sha256(data).hexdigest()}
+        result.append(release)
+        if not include_qualifications:
+            continue
+        qualification = manifest.get('migrationQualification')
+        if (isinstance(qualification, dict) and type(qualification.get('schemaVersion')) is int
+                and qualification['schemaVersion'] == 1
+                and qualification.get('source') == 'macos-direct-publication'
+                and type(qualification.get('migrations')) is int and qualification['migrations'] >= 0):
+            predecessors = qualification.get('releases')
+            if isinstance(predecessors, list):
+                predecessors = [{key: prior.get(key) if isinstance(prior.get(key), str) else None
+                                 for key in ['version', 'revision', 'manifestSha256']}
+                                if isinstance(prior, dict) else None for prior in predecessors]
+            else:
+                predecessors = None
+            qualifications.append({'release': release, 'qualification': {
+                'schemaVersion': 1, 'source': 'macos-direct-publication',
+                'releases': predecessors, 'migrations': qualification.get('migrations')}})
+    return (result, qualifications) if include_qualifications else result
 
 
 def validate_baseline(baseline):
@@ -201,7 +220,8 @@ def main():
         with os.fdopen(open_regular(ROOT / 'release.lock', os.O_WRONLY | os.O_CREAT), 'w') as lock:
             fcntl.flock(lock, fcntl.LOCK_SH)
             validate_storage('')
-            print(json.dumps({'schemaVersion': 1, 'releases': history()}))
+            releases, qualifications = history(include_qualifications=True)
+            print(json.dumps({'schemaVersion': 1, 'releases': releases, 'qualifications': qualifications}))
         return
     version, token, files = request['version'], request['token'], request['files']
     if not VERSION.fullmatch(version) or not re.fullmatch(r'[a-f0-9-]{36}', token):

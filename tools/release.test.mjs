@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { compileBuildReleaseHistory } from "../client/scripts/release-history.mjs";
-import { legacyEvidencePath } from "./legacy-migration-evidence.mjs";
 import {
   catalogDigest,
   compareVersions,
@@ -354,18 +353,8 @@ test("distribution validation requires trusted migration history without changin
   );
 });
 
-test("external release history qualifies the exact committed legacy tuple using the supplied environment", async (t) => {
+test("external release history requires the supplied full published source commit", async (t) => {
   const f = fixture(t);
-  const record = {
-    version: "0.1.5",
-    revision: "6c310a75ecd7d38ff9b4dcf94ba042580f2b68fa",
-    manifestSha256: "c".repeat(64),
-    migrations: { implementations: [], entries: [], modules: [] },
-  };
-  f.write(
-    legacyEvidencePath,
-    JSON.stringify({ schemaVersion: 1, releases: [record] }),
-  );
   const source = "client/crates/situate-migrations/src/";
   f.write(
     `${source}registry.rs`,
@@ -373,40 +362,29 @@ test("external release history qualifies the exact committed legacy tuple using 
   );
   f.write(`${source}migrations/mod.rs`, "pub(crate) mod m0001_metadata;\n");
   f.write(`${source}migrations/m0001_metadata.rs`, "pub struct Migration;\n");
-  f.commit("build: record synthetic publication evidence");
+  f.commit("feat: initialize migrations");
   await localDraft(t, f, f.version);
   await completeLocal(f.root, f.version);
-  const environment = {
-    SITUATE_MIGRATIONS_PUBLISHED_VERSION: record.version,
-    SITUATE_MIGRATIONS_PUBLISHED_REVISION: record.revision,
-    SITUATE_MIGRATIONS_PUBLISHED_MANIFEST_SHA256: record.manifestSha256,
-  };
   assert.equal(
     (
       await compileBuildReleaseHistory(f.root, f.version, {
         distribution: "external",
-        environment,
+        environment: { SITUATE_MIGRATIONS_PUBLISHED_REVISION: f.baseline },
       })
     ).installedVersion,
     f.version,
   );
-  await assert.rejects(
-    compileBuildReleaseHistory(f.root, f.version, {
-      distribution: "external",
-      environment: {
-        ...environment,
-        SITUATE_MIGRATIONS_PUBLISHED_MANIFEST_SHA256: "d".repeat(64),
-      },
-    }),
-    /Missing exact legacy publication evidence/u,
-  );
-  await assert.rejects(
-    compileBuildReleaseHistory(f.root, f.version, {
-      distribution: "external",
-      environment: {},
-    }),
-    /explicit full published Git commit/u,
-  );
+  for (const environment of [
+    {},
+    { SITUATE_MIGRATIONS_PUBLISHED_REVISION: "a".repeat(40) },
+  ])
+    await assert.rejects(
+      compileBuildReleaseHistory(f.root, f.version, {
+        distribution: "external",
+        environment,
+      }),
+      /explicit full published Git commit|Missing local migration history commit/u,
+    );
 });
 
 test("first release preparation uses an explicit Git baseline without previous release records", async (t) => {

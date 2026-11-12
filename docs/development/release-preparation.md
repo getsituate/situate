@@ -95,42 +95,22 @@ Cancellation before commit restores preparation files. Once Git commit starts, i
 
 If startup is interrupted, inspect `local-session.json` and its recorded pane before taking further action. Startup never automatically repeats an uncertain pane creation or prompt. Resume the existing agent directly; archive the session record only after confirming that a replacement will not duplicate work. An interrupted completion retains `completion.json` and may leave a Git index lock. Inspect the recorded owner, commit and files before removing locks or restoring files; never discard retained drafts or user edits to clear a failure.
 
-## Historical migration evidence
+## Published migration checkpoint
 
-Release-note baselines and migration baselines are separate. Migration qualification normally requires a published source revision available locally and ancestral to the candidate. For audited sources predating the migration package, the bridge instead reads `releases/legacy-migration-evidence.json` from the **candidate committed tree**, not the working copy. Adding or editing a local file alone cannot qualify a build.
+Release-note baselines and migration baselines are separate. Migration qualification requires local published source commits ancestral to the candidate, unchanged migration implementation bytes, and preserved registry/module prefixes.
 
-The evidence format is:
+Direct macOS qualification reads `releases/migration-checkpoint.json` from the publication tool checkout's committed `HEAD`, even when qualifying an older artifact revision. The file pins only a publication version, source revision and stored-manifest SHA-256. It is a provenance pin, not an attestation of migration contents.
 
-```json
-{
-  "schemaVersion": 1,
-  "releases": [
-    {
-      "version": "VERSION",
-      "revision": "FULL_SIGNED_SOURCE_SHA",
-      "manifestSha256": "PUBLICATION_MANIFEST_SHA256",
-      "migrations": {
-        "implementations": [],
-        "entries": [],
-        "modules": []
-      }
-    }
-  ]
-}
-```
+The verified-SSH history response includes a restricted qualification projection from the same immutable manifest bytes whose digest identifies the checkpoint. Every attested predecessor must remain present with its exact version, revision and manifest digest. Only those predecessors can omit local Git objects. The checkpoint's migration count must match its source inventory; its source and every uncovered publication still undergo normal Git history checks. Missing checkpoints, proof, predecessor records or hashes fail qualification. The full server history remains the publication race/reconciliation baseline.
 
-Replace placeholders only with reviewed publication evidence. Empty migration prefixes are eligible only for the exact six signed sources documented in the [released-fixture provenance](../../client/crates/situate-migrations/tests/fixtures/README.md), whose source audit found no migration package. Each entry must match the exact version, signed source revision and publication-manifest SHA-256. A DMG digest is not a publication-manifest digest. Do not add an empty evidence file, infer coverage from a version number, or extend this set without a source audit and code review.
-
-Direct distribution matches this evidence against the complete server publication inventory. For an external distribution using one of these historical sources, supply all three trusted baseline identifiers:
+For iOS and external distribution, supply the full published source commit from trusted publication evidence. The baseline must exist locally; the checkpoint does not replace this explicit comparison:
 
 ```sh
-SITUATE_MIGRATIONS_PUBLISHED_VERSION=VERSION \
-SITUATE_MIGRATIONS_PUBLISHED_REVISION=FULL_SIGNED_SOURCE_SHA \
-SITUATE_MIGRATIONS_PUBLISHED_MANIFEST_SHA256=PUBLICATION_MANIFEST_SHA256 \
+SITUATE_MIGRATIONS_PUBLISHED_REVISION=FULL_PUBLISHED_SOURCE_COMMIT \
 node tools/release.mjs validate --version CANDIDATE_VERSION
 ```
 
-Normal new-lineage baselines still use `SITUATE_MIGRATIONS_PUBLISHED_REVISION` with local Git ancestry and unchanged published migration bytes and declaration prefixes. Missing, unknown or mismatched historical evidence must fail qualification; it is not an empty publication history. This evidence does not replace released-data fixtures or native upgrade qualification.
+Neither workflow replaces released-data fixtures or native upgrade qualification.
 
 ## Build and publication
 

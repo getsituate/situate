@@ -5,12 +5,6 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import {
-  isLegacyMigrationSource,
-  legacyEvidencePath,
-  verifyLegacyMigrationEvidence,
-} from "./legacy-migration-evidence.mjs";
-
 const directory = "client/crates/situate-migrations/src/";
 const registryPath = `${directory}registry.rs`;
 const migrationsPath = `${directory}migrations/`;
@@ -115,29 +109,9 @@ export function migrationInventory(root, revision) {
   };
 }
 
-export function committedLegacyMigrationEvidence(root, revision) {
-  const tree = git(root, [
-    "ls-tree",
-    revision,
-    "--",
-    legacyEvidencePath,
-  ]).trim();
-  if (!tree) return undefined;
-  assert(
-    /^100644 blob /u.test(tree),
-    "Legacy evidence must be a regular committed file",
-  );
-  return git(root, ["show", `${revision}:${legacyEvidencePath}`]);
-}
-
 export function verifyMigrationHistory(
   root,
-  {
-    publishedRevision,
-    publishedVersion,
-    publishedManifestSha256,
-    revision = "HEAD",
-  } = {},
+  { publishedRevision, revision = "HEAD" } = {},
 ) {
   assert(
     typeof publishedRevision === "string" &&
@@ -145,22 +119,6 @@ export function verifyMigrationHistory(
     "Migration qualification requires an explicit full published Git commit: SITUATE_MIGRATIONS_PUBLISHED_REVISION",
   );
   const candidate = migrationRevision(root, revision);
-  if (isLegacyMigrationSource(publishedRevision)) {
-    const bytes = committedLegacyMigrationEvidence(root, candidate);
-    assert(bytes, "Missing committed legacy migration publication evidence");
-    const legacyEvidence = verifyLegacyMigrationEvidence(bytes, {
-      version: publishedVersion,
-      revision: publishedRevision,
-      manifestSha256: publishedManifestSha256,
-    });
-    const current = migrationInventory(root, candidate);
-    return {
-      publishedRevision,
-      releasedMigrations: 0,
-      migrations: current.entries.length,
-      legacyEvidence,
-    };
-  }
   for (const at of [publishedRevision, candidate]) {
     let type;
     try {
@@ -201,8 +159,6 @@ export function qualifyMigrationHistory(
   {
     environment = process.env,
     publishedRevision = environment.SITUATE_MIGRATIONS_PUBLISHED_REVISION,
-    publishedVersion = environment.SITUATE_MIGRATIONS_PUBLISHED_VERSION,
-    publishedManifestSha256 = environment.SITUATE_MIGRATIONS_PUBLISHED_MANIFEST_SHA256,
   } = {},
 ) {
   const current = migrationInventory(root, "HEAD");
@@ -210,8 +166,6 @@ export function qualifyMigrationHistory(
     return { status: "not-applicable", migrations: 0 };
   return verifyMigrationHistory(root, {
     publishedRevision,
-    publishedVersion,
-    publishedManifestSha256,
   });
 }
 
@@ -221,8 +175,6 @@ export function main(args = process.argv.slice(2)) {
       args,
       options: {
         "published-revision": { type: "string" },
-        "published-version": { type: "string" },
-        "published-manifest-sha256": { type: "string" },
         revision: { type: "string" },
       },
     });
@@ -232,12 +184,6 @@ export function main(args = process.argv.slice(2)) {
           publishedRevision:
             values["published-revision"] ??
             process.env.SITUATE_MIGRATIONS_PUBLISHED_REVISION,
-          publishedVersion:
-            values["published-version"] ??
-            process.env.SITUATE_MIGRATIONS_PUBLISHED_VERSION,
-          publishedManifestSha256:
-            values["published-manifest-sha256"] ??
-            process.env.SITUATE_MIGRATIONS_PUBLISHED_MANIFEST_SHA256,
           revision: values.revision,
         }),
       ),

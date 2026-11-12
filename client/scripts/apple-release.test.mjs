@@ -925,7 +925,7 @@ test("external builds retain the selected publication evidence and fail before c
   const options = fixture(t);
   const environment = {
     ...options.environment,
-    SITUATE_MIGRATIONS_PUBLISHED_VERSION: "0.1.5",
+    SITUATE_MIGRATIONS_PUBLISHED_REVISION: "b".repeat(40),
   };
   await assert.rejects(
     buildAppleRelease({
@@ -934,10 +934,10 @@ test("external builds retain the selected publication evidence and fail before c
       qualifyExternalMigrations(repoRoot, selected) {
         assert.equal(repoRoot, dirname(options.root));
         assert.equal(selected.environment, environment);
-        throw new Error("Missing exact legacy publication evidence");
+        throw new Error("Missing local migration history commit");
       },
     }),
-    /Missing exact legacy publication evidence/u,
+    /Missing local migration history commit/u,
   );
   assert.ok(
     !options.calls.some(

@@ -515,6 +515,7 @@ test("history accepts an empty request and reads sorted immutable manifests with
   assert.deepEqual(JSON.parse(invoke("history", {}).stdout), {
     schemaVersion: 1,
     releases: [],
+    qualifications: [],
   });
   const later = storeRelease(host, "1.10.0");
   const earlier = storeRelease(host, "1.2.0");
@@ -524,18 +525,80 @@ test("history accepts an empty request and reads sorted immutable manifests with
     "history",
     {},
     undefined,
-    "original=module.history\ndef locked():\n with open(module.ROOT/'release.lock','w') as stream:\n  try: module.fcntl.flock(stream,module.fcntl.LOCK_EX|module.fcntl.LOCK_NB)\n  except BlockingIOError: pass\n  else: raise ValueError('history was not locked')\n return original()\nmodule.history=locked",
+    "original=module.history\ndef locked(**kwargs):\n with open(module.ROOT/'release.lock','w') as stream:\n  try: module.fcntl.flock(stream,module.fcntl.LOCK_EX|module.fcntl.LOCK_NB)\n  except BlockingIOError: pass\n  else: raise ValueError('history was not locked')\n return original(**kwargs)\nmodule.history=locked",
   );
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), {
     schemaVersion: 1,
     releases: [later, earlier],
+    qualifications: [],
   });
   assert.equal(readFileSync(join(host, "release-pending.json"), "utf8"), "{}");
   assert.equal(
     readlinkSync(join(host, "current-release")),
     "releases/1.2.0/metadata",
   );
+});
+
+test("history projects only reviewed qualification fields from the same hashed manifest bytes", (t) => {
+  const { host, invoke } = remoteHarness(t);
+  const predecessor = storeRelease(host, "1.0.0");
+  const qualification = {
+    schemaVersion: 1,
+    source: "macos-direct-publication",
+    releases: [{ ...predecessor, privateField: "not for RPC" }],
+    migrations: 2,
+    legacyEvidenceSha256: "retained in stored bytes",
+    privateField: "not for RPC",
+  };
+  const checkpoint = storeRelease(host, "1.1.0", {
+    migrationQualification: qualification,
+    privateManifestField: "not for RPC",
+  });
+  storeRelease(host, "1.2.0", {
+    migrationQualification: { ...qualification, schemaVersion: 2 },
+  });
+  storeRelease(host, "1.3.0", {
+    migrationQualification: { ...qualification, source: "external" },
+  });
+  const before = readFileSync(join(host, "releases/1.1.0/manifest.json"));
+  const result = invoke("history", {});
+  assert.equal(result.status, 0, result.stderr);
+  const history = JSON.parse(result.stdout);
+  assert.deepEqual(history.qualifications, [
+    {
+      release: checkpoint,
+      qualification: {
+        schemaVersion: 1,
+        source: "macos-direct-publication",
+        releases: [predecessor],
+        migrations: 2,
+      },
+    },
+  ]);
+  assert.equal(
+    history.qualifications[0].release.manifestSha256,
+    sha256(before),
+  );
+  for (const release of history.releases)
+    assert.deepEqual(Object.keys(release).sort(), [
+      "manifestSha256",
+      "revision",
+      "version",
+    ]);
+  assert.ok(!result.stdout.includes("private"));
+  assert.ok(!result.stdout.includes("legacyEvidence"));
+  assert.deepEqual(
+    readFileSync(join(host, "releases/1.1.0/manifest.json")),
+    before,
+  );
+  const normal = invoke(
+    "history",
+    {},
+    undefined,
+    "original=module.history\ndef checked(**kwargs):\n result=original(**kwargs)\n assert original()==result[0]\n return result\nmodule.history=checked",
+  );
+  assert.equal(normal.status, 0, normal.stderr);
 });
 
 test("history fails closed for missing, malformed, oversized and invalid manifests", (t) => {

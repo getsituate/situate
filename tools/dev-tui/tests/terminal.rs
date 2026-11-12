@@ -52,10 +52,6 @@ fn preparation_reads_real_cli_status_without_model_access_or_writes() {
             "migration-history.mjs",
             include_str!("../../migration-history.mjs"),
         ),
-        (
-            "legacy-migration-evidence.mjs",
-            include_str!("../../legacy-migration-evidence.mjs"),
-        ),
         ("release-agent.mjs", include_str!("../../release-agent.mjs")),
         ("release-local.mjs", include_str!("../../release-local.mjs")),
         (

@@ -12,8 +12,6 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { qualifyPublishedMigrations } from "./published-migrations.mjs";
 import { readPublicationHistory } from "../infrastructure/releases/transport.mjs";
-import { legacyEvidencePath } from "./legacy-migration-evidence.mjs";
-import { createHash } from "node:crypto";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "published-migrations-"));
@@ -107,53 +105,172 @@ test("publication history protects every released prefix and records exact compa
   );
 });
 
-test("server qualification retains exact legacy and new-lineage publication identities", (t) => {
+function checkpointFixture(t) {
   const f = fixture(t);
-  const record = f.record("0.1.5", "6c310a75ecd7d38ff9b4dcf94ba042580f2b68fa");
-  const evidence = JSON.stringify({
-    schemaVersion: 1,
-    releases: [
-      {
-        ...record,
-        migrations: { implementations: [], entries: [], modules: [] },
-      },
-    ],
-  });
-  f.put(legacyEvidencePath, evidence);
+  const predecessor = f.record("0.1.0", "c".repeat(40));
   f.migrations(["m0001_metadata"]);
-  const first = f.commit();
-  f.migrations(["m0001_metadata", "m0002_history"]);
+  const artifact = f.commit();
+  const checkpoint = f.record("0.2.0", artifact);
+  const pin = { schemaVersion: 1, release: checkpoint };
+  f.put("releases/migration-checkpoint.json", JSON.stringify(pin));
   f.commit();
-  const releases = [record, f.record("0.2.0", first)];
-  assert.deepEqual(
-    qualifyPublishedMigrations(f.root, { history: f.history(releases) }),
-    {
+  const proof = {
+    release: { ...checkpoint },
+    qualification: {
       schemaVersion: 1,
       source: "macos-direct-publication",
-      legacyEvidenceSha256: createHash("sha256").update(evidence).digest("hex"),
-      releases,
-      migrations: 2,
+      releases: [{ ...predecessor }],
+      migrations: 1,
+      legacyEvidenceSha256: "retained unknown field",
     },
+  };
+  const history = {
+    ...f.history([predecessor, checkpoint]),
+    qualifications: [proof],
+  };
+  return { ...f, predecessor, artifact, checkpoint, history };
+}
+
+test("committed tool checkpoint qualifies an older artifact and retains the complete race baseline", (t) => {
+  const f = checkpointFixture(t);
+  assert.throws(() => f.git("cat-file", "-t", f.predecessor.revision));
+  assert.throws(() =>
+    f.git("show", `${f.artifact}:releases/migration-checkpoint.json`),
   );
-  for (const invalid of [
-    [],
-    [releases[1]],
-    [{ ...record, manifestSha256: "b".repeat(64) }],
-    [{ ...record, revision: "b".repeat(40) }],
-    [{ ...record, version: "0.1.4" }],
-    [...releases, f.record("0.1.4", "b".repeat(40))],
-  ])
-    assert.throws(() =>
-      qualifyPublishedMigrations(f.root, { history: f.history(invalid) }),
-    );
+  f.put("releases/migration-checkpoint.json", "uncommitted tampering");
+  const result = qualifyPublishedMigrations(f.root, {
+    revision: f.artifact,
+    history: f.history,
+  });
+  assert.deepEqual(result, {
+    schemaVersion: 1,
+    source: "macos-direct-publication",
+    checkpoint: f.checkpoint,
+    releases: f.history.releases,
+    migrations: 1,
+  });
+});
+
+test("checkpoint proof rejects missing, altered, duplicate, forward and unknown publication evidence", async (t) => {
+  const changes = {
+    empty: (h) => {
+      h.releases = [];
+    },
+    missingCheckpoint: (h) => {
+      h.releases.pop();
+    },
+    missingPredecessor: (h) => {
+      h.releases.shift();
+    },
+    alteredHash: (h) => {
+      h.releases[0].manifestSha256 = "d".repeat(64);
+    },
+    alteredCheckpoint: (h) => {
+      h.releases[1].manifestSha256 = "d".repeat(64);
+    },
+    missingHash: (h) => {
+      delete h.qualifications[0].qualification.releases[0].manifestSha256;
+    },
+    missingProof: (h) => {
+      delete h.qualifications;
+    },
+    duplicateProof: (h) => {
+      h.qualifications.push(h.qualifications[0]);
+    },
+    unboundProof: (h) => {
+      h.qualifications[0].release.manifestSha256 = "d".repeat(64);
+    },
+    wrongSchema: (h) => {
+      h.qualifications[0].qualification.schemaVersion = 2;
+    },
+    wrongSource: (h) => {
+      h.qualifications[0].qualification.source = "external";
+    },
+    wrongCount: (h) => {
+      h.qualifications[0].qualification.migrations = 0;
+    },
+    duplicateCoverage: (h) => {
+      h.qualifications[0].qualification.releases.push(h.releases[0]);
+    },
+    cycle: (h) => {
+      h.qualifications[0].qualification.releases = [h.releases[1]];
+    },
+    forward: (h) => {
+      h.qualifications[0].qualification.releases = [
+        {
+          version: "0.3.0",
+          revision: "d".repeat(40),
+          manifestSha256: "d".repeat(64),
+        },
+      ];
+    },
+    unknown: (h) => {
+      h.releases.push({
+        version: "0.0.9",
+        revision: "d".repeat(40),
+        manifestSha256: "d".repeat(64),
+      });
+    },
+    duplicateRecord: (h) => {
+      h.releases.push(h.releases[0]);
+    },
+  };
+  for (const [name, change] of Object.entries(changes))
+    await t.test(name, (t) => {
+      const f = checkpointFixture(t);
+      const history = structuredClone(f.history);
+      change(history);
+      assert.throws(() => qualifyPublishedMigrations(f.root, { history }));
+    });
+});
+
+test("uncommitted pins cannot cover missing objects and malformed committed pins fail closed", (t) => {
+  const f = fixture(t);
+  const checkpoint = f.record("0.2.0", f.legacy);
   f.put(
-    `${f.source}migrations/m0001_metadata.rs`,
-    "changed released implementation\n",
+    "releases/migration-checkpoint.json",
+    JSON.stringify({ schemaVersion: 1, release: checkpoint }),
+  );
+  const history = f.history([f.record("0.1.0", "d".repeat(40)), checkpoint]);
+  assert.throws(
+    () => qualifyPublishedMigrations(f.root, { history }),
+    /Missing local migration history commit/u,
+  );
+  f.put(
+    "releases/migration-checkpoint.json",
+    JSON.stringify({ schemaVersion: 2, release: checkpoint }),
   );
   f.commit();
   assert.throws(
-    () => qualifyPublishedMigrations(f.root, { history: f.history(releases) }),
+    () => qualifyPublishedMigrations(f.root, { history }),
+    /Invalid migration checkpoint/u,
+  );
+});
+
+test("checkpoint and subsequent releases keep ordinary ancestry and immutable byte checks", (t) => {
+  const f = checkpointFixture(t);
+  f.migrations(["m0001_metadata", "m0002_history"]);
+  const later = f.commit();
+  f.history.releases.push(f.record("0.3.0", later));
+  assert.equal(
+    qualifyPublishedMigrations(f.root, { history: f.history }).migrations,
+    2,
+  );
+  f.put(`${f.source}migrations/m0002_history.rs`, "changed\n");
+  f.commit();
+  assert.throws(
+    () => qualifyPublishedMigrations(f.root, { history: f.history }),
     /Published migration changed/u,
+  );
+  f.git("checkout", "--orphan", "unrelated");
+  f.git("rm", "-rf", ".");
+  f.put(
+    "releases/migration-checkpoint.json",
+    JSON.stringify({ schemaVersion: 1, release: f.checkpoint }),
+  );
+  f.commit();
+  assert.throws(() =>
+    qualifyPublishedMigrations(f.root, { history: f.history }),
   );
 });
 
