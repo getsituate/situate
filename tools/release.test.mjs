@@ -228,6 +228,8 @@ function fixture(t, version = "1.10.0") {
     return git("rev-parse", "HEAD");
   };
   git("init", "-b", "main");
+  git("config", "user.name", "Fixture");
+  git("config", "user.email", "fixture@example.invalid");
   write(".gitignore", ".release-preparation/\n");
   write("client/packages/localization/locales.json", {
     source: "en",

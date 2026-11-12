@@ -477,6 +477,38 @@ test("changed archives cannot reach the registry or Docker", async (t) => {
   assert.throws(() => readFileSync(f.log), { code: "ENOENT" });
 });
 
+test("image build and publication reclaim only unused SDKs on hosted Linux runners", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/ci-image.yml", import.meta.url),
+    "utf8",
+  );
+  const cleanup = [
+    ...workflow.matchAll(
+      / {6}- name: Free unused hosted runner SDKs\n([\s\S]*?)(?= {6}- name:)/gu,
+    ),
+  ];
+  assert.equal(cleanup.length, 2);
+  for (const [, block] of cleanup) {
+    assert.match(
+      block,
+      /if: runner\.environment == 'github-hosted' && runner\.os == 'Linux'/u,
+    );
+    assert.deepEqual(
+      block
+        .trim()
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("sudo ")),
+      [
+        "sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL",
+      ],
+    );
+    assert.doesNotMatch(block, /docker.*prune|\/home\/|\/usr\/local\/rustup/u);
+  }
+  assert.match(workflow, / {6}- \.github\/workflows\/ci-image\.yml/u);
+  assert.match(workflow, / {6}- tools\/ci-publish\.mjs/u);
+});
+
 test("workflow separates read-only candidate building from privileged data-only publication", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/ci-image.yml", import.meta.url),

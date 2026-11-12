@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/workflows/ci-image.yml
+      - tools/ci-publish.mjs
       - LICENSE
       - package.json
       - client/docker/Dockerfile
@@ -48,6 +50,12 @@ jobs:
     outputs:
       provenance: ${{ steps.seal.outputs.provenance }}
     steps:
+      - name: Free unused hosted runner SDKs
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        run: |
+          df -h /
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: Check out trusted build harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -135,6 +143,12 @@ jobs:
       inputsSha256: ${{ steps.publish.outputs.inputsSha256 }}
       revision: ${{ steps.publish.outputs.revision }}
     steps:
+      - name: Free unused hosted runner SDKs
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        run: |
+          df -h /
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: Check out trusted publisher
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
