@@ -1,0 +1,88 @@
+{
+  "title": "Websuche und Neuerungen für Gespräche",
+  "entries": [
+    {
+      "id": "workspace-conversation-upgrade",
+      "type": "important",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Aktualisiere alle Installationen, bevor du einen Arbeitsbereich öffnest",
+      "paragraphs": [
+        "Beim Öffnen eines Arbeitsbereichs in Situate 0.1.6 wird sein Gesprächsverlauf in ein Format umgewandelt, das 0.1.6 oder neuer erfordert.",
+        "Aktualisiere alle Installationen, die den Arbeitsbereich verwenden, und erstelle vor dem Öffnen eine Sicherungskopie des geschlossenen Arbeitsbereichs. Öffne einen umgewandelten Arbeitsbereich nicht mit einer älteren Version: Sie könnte ihn öffnen, ohne den umgewandelten Verlauf zu erkennen. Es gibt keine Rückumwandlung."
+      ]
+    },
+    {
+      "id": "web-search-and-reading",
+      "type": "new",
+      "platforms": [
+        "macos"
+      ],
+      "title": "Im Chat das Web durchsuchen",
+      "paragraphs": [
+        "Durchsuche im Chat das öffentliche Web und lies Texte von Webseiten. Suchanfragen und Seitenabrufe werden an externe Dienste gesendet; Webseiten, die JavaScript benötigen, sind möglicherweise nicht lesbar."
+      ]
+    },
+    {
+      "id": "earlier-conversation-messages",
+      "type": "changed",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Frühere Nachrichten bei Bedarf laden",
+      "paragraphs": [
+        "Lange Gespräche laden zunächst die jüngsten Nachrichten. Frühere Nachrichten kannst du bei Bedarf nachladen. Wartende Folgenachrichten bleiben erhalten, wenn der Assistent das Gespräch zusammenfasst."
+      ]
+    },
+    {
+      "id": "interface-error-recovery",
+      "type": "changed",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Nach Fehlern weiterarbeiten",
+      "paragraphs": [
+        "Je nach Fehler kannst du den Arbeitsbereich neu laden, einen Problembericht prüfen oder ein Reparaturgespräch öffnen."
+      ]
+    },
+    {
+      "id": "plugin-document-sources",
+      "type": "new",
+      "platforms": [
+        "macos"
+      ],
+      "title": "Dokumente über eigene Plugins lesen",
+      "paragraphs": [
+        "Je nach Plugin kann der Assistent in Dokumentquellen navigieren, nach Dokumenten suchen und deren Inhalte lesen."
+      ]
+    },
+    {
+      "id": "licenses-and-notices",
+      "type": "new",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Lizenzen und Hinweise lesen",
+      "paragraphs": [
+        "Lies, markiere und kopiere die Lizenzhinweise von Drittanbietern unter „Über Situate“."
+      ]
+    },
+    {
+      "id": "filesystem-security-update",
+      "type": "fixed",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Sicherheitsupdate für das Dateisystem",
+      "paragraphs": [
+        "Rustix wurde aktualisiert, um das veröffentlichte Speichersicherheitsproblem RUSTSEC-2026-0486 zu beheben."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "title": "Web search and conversation updates",
+  "entries": [
+    {
+      "id": "workspace-conversation-upgrade",
+      "type": "important",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Update every installation before opening a workspace",
+      "paragraphs": [
+        "Opening a workspace in Situate 0.1.6 converts its conversation history to a format that requires 0.1.6 or later.",
+        "Update every installation that uses the workspace and back up the closed workspace before opening it. Do not reopen a converted workspace in an older version: it may open without recognizing the converted history. There is no reverse conversion."
+      ]
+    },
+    {
+      "id": "web-search-and-reading",
+      "type": "new",
+      "platforms": [
+        "macos"
+      ],
+      "title": "Search the web from chat",
+      "paragraphs": [
+        "Search the public web and read page text from chat. Queries and page requests are sent to external services; pages that require JavaScript may not be readable."
+      ]
+    },
+    {
+      "id": "earlier-conversation-messages",
+      "type": "changed",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Load earlier messages when you need them",
+      "paragraphs": [
+        "Long conversations load recent messages first, with earlier messages available on demand. Queued follow-up messages remain available when the assistant summarizes the conversation."
+      ]
+    },
+    {
+      "id": "interface-error-recovery",
+      "type": "changed",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Recover from interface errors",
+      "paragraphs": [
+        "Depending on the error, you can reload the workspace, review a problem report or open a repair conversation."
+      ]
+    },
+    {
+      "id": "plugin-document-sources",
+      "type": "new",
+      "platforms": [
+        "macos"
+      ],
+      "title": "Read documents through custom plugins",
+      "paragraphs": [
+        "Depending on the plugin, the assistant can browse document sources, search for documents and read their contents."
+      ]
+    },
+    {
+      "id": "licenses-and-notices",
+      "type": "new",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "Read bundled licenses and notices",
+      "paragraphs": [
+        "Read, select and copy third-party license notices from About."
+      ]
+    },
+    {
+      "id": "filesystem-security-update",
+      "type": "fixed",
+      "platforms": [
+        "macos",
+        "ios"
+      ],
+      "title": "File-system security update",
+      "paragraphs": [
+        "Updated Rustix to address the disclosed memory-safety issue RUSTSEC-2026-0486."
+      ]
+    }
+  ]
+}

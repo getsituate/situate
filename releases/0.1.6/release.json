@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.6",
+  "baseline": "d86016293902de8d2243045743371c187fd28f19",
+  "revision": "960d70f313f173dfd814d3e6c08890d32c77fae0",
+  "locales": [
+    "en",
+    "de"
+  ],
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "f49ec478ac23949bd2d2a58ee8d2bed23e3bc95229962a81f4de87843aaefca2"
+  },
+  "localeHashes": {
+    "en": "ee005caa3403224a11017607f94bac4e180bfeb61345e9f95e5aa9d6b1638253",
+    "de": "c2bfe87e60f22fb9b71f2c8a86a3060c58be63b1921c915c1c23c460e4e2c666"
+  },
+  "finalDigest": "8e9ffcda119745ba2adab9f480a034206e2419f45386e69d050dc2644e1ff0b9"
+}
