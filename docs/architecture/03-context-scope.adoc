@@ -1,0 +1,12 @@
+[[context-scope]]
+== Context and Scope
+
+:architecture-repository-root: ../..
+:architecture-diagrams-root: diagrams
+
+include::03-context-scope/business-context.adoc[]
+
+include::03-context-scope/technical-context.adoc[]
+
+:!architecture-repository-root:
+:!architecture-diagrams-root:

@@ -1,0 +1,44 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[pending-input-stop-recall]]
+=== Conversation input, Stop and Recall
+
+Participants are the user, Frontend views, Conversation Gateway & Registry, <<glossary-conversation-owner,Conversation Owner>> and Native Host Adapters.
+The owner serializes submission, consumption, Recall and draft edits.
+Waiting input is already saved history, not text held in a separate pending-state file.
+
+==== Submission and consumption
+
+. The frontend submits input to the owner. Save one user-message entry with its identity, attachments, references and steering/follow-up classification before acknowledging acceptance.
+. Input submitted during active work waits for its eligible boundary. It does not alter a request in flight or join an ongoing compaction request.
+. Before the next eligible main turn, select waiting steering and persist its consumption status without copying the message. Follow-up input waits until the current agent task, including its tool loop, completes; steering takes precedence.
+. Build the main context from consumed inputs on the selected path. A failed save blocks dispatch; it does not authorize submission under a new identity.
+
+Agent task completion is an execution boundary, not completion of a managed <<glossary-task,Task>>.
+Queue status is reconstructible from history, while the live scheduler remains in memory.
+
+==== Recall and draft editing
+
+If consumption wins the race, Recall excludes that input.
+If Recall wins, save its recalled status so it cannot also be consumed; keep its original history entry.
+Merge still-waiting steering first, then follow-up input, then the current draft, retaining order, attachments and references.
+Recall does not resubmit input or start a run.
+
+Draft edits and Recall are owner actions, not frontend transcript replacement.
+An edit based on a draft replaced by Recall fails rather than overwriting the merged text.
+Draft persistence need not provide crash recovery; unsaved draft text may be lost.
+Already submitted or recalled input remains identifiable in history even if an unsaved draft is lost.
+
+==== Stop and reopening
+
+Stop cancels the captured run without merging or resubmitting queued input.
+It does not undo effects already triggered.
+Cancellation before committed consumption leaves the input waiting; committed consumption is not inferred to be waiting merely because its response is absent.
+
+Reopening rebuilds saved history and input status but does not start a model request or replay tools.
+The user initiates subsequent work.
+A call without a result remains an interrupted action with an unknown outcome, not proof of failure.
+Execution handles, unfinished response text and unsaved outcomes are not restored as a serialized run.
+See <<conversation-format-safety>> for append failures and <<conversation-context-compaction>> for branch-local compaction.

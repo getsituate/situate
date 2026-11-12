@@ -1,0 +1,27 @@
+digraph WorkspaceLifecycle {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  open [label="Workspace open\nLocal work and configured sync", fillcolor="#eee7f9", color="#6232bc"];
+  actions [label="Running actions?", shape=diamond];
+  cancel [label="Cancel closure\nRestore new starts; work continues"];
+  abort [label="Abort running work\nPrior external effects remain"];
+  pending [label="Pending synchronization?", shape=diamond];
+  wait [label="Keep open for successful sync"];
+  retain [label="Retain local changes\nfor reopening"];
+  closed [label="Workspace closed\nNo execution or sync", fillcolor="#eee7f9", color="#6232bc"];
+
+  closed -> open [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>User opens /<BR/>startup restores</TD></TR></TABLE>>];
+  open -> actions [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Request closure; block new starts</TD></TR></TABLE>>];
+  actions -> cancel [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes: cancel</TD></TR></TABLE>>];
+  cancel -> open;
+  actions -> abort [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes: abort and close</TD></TR></TABLE>>];
+  actions -> pending [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No</TD></TR></TABLE>>];
+  abort -> pending;
+  pending -> closed [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No / local-only</TD></TR></TABLE>>];
+  pending -> wait [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes: sync then close</TD></TR></TABLE>>];
+  pending -> retain [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes: close now</TD></TR></TABLE>>];
+  wait -> closed [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Sync succeeds</TD></TR></TABLE>>];
+  retain -> closed;
+}

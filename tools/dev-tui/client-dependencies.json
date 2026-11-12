@@ -1,0 +1,9 @@
+[
+  ".package-lock.json",
+  ".bin/tauri",
+  ".bin/vite",
+  "@tauri-apps/cli/tauri.js",
+  "vite/bin/vite.js",
+  "markstream-vue/dist/index.js",
+  "markstream-vue/dist/index.css"
+]

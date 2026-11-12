@@ -1,0 +1,21 @@
+digraph HistoryRecovery {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  report [label="Report unusable history"];
+  confirm [label="User accepts loss\nof old history in a\nnew repository?", shape=diamond];
+  keep [label="Keep files and repository\nDo not reinitialize"];
+  backup [label="Back up damaged repository"];
+  saved [label="Backup preserved?", shape=diamond];
+  init [label="Reinitialize history\nCurrent files become baseline", fillcolor="#eee7f9", color="#6232bc"];
+  retained [label="Retain damaged backup\nOld history absent from new repository"];
+
+  report -> confirm;
+  confirm -> keep [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No</TD></TR></TABLE>>];
+  confirm -> backup [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes</TD></TR></TABLE>>];
+  backup -> saved;
+  saved -> keep [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No: report failure</TD></TR></TABLE>>];
+  saved -> init [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes</TD></TR></TABLE>>];
+  init -> retained;
+}

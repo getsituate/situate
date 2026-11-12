@@ -1,0 +1,24 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[current-application-quit]]
+=== Current client: application quit and cancellation
+
+When the user requests application quit, the current client performs these steps:
+
+. The native host checks whether update preparation already holds <<glossary-lifecycle-admission,lifecycle admission>>, the gate controlling whether a lifecycle operation may start. If so, an ordinary quit attempt does not start.
+. Before collecting participating windows, `ai::ensure_quit` settles pending conversation storage and checks for running work, including plugin processes and pending login work. A storage failure or remaining work blocks quit before the window-readiness protocol begins. Pending logins are asked to cancel, and quit remains blocked while they finish. This preflight does not itself abort running agent or plugin actions.
+. The native lifecycle coordinator identifies participating windows and workspaces, rechecks preflight and lifecycle admission, and admits only one quit attempt at a time. The host supplies participant identities even when a frontend has not yet loaded its initial workspace snapshot.
+. Each participating window prepares its retained file edits and acknowledges readiness. One ready window cannot approve exit for all other windows; with no participating windows, the native host can exit directly.
+
+This current preflight is distinct from the intended active-work abort-and-close choices described earlier.
+
+Every attempt has its own identity and ordering, so a delayed request or cancellation cannot replace a newer attempt.
+Cancellation restores the matching paused file sessions, and repeating an already completed cancellation is safe.
+The host retains the attempt's status so the frontend can reconcile a lost reply or cancellation notification before a later workspace action.
+An unconfirmed cancellation remains retryable with a visible control; the frontend does not assume that rollback succeeded merely because a request was sent.
+
+This protocol coordinates the existing file and AI participants and accounts for running plugin processes during preflight. It does not implement the full plugin shutdown or synchronization-readiness design.
+Forced process termination can bypass the protocol. Separately persisted recovery drafts, rather than successful quit coordination, protect edits across that interruption.
+See link:{architecture-repository-root}/client/app/src-tauri/src/lifecycle.rs[native lifecycle state], link:{architecture-repository-root}/client/app/src/lifecycle.ts[frontend coordination], link:{architecture-repository-root}/client/app/src-tauri/src/ai.rs[quit preflight] and <<quality-requirements>>.

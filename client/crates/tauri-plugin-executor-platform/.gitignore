@@ -1,0 +1,8 @@
+.tauri/
+/target/
+/tests/native/Cargo.lock
+/tests/native/gen/
+/tests/native/target/
+/tests/ios/*.xcodeproj/
+/tests/ios/DerivedData/
+/tests/ios/Resources/

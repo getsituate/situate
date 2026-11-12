@@ -1,0 +1,21 @@
+digraph PluginChangeLifecycle {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  discover [label="Find integrations\nand affected consumers"];
+  install [label="Agree and confirm\nany new installations"];
+  stage [label="Prepare related code changes\nIn workspace development chat"];
+  checks [label="Required checks\nsatisfied?", shape=diamond];
+  wait [label="Wait for affected actions\nNo abort or replay"];
+  activate [label="Activate checked group\nNo extra activation click", fillcolor="#eee7f9", color="#6232bc"];
+  cleanup [label="Remove disposable check state\nKeep source, history and chat"];
+
+  discover -> install;
+  install -> stage;
+  stage -> checks [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Synthetic<BR/>automated tests</TD></TR></TABLE>>];
+  checks -> stage [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No: correct<BR/>changes</TD></TR></TABLE>>];
+  checks -> wait [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes</TD></TR></TABLE>>];
+  wait -> activate [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Actions finished</TD></TR></TABLE>>];
+  activate -> cleanup [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Success</TD></TR></TABLE>>];
+}

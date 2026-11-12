@@ -1,0 +1,13 @@
+{
+  "title": "A quiet Saturday",
+  "label": "System message",
+  "available": "“{pluginName}” is now available in this workspace.",
+  "scenario": "Chat · plugin available after topic change",
+  "language": "System message language",
+  "deliver": "Deliver availability notice",
+  "request": "Create a plugin that organizes my reading list.",
+  "handoff": "Development is underway in a separate conversation.",
+  "changedTopic": "Meanwhile, help me plan a quiet Saturday.",
+  "reply": "Leave the morning free and choose one afternoon outing.",
+  "followup": "Keep the evening free too."
+}

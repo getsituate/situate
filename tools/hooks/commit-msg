@@ -1,0 +1,7 @@
+#!/bin/sh
+root=$(git rev-parse --show-toplevel) || exit 1
+# Shared hooks also run in worktrees whose branches predate the validator.
+if test ! -f "$root/tools/commit-check.mjs"; then
+  exit 0
+fi
+exec node "$root/tools/commit-check.mjs" --message-file "$1"

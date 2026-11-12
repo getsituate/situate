@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 164 184" role="img" aria-labelledby="landscape-print-title" aria-describedby="landscape-print-desc">
+  <title id="landscape-print-title">Landscape print</title>
+  <desc id="landscape-print-desc">A cream instant-photo frame holds two curved abstract hills beneath a small lemon sun.</desc>
+  <g transform="rotate(-7 82 92)">
+    <rect x="24" y="19" width="122" height="150" rx="7" fill="#ffc3a3"/>
+    <rect x="18" y="13" width="122" height="150" rx="7" fill="#fff7e3"/>
+    <rect x="29" y="24" width="100" height="103" rx="3" fill="#48b7ff"/>
+    <circle cx="103" cy="48" r="10" fill="#f4f06d"/>
+    <path d="M29 81c22-29 41-24 62 0 13 15 23 13 38 7v36q0 3-3 3H32q-3 0-3-3Z" fill="#8651ed"/>
+    <path d="M29 109c38 0 45-40 73-40 11 0 19 5 27 12v43q0 3-3 3H32q-3 0-3-3Z" fill="#305cf4"/>
+  </g>
+</svg>

@@ -1,0 +1,7 @@
+# Generated native projects and Tauri schemas
+/gen/android/
+/gen/apple/
+/gen/schemas/
+
+# Build output when using a separate Cargo target directory
+/target/

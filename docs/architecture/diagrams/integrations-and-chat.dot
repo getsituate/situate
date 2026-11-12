@@ -1,0 +1,22 @@
+digraph IntegrationsAndChat {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  user [label="User", shape=ellipse, fillcolor="#fffefa"];
+  view [label="Workflow plugin view"];
+  chat [label="Chat and agent"];
+  integration [label="Reusable integration", fillcolor="#eee7f9", color="#6232bc"];
+  external [label="Connected service"];
+  reference [label="Referenced content"];
+
+  { rank=same; view; chat; }
+  user -> view [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Interact</TD></TR></TABLE>>];
+  user -> chat [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Request work</TD></TR></TABLE>>];
+  view -> chat [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>New chat + reference<BR/>Explicit action</TD></TR></TABLE>>];
+  chat -> view [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Open / reveal</TD></TR></TABLE>>, constraint=false];
+  view -> integration [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Plugin Exports</TD></TR></TABLE>>];
+  chat -> integration [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Designated chat tools</TD></TR></TABLE>>];
+  integration -> external [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Scoped account access</TD></TR></TABLE>>];
+  view -> reference [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Open internally<BR/>or externally</TD></TR></TABLE>>];
+}

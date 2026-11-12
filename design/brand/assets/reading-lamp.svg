@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 12 176 168" role="img" aria-labelledby="reading-lamp-title" aria-describedby="reading-lamp-desc">
+  <title id="reading-lamp-title">Reading lamp</title>
+  <desc id="reading-lamp-desc">A bent violet arm holds a broad tangerine shade above a bounded pool of lemon light.</desc>
+  <path d="m89 73 43 0 29 70q1 4-4 4H80q-5 0-3-5Z" fill="#f4f06d"/>
+  <path d="M51 155 36 86q-2-9 5-15l46-36" fill="none" stroke="#6232bc" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M45 150 30 81q-2-9 5-15l46-36" fill="none" stroke="#8651ed" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28 151h43q14 0 14 15v2H19v-2q0-15 9-15Z" fill="#6232bc"/>
+  <path d="M22 145h43q14 0 14 15v2H13v-2q0-15 9-15Z" fill="#8651ed"/>
+  <path d="M96 31h16q8 0 11 8l26 39q2 4-3 4H76q-5 0-3-4l15-39q2-8 8-8Z" fill="#da592f"/>
+  <path d="M90 25h16q8 0 11 8l26 39q2 4-3 4H70q-5 0-3-4l15-39q2-8 8-8Z" fill="#ff874d"/>
+  <path d="M78 72h51" fill="none" stroke="#ffc3a3" stroke-width="4" stroke-linecap="round"/>
+</svg>

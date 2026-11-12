@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="{{product.description}}" />
+    <title>{{product.title}}</title>
+    <link
+      rel="icon"
+      href="/design/brand/assets/app-icon.svg"
+      type="image/svg+xml"
+    />
+    <link rel="stylesheet" href="/design/brand/tokens.css" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/product.css" />
+    <link rel="stylesheet" href="/components.css" />
+    <script src="/design/brand/bend/bend.js" defer></script>
+    <script src="/design/brand/bend/performance.js" defer></script>
+    <script src="/navigation.js" defer></script>
+    <script src="/script.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip" href="#main">{{skip}}</a>
+    {{site.header}}
+    <main id="main">
+      <section class="product-intro wrap" aria-labelledby="product-title">
+        <div class="product-intro-copy">
+          <h1 id="product-title">
+            {{product.line1}} <em>{{product.line2}}</em>
+          </h1>
+          <p class="product-lead">{{product.body}}</p>
+        </div>
+        <nav class="product-contents" aria-label="{{product.contents}}">
+          <ul class="product-benefits" role="list">
+            <li>
+              <a href="#plugins">
+                <h2>
+                  {{product.benefit.work.title}}<span aria-hidden="true"
+                    >↘</span
+                  >
+                </h2>
+                <p>{{product.benefit.work.body}}</p>
+              </a>
+            </li>
+            <li>
+              <a href="#space">
+                <h2>
+                  {{product.benefit.help.title}}<span aria-hidden="true"
+                    >↘</span
+                  >
+                </h2>
+                <p>{{product.benefit.help.body}}</p>
+              </a>
+            </li>
+            <li>
+              <a href="#choices">
+                <h2>
+                  {{product.benefit.independence.title}}<span aria-hidden="true"
+                    >↘</span
+                  >
+                </h2>
+                <p>{{product.benefit.independence.body}}</p>
+              </a>
+            </li>
+          </ul>
+        </nav>
+        <figure class="workstyle-example" aria-labelledby="workstyle-caption">
+          <blockquote>{{product.example.request}}</blockquote>
+          <div class="workstyle-diagram">
+            <div class="example-notes">
+              <div class="example-note">
+                <p class="example-source">{{product.example.birthday}}</p>
+                <p class="example-task">{{product.example.music}}</p>
+              </div>
+              <div class="example-note">
+                <p class="example-source">{{product.example.club}}</p>
+                <p class="example-task">{{product.example.book}}</p>
+              </div>
+            </div>
+            <svg
+              class="example-connector"
+              viewBox="0 0 80 220"
+              aria-hidden="true"
+            >
+              <path
+                d="M4 40C64 40 12 110 70 110M4 180C64 180 12 110 70 110M58 98L70 110L58 122"
+              />
+            </svg>
+            <div class="example-overview">
+              <p class="example-heading">{{product.example.overview}}</p>
+              <ul role="list">
+                <li>
+                  <span>{{product.example.music}}</span>
+                  <small>{{product.example.birthday}}</small>
+                </li>
+                <li>
+                  <span>{{product.example.book}}</span>
+                  <small>{{product.example.club}}</small>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <figcaption id="workstyle-caption">
+            {{product.example.caption}}
+          </figcaption>
+          <img
+            class="example-bend"
+            src="/design/brand/bend/svg/point-curious.svg"
+            width="160"
+            height="160"
+            alt=""
+          />
+        </figure>
+      </section>
+      <section
+        class="plugins section-space"
+        id="plugins"
+        data-motion-scene
+        aria-labelledby="plugins-title"
+      >
+        <div class="wrap">
+          <div class="feature-heading">
+            <div>
+              <p class="eyebrow">{{plugins.eyebrow}}</p>
+              <h2 id="plugins-title">{{plugins.title}}</h2>
+            </div>
+            <p>{{plugins.body}}</p>
+          </div>
+          <ol class="plugin-path">
+            <li><span>01</span>{{plugins.step1}}</li>
+            <li><span>02</span>{{plugins.step2}}</li>
+            <li><span>03</span>{{plugins.step3}}</li>
+          </ol>
+          <div class="plugin-stage">
+            <svg class="plugin-orbit" viewBox="0 0 1200 650" aria-hidden="true">
+              <path d="M40 445C-46 93 1108-72 1150 250S771 723 91 575" />
+            </svg>
+            <figure class="plugin-screen screen-frame">
+              <figcaption>{{plugins.screen}}</figcaption>
+              <a
+                class="screen-link"
+                href="./media/plugins.webp"
+                data-viewer
+                data-title="{{plugins.screen}}"
+                ><img
+                  src="./media/plugins.webp"
+                  width="1440"
+                  height="940"
+                  alt="{{plugins.alt}}"
+                  loading="lazy"
+                /><span class="expand">{{screen.expand}} ↗</span></a
+              >
+            </figure>
+            <div class="plugin-bend" data-bend-rig="plugins" aria-hidden="true">
+              <img
+                src="/design/brand/bend/svg/point-curious.svg"
+                width="320"
+                height="320"
+                alt=""
+              />
+            </div>
+            <img
+              class="plugin-pieces"
+              src="/design/brand/assets/modular-pieces.svg"
+              width="210"
+              height="210"
+              alt=""
+            />
+          </div>
+          <p class="plugin-aside">{{plugins.aside}}</p>
+        </div>
+      </section>
+      <section
+        class="space section-space"
+        id="space"
+        data-motion-scene
+        aria-labelledby="space-title"
+      >
+        <div class="section-heading wrap">
+          <p class="eyebrow">{{space.eyebrow}}</p>
+          <h2 id="space-title">{{space.title}}</h2>
+          <p>{{space.body}}</p>
+        </div>
+        <div class="workspace-browser wrap">
+          <div
+            class="screen-tabs"
+            role="tablist"
+            aria-label="{{space.eyebrow}}"
+            hidden
+          >
+            <button
+              type="button"
+              role="tab"
+              id="tab-notes"
+              aria-controls="panel-notes"
+              aria-selected="true"
+              data-tab="notes"
+            >
+              {{space.tab.notes}}</button
+            ><button
+              type="button"
+              role="tab"
+              id="tab-documents"
+              aria-controls="panel-documents"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab="documents"
+            >
+              {{space.tab.documents}}</button
+            ><button
+              type="button"
+              role="tab"
+              id="tab-workspace"
+              aria-controls="panel-workspace"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab="workspace"
+            >
+              {{space.tab.workspace}}
+            </button>
+          </div>
+          <div class="screen-panel" id="panel-notes" data-panel="notes">
+            <div class="panel-description">
+              <h3>{{space.notes.title}}</h3>
+              <p>{{space.notes.body}}</p>
+            </div>
+            <figure class="product-shot">
+              <a
+                class="screen-link"
+                href="./media/notes.webp"
+                data-viewer
+                data-title="{{space.tab.notes}}"
+                ><img
+                  src="./media/notes.webp"
+                  width="1440"
+                  height="940"
+                  alt="{{space.alt.notes}}"
+                  loading="lazy"
+                /><span class="expand">{{screen.expand}} ↗</span></a
+              >
+            </figure>
+          </div>
+          <div class="screen-panel" id="panel-documents" data-panel="documents">
+            <div class="panel-description">
+              <h3>{{space.documents.title}}</h3>
+              <p>{{space.documents.body}}</p>
+            </div>
+            <figure class="product-shot">
+              <a
+                class="screen-link"
+                href="./media/documents.webp"
+                data-viewer
+                data-title="{{space.tab.documents}}"
+                ><img
+                  src="./media/documents.webp"
+                  width="1440"
+                  height="940"
+                  alt="{{space.alt.documents}}"
+                  loading="lazy"
+                /><span class="expand">{{screen.expand}} ↗</span></a
+              >
+            </figure>
+          </div>
+          <div class="screen-panel" id="panel-workspace" data-panel="workspace">
+            <div class="panel-description">
+              <h3>{{space.workspace.title}}</h3>
+              <p>{{space.workspace.body}}</p>
+            </div>
+            <figure class="product-shot">
+              <a
+                class="screen-link"
+                href="./media/workspace.webp"
+                data-viewer
+                data-title="{{space.tab.workspace}}"
+                ><img
+                  src="./media/workspace.webp"
+                  width="1440"
+                  height="940"
+                  alt="{{space.alt.workspace}}"
+                  loading="lazy"
+                /><span class="expand">{{screen.expand}} ↗</span></a
+              >
+            </figure>
+          </div>
+        </div>
+      </section>
+      <section
+        class="models section-space wrap"
+        id="choices"
+        data-motion-scene
+        aria-labelledby="choices-title"
+      >
+        <div class="feature-heading">
+          <div>
+            <p class="eyebrow">{{models.eyebrow}}</p>
+            <h2 id="choices-title">{{models.title}}</h2>
+          </div>
+          <p>{{models.body}}</p>
+        </div>
+        <div class="models-layout">
+          <div class="model-choices">
+            <article>
+              <span class="choice-icon" aria-hidden="true">↗</span>
+              <h3>{{models.provider}}</h3>
+              <p>{{models.providerBody}}</p>
+            </article>
+            <article>
+              <span class="choice-icon" aria-hidden="true">⌘</span>
+              <h3>{{models.local}}</h3>
+              <p>{{models.localBody}}</p>
+            </article>
+            <article>
+              <span class="choice-icon" aria-hidden="true">↳</span>
+              <h3>{{models.manual}}</h3>
+              <p>{{models.manualBody}}</p>
+            </article>
+          </div>
+          <div class="model-stage">
+            <div class="model-disc" aria-hidden="true"></div>
+            <figure class="model-screen screen-frame">
+              <figcaption>{{models.screen}}</figcaption>
+              <a
+                class="screen-link"
+                href="./media/models.webp"
+                data-viewer
+                data-title="{{models.screen}}"
+                ><img
+                  src="./media/models.webp"
+                  width="1440"
+                  height="940"
+                  alt="{{models.alt}}"
+                  loading="lazy"
+                /><span class="expand">{{screen.expand}} ↗</span></a
+              >
+            </figure>
+            <div class="provider-chips" aria-hidden="true">
+              <span>{{models.openai}}</span><span>{{models.anthropic}}</span
+              ><span>{{models.openrouter}}</span><span>{{models.local}}</span>
+            </div>
+          </div>
+        </div>
+        <p class="model-processing">{{models.processing}}</p>
+        <div class="open-source" data-motion-scene>
+          <div class="open-art" aria-hidden="true">
+            <svg viewBox="0 0 420 400">
+              <path
+                class="branch-line"
+                d="M210 352V170C210 106 85 204 85 70M210 232C210 150 335 240 335 110"
+              />
+              <circle cx="85" cy="70" r="28" />
+              <circle cx="335" cy="110" r="28" />
+              <circle cx="210" cy="352" r="28" /></svg
+            ><img
+              src="/design/brand/assets/open-book.svg"
+              width="230"
+              height="200"
+              alt=""
+            />
+          </div>
+          <div class="open-copy">
+            <h3>{{open.title}}</h3>
+            <p>{{open.body}}</p>
+            <p class="open-code">{{open.code}}</p>
+          </div>
+        </div>
+      </section>
+      <section class="free section-space" data-motion-scene>
+        <div class="wrap free-layout">
+          <div class="free-copy">
+            <p class="eyebrow">{{free.eyebrow}}</p>
+            <h2>{{free.title}}</h2>
+            <p>{{free.body}}</p>
+            <p class="free-costs">{{free.costs}}</p>
+          </div>
+          <div class="free-art">
+            <div class="free-price">
+              <span class="price-zero" aria-hidden="true">0</span
+              ><span class="sr-only">0</span><span>{{free.price}}</span>
+            </div>
+            <img
+              class="free-bend"
+              src="/design/brand/bend/svg/carry-pleased.svg"
+              width="285"
+              height="285"
+              alt=""
+            /><img
+              class="free-leaf"
+              src="/design/brand/assets/bookmark-clip.svg"
+              width="150"
+              height="150"
+              alt=""
+            />
+          </div>
+          <div class="free-details">
+            <article>
+              <h3>{{free.app}}</h3>
+              <p>{{free.appBody}}</p>
+            </article>
+            <article>
+              <h3>{{free.offline}}</h3>
+              <p>{{free.offlineBody}}</p>
+            </article>
+          </div>
+        </div>
+      </section>
+      <section class="ending" data-motion-scene>
+        <div class="wrap">
+          <div>
+            <p class="eyebrow">{{product.end.eyebrow}}</p>
+            <h2>{{product.end.title}}</h2>
+            <p>{{product.end.body}}</p>
+            <a class="button" href="/#download"
+              >{{product.end.action}} <span aria-hidden="true">↓</span></a
+            >
+          </div>
+          <div class="ending-art" aria-hidden="true">
+            <img
+              class="ending-fan"
+              src="/design/brand/assets/background-paper-fan.svg"
+              width="410"
+              height="360"
+              alt=""
+            />
+            <div class="ending-bend" data-bend-rig="ending">
+              <img
+                src="/design/brand/bend/svg/wave-welcome.svg"
+                width="380"
+                height="380"
+                alt=""
+              />
+            </div>
+            <img
+              class="ending-book"
+              src="/design/brand/assets/book.svg"
+              width="175"
+              height="175"
+              alt=""
+            />
+          </div>
+        </div>
+      </section>
+    </main>
+    {{site.footer}} {{site.viewer}}
+  </body>
+</html>

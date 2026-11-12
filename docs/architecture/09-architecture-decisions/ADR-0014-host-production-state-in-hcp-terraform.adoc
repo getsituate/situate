@@ -1,0 +1,82 @@
+= ADR-0014: Host production infrastructure state in HCP Terraform
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-06
+Implementation:: HCP backend initialization, adoption of eleven existing resources and a subsequent no-change plan verified; independent encrypted export restoration and replacement-machine recovery remain unverified
+
+== Context
+
+Situate has one developer and infrastructure operator.
+A local Terraform backend with encrypted off-device backups was selected initially to avoid operating another service.
+A machine failure must not lose the authoritative infrastructure state, and future GitHub Actions infrastructure runs should not require moving state between machines.
+Maintaining backup scheduling, state-copy ownership and a separate locking mechanism would add operational work for one operator.
+
+The current production root describes eleven existing Hetzner resources: a server, firewall, SSH public key, DNS zone and seven DNS RRSets.
+Resource ownership must remain unambiguous when transferring from previous production and preview roots.
+Website deployment and app publication are separate from Terraform and do not need access to its state.
+
+== Decision
+
+Store authoritative production state in the HCP Terraform workspace `situate-production` at `app.terraform.io`.
+Supply the exact organization through private configuration rather than an inferred or example name.
+Use Local execution mode: Terraform runs on the operator's machine, while HCP provides state storage, version history and locking.
+A future approved GitHub Actions runner may use the same workspace; no CI applies, VCS triggers or automatic production changes are introduced by this decision.
+
+Use the Free plan while its resource allowance and terms meet the project's needs.
+Check the active plan during account setup; exceeding the allowance or accepting a paid service requires a separate spending decision.
+The standard service does not establish EU-only residency.
+HCP encrypts state at rest and uses TLS, but is not an end-to-end-encrypted store against the provider.
+Do not place application content or operational secrets in resource definitions unnecessarily.
+
+Authenticate through explicitly supported environment variables or the private root `.env`, with environment-only credentials in CI.
+Do not fetch credentials automatically from secret managers or place tokens in Terraform files, backend arguments or tracked configuration.
+Enable MFA and retain recoverable account access.
+Keep independent encrypted state exports outside the HCP account and verify their restoration.
+Local exports and disposable inspection states are recovery material, not additional active backends.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Trade-off
+|Local backend with independent encrypted backups
+|No hosted-state account; straightforward for a single applying machine.
+|Backup capture, verification and recovery depend on the operator; a future CI writer requires another ownership and locking arrangement.
+|Object-storage backend
+|Standard Terraform backend with portable storage and access policies.
+|Requires selecting and maintaining storage, versioning, locking compatibility, access controls and billing safeguards.
+|Self-hosted state service
+|Operator controls hosting and access.
+|Adds service maintenance and recovery; hosting it only on the managed application server creates a recovery dependency on that server.
+|HCP Terraform state with Local execution (selected)
+|Managed state history and locking, no self-hosted service, and the same backend for a future CI runner.
+|Adds account/token recovery, provider access to state, service availability and Free-plan limits.
+|===
+
+== Consequences and verification
+
+The link:{architecture-repository-root}/infrastructure/production/README.md[production runbook] defines setup, credentials, adoption and recovery.
+The wrapper verifies workspace execution mode and permissions, binds each checkout to the immutable workspace ID, and binds saved plans to the workspace, state version and plan hash.
+It refuses implicit backend migration and accepts adoption plans containing imports and no-op resource actions only.
+Existing local inspection plans must be regenerated against HCP.
+
+If a previous authoritative state can be recovered, migrate it only through an explicitly reviewed handoff.
+If it cannot be recovered, freeze old writers and establish that no other active owner remains before importing existing resources.
+Do not combine adoption with server replacement, DNS changes, service deployment or release publication.
+
+After interruption, inspect HCP's state version and lock together with local journals and exports before retrying.
+Do not force-unlock a possible active writer or automatically push an old export over a newer state.
+A successful test using synthetic API responses does not establish live workspace access, production ownership, locking or restoration.
+Exercise those boundaries before relying on the backend for production changes.
+
+== References
+
+* https://developer.hashicorp.com/terraform/cloud-docs/overview[HCP Terraform plans and resource limits]
+* https://developer.hashicorp.com/terraform/cloud-docs/workspaces/settings[Workspace execution modes]
+* https://developer.hashicorp.com/terraform/cloud-docs/architectural-details/security-model[State security model]
+* https://developer.hashicorp.com/terraform/cloud-docs/api-docs/state-versions[State versions and retention]

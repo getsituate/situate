@@ -1,0 +1,19 @@
+digraph ReferenceIdentity {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  use [label="Use a live task reference"];
+  resolve [label="Matches for task UUID\nin this workspace?", shape=diamond];
+  open [label="Open intended content", fillcolor="#eee7f9", color="#6232bc"];
+  missing [label="Show unresolved reference"];
+  choose [label="User selects intended item"];
+  repair [label="Keep its ID; reidentify other copies\nRecord repair in history"];
+
+  use -> resolve;
+  resolve -> open [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>One</TD></TR></TABLE>>];
+  resolve -> missing [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>None</TD></TR></TABLE>>];
+  resolve -> choose [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Multiple</TD></TR></TABLE>>];
+  choose -> repair;
+  repair -> open [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Resolve repaired reference</TD></TR></TABLE>>];
+}

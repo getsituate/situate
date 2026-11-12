@@ -1,0 +1,78 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Product environments
+
+The active product targets are macOS and iOS, with macOS direct delivery first and iOS App Store delivery next.
+Windows, Linux desktop and Android remain deferred.
+See link:{architecture-repository-root}/requirements/data/foundations.md#mvp-platform-scope[platform scope] and link:{architecture-repository-root}/requirements/data/foundations.md#distribution[distribution constraints].
+
+==== Software placement and control
+
+The following maps the link:{architecture-repository-root}/docs/architecture/index.adoc#building-block-view[building blocks] to execution locations.
+Optional service rows describe required boundaries, not an operational service inventory.
+
+[cols="2,3,3",options="header"]
+|===
+|Software or dependency |Execution location |Control and communication boundary
+
+|Situate Application: UI, Application Core and Agent Integration
+|The user's macOS or iOS device. Vue views run in the application webview; the native host owns conversation execution, storage access and platform integration.
+|The application uses operating-system permissions for local access. Manual local work requires neither an AI endpoint nor a synchronization service. Platform scope does not imply qualification of every feature on both targets.
+
+|Installed plugins
+|Execution contexts on the user's device, within the owning open workspace's lifecycle.
+|Plugins are trusted code, not sandboxed adversaries. They can call external email, calendar and document APIs through configured access. Mobile suspension can interrupt execution; a closed workspace has no always-running service.
+
+|User-configured model endpoints
+|A local process, self-hosted system or remote provider selected for that workspace on that device.
+|The endpoint remains outside Situate's product boundary, even on the same device. Native adapters communicate with it; the frontend does not take custody of provider credentials.
+
+|Situate Synchronization Service (optional)
+|Situate-operated EU-hosted infrastructure; concrete topology remains unspecified.
+|Exchanges end-to-end encrypted workspace data between the user's devices. Neither service nor operator may decrypt content. Versioning, merging and recovery remain client responsibilities.
+
+|Situate AI Router (optional)
+|Situate-operated EU-hosted infrastructure; concrete topology remains unspecified.
+|Routes authorized model requests to providers, which may process outside the EU subject to the legal constraints. Authorized plaintext AI processing does not grant general access to stored workspaces or the ability to decrypt synchronized content.
+
+|Direct-release hosting
+|The selected Hetzner host, with Nginx behind Caddy HTTPS.
+|Serves static update metadata and signed application artifacts, not workspace storage or an agent runtime. Production activation is separate from preview delivery; see link:{architecture-repository-root}/docs/architecture/index.adoc#delivery-and-operations[delivery and operations].
+|===
+
+The native conversation owner requests model work through link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-model-access[Model Access], an internal host capability.
+Native adapters perform link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-provider-transport[Provider Transport]: authentication, requests and streamed responses to the selected endpoint.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015], link:{architecture-repository-root}/requirements/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016] and link:{architecture-repository-root}/requirements/data/foundations.md#hosting-and-data-processing[hosting and processing constraints].
+Synchronization placement follows link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013]; no service topology is selected here.
+
+==== Storage and configuration boundaries
+
+[cols="2,3,3",options="header"]
+|===
+|Data or configuration |Location |Portability and recovery boundary
+
+|Workspace content, conversations, plugins and histories
+|The workspace directory on the user's device. MVP versioned writes target macOS filesystem workspaces and iOS application-owned document folders.
+|Copying a closed workspace can produce a consistent backup; safe live snapshots remain open. External document-provider workspaces remain read-only until versioned writes are implemented and verified. A directory copy does not prove successful restoration.
+
+|Conversation history and metadata
+|`.situate/conversations/<id>/history.jsonl` and `metadata.json` inside the owning workspace.
+|Portable saved history, branch ancestry and selected entry; no separate pending-state file. Execution handles and unsaved drafts remain in memory. Closed-workspace copying includes conversation directories and existing attachment storage; it does not restore a running agent. See <<conversation-format-safety>>.
+
+|Operational AI settings and credentials
+|Outside the portable workspace, scoped to workspace and device; provider secrets use OS secure storage.
+|No synchronization mode, workspace copy or restoration transfers these settings. A local association with the authorized workspace location, the link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-device-local-workspace-namespace[Device-local Workspace Namespace], is not a portable credential grant.
+
+|Diagnostic logs and update packages
+|Application-owned device-local storage outside workspaces and their histories.
+|Logs are bounded installation-local records, not synchronized workspace content. Update-cache retention and verification are described below; neither cache is a workspace backup.
+|===
+
+A portable link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-diagnostic-workspace-identifier[Diagnostic Workspace Identifier] correlates logs across copies and devices; it does not grant access or share runtime state.
+The native host separately associates requests with an authorized local session through a link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-runtime-workspace-binding[Runtime Workspace Binding].
+See link:{architecture-repository-root}/requirements/data/foundations.md#workspace-storage-and-history[storage and history], link:{architecture-repository-root}/requirements/data/foundations.md#initial-file-editor-delivery[write scope] and link:{architecture-repository-root}/docs/architecture/index.adoc#client-diagnostics[client diagnostics].
+
+Service deployment topology, cryptographic protocols, supported OS versions and safe live-backup procedures remain unresolved.
+The deferred marketplace has no selected hosting topology; it is not a prerequisite for local plugin management.

@@ -1,0 +1,51 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../../../diagrams
+endif::[]
+
+[[application-building-blocks]]
+==== Situate Application
+
+Parent: <<situate-application,Situate Application>> in Level 1.
+
+The decomposition separates presentation, plugin execution, agent execution and shared workspace services.
+Views do not own background execution, and shared storage does not take over domain ownership.
+The boundaries and their rationale are developed in <<solution-strategy>>; detailed SDK packaging and bindings remain open.
+
+Agent Integration runs in the native application host using Rig.
+The <<current-client-packages,package mapping>> identifies its implementation and the separate frontend presentation boundary.
+
+.Shared application services. Arrows name interfaces used by the source component and provided by the target. The dashed connection applies when a custom synchronization plugin is selected.
+image::{architecture-diagrams-root}/application-building-blocks.svg["User Interface, Agent Integration and Plugin Runtime use Application Core lifecycle, storage, history and platform interfaces. The core uses Sync Transport from the runtime when a custom synchronization plugin is configured."]
+
+.Conversation and plugin interfaces between the same application components. Plugins hosted by the runtime provide Plugin Exports; the runtime does not own their domain logic.
+image::{architecture-diagrams-root}/application-plugin-interfaces.svg["User Interface uses Conversations from Agent Integration. Both use Plugin Management and Plugin Exports. Agent Integration requests navigation through UI Contributions, and hosted plugins contribute views."]
+
+[cols="1,3,3",options="header"]
+|===
+|Component |Responsibility |Owned state and persistence
+|Application Core
+|Workspace lifecycle, local storage, Git-backed history, synchronization coordination, content/history recovery and operating-system capabilities. Coordinates blocking new starts during closure, restoring normal operation on cancellation, and aborting active work when the user proceeds with closure.
+|Open-workspace state, storage and history operations, and synchronization state. Persists workspace-owned content and other components' durable state without taking ownership of their domain semantics.
+|[[application-user-interface]]User Interface
+|Built-in content and chat views, named topic tabs, pane layout and navigation histories, question presentation and the independent Plugins destination for workspace plugin management. Hosts normal plugin views and optional plugin-owned Settings views with the same Situate components and contracts. Provides read-only plugin-file inspection, development-mode visibility and conversation working indicators.
+|Presentation state such as selection, active view and pane arrangement. Durable settings use core storage; rendered content is not a separate authoritative copy of workspace data.
+|Plugin Runtime
+|Plugin loading, dependency resolution, registration of exports, views, tools and triggers, version activation and plugin enabling/disabling. Does not load or execute disabled plugin code or Settings views. Hosts plugin execution independently of whether a view is open.
+|Loaded versions, registrations and active plugin execution state. Durable plugin status uses core storage. Individual plugins retain ownership of their domain logic, configuration and data.
+|[[application-agent-integration]]Agent Integration
+|Embeds Rig in the native conversation service, owns execution and completion, uses native model/tool adapters and exposes eligible plugin tools. Executes eligible actions directly within the requested task, without plugin-requested execution approval. The agent integration does not infer arbitrary plugin effects.
+|Normal, onboarding and development conversation state, accepted input and agent execution resources, including task/context handoff into specialized development chats. Durable conversations and process history use core workspace storage, not a separate Rig-owned store. The <<native-conversation-building-blocks,native conversation decomposition>> refines this component and its interfaces.
+|===
+
+The shared Situate Vue components are a library used by built-in and plugin views, not an independently deployed service.
+Their public properties, events and slots form part of the UI contract; internal DOM structure and private host modules do not.
+Plugins can also implement custom components and explicitly export reusable components through declared dependencies.
+
+The User Interface and Agent Integration do not maintain parallel implementations of plugin integration logic.
+For example, a mail view and an agent tool use the same mail plugin functionality rather than each owning an independent mail connection layer.
+Reusable integration plugins define connections and account semantics, while consumers select which accounts to use.
+The Application Core stores the relevant configuration and credentials without imposing a universal mail or inbox domain model.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0001-create-integrations.md[REQ-0001] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026].

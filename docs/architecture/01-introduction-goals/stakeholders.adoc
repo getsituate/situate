@@ -1,0 +1,19 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Stakeholders
+
+[cols="1,3",options="header"]
+|===
+|Role |Concern
+|Individual user
+|Delegate routine organizational work, preserve personal context and working methods, access content across devices, and control actions taken toward others.
+|Situate product and service operator
+|Provide a useful local application and optional sustainable services without making access to stored content depend on purchasing those services. Pricing and service commitments remain open.
+|Developer and operator
+|Keep delivery and operational complexity within one person's capacity, as required by the link:{architecture-repository-root}/requirements/data/foundations.md#development-operation-and-technical-baseline[development and operation constraint].
+|===
+
+Other people may receive communications requested by the user or collaborate in connected external services.
+They are not co-users of a shared Situate workspace; these interactions belong to xref:context-scope[Context and Scope].

@@ -1,0 +1,23 @@
+digraph BusinessContext {
+  graph [rankdir=LR, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  user [label="Individual\nuser", shape=ellipse, fillcolor="#fffefa"];
+  situate [label="Situate\nTasks, knowledge, documents\nOptional sync / managed AI", fillcolor="#eee7f9", color="#6232bc", penwidth=1.8];
+  email [label="Email service"];
+  calendar [label="Calendar service"];
+  documents [label="Document sources"];
+  ai [label="AI model provider"];
+  sync [label="Custom sync storage\n(optional)"];
+
+  edge [dir=both];
+  user -> situate [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Instructions,<BR/>results and questions</TD></TR></TABLE>>];
+  situate -> email [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Correspondence, drafts<BR/>and requested sending</TD></TR></TABLE>>];
+  situate -> calendar [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Calendar data,<BR/>reservations and invitations</TD></TR></TABLE>>];
+  situate -> documents [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Authorized documents<BR/>and requested writes</TD></TR></TABLE>>];
+  situate -> ai [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Requests and<BR/>authorized context;<BR/>model results</TD></TR></TABLE>>];
+  situate -> sync [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Workspace exchange</TD></TR></TABLE>>];
+
+  { rank=same; email; calendar; documents; ai; sync; }
+}

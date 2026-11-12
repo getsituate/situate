@@ -1,0 +1,214 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+[[git-derived-file-references]]
+=== Git-derived file references
+
+A <<glossary-live-reference,live file reference>> selects current content through an original workspace-relative path and a Git commit anchor.
+Confirmed Situate-managed moves determine the file's current path; the anchor does not freeze its bytes.
+Markdown and other files use this same model, without embedded file UUIDs. Task UUIDs remain separate.
+
+.Example of a live path reference
+[source,text]
+----
+C1: reference selects Documents/report.pdf
+C2: confirmed move Documents/report.pdf -> Archive/report.pdf
+C3: content update at Archive/report.pdf
+Result: current content at Archive/report.pdf, not the C1 bytes
+----
+
+*Status: implemented in the core and host; native macOS/iOS qualification remains separate.*
+link:{architecture-docs-root}/09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc[ADR-0010] establishes Git-owned history and cache-free reference reconstruction.
+link:{architecture-docs-root}/09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc[ADR-0012] extends the model to Markdown and removes embedded file UUIDs.
+Stored selectors and runtime authorization have separate boundaries, described below.
+The product boundaries are link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md[history and interrupted operations], link:{architecture-repository-root}/requirements/data/requirements/REQ-0030-open-chats-with-content-references.md[live and historical references], link:{architecture-repository-root}/requirements/data/requirements/REQ-0035-preserve-file-and-task-identity.md[identity] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0038-copy-portable-workspaces.md[portable workspaces].
+
+==== Storage and reconstruction
+
+The resolver reconstructs reference continuity from versioned Git operation records, without an independently authoritative journal or persistent reference cache.
+An operation first records a durable boundary commit describing its expected effects. Only a validated immediate child can record its completion.
+Workspace opening records an interrupted observation when a boundary has no valid completion, without continuing its filesystem effects.
+
+link:{architecture-repository-root}/client/crates/situate-core/src/content/history_records.rs[History records] define the Git facts; link:{architecture-repository-root}/client/crates/situate-core/src/content/lineage.rs[lineage reconstruction] validates their ancestry and resolves anchored paths.
+link:{architecture-repository-root}/client/crates/situate-core/src/content/tree_facts.rs[Tree validation] checks declared effects using Git tree IDs without writing objects during reads.
+The link:{architecture-repository-root}/client/crates/situate-core/src/content/live_references.rs[live-reference module] captures references and reads their selected text; the link:{architecture-repository-root}/client/crates/situate-core/src/content/operations.rs[structural-operation module] owns writes and explicit reversal.
+The link:{architecture-repository-root}/client/crates/situate-core/src/content/text_writes.rs[text-write module] applies the same boundary/completion protocol to text saves, conflict resolution, creation and draft restoration.
+
+Confirmed structural history is authoritative only in Git.
+It does not remove retained drafts, conversation persistence, operating-system authorization, ordinary file-write staging or explicit user-requested reversal.
+
+==== Ownership
+
+[cols="2,4",options="header"]
+|===
+|Owner or data |Responsibility
+|Core Git history
+|Retained content snapshots, explicit confirmed operation records and any durable continuity facts needed for reference reconstruction. Record interpretation belongs to the core, not to a synchronization transport.
+|Working files
+|Current content, including uncommitted or externally edited bytes. Git authority over confirmed history does not make the working tree identical to the latest commit.
+|Core write path
+|Authorize through the host, check current preconditions, secure the prior version, perform bounded safe writes, publish matching Git state and operation metadata, and distinguish complete from partial/uncertain results.
+|Reference resolver
+|Read and validate Git history and stored anchors; compute a current target, known deletion or unresolved result without mutating content or repairing history as a side effect of reading.
+|Optional derived cache
+|Accelerate the same computation. It is disposable and scoped to the admitted workspace, selected Git head, supported history/metadata format and resolver version. It must not hold the only continuity barrier or operation record.
+|UI and agent callers
+|Consume explicit outcomes and unresolved references. Do not infer success from a timeout, bind a stale reference by path, or retry interrupted mutations automatically during restoration.
+|Native filesystem/provider adapters
+|Provide supported file operations and permissions. They do not independently infer move history or own reference identity.
+|===
+
+A copied workspace may share its <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>> and Git history with another local copy.
+That identifier correlates diagnostics; neither it, a cache key nor a reference grants access to the other copy.
+Each copy retains its own <<glossary-runtime-workspace-binding,Runtime Workspace Binding>>: association with an authorized local workspace session.
+Independent working-tree changes remain separate.
+
+==== Authoritative commit facts
+
+A completed structural-operation record and its result tree must belong to the same published Git commit.
+The record must identify the operation and the affected portable paths sufficiently to distinguish moves, copies, deletions, restorations and path reuse.
+Folder operations must cover descendant paths using path-component boundaries, not arbitrary string prefixes.
+Structural facts distinguish moves, deletions and creations. Copies and restorations create a path lineage rather than transferring or reviving an old file reference; the history summary identifies the user-facing action. A `write` operation changes or creates one regular file at `path`; it neither moves a reference nor revives a previously deleted lineage.
+A `createBatch` operation lists new regular-file destinations under existing parents. Its shared boundary and completed result must describe exactly those creations, excluding unrelated external changes. It does not transfer existing path lineages or promise atomic file publication across destinations.
+
+The writer validates that the recorded effect is consistent with the relevant parent/result trees and the operation it actually performed.
+A partial reference rewrite, failed Git reference publication or conflicting external change cannot be relabeled as a fully completed operation.
+A whole-workspace snapshot may also contain unrelated external edits; the record must delimit the operation's actual effects rather than attribute every tree difference to Situate. Detected external changes require separate history entries under REQ-0022, not merely a label inside the operation commit. If the effects cannot be separated safely, the writer must preserve the uncertain result rather than assert a fully attributable completion.
+Unreferenced Git objects and a prepared intent are not a published successful result.
+Git reference publication can precede a failing final history flush, so a reported history failure does not prove that no result commit is reachable.
+The writer and restart reader must distinguish failure before Git reference publication, a visible result whose durability has not been acknowledged, and a corrupt/unverifiable result, without repeating the file operation.
+Metadata is validated data, never executable instructions; unknown versions, malformed paths or conflicting records must not be silently ignored where they could change a reference target.
+
+Git's rename detection, equal blob hashes and matching filenames are not identity evidence on their own.
+Two PDFs can share bytes while remaining separate documents.
+Direct modification of internal history by other Git clients is not a supported editing interface; ordinary external content editing remains supported.
+
+[[git-file-history-format]]
+==== Commit format
+
+Commit messages contain a human-facing summary followed by `\n\nSituate-History: ` and a version-1 JSON envelope. `parent_tree` and `result_tree` must match the actual Git trees; unknown fields, versions, malformed paths and noncanonical object IDs are rejected. Public history replies expose the validated summary, not this envelope.
+
+[cols="1,4",options="header"]
+|===
+|Fact |Meaning
+|`observation`
+|An independently observed content snapshot.
+|`change`
+|Managed state without declared structural identity semantics, including the initial snapshot.
+|`boundary`
+|A durable, same-tree pre-operation boundary. It records a `move`, `delete`, `create`, `createBatch` or `write` operation, its exact expected result tree and any affected Markdown reference patches, not a completed operation.
+|`completed`
+|The actual sole parent is the named boundary commit, and the result tree matches that boundary's validated effect. Only this immediate child can complete the boundary.
+|`interrupted`
+|Observed state after an unmatched boundary, with uncertain provenance. It is recorded even when the content tree is unchanged.
+|===
+
+Boundary commits cannot be captured as live reference anchors or selected as reversible changes. Public history omits them while retaining interrupted observations. A later completion cannot bypass an intervening observation or interruption to close an old gap.
+
+==== Reference anchors and reconstruction
+
+At runtime, a live file reference, including Markdown, contains a `workspaceId` supplied by the Runtime Workspace Binding, the original `path` and an `anchorRevision`: a canonical lowercase 40-character Git commit ID. There is no `fileId` selector. Historical references retain `revision` instead.
+The anchor must describe the selected file: reference capture must establish that association under the content-store boundary and recheck the caller's expected saved version.
+It must not blindly attach the current `HEAD` to an uncommitted file at a reused path. The existing blob/content-based expected revision is a concurrency precondition, not the Git commit anchor; the two must remain distinct in contracts.
+Capturing a new selection is not an automatic rebinding operation for a stored reference.
+
+The anchor starts forward interpretation of confirmed structural changes; it does not freeze the displayed content at that revision.
+An explicit historical reference still selects its exact revision and path.
+Markdown and other files use the same anchor and continuity rules, without embedded file IDs or a global file-ID registry. Task UUIDs remain separate and unchanged. No PDF modification or binary-to-text conversion is introduced.
+
+A copy does not transfer an existing reference from the original to the copy.
+Confirmed deletion terminates the old path lineage; a later creation at the same pathname does not revive it.
+Restoration creates a new file lineage and does not reactivate old live references. A new explicit selection can reference the restored file. Historical access remains available, and restored task IDs retain their separate identity semantics.
+
+Reconstruction must handle history order explicitly, not by timestamp order or an arbitrary walk through a Git DAG.
+Missing anchors, incomplete/shallow history, replaced ancestry, unsupported merges, ambiguous records and applicable continuity gaps yield an unresolved/unsupported result rather than a guessed path.
+The supported traversal is linear. Merge commits, shallow repositories, replacement refs and grafts are rejected rather than selecting an arbitrary parent; synchronization transport cannot pick a semantic winner.
+Even a historically resolved path still requires current workspace authorization, path checks and availability validation before reading or opening its contents.
+
+The defining invariant is that, for the same retained history and reference, cached and cache-free resolution agree.
+A fresh process receiving only a closed workspace's authoritative data can reproduce the result without another device's cache or filesystem inode numbers.
+Requests are bounded by 10,000 commits, 16 MiB of commit metadata and 100,000 changed-node work units.
+The work counter does not include every unchanged sibling entry inspected or hashed; it is not an aggregate entry-scan or execution-time guarantee.
+Each envelope is limited to 64 KiB; tree expansion and individual tree objects have separate depth, entry and byte limits.
+Exceeding a limit fails explicitly, never returning a partially resolved target.
+These limits are safety bounds, not performance acceptance measurements.
+
+Workspace opening and <<glossary-operation-admission,Operation Admission>> for writes validate the current published Git state rather than replaying the entire history.
+Operation Admission accepts a validated request for execution; it is not a completion or durability acknowledgement.
+
+==== Normal write flow
+
+. Validate the request and current source/destination state under the existing workspace ownership and operation-serialization boundary.
+. Durably retain the relevant pre-operation content and publish a same-tree boundary with the exact expected result before file publication exposes changed destination bytes. Failure before that synchronization leaves the mutation unstarted.
+. Perform safe filesystem changes and supported reference rewrites. Retain no-clobber, concurrency, path, permission, bounded-staging and synchronization guarantees.
+. Validate filesystem postconditions and publish the matching result tree as the immediate completed child of the boundary. Separable external changes receive a subsequent independent observation. Acknowledgement follows the existing durability boundary, not merely commit-object creation.
+. Report completion. A failed acknowledgement does not turn a durably committed operation into an instruction to run the mutation again; reads reconstruct from Git.
+
+Text-file publication pins the staged file identity and rechecks replacement sources after flushing the boundary commit.
+It verifies the published bytes, identity and mode through the current root-relative path.
+Creation and draft restoration retain no-clobber file publication. Failure after file publication retains the draft and reports the history/partial outcome.
+An unchanged save first settles prior pending evidence, verifies its retained Git association and current file identity, and synchronizes the file, parent directory and history before draft cleanup. It neither renames the file nor creates an empty action; cleanup failure remains distinct from history durability failure.
+
+Known references follow confirmed moves whether or not their conversation or view is currently mounted.
+This does not require rewriting every conversation for each move, changing its compare-and-swap revision, or loading every UI view.
+
+==== Interruption and uncertainty
+
+[cols="2,4",options="header"]
+|===
+|Boundary |Restart behavior
+|Before mutation
+|The secured prior state remains usable. Do not start the abandoned mutation automatically.
+|After some filesystem changes but before a confirmed result commit
+|Preserve the working files and retained prior history. Do not infer a successful move from a diff, complete remaining reference rewrites, or reset the workspace to `HEAD`. Report the incomplete/uncertain outcome; references lacking continuity evidence remain unresolved.
+|After Git reference advancement but with failed or uncertain final synchronization
+|Inspect and validate the retained history and preserve the partial/uncertain acknowledgement state. A valid reachable result may already describe the completed filesystem effects; never replay them merely because the caller received a failure. Do not trust an incomplete or invalid commit as continuity evidence.
+|After a durable result commit but before acknowledgement
+|The Git result remains authoritative. Rebuild derived state without repeating the filesystem mutation. A later explicit retry rechecks the actual source and destination.
+|After a committed result but before or during cache update
+|Discard or repair only derived cache state from Git. No content replay is needed.
+|===
+
+An absent completion record does not prove that the filesystem was untouched.
+A path can disappear and later be reused after an interrupted operation; uncertainty must survive subsequent history recording rather than silently rebinding an old reference.
+Any durable continuity boundary affecting future resolution belongs in Git and must survive cache deletion, copying and restart.
+The Git boundary itself detects unfinished work; there is no sidecar intent signal. Affected references crossing an unmatched boundary report uncertainty, not a confirmed deletion. This includes an unmatched `write` at the selected path, even with equal bytes or failure before file publication: a detected replacement cannot safely be forgotten after restart. A validated immediate write completion preserves ordinary live continuity. Before a new capture or mutation, the writer durably seals an unmatched head boundary with an interrupted observation. Resolution alone never performs this write.
+If that observation cannot be recorded durably, capture and mutation remain unavailable. The original boundary continues to protect earlier references. An explicit new selection after sealing can capture a new anchor, but cannot repair older references implicitly.
+
+Newly observed changes may be preserved in history without guessing their origin.
+An interrupted Situate operation must not be confidently attributed to an external editor merely because its normal completion record is missing.
+Safe reads, retained drafts and explicit manual history recovery remain available where their own preconditions hold.
+An explicit retry is a new operation against current state; it may report a missing source, an occupied destination or a conflict instead of repeating an old plan.
+
+==== Unsupported development formats
+
+The original unified-format replacement excluded data migration, backward-compatible readers and imported legacy bindings only for formats never shipped publicly. Situate is now publicly available; changes to published reference and history formats follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069], including mixed-version data preservation and tested migration where needed.
+Queued inputs, drafts, stored runs, restored views and unopened conversations use the same file-reference model.
+File-ID enrichment, protected file-ID editing, file-ID resolution and UUID-filtered file history are not part of that model; task-ID handling remains separate. There is no journal or UUID fallback.
+The linked ADR-0012 and development plan describe the replacement scope; verification uses fresh synthetic workspaces, with obsolete development fixtures recreated separately.
+
+The new format still requires explicit validation and conversation compare-and-swap protection.
+Reject unsupported records instead of treating an epoch as a Git revision, recapturing a path or replacing unreadable data with empty state.
+Unsupported development workspaces remain unchanged: no conversion, metadata cleanup, history rewriting, reset or deletion on format mismatch. An existing `situate-id` frontmatter field is ordinary user metadata, not a legacy identity to import. Fixture recreation is a separate, explicitly scoped development action.
+The no-migration exception is limited to formats verified never to have shipped publicly; it does not waive upgrade verification or migration requirements for supported published formats.
+
+==== Stored-reference portability
+
+Structured references in conversation drafts, queued inputs, stored runs and built-in file-view presentation are stored as workspace-local selectors: `kind`, relative `path` and either live `anchorRevision` or historical `revision`. They contain no `workspaceId`. The containing workspace directory determines their owner; copying or moving that closed directory carries the selectors and their Git history together.
+
+Native storage supplies the Runtime Workspace Binding when returning these selectors to callers. The wire API retains `workspaceId` and rejects foreign-scope writes and resolution requests. Layout projection includes every navigation entry in open and closed tabs, not only the mounted view. Binding preserves anchors, stored bytes and compare-and-swap revisions; it does not capture another source, rewrite paths or select a different workspace by identifier. Independent copies can resolve and evolve against their own files and history even when their Diagnostic Workspace Identifiers match.
+
+Only the known structured reference fields are projected. User messages, tool/event data and opaque plugin presentation remain unchanged. Malformed selectors, duplicate owned fields and older stored references containing `workspaceId` fail closed rather than being converted or replaced with empty state. Existing interrupted-run recovery remains a separate operation that can legitimately persist a state change. The portable Diagnostic Workspace Identifier never selects or authorizes another copy.
+
+==== Implementation and verification boundaries
+
+The link:{architecture-repository-root}/docs/development/git-derived-file-references-plan.md[development plan] allocates the format, resolver, writer, direct consumer replacement and target-platform work.
+The PDF example concerns path continuity and history, not a new PDF text-extraction or chat-attachment capability; test binary identity without assuming the current UTF-8 document API can read it.
+
+Removing witness-based reconciliation does not remove every use of hardlinks, prove Android no-replace compatibility or authorize weaker file publication.
+Native macOS and iOS checks must establish the operations used on active product storage paths. Windows, Linux desktop and Android remain deferred; shared or browser tests do not qualify them.
+Provider-backed read-only access, ordinary editor draft restoration, Git durability fences, diagnostics privacy and the separate device-local log store are unchanged.

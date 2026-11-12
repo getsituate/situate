@@ -1,0 +1,52 @@
+name: ExecutorHarness
+options:
+  bundleIdPrefix: dev.situate.executor-tests
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: NO
+packages:
+  Tauri:
+    path: ../../.tauri/tauri-api
+targets:
+  ExecutorHarness:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - ../../ios/Sources/ExecutorWebView.swift
+      - ../../ios/Sources/WebViewCapture.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  ExecutorPluginCompile:
+    type: library.static
+    platform: iOS
+    sources:
+      - ../../ios/Sources
+    dependencies:
+      - package: Tauri
+  ExecutorHarnessTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - path: Resources
+        buildPhase: resources
+    dependencies:
+      - target: ExecutorHarness
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ExecutorHarness:
+    build:
+      targets:
+        ExecutorHarness: all
+        ExecutorPluginCompile: all
+    test:
+      targets:
+        - ExecutorHarnessTests

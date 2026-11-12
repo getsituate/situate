@@ -1,0 +1,27 @@
+digraph SelectiveRollback {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  select [label="Select change, conversation path\nor plugin change set"];
+  scope [label="Rollback scope?", shape=diamond];
+  position [label="Move conversation position\nContent unchanged"];
+  plan [label="Identify associated changes\nPreserve independent and later edits"];
+  local [label="Compensate local changes\nUser resolves conflicts"];
+  external [label="Preview external reversals\nInclude unsupported effects"];
+  confirm [label="User confirms external rollback"];
+  revert [label="Tool-owned revert\nCheck preconditions; idempotent effects"];
+  result [label="Record new history and outcomes\nKeep failures and conflicts visible", fillcolor="#eee7f9", color="#6232bc"];
+
+  select -> scope;
+  scope -> position [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Conversation only</TD></TR></TABLE>>];
+  scope -> plan [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Reverse changes</TD></TR></TABLE>>];
+  plan -> local [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Local content</TD></TR></TABLE>>];
+  plan -> external [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>External effects</TD></TR></TABLE>>];
+  local -> result;
+  external -> confirm;
+  confirm -> revert [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Approved reversible effects</TD></TR></TABLE>>];
+  revert -> result;
+
+  { rank=same; local; external; }
+}

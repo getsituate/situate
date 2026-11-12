@@ -1,0 +1,109 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[document-collection]]
+=== Connected document collection
+
+Status: accepted product boundaries; storage schemas, processing mechanisms and platform qualification remain technical design work, not implemented guarantees.
+The authoritative scope is link:{architecture-repository-root}/requirements/data/foundations.md#initial-document-access-and-data-ownership[initial document access], with link:{architecture-repository-root}/requirements/data/requirements/REQ-0054-connect-document-sources.md[REQ-0054] through link:{architecture-repository-root}/requirements/data/requirements/REQ-0060-save-document-searches.md[REQ-0060].
+The link:{architecture-repository-root}/docs/development/document-store-plan.md[implementation plan] selects direct source access through chat first and separates the later collection roadmap.
+
+==== First iteration: direct source access
+
+Reuse the existing plugin-development, service-export, dependency, tool and invocation-bound host mechanisms.
+Sources are authored in situ by the LLM against a plugin-defined versioned export convention, not supplied as built-in local-folder or Paperless connectors.
+Generic registration remains unchanged; authoring guidance and reusable conformance checks describe the convention, while source/consumer plugins own domain validation.
+This does not introduce a mandatory core-owned document schema or a second source registry.
+Capabilities declare supported list/search/metadata/content/original operations, agreed scope, source-qualified references, provenance, bounds and failure outcomes.
+Source-native search and existing OCR/text are usable without a Situate index or local extraction pipeline.
+A folder source may expose fewer capabilities; missing OCR is not a reason to reject otherwise supported direct access.
+
+Current HTTP host calls return bounded UTF-8 responses, and workspace file helpers are not arbitrary external-folder or binary-reading APIs.
+Use actually available device capabilities; unsupported original access is explicit rather than silently adding a download/cache subsystem.
+Source operations inherit workspace authorization, plugin lifecycle, cancellation and device-local credentials.
+Do not add a second source loader or require Library, categorization, synchronization or a durable full-source mirror.
+Synthetic contract tests support development; real LLM-assisted source creation and chat use remain required before merge.
+
+==== Later collection scope
+
+The following ownership, processing and presentation rules describe the later collection increment, not prerequisites of direct source access.
+They retain the approved target without asserting delivery.
+
+==== Ownership and persistence
+
+Source plugins supply access, reliable identity/revision information where available, agreed subsets and categorization rules.
+Originals stay in their sources; the collection does not introduce a universal source-write interface or restrict an agent's existing filesystem/tool capabilities.
+Actions stay within the user's request and configured access without per-action approval.
+Account/provider authorization, OS permissions and destructive content protections remain separate.
+
+Document records, provenance, tags and saved searches have an authoritative, openly editable file representation in a separate workspace area.
+Prepared text is durable portable content; search indexes are reconstructible projections, not the only readable authority.
+Changes made outside the UI must be validated and reflected in the collection without silently replacing malformed input.
+The precise schema, transaction and reconciliation mechanism remains open.
+
+The document area is separate from notes and plugin code.
+A dedicated Git repository for authoritative document metadata is an option for synchronization, not an accepted storage mechanism or a user-facing history commitment.
+The desired separation of note and plugin/connector/source-code histories needs reconciliation with the existing workspace/Git design before implementation.
+Do not infer that nested repositories, independent commit boundaries or cross-repository synchronization already work.
+Reconstructible indexes and preview caches are not versioned; future embeddings are outside initial delivery.
+Older technical metadata versions may remain, but must not silently repopulate active results after removal.
+
+==== Preparation and model access
+
+Initial search is full-text only: there is no embedding runtime, vector index or semantic retrieval dependency.
+Situate supplies reusable local text extraction and OCR for source plugins, reusing source-provided text when it belongs to the current revision.
+PDF and images are the initial baseline; wider format and language coverage requires qualification.
+Xberg (identified as formerly Kreuzberg) is a library candidate, not a selected dependency: verify its identity, current license, redistribution terms, supported targets, format coverage and OCR dependencies before adoption.
+No external extraction fallback is authorized.
+
+Categorization is separate from extraction and uses the user's configured, authorized LLM, potentially remote, under the source's transmission and cost authorization.
+A provider-independent fixed tag format permits a future classifier adapter without requiring one now.
+Invalid-format output gets one retry; repeated failure leaves automatic tags unapplied and exposes a categorization error.
+A valid empty result succeeds.
+Long text may use an identified bounded excerpt, without truncating the full-text index or introducing multi-stage summarization.
+The schema, excerpt strategy and provider-error policy beyond format failure remain design tasks.
+
+Initial categorization applies once per newly identified document.
+Content changes refresh text but not tags; ordinary refresh does not reconcile tag assignments.
+Manual tag changes during a run invalidate its result without automatic retry.
+Rule changes invalidate old-rule in-flight results, leave completed records unchanged and apply to not-yet-started work.
+Publication therefore needs checks against current document revision, tag edits, source scope and rule version; the concrete concurrency protocol remains open.
+
+==== Runtime and device boundaries
+
+An open workspace checks sources on opening, periodically and on request; capable connectors can also use notifications.
+Closed workspaces do not process sources.
+Preparation is incremental and resumable, with separate extraction and categorization states; categorization failure does not block browsing or full-text search.
+Progress and pause are exposed rather than requiring the whole collection to finish first.
+
+A source is admitted only on a device capable of accessing and locally preparing it.
+Mobile capability is determined by technical qualification, not assumed from a simulated layout.
+Other devices may consume synchronized prepared content without originals; device-local access and original availability remain separate from metadata presence.
+Cross-device job ownership, interruption checkpoints, consistent synchronization and removal propagation remain unresolved mechanisms.
+
+Reliable source identity preserves references across moves and revisions.
+Copies remain distinct even when bytes match; uncertain identity never justifies retargeting a reference.
+Local-folder and Paperless integrations are the initial qualification cases, using synthetic data at tens-of-thousands scale.
+Latency, resource and retrieval-quality budgets still need measurement and agreement.
+
+==== Availability and removal
+
+Temporary outages preserve prepared information with known freshness and original unavailability exposed.
+Confirmed deletion, scope exclusion, explicit access revocation or permanent source removal ends active collection/search/assistant use and clears affected preview copies.
+References become unavailable rather than resolving to another document.
+Transient errors alone are not deletion evidence.
+Unavailable devices apply removal when they receive it; immediate remote erasure is not promised.
+Neither existing conversations nor older technical metadata versions are automatically purged.
+
+Original previews and thumbnails use a bounded, device-local, non-versioned cache, without synchronization or guaranteed offline availability.
+A cached preview can be shown during an outage with its known state identified.
+Cache limits, eviction, safe rendering, supported PDF/image variants and accessibility need platform qualification.
+
+==== Presentation integration
+
+The selected Library view exposes tags and saved searches persistently on large surfaces and through compact navigation on phones.
+It uses the same searchable collection as the assistant and preserves source and available page provenance.
+Results are fetched in portions, with admission-time ordering by default and relevance ordering for text queries.
+Workshop fixtures demonstrate interactions, not the production source contract, search engine or PDF renderer.
+See link:{architecture-repository-root}/client/workshop/src/workshop/document-design-notes.md[document design notes] for the selected design and simulation differences.

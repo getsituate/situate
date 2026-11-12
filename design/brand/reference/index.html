@@ -1,0 +1,1294 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f3ee" />
+    <title>Situate — Brand reference</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="reference.css" />
+    <script src="../bend/bend.js" defer></script>
+    <script src="../bend/motion.js" defer></script>
+    <link rel="stylesheet" href="../bend/mini/mini.css" />
+    <link rel="stylesheet" href="mini-example.css" />
+    <script src="../bend/mini/mini.js" defer></script>
+    <script src="mini-example.js" defer></script>
+    <script src="reference.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="header wrap">
+      <a class="brand-link" href="#top" aria-label="Situate, back to top"
+        ><img
+          class="wordmark"
+          src="../assets/wordmark.svg"
+          alt=""
+          width="165"
+          height="44"
+      /></a>
+      <span class="edition"
+        >Brand reference <span aria-hidden="true">/</span> Bend in Motion</span
+      >
+      <a class="header-link" href="../README.md"
+        >Handbook <span aria-hidden="true">↗</span></a
+      >
+    </header>
+    <nav class="index wrap" aria-label="Reference sections">
+      <a href="#identity">Identity</a><a href="#color">Color</a
+      ><a href="#type">Type</a><a href="#rhythm">Rhythm</a
+      ><a href="#everyday">Everyday</a><a href="#states">States</a
+      ><a href="#bend">Bend</a><a href="#mini-bend">Mini Bend</a
+      ><a href="#scenes">Scenes</a><a href="#illustration">Illustration</a
+      ><a href="#motion">Motion</a>
+    </nav>
+    <div class="motion-bar" role="group" aria-label="Illustration motion">
+      <div class="wrap">
+        <button class="motion-control" id="motion-toggle" aria-pressed="false">
+          Pause motion
+        </button>
+      </div>
+    </div>
+    <main id="main">
+      <section class="opening wrap" id="top" aria-labelledby="opening-title">
+        <div class="opening-copy">
+          <p class="eyebrow">The Situate identity</p>
+          <h1 id="opening-title">
+            Room for life.<br /><em>And its little turns.</em>
+          </h1>
+          <p class="lead">
+            Warmth in the welcome. Clarity in the work.<br />A personal world,
+            with a little Bend in it.
+          </p>
+        </div>
+        <div class="panorama scene" id="welcome-scene">
+          <div class="welcome-art" id="welcome-art">
+            <img
+              class="scene-background"
+              data-ambient-layer
+              src="../assets/panorama-back-ribbons.svg"
+              alt=""
+              width="1440"
+              height="500"
+            />
+            <img
+              class="scene-background"
+              data-still-layer
+              src="../assets/panorama-back-objects.svg"
+              alt=""
+              width="1440"
+              height="500"
+            />
+            <img
+              class="scene-background"
+              data-ambient-layer
+              src="../assets/panorama-front-ribbons.svg"
+              alt=""
+              width="1440"
+              height="500"
+            />
+            <img
+              class="scene-background"
+              data-still-layer
+              src="../assets/panorama-front-objects.svg"
+              alt=""
+              width="1440"
+              height="500"
+            />
+            <div
+              class="bend-slot hero-bend"
+              data-bend="wave"
+              data-expression="welcome"
+              data-name="Bend waves among books and notes"
+            ></div>
+            <span class="paper-caption">A thought. A note. A next step.</span>
+          </div>
+          <div class="welcome-controls">
+            <button
+              class="button light"
+              data-replay="welcome-scene"
+              data-gesture="hello"
+            >
+              Replay welcome <span aria-hidden="true">↗</span></button
+            ><button
+              class="button light"
+              id="ambient-toggle"
+              aria-pressed="false"
+            >
+              Ambient drift off
+            </button>
+          </div>
+        </div>
+        <div class="under-line">
+          <span>Your personal organization, connected.</span
+          ><span>Colorful at the edges. Calm at the center.</span>
+        </div>
+        <p class="reference-note">
+          A live design reference, not a released application. Every task, note
+          and book below is fictional. Interactions run only on this page, reset
+          on reload, and do not use AI or connected services. Light and plum
+          samples demonstrate brand contrast, not available product themes.
+        </p>
+        <noscript
+          ><p class="notice">
+            JavaScript is off. The reference remains readable; Bend previews and
+            interactive examples need JavaScript.
+          </p></noscript
+        >
+        <p id="dependency-status" class="notice" hidden></p>
+      </section>
+
+      <section
+        class="section wrap"
+        id="identity"
+        aria-labelledby="identity-title"
+      >
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">01 / Identity</p>
+            <h2 id="identity-title">Personal, not performative.</h2>
+          </div>
+          <p>
+            A rounded, open identity with room to breathe. Bend is company in
+            the illustration, never a demand for attention.
+          </p>
+        </div>
+        <div class="identity-board">
+          <div class="mark-sample">
+            <div class="clear-space">
+              <img
+                src="../assets/wordmark.svg"
+                alt="Situate canonical vector wordmark"
+                width="330"
+                height="88"
+              />
+            </div>
+            <p class="caption">Canonical vector · plum on paper</p>
+          </div>
+          <div class="mark-sample plum">
+            <div class="clear-space">
+              <img
+                src="../assets/wordmark-light.svg"
+                alt="Situate light vector wordmark"
+                width="330"
+                height="88"
+              />
+            </div>
+            <p class="caption">Reversed vector · warm white on plum</p>
+          </div>
+        </div>
+        <div class="three-columns identity-rules">
+          <div>
+            <h3>Keep its own voice</h3>
+            <p>
+              The rounded stroke paths and tangerine dot are the wordmark. Use
+              the SVG artwork, not a typeset approximation. Preserve proportions
+              and the open counters.
+            </p>
+          </div>
+          <div>
+            <h3>Give it a margin</h3>
+            <p>
+              Clear space: at least half the artwork’s height on every side.
+              Minimum display width: 100 CSS px. Do not place it over a ribbon
+              or a busy illustration.
+            </p>
+          </div>
+          <div>
+            <h3>Let text be text</h3>
+            <p>
+              <span class="text-mark">Situate</span> is the system-font fallback
+              for plain text and unavailable artwork. It is not a second
+              logotype. Bend may accompany the mark, but does not replace its
+              letters.
+            </p>
+          </div>
+        </div>
+        <div class="identity-strip">
+          <img
+            src="../assets/wordmark.svg"
+            alt="Situate at minimum size"
+            width="100"
+            height="27"
+          /><span class="caption">100 px minimum</span
+          ><span class="divider" aria-hidden="true"></span
+          ><img
+            src="../assets/wordmark.svg"
+            alt="Situate at navigation size"
+            width="132"
+            height="36"
+          /><span class="caption">132 px navigation</span
+          ><a href="../assets/wordmark.svg">Open vector asset ↗</a>
+        </div>
+      </section>
+
+      <section class="section wrap" id="color" aria-labelledby="color-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">02 / Color</p>
+            <h2 id="color-title">Paper first.<br />Color with purpose.</h2>
+          </div>
+          <p>
+            Warm neutrals hold the reading. Violet carries emphasis. Sky,
+            tangerine and lemon make the illustrated world feel alive.
+          </p>
+        </div>
+        <div
+          class="palette"
+          id="palette"
+          role="group"
+          aria-label="Brand color values"
+        ></div>
+        <div
+          class="color-ratio"
+          role="img"
+          aria-label="Illustrative everyday color balance: mostly paper and surface, some ink, a little violet and warm color"
+        >
+          <span>Paper &amp; surface</span><span>Ink</span><span>Violet</span
+          ><span>Warmth</span>
+        </div>
+        <p class="caption">
+          Everyday balance, not a mathematical quota. Keep large saturated
+          fields in welcome and illustration areas, away from dense reading.
+        </p>
+        <div class="subhead">
+          <h3>Pairings you can read</h3>
+          <p>
+            Ratios calculated from the token values. Normal text needs 4.5:1;
+            large text and meaningful non-text boundaries need 3:1.
+          </p>
+        </div>
+        <div class="contrast-grid" id="contrast-grid"></div>
+        <div class="note-grid">
+          <p>
+            <strong>Violet is not body ink.</strong> Use violet-deep for links
+            and selected controls; ink leads the primary actions. Keep bright
+            violet, sky and peach as expressive fills with a verified
+            foreground.
+          </p>
+          <p>
+            <strong>A separator is not a control edge.</strong> Line separates
+            already grouped content. Control-line defines input boundaries;
+            focus uses a 3 px contrasting ring drawn inside the control.
+          </p>
+        </div>
+        <div class="bend-colors">
+          <h3>Bend’s material</h3>
+          <div id="material-swatches" class="material-swatches"></div>
+          <p class="caption">
+            Front #a77bff · depth #56329b · highlight #d9c6ff · seam #7045bd.
+            These describe the illustrated body, not a second interface palette.
+          </p>
+        </div>
+      </section>
+
+      <section class="section wrap" id="type" aria-labelledby="type-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">03 / Typography</p>
+            <h2 id="type-title">
+              A little roundness.<br />A lot of readability.
+            </h2>
+          </div>
+          <p>
+            System fonts only. Avenir Next is used when installed, with rounded
+            system display fallbacks and the platform’s UI font for body
+            fallback. No font files are bundled.
+          </p>
+        </div>
+        <div class="type-board">
+          <div class="type-row">
+            <span class="type-meta">Display<br />54–94 / 1.02 / 650</span>
+            <p class="type-display">Make room.</p>
+          </div>
+          <div class="type-row">
+            <span class="type-meta">Section<br />38–62 / 1.08 / 600</span>
+            <p class="type-section">A place for the details.</p>
+          </div>
+          <div class="type-row">
+            <span class="type-meta">Title<br />32 / 1.08 / 600</span>
+            <p class="type-title">The next chapter</p>
+          </div>
+          <div class="type-row">
+            <span class="type-meta">Lead<br />20 / 1.55 / 400</span>
+            <p class="type-lead">
+              Keep the note beside the thing it helps you do.
+            </p>
+          </div>
+          <div class="type-row">
+            <span class="type-meta">Body<br />16 / 1.55 / 400</span>
+            <p>
+              The books we return to often have a detail we missed the first
+              time. Keep a passage, a question, or just a few words to find your
+              way back.
+            </p>
+          </div>
+          <div class="type-row">
+            <span class="type-meta">Small / Caption<br />14 / 13 / 1.55</span>
+            <div>
+              <p class="small">Reading circle · Notes and possibilities</p>
+              <p class="caption">Updated in this example</p>
+            </div>
+          </div>
+        </div>
+        <div class="note-grid">
+          <p>
+            <strong>Display is an accent.</strong> Tight tracking belongs in
+            short headings, not paragraphs or controls. Keep useful body copy at
+            16 px and limit long reading to about 65 characters per line.
+          </p>
+          <p>
+            <strong>Hierarchy without shouting.</strong> Sentence case, medium
+            weight, generous separation. Eyebrows are short section markers, not
+            the default treatment for labels or instructions.
+          </p>
+        </div>
+      </section>
+
+      <section class="section wrap" id="rhythm" aria-labelledby="rhythm-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">04 / Rhythm &amp; shape</p>
+            <h2 id="rhythm-title">Soft edges.<br />Clear relationships.</h2>
+          </div>
+          <p>
+            A small spacing scale keeps neighboring things connected, with
+            optical adjustments for notes and panels. Bigger gaps make room for
+            a change of subject.
+          </p>
+        </div>
+        <div
+          class="spacing-ruler"
+          id="spacing-ruler"
+          role="group"
+          aria-label="Spacing scale"
+        ></div>
+        <div class="shape-grid">
+          <div>
+            <div class="shape small-radius">8</div>
+            <h3>Small detail</h3>
+            <p class="caption">8 px · labels, small objects</p>
+          </div>
+          <div>
+            <div class="shape control-radius">12</div>
+            <h3>Control</h3>
+            <p class="caption">12 px · fields, quiet actions</p>
+          </div>
+          <div>
+            <div class="shape card-radius">28</div>
+            <h3>Content</h3>
+            <p class="caption">28 px · panels; 15 px notes</p>
+          </div>
+          <div>
+            <div class="shape scene-radius">32</div>
+            <h3>Scene</h3>
+            <p class="caption">32 px · expressive fields</p>
+          </div>
+          <div>
+            <div class="shape pill-radius">∞</div>
+            <h3>Pill</h3>
+            <p class="caption">99 px · primary action</p>
+          </div>
+        </div>
+        <div class="density-board">
+          <div>
+            <p class="eyebrow">Comfortable / 60 px minimum rows</p>
+            <div class="sample-row">Choose a passage <span>Open</span></div>
+            <div class="sample-row">
+              Read the last chapter <span>Open</span>
+            </div>
+            <p class="caption">
+              24–32 px panel inset; 16 px between reading groups.
+            </p>
+          </div>
+          <div class="compact">
+            <p class="eyebrow">Compact / 48 px minimum rows</p>
+            <div class="sample-row">Choose a passage <span>Open</span></div>
+            <div class="sample-row">
+              Read the last chapter <span>Open</span>
+            </div>
+            <p class="caption">
+              16–24 px panel inset; keep interactive targets at least 44 px.
+            </p>
+          </div>
+        </div>
+        <div class="stroke-strip">
+          <span><i class="stroke thin"></i>1 px separators</span
+          ><span><i class="stroke medium"></i>2 px interface icons</span
+          ><span><i class="stroke thick"></i>3 px focus ring</span>
+          <p class="caption">
+            Illustration strokes scale with the artwork; they are not interface
+            strokes.
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="section wrap"
+        id="everyday"
+        aria-labelledby="everyday-title"
+      >
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">05 / Everyday work</p>
+            <h2 id="everyday-title">The work gets<br />the quiet part.</h2>
+          </div>
+          <p>
+            Tasks, notes and documents share the same calm surface. No floating
+            mascot, repeated celebration, or color-coded urgency in routine
+            work.
+          </p>
+        </div>
+        <p class="example-label">
+          Interactive specimen · fictional content · changes stay on this page
+        </p>
+        <div class="workspace">
+          <div class="workspace-top">
+            <span class="space-name"
+              ><span aria-hidden="true">●</span> My space</span
+            >
+            <div class="segmented" role="group" aria-label="Row density">
+              <button data-density="comfortable" aria-pressed="true">
+                Comfortable</button
+              ><button data-density="compact" aria-pressed="false">
+                Compact
+              </button>
+            </div>
+          </div>
+          <div class="workspace-body">
+            <aside class="workspace-nav">
+              <p class="eyebrow">Keep close</p>
+              <a href="#reading-area" aria-current="location"
+                >Reading circle <span aria-hidden="true">↗</span></a
+              >
+              <p>A few books.<br />A place for the details.</p>
+              <img src="../assets/book.svg" alt="" width="90" height="107" />
+            </aside>
+            <div class="reading-area" id="reading-area">
+              <div class="reading-heading">
+                <div>
+                  <h3>Reading circle</h3>
+                  <p class="muted">The next conversation starts here.</p>
+                </div>
+                <img
+                  src="../assets/folded-leaf.svg"
+                  alt=""
+                  width="44"
+                  height="56"
+                />
+              </div>
+              <div class="content-heading">
+                <h4>Next up</h4>
+                <span id="task-count">2 open</span>
+              </div>
+              <label class="task"
+                ><input type="checkbox" id="task-book" /><span
+                  >Choose the next book</span
+                ></label
+              >
+              <label class="task"
+                ><input type="checkbox" id="task-passage" /><span
+                  >Keep a passage to talk about</span
+                ></label
+              >
+              <div class="content-heading">
+                <h4>Notes</h4>
+                <span>1 note</span>
+              </div>
+              <button class="note-button" data-dialog="note-dialog">
+                <strong>A conversation worth keeping</strong
+                ><span
+                  >We kept coming back to stories about ordinary lives.
+                  Something short enough to read twice?</span
+                ><small>Reading circle <span aria-hidden="true">↗</span></small>
+              </button>
+              <div class="content-heading">
+                <h4>Documents</h4>
+                <span>1 document</span>
+              </div>
+              <button class="document-button" data-dialog="document-dialog">
+                <span class="document-icon" aria-hidden="true">TXT</span
+                ><span
+                  ><strong>Bookshop shortlist</strong
+                  ><small>Three possibilities for next time</small></span
+                ><span aria-hidden="true">↗</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="sample-foot">
+          <p class="caption">
+            Check and uncheck tasks; open the note and document. No completion
+            animation interrupts the list.
+          </p>
+          <button class="text-button" id="reset-workspace">
+            Reset example
+          </button>
+        </div>
+      </section>
+
+      <section class="section wrap" id="states" aria-labelledby="states-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">06 / Components &amp; states</p>
+            <h2 id="states-title">The next action<br />should be obvious.</h2>
+          </div>
+          <p>
+            One strong action at a time. Name the result. State is expressed
+            through words and shape as well as color.
+          </p>
+        </div>
+        <div class="component-board">
+          <div class="component-row">
+            <h3>Action hierarchy</h3>
+            <div class="component-examples">
+              <button class="button" data-state-demo="Primary action selected">
+                Keep this note</button
+              ><button
+                class="button secondary"
+                data-state-demo="Secondary action selected"
+              >
+                Review note</button
+              ><button
+                class="text-button"
+                data-state-demo="Text action selected"
+              >
+                Not now
+              </button>
+            </div>
+            <p class="caption">
+              Primary / secondary / text · select to compare feedback
+            </p>
+          </div>
+          <div class="component-row">
+            <h3>Visible states</h3>
+            <div class="component-examples state-examples">
+              <span class="button state-hover">Hover</span
+              ><span class="button state-focus">Focus</span
+              ><span class="button state-active">Pressed</span
+              ><button class="button" disabled>Unavailable</button>
+            </div>
+            <p class="caption">
+              Static hover, focus and pressed specimens. The disabled action
+              cannot run.
+            </p>
+          </div>
+          <div class="component-row">
+            <h3>Field &amp; validation</h3>
+            <form id="title-form" novalidate>
+              <label for="list-title">Reading list name</label>
+              <div class="field-row">
+                <input
+                  id="list-title"
+                  name="list-title"
+                  value="Reading circle"
+                  aria-describedby="title-help"
+                  maxlength="60"
+                  required
+                /><button class="button secondary" type="submit">
+                  Apply name
+                </button>
+              </div>
+              <p id="title-help" class="caption">
+                A name to recognize later. Maximum 60 characters.
+              </p>
+              <p id="title-error" class="field-error" hidden>
+                Enter a name for the reading list.
+              </p>
+            </form>
+            <p class="caption" id="field-result" role="status">
+              Current name: Reading circle
+            </p>
+          </div>
+          <div class="component-row">
+            <h3>Status without alarm</h3>
+            <div class="component-examples">
+              <span class="status-pill"
+                ><span aria-hidden="true">✓</span> Ready to review</span
+              ><span class="status-pill choice"
+                ><span aria-hidden="true">?</span> Your choice needed</span
+              ><span class="status-pill neutral"
+                ><span aria-hidden="true">—</span> Not started</span
+              >
+            </div>
+            <p class="caption">
+              Labels carry the meaning. A decorative dot alone does not.
+            </p>
+          </div>
+        </div>
+        <p id="component-status" class="caption" role="status">
+          Action samples only; no note is changed.
+        </p>
+        <div class="surface-comparison">
+          <div class="surface-example">
+            <p class="eyebrow">Light surface</p>
+            <h3>One useful detail.</h3>
+            <p>Keep a note close to the work it belongs to.</p>
+            <a href="#everyday">See the reading area ↗</a>
+          </div>
+          <div class="surface-example plum">
+            <p class="eyebrow">Plum surface</p>
+            <h3>Room for a welcome.</h3>
+            <p>Use a dark field for a short, expressive moment.</p>
+            <a href="#scenes">See the scene collection ↗</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section wrap" id="bend" aria-labelledby="bend-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">07 / Bend</p>
+            <h2 id="bend-title">Present.<br />Not persistent.</h2>
+          </div>
+          <p>
+            An open violet arch, fine facial marks and a little depth.
+            Expression follows the situation, not an imagined need for
+            friendship.
+          </p>
+        </div>
+        <div class="composition-links">
+          <a href="../bend/README.md">Construction &amp; API ↗</a
+          ><a href="../bend/index.html"
+            >All 30 combinations &amp; motion lab ↗</a
+          ><a href="../bend/svg/bend-master.svg">Master SVG ↗</a
+          ><a href="../examples/first-hello/index.html"
+            >A first hello · introduction &amp; gestures ↗</a
+          >
+        </div>
+        <div class="expression-grid" id="expression-grid"></div>
+        <p class="caption">
+          The same resting pose makes expression changes comparable. Keep the
+          face’s small marks restrained; never stretch the eyes into the whole
+          character.
+        </p>
+        <div class="bend-workbench">
+          <div class="workbench-stage scene" id="pose-scene">
+            <div
+              class="bend-slot"
+              id="pose-bend"
+              data-bend="wave"
+              data-expression="welcome"
+              data-name="Bend pose preview"
+            ></div>
+          </div>
+          <div class="workbench-controls">
+            <h3>A body that can help.</h3>
+            <p>
+              Use the pose to show the relationship: reading a book, carrying a
+              stack, or indicating the thing that needs attention.
+            </p>
+            <label for="pose-select">Pose</label
+            ><select id="pose-select">
+              <option value="rest">Rest</option>
+              <option value="wave" selected>Wave</option>
+              <option value="read">Read</option>
+              <option value="carry">Carry</option>
+              <option value="celebrate">Celebrate</option>
+              <option value="point">Point</option></select
+            ><label for="expression-select">Expression</label
+            ><select id="expression-select">
+              <option value="welcome">Welcome</option>
+              <option value="curious">Curious</option>
+              <option value="thinking">Thinking</option>
+              <option value="pleased">Pleased</option>
+              <option value="unsure">Unsure</option></select
+            ><button class="button secondary" id="replay-pose">
+              Replay gesture
+            </button>
+            <p class="caption">
+              Change pose or expression without playing motion. Replay is always
+              optional.
+            </p>
+          </div>
+        </div>
+        <div class="subhead">
+          <h3>Small, still, and on both surfaces</h3>
+          <p>
+            Static comparisons. Use the full character at 64 CSS px or larger.
+            The 32 and 48 px samples are diagnostic inspections only, not
+            approved icon sizes. Never use an expression as the only status
+            label.
+          </p>
+        </div>
+        <div class="size-comparisons" id="size-comparisons"></div>
+
+        <section id="mini-bend" aria-labelledby="mini-title">
+          <div class="subhead">
+            <h3 id="mini-title">Mini Bend.<br />Just an arch and two eyes.</h3>
+            <p>
+              A separate small mark, not a shrunken illustration. One color, no
+              arms or depth. Keep it still beside everyday content; let only the
+              eyes change while something loads.
+            </p>
+          </div>
+          <div class="mini-specimens">
+            <div
+              class="mini-surface"
+              role="group"
+              aria-label="Mini Bend on paper"
+            >
+              <figure>
+                <img
+                  src="../bend/mini/mini.svg"
+                  alt="Mini Bend at 16 pixels"
+                  width="16"
+                  height="16"
+                />
+                <figcaption>16 px</figcaption>
+              </figure>
+              <figure>
+                <img
+                  src="../bend/mini/mini.svg"
+                  alt="Mini Bend at 24 pixels"
+                  width="24"
+                  height="24"
+                />
+                <figcaption>24 px</figcaption>
+              </figure>
+              <figure>
+                <img
+                  src="../bend/mini/mini.svg"
+                  alt="Mini Bend at 32 pixels"
+                  width="32"
+                  height="32"
+                />
+                <figcaption>32 px</figcaption>
+              </figure>
+              <figure>
+                <span
+                  class="bend-mini bend-mini--ascii mini-static-ascii"
+                  role="img"
+                  aria-label="ASCII Mini Bend"
+                  ><span aria-hidden="true"
+                    >&#32;.-.&#32;&#10;|'&#32;'|&#10;|&#32;&#32;&#32;|</span
+                  ></span
+                >
+                <figcaption>ASCII</figcaption>
+              </figure>
+            </div>
+            <div
+              class="mini-surface plum"
+              role="group"
+              aria-label="Mini Bend on plum"
+            >
+              <figure>
+                <img
+                  src="../bend/mini/mini-light.svg"
+                  alt="Mini Bend at 16 pixels"
+                  width="16"
+                  height="16"
+                />
+                <figcaption>16 px</figcaption>
+              </figure>
+              <figure>
+                <img
+                  src="../bend/mini/mini-light.svg"
+                  alt="Mini Bend at 24 pixels"
+                  width="24"
+                  height="24"
+                />
+                <figcaption>24 px</figcaption>
+              </figure>
+              <figure>
+                <img
+                  src="../bend/mini/mini-light.svg"
+                  alt="Mini Bend at 32 pixels"
+                  width="32"
+                  height="32"
+                />
+                <figcaption>32 px</figcaption>
+              </figure>
+              <figure>
+                <span
+                  class="bend-mini bend-mini--ascii mini-static-ascii"
+                  role="img"
+                  aria-label="ASCII Mini Bend"
+                  ><span aria-hidden="true"
+                    >&#32;.-.&#32;&#10;|'&#32;'|&#10;|&#32;&#32;&#32;|</span
+                  ></span
+                >
+                <figcaption>ASCII</figcaption>
+              </figure>
+            </div>
+          </div>
+          <p class="caption mini-caption">
+            SVG: 16–32 px. ASCII: five columns, three lines, about 30 × 30 px.
+            Its fixed-width characters change in discrete frames; the arch stays
+            still.
+          </p>
+          <div class="mini-example" id="mini-example">
+            <div class="mini-example-heading">
+              <div>
+                <p class="eyebrow">Loading / low energy</p>
+                <h4>Opening a note</h4>
+              </div>
+              <div>
+                <label for="mini-format">Loading mark</label
+                ><select id="mini-format" disabled>
+                  <option value="ascii">ASCII</option>
+                  <option value="svg">SVG</option>
+                </select>
+              </div>
+            </div>
+            <div class="mini-status-line">
+              <span id="mini-mark" aria-hidden="true"
+                ><span class="bend-mini bend-mini--ascii"
+                  >&#32;.-.&#32;&#10;|'&#32;'|&#10;|&#32;&#32;&#32;|</span
+                ></span
+              >
+              <p
+                id="mini-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                No note open.
+              </p>
+            </div>
+            <div class="component-examples">
+              <button class="button" id="mini-open" disabled>
+                Open sample note</button
+              ><button class="button secondary" id="mini-complete" disabled>
+                Complete now</button
+              ><button class="button secondary" id="mini-error" disabled>
+                Show error</button
+              ><button class="text-button" id="mini-cancel" disabled>
+                Cancel
+              </button>
+            </div>
+            <div id="mini-result" aria-busy="false">
+              <article class="mini-note" id="mini-note" hidden>
+                <h5>A good detail</h5>
+                <p>Keep one passage to return to after the last chapter.</p>
+              </article>
+            </div>
+            <p class="caption mini-caption">
+              Local simulation with a four-second wait. Complete, fail or cancel
+              it sooner to compare states. Pausing motion never pauses the
+              operation.
+            </p>
+            <p class="caption" id="mini-fallback">
+              The loading example needs JavaScript and the Mini Bend library.
+              Static artwork remains available.
+            </p>
+          </div>
+          <div class="composition-links">
+            <a href="../bend/mini/README.md"
+              >Mini Bend construction &amp; API ↗</a
+            ><a href="../bend/mini/mini.svg">Dark SVG ↗</a
+            ><a href="../bend/mini/mini-light.svg">Light SVG ↗</a
+            ><a href="../bend/mini/mini.txt">ASCII text ↗</a>
+          </div>
+        </section>
+      </section>
+
+      <section class="section wrap" id="scenes" aria-labelledby="scenes-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">08 / Situations</p>
+            <h2 id="scenes-title">One world.<br />Different energy.</h2>
+          </div>
+          <p>
+            Give expressive moments a composition. Let quiet moments use only
+            what helps. The character is never the only explanation of a result.
+          </p>
+        </div>
+        <div class="scene-pair">
+          <figure class="illustrated-card sky">
+            <div class="scene reading-scene" id="reading-scene">
+              <img
+                class="scene-background"
+                src="../assets/reading-garden.svg"
+                alt=""
+                width="720"
+                height="440"
+              />
+              <div
+                class="bend-slot"
+                data-bend="read"
+                data-expression="thinking"
+                data-name="Bend reads in a paper garden"
+              ></div>
+            </div>
+            <figcaption>
+              <span class="eyebrow">Reading / low energy</span>
+              <h3>Worth coming back to.</h3>
+              <p>
+                A book, a note, a moment to follow a thought. Leave the content
+                itself still.
+              </p>
+              <button
+                class="text-button"
+                data-replay="reading-scene"
+                data-gesture="consider"
+              >
+                Replay reading gesture
+              </button>
+            </figcaption>
+          </figure>
+          <figure class="illustrated-card lilac">
+            <div class="scene carrying-scene" id="carrying-scene">
+              <img
+                class="scene-background"
+                src="../assets/gathering.svg"
+                alt=""
+                width="720"
+                height="440"
+              />
+              <div
+                class="bend-slot"
+                data-bend="carry"
+                data-expression="welcome"
+                data-name="Bend carries books along a violet ribbon"
+              ></div>
+            </div>
+            <figcaption>
+              <span class="eyebrow">Gathering / medium energy</span>
+              <h3>A few things, together.</h3>
+              <p>
+                The objects show what is being organized. A small settle is
+                enough to bring them into place.
+              </p>
+              <button
+                class="text-button"
+                data-replay="carrying-scene"
+                data-gesture="gather"
+              >
+                Replay gathering gesture
+              </button>
+            </figcaption>
+          </figure>
+        </div>
+        <p class="example-label">
+          Interactive situation specimens · simulated results, not product
+          availability
+        </p>
+        <div class="tool-moment">
+          <div class="tool-copy">
+            <span class="eyebrow">Tool ready / occasional delight</span>
+            <h3>A reading list,<br />in your own way.</h3>
+            <p>“Give the books on my shortlist a place for reading status.”</p>
+            <p class="muted">
+              Three fictional titles from the Bookshop shortlist.
+            </p>
+            <button class="button" id="make-list">Make reading list</button>
+            <p id="tool-status" role="status">Nothing made yet.</p>
+          </div>
+          <div class="tool-art scene" id="tool-scene">
+            <img
+              src="../assets/gathering.svg"
+              class="scene-background"
+              alt=""
+              width="720"
+              height="440"
+            />
+            <div
+              class="bend-slot"
+              id="tool-bend"
+              data-bend="carry"
+              data-expression="curious"
+              data-name="Bend beside a stack of books"
+            ></div>
+          </div>
+          <div class="made-list" id="made-list" hidden>
+            <div class="content-heading">
+              <h4>Reading list</h4>
+              <button class="text-button" id="undo-list">Undo creation</button>
+            </div>
+            <div class="book-status-row">
+              <span>The Quiet Street</span
+              ><label
+                ><span aria-hidden="true">Reading status</span
+                ><span class="sr-only">Reading status for The Quiet Street</span
+                ><select>
+                  <option>Considering</option>
+                  <option>Reading</option>
+                  <option>Finished</option>
+                </select></label
+              >
+            </div>
+            <div class="book-status-row">
+              <span>A Map of Small Things</span
+              ><label
+                ><span aria-hidden="true">Reading status</span
+                ><span class="sr-only"
+                  >Reading status for A Map of Small Things</span
+                ><select>
+                  <option>Considering</option>
+                  <option>Reading</option>
+                  <option>Finished</option>
+                </select></label
+              >
+            </div>
+            <div class="book-status-row">
+              <span>Almost Sunday</span
+              ><label
+                ><span aria-hidden="true">Reading status</span
+                ><span class="sr-only">Reading status for Almost Sunday</span
+                ><select>
+                  <option>Considering</option>
+                  <option>Reading</option>
+                  <option>Finished</option>
+                </select></label
+              >
+            </div>
+          </div>
+        </div>
+        <div class="quiet-situations">
+          <article class="choice-moment scene" id="choice-scene">
+            <div
+              class="bend-slot small-bend"
+              data-bend="point"
+              data-expression="unsure"
+              data-name="Bend waits beside two choices"
+            ></div>
+            <div>
+              <span class="eyebrow">Uncertain / ask, then wait</span>
+              <h3>Which note belongs here?</h3>
+              <p id="choice-status" role="status">
+                Two notes mention the next book. Choose one to keep beside the
+                shortlist.
+              </p>
+              <div class="choice-buttons">
+                <button
+                  class="button secondary"
+                  data-choice="Conversation notes"
+                  aria-pressed="false"
+                >
+                  Conversation notes</button
+                ><button
+                  class="button secondary"
+                  data-choice="Reading ideas"
+                  aria-pressed="false"
+                >
+                  Reading ideas
+                </button>
+              </div>
+              <button class="text-button" id="clear-choice" disabled>
+                Clear choice
+              </button>
+            </div>
+          </article>
+          <article class="recovery-moment scene" id="recovery-scene">
+            <div
+              class="bend-slot small-bend"
+              data-bend="rest"
+              data-expression="thinking"
+              data-name="Bend stands quietly beside a recovery message"
+            ></div>
+            <div>
+              <span class="eyebrow">Recovery / explain, don’t dramatize</span>
+              <h3 id="recovery-title">The preview didn’t open.</h3>
+              <p id="recovery-copy" role="status">
+                Try opening the example again, or read the text instead.
+              </p>
+              <div class="component-examples">
+                <button class="button secondary" id="retry-preview">
+                  Try again</button
+                ><button class="text-button" data-dialog="document-dialog">
+                  Read the text
+                </button>
+              </div>
+              <button class="text-button" id="reset-recovery" hidden>
+                Reset example
+              </button>
+            </div>
+          </article>
+        </div>
+        <p class="caption">
+          No tears, guilt, victory shower or alarming red scene. A choice stays
+          with the person; a recovery message names the problem and offers a
+          concrete next step.
+        </p>
+        <div class="composition-links">
+          <a href="../examples/listening-room/index.html">Listening room ↗</a
+          ><a href="../examples/listening-room/implementation.md"
+            >Composition &amp; controls ↗</a
+          >
+        </div>
+      </section>
+
+      <section
+        class="section wrap"
+        id="illustration"
+        aria-labelledby="illustration-title"
+      >
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">09 / Illustration</p>
+            <h2 id="illustration-title">
+              Paper, curves,<br />and a little depth.
+            </h2>
+          </div>
+          <p>
+            A small family of objects, used in relationship. Sweeping ribbons
+            connect the scene; folded planes and offset edges give it substance.
+          </p>
+        </div>
+        <div class="grammar-board">
+          <div class="grammar-art">
+            <img
+              src="../assets/quiet-ribbon.svg"
+              alt="A pale violet ribbon leads toward a folded page and lemon leaf"
+              width="960"
+              height="240"
+            />
+          </div>
+          <div class="three-columns">
+            <div>
+              <h3>01. Establish a path</h3>
+              <p>
+                One or two broad curves. Crop at the scene edge, not at Bend’s
+                face. Keep the path out of reading areas.
+              </p>
+            </div>
+            <div>
+              <h3>02. Add useful objects</h3>
+              <p>
+                Books, notes and cards refer to the work. Use a few at varied
+                sizes, not a cloud of generic sparkles.
+              </p>
+            </div>
+            <div>
+              <h3>03. Place a relationship</h3>
+              <p>
+                Let Bend stand on a ribbon, hold a book or point toward a
+                choice. Preserve the open arch and give the face breathing room.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="composition-links">
+          <a href="illustrations.html"
+            >Browse the full illustration catalogue ↗</a
+          >
+        </div>
+        <p class="caption">
+          Objects, background elements, compositions and character resources.
+          See the catalogue for source files and reuse guidance.
+        </p>
+      </section>
+
+      <section class="section wrap" id="motion" aria-labelledby="motion-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">10 / Motion</p>
+            <h2 id="motion-title">A gesture.<br />Then stillness.</h2>
+          </div>
+          <p>
+            Character gestures are finite and replayable. Optional slow ribbon
+            drift belongs only to the welcome panorama. Mini Bend’s eyes move
+            only while loading. The page-wide control pauses all three, not the
+            work itself.
+          </p>
+        </div>
+        <div class="motion-score">
+          <div>
+            <span class="score-line short"></span><strong>160 ms</strong
+            ><span>Interface feedback</span>
+          </div>
+          <div>
+            <span class="score-line medium"></span><strong>700 ms</strong
+            ><span>Object settle</span>
+          </div>
+          <div>
+            <span class="score-line long"></span><strong>1,400 ms</strong
+            ><span>Character gesture target</span>
+          </div>
+          <div>
+            <span class="score-line longest"></span><strong>2,200 ms</strong
+            ><span>Scene accent ceiling</span>
+          </div>
+        </div>
+        <div class="note-grid">
+          <p>
+            <strong>Meaning does not wait for motion.</strong> A reading list
+            appears immediately. The optional gesture acknowledges it, never
+            completes it. Routine task checkboxes stay quiet.
+          </p>
+          <p>
+            <strong>Still is a complete experience.</strong> Reduced motion
+            takes effect live. It stops gestures without removing information.
+            Hidden tabs, offscreen scenes and open dialogs pause motion; static
+            comparisons never animate. Optional welcome drift takes 14 seconds
+            per cycle, with no repeated character gesture.
+          </p>
+        </div>
+        <div class="closing scene" id="closing-scene">
+          <div>
+            <img
+              src="../assets/wordmark-light.svg"
+              alt="Situate"
+              width="165"
+              height="44"
+            />
+            <h3>A little color.<br />A lot of room for you.</h3>
+            <p>Let the person’s work be the interesting part.</p>
+          </div>
+          <div
+            class="bend-slot"
+            data-bend="rest"
+            data-expression="welcome"
+            data-name="Bend resting beside the Situate wordmark"
+          ></div>
+        </div>
+      </section>
+    </main>
+    <footer class="footer wrap">
+      <p>
+        Situate / Bend in Motion<br /><span class="caption"
+          >Brand foundation · live reference</span
+        >
+      </p>
+      <div>
+        <a href="../README.md">Handbook</a
+        ><a href="../tokens.json">Token source</a
+        ><a href="../tokens.css">CSS tokens</a><a href="#top">Back to top ↑</a>
+      </div>
+    </footer>
+    <p
+      class="sr-only"
+      id="announcement"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    ></p>
+    <dialog id="note-dialog" aria-labelledby="note-title">
+      <div class="dialog-top">
+        <h2 id="note-title">A conversation worth keeping</h2>
+        <button class="icon-button" data-close aria-label="Close note">
+          ×
+        </button>
+      </div>
+      <p>
+        We kept coming back to stories about ordinary lives. Something short
+        enough to read twice?
+      </p>
+      <ul>
+        <li>Around 200 pages would leave room to reread.</li>
+        <li>Keep one passage to talk about.</li>
+        <li>Try a different setting from the last book.</li>
+      </ul>
+      <p class="muted dialog-help">
+        Next: choose a book from the Bookshop shortlist.
+      </p>
+      <button class="button" data-close>Back to reading circle</button>
+    </dialog>
+    <dialog id="document-dialog" aria-labelledby="document-title">
+      <div class="dialog-top">
+        <h2 id="document-title">Bookshop shortlist</h2>
+        <button class="icon-button" data-close aria-label="Close document">
+          ×
+        </button>
+      </div>
+      <div class="document-sheet">
+        <p><strong>The Quiet Street</strong><br />Ellis Rowan · 192 pages</p>
+        <p>
+          <strong>A Map of Small Things</strong><br />Robin Vale · 208 pages
+        </p>
+        <p><strong>Almost Sunday</strong><br />Alex Linden · 176 pages</p>
+      </div>
+      <button class="button" data-close>Close document</button>
+    </dialog>
+  </body>
+</html>

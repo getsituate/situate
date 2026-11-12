@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bend — Character library · Situate</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        color: #30203e;
+        background: #fff7e3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        max-width: 1200px;
+        margin: auto;
+        padding: 40px 24px 80px;
+      }
+      a {
+        color: inherit;
+        text-underline-offset: 0.2em;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        margin-bottom: 64px;
+      }
+      h1 {
+        font-size: clamp(44px, 8vw, 88px);
+        letter-spacing: -0.055em;
+        margin: 0;
+        line-height: 1.04;
+      }
+      h2 {
+        font-size: 30px;
+        letter-spacing: -0.035em;
+        margin: 64px 0 16px;
+      }
+      p {
+        max-width: 68ch;
+        line-height: 1.65;
+      }
+      .lead {
+        font-size: 21px;
+        max-width: 52ch;
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin-top: 32px;
+        background: #fffefa;
+        border: 1px solid #ad9284;
+        border-radius: 28px;
+        overflow: hidden;
+      }
+      .art {
+        background: #e9ddfa;
+        display: grid;
+        place-items: center;
+        min-height: 400px;
+        transition: none;
+      }
+      .art[data-dark="true"],
+      .samples[data-dark="true"] {
+        background: #30203e;
+      }
+      #preview {
+        width: min(100%, 400px);
+        aspect-ratio: 1;
+      }
+      #preview svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .controls {
+        padding: 32px;
+      }
+      .fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        font-weight: 650;
+      }
+      select,
+      button {
+        font: inherit;
+        color: inherit;
+        min-height: 44px;
+        border: 1px solid #ad9284;
+        border-radius: 12px;
+        padding: 10px 14px;
+        background: #fffefa;
+      }
+      select {
+        width: 100%;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover {
+        background: #fff7e3;
+      }
+      button.primary {
+        background: #30203e;
+        color: #fff7e3;
+        border-color: #30203e;
+      }
+      :focus-visible {
+        outline: 3px solid #7045bd;
+        outline-offset: 4px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 20px;
+      }
+      #motion-status {
+        min-height: 3em;
+        font-size: 14px;
+      }
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+      figure {
+        margin: 0;
+      }
+      .gallery figure {
+        background: #fffefa;
+        border-radius: 20px;
+        text-align: center;
+        padding: 10px 8px 20px;
+      }
+      .gallery svg {
+        width: 100%;
+        height: auto;
+        max-width: 192px;
+      }
+      figcaption {
+        font-size: 14px;
+      }
+      .pose-title {
+        grid-column: 1 / -1;
+        margin: 20px 0 0;
+        font-size: 20px;
+        text-transform: capitalize;
+      }
+      .samples {
+        background: #e9ddfa;
+        border-radius: 20px;
+        padding: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        align-items: end;
+      }
+      .samples figure {
+        text-align: center;
+        background: #fffefa;
+        padding: 12px;
+        border-radius: 12px;
+      }
+      .samples svg {
+        display: block;
+        margin: auto;
+      }
+      .diagram {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin-top: 24px;
+      }
+      footer {
+        border-top: 1px solid #ad9284;
+        margin-top: 48px;
+        padding-top: 24px;
+      }
+      @media (max-width: 720px) {
+        .stage {
+          grid-template-columns: 1fr;
+        }
+        .art {
+          min-height: 300px;
+        }
+        .gallery {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .controls {
+          padding: 24px;
+        }
+        nav {
+          margin-bottom: 40px;
+        }
+      }
+      @media (max-width: 380px) {
+        .fields {
+          grid-template-columns: 1fr;
+        }
+        main {
+          padding-inline: 16px;
+        }
+      }
+    </style>
+    <script src="bend.js" defer></script>
+    <script src="motion.js" defer></script>
+    <script src="example.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <nav aria-label="Brand library">
+        <a href="../reference/index.html">Situate brand reference</a
+        ><a href="README.md">Character manual</a
+        ><a href="svg/bend-master.svg">Master SVG</a>
+      </nav>
+      <h1>A little Bend.<br />A little company.</h1>
+      <p class="lead">
+        An open arch, a face on its crown, and room for the things that matter.
+        Bend is warm company, not another thing to look after.
+      </p>
+      <section class="stage" aria-label="Character preview">
+        <div class="art" id="surface"><div id="preview"></div></div>
+        <div class="controls">
+          <div class="fields">
+            <label
+              >Pose<select id="pose">
+                <option>rest</option>
+                <option selected>wave</option>
+                <option>read</option>
+                <option>carry</option>
+                <option>celebrate</option>
+                <option>point</option>
+              </select></label
+            ><label
+              >Expression<select id="expression">
+                <option>welcome</option>
+                <option>curious</option>
+                <option>thinking</option>
+                <option>pleased</option>
+                <option>unsure</option>
+              </select></label
+            >
+          </div>
+          <p id="expression-note">
+            An open smile and relaxed brows. A greeting, not a request for
+            attention.
+          </p>
+          <label
+            >Gesture<select id="gesture">
+              <option>hello</option>
+              <option>consider</option>
+              <option>gather</option>
+              <option>celebrate</option>
+              <option>point</option>
+            </select></label
+          >
+          <div class="actions">
+            <button class="primary" id="play">Play gesture</button
+            ><button id="pause" aria-pressed="false">Pause motion</button
+            ><button id="stop">Stop motion</button>
+          </div>
+          <p id="motion-status" role="status">
+            Still until you choose a gesture.
+          </p>
+          <button id="background" aria-pressed="false">Dark backdrop</button>
+          <p>
+            <small
+              >This is a character preview. The books and card are
+              illustrations; no tasks, AI or services run here.</small
+            >
+          </p>
+        </div>
+      </section>
+      <section aria-labelledby="range-title">
+        <h2 id="range-title">A face for the moment</h2>
+        <p>
+          Expression and posture are independent. In daily work, prefer rest or
+          a small reading pose. Save the wave for a welcome and the raised card
+          for an occasional, meaningful completion.
+        </p>
+        <div class="gallery" id="gallery"></div>
+      </section>
+      <section aria-labelledby="size-title">
+        <h2 id="size-title">Give the expression room</h2>
+        <p>
+          64 pixels preserves the silhouette. At 96 pixels, the face begins to
+          read. Use at least 160 pixels when the difference between expressions
+          matters; never make an expression the only status indicator.
+        </p>
+        <div class="samples" id="samples"></div>
+      </section>
+      <section aria-labelledby="construction-title">
+        <h2 id="construction-title">Built around an opening</h2>
+        <p>
+          The crown carries the face. The arms emerge from behind the body,
+          leaving the highlight and inner crease continuous. Books can pass in
+          front; the arch itself never has a lower connector.
+        </p>
+        <img
+          class="diagram"
+          src="anatomy.svg"
+          width="960"
+          height="650"
+          alt="Construction diagram showing the two hidden arm origins, crown face box and six layers from rear arms to front props."
+        />
+      </section>
+      <footer>
+        <p>
+          See the <a href="README.md">character manual</a> for exact geometry,
+          color values, motion behavior and export instructions.
+        </p>
+      </footer>
+      <noscript
+        ><p>
+          JavaScript is off.
+          <a href="svg/bend-master.svg">View the static Bend SVG</a> or open the
+          <a href="README.md">character manual</a>.
+        </p></noscript
+      >
+    </main>
+  </body>
+</html>

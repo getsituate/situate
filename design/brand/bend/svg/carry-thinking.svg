@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320" role="img" aria-labelledby="bend-carry-thinking-title" focusable="false" data-bend-pose="carry" data-bend-expression="thinking">
+<title id="bend-carry-thinking-title">Bend — carry, thinking</title>
+<defs>
+<clipPath id="bend-carry-thinking-left-exterior" clipPathUnits="userSpaceOnUse"><rect x="0" y="0" width="124" height="320"/></clipPath>
+<clipPath id="bend-carry-thinking-right-exterior" clipPathUnits="userSpaceOnUse"><rect x="195" y="0" width="125" height="320"/></clipPath>
+</defs>
+<g data-bend-part="figure" style="transform-box:view-box;transform-origin:160px 270px">
+<g data-bend-part="rear-arms"><g clip-path="url(#bend-carry-thinking-left-exterior)"><g data-bend-part="left-arm" data-bend-origin="103 169" style="transform-box:view-box;transform-origin:103px 169px"><path d="M103 169C57 188 66 218 108 235" fill="none" stroke="#a77bff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/></g></g><g clip-path="url(#bend-carry-thinking-right-exterior)"><g data-bend-part="right-arm" data-bend-origin="225 169" style="transform-box:view-box;transform-origin:225px 169px"><path d="M225 169C279 187 272 219 230 233" fill="none" stroke="#a77bff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/></g></g></g>
+<g data-bend-part="body">
+<path data-bend-part="depth" d="M105 270V148c0-82 131-89 136-3l2 113c0 15-13 21-23 15l-9-8-2-115c-1-33-84-30-85 2v110c0 15-9 24-19 8Z" fill="#56329b"/>
+<path data-bend-part="front" d="M91 264V141c0-82 132-88 136-2l2 112c0 17-30 19-31 3l-3-111c-1-33-71-29-71 3v115c0 19-33 22-33 3Z" fill="#a77bff"/>
+<path data-bend-part="highlight" d="M101 257V142c0-35 22-61 54-64" fill="none" stroke="#d9c6ff" stroke-width="3" stroke-linecap="round"/>
+<path data-bend-part="inset" d="M204 143l2 106" fill="none" stroke="#7045bd" stroke-width="2" stroke-linecap="round"/>
+</g>
+<g data-bend-part="face" fill="none" stroke="#30203e" stroke-linecap="round" stroke-linejoin="round" style="transform-box:view-box;transform-origin:160px 100px"><path d="M141 88q5-3 10-1m15 0q5-2 10 1" stroke-width="2.4"/><path d="M144 97h9m16 0h9" stroke-width="3"/><path d="M146 98v4m25-4v4" stroke-width="4"/><path d="M155 111h10" stroke-width="3"/></g>
+<g data-bend-part="prop"><g transform="translate(0 18)">
+<rect x="93" y="187" width="142" height="23" rx="5" fill="#f4f06d"/>
+<rect x="104" y="167" width="125" height="21" rx="4" fill="#48b7ff"/>
+<path d="M110 173h110m-98 8h98" stroke="#fffefa" stroke-width="2"/>
+<rect x="107" y="207" width="132" height="24" rx="4" fill="#ff874d"/>
+<path data-bend-part="hands" d="m112 214 16 1m90 1 13-2" stroke="#a77bff" stroke-width="12" stroke-linecap="round"/>
+</g></g>
+</g>
+</svg>

@@ -1,0 +1,21 @@
+[[architecture-constraints]]
+== Architecture Constraints
+
+The link:../../requirements/data/foundations.md[foundations] and referenced requirements define the constraints below.
+They are approved boundaries for design, not claims about implemented safeguards.
+The product owner can clarify or change product, budget and distribution boundaries; the CTO clarifies technical restrictions and their consequences within those boundaries.
+Legal obligations require assessment against the actual processing and cannot be waived by a product decision.
+
+:architecture-repository-root: ../..
+:architecture-docs-root: ..
+
+include::02-architecture-constraints/product-and-organizational-constraints.adoc[]
+
+include::02-architecture-constraints/technical-constraints.adoc[]
+
+include::02-architecture-constraints/legal-and-licensing-constraints.adoc[]
+
+include::02-architecture-constraints/unresolved-boundaries.adoc[]
+
+:!architecture-repository-root:
+:!architecture-docs-root:

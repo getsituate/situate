@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f3ee" />
+    <title>Situate — A first hello</title>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="intro.css" />
+    <script src="../../bend/bend.js" defer></script>
+    <script src="../../bend/performance.js" defer></script>
+    <script src="timeline.js" defer></script>
+    <script src="intro.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#introduction">Skip to introduction</a>
+    <header class="shell page-header">
+      <a href="../../reference/index.html"
+        ><img
+          src="../../assets/wordmark.svg"
+          alt="Situate brand reference"
+          width="146"
+          height="42"
+      /></a>
+      <span>A first hello</span>
+      <a href="README.md">Scene notes <span aria-hidden="true">↗</span></a>
+    </header>
+    <main class="shell">
+      <h1 class="sr-only" id="intro-title">Welcome to Situate</h1>
+      <figure class="film" id="introduction" aria-labelledby="intro-title">
+        <div
+          class="stage"
+          id="stage"
+          role="img"
+          aria-label="Bend sways into view, waves and gives a quick wink, then presents tasks, notes and documents. Situate: your personal organization, connected."
+        >
+          <div class="picture" aria-hidden="true">
+            <div class="world" id="world"></div>
+            <div class="ribbons" id="ribbons">
+              <img
+                src="../../assets/panorama-back-ribbons.svg"
+                alt=""
+                width="1440"
+                height="500"
+              />
+            </div>
+            <div class="ground" id="ground"></div>
+            <div class="title title-hello" id="title-hello">
+              <p>Hi, I’m <em>Bend.</em></p>
+            </div>
+            <div class="title title-together" id="title-together">
+              <p>Tasks. Notes.<br />Documents.</p>
+            </div>
+            <div class="title title-end" id="title-end">
+              <img
+                src="../../assets/wordmark-light.svg"
+                alt=""
+                width="300"
+                height="80"
+              />
+              <p>Your personal organization,<br />connected.</p>
+            </div>
+            <div class="object object-task" id="object-task">
+              <img
+                src="../../assets/card.svg"
+                alt=""
+                width="210"
+                height="150"
+              /><span>Tasks</span>
+            </div>
+            <div class="object object-note" id="object-note">
+              <img
+                src="../../assets/book.svg"
+                alt=""
+                width="160"
+                height="190"
+              /><span>Notes</span>
+            </div>
+            <div class="object object-document" id="object-document">
+              <img
+                src="../../assets/page.svg"
+                alt=""
+                width="160"
+                height="190"
+              /><span>Documents</span>
+            </div>
+            <div class="actor-position" id="actor-position">
+              <div class="actor-shadow" id="actor-shadow"></div>
+              <div id="actor">
+                <img
+                  src="../../bend/svg/rest-welcome.svg"
+                  alt=""
+                  width="320"
+                  height="320"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="transport">
+          <div class="playback-buttons">
+            <button id="toggle" class="button primary" disabled>
+              Play introduction</button
+            ><button id="restart" class="button secondary" disabled>
+              Restart</button
+            ><button id="finish" class="text-button" disabled>
+              Skip to end
+            </button>
+          </div>
+          <div class="timeline-control">
+            <label class="sr-only" for="position">Introduction position</label
+            ><input
+              id="position"
+              type="range"
+              min="0"
+              max="10"
+              step="0.01"
+              value="10"
+              disabled
+            /><output id="time" for="position">0:10 / 0:10</output>
+          </div>
+          <p id="playback-status" class="caption" role="status">
+            Still introduction.
+          </p>
+        </figcaption>
+      </figure>
+      <p class="scope-note">
+        An introduction study, not an application launch. Ten seconds, without
+        sound. No account, AI, or connected service is used.
+      </p>
+      <noscript
+        ><p class="notice">
+          JavaScript is off. The still introduction and its text remain
+          available.
+        </p></noscript
+      >
+      <details class="transcript">
+        <summary>Read the introduction</summary>
+        <p>Hi, I’m Bend.</p>
+        <p>Tasks. Notes. Documents.</p>
+        <p>Situate. Your personal organization, connected.</p>
+        <p class="caption">
+          Bend sways into view, settles, waves, and gives a quick wink. As Bend
+          opens its arms, a card, a book, and a document arrive on broad colored
+          ribbons. The scene settles around the Situate name.
+        </p>
+      </details>
+
+      <section class="acting" aria-labelledby="acting-title">
+        <div class="acting-copy">
+          <p class="eyebrow">Bend, a little closer</p>
+          <h2 id="acting-title">
+            A glance.<br />A gesture.<br />A little character.
+          </h2>
+          <p>
+            Watch the mouth, eyes and hands together, or the gentle sway on its
+            own.
+          </p>
+          <div
+            class="gesture-buttons"
+            role="group"
+            aria-label="Character gestures"
+          >
+            <button class="button secondary" data-gesture="hello" disabled>
+              Say hello</button
+            ><button class="button secondary" data-gesture="wink" disabled>
+              Wink</button
+            ><button class="button secondary" data-gesture="talk" disabled>
+              Mouth &amp; eyes</button
+            ><button class="button secondary" data-gesture="walk" disabled>
+              Rock side to side</button
+            ><button class="button secondary" data-gesture="present" disabled>
+              Present
+            </button>
+          </div>
+          <button class="text-button" id="stop-gesture" disabled>
+            Show still
+          </button>
+          <p class="caption" id="gesture-status" role="status">
+            Still character.
+          </p>
+        </div>
+        <div
+          class="acting-stage"
+          id="acting-stage"
+          role="img"
+          aria-label="Bend character movement preview"
+        >
+          <div class="lab-ground" aria-hidden="true"></div>
+          <div id="lab-actor" aria-hidden="true">
+            <img
+              src="../../bend/svg/rest-welcome.svg"
+              alt=""
+              width="320"
+              height="320"
+            />
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="shell page-footer">
+      <a href="../../README.md">Brand handbook</a
+      ><a href="../../bend/PERFORMANCE.md">Character movement guide</a
+      ><a href="README.md">Storyboard &amp; checks</a>
+    </footer>
+  </body>
+</html>

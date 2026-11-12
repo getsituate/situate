@@ -1,0 +1,29 @@
+.situate-text-control {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  min-height: var(--situate-target-min);
+  padding: var(--situate-space-3);
+  border: var(--situate-stroke-divider) solid var(--situate-control-line);
+  border-radius: var(--situate-radius-control);
+  background: var(--situate-surface);
+  color: var(--situate-ink);
+  font: inherit;
+}
+.situate-text-control:where([data-field-tone="error"]) {
+  border-color: var(--situate-ink);
+  box-shadow: inset 0 0 0 1px var(--situate-ink);
+}
+.situate-text-control:where([data-field-tone="warning"]) {
+  border-color: var(--situate-ink);
+  border-style: dashed;
+}
+.situate-text-control:where(:focus-visible) {
+  outline: var(--situate-stroke-focus) solid var(--situate-cobalt);
+  outline-offset: var(--situate-focus-offset);
+}
+.situate-text-control:where(:disabled) {
+  color: var(--situate-muted);
+  cursor: default;
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@situate/workshop",
+  "version": "0.1.0",
+  "private": true,
+  "volta": {
+    "extends": "../../package.json"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "design": "node ../scripts/design-workshop.mjs",
+    "build": "vue-tsc --noEmit && vite build",
+    "check": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.3",
+    "markstream-vue": "2.0.21",
+    "vue": "3.5.43"
+  }
+}

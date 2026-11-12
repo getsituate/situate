@@ -1,0 +1,118 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Application structure
+
+Tauri provides the application shell; Rust implements the application core that owns local storage, version history, synchronization logic and operating-system access.
+Application and plugin views use Vue and the same responsive Situate components.
+This avoids maintaining separate native widgets alongside plugin rendering, but shared components still require cross-engine, accessibility and input testing in Tauri's link:https://v2.tauri.app/reference/webview-versions/[system WebViews].
+Rust supplies a common native boundary, not a measured performance guarantee.
+The active MVP targets are macOS and iOS; other platforms remain deferred under link:{strategy-requirements-root}/data/requirements/REQ-0012-platform-availability.md[REQ-0012].
+
+Native capabilities ship with the host. Plugins add plain JavaScript and Vue templates compiled locally by the shipped runtime/compiler, without rebuilding the host.
+Plugin editing and activation require neither TypeScript nor JSX nor an external build or mobile Node process; host development tooling is separate.
+Downloading new native Rust or Swift binaries is not the cross-platform extension model.
+Local template compilation requires dynamic code generation, weakening Content Security Policy protection and providing no plugin isolation.
+Notes, messages and imported documents must remain data, never trusted templates.
+Production loader policy and mobile qualification remain work to complete; see the <<strategy-plugin-contracts,plugin contracts>> and <<strategy-plugin-recovery-start,recovery boundary>>.
+
+[[strategy-workspace-closure]]
+=== Application-bound execution
+
+Agents run within open workspaces, not an always-running server service.
+Closing or hiding a chat view does not stop its agent; closing the workspace or quitting the application does.
+Desktop work can continue while the workspace remains open; mobile background work remains subject to operating-system limits.
+Explicit closure with running actions offers cancelling closure or aborting the actions and then closing.
+No new work starts while that decision is pending; cancelling restores normal operation without interrupting work or scheduling later closure.
+Aborting does not undo external effects. Suspension or forced termination cannot guarantee this interactive procedure.
+
+Retained work supports continuation on the same device without repeating actions recorded as completed.
+After closure or application exit, reopening waits for user interaction before continuing an interrupted conversation.
+Outside recovery mode, separately configured plugin triggers follow their missed-run policy instead of silently resuming that conversation.
+Normal and development conversations share the conversation list, which shows ongoing work under link:{strategy-requirements-root}/data/requirements/REQ-0039-show-expressive-chat-activity.md[REQ-0039].
+
+Devices synchronize completed conversational turns so work can continue elsewhere when Situate is waiting for input.
+Live progress mirroring, simultaneous execution of one conversation and in-flight run handoff are not required, avoiding a distributed agent runtime.
+An interrupted external call can have an uncertain outcome. Situate retains that uncertainty and does not replay the effect automatically; investigation depends on the agent runtime and model, without a dedicated recovery protocol or guaranteed resolution.
+Task scope and process-history obligations still apply.
+See link:{strategy-requirements-root}/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011] and <<current-application-quit>>.
+
+=== Conversation ownership and agent foundation
+
+Each conversation has one native <<glossary-conversation-owner,Conversation Owner>>: the component that serializes its actions and owns execution, persistence, drafts and pending input.
+Views observe that state; showing one conversation in several panes neither starts duplicate execution nor shares another conversation's draft.
+Rig supplies the native agent library under <<adr-0013,ADR-0013>>; ordinary, onboarding and development conversations use the same owner and application-owned provider/tool adapters, with no WebView-based Pi fallback.
+Core conversation storage is authoritative: one append-only JSONL history and metadata file per conversation under <<adr-0016,ADR-0016>>.
+Stable entry IDs and parent links permit shared ancestry without duplicating originals; model context and UI history are derived from the selected path.
+There is no fixed total conversation-size ceiling, compaction-based file rotation or separate pending-state file.
+Execution stays in memory; history reads and UI projections do not require loading the entire tree.
+Operational model and thinking settings remain device-local, outside portable conversation records.
+Attachments retain durable local identities as copied input, not live content references.
+
+The owner records effect intent before execution and observed completion afterward, preserving tool-call/result pairing and uncertain outcomes.
+Cancellation targets the captured run; late events cannot revive a replaced or closed owner.
+Submitted steering and follow-up input are saved user messages whose waiting, consumed or recalled status is distinct from their original content and from the draft.
+Stop does not resubmit them; explicit Recall merges still-waiting input while preserving order, attachments and references.
+Unsaved draft text may be lost after a crash; saved inputs remain available without automatic execution.
+Compaction appends a summary and retained-entry boundary without rewriting source history. Failed or cancelled compaction preserves the previous usable context.
+The <<native-conversation-building-blocks,native conversation decomposition>>, <<adr-0013,ADR-0013>> and <<conversation-format-safety,storage concept>> define the ownership and persistence contracts.
+See <<pending-input-stop-recall,the pending-input runtime scenario>> for submission, Stop and Recall ordering, and <<conversation-context-compaction>> for context masking, summarization and compaction publication.
+
+The owner requests model work through <<glossary-model-access,Model Access>>, the internal host capability. Native adapters perform <<glossary-provider-transport,Provider Transport>>: authentication and communication with the selected endpoint.
+The host validates each request's caller, workspace and captured context through <<glossary-operation-admission,Operation Admission>>; this is not user confirmation or proof of completion.
+Source integration and deterministic journeys do not establish live-provider, physical-device or deferred-platform qualification; see link:{architecture-repository-root}/docs/development/provider-qualification.md[provider qualification].
+
+The agent uses the same core content and plugin interfaces as the application, subject to authorization and native capabilities.
+Its intended tool surface includes file and plugin editing, activation, history, UI interaction, screenshots and testing; embedding Rig does not provide every integration automatically.
+The agreed working method is saved after conversational confirmation in `.situate/working-method.md` and read with bounded, non-symlink-following access.
+Workspace-installed plugins supply plugin instructions. Root `AGENTS.md`, `.pi/skills` and visible `Situate/` files are user content, not automatic instruction sources; personal developer-machine Pi instructions and credentials are not imported.
+Pi's terminal UI, package manager, extension loader, MCP, codemode, subagent orchestration and conversation branching/import/export are not adopted product interfaces.
+See link:{strategy-requirements-root}/data/requirements/REQ-0001-create-integrations.md[REQ-0001] and link:{strategy-requirements-root}/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026].
+
+=== Workspace access and native commands
+
+The agent may independently search and read local files in its workspace, including earlier chats and process histories, without per-file approval or attachment.
+Situate neither specially restricts nor encourages history inspection; selection remains with the agent and model.
+Workspace content APIs, conversation context and credential access remain independent between workspaces.
+That API boundary is not a filesystem sandbox for native commands or trusted plugins.
+
+Shell commands, plugin process calls, mutating plugin HTTP requests and manual exports execute within the user request and configured access without per-action confirmation.
+A shell command starts in the actual path-backed workspace with the application's OS permissions, not a filesystem jail, command allowlist or container.
+It can reach other readable files, workspaces, the network and internals; Situate-managed provider credentials are not injected into its arguments or environment.
+Native authorization, capability checks, Operation Admission, validation, cancellation/drain and durable intent/results remain required.
+
+Commands share the content mutation window with editor and conversation writes. The host retains or settles drafts, records pre-existing changes and reconciles observed changes after every outcome, including cancellation.
+Cancellation must finish host cleanup before releasing that window. Process groups and bounded pipe draining do not contain programs that detach.
+There is no atomic rollback or reliable attribution of indistinguishable concurrent external edits. Changes outside managed content have no Situate history guarantee, and unrestricted commands can damage the history store.
+Mobile process execution requires separate evidence of real workspace access, cancellation and distribution/license compliance; a simulator or external device shell alone is insufficient.
+The link:{architecture-repository-root}/client/README.md#plugin-runtime[client runtime guide] defines interpreter, output, environment and lifecycle limits.
+See link:{strategy-requirements-root}/data/requirements/REQ-0004-use-existing-context.md[REQ-0004] and link:{strategy-requirements-root}/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037].
+
+=== Device-local AI access
+
+The MVP supports OpenAI API keys and direct ChatGPT browser login, distinct Codex device authorization, Anthropic and OpenRouter API keys, and OpenAI-compatible custom/local endpoints with optional keys.
+Other providers, external credential sources, subscription methods and arbitrary provider extensions are deferred; classifiers and embedded model/server management are excluded.
+Native adapters own authentication, credential injection, renewal and destination checks. ChatGPT and Codex grants are not interchangeable, and browser return alone is not authentication success.
+Known provider restrictions require method-specific disclosure and own-risk acknowledgement under link:{strategy-requirements-root}/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015], not permission to bypass provider rejection.
+Custom HTTP needs destination-specific acknowledgement without insecure redirects or disabling HTTPS certificate verification.
+
+Connections, endpoints, credentials, defaults, conversation overrides and discovery observations belong to one workspace on one device, outside its portable directory and histories.
+A local identifier associates these records with the authorized canonical location: the <<glossary-device-local-workspace-namespace,Device-local Workspace Namespace>>, not the portable diagnostic identifier or a runtime authorization handle.
+Neither official nor custom synchronization transfers these settings. New devices configure access independently; same-phone enrollment remains required on mobile rather than requiring desktop setup.
+The proposed <<adr-0002,ADR-0002>> describes local custody separately from content recovery.
+Only prototype formats verified never to have shipped publicly are exempt from credential migration and legacy-session compatibility. Published device-local connections and settings must survive app upgrades through compatible storage or a tested, recoverable migration. Unknown records must not be silently imported, overwritten or deleted.
+
+A conversation inherits the device's workspace selection unless explicitly overridden; each request captures its connection, model and thinking settings without later preference changes redirecting active work.
+Recommended and initial selection use the same ranked, capability-eligible catalog. Discovery, static compatibility and unknown availability remain distinct; catalog presence proves neither entitlement nor capability, and selection makes no billable probe.
+Saved explicit choices are not replaced by catalog updates, discovery or failure; unresolved/custom endpoints require explicit model selection rather than a guessed default.
+Automatic provider retries, provider prompt-cache requests and model/provider fallback remain disabled pending separate policy decisions. Ordinary tool-loop continuation is not permission to repeat a completed effect.
+Activity comments use a separately configured model with thinking off or minimal and a short work description rather than full context or raw tool results.
+Their usage and cancellation are independent, they never block the main task, and disabled comments make no calls. Late replies after terminal states or question waits are ignored and cannot change main-run completion.
+See the link:{architecture-repository-root}/docs/development/provider-qualification.md#shared-implementation-boundary[provider configuration and request contracts] for selection, provenance and qualification limits.
+
+Paid managed AI through a Situate-operated router is a separate approved capability under link:{strategy-requirements-root}/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016], not an automatic fallback for unavailable user-provided access.
+Its routing and service implementation remain open; authorized plaintext AI processing must remain separate from encrypted synchronization.

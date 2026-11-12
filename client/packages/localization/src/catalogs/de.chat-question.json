@@ -1,0 +1,16 @@
+{
+  "chatQuestion.pending": "Frage an dich",
+  "chatQuestion.collapse": "Frage einklappen",
+  "chatQuestion.show": "Frage anzeigen",
+  "chatQuestion.viewDetails": "Details ansehen",
+  "chatQuestion.more": "{count} weitere anzeigen",
+  "chatQuestion.fewer": "Weniger anzeigen",
+  "chatQuestion.answer": "Deine Antwort",
+  "chatQuestion.placeholder": "Schreibe deine eigene Antwort…",
+  "chatQuestion.invalid": "Diese Antwort ist ungültig.",
+  "chatQuestion.stale": "Diese Frage wartet nicht mehr auf eine Antwort.",
+  "chatQuestion.empty": "Schreibe eine Antwort oder wähle einen Vorschlag.",
+  "chatQuestion.busy": "Warte, bis die aktuelle Aktion abgeschlossen ist.",
+  "chatQuestion.retry": "Einrichtung fortsetzen",
+  "chatQuestion.interrupted": "Deine Antwort wurde gespeichert. Setze die Einrichtung fort, um diesen Schritt abzuschließen."
+}

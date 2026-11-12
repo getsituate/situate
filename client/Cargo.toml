@@ -1,0 +1,9 @@
+[workspace]
+members = ["crates/situate-migrations", "crates/situate-agent", "crates/situate-core", "crates/tauri-plugin-workspace-access", "crates/tauri-plugin-provider-platform", "crates/tauri-plugin-executor-platform", "app/src-tauri"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.6"
+edition = "2024"
+rust-version = "1.98"
+publish = false

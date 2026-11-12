@@ -1,0 +1,15 @@
+{
+	email admin@getsituate.com
+}
+
+import /config/sites/*.caddy
+
+www.getsituate.com, reboot.getsituate.com {
+	redir https://getsituate.com{uri} permanent
+}
+
+getsituate.com {
+	encode zstd gzip
+
+	reverse_proxy situate-production:8080
+}

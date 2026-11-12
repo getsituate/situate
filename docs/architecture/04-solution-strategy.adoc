@@ -1,0 +1,46 @@
+[[solution-strategy]]
+== Solution Strategy
+
+The accepted direction is a Tauri 2 application with an application core implemented in Rust, a shared web interface and JavaScript extensions.
+It addresses local independence, recoverability and personal context continuity within single-person development and operation capacity.
+The linked catalog entries define the product behavior; acceptance of this strategy does not imply a completed product implementation.
+
+:strategy-requirements-root: ../../requirements
+:strategy-diagrams-root: diagrams
+:architecture-repository-root: ../..
+
+=== Application and execution
+
+include::04-solution-strategy/application-and-agent.adoc[leveloffset=+1]
+
+=== Workspace ownership and lifecycle
+
+include::04-solution-strategy/workspaces.adoc[leveloffset=+1]
+
+=== Content, references and recovery
+
+include::04-solution-strategy/content-and-history.adoc[leveloffset=+1]
+
+include::04-solution-strategy/tasks-and-import.adoc[leveloffset=+1]
+
+=== Extensibility and shared interfaces
+
+include::04-solution-strategy/plugin-model.adoc[leveloffset=+1]
+
+include::04-solution-strategy/plugin-interface.adoc[leveloffset=+1]
+
+include::04-solution-strategy/mobile-extensions.adoc[leveloffset=+1]
+
+=== Automation and synchronization
+
+include::04-solution-strategy/automation.adoc[leveloffset=+1]
+
+include::04-solution-strategy/synchronization-and-encryption.adoc[leveloffset=+1]
+
+=== Evidence and remaining decisions
+
+include::04-solution-strategy/implementation-and-open-decisions.adoc[leveloffset=+1]
+
+:!strategy-requirements-root:
+:!strategy-diagrams-root:
+:!architecture-repository-root:

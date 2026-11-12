@@ -1,0 +1,21 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[deferred-ai-loading]]
+=== Native AI execution and browser dependencies
+
+Conversation execution runs in the native host, where `situate-agent` embeds Rig.
+The <<glossary-conversation-owner,Conversation Owner>> retains execution state and persists outcomes independently of frontend views; the frontend displays its projections rather than running the agent loop.
+This replaces the former browser-based Pi runtime, not merely its code-loading strategy.
+See link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0013-native-conversation-execution.adoc[ADR-0013] for the decision and <<native-conversation-building-blocks>> for ownership and interfaces.
+
+The owner requests model work through <<glossary-model-access,Model Access>>, an internal capability supplied by native host adapters.
+Those adapters retain credential custody and implement <<glossary-provider-transport,Provider Transport>>: communication with the selected model endpoint.
+Neither frontend code loading nor view attachment changes workspace authorization or which conversation data a request may send.
+Native execution does not imply local model weights or offline model availability.
+
+The production build still rejects Node-only dependencies in browser output.
+The initial frontend bundle can include AI settings and other interface code; there is no claim that all AI-related code is deferred.
+The <<frontend-bundle-budget>> measures frontend JavaScript, not the native Rig runtime or model weights.
+See link:{architecture-repository-root}/client/app/src/ai/chat.ts[frontend conversation projections] and link:{architecture-repository-root}/client/app/vite.config.ts[browser dependency checks].

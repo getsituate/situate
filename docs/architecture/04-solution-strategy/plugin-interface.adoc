@@ -1,0 +1,76 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::strategy-diagrams-root[]
+:strategy-diagrams-root: ../diagrams
+endif::[]
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Shared interface and plugin development
+
+Desktop and mobile target the same functional scope, including local plugin creation, modification and testing.
+Use Vue and a centrally verified Situate component library for both built-in and plugin views, rather than separately styled implementations.
+Both use the same component definitions, not merely similar styles.
+Plugins compose shared components declaratively by default but may implement custom components, add views and extend existing interfaces.
+Shared components own their standard appearance, input behavior and adaptation to the available container width, including narrow panes on a large display.
+Central component updates can therefore improve both built-in views and unchanged plugins.
+This does not make arbitrary custom layouts responsive or accessible without their own verification.
+Plugins explicitly declare function- and view-level platform limits where capabilities differ.
+This supports consistent local development, but previews on one device do not prove compatibility on another.
+See link:{strategy-requirements-root}/data/requirements/REQ-0012-platform-availability.md[REQ-0012], link:{strategy-requirements-root}/data/requirements/REQ-0014-plugin-platform-compatibility.md[REQ-0014] and link:{strategy-requirements-root}/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026].
+
+Local plugin development requires app-local UI interaction, screenshots and different-size previews, not merely developer-host test tooling.
+The <<strategy-plugin-updates,development lifecycle>> requires synthetic automated tests and forbids incidental real external writes during agentic trials; it is not a technical sandbox.
+These capabilities still need qualification inside installed mobile apps.
+
+=== Component exports and compatibility
+
+A plugin can define Vue components for its own views and explicitly export reusable components through declared plugin dependencies.
+Components remain local unless exported; importing through a declared dependency avoids an automatic global pool of plugin component names.
+The core does not prescribe domain-specific components or provider contracts.
+
+Keep the public SDK and component contracts small, with documented properties, events and slots rather than dependencies on internal DOM structure or private host modules.
+Prefer compatible additions and preservation of existing contracts; validate existing consumers when the shared implementation changes.
+Changes to plugin-owned exported components follow the affected-consumer checks and grouped activation used for other plugin-defined interfaces; the host's public API policy below is separate.
+A shared Vue runtime avoids each plugin requiring its own host framework copy, but Vue upgrades and third-party dependencies still carry compatibility risk.
+Public SDK and shared-component contracts follow the internal minimum six-month compatibility window from each app version's publication under link:{strategy-requirements-root}/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070], with a long-term objective of never breaking them.
+This is not an automatic expiry policy or a promise to support arbitrary third-party framework versions. A plugin using newer capabilities can require a newer app without an older-version fallback; unsupported devices disable that plugin locally before execution and show the required app version.
+Mixed-version workspace data must also remain usable under link:{strategy-requirements-root}/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069]; a plugin's minimum version alone does not make the whole workspace incompatible.
+The current macOS host exposes declared function exports through `dependencies.invoke`; the link:{architecture-repository-root}/client/README.md#plugin-runtime[client guide] lists its Vue and runtime services. A separate Vue component export format and broader compatibility verification remain design work.
+
+Connections can use the general local process host on supported desktop platforms instead of requiring a service-specific core interface.
+The current macOS API exposes literal executable/argument execution without per-command consent, with bounded output and duration, workspace change observation and the same action/request drain as other host work.
+Synthetic checks match explicit process responses and never start local programs.
+The workspace working directory is not a filesystem sandbox, and code checks neither freeze installed executables nor grant OS permissions or account access.
+Service-specific convenience APIs may supplement this access path; they are not a prerequisite for every integration.
+The link:{architecture-repository-root}/client/README.md#plugin-runtime[client guide] defines the process reply, environment and lifecycle limits.
+See link:{strategy-requirements-root}/data/requirements/REQ-0001-create-integrations.md[REQ-0001] and link:{strategy-requirements-root}/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033].
+
+[[strategy-responsive-layout]]
+[[strategy-responsive-workspace]]
+=== Responsive layout and view placement
+
+Each workspace has user-named topic tabs with independent layouts of movable, resizable panes. Tabs group presentation without creating data or execution scopes; each pane has one active view and its own back/forward history.
+Navigation, hiding views and switching tabs preserve workspace-owned execution. Multiple panes can show one conversation without creating multiple owners.
+Phones normally project one pane at a time; larger displays can show several. Narrow or maximized presentation preserves the stored tab arrangement.
+Layout and supported navigation state belong in `.situate` for restoration and synchronization. Device geometry changes presentation, not the stored arrangement; concurrent layout reconciliation remains separate work.
+Built-ins, plugins and agents use host navigation instead of manipulating layout internals. The <<ui-building-blocks,User Interface decomposition>> defines focus, opening, tab/pane controls and the separation of coordination, layout, navigation, sessions and rendering.
+See link:{strategy-requirements-root}/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011] and link:{strategy-requirements-root}/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026].
+
+=== Content references and chat handoff
+
+Plugins can offer an explicit action that opens a new chat with a visible reference to a content item.
+The user can then write a request about that item; opening the chat alone does not start its processing.
+This makes the reference explicit without implicitly adding every current selection to conversation context.
+
+Ordinary references identify the live source and may become unresolved after that source is deleted.
+They do not require retaining a source snapshot, and they do not remove the existing version history of Situate-owned content.
+A reference may instead select a historical revision when one exists, enabling discussion of an earlier state.
+The plugin determines whether following a reference opens an internal view or the source in an external application or browser.
+The core supplies navigation and reference mechanisms rather than domain-specific display rules.
+See link:{strategy-requirements-root}/data/requirements/REQ-0030-open-chats-with-content-references.md[REQ-0030].
+
+.Views and chat use the same integration; reference navigation is chosen by the plugin.
+image::{strategy-diagrams-root}/integrations-and-chat.svg["A user interacts with a plugin view or chat. Both invoke a reusable integration; a view can open a fresh chat with a reference, and the agent can reveal an entry in a view."]

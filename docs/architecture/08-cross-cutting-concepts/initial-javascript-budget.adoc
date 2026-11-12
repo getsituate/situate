@@ -1,0 +1,18 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[frontend-bundle-budget]]
+=== Initial JavaScript budget
+
+Production frontend builds measure the JavaScript needed by their entry points, including shared static dependencies once and excluding lazily loaded chunks.
+They also report the total emitted JavaScript size.
+The initial code must stay within the uncompressed budget defined in link:{architecture-repository-root}/client/scripts/bundle-report.mjs[the bundle check]; exceeding the gzip threshold produces a warning without failing the build.
+
+The uncompressed budget is a coarse safeguard against unexpected code growth, not a measured startup-performance limit.
+It requires deliberate review when legitimate functionality changes the startup cost; exceeding it fails the production build rather than removing code or features automatically.
+The gzip size is informational for the locally packaged macOS and iOS applications, whose startup does not require downloading frontend assets over the internet.
+They do not constrain workspace content, conversation length, model size or the whole installer.
+The report follows static imports only; dynamic imports triggered during startup are not included in the initial graph.
+Smaller initial code is a useful performance safeguard, not a measurement or guarantee of startup latency; first use of a deferred feature can incur additional loading work.
+Changes to loading boundaries should be evaluated against native startup and first-use measurements, not gzip size alone.

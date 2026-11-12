@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 280" role="img" aria-labelledby="background-pebble-cluster-title" aria-describedby="background-pebble-cluster-desc">
+  <title id="background-pebble-cluster-title">Three soft pebble planes</title>
+  <desc id="background-pebble-cluster-desc">Three uneven rounded planes rest apart with open space between them.</desc>
+  <path d="M42 53C70 25 135 35 146 69S126 132 88 133 23 109 28 83Q30 65 42 53Z" fill="#da592f"/>
+  <path d="M36 46C64 18 129 28 140 62S120 125 82 126 17 102 22 76Q24 58 36 46Z" fill="#ff874d"/>
+  <path d="M236 77C268 62 305 80 314 112S304 155 278 159 222 141 219 115Q215 88 236 77Z" fill="#da592f"/>
+  <path d="M230 70C262 55 299 73 308 105S298 148 272 152 216 134 213 108Q209 81 230 70Z" fill="#ffc3a3"/>
+  <path d="M106 200C129 177 172 169 193 190S213 239 185 253 120 266 104 245Q87 224 106 200Z" fill="#da592f"/>
+  <path d="M100 193C123 170 166 162 187 183S207 232 179 246 114 259 98 238Q81 217 100 193Z" fill="#ffc3a3"/>
+</svg>

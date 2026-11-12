@@ -1,0 +1,21 @@
+{
+  "error": "Error:",
+  "warning": "Warning:",
+  "title": "Input feedback",
+  "states": {
+    "default": "Default",
+    "help": "Help",
+    "error": "Error",
+    "warning": "Warning",
+    "focus": "Keyboard focus",
+    "corrected": "Corrected"
+  },
+  "name": "Workspace name",
+  "help": "This will also be the name of the new folder.",
+  "required": "Enter a workspace name.",
+  "warningExample": "This name is similar to another in your list. You can still use it.",
+  "placeholder": "e.g. Field notes",
+  "sample": "Field notes",
+  "longSample": "Community garden planning and reading notes for the coming season",
+  "reviewHelp": "Tab to inspect keyboard focus. Clear the name and leave the field, or submit, then correct it. The warning is a library example, not a new workspace naming rule."
+}

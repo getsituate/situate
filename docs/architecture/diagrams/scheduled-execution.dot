@@ -1,0 +1,21 @@
+digraph ScheduledExecution {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  trigger [label="Time, interval, shortcut or event"];
+  available [label="Workspace open\nand OS permits work?", shape=diamond];
+  missed [label="Do not run\nApply missed-trigger policy on return"];
+  policy [label="Apply plugin execution policy\nCross-device and offline coordination"];
+  run [label="Run plugin or configured agent\nWithin configured task scope", fillcolor="#eee7f9", color="#6232bc"];
+  result [label="Present chat or result\nKeep traceable history"];
+  sync [label="Synchronize stored results\nIf configured and still open"];
+
+  trigger -> available;
+  available -> missed [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No</TD></TR></TABLE>>];
+  available -> policy [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes</TD></TR></TABLE>>];
+  missed -> policy [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Catch up, if selected</TD></TR></TABLE>>];
+  policy -> run [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Execution permitted</TD></TR></TABLE>>];
+  run -> result;
+  result -> sync;
+}

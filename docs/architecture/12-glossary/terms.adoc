@@ -1,0 +1,247 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+These terms apply across the product requirements and architecture.
+Component responsibilities and named interfaces are defined in <<building-block-view>> and <<building-block-interfaces>>.
+The definitions describe intended concepts, not implementation evidence.
+Use the preferred terms below consistently. Keep code identifiers, UI labels and historical decision titles unchanged; explain their relationship to these concepts where needed. Qualify terms with several meanings, especially publication, admission and workspace identity, rather than treating the meanings as interchangeable.
+
+[cols="1,4",options="header"]
+|===
+|Term |Definition
+
+|[[glossary-action]]Action
+|An individual step performed by an agent or plugin, such as a tool invocation. An action is distinct from a stored <<glossary-task,task>> and from the <<glossary-user-request,user request>> it serves. Exact execution granularity and tracking of nested actions remain open.
+
+|[[glossary-active-revision-map]]Active Revision Map
+|The workspace record selecting the immutable code revision used for each active plugin. Grouped activation replaces the affected selections together; editable source and a successful <<glossary-check-receipt,check receipt>> do not themselves change active revisions.
+
+|[[glossary-agent]]Agent
+|The execution logic that uses a <<glossary-model,model>> and <<glossary-tool,tools>> to handle work. Rig supplies the native agent library; the model itself is not the agent, and Situate's Agent Integration supplies workspace-scoped tools, persistence and model access.
+
+|[[glossary-agent-run]]Agent Run
+|A concrete execution of the agent, started through user interaction or a configured trigger. A <<glossary-conversation,conversation>> can involve multiple runs; a triggered run need not have a visible <<glossary-chat,chat>>. Interruption and continuation follow the application-bound execution rules, not an always-running server model.
+
+|[[glossary-approval]]Approval
+|A decision required at a distinct product or access boundary, such as marketplace review or provider authorization. Ordinary agent/plugin actions within a user request do not require per-action approval. Approval is not evidence that an action succeeded.
+
+|[[glossary-attachment]]Attachment
+|A file associated with other content, such as an image or PDF. This is a relationship, not a distinct file format; a document can also be an attachment.
+
+|[[glossary-blocked-dependency]]Blocked by Dependency
+|Unavailable for new actions because a required plugin dependency is unavailable. Re-enabling that dependency does not automatically restore use of affected dependent plugins; each requires explicit user re-enabling. This is distinct from a suspended execution.
+
+|[[glossary-chat]]Chat
+|The user-facing interface for interacting with an agent and displaying a <<glossary-conversation,conversation>>. Closing or hiding that view does not itself delete the conversation or close its workspace.
+
+|[[glossary-check-receipt]]Check Receipt
+|A retained result identifying the plugin revisions and checks covered by a development check. Activation requires a successful receipt applicable to the selected revisions and dependencies; the receipt is not proof of safety against malicious code. Disposable synthetic test state belongs to the check, not to ordinary workspace content.
+
+|[[glossary-component]]Component
+|In UI descriptions, a reusable Vue building block composed into a view, with public properties, events and slots. In the building-block view, an architectural component instead denotes a logical responsibility boundary. Neither usage implies a separately deployed service.
+
+|[[glossary-confirmation]]Confirmation
+|An interaction that asks the user to accept or reject a presented choice. It can confirm a deliberate decision, such as disabling a plugin or discarding unsaved content. Ordinary external-action execution does not use this interaction. It is not synonymous with <<glossary-approval,approval>> or with technical enforcement against malicious plugins.
+
+|[[glossary-content-reference]]Content Reference
+|A navigable reference to internal or external content. It does not automatically retain a source copy or start agent processing. <<glossary-live-reference,Live>> versus <<glossary-historical-reference,historical>> selection determines which version is selected; <<glossary-identity-reference,identity-based>> versus <<glossary-path-reference,path-based>> resolution determines how the target is found.
+
+|[[glossary-conversation]]Conversation
+|A retained, potentially branching exchange between the user and agent, together with the work state needed for continuation. It can span multiple agent runs and application openings. Archiving removes it from the active overview without deleting it or excluding it from context use.
+
+|[[glossary-conversation-owner]]Conversation Owner
+|The native execution component that processes a <<glossary-conversation,conversation>>'s actions in order and owns its current run, persistence and observable state. Views display that state; closing a view does not terminate the owner or duplicate its execution.
+
+|[[glossary-device-local-ai-settings]]Device-local AI Settings
+|Provider connections, endpoint addresses, selected access, model defaults and conversation-specific model selections associated with one workspace on one device. They persist outside the portable workspace directory and its histories; provider secrets remain in device-local OS secure storage. Neither workspace copying nor any synchronization mode transfers them; see link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015].
+
+|[[glossary-device-local-workspace-namespace]]Device-local Workspace Namespace
+|The local identifier associating AI connection records with an authorized canonical workspace location on one device. It is not the portable <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>> or a <<glossary-runtime-workspace-binding,Runtime Workspace Binding>>; copying workspace content does not copy this association or grant access to its credentials.
+
+|[[glossary-diagnostic-workspace-identifier]]Diagnostic Workspace Identifier
+|The random identifier retained in portable workspace metadata for diagnostic correlation across devices, copies and restoration. It does not select a local workspace location, grant access, share runtime state or associate copies with the same AI credentials; see link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0009-workspace-diagnostic-identity.adoc[ADR-0009]. Prefer this qualified term when discussing diagnostics rather than the ambiguous workspace identity.
+
+|[[glossary-disable]]Disable / Enable
+|Prevent or permit use of an installed plugin without deleting its code, configuration or data. Disabling blocks new actions immediately after confirmation; running actions normally finish unless the user chooses to abort. Enabling is distinct from <<glossary-stage-activate,activating a new version>> and does not bypass <<glossary-recovery-mode,recovery mode>>.
+
+|[[glossary-document]]Document
+|Content managed or accessed as a document, including ordinary PDF, image and other files. This is a content role, not a requirement to convert every document into Markdown. External documents remain external unless copied or imported.
+
+|[[glossary-durable-staging-acknowledgement]]Durable Staging Acknowledgement
+|Confirmation that pending recovery content has been durably stored before the final content save. It does not mean that the final destination or its Git history has been saved successfully; see <<conversation-format-safety>>.
+
+|[[glossary-end-to-end-encryption]]End-to-end Encryption
+|For the official synchronization service, encryption that prevents both the service and its operator from decrypting synchronized user content. Authorized plaintext model processing is a separate flow. Cryptographic protocols and metadata protection remain design work; workspace storage is not implicitly encrypted by this term.
+
+|[[glossary-execution-policy]]Execution Policy
+|Plugin-defined rules for missed triggers, offline operation and once-across-devices versus per-device execution. These rules do not promise exactly-once execution or execution while a workspace is closed.
+
+|[[glossary-execution-state]]Execution State
+|The current state of concrete work: running work is executing, waiting work needs an input or condition, and suspended work is paused by an interruption such as operating-system suspension. These descriptions do not define a complete state machine or imply that a plugin is disabled.
+
+|[[glossary-external-effect]]External Effect
+|A change outside Situate-owned content, such as saving a draft, sending a message, inviting another person or changing shared content. It executes within the requested task and configured access without per-action approval under link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004].
+
+|[[glossary-file-identity]]File Identity
+|The continuity of a selected file established by its anchored path and confirmed Git operation history, not an embedded UUID. Managed moves preserve continuity; copies and restorations create separate lineages, and known deletion terminates the old one. <<glossary-task-identity,Task identity>> is separate.
+
+|[[glossary-historical-reference]]Historical Reference
+|A content reference selecting a particular retained revision rather than the current source. It requires an available revision, not universal retention of external sources.
+
+|[[glossary-history-reinitialization]]History Reinitialization
+|Creating a new repository history from existing content when corruption has made the old history unusable. It requires confirmation of prior-history loss in the new repository and a preserved damaged-repository backup. It neither guarantees recovery of old history nor authorizes replacing remote histories.
+
+|[[glossary-identity-reference]]Identity Reference
+|A reference resolved through a stable task UUID rather than its containing file or current position. File references instead use Git-anchored paths. Duplicate identities from external copies require user-directed repair rather than arbitrary targeting.
+
+|[[glossary-import]]Import
+|Copying source content into a workspace without changing the source. Notes and tasks are converted into Situate's Markdown conventions; other documents remain ordinary files. Reconciliation of later source changes remains unspecified.
+
+|[[glossary-integration-plugin]]Integration Plugin
+|A plugin role that owns connections and account configuration for external systems and exposes reusable capabilities. Consumers independently select relevant accounts. This role can coexist with workflow and view contributions in the same plugin.
+
+|[[glossary-layout]]Layout
+|The tab and split-pane arrangement in a workspace's UI. It is distinct from content and execution ownership. Layout and supported navigation state are stored in the workspace's `.situate` directory for restoration and synchronization. Phones normally project one pane at a time without changing that arrangement.
+
+|[[glossary-lifecycle-admission]]Lifecycle Admission
+|The coordination gate controlling whether a workspace or application lifecycle operation, such as closure or update installation, may start. It is distinct from permission to access a workspace and from acceptance of individual plugin or model requests; see <<glossary-operation-admission,Operation Admission>>.
+
+|[[glossary-live-reference]]Live Reference
+|A content reference selecting the current source, without requiring a retained snapshot. Deletion or loss of access can leave it unresolved.
+
+|[[glossary-local-plugin-copy]]Local Plugin Copy
+|An independently developed plugin within a workspace, optionally adopted from a marketplace template. It has its own code history and receives no automatic upstream updates or merges.
+
+|[[glossary-merge-conflict]]Merge Conflict
+|Changes that cannot be automatically combined in an intact repository. Unresolved synchronization conflicts pause synchronization for the affected workspace, not local editing or other workspaces. This is distinct from repository corruption.
+
+|[[glossary-model]]Model
+|The AI model used to produce results for agent requests. Protocol compatibility of its endpoint does not establish support for all agent capabilities.
+
+|[[glossary-model-access]]Model Access
+|The internal capability through which the <<glossary-conversation-owner,Conversation Owner>> requests model work from native host adapters. It is distinct from <<glossary-provider-transport,Provider Transport>>, the adapters' communication with a model endpoint.
+
+|[[glossary-model-endpoint]]Model Endpoint
+|The configured access point through which model requests and results are exchanged. It can be remote, self-hosted or local to the device; local placement does not make it part of Situate's product boundary.
+
+|[[glossary-model-provider]]Model Provider
+|The party operating or supplying model access. User-provided access and Situate-managed access have different service and data-processing guarantees.
+
+|[[glossary-note]]Note
+|User-authored or maintained knowledge represented in editable Markdown within a workspace. A note is a content role, not every Markdown file or a mandatory organizational structure.
+
+|[[glossary-operation-admission]]Operation Admission
+|Acceptance of a specific request for execution after validating its caller, workspace, captured context and applicable lifecycle conditions. Operation admission is not completion, durability or user confirmation and is distinct from <<glossary-lifecycle-admission,Lifecycle Admission>>. Diagnostic data admission instead means accepting validated events into the bounded logging pipeline; it does not authorize agent or plugin work.
+
+|[[glossary-organizational-process]]Organizational Process
+|An ongoing matter whose information and next steps can span several organizational areas, such as gathering documents and preparing a reply. It is distinct from an operating-system process, an agent run and the workflow used to handle it. It need not correspond to one conversation.
+
+|[[glossary-pane]]Pane
+|A region of the layout used to display a view. The pane is the placement container; the view supplies the content or function.
+
+|[[glossary-path-reference]]Path Reference
+|A file reference containing its original workspace-relative path and a Git commit anchor. Confirmed managed moves determine its current location; external moves or uncertain continuity can leave it unresolved. Markdown uses the same model as other files.
+
+|[[glossary-plugin]]Plugin
+|A workspace-owned extension using JavaScript and supported host interfaces, optionally contributing views, tools, exports and triggers. Integration and workflow are roles, not mutually exclusive plugin types. Installed plugins are trusted code, not isolated adversaries.
+
+|[[glossary-plugin-change-set]]Plugin Change Set
+|Related changes across one or more plugins that are checked, activated and rolled back together, even across separate code repositories. <<glossary-stage-activate,Activation>> waits for affected running actions to finish; <<glossary-rollback,rollback>> preserves later independent edits and exposes conflicts.
+
+|[[glossary-plugin-code-history]]Plugin Code History
+|The separate Git-backed history of one plugin's code. Plugin configuration, data and plugin-specific histories remain inside the owning plugin directory; the workspace's general content history is not their storage authority. Directory ownership and history membership are distinct; see link:{architecture-repository-root}/requirements/data/foundations.md#workspace-storage-and-history[workspace storage and history].
+
+|[[glossary-plugin-dependency]]Plugin Dependency
+|A declared required relationship to a concrete plugin or a shared provider interface. Dependencies determine installation prerequisites and affected consumers; they do not automatically cross workspace boundaries.
+
+|[[glossary-plugin-export]]Plugin Export
+|Functionality or a component explicitly exposed by a plugin for eligible consumers through declared contracts. Internal functions and components are not automatically public. Agent tools are a designated callable part of this functionality, not the whole export surface.
+
+|[[glossary-plugin-template]]Plugin Template
+|A versioned marketplace starting point adopted as an independent local plugin copy and adapted to the user's workflow. It is not an automatically updated installed package.
+
+|[[glossary-process-history]]Process History
+|The recorded relevant information, actions and results of organizational work, understandable to the user and reusable for later work. Prepared actions remain distinguishable from performed ones. It is distinct from <<glossary-version-history,file version history>> and does not require copying all external source content.
+
+|[[glossary-provider-interface]]Provider Interface
+|A plugin-defined contract implemented by interchangeable plugins, allowing a consumer to depend on a capability rather than one concrete provider. The core does not prescribe universal mail, document or task domain contracts.
+
+|[[glossary-provider-transport]]Provider Transport
+|Communication between native host adapters and the selected model endpoint, including authentication, request dispatch and streamed responses. It implements part of <<glossary-model-access,Model Access>> without moving credential custody into the frontend.
+
+|[[glossary-publication]]Publication
+|Making prepared content or a selection visible at a defined boundary. Qualify the operation: file publication exposes destination bytes; Git reference publication exposes a history commit; plugin activation publication changes the <<glossary-active-revision-map,active revision map>>; marketplace publication distributes a <<glossary-plugin-template,template>>. Success at one boundary does not imply success, durability or approval at another.
+
+|[[glossary-recovery]]Recovery
+|Restoring a usable state after failure. Plugin repair through <<glossary-recovery-mode,recovery mode>>, handling of <<glossary-repository-corruption,repository corruption>> and investigation of uncertain external outcomes have different responsibilities. Recovery does not necessarily mean <<glossary-rollback,rollback>> or guarantee restoration.
+
+|[[glossary-recovery-key]]Recovery Key
+|A user-held means of authorizing access to encrypted synchronized content when provisioning a device. Account login alone does not unlock that content. The exact cryptographic construction remains open; this is not a key held by the synchronization operator to recover user data.
+
+|[[glossary-recovery-mode]]Recovery Mode
+|Application startup with installed plugins temporarily suspended across restored and subsequently opened workspaces. Built-in management and agent development remain available; inspection and source edits alone do not resume plugins. Explicit resumption or successful checked activation can resume selected targets while unrelated plugins remain suspended; see link:{architecture-repository-root}/requirements/data/requirements/REQ-0032-manage-plugin-status-and-disabling.md#plugin-management-and-recovery[REQ-0032]. This is neither a sandbox nor automatic rollback.
+
+|[[glossary-repository-corruption]]Repository Corruption
+|Damage that makes repository history unreliable or unusable, rather than a <<glossary-merge-conflict,merge conflict>> in an intact repository. Preserving a damaged backup leaves recovery possible but does not guarantee it.
+
+|[[glossary-revert-operation]]Revert Operation
+|A tool-provided operation to reverse a supported external effect. It must be idempotent and check preconditions to avoid overwriting intervening changes. Unsupported reversal is explicitly declared; external rollback requires preview and confirmation.
+
+|[[glossary-rollback]]Rollback
+|Selective reversal through new compensating changes, preserving later or independent edits rather than erasing history or blindly restoring old files. Moving to an earlier conversation position can be requested without rolling back associated content. Aborting execution is not rollback.
+
+|[[glossary-root-action]]Root Action
+|A top-level plugin tool or exported-function invocation whose nested calls share its execution context. Action root is a synonym; prefer root action. An independent host request has its own lifetime (see <<glossary-worker-lease,Worker Lease>>), and an ordinary view callback does not automatically group several requests into one root action.
+
+|[[glossary-runtime-workspace-binding]]Runtime Workspace Binding
+|The native host's association of a request or loaded record with its authorized local workspace session. It is not portable content, a <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>> or a <<glossary-device-local-workspace-namespace,Device-local Workspace Namespace>>; a reference containing an identifier cannot grant this authorization.
+
+|[[glossary-stage-activate]]Stage / Activate
+|Staging prepares replacement plugin versions separately from active versions. Activation makes the checked <<glossary-plugin-change-set,change set>> active together after affected running actions finish. This version-development lifecycle is distinct from enabling or disabling a plugin and is not a security sandbox.
+
+|[[glossary-synchronization-service]]Synchronization Service
+|A service used to exchange portable workspace data between devices. The official Situate service requires end-to-end encryption; custom alternatives may use other content-encryption policies. <<glossary-device-local-ai-settings,Device-local AI settings and credentials>> are excluded from every synchronization mode; see link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013].
+
+|[[glossary-synchronization-transport]]Synchronization Transport
+|The adapter capability that transfers data through a <<glossary-synchronization-service,service>> or storage backend. Versioning, merge-conflict handling and history recovery remain Application Core responsibilities for every transport. Transfer success alone does not establish consistent history.
+
+|[[glossary-task]]Task
+|A managed item of personal work, distinct from a request to Situate or its execution. The default model has text, identity and open/completed state; users can adapt its fields and completion rules. An unmarked checkbox is not automatically a task, and deletion is not universally completion.
+
+|[[glossary-task-identity]]Task Identity
+|A task's UUID, independent of its containing Markdown file. Under the default convention, the `situate-task-id` HTML comment both identifies the task and distinguishes it from an ordinary checkbox; it also holds extensible metadata.
+
+|[[glossary-tool]]Tool
+|A capability exposed for agent invocation with a description and declared read/write behavior. Situate supplies built-in tools; plugins designate exported functionality as chat tools. Tool-list visibility controls discovery and context size, not authorization.
+
+|[[glossary-trigger]]Trigger
+|A configured source of plugin execution, such as a shortcut, interval, scheduled time or available event. Execution depends on the workspace being open, platform availability and the plugin's <<glossary-execution-policy,execution policy>>.
+
+|[[glossary-user-request]]User Request
+|Work assigned by the user to Situate, including its intended scope. It need not create a stored task and may involve several actions or agent runs. It does not authorize unrelated internal changes or external effects.
+
+|[[glossary-version-history]]Version History
+|Recoverable versions of stored content. Organizational content has one Git history per workspace; see <<glossary-plugin-code-history,Plugin Code History>> for plugin-owned storage and histories. Version history is distinct from the explanatory <<glossary-process-history,process history>> and is not protection against physical damage or <<glossary-repository-corruption,repository corruption>>.
+
+|[[glossary-view]]View
+|A UI presentation of content or a function, built in or supplied by a plugin. It is displayed in a pane or maximized. Closing a plugin view releases view-scoped resources, not the plugin's independent work or its workspace.
+
+|[[glossary-window]]Window
+|An operating-system application window. Several desktop windows can belong to the same workspace; closing its last window triggers workspace closure. Mobile view or workspace switching is not equivalent to closure.
+
+|[[glossary-worker-lease]]Worker Lease
+|A runtime lifetime handle retained while an independent native host request still owns work or resources. It is released after actual completion and cleanup, not merely when a view closes or cancellation is requested; a lease is not an operating-system process or a security sandbox.
+
+|[[glossary-workflow]]Workflow
+|The rules or arrangement of steps used to handle organizational work. It can be adapted to the user's working method and is distinct from a particular ongoing organizational process or execution.
+
+|[[glossary-workflow-plugin]]Workflow Plugin
+|A plugin role that composes capabilities into individual workflows and, where useful, views. It can consume integration exports without owning duplicate connection logic. Plugins contributing only visual extensions need not be workflow plugins.
+
+|[[glossary-workspace]]Workspace
+|A personal organizational system whose portable content, conversations, plugins, workspace configuration and histories reside in one directory. <<glossary-device-local-ai-settings,Operational AI settings and credentials>> are an explicit device-local exception outside that directory. Workspace separation is an ownership and lifecycle boundary, not a malicious-plugin sandbox or a promise of encrypted local storage; a layout describes presentation, not the data boundary.
+
+|[[glossary-workspace-operation-lease]]Workspace Operation Lease
+|A lifetime handle retaining an accepted operation for an open workspace session so that closure can wait for its actual completion and cleanup. It is distinct from a plugin <<glossary-worker-lease,Worker Lease>>, which retains an independent host request while plugin activation waits for affected work to finish.
+|===

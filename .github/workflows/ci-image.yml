@@ -1,0 +1,168 @@
+name: Publish Linux CI image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - LICENSE
+      - package.json
+      - client/docker/Dockerfile
+      - client/docker/Dockerfile.dockerignore
+      - client/docker/ci-*.json
+      - client/docker/ci-*.mjs
+      - client/docker/ci-*.py
+      - client/docker/ci-*.sh
+      - client/docker/ci-NOTICES.md
+      - client/.node-version
+      - client/rust-toolchain.toml
+      - tools/toolchain.quality.json
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Reviewed 40-character commit SHA; leave empty to build the main run revision
+        required: false
+        type: string
+      bootstrap:
+        description: Create an absent private package for reviewed public-image setup; does not produce a pinnable result
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-ci-image
+  cancel-in-progress: false
+
+env:
+  WORKFLOW_SHA: ${{ github.workflow_sha }}
+
+jobs:
+  build:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      provenance: ${{ steps.seal.outputs.provenance }}
+    steps:
+      - name: Check out trusted build harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: harness
+          persist-credentials: false
+      - uses: volta-cli/action@615a78f6c83e116339c53b94f3f82b4d6c0b7d18
+        with:
+          volta-version: 2.0.2
+          package-json-path: harness/package.json
+      - name: Activate the harness toolchain
+        working-directory: harness
+        shell: bash
+        run: volta install "node@$(node -p 'require("./package.json").volta.node')" "npm@$(node -p 'require("./package.json").volta.npm')"
+      - name: Resolve reviewed source revision
+        id: revision
+        env:
+          REQUESTED_REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          revision=$(node harness/tools/ci-publish.mjs revision)
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - name: Check out candidate source as build data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.revision.outputs.revision }}
+          path: source
+          persist-credentials: false
+      - name: Build the Linux toolchain image
+        env:
+          SOURCE_REVISION: ${{ steps.revision.outputs.revision }}
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_REVISION"
+          node harness/tools/ci-image.mjs --inputs --directory source > "$RUNNER_TEMP/ci-inputs-sha256"
+          docker build --provenance=false --target ci --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$SOURCE_REVISION" \
+            --tag "situate-ci-build:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --file source/client/docker/Dockerfile source
+      - name: Verify tools without source, credentials, network or Docker access
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/amd64 --user 1000:1000 \
+            --network none --cap-drop ALL --security-opt no-new-privileges \
+            --read-only --pids-limit 256 --memory 4g --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=1g \
+            --tmpfs /ci-cache:rw,nosuid,nodev,size=64m \
+            --env HOME=/tmp/home --env CARGO_HOME=/tmp/cargo \
+            --env npm_config_cache=/tmp/npm --env PLAYWRIGHT_BROWSERS_PATH=/ci-cache/browsers \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/harness/client/docker/ci-verify.mjs,dst=/ci-verify.mjs,readonly" \
+            --entrypoint /opt/volta/bin/node \
+            "situate-ci-build:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" /ci-verify.mjs
+      - name: Seal the image archive
+        id: seal
+        env:
+          SOURCE_REVISION: ${{ steps.revision.outputs.revision }}
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/ci-image"
+          docker save "situate-ci-build:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" | gzip -1 > "$RUNNER_TEMP/ci-image/image.tar"
+          INPUTS_SHA256="$(< "$RUNNER_TEMP/ci-inputs-sha256")"
+          export INPUTS_SHA256
+          node harness/tools/ci-publish.mjs seal "$RUNNER_TEMP/ci-image"
+      - name: Retain the single image archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ci-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-image/image.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+      inputsSha256: ${{ steps.publish.outputs.inputsSha256 }}
+      revision: ${{ steps.publish.outputs.revision }}
+    steps:
+      - name: Check out trusted publisher
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: harness
+          persist-credentials: false
+      - uses: volta-cli/action@615a78f6c83e116339c53b94f3f82b4d6c0b7d18
+        with:
+          volta-version: 2.0.2
+          package-json-path: harness/package.json
+      - name: Activate the harness toolchain
+        working-directory: harness
+        shell: bash
+        run: volta install "node@$(node -p 'require("./package.json").volta.node')" "npm@$(node -p 'require("./package.json").volta.npm')"
+      - name: Check same-run artifact bounds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node harness/tools/ci-publish.mjs artifact
+      - name: Download the image archive from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ci-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-image
+      - name: Validate and publish without running the image
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVENANCE: ${{ needs.build.outputs.provenance }}
+          DOCKER_CONFIG: ${{ runner.temp }}/ci-registry-auth
+          PUBLISH_COMMAND: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap && 'bootstrap' || 'publish' }}
+        run: node harness/tools/ci-publish.mjs "$PUBLISH_COMMAND" "$RUNNER_TEMP/ci-image"

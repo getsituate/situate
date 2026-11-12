@@ -1,0 +1,296 @@
+[[adr-0013]]
+= ADR-0013: Own conversation execution in the native host
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: accepted; native conversation ownership and complete product replacement of Pi with Rig selected
+Date:: 2026-11-03
+Implementation:: native owner, provider/tool adapters and frontend projections integrated; native application fixtures cover macOS and iOS Simulator paths; aggregate and release qualification remain open
+Implementation plan:: link:{architecture-repository-root}/docs/development/rig-implementation-plan.md[Rig replacement implementation plan]
+Storage refinement:: <<adr-0016,ADR-0016>> replaces the full-record v2 persistence representation with append-only conversation history; native execution ownership remains unchanged.
+Related decisions:: link:{architecture-docs-root}/09-architecture-decisions/0002-portable-workspace-credentials.adoc[ADR-0002], link:{architecture-docs-root}/09-architecture-decisions/ADR-0001-ui-orchestration.adoc[ADR-0001] and link:{architecture-docs-root}/09-architecture-decisions/ADR-0008-device-local-diagnostics.adoc[ADR-0008]
+
+== Context
+
+The former WebView conversation runtime owned the Pi agent, message processing, pending input and persistence scheduling. The current link:{architecture-repository-root}/client/app/src/ai/chat.ts[`chat.ts`] instead projects native-owned state.
+In that prototype, the native link:{architecture-repository-root}/client/app/src-tauri/src/ai.rs[AI host] separately owned acceptance of active turns, provider transport, tool authorization and the persistence lease.
+Both sides therefore made execution-state decisions, although only the frontend could assemble and save the complete conversation result.
+
+In the prototype, a frontend restart could lose its turn identity while the native process retained the active turn.
+The frontend's `restoreRecord()` marked a stored running run as interrupted without consulting that native owner.
+The native reader deliberately avoided durable interruption recovery while a turn remained active, and `save_history()` rejected a save without that turn's identity.
+Network completion did not release the persistence lease; the frontend had to save and call `ai_end`.
+Repeated saving could not resolve this ownership mismatch by itself.
+
+The problem is not the existence of several representations of data.
+Persisted history, an executing agent's request context and a view's display cache serve different purposes.
+The problem is independent authority over execution, combined with a completion path that depends on one view runtime remaining alive.
+Moving the same mutable snapshot between processes, or adding a turn-status read alone, would not remove that dependency.
+
+The governing boundaries are:
+
+* link:{architecture-repository-root}/requirements/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011]: execution belongs to the open workspace and running application, not a visible pane; reopening after application exit waits for user interaction rather than replaying interrupted work.
+* link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]: macOS and iOS are the active MVP targets. Windows, Linux desktop and Android remain deferred goals, not additional implementation gates.
+* link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015]: keep device-local credential custody, supported access methods and explicit model selection. A replacement agent must not import its own global credentials or silently retry or switch providers.
+* link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005] and link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004]: retain action outcomes and task scope; interruption does not establish that an external effect did not happen.
+* link:{architecture-repository-root}/requirements/data/foundations.md[Foundations]: plain JavaScript/Vue plugins, core-managed versioned writes, portable conversation content and separate device-local AI settings remain in force. Delivery complexity must fit a single developer.
+
+The replaced prototype embedded TypeScript Pi Agent Core.
+A Rust port is a separate implementation, not an official language binding or evidence of equivalent behavior.
+Rig replaces Pi as the agent foundation, not Situate's ownership of task scope, history or uncertain outcomes. Ordinary actions now execute without per-action approval under GOAL-0004; account authorization and content protections remain separate.
+Historical Pi references do not describe the current runtime or establish Rig qualification.
+
+== Decision
+
+=== One native conversation owner
+
+Place conversation execution and persistence under an application-owned native conversation service, keyed by the authorized workspace session and conversation. The host's link:{architecture-docs-root}/index.adoc#glossary-runtime-workspace-binding[runtime workspace binding] associates each request with that local session; a portable identifier alone cannot authorize it.
+That service owns the agent loop, pending-input consumption, tool-effect recording, cancellation, persistence failures and terminal completion.
+The agent library is an implementation component of that owner, not another conversation store or independently authoritative runtime.
+Its model context and queues are derived from, or changed through, the same owner.
+The owner requests model work through link:{architecture-docs-root}/index.adoc#glossary-model-access[Model Access], an internal capability supplied by native host adapters. Their link:{architecture-docs-root}/index.adoc#glossary-provider-transport[Provider Transport] communicates with the selected model endpoint; it is not a second conversation authority.
+
+The UI sends domain actions and observes the owner's state.
+It does not construct full conversation replacements, infer interruption from stored runs, release execution leases or hold the only capability needed to finish saving.
+All views of a conversation use the same execution owner.
+Native authorization still validates window access and the current workspace-session generation; a conversation identifier or event subscription is not an access grant.
+
+Retain local UI state for focus, selection, scroll position, open dialogs and input not yet acknowledged by the host.
+A displayed conversation snapshot is a replaceable projection, not a second writable source of truth.
+Draft updates are field-specific native mutations against the current conversation, serialized with its other changes; they must not overwrite a newer transcript or require the UI to possess an execution token.
+This does not require a new database, a separate draft store or a second event-sourcing system.
+
+On attachment, the UI obtains an authorized snapshot and a matching event position without a read/subscribe gap.
+Subsequent events carry ordering information; a gap or bounded-queue overflow triggers a fresh snapshot rather than speculative state transitions.
+Submission has a host-recognized identity so a lost acknowledgement cannot create a second run on resubmission.
+Disconnection does not grant permission to repeat a model request or effectful tool.
+
+=== Completion and interruption
+
+The host records accepted input and effectful tool intent before execution, then records observed results and terminal run state without requiring a UI acknowledgement.
+It may publish transient streaming progress without synchronously persisting every token, but must distinguish that progress from durable results.
+An awaited library callback is not by itself proof of durability: persistence failure must prevent the next admitted effect or request and remain visible and retryable in the native owner.
+Only successful completion of the required writes and resource cleanup releases the run.
+A save retry retries persistence, not generation or tool execution.
+
+A UI reload does not discard native execution ownership or its pending persistence, and the replacement UI reconnects to the owner's actual state.
+Native model requests and native tools can continue without observers.
+A dispatched JavaScript invocation may instead be interrupted if its WebView executor disappears; the native owner must record the observed result or uncertainty and must not replay that invocation on reconnection.
+The owner must retain results even with no subscribed UI.
+Workspace closure and application quit use the existing cancel-or-abort lifecycle and wait for owned cleanup, not merely for the display to detach.
+A late callback from a replaced workspace session cannot mutate its replacement.
+
+Application termination or runtime failure can still interrupt work.
+Retain domain checkpoints and observed effect outcomes rather than depending on serialization of a JavaScript heap, a Rust future or a third-party session file.
+A process restart shows durable intermediate state and does not automatically replay an interrupted conversation.
+This ownership change does not provide exactly-once external effects, atomic rollback or a new automatic outcome-recovery protocol.
+Operating-system suspension of a surviving process remains distinct from a new application launch.
+
+=== Runtime selection
+
+Replace TypeScript Pi Agent Core and Pi AI completely in the production application with Rig-backed native execution.
+Rig is selected based on its broader historical contributor base, active release history and host-drivable agent-library design rather than proximity to Pi's API alone.
+Use its minimal agent/core dependency surface with Situate-owned transport, persistence and tool execution, not the terminal agent, default memory helper or an upstream credential/session store.
+Pin the tested dependency version and keep the third-party notices and transitive license review separate from the project's own licensing status.
+
+The cutover required preserving conversation, provider, onboarding and plugin behavior; the TypeScript Pi path is no longer a production fallback.
+An isolated implementation spike may establish native execution and persistence properties without shipping a replacement that lacks required product capabilities.
+The original cutover plan required passing the cutover gates before removing the product's Pi runtime dependencies. The source integration now has no production Pi fallback; aggregate and release qualification remain open, as described below.
+Development-time Pi coding-agent tooling is outside this replacement.
+Do not introduce a general multi-engine framework, an automatic runtime fallback or a second production conversation authority.
+No toolchain change is selected here. The replacement defines its own versioned domain format rather than preserving Pi's conversation representation.
+
+=== Prototype state boundary
+
+For the original native replacement, only Pi prototype formats verified never to have shipped publicly are excluded: their sessions and chats, including drafts, queues, checkpoints and onboarding conversation links, are unsupported.
+Do not migrate, import, translate, reopen or resume that state, and do not retain legacy readers, Pi-shaped type replicas or compatibility adapters for it.
+Required product capabilities remain in scope, including plain JavaScript/Vue plugin authoring; prototype internal APIs and Pi-derived tool signatures need not remain compatible.
+This exception does not apply to formats or interfaces shipped in any public release. Published native conversation formats and retained state follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069], and public plugin interfaces follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070].
+This state break does not authorize deleting unrelated workspace content or credentials.
+Persistence, restart and interruption guarantees apply to records created by the new native runtime.
+
+=== Platform qualification
+
+Qualify macOS and iOS for the product replacement.
+Also probe Windows, Linux and Android compatibility to expose later adoption barriers; this additional verification scope does not reintroduce those platforms as supported MVP products.
+
+== Maintenance and project continuity
+
+Prefer a maintained agent library with a sustainable upstream contribution and release process over a port solely because its API resembles the current implementation.
+Assess recent releases, active contributors, review and issue handling, API-change policy, dependency maintenance and whether the required embedding surface is actually maintained.
+Stars, total contributors and commit volume are supporting signals, not guarantees of future support or code quality.
+
+GitHub observations on 2026-11-03:
+
+[cols="2,1,3",options="header"]
+|===
+|Project |Listed contributor accounts, excluding bots |Observed activity
+|Rig
+|223
+|Release `v0.46.0` on 2026-10-31, following stable releases on 2026-10-19 and 2026-10-07.
+|Official TypeScript Pi
+|297
+|Release `v1.5.0` on 2026-11-02; retaining the official implementation remains a maintained alternative, although it requires an embedded JavaScript host.
+|`bigfish1913/pi-rust`
+|14
+|Recent commits and preview releases; active development, but a substantially smaller historical contributor base than Rig.
+|`yannelli/pi-rust`
+|1
+|Release `v0.12.8` on 2026-11-03; frequent recent changes do not establish shared maintenance.
+|===
+
+For Rig, the default-branch commit query from 2026-08-05 through 2026-11-03 returned 386 commits, including eight attributed to bot accounts.
+Seven non-bot author accounts appeared, with one accounting for about 98% of the mapped non-bot commits.
+Commit attribution can hide review, co-authorship and other maintenance work; this is not a count of maintainers or proof of a bus factor.
+The broader historical contributor base makes Rig a stronger candidate than the small Rust ports, but current maintenance concentration and review responsiveness still need assessment.
+Do not infer broad current ownership from the total contributor count or infer iOS support from repository activity.
+
+== Alternatives and evidence
+
+Source and documentation were inspected on 2026-11-03; the immutable references below identify the compared revisions, not an adoption pin.
+No candidate was built, benchmarked or run on a target device for this comparison.
+Top-level license observations do not replace a transitive dependency and redistribution review.
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Cost or limitation
+|Official TypeScript Pi in system JavaScriptCore
+|Retains the existing Pi implementation. Apple documents JavaScriptCore as a public in-process scripting framework on macOS/iOS; no additional Node process is needed.
+|An engine is not a browser or Node environment. Bundle the pinned agent and its required dependencies, remove Vue/Tauri UI imports, and supply the actual timer, cancellation, stream and host-call APIs they use. Thread/run-loop integration, retain cycles, interruption and resource bounds need proof using public APIs. Later non-Apple targets need another engine/backend.
+|Official TypeScript Pi in QuickJS-NG through `rquickjs`
+|Retains Pi behind a Rust embedding API with futures/promises, module loading, interruption and memory/stack controls. `rquickjs` identifies its license as MIT.
+|The same host APIs are still needed. The reviewed target matrix lists desktop targets but does not establish iOS or Android support; generated bindings alone would not qualify either. C compilation, Apple device builds, third-party notices and cancellation behavior need verification. This adds an engine to package and maintain.
+|Rust Pi core: `bigfish1913/pi-rust` (`rpi-agent`)
+|Library-first Pi-derived agent core, Tokio integration, injectable stream function, queued input, cancellation and awaited events/hooks. Reviewed source version 0.16.0 uses MIT with retained upstream attribution. The core does not require the project's CLI or native plugin loader.
+|An independent implementation with differing hooks and behavior. Existing Situate provider adapters, compaction, approvals, attachments, work history and development tools need an explicit mapping. The shared Tokio feature set includes process APIs; inspect the actual mobile dependency closure. Do not adopt its separate session stores, automatic crash resumption, built-in tools or native plugin ABI.
+|Rust Pi core: `yannelli/pi-rust` (`pi-agent`)
+|Separate agent and provider crates, injectable `StreamFn`, asynchronous tool hooks and awaited `EventSink`. Reviewed source version 0.12.8 uses MIT with upstream attribution; its agent manifest does not directly require the extension JavaScript engine.
+|The workspace is marked `publish = false`; package availability and an update/pinning policy need resolution. Provider and workspace dependencies are broader than just a loop. Full CLI features include embedded JavaScript and platform-specific facilities, so “Rust port” does not mean the whole harness is JavaScript-free or mobile-ready. iOS operation and behavioral compatibility remain unverified.
+|`Dicklesworthstone/pi_agent_rust`
+|A Rust Pi-derived agent with a documented in-process SDK.
+|The reviewed license is *MIT with an OpenAI/Anthropic rider*, not standard MIT: it restricts access and use by specified parties. Do not adopt it as an unrestricted MIT dependency; permission/legal review is a blocking prerequisite. Its manifest also includes a separate async runtime and unconditional QuickJS. This is not a JavaScript-free drop-in replacement.
+|Rig's Rust library (`rig-agent` / `rig-core`), not its terminal agent
+|MIT-licensed provider/tool contracts and an inspectable, serializable sans-I/O `AgentRun`; a native host can drive execution and supply effect handlers without a JavaScript engine for the agent loop.
+|Not Pi. Steering, compaction, tool semantics and provider behavior require replacement integration and explicit foundation review. Its high-level memory helper saves after successful completion and saves nothing on failed/cancelled runs; it cannot substitute for Situate's intermediate effect recording. Serialized library run state is version-sensitive and can contain provider bodies. Avoid adopting it as the portable storage format. Native iOS qualification is not established.
+|Keep the agent in the UI; add lease expiry, a reconnect token or a hidden WebView
+|Less immediate relocation work; some symptoms could be reduced.
+|A token/status fix alone leaves result processing and saving dependent on the UI. Expiring a lease cannot prove that native effects stopped. A separate execution WebView would need its own proven lifecycle and persistence ownership; a hidden chat window is not that proof. Not the proposed direction.
+|===
+
+Rust-native execution does not remove JavaScript from Situate's plugin model.
+Plain JavaScript tools/services still need supervised execution independent of their visible views, regardless of the agent language.
+A workspace-level WebView executor can be a fallible tool dependency without being the conversation authority, but forwarding today's closures unchanged is insufficient.
+Native code must bind invocations and acknowledgements to the executor and workspace generations, retain observed host-operation outcomes, revoke further operation admission on executor loss, drain owned resources and persist interruption without relying on a JavaScript continuation.
+Unknown outcomes must not be redispatched automatically.
+Questions, answers and development-run starts remain native domain actions; ordinary tool/export execution has no allow/deny action. Presentation requests need explicit routing and an observed acknowledgement rather than assumed success.
+
+Generation revocation alone cannot stop non-cooperative JavaScript or direct browser operations.
+This decision does not weaken the existing supervised-service/tool contract or establish that the current cooperative runtime satisfies it.
+Existing Vue plugin views retain their documented availability trade-off; trusted plugins do not become sandboxed code, and a native process crash can still interrupt every in-process component.
+
+== Platform assessment
+
+The ownership model fits the application-bound lifecycle on both active targets.
+That is an architectural assessment, not platform qualification of any engine or agent crate.
+
+[cols="1,3,3",options="header"]
+|===
+|Target |Assessment |Remaining constraint
+|macOS, active MVP
+|An in-process native owner can outlive a UI reload without a server or separate agent executable. System JavaScriptCore and native Rust are credible candidates.
+|Qualify signed/release builds, workspace access, cancellation and independent concurrent conversations. No private API, extra executable-memory entitlement or new JIT requirement should be assumed necessary for the design.
+|iOS, active MVP
+|Use a library inside the signed app, not a desktop CLI/subprocess deployment. JavaScriptCore is a documented system framework; Rust avoids an additional engine for the agent itself.
+|Neither choice grants indefinite background execution. Handle expiration, suspension, termination, protected storage and foreground return. Simulator success does not qualify a physical device. App Store compatibility of generated/downloaded plugin behavior remains a separate unresolved release concern.
+|Windows, deferred
+|Native Rust avoids dependence on an Apple system framework. A QuickJS backend could also fit the same owner boundary.
+|JavaScriptCore is not a Windows system API. The reviewed `rquickjs` matrix labels MSVC engine support experimental. Reassess builds, process cancellation and packaging when this target returns to scope.
+|Linux desktop, deferred
+|Native Rust or a separately supplied JavaScript engine could implement the same service.
+|Do not assume JavaScriptCore is installed or that a particular system engine package/version is available. Reassess distribution and dependency terms. Linux CI does not establish desktop qualification.
+|Android, deferred
+|The native owner boundary can be retained without moving execution back into an Activity/WebView.
+|Evaluate the selected crate/engine under the app UID and Android lifecycle. NDK/bindings, background-service eligibility, process death, storage and store rules need fresh review. Termux/desktop execution is not app evidence.
+|===
+
+Apple's background-execution documentation permits limited completion time, not an always-running agent entitlement.
+The native owner must retain recoverable domain state even when no graceful shutdown is available.
+A Rust implementation does not change those operating-system limits.
+
+Apple App Review Guidelines 2.5.1, 2.5.2 and 2.5.4 require public APIs and constrain executable functionality and background services.
+Using a documented scripting framework does not establish that generated plugins, downloaded scripts, arbitrary shell tools or the complete product will be accepted.
+Conversely, the browser-engine rule is not evidence that all non-browser embedded interpreters are prohibited.
+Review the shipped behavior and applicable rules before iOS release; do not claim approval from the engine choice or silently reduce the approved mobile scope.
+
+== Implementation evidence
+
+The link:{architecture-repository-root}/client/crates/situate-agent/README.md[`situate-agent` owner] pins published `rig-agent` and `rig-core` 0.46.0 with default features disabled.
+Native application host adapters validate requests before accepting them for execution through link:{architecture-docs-root}/index.adoc#glossary-operation-admission[Operation Admission]. They also supply Model Access, Provider Transport, built-in and Worker tools, persistence and bounded projections.
+It uses validated version-2 Situate conversation records, not serialized Rig sessions or converted prototype history.
+Deterministic tests cover accepted input, intent/result/terminal persistence barriers, retained failed writes, cancellation/drain, pending decisions, session invalidation and request-local capability graphs.
+
+Native application journeys exercise ordinary workspace work, onboarding and checked plugin activation on macOS, plus files, service Workers, cancellation and reopening in the iOS Simulator application.
+The link:{architecture-repository-root}/docs/development/provider-qualification.md[qualification record] distinguishes these local fixture paths from live-provider, physical-device, background and distribution evidence.
+Standalone library or linkage probes are not substitutes for that application boundary.
+There is no production Pi fallback or frontend transcript writer.
+
+== Release verification gates
+
+Source integration does not close these delivery gates:
+
+. Qualify Rig against synthetic, in-process model/tool fixtures, using the existing behavior-focused tests as the integration reference. Prove input ordering, steering/follow-up consumption, cancellation, error handling, tool-call/result pairing, compaction and context updates, direct tool execution and main/comment/title request separation.
+. Route provider requests through Situate's native operation admission, including credential and destination validation. Cover OpenAI Responses, direct ChatGPT, distinct Codex access, Anthropic, OpenRouter and custom/local endpoints without importing upstream authentication storage or enabling automatic retry/fallback. Existing provider qualification limits remain explicit.
+. Prove awaited persistence and failure propagation before effects, after tool cleanup and before run release. Source-level awaited hooks do not establish this contract, particularly where an event callback cannot return a storage error.
+. Build the selected minimal dependency closure for macOS and iOS device/simulator targets. Check public APIs, no-JIT operation where applicable, thread affinity, bounded cancellation, memory/stack behavior, app size and licenses/notices. No numerical performance threshold is selected here.
+. Review maintenance scope and upstream update strategy, including current review activity, release/API-change practices and ownership of the embedding surface. The original plan retained the Pi product path until the replacement passed the required gates. The source cutover is now integrated, but this does not establish that those gates passed. Do not maintain an unbounded compatibility fork or two production implementations by default.
+
+The resulting service needs regression evidence across the real UI/native/storage boundary:
+
+* Reload the UI during model streaming, during an effectful tool and after network completion but before final persistence. Reattach to native-owned state; retain acknowledged outcomes without repeating effects or requiring a UI-held turn identity. A lost JavaScript executor must produce an accountable interrupted/uncertain invocation, not a fabricated result or automatic redispatch.
+* Detach all observers, finish a run and reopen its view. The durable terminal result must exist without a frontend save call.
+* Drop submission acknowledgements, duplicate actions, interrupt event delivery and overflow a subscriber queue. Reattachment must not create a second run, miss a state transition or overwrite a newer transcript.
+* Edit and recall pending input through multiple views while a run completes. Preserve draft revisions and prevent consumed input from being both recalled and executed.
+* Fail intent persistence, result persistence and final persistence separately. No unrecorded effect may be newly admitted; failed final saving must remain retryable without rerunning tools or generation. Test uncertain write acknowledgements against the exact durable write.
+* Close/reopen a workspace while callbacks are pending; cancel closure, then explicitly abort and close. Old-session callbacks cannot affect the new session or another workspace.
+* Terminate the process or runtime with incomplete work. Reopening exposes recorded completion/uncertainty and waits for user interaction, without declaring an unknown external effect safe to repeat.
+* Exercise iOS background expiration, surviving-process suspension/return and process termination as different scenarios on a physical device. Add release/signing and App Store review evidence separately from host fixtures.
+
+These gates do not authorize live-provider charges, personal-workspace recovery, new platform commitments or automatic replay.
+The current link:{architecture-repository-root}/docs/development/provider-qualification.md[provider qualification record] and native test boundaries remain applicable until replacement evidence exists.
+
+== Consequences and affected views
+
+The UI can be replaced without replacing conversation execution, and terminal persistence no longer depends on a UI save/release handshake.
+This requires moving the actual loop and its host integrations, not merely exposing the existing native active-turn map.
+A native loop still needs durable checkpoints, effect barriers and cleanup; choosing Rust or JavaScript does not provide these automatically.
+
+The change crosses conversation handling, provider adaptation, plugin/tool execution, onboarding, navigation actions, drafts, diagnostics and workspace/application closure.
+UI-only actions need explicit presentation routing; absence of a view must not block storage or silently authorize an action.
+Diagnostics remain content-neutral and device-local under ADR-0008/0009; conversation events are not diagnostic log payloads.
+Core-managed storage remains authoritative for the new native conversation format, and damaged native records retain overwrite protection. Prototype Pi sessions/chats are not a supported input format.
+
+The link:{architecture-docs-root}/04-solution-strategy/application-and-agent.adoc[agent strategy] describes the native Rig owner and application-owned provider/tool adapters.
+The link:{architecture-docs-root}/05-building-block-view/level-3/application/agent-integration/native-conversation-execution.adoc[native conversation building-block view] defines component placement, interface ownership and dependency direction for that target.
+Update the link:{architecture-docs-root}/05-building-block-view/level-2/application/current-client-package-boundaries.adoc[package boundaries], link:{architecture-docs-root}/06-runtime-view/current-client-workspace-operations-and-closure.adoc[workspace lifecycle] and link:{architecture-docs-root}/06-runtime-view/current-client-application-quit-and-cancellation.adoc[application lifecycle] when the product integration changes those implementations.
+Their current lifecycle descriptions are not evidence that the replacement has shipped.
+
+== Sources
+
+All external references below were checked on 2026-11-03. Upstream capability statements are not Situate test results.
+
+Maintenance observations use GitHub's paginated contributor and release APIs for https://github.com/0xPlaygrounds/rig/graphs/contributors[Rig], https://github.com/earendil-works/pi/graphs/contributors[official Pi], https://github.com/bigfish1913/pi-rust/graphs/contributors[`bigfish1913/pi-rust`] and https://github.com/yannelli/pi-rust/graphs/contributors[`yannelli/pi-rust`], excluding accounts typed as bots.
+Rig's recent commit attribution uses the https://api.github.com/repos/0xPlaygrounds/rig/commits?since=2026-08-05T00%3A00%3A00Z&until=2026-11-03T19%3A15%3A27Z&per_page=100[default-branch commits API] across all returned pages; contributor listings and account classifications can change after the observation date.
+
+* Official Pi, historically integrated version 1.1.0: https://github.com/earendil-works/pi/tree/abe508e1b89912adde45528136c3221eb69acdd7/packages/agent[agent source], https://github.com/earendil-works/pi/blob/abe508e1b89912adde45528136c3221eb69acdd7/LICENSE[MIT license]. This source identifies the historical comparison and retained-code attribution, not a current application dependency.
+* `bigfish1913/pi-rust`, source revision `5d04ed540fca5f332540e1875d965f2276872838`: https://github.com/bigfish1913/pi-rust/tree/5d04ed540fca5f332540e1875d965f2276872838/crates/rpi-agent[agent core], https://github.com/bigfish1913/pi-rust/blob/5d04ed540fca5f332540e1875d965f2276872838/Cargo.toml[workspace/dependencies], https://github.com/bigfish1913/pi-rust/blob/5d04ed540fca5f332540e1875d965f2276872838/LICENSE[license] and https://github.com/bigfish1913/pi-rust/blob/5d04ed540fca5f332540e1875d965f2276872838/NOTICE[attribution].
+* `yannelli/pi-rust`, source revision `259d25b7515a564c601d0d9c5ef09b3997449b9c`: https://github.com/yannelli/pi-rust/tree/259d25b7515a564c601d0d9c5ef09b3997449b9c/crates/pi-agent[agent core], https://github.com/yannelli/pi-rust/blob/259d25b7515a564c601d0d9c5ef09b3997449b9c/Cargo.toml[workspace/dependencies], https://github.com/yannelli/pi-rust/blob/259d25b7515a564c601d0d9c5ef09b3997449b9c/README.md[scope and differences] and https://github.com/yannelli/pi-rust/blob/259d25b7515a564c601d0d9c5ef09b3997449b9c/LICENSE[license].
+* `Dicklesworthstone/pi_agent_rust`, source revision `4ea8188250c9883c247642324cda4afd0a212252`: https://github.com/Dicklesworthstone/pi_agent_rust/blob/4ea8188250c9883c247642324cda4afd0a212252/docs/sdk.md[SDK], https://github.com/Dicklesworthstone/pi_agent_rust/blob/4ea8188250c9883c247642324cda4afd0a212252/Cargo.toml[dependencies] and https://github.com/Dicklesworthstone/pi_agent_rust/blob/4ea8188250c9883c247642324cda4afd0a212252/LICENSE[license with rider].
+* Rig, source revision `125417d4d6a7891a25f60db537df4818effa4cca`: https://github.com/0xPlaygrounds/rig/blob/125417d4d6a7891a25f60db537df4818effa4cca/crates/rig-agent/README.md[agent runtime, memory behavior and run protocol], https://github.com/0xPlaygrounds/rig/blob/125417d4d6a7891a25f60db537df4818effa4cca/crates/rig-core/Cargo.toml[provider/core dependencies] and https://github.com/0xPlaygrounds/rig/blob/125417d4d6a7891a25f60db537df4818effa4cca/LICENSE[MIT license].
+* `rquickjs`, source revision `ec4877620eae03807606e639b0c293da3b6f0999`: https://github.com/DelSkayn/rquickjs/blob/ec4877620eae03807606e639b0c293da3b6f0999/README.md[features, missing host APIs, license and target matrix] and https://github.com/DelSkayn/rquickjs/blob/ec4877620eae03807606e639b0c293da3b6f0999/core/src/runtime/base.rs[interruption and resource controls].
+* Apple: https://developer.apple.com/documentation/javascriptcore[JavaScriptCore], https://developer.apple.com/documentation/javascriptcore/jsvirtualmachine[virtual-machine concurrency and object lifetime], https://developer.apple.com/documentation/uikit/extending-your-app-s-background-execution-time[limited background execution] and https://developer.apple.com/app-store/review/guidelines/[App Review Guidelines, particularly 2.5.1, 2.5.2, 2.5.4 and 2.5.6].

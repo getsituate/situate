@@ -1,0 +1,17 @@
+{
+  "productName": "Situate Visual",
+  "identifier": "dev.situate.client.visual",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Situate Visual",
+        "visible": false,
+        "width": 1280,
+        "height": 900,
+        "minWidth": 320,
+        "minHeight": 360
+      }
+    ]
+  }
+}

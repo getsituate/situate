@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "id": "one",
+  "title": "Retained work",
+  "revision": 4,
+  "selectedEntryId": "migration-2",
+  "messageCount": 1,
+  "eventCount": 0,
+  "lastUserMessageAt": 1,
+  "legacyDraft": {
+    "text": "Retained draft",
+    "attachments": [],
+    "references": []
+  }
+}

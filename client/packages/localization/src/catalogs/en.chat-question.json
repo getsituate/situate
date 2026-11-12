@@ -1,0 +1,16 @@
+{
+  "chatQuestion.pending": "Question for you",
+  "chatQuestion.collapse": "Collapse question",
+  "chatQuestion.show": "Show question",
+  "chatQuestion.viewDetails": "View details",
+  "chatQuestion.more": "Show {count} more",
+  "chatQuestion.fewer": "Show fewer",
+  "chatQuestion.answer": "Your answer",
+  "chatQuestion.placeholder": "Write your own answer…",
+  "chatQuestion.invalid": "This answer is not valid.",
+  "chatQuestion.stale": "This question is no longer waiting for an answer.",
+  "chatQuestion.empty": "Write an answer or choose a suggestion.",
+  "chatQuestion.busy": "Wait until the current action finishes.",
+  "chatQuestion.retry": "Continue setup",
+  "chatQuestion.interrupted": "Your answer was saved. Continue setup to finish this step."
+}

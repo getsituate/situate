@@ -1,0 +1,15 @@
+{
+  "version": "2.0.2",
+  "arm64": {
+    "url": "https://github.com/volta-cli/volta/releases/download/v2.0.2/volta-2.0.2-linux-arm.tar.gz",
+    "sha256": "1eb92f8b711753aa576352b2e580b2f3fdadeab8664929ca1da3d0de65448517"
+  },
+  "x64": {
+    "url": "https://github.com/volta-cli/volta/releases/download/v2.0.2/volta-2.0.2-linux.tar.gz",
+    "sha256": "6cec054c911fb925b629a09455775af6e95dc0f5694a4c28b63979ab9ef18037"
+  },
+  "license": {
+    "url": "https://raw.githubusercontent.com/volta-cli/volta/v2.0.2/LICENSE",
+    "sha256": "ae2964ee7d12ac050a3be5d429456894cad909e3a8c87c8ebb51f4e20cdd0369"
+  }
+}

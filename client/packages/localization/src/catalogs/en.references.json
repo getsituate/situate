@@ -1,0 +1,12 @@
+{
+  "references.invalid": "This content reference does not belong to this workspace or is invalid.",
+  "references.unavailable": "Referenced content could not be read. Check the reference or remove it before sending.",
+  "references.tooLarge": "The referenced content is too large. Choose fewer or smaller files before sending.",
+  "references.draft": "Referenced content",
+  "references.pending": "Queued references",
+  "references.submitted": "Conversation references",
+  "references.open": "Open {path}",
+  "references.remove": "Remove reference to {path}",
+  "references.historical": "Historical version",
+  "references.useDefaultModel": "Use workspace default"
+}

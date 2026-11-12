@@ -1,0 +1,35 @@
+digraph NativeHostAdapters {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.65, ranksep=0.8, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  subgraph cluster_app {
+    label="Situate Application — host interfaces";
+    color="#6a5c70";
+    style="rounded";
+    margin=20;
+
+    frontend [label="Frontend views\nWebView presentation"];
+    executor [label="JavaScript Tool Executor\nPlugin Runtime"];
+
+    subgraph cluster_native {
+      label="Native host (Rust)";
+      labeljust=l;
+      labelloc=b;
+      color="#6a5c70";
+      style="rounded";
+      margin=36;
+      host [label="Native Host Adapters\nAgent Integration", fillcolor="#eee7f9", color="#6232bc"];
+      core [label="Application Core\nsituate-core +\nnative services"];
+    }
+    { rank=same; frontend; executor; }
+
+    frontend -> host [style=invis];
+    host -> frontend [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>UI Contributions</TD></TR></TABLE>>, constraint=false];
+    host -> executor [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Tool invocations<BR/>and structured results</TD></TR></TABLE>>, style=dashed, constraint=false];
+    executor -> host [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Scoped native calls</TD></TR></TABLE>>, style=dashed];
+    host -> core [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Workspace Storage<BR/>&amp; History<BR/>Workspace Lifecycle<BR/>Platform Access</TD></TR></TABLE>>];
+  }
+  model [label="Admitted model endpoint"];
+  host -> model [minlen=2, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Provider Transport</TD></TR></TABLE>>];
+}

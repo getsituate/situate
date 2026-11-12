@@ -1,0 +1,249 @@
+{
+  "title": "Updates",
+  "notice": "Update available",
+  "open": "Open update settings",
+  "scope": "For this app on this device",
+  "currentVersion": "Installed version",
+  "version": "Version {version}",
+  "latest": "You’re up to date",
+  "latestDetail": "Situate checks for updates in the background every 24 hours.",
+  "lastCheck": "Last checked just now",
+  "check": "Check for updates",
+  "checking": "Checking for updates…",
+  "checkingDetail": "You can keep working while Situate checks.",
+  "downloadTitle": "Downloading the next version",
+  "downloadDetail": "The download continues while you work. Situate won’t restart on its own.",
+  "progress": "Update download",
+  "downloaded": "{done} of {total} MB",
+  "readyTitle": "Ready when you are",
+  "readyDetail": "The update is downloaded. Install it whenever you’re ready to restart Situate.",
+  "install": "Install and restart",
+  "installing": "Installing the update…",
+  "installingDetail": "Situate will reopen when installation is complete.",
+  "checkFailed": "Couldn’t check for updates",
+  "checkFailedDetail": "A connection to the update service couldn’t be established. Check again later.",
+  "readNotes": "Browse version history",
+  "featureNotes": {
+    "title": "Fixes for navigation and document search",
+    "intro": "Corrections to pane navigation and filtered document results.",
+    "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
+    "sections": [
+      {
+        "title": "Pane navigation",
+        "paragraphs": [
+          "Fixed Back returning to the wrong note after following two references in the same pane."
+        ],
+        "subheading": "macOS",
+        "details": [
+          "This fix applies to multi-pane layouts on macOS. iOS navigation is unchanged."
+        ],
+        "image": null,
+        "imageAlt": "",
+        "imageCaption": ""
+      },
+      {
+        "title": "Document search",
+        "paragraphs": [
+          "Fixed a cleared tag filter remaining active when you changed the search text."
+        ],
+        "subheading": "If a filter still appears active",
+        "details": [
+          "Clear the search once and enter it again. Your documents and tags are unchanged."
+        ],
+        "image": null,
+        "imageAlt": "",
+        "imageCaption": ""
+      }
+    ]
+  },
+  "releaseArchive": {
+    "0.8.0": {
+      "title": "Pane layouts and combined tag filters",
+      "intro": "Keep related material in view and narrow a document search with multiple tags.",
+      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
+      "sections": [
+        {
+          "title": "Keep a note beside its conversation",
+          "paragraphs": [
+            "On macOS, split a tab into panes and resize them. Each pane keeps its own Back and Forward history."
+          ],
+          "subheading": "On iOS",
+          "details": [
+            "Notes and conversations open one at a time; split-pane layouts are not available."
+          ],
+          "image": null,
+          "imageAlt": "",
+          "imageCaption": ""
+        },
+        {
+          "title": "Combine document tags",
+          "paragraphs": [
+            "Select Any to match at least one chosen tag, or All to match every chosen tag."
+          ],
+          "subheading": "Existing searches",
+          "details": [
+            "Saved searches keep their current matching rule. Select All explicitly if you want to narrow an existing search."
+          ],
+          "image": null,
+          "imageAlt": "",
+          "imageCaption": ""
+        }
+      ]
+    },
+    "0.7.2": {
+      "title": "Fixes for drafts and long filenames",
+      "intro": "Corrections to retained conversation drafts and file list labels.",
+      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
+      "sections": [
+        {
+          "title": "Conversation drafts",
+          "paragraphs": [
+            "Fixed a draft disappearing from view when switching away from a conversation during a reply."
+          ],
+          "subheading": "After reopening",
+          "details": [
+            "Open the conversation to continue editing its retained draft. Sending still requires your action."
+          ],
+          "image": null,
+          "imageAlt": "",
+          "imageCaption": ""
+        },
+        {
+          "title": "Long filenames on iOS",
+          "paragraphs": [
+            "Fixed the file action button being pushed offscreen by long filenames."
+          ],
+          "subheading": "macOS",
+          "details": ["File list layout is unchanged."],
+          "image": null,
+          "imageAlt": "",
+          "imageCaption": ""
+        }
+      ]
+    },
+    "0.7.1": {
+      "title": "Fixes for search and scrolling",
+      "intro": "Search and reading-position corrections.",
+      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
+      "sections": [
+        {
+          "title": "Search text",
+          "paragraphs": [
+            "Fixed pasted search text retaining leading spaces and hiding otherwise matching notes."
+          ],
+          "subheading": "Reading position",
+          "details": [
+            "Fixed a note jumping to its beginning when returning from another tab on macOS."
+          ],
+          "image": null,
+          "imageAlt": "",
+          "imageCaption": ""
+        }
+      ]
+    },
+    "0.7.0": {
+      "title": "Document tags",
+      "intro": "Filter the document collection by a tag.",
+      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
+      "sections": [
+        {
+          "title": "Filter by tag",
+          "paragraphs": [
+            "Choose a tag in Documents to show matching material alongside your search results."
+          ],
+          "subheading": "Source refresh required",
+          "details": [
+            "Refresh an existing document source once to include its tags. Tags are available only when the source supplies them."
+          ],
+          "image": null,
+          "imageAlt": "",
+          "imageCaption": ""
+        }
+      ]
+    }
+  },
+  "restartTitle": "Restart to install the update?",
+  "restartIdle": "Situate will save your work in all open windows, then restart with the update.",
+  "restartWorking": "Actions are still running. Restarting will stop them and save your work in all open windows.",
+  "restartCaution": "You can continue these chats with a new message after restarting.",
+  "later": "Update later",
+  "force": "Force update…",
+  "forceTitle": "Update without saving?",
+  "forceWarning": "Running actions will stop. Unsaved changes in any open window may be lost. Save anything you need before continuing.",
+  "forceConfirm": "Force update and restart",
+  "preparingTitle": "Preparing to restart…",
+  "preparingDetail": "Stopping actions and saving work in all open windows. You can leave this page while Situate prepares to restart.",
+  "forcePreparingDetail": "Stopping actions before restarting. You can leave this page while Situate prepares to restart.",
+  "preparationFailed": "Couldn’t prepare to restart",
+  "preparationReasons": {
+    "window": "An open window couldn’t finish saving or confirm it was ready. Check your open windows and save your work, then try again.",
+    "native": "Running actions are still stopping. Wait for them to finish before trying again. The update will not restart Situate automatically.",
+    "stop-failed": "Situate couldn’t stop running actions safely. Wait for them to finish before trying again. A forced update cannot bypass this step."
+  },
+  "retryPreparation": "Try again…",
+  "waitForWrites": "Waiting for actions to stop…",
+  "manualInstallation": "If this keeps happening, quit Situate once the actions finish and use a trusted installer of the same or a newer version. Keep your workspaces; don’t delete or reset them.",
+  "stoppedChats": "Actions stopped for this attempt won’t restart on their own. Continue a chat with a new message.",
+  "confirm": "Install and restart",
+  "abortConfirm": "Stop actions and restart",
+  "unsynced": "Some workspace changes haven’t synchronized yet.",
+  "sync": "Synchronize before restarting",
+  "syncWaiting": "Waiting for synchronization…",
+  "syncDetail": "The workspace stays open. Restart only continues after synchronization completes.",
+  "withoutSync": "Restart without synchronizing",
+  "cancelSync": "Keep working",
+  "close": "Close history",
+  "workspace": "Back to workspace",
+  "controls": {
+    "title": "Update simulation",
+    "forceScreen": "Confirm restart without saving",
+    "preparationScreen": "Preparing update restart",
+    "failedScreen": "Update preparation failed",
+    "blockedScreen": "Waiting for safe shutdown",
+    "preparationReason": "Preparation failure reason",
+    "preparationReasons": {
+      "window": "Window preparation failed",
+      "native": "Stopping actions timed out",
+      "stop-failed": "Safe shutdown failed"
+    },
+    "finishPreparation": "Complete safe preparation",
+    "failPreparation": "Fail preparation",
+    "settleWrites": "Finish stopping actions without installing",
+    "description": "Synthetic releases and local interactions. No network, downloads, installation or application restart.",
+    "channel": "Distribution channel",
+    "direct": "Website download",
+    "homebrew": "Homebrew",
+    "store": "App Store / TestFlight",
+    "state": "Download and check result",
+    "available": "Update available",
+    "current": "Already current",
+    "offline": "Connection unavailable",
+    "progress": "Download progress",
+    "completeCheck": "Complete update check",
+    "completeDownload": "Complete download",
+    "completeInstall": "Complete installation and restart",
+    "externalUpdate": "Apply external update and reopen",
+    "running": "Actions running",
+    "unsynced": "Unsynchronized workspace changes",
+    "completeSync": "Complete synchronization",
+    "notes": "Open version history",
+    "screenNotice": "Workspace · update ready",
+    "screenSettings": "Settings · Updates",
+    "screenRestart": "Confirm update restart",
+    "screenSync": "Wait for synchronization",
+    "screenInstalling": "Install update",
+    "screenNotes": "Version history",
+    "scenario": "Update the app",
+    "notesScenario": "Browse release history"
+  },
+  "about": "About Situate",
+  "history": "Version history",
+  "backToHistory": "All releases",
+  "searchHistory": "Find a release",
+  "searchPlaceholder": "Version or change",
+  "noReleases": "No matching releases",
+  "clearSearch": "Clear search",
+  "installed": "Installed",
+  "olderRelease": "Older",
+  "newerRelease": "Newer"
+}

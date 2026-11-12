@@ -1,0 +1,7 @@
+.situate-popover,
+.situate-tooltip {
+  --situate-popup-safe-top: env(safe-area-inset-top, 0px);
+  --situate-popup-safe-right: env(safe-area-inset-right, 0px);
+  --situate-popup-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --situate-popup-safe-left: env(safe-area-inset-left, 0px);
+}

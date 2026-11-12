@@ -1,0 +1,33 @@
+name: Coverage comment
+
+on:
+  workflow_run:
+    workflows: [Coverage]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: coverage-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: volta-cli/action@5c175f92dea6f48441c436471e6479dbc192e194
+        with:
+          volta-version: 2.0.2
+      - run: node tools/coverage-comment.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

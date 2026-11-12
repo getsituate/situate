@@ -1,0 +1,9 @@
+{
+  "native.layout.storage.failed": "Das Arbeitsbereichslayout konnte nicht gelesen oder gespeichert werden.",
+  "native.layout.storage.invalid": "Das gespeicherte Arbeitsbereichslayout ist ungültig. Die ursprüngliche Datei wurde beibehalten.",
+  "native.layout.storage.unsupported": "Dieses Arbeitsbereichslayout verwendet eine nicht unterstützte Version. Die ursprüngliche Datei wurde beibehalten.",
+  "native.layout.storage.conflict": "Das Arbeitsbereichslayout wurde geändert. Lade es vor dem nächsten Speichern erneut.",
+  "native.layout.storage.tooLarge": "Das Arbeitsbereichslayout ist zu groß zum Speichern.",
+  "native.layout.storage.busy": "Das Arbeitsbereichslayout wird gerade an anderer Stelle gespeichert. Versuche es erneut.",
+  "native.layout.storage.durability": "Das Layout wurde geschrieben, aber die dauerhafte Speicherung konnte nicht bestätigt werden. Lade es vor dem nächsten Speichern erneut."
+}

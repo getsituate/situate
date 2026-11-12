@@ -1,0 +1,65 @@
+@startuml
+hide footbox
+skinparam shadowing false
+skinparam backgroundColor #fffefa
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 14
+skinparam defaultFontColor #30203e
+skinparam roundcorner 12
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam BoxPadding 10
+skinparam sequence {
+  ArrowColor #6a5c70
+  ArrowFontColor #30203e
+  ArrowFontSize 13
+  LifeLineBorderColor #8c7a97
+  ParticipantBorderColor #6a5c70
+  ParticipantBackgroundColor #eee7f9
+  ParticipantFontColor #30203e
+  ActorBorderColor #6a5c70
+  ActorBackgroundColor #fffefa
+  ActorFontColor #30203e
+  GroupBorderColor #6a5c70
+  GroupBackgroundColor #f6f3ee
+  GroupHeaderFontColor #30203e
+  DividerBorderColor #8c7a97
+  DividerBackgroundColor #f6f3ee
+}
+skinparam note {
+  BackgroundColor #fff7e3
+  BorderColor #8c7a97
+  FontColor #30203e
+  FontSize 12
+}
+
+participant "Agent Integration" as Agent
+participant "Plugin Runtime" as Runtime
+participant "Application Core" as Core
+participant "Active plugins" as Active
+
+Agent -> Runtime: Request grouped activation
+Runtime -> Core: Block new affected Root Actions
+
+== Drain existing actions ==
+Active --> Core: Root Actions and nested calls finish
+note over Core, Active
+  No abort or replay.
+  A tool awaiting data keeps its current version.
+end note
+
+== Drain host requests ==
+Core -> Core: Block new affected host requests
+Active --> Core: Requests finish; Worker Leases released
+Core -> Core: Revalidate checked code\nand dependency revisions
+
+alt Relevant revisions changed
+  Core --> Runtime: Needs recheck; no publication
+  Runtime --> Agent: Obtain fresh applicable checks
+else Checks still apply
+  ref over Agent, Core
+    Publish activation and refresh registrations
+    (next diagram)
+  end ref
+end
+@enduml

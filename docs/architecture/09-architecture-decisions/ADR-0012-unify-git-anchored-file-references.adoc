@@ -1,0 +1,101 @@
+[[adr-0012]]
+= ADR-0012: Unify file references without embedded file IDs
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-03
+Implementation:: unified file references, task-only identity preparation and general file publication implemented; native macOS/iOS qualification remains separate
+Amends:: link:{architecture-docs-root}/09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc[ADR-0010], replacing its preservation of Markdown file UUIDs
+
+== Context
+
+Markdown files currently carry a `situate-id` UUID in YAML frontmatter, while other files use a path and Git commit anchor.
+External writers can omit, change or duplicate a file UUID. Maintaining this convention requires content enrichment, protected-ID editing, copy/import identity remapping and ambiguous-ID repair.
+A missing or duplicated UUID can prevent Markdown reference capture even though the content is otherwise usable.
+
+ADR-0010 already places confirmed structural-operation facts in core-managed Git history and resolves anchored paths without an independently authoritative registry.
+Using that mechanism for Markdown removes a second file-reference model.
+Git does not itself assign stable file identities: blob hashes identify bytes, and rename detection estimates similarity rather than proving continuity.
+The chosen mechanism therefore depends on validated operation facts, not rename heuristics.
+
+The governing requirements are link:{architecture-repository-root}/requirements/data/requirements/REQ-0035-preserve-file-and-task-identity.md[REQ-0035], link:{architecture-repository-root}/requirements/data/requirements/REQ-0030-open-chats-with-content-references.md[REQ-0030], link:{architecture-repository-root}/requirements/data/requirements/REQ-0036-convert-imported-notes-and-tasks.md[REQ-0036] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022].
+The original decision excluded compatibility with unpublished development formats. Situate is now publicly available; this exclusion applies only to formats verified never to have shipped publicly. Changes to published formats follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069].
+
+== Decision
+
+Use one Git-anchored live file-reference model for Markdown and other files.
+A reference retains its original workspace-relative path and capture commit; confirmed managed moves advance its derived current location.
+Ordinary content edits preserve continuity. Copies create a separate lineage. A known deletion terminates the old lineage; restoration or recreation does not revive its old live references, even at the same path with identical bytes.
+Historical references continue to select their exact retained commit and path. File-history inspection follows confirmed managed moves without a file UUID filter.
+
+Stop generating, requiring, protecting, indexing and resolving the file-frontmatter key `situate-id` as system metadata.
+Do not replace it with another embedded file ID, sidecar identity registry or durable cache authority.
+Ordinary writes preserve user metadata, including an existing field named `situate-id`, without interpreting it as identity.
+External content discovery records changes but does not insert file IDs or otherwise normalize content merely to make it referencable.
+
+Missing anchors, observed deletions, interrupted operations and insufficient continuity evidence leave references unresolved.
+Do not silently recapture a stored path or choose a target from equal bytes, filenames or Git rename similarity.
+External moves need not preserve references; explicitly selecting a source creates a new reference rather than repairing an old one implicitly.
+The existing limits on observable external changes remain: Git snapshots cannot reconstruct an unobserved sequence of external replacement operations.
+
+Retain `situate-task-id` UUIDs and their existing recognition, movement, copy, restoration, ambiguity and deliberate-edit rules.
+Tasks can move between files and cannot be identified by a file lineage alone.
+Only task identities require UUID generation, regeneration and identity-link remapping in user content.
+Diagnostic workspace identifiers, runtime authorization, conversation IDs and plugin identities are unchanged.
+
+Treat import as a source-preserving conversion workflow available in ordinary conversations, including new conversations after setup.
+Publish prepared content through general versioned write/edit capabilities, with a bounded general batch-creation capability where needed.
+Remove the import-only file-publication tools and the restriction requiring new imported Markdown to use them.
+Keep task-copy identity preparation and recognized link retargeting in shared native operations rather than relying on model-invented IDs or duplicated prompt logic.
+Import and ordinary editing preserve supplied content and metadata under REQ-0036. File-reference capture derives its information from Git history, while task-copy preparation changes task identities and recognized task links.
+Retain revision preconditions, no-clobber creation, authorization, history durability, bounded staging and accurate partial/uncertain outcomes.
+A batch is not an all-or-nothing transaction. Only verified published destinations count as results; an uncertain acknowledgement must not trigger automatic replay.
+
+For formats verified never to have shipped publicly, replace producers, consumers and synthetic fixtures together without migration, compatibility readers or legacy-reference conversion.
+Leave those unsupported development workspaces as they are: no upgrade-time conversion, metadata cleanup, history rewriting, reset or deletion.
+Unsupported stored formats fail explicitly and retain overwrite protection; never replace unreadable state with empty records or recapture its paths.
+Fresh synthetic workspaces cover the original replacement. Later changes to published formats also require supported-release fixtures and upgrade verification, including tested migration where needed; the original exception does not waive those obligations.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Cost or limitation
+|Keep embedded file UUIDs
+|Can rediscover an externally moved Markdown file when its UUID remains unique and intact.
+|Retains enrichment, duplicate repair, protected editing and separate reference semantics; does not solve arbitrary external changes.
+|Make file UUIDs optional with anchored-path fallback
+|Accepts files without IDs while retaining UUID-based rediscovery for others.
+|Maintains both models and adds transitions when IDs appear, disappear or become ambiguous.
+|Use Git-anchored paths for every file
+|Reuses existing operation facts and removes file-ID mutation and repair machinery.
+|External moves can break references; restoration requires a new live selection. Selected.
+|Infer continuity from content similarity or ordinary Git rename detection
+|Can suggest likely external moves without modifying files.
+|Cannot reliably distinguish copies, replacements and moves; unsuitable for automatically selecting a read or write target.
+|===
+
+== Consequences and verification
+
+Markdown and other files share reference capture, persistence, resolution, history traversal and interruption rules.
+File-ID normalization, warnings, ambiguity handling and remapping can be removed; task metadata parsing and task-ID protection remain.
+The Git operation protocol, retained drafts, safe file publication and authorization are still necessary and must not be weakened in the simplification.
+
+Verify unchanged source bytes on normal creation, externally added Markdown without frontmatter, live updates, chained managed moves, folder operations, copies, deletion/path reuse and restoration with a fresh selection.
+Verify cache-free reconstruction after restart and a portable workspace copy, including references in unopened conversations, queued inputs, stored runs and inactive file-view presentations.
+Missing or unsupported evidence must not redirect a reference or replay a mutation.
+Historical inspection, selective reversal and draft recovery must remain usable without file UUIDs.
+
+Import verification must cover a later ordinary chat, unchanged originals, task recognition and fresh task-copy IDs, links between copied items, metadata conversion, bounded batches, no-clobber destinations and partial/uncertain file publication.
+Reject obsolete selectors without converting or rewriting existing workspaces.
+Run the affected MVP checks and native macOS/iOS checks where applicable; browser and shared-core results alone do not qualify native behavior.
+
+The detailed reference rules are in link:{architecture-docs-root}/index.adoc#git-derived-file-references[Git-derived file references].
+Acceptance of this decision does not establish implementation or platform qualification.

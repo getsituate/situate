@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 260" role="img" aria-labelledby="background-paper-fan-title" aria-describedby="background-paper-fan-desc">
+  <title id="background-paper-fan-title">Pleated paper fan</title>
+  <desc id="background-paper-fan-desc">Four broad peach and orange panels open from a shared lower fold.</desc>
+  <path d="M167 230 34 184Q27 181 29 173L47 103Q50 88 61 81L125 42Q134 36 145 38L220 51Q233 53 242 64L297 139Q303 147 295 153Z" fill="#da592f"/>
+  <path d="M160 222 27 176Q20 173 22 165L40 95Q43 80 54 73Z" fill="#ffc3a3"/>
+  <path d="M160 222 54 73 118 34Q127 28 138 30Z" fill="#ff874d"/>
+  <path d="M160 222 138 30 213 43Q226 45 235 56Z" fill="#ffc3a3"/>
+  <path d="M160 222 235 56 290 131Q296 139 288 145Z" fill="#ff874d"/>
+</svg>

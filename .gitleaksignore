@@ -1,0 +1,18 @@
+# Synthetic ID tokens verified only against the independent fixture JWKS.
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:15
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:16
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:17
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:18
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:19
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:20
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:21
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:22
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:23
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:24
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:25
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:26
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:27
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:28
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:29
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:30
+client/app/src-tauri/src/openai_identity_fixtures.json:jwt:31

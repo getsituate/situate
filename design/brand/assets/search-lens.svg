@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 172" role="img" aria-labelledby="search-lens-title" aria-describedby="search-lens-desc">
+  <title id="search-lens-title">A closer look at a note</title>
+  <desc id="search-lens-desc">A broad violet magnifier enlarges a curved line on a cream paper fragment.</desc>
+  <g id="paper">
+    <path d="M28 22h80l17 18v110H20V30a8 8 0 0 1 8-8Z" fill="#ffc3a3"/>
+    <path d="M22 16h80l17 18v110H14V24a8 8 0 0 1 8-8Z" fill="#fff7e3"/>
+    <path d="M102 16v18h17Z" fill="#ff874d"/>
+    <path d="M30 99h29m-29 16h58m-58 13h37" fill="none" stroke="#ad9284" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g id="magnifier-depth" fill="none" stroke="#6232bc">
+    <path d="m118 109 27 36" stroke-width="23" stroke-linecap="round"/>
+    <circle cx="93" cy="70" r="34" stroke-width="14"/>
+  </g>
+  <g id="magnifier">
+    <path d="m112 103 27 36" fill="none" stroke="#8651ed" stroke-width="23" stroke-linecap="round"/>
+    <circle cx="87" cy="64" r="41" fill="#8651ed"/>
+    <circle cx="87" cy="64" r="27" fill="#fff7e3"/>
+    <path d="M68 71c9-18 19-22 36-12" fill="none" stroke="#ff874d" stroke-width="8" stroke-linecap="round"/>
+  </g>
+</svg>

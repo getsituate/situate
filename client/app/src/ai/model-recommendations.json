@@ -1,0 +1,709 @@
+{
+  "schemaVersion": 2,
+  "revision": "2026-10-08.1",
+  "rankedCandidates": [
+    {
+      "provider": "openai",
+      "access": "api_key",
+      "modelId": "gpt-6.1-sol",
+      "api": "openai-responses",
+      "thinking": "medium",
+      "priority": { "chat": 10, "comment": 10 },
+      "eligibility": "supported",
+      "rationale": "Reviewed balanced conversational tier; comments independently prefer the lower-rate Mini candidate when available and otherwise use Sol at its lowest verified effort.",
+      "sources": ["https://developers.openai.com/api/docs/models/gpt-6.1-sol"]
+    },
+    {
+      "provider": "openai",
+      "access": "oauth",
+      "modelId": "gpt-6.1-sol",
+      "api": "openai-responses",
+      "thinking": "medium",
+      "priority": { "chat": 10, "comment": 10 },
+      "eligibility": "supported",
+      "rationale": "Direct ChatGPT static compatibility only; account entitlement and discovery remain unresolved.",
+      "sources": [
+        "https://developers.openai.com/siwc/token-sharing-open-source/sign-in"
+      ]
+    },
+    {
+      "provider": "anthropic",
+      "access": "api_key",
+      "modelId": "claude-sonnet-5-5",
+      "api": "anthropic-messages",
+      "thinking": "medium",
+      "priority": { "chat": 10, "comment": 10 },
+      "eligibility": "supported",
+      "rationale": "Balanced conversational tier. Official effort documentation and pinned adapter fixtures establish adaptive thinking with per-message low, medium and high effort, streamed tools and tool-result continuation; account access remains unverified.",
+      "sources": [
+        "https://platform.claude.com/docs/en/about-claude/models/overview",
+        "https://platform.claude.com/docs/en/build-with-claude/effort"
+      ]
+    },
+    {
+      "provider": "openrouter",
+      "access": "api_key",
+      "modelId": "openai/gpt-6.1-sol",
+      "api": "openai-completions",
+      "thinking": "medium",
+      "priority": { "chat": 10, "comment": 10 },
+      "eligibility": "supported",
+      "rationale": "Balanced conversational tier. OpenRouter documents gateway-normalized reasoning and tools; pinned adapter fixtures establish low, medium and high effort, streamed tools and tool-result continuation without assuming direct OpenAI wire compatibility.",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-6.1-sol",
+        "https://openrouter.ai/docs/guides/best-practices/reasoning-tokens",
+        "https://openrouter.ai/docs/guides/features/tool-calling"
+      ]
+    },
+    {
+      "provider": "openai",
+      "access": "api_key",
+      "modelId": "gpt-4o-mini",
+      "api": "openai-responses",
+      "thinking": "off",
+      "priority": { "chat": 20, "comment": 5 },
+      "eligibility": "supported",
+      "rationale": "Lower listed API rates than Sol for short comments; non-reasoning text/image model with documented streaming and function calling. Pinned Responses fixtures cover tools and continuation. Second chat choice only during explicit recommendation or initial selection, never request-error fallback.",
+      "sources": ["https://developers.openai.com/api/docs/models/gpt-4o-mini"]
+    },
+    {
+      "provider": "openrouter",
+      "access": "api_key",
+      "modelId": "openai/gpt-4o-mini",
+      "api": "openai-completions",
+      "thinking": "off",
+      "priority": { "chat": 20, "comment": 5 },
+      "eligibility": "supported",
+      "rationale": "Lower listed gateway rates than Sol for short comments, without reasoning effort. Pinned gateway fixtures cover streaming tools and continuation. Route availability and actual billing remain account-controlled.",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-4o-mini",
+        "https://openrouter.ai/docs/guides/features/tool-calling"
+      ]
+    },
+    {
+      "provider": "openai-codex",
+      "access": "oauth",
+      "modelId": "gpt-6.1-sol",
+      "api": "openai-codex-responses",
+      "thinking": "medium",
+      "priority": { "chat": 10, "comment": 10 },
+      "eligibility": "supported",
+      "rationale": "Codex-specific adapter fixtures qualify low, medium and high effort, encrypted reasoning continuation and streamed tool calls. The runtime method policy still gates device authorization and native transport activation; rollout and account entitlement remain unverified.",
+      "sources": [
+        "https://developers.openai.com/codex/models",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol"
+      ]
+    }
+  ],
+  "staticModels": [
+    {
+      "id": "gpt-6.1-sol",
+      "provider": "openai",
+      "api": "openai-responses",
+      "baseUrl": "https://api.openai.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.anthropic.com",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
+      "id": "openai/gpt-6.1-sol",
+      "provider": "openrouter",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
+      "id": "gpt-4o-mini",
+      "provider": "openai",
+      "api": "openai-responses",
+      "baseUrl": "https://api.openai.com/v1",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
+      "id": "openai/gpt-4o-mini",
+      "provider": "openrouter",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "provider": "openai-codex",
+      "api": "openai-codex-responses",
+      "baseUrl": "https://chatgpt.com/backend-api",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "type": "chat"
+    }
+  ],
+  "verifiedThinking": [
+    {
+      "provider": "openai",
+      "modelId": "gpt-6.1-sol",
+      "api": "openai-responses",
+      "levels": ["low", "medium", "high"],
+      "default": "medium",
+      "sources": ["https://developers.openai.com/api/docs/models/gpt-6.1-sol"]
+    },
+    {
+      "provider": "anthropic",
+      "modelId": "claude-sonnet-5-5",
+      "api": "anthropic-messages",
+      "levels": ["low", "medium", "high"],
+      "default": "medium",
+      "sources": [
+        "https://platform.claude.com/docs/en/about-claude/models/overview",
+        "https://platform.claude.com/docs/en/build-with-claude/effort"
+      ]
+    },
+    {
+      "provider": "openrouter",
+      "modelId": "openai/gpt-6.1-sol",
+      "api": "openai-completions",
+      "levels": ["low", "medium", "high"],
+      "default": "medium",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-6.1-sol",
+        "https://openrouter.ai/docs/guides/best-practices/reasoning-tokens",
+        "https://openrouter.ai/docs/guides/features/tool-calling"
+      ]
+    },
+    {
+      "provider": "openai-codex",
+      "modelId": "gpt-6.1-sol",
+      "api": "openai-codex-responses",
+      "levels": ["low", "medium", "high"],
+      "default": "medium",
+      "sources": [
+        "https://developers.openai.com/codex/models",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol"
+      ]
+    }
+  ],
+  "reviewedAt": "2026-10-08",
+  "catalogVersion": "1.1.0",
+  "policy": {
+    "activation": "Only supported ranked candidates can initialize choices. Pending-validation and planned candidates remain ineligible until model, authentication, transport, tool and thinking compatibility are verified.",
+    "availability": "Static supported catalogs establish compatibility, not account entitlement. An account-specific catalog replaces the static availability list when supplied. Unknown discovery has no automatic choice; newly discovered unranked models require explicit selection.",
+    "ranking": "Lower positive integer priority wins independently for chat and comment within each provider and authentication method. Priorities must be unique; catalog and provider enumeration order have no meaning.",
+    "admission": "Admission describes current static checks for text streaming, not live account access or implemented tool execution.",
+    "pricing": "Unless stated otherwise, rates are USD per million uncached input/output tokens. Rates are dated evidence, not billing guarantees.",
+    "commentThinking": "off-or-lowest-supported",
+    "commentModel": "Comment priorities are independent. OpenAI and OpenRouter API-key connections prefer the documented lower-rate GPT-4o Mini for comments; direct ChatGPT keeps Sol at its lowest verified effort without applying API price assumptions to subscription access.",
+    "updates": "Do not overwrite explicit saved choices, redirect active runs or fall back to another provider. Resolve recommendations during configuration, not per request."
+  },
+  "providers": [
+    {
+      "provider": "amazon-bedrock",
+      "status": "deployment-specific",
+      "modelId": null,
+      "access": { "api_key": "unsupported-transport" },
+      "rationale": "Evaluate the Sonnet 5.5 family after resolving account, region and inference profile. No universal profile ID or verified price. The catalog uses bedrock-converse-stream, which Situate does not admit.",
+      "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/models-at-a-glance.html"
+      ]
+    },
+    {
+      "provider": "ant-ling",
+      "status": "research-candidate",
+      "modelId": "Ling-3.0-flash-VL",
+      "catalogMatch": false,
+      "access": { "api_key": "candidate-missing-from-catalog" },
+      "pricing": "CNY 0.14/0.42 promotional; CNY 0.50/1.50 regular.",
+      "rationale": "Low-priced multimodal candidate. The snapshot contains only 2.6 models; exact function-calling compatibility remains unverified. Do not substitute an older model silently.",
+      "sources": [
+        "https://developer.ant-ling.com/en/docs/models/ling/",
+        "https://developer.ant-ling.com/en/docs/models/price/"
+      ]
+    },
+    {
+      "provider": "anthropic",
+      "status": "research-candidate",
+      "modelId": "claude-sonnet-5-5",
+      "access": {
+        "api_key": "statically-admitted",
+        "oauth": "unsupported-auth"
+      },
+      "pricing": "2/10.",
+      "rationale": "Tool- and image-capable balanced tier below Opus pricing. Exact ID is present in the snapshot; official overview confirms the family, capabilities and price. Low, medium and high adaptive effort and tool continuation are qualified by pinned adapter fixtures.",
+      "sources": [
+        "https://platform.claude.com/docs/en/about-claude/models/overview"
+      ]
+    },
+    {
+      "provider": "azure",
+      "status": "deployment-specific",
+      "modelId": null,
+      "access": { "api_key": "unsupported-transport" },
+      "rationale": "Evaluate GPT-6.1 Sol, but the deployment alias, endpoint, region, entitlement and Azure price are deployment-specific. Do not substitute a public OpenAI ID for a deployment name.",
+      "sources": [
+        "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses"
+      ]
+    },
+    {
+      "provider": "baseten",
+      "status": "research-candidate",
+      "modelId": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "Unknown; snapshot rates were not independently verified.",
+      "rationale": "Cost-oriented model family with documented tool and image support. The serverless model slug is verified; dedicated deployments require separate configuration.",
+      "sources": ["https://docs.baseten.co/development/model-apis/overview"]
+    },
+    {
+      "provider": "cerebras",
+      "status": "research-candidate",
+      "modelId": "gpt-oss-120b",
+      "thinking": "medium",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "0.35/0.75.",
+      "rationale": "Low-cost tool-capable text model. No image input. Low reasoning is supported for comments; context limits depend on account tier.",
+      "sources": ["https://inference-docs.cerebras.ai/models/openai-oss"]
+    },
+    {
+      "provider": "cloudflare-ai-gateway",
+      "status": "deployment-specific",
+      "modelId": null,
+      "access": { "api_key": "unresolved-endpoint" },
+      "rationale": "Account, gateway and upstream route determine model ID, credentials, price and capabilities. The catalog endpoint contains placeholders; there is no universal physical-model default.",
+      "sources": ["https://developers.cloudflare.com/ai-gateway/providers/"]
+    },
+    {
+      "provider": "cloudflare-workers-ai",
+      "status": "research-candidate",
+      "modelId": "@cf/openai/gpt-oss-120b",
+      "thinking": "medium",
+      "access": { "api_key": "unresolved-endpoint" },
+      "pricing": "0.35/0.75.",
+      "rationale": "Low-cost tool-capable text model with low reasoning available. No image input. Resolve the account placeholder before admission.",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/"
+      ]
+    },
+    {
+      "provider": "deepseek",
+      "status": "research-candidate",
+      "modelId": "deepseek-flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "0.30/1.20 peak; 0.15/0.60 off-peak.",
+      "rationale": "Current V4.1 Flash alias combines low listed cost with tools and images. Thinking can be disabled. Alias retargeting requires review; the ID does not pin immutable weights.",
+      "sources": ["https://api-docs.deepseek.com/quick_start/pricing"]
+    },
+    {
+      "provider": "fireworks",
+      "status": "research-candidate",
+      "modelId": "accounts/fireworks/models/deepseek-v4p1-flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "0.22/0.66 on the current model page, differing from the snapshot's 0.30/1.20.",
+      "rationale": "Low-cost multimodal, tool-capable serverless candidate. Validate the snapshot's Anthropic-protocol translation before agent use.",
+      "sources": ["https://fireworks.ai/models/deepseek-ai/deepseek-v4p1-flash"]
+    },
+    {
+      "provider": "github-copilot",
+      "status": "research-candidate",
+      "modelId": "gpt-6.1-sol",
+      "thinking": "medium",
+      "access": {
+        "api_key": "unsupported-headers",
+        "oauth": "unsupported-auth-and-headers"
+      },
+      "pricing": "Subscription and AI credits; not direct OpenAI API rates.",
+      "rationale": "Balanced underlying model. Entitlement depends on plan, client and administrator policy. Required catalog headers are currently rejected.",
+      "sources": [
+        "https://docs.github.com/en/copilot/reference/ai-models/supported-models",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol"
+      ]
+    },
+    {
+      "provider": "google",
+      "status": "research-candidate",
+      "modelId": "gemini-3.8-flash",
+      "thinking": "medium",
+      "access": { "api_key": "unsupported-transport" },
+      "pricing": "0.75/3.75 through 2026-12-31; then 1.50/7.50.",
+      "rationale": "Stable Flash tier with tools and images. Low reasoning is available; minimal is not. Google transport is not implemented by Situate.",
+      "sources": [
+        "https://ai.google.dev/gemini-api/docs/models",
+        "https://ai.google.dev/gemini-api/docs/pricing"
+      ]
+    },
+    {
+      "provider": "google-vertex",
+      "status": "research-candidate",
+      "modelId": "gemini-3.8-flash",
+      "thinking": "medium",
+      "access": { "api_key": "unsupported-transport" },
+      "pricing": "Vertex price unknown; do not reuse Developer API prices.",
+      "rationale": "Tool- and image-capable Flash tier. Resolve Cloud credentials and location separately. LOW/MEDIUM/HIGH are documented; MINIMAL is not.",
+      "sources": [
+        "https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-8-flash"
+      ]
+    },
+    {
+      "provider": "groq",
+      "status": "research-candidate",
+      "modelId": "openai/gpt-oss-120b",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "0.15/0.60.",
+      "rationale": "Low-cost production tool/reasoning model, avoiding a preview default. Text-only; reasoning-level mapping needs adapter validation.",
+      "sources": ["https://console.groq.com/docs/models"]
+    },
+    {
+      "provider": "huggingface",
+      "status": "research-candidate",
+      "modelId": "openai/gpt-oss-120b",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "Depends on the inference provider; Hugging Face documents no additional markup.",
+      "rationale": "Documented router ID for a tool-capable text model. No image input. Actual route, availability and reasoning mapping require validation.",
+      "sources": ["https://huggingface.co/docs/inference-providers/index"]
+    },
+    {
+      "provider": "kimi-coding",
+      "status": "research-candidate",
+      "modelId": "k3-256k",
+      "thinking": "high",
+      "access": {
+        "api_key": "statically-admitted",
+        "oauth": "unsupported-auth"
+      },
+      "pricing": "Subscription quota; documented lower quota consumption than the 1M-context K3 variant.",
+      "rationale": "Lower-quota coding-model variant. Low reasoning is documented. Image support is only snapshot evidence here. The built-in endpoint is China; the official overseas endpoint differs.",
+      "sources": [
+        "https://www.kimi.com/code/docs/en/kimi-code/models",
+        "https://www.kimi.com/code/docs/en/kimi-code/membership"
+      ]
+    },
+    {
+      "provider": "meta",
+      "status": "research-candidate",
+      "modelId": "muse-spark-1.3",
+      "access": {
+        "api_key": "statically-admitted",
+        "oauth": "unsupported-auth"
+      },
+      "pricing": "Unknown.",
+      "rationale": "Official new-work recommendation with tools and images. Evaluate Standard access, not Contributor access that permits training on prompts/completions. Reasoning is always enabled; verify the lowest effort.",
+      "sources": [
+        "https://dev.meta.ai/docs/models",
+        "https://dev.meta.ai/docs/protocols/chat-completions.md"
+      ]
+    },
+    {
+      "provider": "minimax",
+      "status": "research-candidate",
+      "modelId": "MiniMax-M3",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "0.30/1.20 at up to 512K input; 0.60/2.40 above. Priority costs more.",
+      "rationale": "Native multimodal, tool-capable model at the listed M2.7 base price. Reasoning controls need adapter validation.",
+      "sources": [
+        "https://www.minimax.io/models/text/m3",
+        "https://platform.minimax.io/docs/guides/pricing-paygo.md"
+      ]
+    },
+    {
+      "provider": "minimax-cn",
+      "status": "research-candidate",
+      "modelId": "MiniMax-M3",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "CNY 2.10/8.40 at up to 512K input; CNY 4.20/16.80 above.",
+      "rationale": "Regional multimodal/tool candidate. Keep China credentials and billing separate; do not reuse international USD prices.",
+      "sources": [
+        "https://platform.minimaxi.com/docs/guides/pricing-paygo",
+        "https://www.minimax.io/models/text/m3"
+      ]
+    },
+    {
+      "provider": "mistral",
+      "status": "research-candidate",
+      "modelId": "mistral-medium-2604",
+      "access": { "api_key": "unsupported-transport" },
+      "pricing": "1.50/7.50.",
+      "rationale": "Medium 3.5 generalist agentic model with tools and images, rather than a coding-only default. Official version is 26.04; exact ID comes from the snapshot. Mistral Conversations is not admitted.",
+      "sources": ["https://docs.mistral.ai/models/mistral-medium-3-5-26-04"]
+    },
+    {
+      "provider": "moonshotai",
+      "status": "research-candidate",
+      "modelId": "kimi-k2.6",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "0.95/4.",
+      "rationale": "General-purpose tools and images at a lower listed price than K3. Thinking can be disabled; no claim of equal quality to K3.",
+      "sources": [
+        "https://platform.moonshot.ai/docs/guide/kimi-k2-6-quickstart",
+        "https://platform.moonshot.ai/docs/pricing/chat"
+      ]
+    },
+    {
+      "provider": "moonshotai-cn",
+      "status": "research-candidate",
+      "modelId": "kimi-k2.6",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "CNY 6.50/27.",
+      "rationale": "Regional candidate from the same tool- and image-capable family. China billing and credentials are distinct from international access.",
+      "sources": [
+        "https://platform.moonshot.cn/docs/pricing/chat",
+        "https://platform.moonshot.ai/docs/guide/kimi-k2-6-quickstart"
+      ]
+    },
+    {
+      "provider": "nvidia",
+      "status": "unresolved",
+      "modelId": null,
+      "shortlist": ["openai/gpt-oss-20b"],
+      "access": { "api_key": "shortlist-statically-admitted" },
+      "pricing": "Unknown; trial and production terms require verification.",
+      "rationale": "The shortlist has documented tools and low/medium/high reasoning, without images. Comparative evidence is insufficient to prefer it over newer hosted multimodal candidates.",
+      "sources": ["https://build.nvidia.com/openai/gpt-oss-20b/modelcard"]
+    },
+    {
+      "provider": "openai",
+      "status": "eligible-static-recommendation",
+      "modelId": "gpt-6.1-sol",
+      "thinking": "medium",
+      "access": {
+        "api_key": "statically-admitted",
+        "oauth": "statically-admitted-entitlement-unverified"
+      },
+      "accessOverrides": {
+        "oauth": {
+          "status": "eligible-static-recommendation-entitlement-unverified",
+          "modelId": "gpt-6.1-sol",
+          "thinking": "medium",
+          "pricing": "ChatGPT subscription usage, not API token rates."
+        }
+      },
+      "pricing": "API base 2/10; prompts over 272K use 2x input and 1.5x output rates. Fast, regional, Batch and Flex rates differ.",
+      "rationale": "Official intelligence/cost-balanced tier with tools and images. Tool calling requires Responses; Chat Completions does not support tools for this model. Low is the minimum effort. The direct-token ChatGPT OAuth flow intentionally uses the public API resource; do not replace it with legacy Codex. The subscription default is GPT-6.1 Sol with medium reasoning; Responses model identity and low/medium/high reasoning are validated statically; account entitlement remains provider-controlled and unverified.",
+      "sources": [
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+        "https://developers.openai.com/siwc/token-sharing-open-source/sign-in"
+      ]
+    },
+    {
+      "provider": "openai-codex",
+      "status": "eligible-static-recommendation-entitlement-unverified",
+      "modelId": "gpt-6.1-sol",
+      "shortlist": ["gpt-6.1-sol"],
+      "access": { "oauth": "statically-qualified-runtime-policy-gated" },
+      "pricing": "Subscription and account/client rollout dependent.",
+      "rationale": "Codex device authorization is separate from OpenAI direct-token login. The Codex-specific SSE adapter is statically qualified for Sol with low, medium and high effort and tool continuation. Runtime activation follows the shared method policy; account/client rollout is not confirmed by synthetic fixtures.",
+      "sources": [
+        "https://developers.openai.com/codex/models",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol"
+      ]
+    },
+    {
+      "provider": "opencode",
+      "status": "research-candidate",
+      "modelId": "gpt-6.1-sol",
+      "thinking": "medium",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "Zen price unverified; do not substitute direct OpenAI rates.",
+      "rationale": "Balanced tool/image-capable underlying model with a documented Zen Responses endpoint and exact ID. Validate gateway behavior before agent use.",
+      "sources": [
+        "https://opencode.ai/docs/zen/",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol"
+      ]
+    },
+    {
+      "provider": "opencode-go",
+      "status": "research-candidate",
+      "modelId": "gpt-6-luna",
+      "access": {
+        "api_key": "statically-admitted-service-suitability-unverified"
+      },
+      "pricing": "USD 10/month Go or 40/month Go Plus; quotas apply.",
+      "rationale": "Lower-cost underlying tool/image model. The service requests coding-agent traffic and stable session headers; general Situate chat and current forwarding are not validated.",
+      "sources": [
+        "https://opencode.ai/docs/go/",
+        "https://developers.openai.com/api/docs/models"
+      ]
+    },
+    {
+      "provider": "openrouter",
+      "status": "research-candidate",
+      "modelId": "openai/gpt-6.1-sol",
+      "thinking": "medium",
+      "access": {
+        "api_key": "statically-admitted",
+        "oauth": "unsupported-auth"
+      },
+      "pricing": "2/10 standard listing; route and service tier can change cost.",
+      "rationale": "Balanced underlying model with tools and images. OpenRouter normalizes tools and reasoning through Chat Completions; pinned gateway fixtures qualify low, medium and high effort with tool continuation, rather than assuming the direct OpenAI protocol.",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-6.1-sol",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-sol"
+      ]
+    },
+    {
+      "provider": "qwen-token-plan",
+      "status": "research-candidate",
+      "modelId": "qwen3.8-flash",
+      "access": { "api_key": "statically-admitted-entitlement-unverified" },
+      "pricing": "Singapore Team-plan subscription and Credits; verified rate unavailable.",
+      "rationale": "Cost-oriented image-capable candidate. Exact Team-plan entitlement, arbitrary function calling and reasoning controls remain unverified; bundled Harness tools are not proof of those contracts.",
+      "sources": [
+        "https://www.alibabacloud.com/help/en/model-studio/token-plan-overview"
+      ]
+    },
+    {
+      "provider": "qwen-token-plan-cn",
+      "status": "research-candidate",
+      "modelId": "qwen3.8-flash",
+      "access": { "api_key": "statically-admitted-entitlement-unverified" },
+      "pricing": "China subscription price unknown.",
+      "rationale": "China Personal-plan documentation lists this image-capable model, but does not prove the snapshot Team-plan entitlement. Function calling and reasoning controls remain unverified.",
+      "sources": [
+        "https://help.aliyun.com/en/model-studio/token-plan-personal-overview"
+      ]
+    },
+    {
+      "provider": "qwen-token-plan-individual",
+      "status": "research-candidate",
+      "modelId": "qwen3.8-flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "Promotional Singapore Personal plans USD 6/10/18/68 per month with Credits quotas.",
+      "rationale": "Documented exact ID and image support in a cost-oriented tier. Function-calling and reasoning contracts remain unverified; subscription metadata with zero token rates is not free inference.",
+      "sources": [
+        "https://www.alibabacloud.com/help/en/model-studio/token-plan-personal-overview"
+      ]
+    },
+    {
+      "provider": "radius",
+      "status": "deployment-specific",
+      "modelId": null,
+      "shortlist": ["balanced"],
+      "access": {
+        "api_key": "unsupported-transport",
+        "oauth": "unsupported-auth-and-transport"
+      },
+      "rationale": "Balanced is an organization/provider-controlled routing alias, not a fixed physical model. Price, tools, images and reasoning depend on the resolved route. Pi Messages is not admitted.",
+      "sources": ["https://radius.earendil.com/docs/models"]
+    },
+    {
+      "provider": "together",
+      "status": "research-candidate",
+      "modelId": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "0.30/1.20.",
+      "rationale": "Low-cost serverless model with explicitly documented function calling. Image support follows underlying-model and snapshot evidence; hosted image behavior has not been separately tested.",
+      "sources": ["https://docs.together.ai/docs/serverless-models"]
+    },
+    {
+      "provider": "typesafe",
+      "status": "not-applicable",
+      "modelId": null,
+      "access": { "api_key": "no-chat-models" },
+      "rationale": "The empty chat catalog is intentional: this provider registers classifiers. Its structured judgment model is not a main-chat substitute.",
+      "sources": ["https://docs.typesafe.ai/api.md"]
+    },
+    {
+      "provider": "vercel-ai-gateway",
+      "status": "research-candidate",
+      "modelId": "openai/gpt-6.1-sol",
+      "thinking": "medium",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "2/10 base listing; routing and tier can change cost.",
+      "rationale": "Balanced tool/image-capable underlying model. The Anthropic-compatible endpoint accepts x-api-key, matching the host contract; model-specific protocol translation still needs validation.",
+      "sources": [
+        "https://vercel.com/ai-gateway/models/gpt-6.1-sol",
+        "https://vercel.com/docs/ai-gateway/anthropic-compat"
+      ]
+    },
+    {
+      "provider": "xai",
+      "status": "research-candidate",
+      "modelId": "grok-4.7",
+      "access": {
+        "api_key": "statically-admitted",
+        "oauth": "unsupported-auth"
+      },
+      "pricing": "2/6.",
+      "rationale": "Current vendor chat/code recommendation with agentic tools and configurable reasoning. Model-specific image limits and reasoning-level mapping still need verification.",
+      "sources": ["https://docs.x.ai/developers/models"]
+    },
+    {
+      "provider": "xiaomi",
+      "status": "research-candidate",
+      "modelId": "mimo-v2.6-flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "USD 0.14/0.28 or CNY 1/2.",
+      "rationale": "Explicitly cost-sensitive everyday tier with tools and images. Thinking can be disabled.",
+      "sources": ["https://mimo.mi.com/models/en-US/mimo-v2.6-flash"]
+    },
+    {
+      "provider": "xiaomi-token-plan-ams",
+      "status": "research-candidate",
+      "modelId": "mimo-v2.6-flash",
+      "access": { "api_key": "statically-admitted-entitlement-unverified" },
+      "pricing": "Subscription price unknown; a dedicated plan key is required.",
+      "rationale": "Cost-sensitive tool/image family with thinking-off support. Amsterdam endpoint and regional entitlement have not been independently verified.",
+      "sources": ["https://mimo.mi.com/models/en-US/mimo-v2.6-flash"]
+    },
+    {
+      "provider": "xiaomi-token-plan-cn",
+      "status": "research-candidate",
+      "modelId": "mimo-v2.6-flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "Subscription price unknown; a dedicated plan key is required.",
+      "rationale": "The plan explicitly includes the cost-sensitive tool/image model. Keep regional credentials and account entitlements distinct from pay-as-you-go access.",
+      "sources": [
+        "https://mimo.mi.com/docs/en-US/quick-start/faq/token-plan/Plans&Pricing",
+        "https://mimo.mi.com/models/en-US/mimo-v2.6-flash"
+      ]
+    },
+    {
+      "provider": "xiaomi-token-plan-sgp",
+      "status": "research-candidate",
+      "modelId": "mimo-v2.6-flash",
+      "access": { "api_key": "statically-admitted-entitlement-unverified" },
+      "pricing": "Subscription price unknown; a dedicated plan key is required.",
+      "rationale": "Cost-sensitive tool/image family with thinking-off support. Singapore endpoint and regional entitlement have not been independently verified.",
+      "sources": ["https://mimo.mi.com/models/en-US/mimo-v2.6-flash"]
+    },
+    {
+      "provider": "zai",
+      "status": "research-candidate",
+      "modelId": "glm-5.3-flash",
+      "access": { "api_key": "statically-admitted" },
+      "pricing": "API rate unverified; the documented Coding Plan grants Flash 3x GLM-5.3 quota.",
+      "rationale": "Tool/image-capable quota-efficient candidate on the catalog coding endpoint. Reasoning is always enabled; low is supported. Account history affects available protocols.",
+      "sources": [
+        "https://docs.z.ai/guides/llm/glm-5.3-flash",
+        "https://docs.z.ai/guides/llm/glm-5.3"
+      ]
+    },
+    {
+      "provider": "zai-coding-cn",
+      "status": "research-candidate",
+      "modelId": "glm-5.3-flash",
+      "access": { "api_key": "statically-admitted-entitlement-unverified" },
+      "pricing": "China plan entitlement and price unverified.",
+      "rationale": "International family evidence supports tools, images and always-on reasoning, but does not establish China account availability. Current China model documentation and entitlement remain unverified.",
+      "sources": ["https://docs.z.ai/guides/llm/glm-5.3-flash"]
+    }
+  ],
+  "customEndpoint": {
+    "status": "deployment-specific",
+    "modelId": null,
+    "access": {
+      "api_key": "deployment-validation-required",
+      "oauth": "unsupported-auth"
+    },
+    "rationale": "Use the actual served or administrator-specified model ID. OpenAI protocol compatibility does not establish tool, image or reasoning support. Placeholder context/output limits and zero cost metadata are not verified deployment capabilities or free pricing."
+  }
+}

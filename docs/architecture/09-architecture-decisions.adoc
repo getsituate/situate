@@ -1,0 +1,67 @@
+[[architecture-decisions]]
+== Architecture Decisions
+
+[cols="1,3,1",options="header"]
+|===
+|Decision |Subject |Decision status and implementation
+|link:09-architecture-decisions/ADR-0001-ui-orchestration.adoc[ADR-0001]
+|Named tab layouts, per-pane navigation and UI orchestration; refined in <<ui-building-blocks>> and summarized in <<strategy-responsive-workspace>>.
+|Accepted; layout transitions, persistence, coordinator and built-in views implemented; plugin integration and native verification remain
+|link:09-architecture-decisions/ADR-0008-device-local-diagnostics.adoc[ADR-0008]
+|Application-owned diagnostic event contract, bounded native collection and device-local files; detailed in <<client-diagnostics>>.
+|Accepted; identity scope superseded by ADR-0009; local pipeline implemented, target verification remains
+|link:09-architecture-decisions/ADR-0009-workspace-diagnostic-identity.adoc[ADR-0009]
+|Portable diagnostic workspace identifier instead of user identity; copy/restore continuity and device-local session context.
+|Accepted; portable metadata and diagnostic context cache implemented, target verification remains
+|ADR-0002 |<<adr-0002,Device-local AI configuration and provider credentials>> |Proposed
+|link:09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc[ADR-0010]
+|Git-owned confirmed file history, reconstructible reference projection and no automatic completion of interrupted file operations; detailed in <<git-derived-file-references>>.
+|Accepted; Markdown UUID scope superseded by ADR-0012; Git history and portable stored selectors implemented, target qualification outstanding
+|link:09-architecture-decisions/ADR-0011-build-time-distribution-variants.adoc[ADR-0011]
+|Build-time distribution variants select direct or external update authority without runtime installation-origin detection; detailed in <<delivery-and-operations>>.
+|Accepted; Apple build-time policy implemented; signed update/relaunch qualification remains; Homebrew delivery deferred
+|link:09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc[ADR-0012]
+|One Git-anchored reference model for every file, no embedded file UUIDs, retained task IDs and general file publication for reusable import.
+|Accepted; implemented; native qualification remains separate
+|link:09-architecture-decisions/ADR-0013-native-conversation-execution.adoc[ADR-0013]
+|Native ownership of conversation execution and persistence, UI projections, and an evaluation of Rust-native Pi cores, Rig and embedded JavaScript across target platforms.
+|Accepted; complete Pi replacement with Rig selected; native owner and product adapters integrated; no production Pi fallback; aggregate and release qualification remain
+|link:09-architecture-decisions/ADR-0014-host-production-state-in-hcp-terraform.adoc[ADR-0014]
+|HCP Terraform hosts production infrastructure state; local execution, remote locking and independently recoverable exports.
+|Accepted; HCP backend and eleven-resource adoption verified without infrastructure changes; independent export restoration and replacement-machine recovery remain
+|link:09-architecture-decisions/ADR-0015-client-encrypted-git-pack-transport.adoc[ADR-0015]
+|Client-encrypted incremental Git packs for the official synchronization transport; candidate mechanisms and open verification in <<encrypted-git-synchronization>>.
+|Proposed; not implemented or security-verified
+|link:09-architecture-decisions/ADR-0016-append-conversation-history.adoc[ADR-0016]
+|Append-only per-conversation JSONL history, branch-local compaction and in-memory execution without a separate pending-state file.
+|Accepted; implementation, flush points and compatible rollout remain
+|===
+
+:architecture-repository-root: ../..
+:architecture-docs-root: .
+:architecture-diagrams-root: diagrams
+
+include::09-architecture-decisions/ADR-0001-ui-orchestration.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0008-device-local-diagnostics.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0009-workspace-diagnostic-identity.adoc[leveloffset=+2]
+include::09-architecture-decisions/0002-portable-workspace-credentials.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0011-build-time-distribution-variants.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0013-native-conversation-execution.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0014-host-production-state-in-hcp-terraform.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0015-client-encrypted-git-pack-transport.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0016-append-conversation-history.adoc[leveloffset=+2]
+
+:!architecture-repository-root:
+:!architecture-docs-root:
+:!architecture-diagrams-root:

@@ -1,0 +1,18 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+
+=== Mobile extension boundaries
+
+Plugins extend Situate's personal organizational functions rather than form a storefront for unrelated standalone applications.
+Locally authored or agent-modified code and adopted templates use the same JavaScript runtime and available host interfaces.
+Files outside the application's container require operating-system-authorized access; access to external accounts remains subject to the user's permissions.
+
+Existing applications provide relevant precedents: link:https://apps.apple.com/us/app/obsidian-connected-notes/id1557175442[Obsidian on iOS] supports community plugins, while link:https://apps.apple.com/us/app/scriptable/id1405459188[Scriptable] supports user-authored JavaScript with file, calendar and web-view capabilities.
+Obsidian's link:https://docs.obsidian.md/Plugins/Getting+started/Mobile+development[mobile plugin documentation] explicitly excludes Node.js and Electron APIs on mobile.
+These precedents support purpose-bound extensions but do not establish approval for Situate's particular marketplace or agent behavior.
+
+Apple's link:https://developer.apple.com/support/terms/apple-developer-program-license-agreement/#b331[Developer Program License Agreement, section 3.3.1(B)] permits downloaded interpreted code subject to purpose, OS-security and distribution restrictions.
+It must be read together with the other agreement provisions and link:https://developer.apple.com/app-store/review/guidelines/[App Review Guidelines, sections 2.5.2 and 4.7].
+The applicable treatment of generated plugin variants, native API exposure, data consent and marketplace obligations remains to be clarified for the concrete implementation.
+For the deferred Android target, Google Play's link:https://support.google.com/googleplay/android-developer/answer/9888379[Device and Network Abuse policy] likewise distinguishes interpreted code from downloaded native executable code while retaining policy obligations.

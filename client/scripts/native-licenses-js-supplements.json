@@ -1,0 +1,17 @@
+{
+  "markstream-core@2.0.21": {
+    "integrity": "sha512-X41UhtNLlYtIPvokEQeYkOghl7T+uZvJ30Dx+H46imCuZZU2dran92If06BNz4RzKA6FpOsY9yQAEGekeReZlg==",
+    "source": "https://github.com/Simon-He95/markstream-vue/blob/284a50d5bca7bba5c58a3c9b0712f96ce0fded7b/license",
+    "noticesFrom": "stream-markdown-parser@1.2.22"
+  },
+  "stream-markdown-parser@1.2.22": {
+    "integrity": "sha512-dt29XGvq5Brs43br7NbmmTN8a/YInpYRSrAxTwtN+K/f/W6TnYplNZ7W4d0ZCcjwpkc1+xHEHpyDEpcm3E/BtA==",
+    "source": "https://github.com/Simon-He95/markstream-vue/blob/284a50d5bca7bba5c58a3c9b0712f96ce0fded7b/license",
+    "notices": [
+      {
+        "path": "license",
+        "text": "MIT License\n\nCopyright (c) 2022 Simon He\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+      }
+    ]
+  }
+}

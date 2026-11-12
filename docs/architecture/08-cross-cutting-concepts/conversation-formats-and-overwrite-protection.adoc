@@ -1,0 +1,106 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+[[conversation-format-safety]]
+=== Conversation storage and overwrite protection
+
+Under <<adr-0016,ADR-0016>>, each conversation owns one directory inside its workspace:
+
+[source,text]
+----
+.situate/conversations/<conversation-id>/
+  metadata.json
+  history.jsonl
+----
+
+.Metadata is mutable; original history grows by appending entries.
+image::{architecture-diagrams-root}/append-conversation-storage.svg["The Conversation Owner appends history.jsonl before atomically replacing metadata.json in the conversation directory.",width=650]
+
+==== History, metadata and execution
+
+Each history entry has a stable ID, parent ID and entry type.
+Original messages, submitted inputs, tool calls, available results and compactions share this history; each original is stored once.
+Metadata uses format version 3; history entries use version 1.
+
+[cols="1,3",options="header"]
+|===
+|Entry type |Stored information
+|`message`
+|Original message; submitted input also carries its logical ID, kind, initial state, attachments and references, without another copy of its text.
+|`inputStatus`
+|State change for an existing logical input, such as consumption or Recall.
+|`event`, `run`
+|Observed process history and run updates. A new tool-completion event references its original result message through `resultEntryId` instead of copying the result.
+|`action`
+|Accepted-action receipt for idempotency; input-backed actions reference their original through `inputEntryId`.
+|`compaction`
+|Summary, `firstKeptEntryId` and optional run identity.
+|`legacy`
+|Opaque imported fields that are retained without becoming execution instructions.
+|===
+
+Parent links define ancestry independently of physical append order.
+Two branches can share earlier entries without copying them.
+The UI reads originals on the selected path; model context is a <<conversation-context-compaction,derived projection>>.
+
+Metadata holds the title, timestamps and selected entry ID, not a second transcript.
+The native <<glossary-conversation-owner,Conversation Owner>> serializes writes; views cannot replace history with their snapshots.
+Submitted inputs are saved immediately as user messages, even while waiting for an eligible model turn.
+Consumption and Recall change their status, not the identity or stored text of the original input; retain enough history to distinguish waiting, consumed and recalled input after reopening.
+
+Active execution, task handles and unsaved outcomes remain in memory, without a separate pending-state file or durable execution journal.
+An unsaved response suffix or draft may be lost after a crash.
+Migration retains an existing draft as metadata `legacyDraft`; successful submission clears that seed so it is not restored as a new draft afterward.
+Opaque history fields remain stored even when a private typed projection uses only known fields.
+
+==== Write ordering and interruption
+
+Append history before replacing metadata that references it.
+Write replacement metadata through a temporary file and atomic rename.
+If metadata publication fails, the previous selection remains usable; an additional history entry is retained, not rolled back.
+Retry must recognize an already appended entry by ID rather than append another copy or repeat an effect.
+
+A regular-file append can be short or leave an incomplete final entry.
+Preserve the trailing bytes before repairing that append boundary; complete preceding history remains usable.
+Never append behind an unrepaired partial entry.
+Malformed complete entries, broken ancestry and unsupported formats fail explicitly rather than being skipped, overwritten or converted into empty history.
+
+Use operating-system flush/sync facilities and distinguish accepted writes from durable acknowledgement.
+Flush completed history before replacing metadata; flush the replacement metadata file and synchronize its containing directory before durable acknowledgement.
+An explicit retry reflushes and recognizes the original entry IDs instead of repeating generation or effects.
+Disk-full, write and flush failures are visible save failures, not permission to continue effects as if saving had succeeded.
+A successful read-back alone does not establish durability after a failed flush.
+
+Reopening does not automatically resume execution or replay tools.
+A saved call without an available result has an unknown outcome: it does not prove that no effects occurred.
+Later user-directed work can inspect current state, without guaranteed reconstruction, exactly-once execution or automatic external rollback.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005].
+
+==== Growth, references and format evolution
+
+There is no fixed total conversation-size ceiling and no compaction-based file rotation.
+Read incrementally and load older UI history on demand; continuing must not require keeping the entire tree in memory.
+An opaque owner-held `ConversationCache` shares only ephemeral lookup hints across freshly authorized storage operations; it retains no workspace directory or access guard.
+The index uses a private anonymous temporary file, fixed hash heads and a bounded hot cache; cold ancestry traversal spools offsets, not payloads.
+Each index retains at most 1,024 hot nodes and the shared cache retains at most eight conversation indexes. Hints are bound to the held directory, workspace scope and history file identity/length/modification time.
+Missing, inconsistent or corrupted hints rebuild from history; they cannot establish that an entry or action is absent.
+This cache is neither a history authority nor portable workspace data and is not backed up or synchronized.
+The `read_conversation` tool captures selected ancestry and input/run eligibility in a rewindable offset spool.
+It releases storage/cache locks before hydration, reuses the spool for chronological serialization, and verifies revision and file generation before returning UTF-8 byte windows.
+Compaction does not bound history bytes or individual results.
+
+Structured content references remain workspace-relative in storage.
+Native readers bind them to the authorized local workspace session without rewriting their selectors or embedded user text; see <<git-derived-file-references>>.
+Attachments retain their existing durable identities and storage boundary.
+Native presentation reconstructs attached text and image references from the saved input without adding resolved payload copies to history.
+Credentials and operational AI settings remain device-local, outside portable conversation history.
+
+Migration 2 converts published version-2 conversations through the existing <<workspace-migrations,workspace migration runner>>, not a second backup or activation protocol.
+It inventories unopened conversations too, validates their converted data and uses the runner's whole-chain recovery backup before retiring the old authority.
+Under the specific <<adr-0016,ADR-0016>> compatibility exception, converted workspaces require app 0.1.6 or newer; there is no dual writer or reverse conversion.
+Rejecting an unsupported format does not establish mixed-version compatibility. A minimum-version field cannot make apps predating the compatibility gate refuse safely; those binaries are unsupported for migrated workspaces.
+Former Pi prototype files are not the published v2 input format and are not implicitly imported.

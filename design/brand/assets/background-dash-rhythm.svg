@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 248" role="img" aria-labelledby="background-dash-rhythm-title" aria-describedby="background-dash-rhythm-desc">
+  <title id="background-dash-rhythm-title">Diagonal dash rhythm</title>
+  <desc id="background-dash-rhythm-desc">Three broad violet capsules form a loose descending rhythm.</desc>
+  <g transform="translate(6 7)" fill="#6232bc">
+    <rect x="24" y="53" width="90" height="40" rx="20" transform="rotate(-28 69 73)"/>
+    <rect x="99" y="120" width="116" height="42" rx="21" transform="rotate(-28 157 141)"/>
+    <rect x="222" y="184" width="72" height="38" rx="19" transform="rotate(-28 258 203)"/>
+  </g>
+  <g fill="#8651ed">
+    <rect x="24" y="53" width="90" height="40" rx="20" transform="rotate(-28 69 73)"/>
+    <rect x="99" y="120" width="116" height="42" rx="21" transform="rotate(-28 157 141)"/>
+    <rect x="222" y="184" width="72" height="38" rx="19" transform="rotate(-28 258 203)"/>
+  </g>
+</svg>

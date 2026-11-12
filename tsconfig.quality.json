@@ -1,0 +1,15 @@
+{
+  "extends": "./client/app/tsconfig.json",
+  "compilerOptions": {
+    "types": [],
+    "allowJs": false
+  },
+  "include": ["client/**/*.ts", "client/**/*.vue"],
+  "exclude": [
+    "**/node_modules",
+    "**/dist",
+    "**/target",
+    "**/build",
+    "client/app/src-tauri/gen"
+  ]
+}

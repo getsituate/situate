@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 196 158" role="img" aria-labelledby="modular-pieces-title" aria-describedby="modular-pieces-desc">
+  <title id="modular-pieces-title">Three fitting pieces</title>
+  <desc id="modular-pieces-desc">Violet and blue stepped pieces nest together, with a small orange piece resting separately above them.</desc>
+  <path d="M32 54h18q9 0 9 9v39q0 8 8 8h23q9 0 9 9v16q0 9-9 9H32q-9 0-9-9V63q0-9 9-9Z" fill="#6232bc"/>
+  <path d="M25 48h18q9 0 9 9v39q0 8 8 8h23q9 0 9 9v16q0 9-9 9H25q-9 0-9-9V57q0-9 9-9Z" fill="#8651ed"/>
+  <path d="M74 54h53q9 0 9 9v72q0 9-9 9h-15q-9 0-9-9v-29q0-8-8-8H74q-9 0-9-9V63q0-9 9-9Z" fill="#305cf4"/>
+  <path d="M67 48h53q9 0 9 9v72q0 9-9 9h-15q-9 0-9-9v-29q0-8-8-8H67q-9 0-9-9V57q0-9 9-9Z" fill="#48b7ff"/>
+  <g transform="rotate(12 155 33)">
+    <rect x="142" y="19" width="36" height="36" rx="8" fill="#da592f"/>
+    <rect x="135" y="13" width="36" height="36" rx="8" fill="#ff874d"/>
+  </g>
+</svg>

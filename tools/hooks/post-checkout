@@ -1,0 +1,59 @@
+#!/bin/sh
+exec node --input-type=commonjs - "$@" <<'NODE'
+const fs = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const { basename, join, resolve } = require('node:path');
+const { randomUUID } = require('node:crypto');
+
+function copyEnvironment() {
+  if (process.argv[4] !== '1') return;
+  if (process.platform === 'win32') throw new Error('unsupported-platform');
+  const env = { ...process.env };
+  const localNames = execFileSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  for (const name of localNames.trim().split('\n')) delete env[name];
+  const git = (args, cwd = process.cwd()) => execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const destinationRoot = git(['rev-parse', '--show-toplevel']).replace(/\n$/, '');
+  const first = git(['worktree', 'list', '--porcelain', '-z']).split('\0')[0];
+  if (!first.startsWith('worktree ')) throw new Error('missing-main-worktree');
+  const sourceRoot = first.slice('worktree '.length);
+  if (resolve(sourceRoot) === resolve(destinationRoot)) return;
+  const source = join(sourceRoot, '.env');
+  const destination = join(destinationRoot, '.env');
+  const exists = path => { try { fs.lstatSync(path); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; } };
+  if (exists(destination) || !exists(source)) return;
+  git(['check-ignore', '--quiet', '--', '.env'], sourceRoot);
+  git(['check-ignore', '--quiet', '--', '.env'], destinationRoot);
+  const input = fs.openSync(source, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  let temporary;
+  try {
+    const metadata = fs.fstatSync(input);
+    if (!metadata.isFile() || metadata.nlink !== 1 || metadata.uid !== process.getuid() || (metadata.mode & 0o077) !== 0 || metadata.size > 65536) throw new Error('unsafe-source');
+    const bytes = Buffer.alloc(65537);
+    let size = 0;
+    while (size < bytes.length) {
+      const count = fs.readSync(input, bytes, size, bytes.length - size, null);
+      if (count === 0) break;
+      size += count;
+    }
+    if (size > 65536) throw new Error('oversized-source');
+    const candidate = join(destinationRoot, `.env.${randomUUID()}.tmp`);
+    git(['check-ignore', '--quiet', '--', basename(candidate)], destinationRoot);
+    const output = fs.openSync(candidate, 'wx', 0o600);
+    temporary = candidate;
+    try {
+      fs.fchmodSync(output, 0o600);
+      fs.writeFileSync(output, bytes.subarray(0, size));
+      fs.fsyncSync(output);
+    } finally { fs.closeSync(output); }
+    // Linking publishes a complete file without replacing an existing destination.
+    try { fs.linkSync(temporary, destination); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+  } finally {
+    fs.closeSync(input);
+    if (temporary) fs.unlinkSync(temporary);
+  }
+}
+try { copyEnvironment(); } catch {
+  console.error('Worktree .env copy failed. The source must be an ignored, owner-only regular file; the destination must be writable and ignore both .env and .env.*.');
+  process.exitCode = 1;
+}
+NODE

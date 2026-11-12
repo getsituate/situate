@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 0 156 174" role="img" aria-labelledby="ribbon-cup-title" aria-describedby="ribbon-cup-desc">
+  <title id="ribbon-cup-title">Cup with a steam ribbon</title>
+  <desc id="ribbon-cup-desc">A tangerine cup with a generous open handle and one broad violet ribbon of rising steam.</desc>
+  <path d="M82 16c21 26-27 30-25 44 0 5 5 9 10 12l-10 9C25 58 48 43 66 36c9-4 10-8 4-14Z" fill="#6232bc"/>
+  <path d="M76 10c21 26-27 30-25 44 0 5 5 9 10 12L51 75C19 52 42 37 60 30c9-4 10-8 4-14Z" fill="#8651ed"/>
+  <path d="M111 99h15c32 0 32 46 0 46h-15" fill="none" stroke="#da592f" stroke-width="13" stroke-linejoin="round"/>
+  <path d="M105 93h15c32 0 32 46 0 46h-15" fill="none" stroke="#ff874d" stroke-width="13" stroke-linejoin="round"/>
+  <path d="M28 90h91v42q0 29-29 29H57q-29 0-29-29Z" fill="#da592f"/>
+  <path d="M22 84h91v42q0 29-29 29H51q-29 0-29-29Z" fill="#ff874d"/>
+  <ellipse cx="67.5" cy="85" rx="45.5" ry="10" fill="#ffc3a3"/>
+  <ellipse cx="67.5" cy="85" rx="33.5" ry="5" fill="#30203e"/>
+</svg>

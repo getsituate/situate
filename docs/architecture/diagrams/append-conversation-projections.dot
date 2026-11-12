@@ -1,0 +1,15 @@
+digraph AppendConversationProjections {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.55, ranksep=0.9, fontname="Helvetica", fontsize=13];
+  node [shape=box, style="rounded,filled", fillcolor="#e5effa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  path_g [label="Path G\nA · B · C · D · K · G"];
+  path_f [label="Path F\nA · B · E · F"];
+  model_g [label="Model context\nSummary K · C · D · G", fillcolor="#edf5ed"];
+  ui_g [label="UI history\nA · B · C · D · G", fillcolor="#f4f6f8"];
+  model_f [label="Model context\nA · B · E · F", fillcolor="#edf5ed"];
+
+  path_g -> model_g [label="Apply compaction"];
+  path_g -> ui_g [label="Show originals"];
+  path_f -> model_f [label="Use messages"];
+}

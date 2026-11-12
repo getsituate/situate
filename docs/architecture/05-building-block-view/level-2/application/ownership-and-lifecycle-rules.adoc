@@ -1,0 +1,55 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../../../..
+endif::[]
+
+===== Ownership and lifecycle rules
+
+====== Workspace scope
+
+Content, conversations, plugin configuration and histories belong to their workspace.
+Operational AI connections and model settings are additionally device-local and remain outside the portable workspace directory.
+Their <<glossary-device-local-workspace-namespace,Device-local Workspace Namespace>> associates these settings with an authorized local workspace location; it is not a portable identity or runtime authorization handle.
+Component instances or resources associated with one workspace do not automatically consume another workspace's data or dependencies.
+Application-level presentation and startup coordination can span workspaces without merging their ownership.
+Explicit trusted cross-workspace integrations remain possible under operating-system permissions; this separation is not an adversarial sandbox.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037].
+
+====== Coordinated execution
+
+The Application Core coordinates the workspace lifecycle; the Plugin Runtime and Agent Integration control their respective execution resources.
+Closing a plugin or chat view releases view-scoped resources, not plugin or agent work or its workspace. Navigation and pane closure do not stop development, pause it or request discard.
+Development conversations use the same workspace capabilities and task-scope rules as ordinary chat; their affected-package lists do not restrict access.
+Source preparation remains distinct from checked grouped activation. Ordinary workspace edits become durable independently; synthetic test data and configuration do not become production state.
+A <<glossary-check-receipt,Check Receipt>> records the plugin revisions and checks covered by a development check.
+Disposable synthetic state belongs to the check; conversations, shared editable source and Git history do not expire with its receipt.
+Incomplete assignments remain resumable.
+Internal check completion and release dispose of synthetic test files while retaining trial identity until the owning temporary directory is released.
+Pending or uncertain plugin activation publication retains its evidence.
+The MVP exposes neither storage inspection nor manual development cleanup and adds no age-based cleanup policy.
+Leftover development artifacts may accumulate. Only legacy draft formats verified never to have shipped publicly are exempt from compatibility and migration requirements; published draft formats follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069].
+Development remains bound to its workspace: closure stops its work, and application quit stops all work.
+When closure is requested, the core coordinates blocking new starts across both execution components.
+The <<glossary-lifecycle-admission,Lifecycle Admission>> gate controls whether closure may start; <<glossary-operation-admission,Operation Admission>> validates each individual execution request against its caller, workspace and lifecycle conditions.
+Neither gate is per-action user approval or proof of completion.
+With active work, the user can cancel closure or abort the work and proceed with closure.
+Cancellation restores normal operation without interrupting running work or scheduling later closure; proceeding retains the separate pending-synchronization choice.
+Completion and abort reporting must not imply that external effects have been undone.
+A <<glossary-root-action,Root Action>> is a top-level plugin tool or exported-function invocation whose nested calls share its execution context.
+Its generated action signals pass through nested calls without borrowing another Root Action's Operation Admission.
+Each independent native host request keeps a <<glossary-worker-lease,Worker Lease>>, a lifetime handle, until its work and cleanup actually finish.
+Chat snapshots retain resources but do not delay plugin activation publication.
+An ordinary view callback does not implicitly group multiple requests into one Root Action.
+
+This coordination does not guarantee that an abort request can stop synchronous plugin code blocking the shared runtime.
+It also does not add a separate protocol for resolving uncertain external outcomes; the agent and model retain that responsibility under the solution strategy.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0031-run-plugins-independently-of-views.md[REQ-0031] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037].
+
+====== Startup without plugins
+
+The host must be able to start core services, built-in management UI and Agent Integration without loading or executing plugin code.
+The Plugin Runtime must honor the recovery startup gate across every restored or subsequently opened workspace, before any plugin initialization or registration executes.
+Recovery tools must therefore be built-in capabilities rather than depend on the faulty plugin's exports.
+Users may resume individual plugins or all previously enabled plugins without restarting; persistent disabling remains separate.
+Requested development retains ordinary checks and activation for its target without resuming unrelated suspended plugins.
+The macOS `--recovery` startup flag gates restored and newly opened workspaces. Built-in source/check routes remain available; checked activation resumes only its selected targets. Native mobile recovery qualification remains separate work.
+See <<strategy-plugin-recovery-start>> and link:{architecture-repository-root}/requirements/data/requirements/REQ-0032-manage-plugin-status-and-disabling.md[REQ-0032].

@@ -1,0 +1,19 @@
+{
+  "name": "@situate/ui",
+  "version": "0.0.0",
+  "private": true,
+  "volta": {
+    "extends": "../../../package.json"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/*": "./src/*.vue"
+  },
+  "dependencies": {
+    "@situate/localization": "0.0.0"
+  },
+  "peerDependencies": {
+    "vue": "3.5.43"
+  }
+}

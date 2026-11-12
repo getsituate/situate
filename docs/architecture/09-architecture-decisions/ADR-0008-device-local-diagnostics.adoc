@@ -1,0 +1,104 @@
+= ADR-0008: Collect structured client diagnostics through an application-owned API
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: accepted
+Date:: 2026-10-10
+Implementation:: local pipeline implemented; see the client diagnostics concept for current scope and verification limits
+Identity scope:: superseded by link:{architecture-docs-root}/09-architecture-decisions/ADR-0009-workspace-diagnostic-identity.adoc[ADR-0009]
+
+The user identifier and launch-local workspace aliases below describe the original identity decision, not the current event contract.
+ADR-0009 replaces them with a link:{architecture-docs-root}/index.adoc#glossary-diagnostic-workspace-identifier[diagnostic workspace identifier] retained in portable metadata. Device/session identity and the remaining collection, privacy, retention and failure-isolation architecture stay in force.
+
+== Context
+
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0064-record-client-diagnostic-events.md[REQ-0064] requires detailed local reconstruction of client activity, including interactions and related application/plugin operations.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0065-provide-shared-logging-api.md[REQ-0065] requires a shared API and replaceable implementations without committing to an external service.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0066-bound-local-diagnostic-storage.md[REQ-0066] requires one installation-wide storage budget and exclusion from workspace synchronization and history.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0067-limit-diagnostic-data.md[REQ-0067] excludes personal content from standard logs and credentials from all logs.
+
+The current client uses Vue/JavaScript in WebViews, a Rust/Tauri host and a Rust core.
+Workspaces and operations can coexist; a single mutable current-operation variable or one log allowance per workspace would not meet the required correlation and storage boundaries.
+The production plugin runtime is not yet complete, but its plain-JavaScript contract must be able to consume the same logging capability as built-in code.
+
+A conventional arbitrary-message logger does not by itself enforce the agreed data limits.
+Free-form errors, plugin labels, URLs, file paths and object serialization can disclose personal information even without explicit document-content logging.
+
+== Confirmed constraints
+
+Logging runs asynchronously and must not interrupt or become a prerequisite for application work. Under pressure, continued application operation takes precedence over retaining every diagnostic event.
+No additional application-level log encryption is planned.
+Use a pseudonymous user identifier, a device identifier established once and retained locally, and a separate session identifier. These permit technical correlation without recording real-world identity or personal content; they do not establish anonymity.
+The initial storage limit is 256 MiB per installation, including active and rotated files across all workspaces and plugins, under REQ-0066. This is a size bound, not a retention-duration guarantee.
+Identity provisioning and reset semantics still need design.
+
+== Decision
+
+Use an application-owned structured event contract with JavaScript and Rust bindings.
+The native host composes a bounded asynchronous collector and one exclusively locked rotating file writer outside all workspaces.
+Producers emit catalog-defined events with explicit causal context and constrained attributes; validation occurs before frontend buffering and again at native diagnostic data admission. This accepts validated events into the logging pipeline; it does not authorize application operations.
+The default local destination records all levels through trace into UTF-8 JSON Lines.
+Destination implementations and their filters remain separate from producer calls.
+
+Record semantic control activations rather than generic DOM/session capture.
+Use persistent random user/device pseudonyms and fresh launch/session identifiers; keep workspace and personal plugin references launch-local rather than log their names or paths.
+Do not derive pseudonyms from emails, hardware identifiers or other personal values. Cross-device user-ID provisioning remains open.
+Normalize errors to known codes and safe shipped-code locations rather than retain arbitrary exception text.
+Do not automatically forward console output or third-party library logs.
+
+Prefer continued application operation over lossless diagnostics: bounded non-blocking queues, explicit loss summaries when possible, finite rotation and best-effort shutdown draining.
+No per-event durable synchronization, remote exporter, upload spool, in-app viewer or runtime user-level control is included.
+The proposed operating parameters, failure behavior and verification cases are specified in the link:{architecture-docs-root}/index.adoc#client-diagnostics[client diagnostics concept].
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Option |Advantages |Reason not selected
+|Adopt a Tauri logging plugin and its JavaScript/Rust logging interfaces as the public contract
+|Existing native integration, conventional levels and destinations can reduce initial work.
+|An ordinary message-oriented contract still needs diagnostic field validation, causal context, aggregate bounds and plugin attribution. A maintained logging/file library can be evaluated behind the application contract, but no dependency is selected or claimed unsuitable without review.
+|Adopt OpenTelemetry SDKs and OTLP as the application contract now
+|Standard trace concepts and collector/exporter interoperability suit eventual cross-service diagnostics.
+|The initial need is bounded local files with no selected receiver. SDK lifecycle, cross-language integration and exporter configuration add work while diagnostic data admission and rotation still require product-specific policy. Later mapping is possible; this is not a claim that OpenTelemetry requires a server or is incompatible with local use.
+|Write independent frontend, native and per-plugin logs
+|Local implementations can be simple and isolated.
+|Aggregate storage limits, causal correlation and replacing destinations become distributed responsibilities. WebViews do not provide the same native file access on every platform.
+|Collect generic clicks, DOM snapshots and arbitrary error objects, then redact before export
+|Broad capture can aid reproduction and reduce explicit instrumentation work.
+|Personal content would already enter local logs, contrary to the standard-logging boundary. Redaction at export is too late, and generic capture cannot reliably distinguish intent from operation outcomes.
+|Synchronously persist every event before continuing application work
+|Reduces some windows of diagnostic loss.
+|Makes interaction latency, content operations and shutdown depend on diagnostic storage. It still does not establish universal power-loss survival. The confirmed priority is continued application work, with diagnostic loss rather than blocking under pressure.
+|===
+
+== Consequences and limits
+
+The project owns a small cross-language event contract, instrumentation conventions and tests, not a general-purpose observability platform.
+Typed events, bounded queues, partial-write recovery, locking and aggregate rotation require implementation and verification work.
+Any selected library remains subject to dependency and licensing review and must satisfy the contract rather than weaken it.
+
+A schema allowlist reduces accidental disclosure but cannot prove anonymity or constrain malicious trusted plugins through every available API.
+Persistent user/device pseudonyms allow cross-launch correlation and therefore require privacy treatment rather than an anonymity claim.
+Launch-local workspace/plugin aliases and omission of raw error text still limit diagnosis, particularly after losing separately supplied plugin context.
+Unencrypted local files rely on platform access controls and remain sensitive.
+
+Overload, storage failure and termination can lose even error events; rotation can leave incomplete traces.
+A loss summary is best effort, not an audit guarantee, and logs never replace durable content or process history.
+Multiple application processes do not each receive a storage allowance; a process without the writer lock operates without local file recording.
+Mobile directory, backup, locking and suspension behavior need device-level verification.
+
+The decision adds no external data flow, service costs or approved analytics dataset.
+Future destinations require their own security, participation, delivery and retention decisions.
+
+== Acceptance and verification
+
+At acceptance, implementation was outstanding; the accepted architecture included the initial 256 MiB storage limit, asynchronous failure isolation, absence of additional log encryption and user/device/session correlation.
+The local pipeline is now implemented. ADR-0009 replaces the original identity scope and describes current provisioning and lifecycle limits; target-device verification remains open. Candidate operating parameters require sizing and verification during development; acceptance does not turn planning estimates into measured performance guarantees.
+Verification covers the shared contract, privacy, concurrency, storage failures and platform behavior as detailed in the concept.

@@ -1,0 +1,8 @@
+/.gradle/
+/__pycache__/
+/.kotlin/
+/build/
+/local.properties
+/src/main/jniLibs/
+/rust/target/
+/rust/Cargo.lock

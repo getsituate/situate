@@ -1,0 +1,41 @@
+{
+  "assets": [
+    {
+      "file": "windows.svg",
+      "name": "Windows symbol",
+      "author": "Microsoft Corporation; SVG representation published on Wikimedia Commons",
+      "source": "https://commons.wikimedia.org/wiki/File:Windows_logo_-_2021.svg",
+      "download": "https://upload.wikimedia.org/wikipedia/commons/8/87/Windows_logo_-_2021.svg",
+      "sha256": "0f6b74d8d8ede1ec0e454b3c6fcdfba65fbe989af9a49ad4ff0c498f4dc3afbb",
+      "modifications": "None",
+      "copyright": "Wikimedia Commons identifies the simple geometric artwork as public domain. This does not grant trademark rights.",
+      "trademarkGuidelines": "https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/mscle/documents/presentations/Windows_trademark_guidelines_2025.pdf",
+      "usage": "Page 6 describes the symbol beside the Windows name in a multi-platform compatibility list. Preserve its color, proportions and clear space. Licensing requirements and truthful compatibility information still apply; no Microsoft license agreement is included."
+    },
+    {
+      "file": "linux.png",
+      "name": "Tux",
+      "author": "Larry Ewing and The GIMP",
+      "source": "https://commons.wikimedia.org/wiki/File:Tux.png",
+      "download": "https://upload.wikimedia.org/wikipedia/commons/a/af/Tux.png",
+      "sha256": "e4f4c8010312078a37ca1797a8c9eaa5156d0fec407d7875522ca31a3d78c586",
+      "modifications": "None",
+      "permission": "Use, redistribution, modification and commercial use are permitted with attribution to Larry Ewing and The GIMP.",
+      "permissionSource": "https://kernel.org/doc/Documentation/COPYING-logo"
+    },
+    {
+      "file": "android.svg",
+      "name": "Android robot head (2023)",
+      "author": "Google LLC",
+      "source": "https://commons.wikimedia.org/wiki/File:Android_Robot_Head_2023.svg",
+      "originalSource": "https://partnermarketinghub.withgoogle.com/brands/android/visual-identity/visual-identity/logo-lock-ups/",
+      "download": "https://upload.wikimedia.org/wikipedia/commons/2/26/Android_Robot_Head_2023.svg",
+      "sha256": "7c2619f711acae579675c139cad1b362f83cf9cdc7dcf2fcfab37c13f9c128a1",
+      "modifications": "None",
+      "license": "https://creativecommons.org/licenses/by/3.0/",
+      "permissionSource": "https://developer.android.com/distribute/marketing-tools/brand-guidelines#android-robot",
+      "attribution": "The Android robot is reproduced or modified from work created and shared by Google and used according to terms described in the Creative Commons 3.0 Attribution License.",
+      "trademark": "Android is a trademark of Google LLC."
+    }
+  ]
+}

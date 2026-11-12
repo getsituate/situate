@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 166" role="img" aria-labelledby="linked-notes-title" aria-describedby="linked-notes-desc">
+  <title id="linked-notes-title">Two connected notes</title>
+  <desc id="linked-notes-desc">A short orange ribbon loops between a tall cream note and a smaller lilac note.</desc>
+  <g id="ribbon-back" fill="none" stroke-linecap="round">
+    <path d="M85 88c-15-39 62-54 65 0" stroke="#da592f" stroke-width="17"/>
+    <path d="M79 82c-15-39 62-54 65 0" stroke="#ff874d" stroke-width="17"/>
+  </g>
+  <g id="tall-note" transform="rotate(-7 60 72)">
+    <rect x="24" y="24" width="81" height="108" rx="9" fill="#ffc3a3"/>
+    <rect x="18" y="18" width="81" height="108" rx="9" fill="#fff7e3"/>
+    <path d="M34 42h46m-46 15h32m-32 48h23" fill="none" stroke="#ad9284" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g id="small-note" transform="rotate(8 154 104)">
+    <rect x="120" y="69" width="67" height="77" rx="9" fill="#6232bc"/>
+    <rect x="114" y="63" width="67" height="77" rx="9" fill="#eee7f9"/>
+    <path d="M128 116h37m-37 12h23" fill="none" stroke="#8651ed" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g id="ribbon-slots" fill="none" stroke-width="6" stroke-linecap="round">
+    <path d="M70 79h18" stroke="#ad9284"/>
+    <path d="M135 79h18" stroke="#6232bc"/>
+  </g>
+  <g id="ribbon-front" fill="none" stroke-linecap="round">
+    <path d="M85 88c5 35 59 35 65 0" stroke="#da592f" stroke-width="17"/>
+    <path d="M79 82c5 35 59 35 65 0" stroke="#ff874d" stroke-width="17"/>
+  </g>
+</svg>

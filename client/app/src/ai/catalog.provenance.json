@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "catalog": {
+    "file": "catalog.generated.json",
+    "version": "1.1.0",
+    "sha256": "8224351c2d2c0a2ddf8646bc521ff042294d3838cb049d08b0326f6dd902b927",
+    "maintenance": "Checked-in application source. Builds validate this snapshot without installing or running its upstream package. Review metadata changes together with model-recommendations.json and provider-policy.json; update this digest when the source changes."
+  },
+  "origin": {
+    "package": "@earendil-works/pi-ai",
+    "version": "1.1.0",
+    "tarball": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-1.1.0.tgz",
+    "integrity": "sha512-1T7LAkc/5Bvc0v6w4vAGVdCrli0o/E0pEmYKTnixu95vSFArBjvbhS/G4ZwI0RUePgf0Imcu0VyqlM4EcXxqfw==",
+    "repository": "https://github.com/earendil-works/pi",
+    "commit": "abe508e1b89912adde45528136c3221eb69acdd7",
+    "export": "builtinProviders(): provider id/name, authentication method labels and static getModels() metadata"
+  },
+  "license": {
+    "spdx": "MIT",
+    "file": "../../public/licenses/ai-catalog.txt",
+    "sha256": "4f6a1985796db5225e3b1e59972bd47e07a27a0748427cb3d3c8fbf39f9311f0",
+    "source": "https://github.com/earendil-works/pi/blob/abe508e1b89912adde45528136c3221eb69acdd7/LICENSE"
+  },
+  "qualification": "Static metadata and listed prices do not establish account entitlement, accepted authentication, actual billing or native platform qualification. Admission and recommendation eligibility remain separate reviewed policies."
+}

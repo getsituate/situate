@@ -1,0 +1,84 @@
+[graph]
+# Audit the macOS/iOS MVP targets, independently of the CI host OS.
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "aarch64-apple-ios",
+  "aarch64-apple-ios-sim",
+  "x86_64-apple-ios",
+]
+
+[advisories]
+version = 2
+# Temporary exception for an unmaintained build dependency in Tauri's GTK 0.18 stack.
+# Remove when a supported Tauri/GTK update eliminates proc-macro-error from Cargo.lock.
+# https://github.com/tauri-apps/tauri/issues/10910
+# https://github.com/tauri-apps/muda/issues/219
+# https://github.com/tauri-apps/muda/pull/403
+ignore = ["RUSTSEC-2024-0370"]
+
+[licenses]
+version = 2
+confidence-threshold = 0.95
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  # The webpki root data requires the agreement text with redistributed data.
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "Unicode-3.0",
+  "Zlib",
+]
+
+# MPL permits a separately licensed larger work, but covered files retain MPL
+# notices and source-availability obligations. Limit approval to these versions.
+[[licenses.exceptions]]
+name = "cssparser"
+version = "=0.37.0"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "cssparser"
+version = "=0.38.0"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "cssparser-macros"
+version = "=0.7.1"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "dtoa-short"
+version = "=0.3.5"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "option-ext"
+version = "=0.2.0"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "selectors"
+version = "=0.38.0"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "selectors"
+version = "=0.41.0"
+allow = ["MPL-2.0"]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

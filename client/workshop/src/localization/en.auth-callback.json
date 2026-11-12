@@ -1,0 +1,36 @@
+{
+  "scenario": "Browser sign-in return",
+  "states": {
+    "received": "AI provider connected",
+    "rejected": "Connection not confirmed"
+  },
+  "page": {
+    "brand": "Situate",
+    "documentTitle": "Return to Situate",
+    "received": {
+      "title": "AI provider connected",
+      "body": "Return to Situate to start using it.",
+      "helpBody": "Switch to the Situate app where you started signing in. You can close this page."
+    },
+    "rejected": {
+      "status": "Connection not confirmed",
+      "title": "Let’s return to Situate.",
+      "body": "The connection couldn’t be confirmed. Return to Situate to check what happened before trying again.",
+      "next": "This page can’t confirm a connection.",
+      "close": "Check the result in Situate before closing this page.",
+      "helpBody": "Switch to the Situate app you started from. The connection result appears there, not on this page."
+    },
+    "help": "How do I return to Situate?"
+  },
+  "controls": {
+    "state": "Connection result",
+    "replay": "Replay celebration",
+    "pause": "Pause animation",
+    "resume": "Resume animation",
+    "frame": "Animation frame",
+    "still": "Show reduced-motion still",
+    "note": "Synthetic connection results only. No provider is contacted and no connection is saved.",
+    "live": "Live playback · {duration}-second sequence",
+    "at": "{time} / {duration} ms"
+  }
+}

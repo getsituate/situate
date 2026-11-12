@@ -1,0 +1,12 @@
+[[risks-technical-debt]]
+== Risks and Technical Debt
+
+:architecture-repository-root: ../..
+
+This register covers plugin development, marketplace adoption, application freezes and damaged history.
+It is not a complete inventory of system risks or existing technical debt.
+The requirements catalog defines the constraints on mitigation; open questions here do not establish new product decisions.
+
+include::11-risks-technical-debt/technical-risks.adoc[]
+
+include::11-risks-technical-debt/technical-debt.adoc[]

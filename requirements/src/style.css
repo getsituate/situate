@@ -1,0 +1,280 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #233a36;
+  background: #f7f8f5;
+  font-synthesis: none;
+  line-height: 1.6;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+a {
+  color: #206454;
+  text-underline-offset: 4px;
+}
+a:hover {
+  color: #123d33;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 22px max(24px, calc((100vw - 1160px) / 2));
+  border-bottom: 1px solid #dce3dc;
+  background: #fff;
+}
+.brand {
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -1px;
+  text-decoration: none;
+}
+.brand span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: #62746e;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  font-size: 14px;
+}
+main {
+  max-width: 1208px;
+  padding: 44px 24px 80px;
+  margin: 0 auto;
+}
+h1 {
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: -1.4px;
+  line-height: 1.2;
+  margin: 10px 0 20px;
+  overflow-wrap: anywhere;
+}
+h2 {
+  font-size: 20px;
+  line-height: 1.4;
+}
+.intro {
+  margin-bottom: 36px;
+}
+.intro > p:last-child {
+  color: #62746e;
+}
+.eyebrow {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #62746e;
+}
+.filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #dce3dc;
+  border-radius: 12px;
+  background: #fff;
+}
+label {
+  font-size: 12px;
+  font-weight: 600;
+  flex: 1 1 130px;
+}
+label.search {
+  flex: 2 1 240px;
+}
+input,
+select,
+button {
+  font: inherit;
+  font-size: 14px;
+  min-height: 42px;
+  border: 1px solid #bdccc2;
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: #fff;
+  color: #233a36;
+}
+input,
+select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+button {
+  cursor: pointer;
+}
+button:hover {
+  background: #eef3ed;
+}
+:focus-visible {
+  outline: 3px solid #44836e;
+  outline-offset: 4px;
+}
+.count {
+  color: #62746e;
+  font-size: 13px;
+  margin: 24px 0 12px;
+}
+.card {
+  background: #fff;
+  border: 1px solid #dce3dc;
+  border-radius: 10px;
+  padding: 22px 24px;
+  margin-bottom: 12px;
+}
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #62746e;
+}
+.card h2 {
+  margin: 12px 0 4px;
+  overflow-wrap: anywhere;
+}
+.card h2 a {
+  text-decoration: none;
+}
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: #edf1ed;
+  color: #41554c;
+  margin: 0 5px 4px 0;
+}
+.badge.approved {
+  background: #dceee3;
+  color: #245e40;
+}
+.badge.rejected {
+  background: #f6e3df;
+  color: #873e32;
+}
+.goal-links {
+  font-size: 13px;
+  margin-bottom: 0;
+}
+.empty {
+  padding: 65px 24px;
+  text-align: center;
+  border: 1px dashed #bdccc2;
+  border-radius: 10px;
+  color: #62746e;
+}
+.empty h2 {
+  color: #233a36;
+}
+.back {
+  display: inline-block;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+.document {
+  max-width: 860px;
+  background: #fff;
+  border: 1px solid #dce3dc;
+  border-radius: 12px;
+  padding: clamp(24px, 5vw, 48px);
+  overflow-wrap: anywhere;
+}
+.document h2 {
+  margin-top: 32px;
+}
+.document aside {
+  background: #f2f5f0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 28px 0;
+}
+.document aside h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.document aside ul {
+  padding-left: 20px;
+  margin-bottom: 0;
+}
+.document footer {
+  border-top: 1px solid #dce3dc;
+  padding-top: 20px;
+  margin-top: 40px;
+  color: #62746e;
+  font-size: 12px;
+}
+pre {
+  overflow: auto;
+  background: #f2f5f0;
+  padding: 16px;
+}
+code {
+  font-size: 0.9em;
+}
+.criteria-table {
+  max-width: 100%;
+  overflow: auto;
+}
+.criteria-table table {
+  display: table;
+  width: 100%;
+}
+.criteria-table th[scope="row"] {
+  white-space: nowrap;
+}
+.criteria-table td {
+  min-width: 110px;
+  overflow-wrap: anywhere;
+}
+.criteria-table td:nth-child(2) {
+  min-width: 200px;
+  white-space: pre-wrap;
+}
+table {
+  border-collapse: collapse;
+  display: block;
+  overflow: auto;
+}
+th,
+td {
+  border: 1px solid #dce3dc;
+  padding: 8px;
+  text-align: left;
+}
+blockquote {
+  border-left: 3px solid #bdccc2;
+  padding-left: 18px;
+  margin-left: 0;
+  color: #62746e;
+}
+@media (max-width: 550px) {
+  .header {
+    padding: 18px;
+  }
+  nav {
+    gap: 14px;
+  }
+  main {
+    padding: 28px 16px 50px;
+  }
+  label,
+  label.search {
+    flex-basis: 100%;
+  }
+  .card {
+    padding: 18px;
+  }
+}

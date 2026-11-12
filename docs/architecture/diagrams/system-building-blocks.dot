@@ -1,0 +1,27 @@
+digraph SystemBuildingBlocks {
+  graph [rankdir=LR, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  subgraph cluster_situate {
+    label="Situate product boundary";
+    color="#6a5c70";
+    style="rounded";
+    margin=20;
+    app [label="Situate\nApplication", fillcolor="#eee7f9", color="#6232bc", penwidth=1.8];
+    sync [label="Situate Synchronization Service\nOptional"];
+    router [label="Situate AI Router\nOptional managed access"];
+    marketplace [label="Situate Marketplace\nDeferred", style="rounded,dashed,filled"];
+  }
+  models [label="Model endpoints\nRemote or local"];
+  systems [label="Email, calendar and\ndocument systems"];
+  transport [label="Alternative sync\nservices or storage"];
+
+  app -> sync [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Encrypted exchange</TD></TR></TABLE>>];
+  app -> router [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Authorized<BR/>model requests</TD></TR></TABLE>>];
+  router -> models [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Routed requests</TD></TR></TABLE>>];
+  app -> models [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Direct model access</TD></TR></TABLE>>];
+  app -> systems [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Plugin provider APIs</TD></TR></TABLE>>];
+  app -> transport [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Custom<BR/>Sync Transport</TD></TR></TABLE>>];
+  app -> marketplace [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Discover, submit, adopt<BR/>templates</TD></TR></TABLE>>, style=dashed];
+}

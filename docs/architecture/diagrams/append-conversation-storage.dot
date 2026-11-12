@@ -1,0 +1,17 @@
+digraph AppendConversationStorage {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.55, ranksep=0.8, fontname="Helvetica", fontsize=13];
+  node [shape=box, style="rounded,filled", fillcolor="#e5effa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  owner [label="Conversation Owner"];
+  subgraph cluster_directory {
+    label="conversations/<id>/";
+    color="#536171";
+    style="rounded";
+    history [label="history.jsonl"];
+    metadata [label="metadata.json"];
+  }
+
+  owner -> history [label="1. Append"];
+  owner -> metadata [label="2. Replace atomically"];
+}

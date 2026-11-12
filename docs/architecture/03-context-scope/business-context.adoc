@@ -1,0 +1,95 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+=== Business context
+
+The system boundary covers Situate's personal organizational capabilities, including its intended optional synchronization and managed AI offerings.
+It is not limited to a single application installation.
+Whether a capability runs on a device or in a service is a deployment question, not a change to this product boundary.
+
+Within this boundary, Situate manages one person's tasks, notes and knowledge, and documents.
+It maintains context across <<glossary-organizational-process,organizational processes>>: ongoing matters such as gathering documents and preparing a reply.
+It uses AI to prepare work within those matters.
+Tasks and notes from other systems must be imported for Situate to manage them.
+The link:{architecture-repository-root}/requirements/data/foundations.md[foundations] are authoritative for these scope decisions.
+
+A <<glossary-workspace,workspace>> is a personal organizational system whose portable content, conversations, plugins, configuration and histories reside in one directory.
+Operational AI settings and credentials are a device-local exception, described below.
+Users may keep separate workspaces; Situate does not provide a shared organizational workspace or its own email or calendar service.
+
+Document sources may include local folders and external services, including repositories shared with other people.
+Connecting a source does not require migrating its originals or keeping a complete local copy, as specified by link:{architecture-repository-root}/requirements/data/requirements/REQ-0054-connect-document-sources.md[REQ-0054].
+
+[[business-context-diagram]]
+.Business context and information exchanges
+image::{architecture-diagrams-root}/business-context.svg["Business context: the individual user exchanges instructions and results with Situate. Situate exchanges data with email and calendar services, document sources, AI providers and optional custom synchronization storage."]
+
+Bidirectional arrows summarize information exchanges and requested actions, not network connections. The table below separates incoming information from outgoing effects.
+The Situate box represents the product boundary, including optional services; it does not imply a single deployment.
+Other people participate through external services, not through a shared Situate workspace.
+The user may also send a prepared draft directly in their email application.
+
+[cols="1,2,2",options="header"]
+|===
+|External party or system |Information entering Situate |Information or effects leaving Situate
+|Individual user
+|Instructions, personal content, missing context and preferred working methods.
+|Results, organized content, <<glossary-process-history,process history>> (relevant information, actions and results) and questions for missing data.
+|Email service controlled through the user's account
+|Authorized messages and related correspondence.
+|Reply drafts in the connected account. A draft request does not authorize sending; a separate sending request executes without per-action approval, or the user sends the draft in their email application.
+|Calendar service controlled through the user's account
+|Authorized calendar information, including availability used to plan work.
+|Personal time reservations and invitations within a user request, without per-action approval.
+|Document source: local folder or external service
+|Authorized documents and project material, for example in a local folder, Paperless or a shared Google Drive repository.
+|Any supported write-back depends on the individual integration and granted access. External actions execute within the user request without per-action approval.
+|AI model provider
+|Model results used in processing the assigned work.
+|Processing requests and authorized context, through user-provided access or Situate's managed AI service. The managed router may process that context in plaintext. Neither Situate nor its managed providers may use content supplied through managed AI for training; this guarantee does not extend to independently selected providers. Users evaluate those providers' processing terms. Exact context-authorization and managed-routing mechanisms remain to be designed.
+|User-configured storage or service for custom synchronization
+|Workspace data from the user's other devices through the selected synchronization transport.
+|Workspace data for the user's other devices. The selected custom plugin determines content encryption; the official service's encryption guarantee does not extend to custom alternatives.
+|===
+
+The user authorizes access to external accounts and sources; their providers retain control of those services.
+Other participants may control content in shared repositories.
+Such participants do not gain access to the user's Situate system merely because a shared source is connected.
+
+==== Preparation and external effects
+
+Situate may independently perform reversible internal organizational work within a user request.
+User direction does not require approval of every preparatory step.
+It also does not authorize autonomous external commitments.
+
+For a document request, Situate can assemble available material, identify missing work, organize tasks and prepare a reply.
+Preparing a draft does not send it. A user request to send can execute directly, or the user can send the prepared draft through their email application.
+A prepared draft is not recorded as a sent message.
+Calendar invitations and changes with effects on collaborators remain within the requested task and configured account access.
+
+The required boundary is defined by link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004]; connected-account drafts are specified in link:{architecture-repository-root}/requirements/data/requirements/REQ-0003-save-email-drafts.md[REQ-0003].
+This is an intended behavior boundary, not evidence of implemented isolation or enforcement.
+Configured read-only access does not become writable merely because an action was requested.
+
+==== Content ownership and device scope
+
+Synchronization serves the same person across connected devices, not multiple people sharing a workspace.
+It is configured per workspace and runs only while that workspace is open, as specified by link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013].
+Users may choose no synchronization, the official service or a custom plugin using external storage or transport.
+A <<glossary-synchronization-transport,synchronization transport>> transfers data; the Application Core retains responsibility for versioning, merge-conflict handling and history recovery for every transport.
+
+Workspaces keep content, conversations, plugins and account configuration separate.
+A plugin intentionally designed to access another workspace may do so where operating-system access and permissions allow it; workspace separation is not a security sandbox.
+<<glossary-device-local-ai-settings,Device-local AI settings>> include provider connections, endpoints and model selections for one workspace on one device.
+They stay outside the portable workspace directory and its histories; provider secrets remain in device-local OS secure storage.
+Neither copying a workspace nor any synchronization mode transfers these settings or credentials, as specified by link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015].
+
+External sources remain external unless their content is imported or copied into Situate.
+<<glossary-import,Import>> leaves the source unchanged and creates workspace-local copies; handling later changes between those copies and their sources remains unspecified.
+
+Centralizing organizational access in Situate does not select a centralized storage architecture.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[Local availability] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0009-reuse-stored-content.md[reuse without Situate] remain required for stored content.

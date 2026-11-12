@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-labelledby="background-stepped-planes-title" aria-describedby="background-stepped-planes-desc">
+  <title id="background-stepped-planes-title">Stepped planes</title>
+  <desc id="background-stepped-planes-desc">Two broad stepped terraces with softly turned corners.</desc>
+  <path d="M40 52Q40 40 52 40H210Q222 40 222 52V100Q222 112 234 112H370Q382 112 382 124V172Q382 184 394 184H532Q544 184 544 196V308Q544 320 532 320H52Q40 320 40 308Z" fill="#d9d0df"/>
+  <path d="M58 130Q58 118 70 118H176Q188 118 188 130V178Q188 190 200 190H336Q348 190 348 202V250Q348 262 360 262H550Q562 262 562 274V338Q562 350 550 350H70Q58 350 58 338Z" fill="#eee7f9"/>
+</svg>

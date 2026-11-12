@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Listening room — Situate</title>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="listening-room.css" />
+    <script src="../../bend/bend.js" defer></script>
+    <script src="../../bend/motion.js" defer></script>
+    <script src="listening-room.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#collection">Skip to collection</a>
+    <header class="shell header" id="top">
+      <a class="brand" href="#top" aria-label="Situate, back to top"
+        ><img src="../../assets/wordmark.svg" width="146" height="42" alt=""
+      /></a>
+      <nav aria-label="Listening room">
+        <a href="#collection">Records</a><a href="#next-up">Next up</a>
+      </nav>
+    </header>
+    <main class="shell">
+      <section class="welcome" aria-labelledby="welcome-title">
+        <p class="eyebrow">Listening room</p>
+        <h1 id="welcome-title">A little time.<br /><em>A whole record.</em></h1>
+        <p class="intro">
+          Keep the albums you return to, the details you notice,<br
+            class="wide-only"
+          />
+          and a few things to listen for next time.
+        </p>
+        <a class="button" href="#collection"
+          >Browse the records <span aria-hidden="true">↓</span></a
+        >
+        <figure class="welcome-scene">
+          <div
+            class="stage"
+            role="img"
+            aria-label="Bend points toward a record resting on its sleeve."
+          >
+            <div class="artboard" aria-hidden="true">
+              <svg
+                class="record-scene"
+                viewBox="0 0 1100 360"
+                focusable="false"
+              >
+                <g fill="none" stroke-linecap="round">
+                  <path
+                    class="ribbon-depth"
+                    d="M-70 128C80 16 171 41 179 151S204 346 380 326"
+                    stroke-width="65"
+                  />
+                  <path
+                    class="ribbon-front"
+                    d="M-70 119C80 7 171 32 179 142S204 337 380 317"
+                    stroke-width="65"
+                  />
+                  <path
+                    class="ribbon-light"
+                    d="M-64 104C68 12 157 35 162 143"
+                    stroke-width="3"
+                  />
+                  <path
+                    class="ribbon-tail"
+                    d="M882 306C1008 323 1070 264 1191 200"
+                    stroke-width="49"
+                  />
+                </g>
+                <g class="record-sleeve" transform="rotate(9 685 200)">
+                  <rect
+                    class="sleeve-depth"
+                    x="582"
+                    y="98"
+                    width="220"
+                    height="220"
+                    rx="9"
+                  />
+                  <rect
+                    class="sleeve-front"
+                    x="575"
+                    y="90"
+                    width="220"
+                    height="220"
+                    rx="9"
+                  />
+                  <path class="sleeve-fold" d="M750 90h45v45Z" />
+                  <path
+                    class="sleeve-mark"
+                    d="M714 283h52m-52 12h32"
+                    fill="none"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                  />
+                </g>
+                <g class="record-object">
+                  <circle class="record-edge" cx="688" cy="174" r="101" />
+                  <circle class="record-face" cx="682" cy="167" r="101" />
+                  <g class="grooves" fill="none" stroke-width="2">
+                    <circle cx="682" cy="167" r="88" />
+                    <circle cx="682" cy="167" r="77" />
+                    <circle cx="682" cy="167" r="66" />
+                  </g>
+                  <circle class="record-label" cx="682" cy="167" r="37" />
+                  <path
+                    class="label-arch"
+                    d="M661 175v-16a21 21 0 0 1 42 0v16"
+                    fill="none"
+                    stroke-width="7"
+                  />
+                  <circle class="record-hole" cx="682" cy="167" r="5" />
+                </g>
+                <path
+                  class="shelf"
+                  d="M331 323h510"
+                  fill="none"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <div id="bend" class="bend">
+                <img
+                  src="../../bend/svg/point-curious.svg"
+                  width="320"
+                  height="320"
+                  alt=""
+                />
+              </div>
+            </div>
+          </div>
+          <figcaption>
+            <span>Something worth another listen.</span>
+            <div class="scene-controls" id="scene-controls" hidden>
+              <button class="button secondary" id="gesture" type="button">
+                Point to the record
+              </button>
+              <button
+                class="text-button"
+                id="motion"
+                type="button"
+                aria-pressed="false"
+              >
+                Pause motion
+              </button>
+              <button class="text-button" id="still" type="button">
+                Show still
+              </button>
+            </div>
+          </figcaption>
+          <p class="motion-help" id="motion-help" hidden>
+            Motion is off in your system settings. The illustration stays still.
+          </p>
+        </figure>
+      </section>
+
+      <section
+        id="collection"
+        class="collection"
+        aria-labelledby="collection-title"
+        tabindex="-1"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">On the shelf</p>
+            <h2 id="collection-title">Your records</h2>
+          </div>
+          <p>3 albums · Room to listen again</p>
+        </div>
+        <noscript
+          ><p class="notice">
+            JavaScript is off. You can read the collection and note below.
+            Enable JavaScript to choose a record, edit a note, or update the
+            task.
+          </p></noscript
+        >
+        <div class="work-surface">
+          <section class="album-shelf" aria-labelledby="albums-title">
+            <h3 id="albums-title">The collection</h3>
+            <p class="caption">Choose an album for its listening notes.</p>
+            <div class="album-list" role="group" aria-label="Albums">
+              <button
+                class="album"
+                type="button"
+                data-album="window"
+                aria-pressed="true"
+                disabled
+              >
+                <span class="cover cover-window" aria-hidden="true"
+                  ><span></span
+                ></span>
+                <span class="album-copy"
+                  ><strong>Windows after rain</strong
+                  ><span>The Paper Hours</span
+                  ><small>Soft percussion · 6 tracks</small
+                  ><span class="selection">Selected</span></span
+                >
+              </button>
+              <button
+                class="album"
+                type="button"
+                data-album="tide"
+                aria-pressed="false"
+                disabled
+              >
+                <span class="cover cover-tide" aria-hidden="true"
+                  ><span></span
+                ></span>
+                <span class="album-copy"
+                  ><strong>The slower tide</strong><span>Low Lantern</span
+                  ><small>Piano &amp; tape · 6 tracks</small
+                  ><span class="selection" hidden>Selected</span></span
+                >
+              </button>
+              <button
+                class="album"
+                type="button"
+                data-album="orchard"
+                aria-pressed="false"
+                disabled
+              >
+                <span class="cover cover-orchard" aria-hidden="true"
+                  ><span></span
+                ></span>
+                <span class="album-copy"
+                  ><strong>Orchard at midnight</strong
+                  ><span>Violet Assembly</span
+                  ><small>Guitar &amp; brass · 6 tracks</small
+                  ><span class="selection" hidden>Selected</span></span
+                >
+              </button>
+            </div>
+            <section class="next-up" id="next-up" aria-labelledby="task-title">
+              <div class="small-heading">
+                <h3 id="task-title">Next up</h3>
+                <span id="task-count" class="caption">1 open task</span>
+              </div>
+              <label class="task"
+                ><input id="task" type="checkbox" disabled /><span
+                  >Listen for the second guitar on
+                  <i>Orchard at midnight</i>.</span
+                ></label
+              >
+              <p class="caption">Uncheck to put it back on your list.</p>
+              <p id="task-status" class="sr-only" role="status"></p>
+            </section>
+          </section>
+
+          <section class="listening-card" aria-labelledby="note-album">
+            <p class="eyebrow">Listening notes</p>
+            <h3 id="note-album">Windows after rain</h3>
+            <p id="note-artist" class="caption">The Paper Hours</p>
+            <form id="note-form" novalidate>
+              <fieldset class="side-selector" disabled>
+                <legend>Record side</legend>
+                <label
+                  ><input type="radio" name="side" value="A" checked /><span
+                    >Side A</span
+                  ></label
+                >
+                <label
+                  ><input type="radio" name="side" value="B" /><span
+                    >Side B</span
+                  ></label
+                >
+              </fieldset>
+              <div class="track-field">
+                <label for="track">Track to remember</label
+                ><select id="track" aria-describedby="track-help" disabled>
+                  <option value="0">01 · An open window</option>
+                  <option value="1" selected>02 · The room between</option>
+                  <option value="2">03 · Rain on the sill</option>
+                </select>
+                <p id="track-help" class="caption">
+                  Give the detail a place on the record.
+                </p>
+              </div>
+              <article class="kept-note" aria-labelledby="kept-heading">
+                <div class="small-heading">
+                  <h4 id="kept-heading">A detail to keep</h4>
+                  <span class="caption" id="note-position">Side A · 02</span>
+                </div>
+                <p id="kept-text">
+                  The drums fall away just before the last chorus. The room
+                  seems to get wider.
+                </p>
+                <p class="caption" id="kept-track">The room between</p>
+              </article>
+              <p id="empty-note" class="empty-note" hidden>
+                No note for this track yet. Write a detail below, then choose
+                Keep note.
+              </p>
+              <label for="note-text">What stood out?</label>
+              <textarea
+                id="note-text"
+                rows="4"
+                maxlength="600"
+                aria-describedby="note-help"
+                disabled
+              >
+The drums fall away just before the last chorus. The room seems to get wider.</textarea>
+              <p class="caption" id="note-help">
+                A sound, a lyric, or a question for next time. Up to 600
+                characters. Keep your note before choosing another album, side,
+                or track.
+              </p>
+              <p id="note-error" class="field-error" hidden>
+                Write a detail before keeping this note.
+              </p>
+              <div class="note-actions">
+                <button class="button" id="keep-note" type="submit" disabled>
+                  Keep note</button
+                ><button
+                  class="text-button"
+                  id="restore-note"
+                  type="button"
+                  disabled
+                >
+                  Restore kept note
+                </button>
+              </div>
+              <p
+                id="note-status"
+                class="caption status"
+                role="status"
+                aria-atomic="true"
+              ></p>
+            </form>
+          </section>
+        </div>
+      </section>
+    </main>
+    <footer class="shell example-footer">
+      <h2>About this example</h2>
+      <p>
+        Fictional albums, artists, and notes. Controls simulate changes on this
+        page only; reloading resets them. No audio, AI, accounts, service
+        connections, or saved storage.
+      </p>
+      <a href="implementation.md">Implementation and checks</a>
+    </footer>
+  </body>
+</html>

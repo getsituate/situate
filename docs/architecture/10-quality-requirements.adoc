@@ -1,0 +1,12 @@
+[[quality-requirements]]
+== Quality Requirements
+
+:architecture-repository-root: ../..
+:architecture-docs-root: ..
+
+include::10-quality-requirements/quality-overview.adoc[]
+
+include::10-quality-requirements/quality-scenarios.adoc[]
+
+:!architecture-repository-root:
+:!architecture-docs-root:

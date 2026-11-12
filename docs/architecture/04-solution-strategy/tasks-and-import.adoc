@@ -1,0 +1,62 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::strategy-diagrams-root[]
+:strategy-diagrams-root: ../diagrams
+endif::[]
+
+[[strategy-task-defaults]]
+=== Adaptable task defaults
+
+Situate includes a ready-to-use task workflow plugin with basic filtering, backed by reusable task operations.
+Users start with a useful view rather than having to build their first task interface.
+During import and onboarding, the agent adapts the view, filters, ordering and operations to the user's working method.
+The view uses the same movable, resizable and responsive placement capabilities as other plugin views; there is no additional immutable core task overview.
+
+The initial task contract contains text, identity and open/completed state.
+Due dates, scheduled dates, priorities and other fields have no prescribed default vocabulary or interpretation; these are established from the user's source system and workflow.
+Tasks can live in project notes, thematic lists or individual files, without a mandatory project concept or file-per-task rule.
+
+Chat and the task view call the same reusable operations, including completion.
+A user's completion rule may check an entry, archive it or remove it from the current file; deletion alone is not universally interpreted as completion.
+The agent may change the default contract and state model while updating its consumers under the existing grouped-change rules.
+Stored-content history remains recoverable regardless of the chosen display and completion behavior.
+See link:{strategy-requirements-root}/data/requirements/REQ-0034-adapt-task-workflows.md[REQ-0034].
+
+.Task view and chat share completion behavior, including after workflow customization.
+image::{strategy-diagrams-root}/task-operations.svg["The ready-to-use task plugin can be customized with the user. Task view and chat invoke the same completion operation, which records changes in workspace history."]
+
+[[strategy-content-import]]
+=== Import and external editing
+
+Import is available during setup and in later ordinary conversations, including new chats. It is agent-assisted rather than limited to a fixed catalog of prebuilt importers.
+The user describes where notes, tasks and documents currently reside; the agent clarifies their structure and the desired transfer, then develops suitable importers for the source technology as needed.
+Access still depends on available interfaces and permissions; generic importer development does not guarantee access to every system.
+
+Import leaves source data unchanged and creates copies in the workspace.
+Imported notes and tasks are converted into Situate's Markdown conventions, including normalization of existing Markdown copies.
+The agent establishes the source's task recognition and metadata meanings with the user.
+It assigns fresh task identifiers and can replace a source-specific task marker with the task identifier comment in the imported copy. No file identifier is required or inserted.
+Notes and tasks from other formats become a suitable Markdown organization that preserves titles, body content, links, actual attachment files and task field meanings.
+Within the imported copies, supplied content and metadata remain in place alongside actual attachments and working links.
+Temporary conversion mappings are removed after acknowledged completion.
+Under ADR-0012, conversion prepares content; shared write/edit and bounded batch-creation operations perform file publication into the workspace. The same tools serve setup and ordinary conversations.
+Native shared task-copy preparation assigns fresh task IDs and retargets recognized task links while preserving other source bytes.
+Creation prevents overwrite; corrections check current revisions. Partial and uncertain batch outcomes retain actual file publication results without automatic replay or an all-or-nothing promise.
+PDFs, images and other document files remain ordinary files rather than universally converted into Markdown; all file references use Git-anchored paths.
+
+When an external editor creates a Markdown file in a workspace, Situate records detected changes without inserting a file identifier or rewriting content for reference capture.
+An externally written checkbox without a task identifier remains an ordinary checkbox; import-time task recognition does not become an unconditional background conversion rule.
+Unknown file and task metadata survives import and Situate's own edits to existing workspace files.
+Import does not trigger cleanup of existing workspace files.
+Malformed or unsupported metadata is reported; transformations that cannot preserve its meaning fail safely.
+Cancellation markers such as `[-]` remain unchanged and are not recognized as open tasks.
+A source task state without a supported equivalent retains its source representation and is reported as a limitation rather than mapped to another state.
+
+Keeping metadata in the file preserves independent editing and transfer, but comments can be removed by other tools and become unwieldy with many fields.
+The parser and write path therefore need to preserve content and detect invalid metadata without depending on AI to repair every edit.
+Task field mappings remain source-dependent; preserved file frontmatter does not require a fixed source metadata schema.
+See link:{strategy-requirements-root}/data/requirements/REQ-0036-convert-imported-notes-and-tasks.md[REQ-0036] and link:{strategy-requirements-root}/data/requirements/REQ-0009-reuse-stored-content.md[REQ-0009].
+
+.Agent-assisted import prepares workspace copies without changing their sources.
+image::{strategy-diagrams-root}/task-import.svg["The user and agent agree task recognition and field meanings. A suitable importer prepares Markdown copies, assigns fresh task identities and publishes them through shared file operations."]

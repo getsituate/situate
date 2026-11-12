@@ -1,0 +1,26 @@
+[[runtime-view]]
+== Runtime View
+
+The plugin and synchronization scenarios describe the selected design, not evidence that every path is implemented or verified.
+Sections explicitly marked as current client behavior describe the implemented file and AI lifecycle.
+Conversation input and reopening follow <<adr-0016>>; the link:../development/conversation-storage-implementation-plan.md[storage plan] tracks implementation and reconciliation with these scenarios.
+Source descriptions do not establish native platform qualification.
+Participants and interface names correspond to the <<building-block-view>>.
+
+:architecture-repository-root: ../..
+:architecture-diagrams-root: diagrams
+
+include::06-runtime-view/plugin-tool-with-user-confirmation.adoc[]
+
+include::06-runtime-view/grouped-plugin-activation-during-ongoing-work.adoc[]
+
+include::06-runtime-view/closing-a-workspace-with-active-work.adoc[]
+
+include::06-runtime-view/current-client-workspace-operations-and-closure.adoc[]
+
+include::06-runtime-view/current-client-application-quit-and-cancellation.adoc[]
+
+include::06-runtime-view/pending-input-stop-and-recall.adoc[]
+
+:!architecture-repository-root:
+:!architecture-diagrams-root:

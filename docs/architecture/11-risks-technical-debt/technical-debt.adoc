@@ -1,0 +1,8 @@
+=== Technical debt
+
+No assessed technical-debt inventory is recorded in this chapter; this does not establish that the implementation has no debt.
+The risk entries above describe possible consequences and accepted design trade-offs, not evidence of current implementation defects.
+Deferred requirements are not automatically technical debt.
+
+The CTO owns the open inventory question: which existing implementation compromises have observable consequences for maintenance, reliability or delivery?
+When such a compromise is established, its record should identify the evidence, affected behavior, originating decision where known, owner, mitigation options and review trigger.

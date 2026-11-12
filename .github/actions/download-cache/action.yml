@@ -1,0 +1,49 @@
+name: Dependency downloads
+description: Restore dependency downloads; only successful trusted main runs save shared caches.
+inputs:
+  phase:
+    description: restore or save
+    default: restore
+  group:
+    description: Job family
+    required: true
+  revision:
+    description: Lockfile and toolchain fingerprint
+    required: true
+  hit:
+    description: Exact restore hit
+    default: "false"
+outputs:
+  revision:
+    description: Fingerprint captured before dependency installation
+    value: ${{ inputs.revision }}
+  hit:
+    description: Whether the exact cache was restored
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: restore
+      if: inputs.phase == 'restore'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: |
+          ${{ runner.temp }}/situate-downloads/npm
+          ${{ runner.temp }}/situate-downloads/browsers
+          ${{ runner.temp }}/situate-downloads/cargo/registry/cache
+          ${{ runner.temp }}/situate-downloads/cargo/registry/index
+          ${{ runner.temp }}/situate-downloads/cargo/git/db
+        key: downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.group }}-${{ inputs.revision }}
+        restore-keys: |
+          downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.group }}-
+          downloads-v1-${{ runner.os }}-${{ runner.arch }}-
+    - if: success() && inputs.phase == 'save' && inputs.hit != 'true' && contains(fromJSON('["push","schedule","workflow_dispatch"]'), github.event_name) && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: |
+          ${{ runner.temp }}/situate-downloads/npm
+          ${{ runner.temp }}/situate-downloads/browsers
+          ${{ runner.temp }}/situate-downloads/cargo/registry/cache
+          ${{ runner.temp }}/situate-downloads/cargo/registry/index
+          ${{ runner.temp }}/situate-downloads/cargo/git/db
+        key: downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.group }}-${{ inputs.revision }}

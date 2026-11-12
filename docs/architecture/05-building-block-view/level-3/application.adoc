@@ -1,0 +1,13 @@
+=== Level 3: Selected refinements
+
+==== Refinements within Situate Application
+
+The following views refine Agent Integration and User Interface from the <<application-building-blocks,Level 2 application decomposition>>.
+Application Core and Plugin Runtime appear only as dependencies in these views; their internals are not refined here.
+These logical boundaries do not prescribe internal classes, a message bus, separate worker processes or additional services.
+
+include::application/agent-integration/native-conversation-execution.adoc[]
+
+include::application/agent-integration/conversation-tools.adoc[]
+
+include::application/user-interface/decomposition.adoc[]

@@ -1,0 +1,38 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Unresolved boundaries
+
+Clarification responsibilities below do not authorize spending, scope changes or exceptions to legal obligations.
+The product owner decides product boundaries; the CTO develops technical options within them.
+
+[cols="2,2,1",options="header"]
+|===
+|Open question |Source and remaining scope |Clarification responsibility
+|Budget ceiling and service commitments
+|link:{architecture-repository-root}/requirements/data/foundations.md#development-operation-and-technical-baseline[Foundations] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016]: exact spending limits, capacity and verifiable model-quality standards remain undefined.
+|Product owner, with CTO cost and feasibility input.
+|Supported OS versions and additional distribution channels
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]: macOS DMG first and iOS App Store second are selected. Additional channels, supported versions and any resumption or sequencing of deferred platforms remain open.
+|Product owner, with CTO platform and store feasibility input.
+|Insufficient storage and incomplete synchronization
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008]: how to communicate these conditions without silently dropping required local content or history. Selective document download remains a later stretch goal.
+|CTO; product owner for changes to replication scope.
+|Key provisioning and synchronization metadata protection
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013]: key hierarchy, provisioning and rotation protocols, device authorization/revocation, and metadata protection and retention remain open within the approved recovery boundary.
+|CTO, with product-owner clarification of recovery interactions.
+|Conflict representation and imported-source reconciliation
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013]: merge algorithms and representation of deletion and structural conflicts remain open. link:{architecture-repository-root}/requirements/data/foundations.md#personal-organizational-core[Foundations]: reconciliation between imported copies and their sources remains unspecified.
+|CTO for conflict mechanisms; product owner for reconciliation behavior.
+|AI-context authorization and data-processing safeguards
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016]: context authorization mechanisms, request/response/log retention and deletion periods, and provider-specific legal safeguards remain open.
+|Product owner with appropriate legal review; CTO for mechanisms and data flows.
+|Trademark rights and registration
+|link:{architecture-repository-root}/TRADEMARKS.md[Trademark policy]: software and artwork licenses are selected, but the policy does not establish trademark ownership, registration or enforceability in a particular territory.
+|Product owner with appropriate trademark review.
+|===
+
+The business and technical exchanges are described in <<context-scope>>.
+Implementation choices within these constraints belong in <<solution-strategy>> and consequential decisions in <<architecture-decisions>>.
+The constraints include the shared Vue UI boundary, but do not select a storage engine or deployment topology.

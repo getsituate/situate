@@ -1,0 +1,35 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../../../..
+endif::[]
+
+[[current-client-packages]]
+===== Client package boundaries
+
+The current implementation has the following package boundaries.
+The native conversation gateway, registry and host adapters in <<native-conversation-building-blocks>> implement conversation execution. Platform and live-provider qualification remain separate from these source boundaries.
+
+[cols="2,3",options="header"]
+|===
+|Location |Responsibility
+|`client/app/src`
+|Vue application views, editor state and frontend presentation lifecycle. Chat and onboarding submit native actions and render bounded, acknowledged snapshots; they do not execute model/tool loops or replace stored transcripts.
+|`client/packages/ui`
+|Reusable Vue components. Application views depend on this library; the library must not depend on application-specific modules.
+|`client/app/src-tauri/src`
+|Window-authorized conversation registry and host adapters, model operation admission and provider transport, built-in and plugin tool dispatch, conversation persistence, workspace sessions, lifecycle coordination and platform integration.
+|`client/crates/situate-core`
+|Storage, content history, path policies and conversation format validation without application-window ownership.
+|`client/crates/situate-agent`
+|Conversation owner embedding Rig and using core domain/storage contracts. Owns accepted input, pending decisions, request preparation, tool scheduling, checkpoints, cancellation and completion through the native application's host implementation.
+|`client/crates/tauri-plugin-executor-platform`
+|Native supervision and termination of plugin service execution contexts. Plugin services run in Workers rather than the application UI realm.
+|`client/crates/tauri-plugin-workspace-access`
+|Native workspace access under operating-system permissions, including Swift and Kotlin adapters.
+|===
+
+Shared UI independence is checked for TypeScript, Vue and JavaScript sources, including `.mjs` and `.cjs` modules and dynamic imports.
+This prevents ordinary dependency drift; it is not a sandbox against malicious code.
+File operations use operation-specific requests and replies at the frontend/native boundary.
+The native host rejects malformed requests, and the frontend validates replies before using them; window and workspace authorization remains a separate host responsibility.
+Shared contract fixtures keep the two sides aligned without moving storage or authorization into the UI library.
+See link:{architecture-repository-root}/eslint.config.mjs[dependency rules] and link:{architecture-repository-root}/client/contracts/files.json[file operation contracts].

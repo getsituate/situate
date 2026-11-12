@@ -1,0 +1,106 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ../..
+endif::[]
+
+=== Quality scenarios
+
+Each row identifies an event, its operating conditions, the affected part and an observable outcome.
+The linked tests and policies locate verification mechanisms; they do not qualify every filesystem, platform or failure point.
+No latency, availability or universal coverage target is established here.
+
+[[quality-preservation-scenarios]]
+==== Data preservation and lifecycle coordination
+
+[cols="2,3,3",options="header"]
+|===
+|Situation and catalog basis |Expected behavior and success criterion |Verification boundary
+|A conversation save is blocked on storage while two workspaces are open and the user closes the saving workspace. link:{architecture-repository-root}/requirements/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037] (`must`).
+|Closure waits for the save already accepted for execution (<<glossary-operation-admission,Operation Admission>>). While it waits, the other workspace can save and the shared workspace registry can be inspected. Disk access does not hold the shared registry or active-turn lock; the latter coordinates the current AI turn. See <<current-workspace-operations>>.
+|The `close_drains_ai_storage_without_blocking_other_workspace_io_or_registry_snapshots` test in link:{architecture-repository-root}/client/app/src-tauri/src/workspaces.rs[workspace lease tests] checks save/closure ordering and independent access. <<current-workspace-operations,AI turn coordination>> separately rechecks the turn after storage. These are in-process rules, not cross-device locks.
+|A quit cancellation notification or reply is lost, or an old cancellation arrives after a newer quit attempt starts. link:{architecture-repository-root}/requirements/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037] (`must`).
+|The native host retains the attempt's status so the frontend can reconcile the lost message. Repeating a completed cancellation does not repeat restoration of paused file sessions. An older cancellation leaves the newer attempt pending. An unconfirmed cancellation remains visibly retryable; sending it is not proof that restoration succeeded.
+|link:{architecture-repository-root}/client/app/src-tauri/src/lifecycle_tests.rs[Lifecycle state tests] cover failed notification delivery and stale attempt tokens. link:{architecture-repository-root}/client/app/src/lifecycle.ts[Frontend coordination] reconciles status; see <<current-application-quit>>. This protocol does not establish plugin shutdown or synchronization readiness.
+|A stored conversation is malformed or uses an unsupported format. link:{architecture-repository-root}/requirements/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011] (`must`).
+|Loading reports the problem. A later save fails rather than replacing the unreadable original with empty history; the original bytes remain unchanged. This favors preservation over automatic recovery and can block further saving.
+|link:{architecture-repository-root}/client/crates/situate-core/src/conversation_store.rs[Conversation storage tests] check corrupt records and preservation after failed saves; link:{architecture-repository-root}/client/crates/situate-core/src/conversation.rs[format validation] defines accepted records. See <<conversation-format-safety>>. Rejecting unsupported data does not establish mixed-version compatibility.
+|A conversation append stops midway through its final entry, or metadata publication fails after a history append. <<adr-0016,ADR-0016>>.
+|Complete preceding history remains available. Preserve an incomplete suffix before repairing the append boundary; keep additional complete entries if metadata still selects the old entry. No silent reset or automatic tool replay occurs.
+|The link:{architecture-docs-root}/development/conversation-storage-implementation-plan.md[storage plan] requires short-write, partial-tail and metadata-ordering fixtures; existing v2 round-trip tests do not establish the append protocol.
+|A conversation grows beyond the former 16 MiB ceiling and is continued after compaction or a branch change. <<adr-0016,ADR-0016>>.
+|The conversation remains continuable without rewriting original history, copying shared ancestors or loading the entire tree. Only the selected ancestry contributes context; older UI history loads on demand.
+|Synthetic large-history, branch/compaction and resource measurements in the storage plan; no latency threshold or native qualification is inferred from a format choice.
+|The application terminates with saved waiting input or a tool call lacking its result. link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005].
+|Reopening preserves saved input and available outcomes without starting work. A missing result is unknown, not proof of no effects. Unsaved response text and drafts may be lost; execution handles are not reconstructed.
+|Owner and native restart scenarios in the storage plan; external effects and history are not one transaction and missing outcomes need not be reconstructible.
+|The process is killed after recovery text has been durably stored but the content save has failed. link:{architecture-repository-root}/requirements/data/requirements/REQ-0042-edit-markdown-source-and-read-rendered-content.md[REQ-0042] (`must`).
+|Restart restores the exact retained editor text and preserves the original content-file bytes. Confirmation that recovery text was stored (<<glossary-durable-staging-acknowledgement,Durable Staging Acknowledgement>>) is not confirmation that the final content save succeeded.
+|The link:{architecture-repository-root}/client/app/src-tauri/tests/support/editor_smoke.rs[editor recovery fixture] and link:{architecture-repository-root}/client/app/src-tauri/tests/support/editor-smoke.js[editor smoke flow] support termination after that acknowledgement and reopening. This does not establish power-loss durability on every filesystem.
+|A structural file operation is interrupted after changing files but before its completed result is committed. link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022], link:{architecture-repository-root}/requirements/data/requirements/REQ-0035-preserve-file-and-task-identity.md[REQ-0035] (both `must`).
+|Under link:{architecture-docs-root}/architecture/09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc[ADR-0010], restart preserves current files and prior history without replay or rollback. References lacking continuity evidence stay unresolved, including after later path reuse. An interrupted attempt is not reported as complete without verified completion evidence.
+|link:{architecture-repository-root}/client/crates/situate-core/src/content/lineage_tests.rs[Core interruption tests] include interrupted moves and copying continuity gaps. The link:{architecture-repository-root}/client/app/src-tauri/tests/support/references-smoke.js[native reference/restart journey] checks completed operations across restart, not every mid-operation interruption. Working-tree changes and Git reference publication are not one atomic transaction.
+|===
+
+[[quality-portability-scenarios]]
+==== Portable references
+
+[cols="2,3,3",options="header"]
+|===
+|Situation and catalog basis |Expected behavior and success criterion |Verification boundary
+|The application restarts without derived reference state, or a closed workspace is copied to a fresh installation. link:{architecture-repository-root}/requirements/data/requirements/REQ-0030-open-chats-with-content-references.md[REQ-0030], link:{architecture-repository-root}/requirements/data/requirements/REQ-0035-preserve-file-and-task-identity.md[REQ-0035], link:{architecture-repository-root}/requirements/data/requirements/REQ-0038-copy-portable-workspaces.md[REQ-0038] (all `must`).
+|Retained Git history and stored reference anchors reproduce the same target, deletion or uncertainty result without another authoritative move journal. ADR-0010 defines Git authority; link:{architecture-docs-root}/architecture/09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc[ADR-0012] extends this model to Markdown. A copied reference does not authorize access to a local workspace session.
+|link:{architecture-repository-root}/client/crates/situate-core/src/reference_storage_tests.rs[Closed-directory copy/move fixtures] include persisted chat and view selectors; <<git-derived-file-references>> describes cache-free reconstruction. Host authorization and native IPC/restart checks separately cover association with the authorized local session (<<glossary-runtime-workspace-binding,Runtime Workspace Binding>>). Neither a portable <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>> nor the credential association called a <<glossary-device-local-workspace-namespace,Device-local Workspace Namespace>> substitutes for this authorization.
+|===
+
+==== Engineering safeguards
+
+These checks enforce development policies supporting modularity, resource control and security.
+They are not additional catalog priorities or evidence that all user-facing quality goals are satisfied.
+
+[cols="2,3,3",options="header"]
+|===
+|Situation |Expected behavior and success criterion |Verification boundary
+|A shared UI component imports forbidden application internals.
+|Dependency checks reject the forbidden reference rather than allowing the shared library to depend on application implementation details.
+|link:{architecture-repository-root}/client/scripts/ui-boundary.mjs[UI boundary policy] and link:{architecture-repository-root}/client/scripts/ui-boundary.test.mjs[regression tests].
+|A file IPC request or reply has an invalid shape.
+|File-boundary validation rejects malformed data rather than treating it as a successful operation.
+|link:{architecture-repository-root}/client/contracts/files.json[Shared contract fixtures], link:{architecture-repository-root}/client/app/src/files/api.test.ts[frontend tests] and link:{architecture-repository-root}/client/app/src-tauri/src/files_tests.rs[native tests]. Shape validation does not authorize workspace access.
+|A dependency increases the initial frontend code in a production build.
+|The build reports its size, fails above the reviewed uncompressed limit and warns above the gzip threshold. Initial code includes shared static dependencies, not dynamic imports, even when triggered during startup.
+|link:{architecture-repository-root}/client/scripts/bundle-report.mjs[Bundle policy] and link:{architecture-repository-root}/client/scripts/bundle-report.test.mjs[manifest-based tests]; see <<frontend-bundle-budget>>. Size does not measure native startup or first-use latency.
+|A dependency violates the configured advisory, license, ban or source policy.
+|The applicable dependency check reports a failure rather than suppressing the finding to keep CI green.
+|link:{architecture-repository-root}/client/deny.toml[Rust dependency policy] and link:{architecture-docs-root}/development/testing.md#ci-gates[CI gates]. Advisory audits run in the separate link:{architecture-repository-root}/.github/workflows/dependency-audit.yml[Dependency audit workflow], not the required host-quality gate. These scans do not establish the absence of every vulnerability.
+|The secret scanner detects credentials in source history.
+|The history scan reports failure.
+|link:{architecture-docs-root}/development/testing.md#ci-gates[Quality workflow secret scanning]. Automated scans do not detect all forms of confidential information.
+|===
+
+[[quality-open-evidence]]
+==== Required outcomes and open verification questions
+
+The following catalog obligations are not established by the safeguards above.
+They remain required outcomes, not claims of missing implementation or passing tests.
+
+[cols="2,3,3",options="header"]
+|===
+|Quality outcome and basis |Acceptance condition from the catalog |Open verification question
+|Offline manual use — link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008] (`must`).
+|With internet access disabled and AI unavailable, a user can read and manually edit locally stored content and reopen saved changes after restart. Local content is usable without waiting for background synchronization; retained offline edits remain available for later configured synchronization.
+|Which native macOS/iOS evidence covers reading, editing, restart and later synchronization together? This does not require offline AI or access to external services.
+|Reuse without Situate — link:{architecture-repository-root}/requirements/data/requirements/REQ-0009-reuse-stored-content.md[REQ-0009] (`must`).
+|Stored notes and tasks open in an ordinary text editor, and documents in appropriate applications, without a special export or a Situate service. Transfer preserves content.
+|Which representative destination tools, content types, metadata and relationships demonstrate transferability? Whole-directory reference reconstruction alone does not answer this.
+|Context continuity and traceability — link:{architecture-repository-root}/requirements/data/requirements/REQ-0004-use-existing-context.md[REQ-0004], link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005] (both `must`).
+|Subsequent work uses relevant known context within workspace and task scope. Recorded intent and outcomes let users distinguish preparation from completed actions.
+|Which representative multi-step tasks demonstrate context use and understandable process history? Byte preservation alone cannot establish either outcome.
+|Personal fit and understandable organization — link:{architecture-repository-root}/requirements/data/requirements/REQ-0006-preserve-personal-note-structure.md[REQ-0006], link:{architecture-repository-root}/requirements/data/requirements/REQ-0023-browse-human-readable-note-structure.md[REQ-0023] (both `must`).
+|Users can browse and read their notes without assistant retrieval or explanation, including after reorganization. No particular organizational method is prescribed.
+|Which representative collections, methods and navigation tasks establish understandability? No task-duration or success-rate threshold has been agreed here.
+|Decision authority and recovery — link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004], link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022] (`must`).
+|Internal changes remain reversible; users can inspect outcomes and stop work without treating interruption as undo or proof that no effects occurred.
+|Which scenarios cover the required scope of undo and the presentation of partial or uncertain external outcomes? File interruption and quit-cancellation checks cover narrower boundaries, not a general external-effect recovery protocol.
+|===

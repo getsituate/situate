@@ -1,0 +1,15 @@
+{
+  "ready": "Answer ready",
+  "working": "Working",
+  "changes": "Note changes",
+  "question": "Question",
+  "approval": "Approval required",
+  "notice": "Plugin available",
+  "stopped": "Stopped",
+  "error": "Interrupted",
+  "unavailable": "AI unavailable",
+  "empty": "New conversation",
+  "questionExample": "Question example",
+  "followup": "Follow-up messages",
+  "questionNote": "Changing the question example replaces its text and clears the draft."
+}

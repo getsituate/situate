@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-labelledby="background-orbit-arcs-title" aria-describedby="background-orbit-arcs-desc">
+  <title id="background-orbit-arcs-title">Open concentric arcs</title>
+  <desc id="background-orbit-arcs-desc">Two broad blue circular arcs share an open gap toward the upper right.</desc>
+  <g transform="translate(6 7)" fill="#305cf4">
+    <path d="M279.633 215.786A132 132 0 1 1 215.786 40.367A16 16 0 0 1 202.262 69.369A100 100 0 1 0 250.631 202.262A16 16 0 0 1 279.633 215.786Z"/>
+    <path d="M230.692 192.964A78 78 0 1 1 192.964 89.308A14 14 0 0 1 181.131 114.685A50 50 0 1 0 205.315 181.131A14 14 0 0 1 230.692 192.964Z"/>
+  </g>
+  <g fill="#48b7ff">
+    <path d="M279.633 215.786A132 132 0 1 1 215.786 40.367A16 16 0 0 1 202.262 69.369A100 100 0 1 0 250.631 202.262A16 16 0 0 1 279.633 215.786Z"/>
+    <path d="M230.692 192.964A78 78 0 1 1 192.964 89.308A14 14 0 0 1 181.131 114.685A50 50 0 1 0 205.315 181.131A14 14 0 0 1 230.692 192.964Z"/>
+  </g>
+</svg>

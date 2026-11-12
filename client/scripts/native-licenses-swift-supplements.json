@@ -1,0 +1,9 @@
+{
+  "fluidaudio": {
+    "location": "https://github.com/FluidInference/FluidAudio.git",
+    "revision": "503b4bd1bbf7220882de39fe8ae6716aae4132da",
+    "version": "0.17.7",
+    "noticeFile": "THIRD-PARTY-NOTICES.txt",
+    "noticeSha256": "064e3fea1c8aa9148408dad698c04c96aeb1a40ed78197c966709e10337a2f7a"
+  }
+}

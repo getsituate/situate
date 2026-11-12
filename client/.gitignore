@@ -1,0 +1,6 @@
+# Rust workspace build output
+/target/
+
+# Local release artifacts and Apple account configuration
+/artifacts/
+/.apple-release.local.json

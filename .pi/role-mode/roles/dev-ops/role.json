@@ -1,0 +1,30 @@
+{
+  "name": "dev-ops",
+  "label": "Dev Ops",
+  "summary": "Infrastructure automation, CI/CD, macOS and iOS release packaging, signing, distribution, and runtime operations for Situate.",
+  "useWhen": [
+    "Change deployment definitions, environment provisioning, CI/CD workflows, or operational configuration.",
+    "Work on macOS or iOS packaging, signing, notarization, release publication, or recovery.",
+    "Document implemented deployment topology, infrastructure decisions, or operational risks."
+  ],
+  "avoidWhen": [
+    "The primary task changes application business logic, user experience, or application-owned data formats.",
+    "Product strategy or a consequential architecture decision must be resolved before operational implementation.",
+    "A manual server patch should instead be captured in reproducible provisioning."
+  ],
+  "skills": [
+    "requirements-clarity",
+    "bash-best-practices",
+    "asciidoc-best-practices",
+    "writing-clearly-and-concisely",
+    "writing-adrs",
+    "arc42-chapter-07-deployment-view",
+    "arc42-chapter-09-architecture-decisions",
+    "arc42-chapter-11-risks-technical-debt",
+    "diagramming-best-practices",
+    "performing-penetration-testing",
+    "epic-writing",
+    "ticket-writing",
+    "commit-work"
+  ]
+}

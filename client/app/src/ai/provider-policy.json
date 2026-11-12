@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "providers": {
+    "openai": {
+      "endpoint": "none",
+      "methods": {
+        "api_key": {
+          "status": "implemented",
+          "flow": "api_key",
+          "key": "required"
+        },
+        "oauth": { "status": "implemented", "flow": "browser" }
+      }
+    },
+    "openai-codex": {
+      "endpoint": "none",
+      "methods": {
+        "oauth": { "status": "implemented", "flow": "device" }
+      }
+    },
+    "anthropic": {
+      "endpoint": "none",
+      "methods": {
+        "api_key": {
+          "status": "implemented",
+          "flow": "api_key",
+          "key": "required"
+        }
+      }
+    },
+    "openrouter": {
+      "endpoint": "none",
+      "methods": {
+        "api_key": {
+          "status": "implemented",
+          "flow": "api_key",
+          "key": "required"
+        }
+      }
+    },
+    "custom": {
+      "endpoint": "required",
+      "methods": {
+        "api_key": {
+          "status": "implemented",
+          "flow": "api_key",
+          "key": "optional"
+        }
+      }
+    }
+  }
+}

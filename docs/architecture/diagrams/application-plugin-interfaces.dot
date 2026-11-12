@@ -1,0 +1,22 @@
+digraph ApplicationPluginInterfaces {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.8, ranksep=1.0, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  subgraph cluster_app {
+    label="Situate Application — conversation and plugin interfaces";
+    color="#6a5c70";
+    style="rounded";
+    margin=20;
+    ui [label="User Interface", fillcolor="#eee7f9"];
+    agent [label="Agent Integration"];
+    runtime [label="Plugin Runtime"];
+    { rank=same; agent; runtime; }
+
+    ui -> agent [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Conversations</TD></TR></TABLE>>];
+    ui -> runtime [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Plugin Management<BR/>Plugin Exports</TD></TR></TABLE>>];
+    agent -> runtime [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Plugin Management<BR/>Plugin Exports</TD></TR></TABLE>>];
+    agent -> ui [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>UI Contributions<BR/>Navigation</TD></TR></TABLE>>];
+    runtime -> ui [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>UI Contributions<BR/>Plugin views</TD></TR></TABLE>>];
+  }
+}

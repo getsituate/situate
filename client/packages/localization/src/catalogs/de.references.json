@@ -1,0 +1,12 @@
+{
+  "references.invalid": "Dieser Inhaltsverweis gehört nicht zu diesem Arbeitsbereich oder ist ungültig.",
+  "references.unavailable": "Der referenzierte Inhalt konnte nicht gelesen werden. Prüfe oder entferne den Verweis vor dem Senden.",
+  "references.tooLarge": "Der referenzierte Inhalt ist zu groß. Wähle vor dem Senden weniger oder kleinere Dateien.",
+  "references.draft": "Referenzierte Inhalte",
+  "references.pending": "Vorgemerkte Verweise",
+  "references.submitted": "Verweise der Unterhaltung",
+  "references.open": "{path} öffnen",
+  "references.remove": "Verweis auf {path} entfernen",
+  "references.historical": "Historische Version",
+  "references.useDefaultModel": "Arbeitsbereichsstandard verwenden"
+}

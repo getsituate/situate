@@ -1,0 +1,31 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[current-workspace-operations]]
+=== Current client: workspace operations and closure
+
+Critical workspace operations retain a <<glossary-workspace-operation-lease,workspace operation lease>> while they run, so closure waits for those operations to finish. This is distinct from the plugin worker leases used during activation.
+The shared registry is locked briefly to identify and authorize the session, rather than remaining locked during conversation storage.
+A slow save in one workspace therefore need not block registry access or storage in another workspace.
+Queued operations recheck the session after obtaining the lease: reopening the same workspace does not authorize requests from its previous session.
+This check preserves the <<glossary-runtime-workspace-binding,runtime workspace binding>>, the native host's association of the request with an authorized local session. The portable <<glossary-diagnostic-workspace-identifier,diagnostic workspace identifier>> correlates diagnostics; it does not grant this authorization.
+
+The frontend resolves the workspace's dictation-close decision before preparing file closure.
+Cancelling that decision performs no file snapshot, save or detach, leaving file sessions available for an explicit later attempt.
+Closure waits for already admitted operations in that workspace before completing the file and AI participants' close procedure.
+Successful closure persists removal from the remembered startup-open set while retaining the known-workspace entry.
+Failure to persist the workspace registry leaves the session available for recovery instead of reporting a successful close.
+
+When file saving or draft inspection fails, the user can choose *Close anyway…*, then explicitly confirm the warning about unsaved changes.
+Only that confirmation sends file `detach` with `force: true`, bypassing the file-save/snapshot validation rather than deleting recovery data.
+Saved files, history and persisted recovery drafts remain; unsaved in-memory edits may be lost.
+Cancelling retains pending writes and sessions.
+Ownership checks, operation leases, running-action decisions, dictation and registry persistence still apply.
+The confirmation does not bypass <<glossary-lifecycle-admission,lifecycle admission>>, which controls whether closure may proceed.
+This path is not offered during application quit or updater preparation.
+
+Conversation storage also releases the shared active-turn lock during disk access, then checks the turn again before acknowledging its save.
+If the model response finishes during that write, a subsequent save is required before the completed response is considered durable.
+These are in-process coordination rules, not locks between devices or guarantees against writes by other applications.
+See link:{architecture-repository-root}/client/app/src/files/FileLifecycle.vue[file closure choices], link:{architecture-repository-root}/client/app/src-tauri/src/files.rs[native file preparation], link:{architecture-repository-root}/client/app/src-tauri/src/workspaces.rs[workspace operation leases] and link:{architecture-repository-root}/client/app/src-tauri/src/ai.rs[AI turn coordination].

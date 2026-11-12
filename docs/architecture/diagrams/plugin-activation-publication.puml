@@ -1,0 +1,62 @@
+@startuml
+hide footbox
+skinparam shadowing false
+skinparam backgroundColor #fffefa
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 14
+skinparam defaultFontColor #30203e
+skinparam roundcorner 12
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam BoxPadding 10
+skinparam sequence {
+  ArrowColor #6a5c70
+  ArrowFontColor #30203e
+  ArrowFontSize 13
+  LifeLineBorderColor #8c7a97
+  ParticipantBorderColor #6a5c70
+  ParticipantBackgroundColor #eee7f9
+  ParticipantFontColor #30203e
+  ActorBorderColor #6a5c70
+  ActorBackgroundColor #fffefa
+  ActorFontColor #30203e
+  GroupBorderColor #6a5c70
+  GroupBackgroundColor #f6f3ee
+  GroupHeaderFontColor #30203e
+  DividerBorderColor #8c7a97
+  DividerBackgroundColor #f6f3ee
+}
+skinparam note {
+  BackgroundColor #fff7e3
+  BorderColor #8c7a97
+  FontColor #30203e
+  FontSize 12
+}
+
+participant "Agent Integration" as Agent
+participant "Plugin Runtime" as Runtime
+participant "Application Core" as Core
+
+note over Runtime, Core: Affected Operation Admission remains blocked
+
+Core -> Core: Record durable activation attempt;\natomically replace Active Revision Map
+Core --> Runtime: Publication outcome
+
+alt Publication confirmed
+  Runtime -> Runtime: Stage registrations;\ncoordinate refresh
+  alt Refresh succeeds
+    Runtime -> Core: Release affected Operation Admission
+    Runtime --> Agent: Activated, including disabled target
+    Agent -> Agent: Remove disposable check state
+  else Refresh fails
+    Runtime --> Agent: Published; report refresh failure
+  end
+else Publication uncertain or not confirmed
+  Runtime --> Agent: Report known outcome or uncertainty
+end
+
+note over Agent, Core
+  Inspect the recorded attempt; do not blindly repeat or repair it.
+  Failed refresh does not undo confirmed publication.
+end note
+@enduml

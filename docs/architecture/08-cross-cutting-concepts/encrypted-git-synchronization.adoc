@@ -1,0 +1,93 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[encrypted-git-synchronization]]
+=== Encrypted Git synchronization proposal
+
+Status: proposed mechanisms supporting <<adr-0015,ADR-0015>>, which proposes client-encrypted incremental Git packs. Neither the transport nor this concept is an implemented service or finalized protocol. Cryptographic construction, data reconciliation and native macOS/iOS feasibility remain unverified.
+
+The governing requirements are link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008].
+They require operator-independent content encryption, local availability and initial replication of workspace content and retained history. Connected external document originals need not be copied into the workspace.
+This proposal does not establish pricing, storage packages, service levels or a deployment provider.
+
+==== Transport direction
+
+<<adr-0015,ADR-0015>> records the proposed transport choice, rationale, alternatives and decision limits.
+Clients would exchange Git packs encrypted after compression and encrypted indexes for object lookup and dependencies; the service would manage ciphertext, authorization and publication without interpreting plaintext Git history.
+The Application Core continues to own validation, merging and recovery for every transport through <<building-block-interfaces,Sync Transport>>.
+The following mechanisms remain proposals rather than consequences already settled by that transport choice.
+
+==== Proposed transfer model and protection boundaries
+
+An encrypted manifest would bind the required repository roots and supported state exports into one _synchronization revision_. This is a transfer-consistent selection, not one global Git commit or proof that all component states are semantically consistent.
+The _synchronization head_ would identify the service's currently published revision, not a device's working files or its currently displayed conversation branch.
+
+A candidate publication model is to finalize immutable ciphertext durably before conditionally advancing that head. The update would check the expected prior head and workspace authorization state, and retain a publication identifier to reconcile a lost reply without creating a second publication.
+A rejected update would leave local edits intact and require another reconciliation. Downloads would be authenticated, decrypted and validated on the receiving device before integration.
+Exact record formats, transaction boundaries, transfer resumption and cleanup ordering are not settled.
+
+The following boundaries constrain that design:
+
+* Content keys and plaintext stay on authorized devices, separate from the Situate AI Router's authorized model-processing flow. Encryption does not hide account relationships, transfer sizes or timing, and does not protect plaintext from a compromised endpoint or malicious trusted plugin.
+* Device grants apply to individual workspaces; account recovery covers the account's officially synchronized workspaces. Account login alone must not unlock content. Enrollment, revocation and recovery replacement must preserve this separation without operator key substitution.
+* <<glossary-device-local-ai-settings,Device-local AI Settings>>, provider credentials, diagnostic logs and device/session diagnostic identifiers are not portable content. The portable Diagnostic Workspace Identifier is for correlation, not service authorization or a Runtime Workspace Binding.
+* Git-owned operation facts and stored reference anchors must survive transfer under <<git-derived-file-references>>, ADR-0010 and ADR-0012. Resuming data transfer must not replay, finish or roll back interrupted working-file mutations.
+* Receiving plugin code does not activate it. Same-version source divergence, data migration and checked activation retain the boundaries in link:{architecture-repository-root}/requirements/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033].
+
+Synchronization operates only while the workspace is open, subject to platform limits. Durable service acceptance would not mean that every device has received or integrated the revision, or that a separate backup has completed.
+The service cannot verify encrypted Git dependency closure or a client's claimed uncompressed content size independently; signatures identify a declaration's author, not its truth.
+
+==== Conversation-tree reconciliation candidate
+
+A candidate model for independently continued conversations is to retain both continuations as branches of one conversation tree, rather than overwrite one or invent a sequential order between them.
+The same representation could support deliberate branching from an earlier conversation point under link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022].
+
+For example, two devices might continue a shared travel-planning conversation by independently comparing trains and hotels. Both paths would retain their common prefix and their own subsequent messages and recorded actions.
+Choosing a conversation branch would select conversational context, not restore a separate workspace snapshot. File changes remain shared workspace changes, and already performed external effects cannot be deduplicated or undone merely by combining conversation records.
+
+This is not yet a selected reconciliation algorithm or a completed UI decision. Stable branch ancestry, divergence detection, draft and queued-input handling, active-run ownership, branch presentation and interaction with the workspace-wide conflict pause remain open.
+Local numeric record revisions alone do not establish shared ancestry. The current requirement to continue on another device at a completed turn does not require live run migration or simultaneous processing of one conversation under link:{architecture-repository-root}/requirements/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011].
+
+==== Design risks and required evidence
+
+The main uncertainty is local integration and recovery, not ciphertext storage alone. Reusing Git's representation does not establish correct cross-device reconciliation, secure key provisioning or production readiness.
+
+[cols="2,3,3",options="header"]
+|===
+|Concern |Concrete gap or failure case |Evidence needed before relying on the design
+|Merge-aware history and file references
+|The current link:{architecture-repository-root}/client/crates/situate-core/src/content/git_storage.rs[commit writer] and link:{architecture-repository-root}/client/crates/situate-core/src/content/history_records.rs[history validator] reject multiple parents. A managed move on one device and an edit on another need more than a text merge to preserve anchored references.
+|A core prototype covering both parents' confirmed operation facts, divergent moves, deletion/path reuse and interrupted integration. Neither arbitrary parent selection nor guessed continuity is acceptable; safe refusal alone does not satisfy supported cross-device reference continuity.
+|Conversations, settings and plugin state
+|The link:{architecture-repository-root}/client/crates/situate-core/src/conversation_store.rs[conversation store] uses local compare-and-swap revisions. Two devices can reach the same counter with different content. A stable export also does not prove that plugin code and data are compatible.
+|An export inventory with owner, ancestry/base, dependencies, reconciliation rule and import checkpoint. Demonstrate completed-conversation continuation, settings and plugin code/data consistency without a universal semantic-conflict engine.
+|Account recovery and device grants
+|A device connected only to workspace A cannot use A's grant to rewrap workspace B's keys. Concurrent workspace creation or key rotation can invalidate an earlier inventory during recovery-key replacement.
+|A reviewed enrollment/recovery/revocation state model, completeness checks against a defined account state, replay and race tests, and independent cryptographic review. New-device freshness without a trusted checkpoint needs an explicit threat-model limit.
+|Mobile pack and index growth
+|Small edits can accumulate many packs, large indexes and external delta dependencies. Full initial replication includes earlier attachments.
+|Compare bounded self-contained incremental packs with thin packs using synthetic histories on macOS/iOS. Measure memory, temporary disk use, transferred bytes, index growth and interruption recovery before fixing limits. Thin packs and later pack compaction are optimizations, not prerequisites.
+|Resource abuse and service economics
+|Encrypted logical-size declarations cannot bound physical storage, abandoned uploads or transfer costs, including with modified clients.
+|An abuse model, bounded reservations and server-observable safeguards, with cost estimates including staging, backups and mediated transfers. Any customer-visible limits or service commitments require a product decision rather than silently redefining an allowance.
+|Publication, deletion and backup restoration
+|A cleanup job could delete staged data while publication references it; restoring older metadata could reactivate a deleted server copy.
+|Fault-injection tests for payload finalization, conditional publication, lost replies and cleanup races. Define deletion records that survive database rollback and verify restoration before enabling access. Backup retention, acceptable data loss and restoration time remain undecided.
+|===
+
+==== Released-format compatibility and decision boundaries
+
+The protocol must integrate with <<workspace-migrations>>, not create a second migration authority. Local synchronization starts only after the opening gate succeeds; incoming data must be checked before incompatible processing or writes, including when a workspace is already open.
+Migration recovery archives, locks and temporary artifacts must not be transported as ordinary workspace state. Local recovery is not a distributed lock and must not roll back another device's edits.
+
+Persisted-format changes follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069], including supported mixed-version preservation, tested migrations and any explicitly approved format-specific exception.
+Plugin interfaces retain their separate policy under link:{architecture-repository-root}/requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070]. Neither policy establishes a service API lifetime or indefinite migration-chain retention.
+
+Before a detailed implementation commitment, resolve merge semantics, the export inventory and reconciliation rules, and the account recovery model. Prototype measurements should inform pack, chunk and dependency limits; deployment and storage choices must support the resulting durability contract.
+Changes to user-visible conflict behavior, supported scope, customer limits, spending or recovery commitments need a product decision. Cryptographic security, native feasibility and restoration correctness still need evidence after a design is chosen.
+
+==== Technical references
+
+* https://git-scm.com/docs/gitprotocol-pack[Git pack transfer protocol]: ordinary server-side object negotiation and pack construction.
+* https://git-scm.com/docs/pack-format[Git pack format]: compressed objects, delta representations and dependency constraints.

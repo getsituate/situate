@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-event"
+description = "Allows the native-owned executor document to send supervision events."
+commands.allow = ["event"]

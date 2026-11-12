@@ -1,0 +1,338 @@
+{
+  "SituateButton": {
+    "purpose": "Labeled action.",
+    "props": {
+      "title": "Optional supplementary hover/focus help.",
+      "type": "button (default), submit or reset.",
+      "disabled": "Boolean; false by default.",
+      "variant": "primary (default), secondary, ghost, danger or plain (unstyled, without shared appearance or focus treatment).",
+      "size": "normal (default) or small.",
+      "busy": "Boolean; prevents activation and exposes aria-busy. Supply progress wording."
+    },
+    "events": {},
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Native click and form attributes/listeners are supported. Use one primary action per decision group. Ref exposes element and focus()."
+  },
+  "SituateIconButton": {
+    "purpose": "Compact action with an accessible label.",
+    "props": {
+      "icon": "Optional host icon name.",
+      "label": "Required accessible action name.",
+      "title": "Optional supplementary hover/focus help.",
+      "disabled": "Optional boolean.",
+      "unavailableReason": "Optional explanation for a disabled action.",
+      "variant": "quiet (default), primary or plain."
+    },
+    "events": {},
+    "slots": {
+      "default": "Optional artwork replacing icon."
+    },
+    "usage": "Native click listener. Ref exposes element and focus(). Never rely on an icon alone to name an action."
+  },
+  "SituateIcon": {
+    "purpose": "Decorative icon from the host vocabulary.",
+    "props": {
+      "name": "Required host icon name, for example folder."
+    },
+    "events": {},
+    "slots": {},
+    "usage": "Pair with visible text or a named control; do not use as an accessible label."
+  },
+  "SituateInput": {
+    "purpose": "Single-line text, search or numeric input.",
+    "props": {
+      "modelValue": "Optional string or number; use v-model for owned text.",
+      "modelModifiers": "Optional {trim,lazy,number} booleans, supplied by v-model modifiers.",
+      "appearance": "default (ordinary fields) or plain (specialized controls)."
+    },
+    "events": {
+      "update:modelValue": "New string or number value."
+    },
+    "slots": {},
+    "usage": "Native input attributes/listeners including type, required and autocomplete. Bind Field controlAttrs. Ref exposes element, focus(), select(), setSelectionRange()."
+  },
+  "SituateTextarea": {
+    "purpose": "Multiline editable text.",
+    "props": {
+      "modelValue": "Optional string or number; use v-model for owned text.",
+      "modelModifiers": "Optional {trim,lazy,number} booleans, supplied by v-model modifiers.",
+      "appearance": "default (ordinary fields) or plain (specialized controls)."
+    },
+    "events": {
+      "update:modelValue": "New string or number value."
+    },
+    "slots": {},
+    "usage": "Native textarea attributes/listeners including rows and required. Bind Field controlAttrs. Ref exposes element, focus(), select(), setSelectionRange()."
+  },
+  "SituateCheckbox": {
+    "purpose": "Boolean choice.",
+    "props": {
+      "modelValue": "Optional boolean v-model.",
+      "appearance": "default or plain."
+    },
+    "events": {
+      "update:modelValue": "New boolean on change."
+    },
+    "slots": {},
+    "usage": "Supply a label with Field or a wrapping native label. Native checked/change ownership is also supported. Ref exposes element and focus()."
+  },
+  "SituateRadio": {
+    "purpose": "One choice within a mutually exclusive group.",
+    "props": {
+      "modelValue": "Optional string/number v-model.",
+      "value": "Choice value; defaults to on.",
+      "appearance": "default or plain."
+    },
+    "events": {
+      "update:modelValue": "New string or number value."
+    },
+    "slots": {},
+    "usage": "Use a native fieldset/legend, shared name and a label per radio. Native attributes/listeners are supported. Ref exposes element and focus()."
+  },
+  "SituateSelect": {
+    "purpose": "Single-value choice with host listbox or mobile sheet.",
+    "props": {
+      "id": "Optional control ID.",
+      "value": "Optional string/number with native change ownership.",
+      "modelValue": "Optional string/number v-model.",
+      "modelModifiers": "Optional {number:true}, supplied by v-model.number.",
+      "name": "Optional form field name.",
+      "disabled": "Optional boolean.",
+      "required": "Optional boolean.",
+      "form": "Optional owning form ID.",
+      "appearance": "field (default) or toolbar."
+    },
+    "events": {
+      "update:modelValue": "New string or number value.",
+      "input": "Native Event targeting the hidden form select.",
+      "change": "Native Event targeting the hidden form select."
+    },
+    "slots": {
+      "default": "Native option and optgroup elements, not custom menu items."
+    },
+    "usage": "Bind Field controlAttrs. focus() targets the visible combobox; .element is the hidden native select. Do not recreate its popup or keyboard behavior."
+  },
+  "SituateSwitch": {
+    "purpose": "Immediately applied boolean setting.",
+    "props": {
+      "modelValue": "Optional boolean v-model."
+    },
+    "events": {
+      "update:modelValue": "New boolean on change."
+    },
+    "slots": {},
+    "usage": "Supply a label. Native checked/change ownership is also supported. Ref exposes element and focus()."
+  },
+  "SituateFilterChip": {
+    "purpose": "Removable active filter.",
+    "props": {
+      "removeLabel": "Required accessible removal action name.",
+      "disabled": "Optional boolean."
+    },
+    "events": {
+      "remove": "MouseEvent from the removal action."
+    },
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Use for removing a filter, not switching a setting or navigating."
+  },
+  "SituateField": {
+    "purpose": "Control label, help and validation association.",
+    "props": {
+      "id": "Optional stable control ID; otherwise generated.",
+      "label": "Visible label.",
+      "help": "Optional help text.",
+      "error": "Optional current validation error; takes precedence over warning.",
+      "warning": "Optional nonblocking feedback; does not set aria-invalid.",
+      "reserveFeedback": "Reserve two short feedback lines; default false. Long messages wrap and grow.",
+      "announce": "Use a polite atomic feedback live region; default false. Disable when focusing an invalid control on submission."
+    },
+    "events": {},
+    "slots": {
+      "default": "Scope: {id,describedBy,invalid,controlAttrs}. Bind v-bind=\"controlAttrs\" to exactly one control."
+    },
+    "usage": "Place instructions outside placeholders. Clearing error removes its description association. Use fieldset/legend for groups."
+  },
+  "SituateBadge": {
+    "purpose": "Short status or metadata.",
+    "props": {
+      "tone": "neutral (default), info, success, warning or danger."
+    },
+    "events": {},
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Name the actual state in text; color alone is insufficient. No automatic live-region role."
+  },
+  "SituateNotice": {
+    "purpose": "Contextual feedback or error.",
+    "props": {
+      "tone": "neutral (default), info, success, warning or danger."
+    },
+    "events": {},
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Caller supplies role=status or role=alert only when an announcement is appropriate. State known outcome and useful recovery without claiming rollback."
+  },
+  "SituateEmptyState": {
+    "purpose": "Empty collection or no matching results.",
+    "props": {
+      "title": "Optional heading text.",
+      "description": "Optional explanation."
+    },
+    "events": {},
+    "slots": {
+      "title": "Optional heading replacing default h3.",
+      "default": "Supporting content.",
+      "actions": "Relevant next action."
+    },
+    "usage": "Distinguish an empty source from filtered-out results and failed loading. Offer a relevant action rather than decorative filler."
+  },
+  "SituatePanel": {
+    "purpose": "Neutral content surface.",
+    "props": {
+      "appearance": "default (surface) or plain."
+    },
+    "events": {},
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Use when a surface groups content; avoid a separate card around every row. Supply your own semantic headings."
+  },
+  "SituateDialog": {
+    "purpose": "Native modal dialog.",
+    "props": {
+      "appearance": "default (bounded styled surface) or plain.",
+      "open": "Optional boolean for caller-owned modal state; omit when using showModal()/close()."
+    },
+    "events": {},
+    "slots": {
+      "header": "Optional title and header controls.",
+      "default": "Content.",
+      "actions": "Optional actions in the shared dialog footer."
+    },
+    "usage": "Ref exposes element, showModal(), close(returnValue?), focus(). Supply aria-labelledby, initial focus, a labeled close action and invoker focus restoration. Native close/cancel events are forwarded; update caller-owned open when they occur. There is no v-model contract."
+  },
+  "SituateDialogActions": {
+    "purpose": "Wrapping, end-aligned dialog action group.",
+    "props": {},
+    "events": {},
+    "slots": {
+      "default": "Dialog action controls."
+    },
+    "usage": "Dialog's actions slot already provides this layout. Use the component directly only for a separate dialog action group."
+  },
+  "SituatePopover": {
+    "purpose": "Anchored supplementary content.",
+    "props": {
+      "open": "Required boolean, owned by the caller.",
+      "label": "Required accessible name.",
+      "anchor": "Optional native HTMLElement or null; use a component ref's .element.",
+      "point": "Optional viewport {x,y} instead of an anchor.",
+      "align": "start or end; end by default.",
+      "maxHeight": "Optional pixel height, bounded by available viewport space."
+    },
+    "events": {
+      "close": "Update caller-owned open to false."
+    },
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Ref exposes element and dismiss(). Surface placement handles viewport bounds and modal hosting. Arbitrary content does not gain menu keyboard navigation."
+  },
+  "SituateMenu": {
+    "purpose": "Anchored or pointer-positioned actions.",
+    "props": {
+      "open": "Required boolean, owned by the caller.",
+      "label": "Required accessible name.",
+      "anchor": "Optional native HTMLElement or null; use a component ref's .element.",
+      "point": "Optional viewport {x,y} instead of an anchor.",
+      "align": "start or end; end by default.",
+      "maxHeight": "Optional pixel height, bounded by available viewport space.",
+      "initialFocus": "first, last or checked.",
+      "closeOnSelect": "Boolean; true by default."
+    },
+    "events": {
+      "close": "Update caller-owned open to false."
+    },
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Supply menuitem/menuitemradio/menuitemcheckbox controls with checked state and handlers. Shared menu owns keyboard navigation and dismissal; caller owns actions and open state."
+  },
+  "SituateDisclosure": {
+    "purpose": "Expandable supporting content.",
+    "props": {
+      "label": "Optional summary text.",
+      "open": "Optional boolean v-model:open."
+    },
+    "events": {
+      "update:open": "New boolean.",
+      "toggle": "Native toggle Event."
+    },
+    "slots": {
+      "label": "Optional summary content.",
+      "default": "Expanded content."
+    },
+    "usage": "Uses native details/summary. Ref exposes element and focus(). Do not use as a substitute for navigation tabs."
+  },
+  "SituateTooltip": {
+    "purpose": "Supplementary hover/focus help.",
+    "props": {
+      "text": "Required help text.",
+      "disabled": "Optional boolean.",
+      "anchor": "Optional native HTMLElement."
+    },
+    "events": {
+      "describe": "Description ID or undefined; associate it with an external trigger when using anchor."
+    },
+    "slots": {
+      "default": "Scope: {triggerAttrs}; bind to the trigger."
+    },
+    "usage": "The trigger still needs an accessible name. Button title and IconButton label/title already provide shared help; do not nest redundant tooltips."
+  },
+  "SituateProgress": {
+    "purpose": "Measured or indeterminate progress.",
+    "props": {
+      "label": "Required accessible name.",
+      "value": "Optional finite number; omit for indeterminate work.",
+      "max": "Positive number; default 100.",
+      "estimate": "Optional fraction for indeterminate visual fill only."
+    },
+    "events": {},
+    "slots": {},
+    "usage": "Keep visible status wording outside an aria-busy region. Never present an estimate as measured completion. Stop pending feedback on every terminal outcome."
+  },
+  "SituateScrollbars": {
+    "purpose": "Host-wide indicators for native scrolling.",
+    "props": {},
+    "events": {},
+    "slots": {
+      "default": "Content."
+    },
+    "usage": "Mounted once by the application; do not mount per plugin. Does not replace scrolling surfaces."
+  },
+  "SituateResizeHandle": {
+    "purpose": "Caller-owned internal region resizing in pixels.",
+    "props": {
+      "modelValue": "Required pixel dimension.",
+      "min": "Required minimum pixels.",
+      "max": "Required maximum pixels.",
+      "resetValue": "Required reset dimension.",
+      "label": "Required accessible separator name.",
+      "controls": "Required controlled region ID.",
+      "orientation": "vertical (width, default) or horizontal (height)."
+    },
+    "events": {
+      "update:modelValue": "Preview pixel dimension.",
+      "change": "Completed gesture dimension.",
+      "dragging": "Whether a gesture is active."
+    },
+    "slots": {},
+    "usage": "Caller owns geometry and persistence. Ref exposes cancel(). Do not use to override host pane layout or create plugin-selected pane splits."
+  }
+}

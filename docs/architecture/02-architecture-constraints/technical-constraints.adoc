@@ -1,0 +1,44 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[constraints-technical]]
+=== Technical constraints
+
+[cols="1,2,2",options="header"]
+|===
+|Constraint and source |Scope |Architectural consequence
+|Platform availability and distribution; link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]
+|The MVP targets macOS and iOS. Windows, Linux desktop and Android are deferred. MVP delivery starts with a website-provided macOS DMG and the direct-install updater, followed by iOS through the App Store. Mobile app-store distribution is mandatory; desktop app stores are optional.
+|Technology and plugin execution choices must support the Apple targets and applicable store rules. Deferred-platform compatibility is not an MVP development or acceptance constraint. Package-manager channels are deferred. Supported OS versions, additional channels and deferred-platform sequencing remain open.
+|Local reading and manual editing; link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008]
+|Locally stored content remains readable and manually editable without internet, AI or Situate services. Initial synchronization replicates the complete current collection and full version history, including previous attachments, to every connected device.
+|AI cannot be the only editing interface. Changes must persist locally for synchronization when configured. Selective document download is deferred; connected external sources need not be copied in full. Offline external-service access is not required; local model use relies on user-configured compatible endpoints rather than a bundled model runtime.
+|Reuse without Situate; link:{architecture-repository-root}/requirements/data/requirements/REQ-0009-reuse-stored-content.md[REQ-0009]
+|Stored content remains readable and transferable without continuing to operate Situate.
+|Storage must avoid dependence on Situate-only readers. The selected Markdown conventions and portable workspace layout are described in <<solution-strategy>>.
+|End-to-end encrypted synchronization; link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013]
+|Neither the official synchronization service nor Situate as operator may decrypt content synchronized through that service.
+|Key handling must preserve this boundary. Authorized plaintext AI processing is a separate flow and must not expose plaintext or decryption keys to synchronization.
+|Official synchronization recovery; link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013]
+|A new device obtains key material through an authorized device or a user-held <<glossary-recovery-key,recovery key>>. One key per account covers all officially synchronized workspaces. Users must save and confirm recovery material before official synchronization setup completes.
+|Account login alone must not unlock content. Neither the service nor operator may obtain usable decryption keys. Recovery does not restore device-local AI settings or credentials. Cryptographic and provisioning protocols remain open. If neither usable local data nor key access remains, content cannot be recovered.
+|Device-local AI settings and credentials; link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013]
+|Provider connections, endpoints, selected access and model choices belong to one workspace on one device: <<glossary-device-local-ai-settings,Device-local AI Settings>>. They persist outside the portable workspace directory and its histories; provider secrets remain in device-local OS secure storage.
+|Neither workspace copying nor official or custom synchronization may transfer these settings or credentials, even if a provider permits key sharing. Authentication and model requests go directly to the chosen provider; Situate-operated services must not store or broker user-provided credentials. Conversation content remains portable, but another device keeps its own access selection.
+|Synchronization history and conflicts; link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013]
+|Synchronization plugins provide storage and transport; the core owns versioning, merge-conflict handling and file/history recovery for every transport.
+|An unresolved merge conflict pauses synchronization for the affected workspace, not local edits or other workspaces. Conflict resolution must work without AI; combined results and binary-version choices require the user's decision before application. Conflict representation and merge algorithms remain open.
+|User decision authority; link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004]
+|Actions stay within the user request and configured access, without per-action approval; internal work remains reversible.
+|Execution paths, including plugins, must preserve this boundary. Installed plugins are trusted code, not sandboxed adversaries; this contract does not establish protection against malicious plugins. Enforcement mechanisms remain to be designed.
+|Shared UI and local plugin authoring; link:{architecture-repository-root}/requirements/data/foundations.md#shared-vue-interfaces-and-local-plugin-authoring[foundations]
+|Host and plugin UI use Vue and the same Situate component implementations. Plugins may also define custom components and views.
+|Plugin authoring must support plain JavaScript and locally compiled Vue templates without mandatory TypeScript, JSX or an external build pipeline, including on mobile. Shared components do not impose a restricted UI vocabulary. Cross-plugin reuse requires explicit exports and declared dependencies.
+|Released-version compatibility; link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070]
+|Workspace data and public plugin interfaces have an internal minimum six-month compatibility window measured from each app version's release. REQ-0069 permits an explicitly approved workspace-format exception for disproportionate transition effort, with safe refusal on affected older apps; this does not waive public plugin-interface compatibility. Public interfaces include SDK operations and shared component properties, events and slots.
+|Mixed-version reads and writes must preserve data. Version age alone must not block use; actual incompatibility blocks only the affected workspace. Plugins may require newer app capabilities without older-version fallbacks; disable unsupported plugins only on the affected device and show the required app version. The window does not promise indefinite migration paths, service API compatibility or OS support.
+|Plugin platform compatibility; link:{architecture-repository-root}/requirements/data/requirements/REQ-0014-plugin-platform-compatibility.md[REQ-0014]
+|Plugins are cross-platform or explicitly restricted.
+|Synchronization must not imply that a plugin can execute on an unsupported platform.
+|===

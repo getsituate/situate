@@ -1,0 +1,22 @@
+digraph SyncMergeConflicts {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  conflict [label="Git merge conflict?", shape=diamond];
+  pause [label="Pause workspace synchronization\nLocal editing remains available"];
+  text [label="Text conflict\nChoose a version or combine in chat"];
+  binary [label="Binary conflict\nChoose a version or keep both files"];
+  decide [label="User approves resolution"];
+  resume [label="Synchronize automatically\nAll blocking conflicts resolved", fillcolor="#eee7f9", color="#6232bc"];
+
+  conflict -> resume [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No</TD></TR></TABLE>>];
+  conflict -> pause [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes</TD></TR></TABLE>>];
+  pause -> text [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Text</TD></TR></TABLE>>];
+  pause -> binary [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Binary</TD></TR></TABLE>>];
+  text -> decide;
+  binary -> decide;
+  decide -> resume [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Apply resolution</TD></TR></TABLE>>];
+
+  { rank=same; text; binary; }
+}

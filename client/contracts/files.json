@@ -1,0 +1,1820 @@
+{
+  "valid": [
+    {
+      "name": "plugin code snapshot is read-only",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "snapshot",
+        "pluginId": "sample"
+      },
+      "reply": {
+        "status": "ok",
+        "snapshot": {
+          "writable": false,
+          "reason": null,
+          "entries": [
+            {
+              "path": "entry.js",
+              "isDirectory": false
+            }
+          ],
+          "drafts": []
+        }
+      }
+    },
+    {
+      "name": "plugin source preview stays text",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "read",
+        "pluginId": "sample",
+        "path": "entry.js",
+        "text": "const preview = 1;"
+      },
+      "reply": {
+        "status": "ok",
+        "document": {
+          "path": "entry.js",
+          "version": {
+            "text": "const value = 1;",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "binary read never opens an application",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "read",
+        "path": "data.md"
+      },
+      "reply": {
+        "status": "binary"
+      }
+    },
+    {
+      "name": "plugin binary read",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "read",
+        "pluginId": "sample",
+        "path": "image.png"
+      },
+      "reply": {
+        "status": "binary"
+      }
+    },
+    {
+      "name": "plugin explicit binary open",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "openExternal",
+        "pluginId": "sample",
+        "path": "image.png"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "plugin relative text link opens internally",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "openExternal",
+        "pluginId": "sample",
+        "href": "entry.js",
+        "destination": "README.md"
+      },
+      "reply": {
+        "status": "ok",
+        "document": {
+          "path": "entry.js",
+          "version": {
+            "text": "const value = 1;",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "resolve a moved path while retaining its Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "document": {
+          "path": "Archive/data.txt",
+          "version": {
+            "text": "Updated",
+            "revision": "r2"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "capture selected Markdown at its Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "captureReference",
+        "path": "Note.md",
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "Note.md",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "resolve moved Markdown at its original Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "Note.md",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "Note.md",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "document": {
+          "path": "Archive/Note.md",
+          "version": { "text": "# Note\n", "revision": "r1" },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "capture a path reference at its Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "captureReference",
+        "path": "data.txt"
+      },
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "snapshot",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "snapshot"
+      },
+      "reply": {
+        "status": "ok",
+        "snapshot": {
+          "writable": true,
+          "canExport": true,
+          "reason": null,
+          "entries": [
+            {
+              "path": "Note.md",
+              "isDirectory": false
+            }
+          ],
+          "drafts": [
+            {
+              "path": "Note.md",
+              "base": {
+                "text": "# Note\n",
+                "revision": "r1"
+              },
+              "text": "Draft"
+            }
+          ],
+          "deleted": []
+        }
+      }
+    },
+    {
+      "name": "snapshot with deleted files",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "snapshot",
+        "includeDeleted": true
+      },
+      "reply": {
+        "status": "ok",
+        "snapshot": {
+          "writable": true,
+          "reason": null,
+          "entries": [],
+          "drafts": [],
+          "deleted": [
+            { "path": "Old.md", "revision": "earlier", "isDirectory": false }
+          ]
+        }
+      }
+    },
+    {
+      "name": "read preview",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "read",
+        "path": "Note.md",
+        "text": "Preview"
+      },
+      "reply": {
+        "status": "ok",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "stage",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "stage",
+        "path": "Note.md",
+        "text": "Draft",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        }
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "save",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "text": "Draft",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        }
+      },
+      "reply": {
+        "status": "saved",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        },
+        "message": null
+      }
+    },
+    {
+      "name": "resolve",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolve",
+        "path": "Note.md",
+        "token": "review",
+        "choice": "editor"
+      },
+      "reply": {
+        "status": "saved",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        },
+        "message": null
+      }
+    },
+    {
+      "name": "discard",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "discard",
+        "path": "Note.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "mkdir",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "mkdir",
+        "path": "Note.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "delete",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "delete",
+        "path": "Note.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "create",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "create",
+        "path": "New.md"
+      },
+      "reply": {
+        "status": "saved",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        },
+        "message": null
+      }
+    },
+    {
+      "name": "rename",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "rename",
+        "path": "Note.md",
+        "destination": "Other.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "copy",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "copy",
+        "path": "Note.md",
+        "destination": "Other.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "history",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "history"
+      },
+      "reply": {
+        "status": "ok",
+        "history": [
+          {
+            "path": null,
+            "deleted": false,
+            "revision": "r1",
+            "message": "Update",
+            "timestamp": 12
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleted history",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "history",
+        "path": "Note.md",
+        "exactPath": true,
+        "revision": "r1"
+      },
+      "reply": {
+        "status": "ok",
+        "history": []
+      }
+    },
+    {
+      "name": "revision",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "revision",
+        "path": "Note.md",
+        "revision": "r1",
+        "exactPath": true
+      },
+      "reply": {
+        "status": "ok",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "restore revision",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "restore",
+        "path": "Note.md",
+        "revision": "r1",
+        "destination": "Restored.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "restore draft",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "restore",
+        "path": "Note.md",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "text": "Draft"
+      },
+      "reply": {
+        "status": "saved",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        },
+        "message": null
+      }
+    },
+    {
+      "name": "historical copy",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "historicalCopy",
+        "path": "Note.md",
+        "revision": "r1",
+        "destination": "Old.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "revert",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "revert",
+        "path": "Note.md",
+        "revision": "r1"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "open file",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "openExternal",
+        "path": "Note.md"
+      },
+      "reply": {
+        "status": "ok",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "open link",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "openExternal",
+        "href": "https://example.com",
+        "destination": "Note.md"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "resource",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resource",
+        "path": "image.png"
+      },
+      "reply": {
+        "status": "ok",
+        "dataUrl": "data:image/png;base64,AA=="
+      }
+    },
+    {
+      "name": "export",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "export",
+        "path": "Note.md",
+        "text": "Draft"
+      },
+      "reply": {
+        "status": "cancelled"
+      }
+    },
+    {
+      "name": "detach",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "detach"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "forced detach",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "detach",
+        "force": true
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "quitReady",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "quitReady",
+        "token": "quit"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "cancelQuit",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "cancelQuit",
+        "token": "quit"
+      },
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "savedHistoryFailed",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "text": "Draft"
+      },
+      "reply": {
+        "status": "savedHistoryFailed",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        },
+        "message": "Retry recovery.",
+        "submittedRevision": "r2"
+      }
+    },
+    {
+      "name": "savedDraftCleanupFailed",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "text": "Draft"
+      },
+      "reply": {
+        "status": "savedDraftCleanupFailed",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        },
+        "message": "Retry recovery.",
+        "submittedRevision": "r2"
+      }
+    },
+    {
+      "name": "conflict",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "text": "Draft"
+      },
+      "reply": {
+        "status": "conflict",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "editor": "Draft",
+        "external": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "token": "review"
+      }
+    },
+    {
+      "name": "changed",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolve",
+        "path": "Note.md",
+        "token": "review",
+        "choice": "external"
+      },
+      "reply": {
+        "status": "changed",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "identity confirmation",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "text": "Draft"
+      },
+      "reply": {
+        "status": "identityConfirmation"
+      }
+    },
+    {
+      "name": "deleted",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "revision",
+        "path": "Note.md",
+        "revision": "r1"
+      },
+      "reply": {
+        "status": "deleted"
+      }
+    },
+    {
+      "name": "partial failure",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "rename",
+        "path": "Note.md",
+        "destination": "Other.md"
+      },
+      "reply": {
+        "status": "partialFailure",
+        "changedPaths": ["Note.md"],
+        "recoveryRevision": null,
+        "message": "Retry recovery."
+      }
+    },
+    {
+      "name": "saved null submitted revision",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "restore",
+        "path": "Note.md",
+        "base": { "text": "Original", "revision": "r1" },
+        "text": "Draft"
+      },
+      "reply": {
+        "status": "saved",
+        "document": {
+          "path": "Note.md",
+          "version": { "text": "Draft", "revision": "r2" },
+          "html": "<p>Draft</p>",
+          "issues": []
+        },
+        "message": null,
+        "submittedRevision": null
+      }
+    }
+  ],
+  "invalidRequests": [
+    {
+      "name": "plugin scope forbidden for stage",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "stage",
+        "pluginId": "sample",
+        "path": "entry.js",
+        "text": "changed",
+        "base": {
+          "text": "before",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "plugin scope forbidden for save",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "pluginId": "sample",
+        "path": "entry.js",
+        "text": "changed",
+        "base": {
+          "text": "before",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "plugin scope forbidden for history",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "history",
+        "pluginId": "sample",
+        "path": "entry.js",
+        "text": "changed",
+        "base": {
+          "text": "before",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "plugin scope forbidden for captureReference",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "captureReference",
+        "pluginId": "sample",
+        "path": "entry.js",
+        "text": "changed",
+        "base": {
+          "text": "before",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "plugin scope forbidden for resource",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resource",
+        "pluginId": "sample",
+        "path": "entry.js",
+        "text": "changed",
+        "base": {
+          "text": "before",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "plugin scope forbidden for detach",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "detach",
+        "pluginId": "sample",
+        "path": "entry.js",
+        "text": "changed",
+        "base": {
+          "text": "before",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "null force flag",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "detach",
+        "force": null
+      }
+    },
+    {
+      "name": "nonboolean force flag",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "detach",
+        "force": "true"
+      }
+    },
+    {
+      "name": "null deleted-file flag",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "snapshot",
+        "includeDeleted": null
+      }
+    },
+    {
+      "name": "force flag on snapshot",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "snapshot",
+        "force": true
+      }
+    },
+    {
+      "name": "Git anchor with trailing newline",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+        }
+      }
+    },
+    {
+      "name": "path-only reference",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt"
+        }
+      }
+    },
+    {
+      "name": "null Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": null
+        }
+      }
+    },
+    {
+      "name": "uppercase Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    },
+    {
+      "name": "short Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "symbolic Git anchor",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "HEAD"
+        }
+      }
+    },
+    {
+      "name": "null file identity",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "fileId": null
+        }
+      }
+    },
+    {
+      "name": "null alternate identity",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "fileId": null
+        }
+      }
+    },
+    {
+      "name": "unknown reference field",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "extra": 1
+        }
+      }
+    },
+    {
+      "name": "obsolete path journal",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "pathEpoch": 0,
+          "pathJournalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "reference resolution requires its identity",
+      "request": { "workspaceId": "workspace", "operation": "resolveReference" }
+    },
+    {
+      "name": "reference capture cannot substitute preview text",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "captureReference",
+        "path": "Note.md",
+        "text": "Preview"
+      }
+    },
+    {
+      "name": "reference identity and Git anchor are exclusive",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolveReference",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "Note.md",
+          "fileId": "11111111-1111-4111-8111-111111111111",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "save missing text",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "save missing path",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "text": "private text",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "save missing base",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "text": "Draft"
+      }
+    },
+    {
+      "name": "resolve missing token",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolve",
+        "path": "Note.md",
+        "choice": "editor"
+      }
+    },
+    {
+      "name": "resolve missing choice",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolve",
+        "path": "Note.md",
+        "token": "review"
+      }
+    },
+    {
+      "name": "invalid choice",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "resolve",
+        "path": "Note.md",
+        "token": "review",
+        "choice": "private text"
+      }
+    },
+    {
+      "name": "irrelevant choice",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "save",
+        "path": "Note.md",
+        "text": "Draft",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "choice": "editor"
+      }
+    },
+    {
+      "name": "mixed restore",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "restore",
+        "path": "Note.md",
+        "revision": "r1",
+        "text": "Draft",
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "empty restore",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "restore",
+        "path": "Note.md"
+      }
+    },
+    {
+      "name": "mixed link",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "openExternal",
+        "path": "Note.md",
+        "href": "link",
+        "destination": "Note.md"
+      }
+    },
+    {
+      "name": "contextless link",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "openExternal",
+        "href": "link"
+      }
+    },
+    {
+      "name": "exact history without revision",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "history",
+        "path": "Note.md",
+        "exactPath": true
+      }
+    },
+    {
+      "name": "unknown operation",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "private text"
+      }
+    },
+    {
+      "name": "unknown field",
+      "request": {
+        "workspaceId": "workspace",
+        "operation": "snapshot",
+        "root": "private path"
+      }
+    }
+  ],
+  "invalidReplies": [
+    {
+      "name": "binary forbidden for openExternal",
+      "operation": "openExternal",
+      "reply": {
+        "status": "binary"
+      }
+    },
+    {
+      "name": "binary forbidden for revision",
+      "operation": "revision",
+      "reply": {
+        "status": "binary"
+      }
+    },
+    {
+      "name": "binary forbidden for snapshot",
+      "operation": "snapshot",
+      "reply": {
+        "status": "binary"
+      }
+    },
+    {
+      "name": "binary forbidden for save",
+      "operation": "save",
+      "reply": {
+        "status": "binary"
+      }
+    },
+    {
+      "name": "Git anchor with trailing newline",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+        }
+      }
+    },
+    {
+      "name": "captureReference: path-only reference",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt"
+        }
+      }
+    },
+    {
+      "name": "resolveReference: path-only reference",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt"
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: null Git anchor",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": null
+        }
+      }
+    },
+    {
+      "name": "resolveReference: null Git anchor",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": null
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: uppercase Git anchor",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    },
+    {
+      "name": "resolveReference: uppercase Git anchor",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: short Git anchor",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "resolveReference: short Git anchor",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: symbolic Git anchor",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "HEAD"
+        }
+      }
+    },
+    {
+      "name": "resolveReference: symbolic Git anchor",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "HEAD"
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: null file identity",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "fileId": null
+        }
+      }
+    },
+    {
+      "name": "resolveReference: null file identity",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "fileId": null
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: null alternate identity",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "fileId": null
+        }
+      }
+    },
+    {
+      "name": "resolveReference: null alternate identity",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "fileId": null
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: unknown reference field",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "extra": 1
+        }
+      }
+    },
+    {
+      "name": "resolveReference: unknown reference field",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "extra": 1
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captureReference: obsolete path journal",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "pathEpoch": 0,
+          "pathJournalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "resolveReference: obsolete path journal",
+      "operation": "resolveReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "data.txt",
+          "pathEpoch": 0,
+          "pathJournalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "document": {
+          "path": "data.txt",
+          "version": {
+            "text": "Data",
+            "revision": "r1"
+          },
+          "html": "",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "captured reference has an invalid UUID",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "Note.md",
+          "fileId": "not-a-uuid"
+        }
+      }
+    },
+    {
+      "name": "captured reference has conflicting identities",
+      "operation": "captureReference",
+      "reply": {
+        "status": "ok",
+        "reference": {
+          "kind": "live",
+          "workspaceId": "workspace",
+          "path": "Note.md",
+          "fileId": "11111111-1111-4111-8111-111111111111",
+          "anchorRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "irrelevant null submitted revision",
+      "operation": "read",
+      "reply": { "status": "deleted", "submittedRevision": null }
+    },
+    {
+      "name": "missing snapshot reason",
+      "operation": "snapshot",
+      "reply": {
+        "status": "ok",
+        "snapshot": { "writable": false, "entries": [], "drafts": [] }
+      }
+    },
+    {
+      "name": "missing recovery revision",
+      "operation": "rename",
+      "reply": {
+        "status": "partialFailure",
+        "changedPaths": [],
+        "message": "Retry."
+      }
+    },
+    {
+      "name": "missing snapshot",
+      "operation": "snapshot",
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "missing document",
+      "operation": "read",
+      "reply": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "wrong operation payload",
+      "operation": "read",
+      "reply": {
+        "status": "ok",
+        "history": []
+      }
+    },
+    {
+      "name": "missing saved document",
+      "operation": "save",
+      "reply": {
+        "status": "saved"
+      }
+    },
+    {
+      "name": "missing conflict base",
+      "operation": "save",
+      "reply": {
+        "status": "conflict",
+        "editor": "Draft",
+        "external": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "token": "review"
+      }
+    },
+    {
+      "name": "missing conflict token",
+      "operation": "save",
+      "reply": {
+        "status": "conflict",
+        "editor": "Draft",
+        "external": {
+          "text": "# Note\n",
+          "revision": "r1"
+        },
+        "base": {
+          "text": "# Note\n",
+          "revision": "r1"
+        }
+      }
+    },
+    {
+      "name": "invalid document",
+      "operation": "read",
+      "reply": {
+        "status": "ok",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "Draft"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "invalid snapshot",
+      "operation": "snapshot",
+      "reply": {
+        "status": "ok",
+        "snapshot": {
+          "writable": "yes",
+          "canExport": true,
+          "reason": null,
+          "entries": [
+            {
+              "path": "Note.md",
+              "isDirectory": false
+            }
+          ],
+          "drafts": [
+            {
+              "path": "Note.md",
+              "base": {
+                "text": "# Note\n",
+                "revision": "r1"
+              },
+              "text": "Draft"
+            }
+          ],
+          "deleted": []
+        }
+      }
+    },
+    {
+      "name": "invalid draft",
+      "operation": "snapshot",
+      "reply": {
+        "status": "ok",
+        "snapshot": {
+          "writable": true,
+          "canExport": true,
+          "reason": null,
+          "entries": [
+            {
+              "path": "Note.md",
+              "isDirectory": false
+            }
+          ],
+          "drafts": [
+            {
+              "path": "Note.md",
+              "text": "Draft"
+            }
+          ],
+          "deleted": []
+        }
+      }
+    },
+    {
+      "name": "missing history failure message",
+      "operation": "save",
+      "reply": {
+        "status": "savedHistoryFailed",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        }
+      }
+    },
+    {
+      "name": "mixed response",
+      "operation": "save",
+      "reply": {
+        "status": "saved",
+        "document": {
+          "path": "Note.md",
+          "version": {
+            "text": "# Note\n",
+            "revision": "r1"
+          },
+          "html": "<h1>Note</h1>",
+          "issues": []
+        },
+        "message": null,
+        "snapshot": {
+          "writable": true,
+          "canExport": true,
+          "reason": null,
+          "entries": [
+            {
+              "path": "Note.md",
+              "isDirectory": false
+            }
+          ],
+          "drafts": [
+            {
+              "path": "Note.md",
+              "base": {
+                "text": "# Note\n",
+                "revision": "r1"
+              },
+              "text": "Draft"
+            }
+          ],
+          "deleted": []
+        }
+      }
+    },
+    {
+      "name": "invalid partial failure",
+      "operation": "rename",
+      "reply": {
+        "status": "partialFailure",
+        "message": "Retry",
+        "changedPaths": [7],
+        "recoveryRevision": null
+      }
+    },
+    {
+      "name": "unknown status",
+      "operation": "read",
+      "reply": {
+        "status": "private text"
+      }
+    }
+  ]
+}

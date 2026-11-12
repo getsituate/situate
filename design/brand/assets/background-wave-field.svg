@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="background-wave-field-title" aria-describedby="background-wave-field-desc">
+  <title id="background-wave-field-title">Wave field</title>
+  <desc id="background-wave-field-desc">Two broad, undulating landform planes overlap along a low curved boundary.</desc>
+  <path d="M40 169C103 62 178 29 263 92C327 139 374 159 435 113C499 66 555 87 588 135Q600 151 600 173V332Q600 350 582 350H58Q40 350 40 332Z" fill="#eee7f9"/>
+  <path d="M40 236C123 291 183 247 250 207C304 175 342 182 401 215C463 250 522 251 600 205V332Q600 350 582 350H58Q40 350 40 332Z" fill="#d9d0df"/>
+</svg>

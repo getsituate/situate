@@ -1,0 +1,31 @@
+= Situate Architecture
+:lang: en
+:toc: left
+:toclevels: 2
+:sectnums:
+:sectnumlevels: 2
+:sectanchors:
+
+include::01-introduction-goals.adoc[]
+
+include::02-architecture-constraints.adoc[]
+
+include::03-context-scope.adoc[]
+
+include::04-solution-strategy.adoc[]
+
+include::05-building-block-view.adoc[]
+
+include::06-runtime-view.adoc[]
+
+include::07-deployment-view.adoc[]
+
+include::08-cross-cutting-concepts.adoc[]
+
+include::09-architecture-decisions.adoc[]
+
+include::10-quality-requirements.adoc[]
+
+include::11-risks-technical-debt.adoc[]
+
+include::12-glossary.adoc[]

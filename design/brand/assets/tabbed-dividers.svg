@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 188" role="img" aria-labelledby="tabbed-dividers-title" aria-describedby="tabbed-dividers-desc">
+  <title id="tabbed-dividers-title">Three tabbed paper dividers</title>
+  <desc id="tabbed-dividers-desc">Offset paper dividers step forward beneath broad cobalt, tangerine, and violet tabs.</desc>
+  <g id="rear-divider">
+    <path d="M111 22h34q9 0 9 9v122q0 9-9 9H58q-9 0-9-9V52q0-9 9-9h45V30q0-8 8-8Z" fill="#6232bc"/>
+    <path d="M52 36h87q9 0 9 9v101q0 9-9 9H52q-9 0-9-9V45q0-9 9-9Z" fill="#eee7f9"/>
+    <path d="M105 15h34q9 0 9 9v24H97V23q0-8 8-8Z" fill="#305cf4"/>
+  </g>
+  <g id="middle-divider">
+    <path d="M39 52h89q9 0 9 9v95q0 9-9 9H39q-9 0-9-9V61q0-9 9-9Z" fill="#ffc3a3"/>
+    <path d="M73 31h28q8 0 8 8v25H65V39q0-8 8-8Z" fill="#ff874d"/>
+  </g>
+  <g id="front-divider">
+    <path d="M30 70h89q9 0 9 9v89q0 8-9 8H30q-9 0-9-8V79q0-9 9-9Z" fill="#ff874d"/>
+    <path d="M26 65h89q9 0 9 9v89q0 8-9 8H26q-9 0-9-8V74q0-9 9-9Z" fill="#fff7e3"/>
+    <path d="M25 49h27q8 0 8 8v22H17V57q0-8 8-8Z" fill="#8651ed"/>
+  </g>
+</svg>

@@ -1,0 +1,45 @@
+name: Agent live API
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'getsituate/situate' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    environment: agent-live
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: volta-cli/action@615a78f6c83e116339c53b94f3f82b4d6c0b7d18
+        with:
+          volta-version: 2.0.2
+      - name: Install dependencies without provider credentials
+        run: npm ci --prefix client
+      - name: Run bounded live journey
+        env:
+          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+        run: |
+          mkdir -p test-results
+          node client/scripts/test-agent-e2e.mjs --provider openai --build-timeout 1800 > test-results/agent-live.json
+      - name: Retain structured result
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: agent-live-result
+          path: test-results/agent-live.json
+          retention-days: 7
+          if-no-files-found: error

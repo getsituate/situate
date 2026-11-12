@@ -1,0 +1,60 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Implementation scope
+
+The client under `client/` implements workspace entry and lifecycle, a Files view with Markdown editing, reading and history/recovery, and persistent topic tabs with pane-local navigation.
+A window-authorized bridge connects those views to path-backed Git storage, drafts, metadata and structural operations.
+Desktop filesystem and application-owned mobile folders are writable; external mobile providers remain read-only without history initialization.
+An unobserved external write can still be overwritten; source integration does not establish platform durability or complete recovery.
+See link:{strategy-requirements-root}/data/foundations.md#initial-file-editor-delivery[Initial file-editor delivery], <<ui-building-blocks>> and <<current-client-packages>> for detailed mappings and limits.
+
+Native conversation execution uses Rig under <<adr-0013,ADR-0013>>, with application-owned storage and provider/tool adapters rather than a WebView-based Pi fallback.
+Versioned records protect against invalid-data overwrite but do not by themselves implement conversation history or branching.
+Workspace-scoped operations and quit coordination are described in <<current-workspace-operations>> and <<current-application-quit>>; native AI ownership, browser dependency boundaries and the initial JavaScript budget are described in <<deferred-ai-loading>> and <<frontend-bundle-budget>>.
+The link:{architecture-repository-root}/docs/development/provider-qualification.md[qualification record] distinguishes source integration, deterministic checks, native platform evidence and live-provider evidence.
+
+Feasibility prototypes demonstrated runtime JavaScript editing and activation, shared/custom UI, core-view contributions and app-local checks.
+Commit `82770f1188730fb7e6ef7db0fc72a4ce8aec1a0e` on `prototype/tauri` demonstrated shared host/plugin Vue components, local template editing, container-responsive layouts and view cleanup on Android, the iOS simulator and macOS; `prototypes/tauri/VERIFICATION.md` on that branch records the evidence.
+A central component update changed both consumers without changing stored plugin source. This verifies that scenario, not general SDK compatibility, mobile plugin qualification or store approval.
+Those prototypes used change journals, not Git, and do not verify the current core's Git durability, synchronization or interruption recovery.
+The macOS client supplies declared function exports, required local dependencies and recovery startup; plugin-to-plugin Vue component exports remain design work.
+
+=== Detailed design and verification work
+
+The selected direction is Tauri, Rust, shared Vue components, plain JavaScript with locally compiled templates, native Rig conversation ownership, Markdown and Git-backed history within independent workspaces.
+Trusted plugins have no additional mandatory isolation runtime; recovery startup supplies a repair path, not prevention of every runtime failure.
+The following gaps do not imply that all mechanisms are absent or that every item requires an ADR. Consequential alternatives belong in decision records; detailed protocols and qualification belong in their corresponding views.
+
+==== Interfaces, storage and runtime
+
+* Vue component export formats, typed contracts and verification within the approved public-interface compatibility policy; mixed-version workspace handling under REQ-0069 and plugin version checks under REQ-0070.
+* Broader loader/local-compilation qualification, native mobile execution and access, and effective recovery entry before plugin code loads.
+* Interruption and durability qualification of Git-backed plugin source, checked dependency revisions, the Active Revision Map and plugin activation publication outcomes. Overlapping development does not imply automatic conflict-free merging or repair of uncertain activation.
+* Local security-review coverage and inconclusive results, retaining the specified warning override; automated review does not replace initial manual marketplace review.
+* Interactive duplicate-task-ID repair, additional reference forms, non-text comparison/reversal controls, mobile external recovery export and larger structural operations.
+* Consistent snapshots, partial external writes, and checked-replacement races with noncooperating writers; native Apple permission, interruption and durability evidence.
+* Connected-document metadata, connector capabilities, external reference identity and search preparation within agreed source/processing boundaries.
+* Remaining structural agent tools, the full plugin-development tool surface and the managed AI router; database choices remain open.
+
+==== Synchronization and service design
+
+* Consistent transport representations and active-state snapshots; cadence and recording local edits during unresolved synchronization conflicts.
+* Cryptographic protocols, key separation, rotation, revocation, metadata protection and account recovery/device provisioning.
+* Corrupt-history backup placement and coordination with remote histories after confirmed local reinitialization.
+* Cross-device trigger coordination, transport support and recovery after stale execution claims, without an exactly-once guarantee.
+* Deferred marketplace hosting, identity, submission/review storage, reports, blocking and general terms/administrator procedures; deployment providers and operating-system file integration remain open.
+
+==== Interaction and verification
+
+* Target-platform shared-component, accessibility and interruption qualification; broader compatibility than the demonstrated prototype scenarios.
+* Concurrent layout reconciliation, same-workspace window assignment and mobile workspace switching/closure, including combined action and pending-synchronization choices.
+* Mobile recovery entry and broader multi-workspace startup gating; testing or resuming faulty code can freeze the app again.
+* Import preservation of content, metadata, links, attachments and task field meanings, including unsupported states and malformed metadata.
+* Presentation of retained binary variants, uncertain external continuity, missing restoration parents, whole-version conflicts and failed-save recovery.
+
+Evidence invalidating a central assumption can require revisiting the strategy. Windows, Linux desktop and Android qualification remain deferred rather than prerequisites for the macOS/iOS MVP.

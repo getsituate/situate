@@ -1,0 +1,46 @@
+name: situate-production
+
+services:
+  website:
+    image: nginx@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+    user: "101:101"
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./site:/usr/share/nginx/html:ro
+      - /opt/situate:/srv/distribution:ro
+    tmpfs:
+      - /var/cache/nginx:uid=101,gid=101,mode=0700
+      - /tmp:uid=101,gid=101,mode=0700
+    networks:
+      edge:
+        aliases:
+          - situate-production
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8080/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+networks:
+  edge:
+    external: true
+    name: getsituate_default

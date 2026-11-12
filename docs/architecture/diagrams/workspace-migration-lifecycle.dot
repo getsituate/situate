@@ -1,0 +1,23 @@
+digraph WorkspaceMigrationLifecycle {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.4, ranksep=0.45, fontname="Helvetica", fontsize=12];
+  node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  prepare [label="Compatible app; pending migrations\nHold exclusive local access\nRecover or clean up any prior backup"];
+  backup [label="Ensure a complete, durable\nrecovery backup of the original state"];
+  chain [label="Apply pending migrations in order\nExample: M002, then M003"];
+  validate [label="Validate the result\nPersist migration ID and any\ndeliberate minimum-version increase"];
+  retire [label="Durably retire the recovery backup\nThen delete it completely"];
+  open [label="Open the workspace\nAllow execution and synchronization", fillcolor="#e5effa"];
+  restore [label="Restore the original state\nincluding compatibility metadata"];
+  error [label="Keep workspace closed; report error\nRetain backup if restoration fails", fillcolor="#fbe9e7"];
+
+  prepare -> backup;
+  backup -> chain;
+  chain -> validate [label="Success"];
+  validate -> retire [label="Success"];
+  retire -> open [label="Success"];
+  chain -> restore [label="Failure"];
+  validate -> restore [label="Failure"];
+  restore -> error;
+}

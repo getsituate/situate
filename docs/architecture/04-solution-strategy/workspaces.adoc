@@ -1,0 +1,70 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::strategy-diagrams-root[]
+:strategy-diagrams-root: ../diagrams
+endif::[]
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[strategy-workspaces]]
+[[strategy-vaults]]
+=== Independent workspaces
+
+A workspace is a self-contained personal organizational system.
+Its content, conversations, plugins, configuration, connected accounts and model settings belong to that workspace.
+Users may keep everything together or separate areas of their work into independent workspaces; no particular division is prescribed.
+The core does not automatically search other workspaces, share their conversation context or connect plugin dependencies across them.
+
+Workspace separation is an ownership and lifecycle boundary, not a security sandbox for trusted plugins.
+A deliberately developed plugin may access another workspace where operating-system access and permissions allow it.
+Such extensions do not introduce built-in team collaboration, roles or multi-user conflict guarantees.
+See link:{strategy-requirements-root}/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037].
+
+=== Open-workspace lifecycle
+
+Several workspaces can operate independently in separate desktop windows. Mobile workspace switching changes presentation without closing the previous workspace.
+Execution and synchronization require that workspace to remain open, not merely a running application; closing its last window stops its agents, plugins, automation and synchronization without stopping other workspaces.
+The native host coordinates whether closure may start through <<glossary-lifecycle-admission,Lifecycle Admission>>, distinct from accepting individual requests through Operation Admission.
+The <<strategy-workspace-closure,closure policy>> blocks new starts while the user decides, preserves running work on cancellation and warns that aborting does not undo external effects.
+Pending synchronization remains a separate choice between synchronization before closure and retaining local changes for later. Combined presentation of those choices remains open.
+Mobile work remains subject to operating-system limits; suspension and forced termination cannot guarantee interactive closure.
+
+At application startup, Situate automatically reopens the workspaces that were last open.
+Workspaces explicitly closed individually are not reopened merely because they were used earlier; application exit preserves the set to restore on startup.
+Reopening makes local content usable immediately, detects external edits and resumes configured synchronization. Conflicts pause only that workspace's synchronization, not local editing or other workspaces.
+Interrupted conversations wait for user interaction; new scheduled work follows the plugin's missed-trigger policy.
+The <<strategy-plugin-recovery-start,recovery startup>> suppresses plugin code across restored and subsequently opened workspaces before loading it.
+No always-running service keeps a closed workspace active; the link:{architecture-repository-root}/client/README.md#workspaces[workspace guide] defines session navigation and restoration details.
+See link:{strategy-requirements-root}/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011] and link:{strategy-requirements-root}/data/requirements/REQ-0031-run-plugins-independently-of-views.md[REQ-0031].
+
+.Normal operation and explicit closure of one workspace; other open workspaces continue independently. Recovery startup suppresses plugin execution across restored workspaces. Action and synchronization choices are shown separately, not as a prescribed dialog sequence.
+image::{strategy-diagrams-root}/workspace-lifecycle.svg["Workspace opening enables local work and configured synchronization. Closure blocks new starts pending a decision. Cancellation restores normal operation; abort-and-close stops running work. If closure proceeds, synchronization first or retention of pending local changes remain separate choices."]
+
+=== Local entry, recognition and registry
+
+Creation makes a new named child directory and an initially empty `.situate` marker, never reusing an existing file, directory or symlink at that destination.
+Partial creation failure preserves created data and reports what happened rather than recursively deleting leftovers or claiming no change.
+Opening recognizes an accessible marker without converting ordinary folders; recognition grants neither trust nor execution permission.
+
+The native host keeps known locations, open sessions, startup restoration and mobile presentation as distinct device-local registry state.
+Removing a remembered location does not delete content, close its session or remove it from restoration. Corrupt or unsupported registry data is not silently reset.
+Native session authorization binds requests to the actual workspace; frontend identifiers and display names cannot grant access.
+Mobile entry uses real directory access and persistent grants where supported, not fictitious paths or temporary copies of provider storage. Lost access requires retry or renewed authorization rather than replacing the remembered location.
+See the link:{architecture-repository-root}/client/README.md#workspaces[workspace guide] for registry persistence, location reuse, startup failures and platform access limits.
+See link:{strategy-requirements-root}/data/requirements/REQ-0044-select-and-remember-workspaces.md[REQ-0044], link:{strategy-requirements-root}/data/requirements/REQ-0045-create-local-workspaces.md[REQ-0045] and link:{strategy-requirements-root}/data/requirements/REQ-0046-open-existing-local-workspaces.md[REQ-0046].
+
+=== Portable directory and per-workspace services
+
+Each workspace is one portable directory containing user files, chats, plugin code, configuration, data, internal state and all associated histories.
+Ordinary files remain directly accessible; internal state can occupy a hidden area without requiring a separate export to copy the complete workspace.
+A consistent copy can be made with the workspace closed; a safe live-copy mechanism remains open.
+Operational AI settings are an exception to directory completeness: connections, endpoints, credentials, selected access, model defaults and conversation overrides remain local to the workspace on each device.
+Neither official nor custom synchronization transfers them. New devices configure access independently; copied content remains readable and manually editable before setup.
+See link:{strategy-requirements-root}/data/requirements/REQ-0038-copy-portable-workspaces.md[REQ-0038].
+
+Synchronization is configured independently for each workspace: no synchronization, the official service or a custom synchronization plugin.
+AI connections are chosen per workspace and device, including compatible locally operated endpoints as well as external providers.
+Choosing a local endpoint and no synchronization does not prohibit networking by the workspace or its plugins.
+See link:{strategy-requirements-root}/data/requirements/REQ-0013-synchronization-service.md[REQ-0013] and link:{strategy-requirements-root}/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015].

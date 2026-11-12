@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 196 204" role="img" aria-labelledby="paper-mobile-title" aria-describedby="paper-mobile-desc">
+  <title id="paper-mobile-title">Paper mobile</title>
+  <desc id="paper-mobile-desc">A curved violet support suspends a lemon paper leaf, a small folded cream page, and a tangerine diamond.</desc>
+  <path d="M96 12v23M30 51v47m66-64v90m64-74v41" fill="none" stroke="#ad9284" stroke-width="3" stroke-linecap="round"/>
+  <path d="M29 55c40-26 93-29 139-3" fill="none" stroke="#6232bc" stroke-width="9" stroke-linecap="round"/>
+  <path d="M24 49c40-26 93-29 139-3" fill="none" stroke="#8651ed" stroke-width="9" stroke-linecap="round"/>
+  <path d="M35 93c30 10 35 41 3 65C6 142 9 111 35 93Z" fill="#da592f"/>
+  <path d="M30 87c30 10 35 41 3 65C1 136 4 105 30 87Z" fill="#f4f06d"/>
+  <path d="M30 87c30 10 35 41 3 65Z" fill="#ffc3a3"/>
+  <path d="M79 122h31l14 14v53H79Z" fill="#ffc3a3"/>
+  <path d="M74 116h31l14 14v53H74Z" fill="#fff7e3"/>
+  <path d="M105 116v14h14Z" fill="#ff874d"/>
+  <path d="M86 146h20m-20 11h14" fill="none" stroke="#ad9284" stroke-width="3" stroke-linecap="round"/>
+  <path d="m165 83 22 25-25 37-26-33Z" fill="#da592f"/>
+  <path d="m160 77 22 25-25 37-26-33Z" fill="#ff874d"/>
+  <path d="m160 77-3 62 25-37Z" fill="#ffc3a3"/>
+</svg>

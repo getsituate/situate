@@ -1,0 +1,73 @@
+name: Swift quality tools
+description: Restore or install verified pinned Swift quality tools for the active Apple toolchain.
+outputs:
+  key:
+    description: Exact tool and compiler identity
+    value: ${{ steps.identity.outputs.key }}
+  hit:
+    description: Whether the exact cache was restored
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: identity
+      shell: bash
+      env:
+        CACHE_OS: ${{ runner.os }}
+        CACHE_ARCH: ${{ runner.arch }}
+      run: |
+        test "$RUNNER_OS" = macOS
+        SWIFT_IDENTITY=$(swift --version)
+        XCODE_IDENTITY=$(xcodebuild -version)
+        export SWIFT_IDENTITY XCODE_IDENTITY
+        node --input-type=module <<'NODE'
+        import { createHash } from 'node:crypto';
+        import { appendFileSync, readFileSync } from 'node:fs';
+        const pins = JSON.parse(readFileSync('tools/toolchain.quality.json', 'utf8'));
+        const identity = [process.env.CACHE_OS, process.env.CACHE_ARCH,
+          process.env.SWIFT_IDENTITY, process.env.XCODE_IDENTITY,
+          pins['swift-format'], pins.swiftlint];
+        const digest = createHash('sha256').update(JSON.stringify(identity)).digest('hex');
+        appendFileSync(process.env.GITHUB_OUTPUT, `key=swift-tools-v1-${digest}\n`);
+        NODE
+    - id: restore
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ${{ runner.temp }}/situate-swift-tools
+        key: ${{ steps.identity.outputs.key }}
+    - name: Install pinned tools
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        build_dir=$(mktemp -d "$RUNNER_TEMP/swift-tools.XXXXXX")
+        trap 'rm -rf "$build_dir"' EXIT
+        rm -rf "$RUNNER_TEMP/situate-swift-tools"
+        mkdir -p "$RUNNER_TEMP/situate-swift-tools"
+        version=$(node -p "require('./tools/toolchain.quality.json')['swift-format'].version")
+        revision=$(node -p "require('./tools/toolchain.quality.json')['swift-format'].revision")
+        git clone --depth 1 --branch "$version" https://github.com/swiftlang/swift-format.git "$build_dir/swift-format"
+        test "$(git -C "$build_dir/swift-format" rev-parse HEAD)" = "$revision"
+        swift build --package-path "$build_dir/swift-format" -c release --product swift-format
+        cp "$build_dir/swift-format/.build/release/swift-format" "$RUNNER_TEMP/situate-swift-tools/"
+        version=$(node -p "require('./tools/toolchain.quality.json').swiftlint.version")
+        digest=$(node -p "require('./tools/toolchain.quality.json').swiftlint.sha256")
+        curl --fail --location "https://github.com/realm/SwiftLint/releases/download/$version/portable_swiftlint.zip" -o "$build_dir/swiftlint.zip"
+        echo "$digest  $build_dir/swiftlint.zip" | shasum -a 256 --check
+        unzip "$build_dir/swiftlint.zip" -d "$build_dir/swiftlint"
+        cp "$build_dir/swiftlint/swiftlint" "$RUNNER_TEMP/situate-swift-tools/"
+        chmod +x "$RUNNER_TEMP/situate-swift-tools/swiftlint"
+    - name: Expose tools
+      shell: bash
+      run: |
+        test -x "$RUNNER_TEMP/situate-swift-tools/swift-format"
+        test -x "$RUNNER_TEMP/situate-swift-tools/swiftlint"
+        echo "$RUNNER_TEMP/situate-swift-tools" >> "$GITHUB_PATH"
+    - name: Save verified tools
+      if: >-
+        success() && steps.restore.outputs.cache-hit != 'true' &&
+        github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main' &&
+        (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ${{ runner.temp }}/situate-swift-tools
+        key: ${{ steps.identity.outputs.key }}

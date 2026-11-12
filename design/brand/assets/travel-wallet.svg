@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 0 184 158" role="img" aria-labelledby="travel-wallet-title" aria-describedby="travel-wallet-desc">
+  <title id="travel-wallet-title">Travel wallet</title>
+  <desc id="travel-wallet-desc">A small folded violet wallet carries a creased map and a protruding lemon ticket.</desc>
+  <path d="M30 53h124q14 0 14 14v68q0 10-10 10H30q-10 0-10-10V63q0-10 10-10Z" fill="#6232bc"/>
+  <path d="m27 28 29-10 29 10 27-10 7 81-28 10-29-10-29 10Z" fill="#fff7e3"/>
+  <path d="m56 18 29 10 6 81-29-10Z" fill="#ffc3a3"/>
+  <path d="m37 59 16-15 23 18 19-15 12 6" fill="none" stroke="#305cf4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m56 23 5 69m24-57 5 63" fill="none" stroke="#ad9284" stroke-width="2" stroke-linecap="round"/>
+  <g transform="rotate(12 137 58)">
+    <path d="M114 14h40q4 0 4 4v17a7 7 0 0 0 0 14v50q0 4-4 4h-40q-4 0-4-4V49a7 7 0 0 0 0-14V18q0-4 4-4Z" fill="#f4f06d"/>
+    <path d="M121 27h26" fill="none" stroke="#ff874d" stroke-width="6" stroke-linecap="round"/>
+    <path d="M122 55h24m-24 12h15" fill="none" stroke="#30203e" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <path d="M26 65c43 21 92 20 136-5v69q0 10-10 10H26q-12 0-12-12V73q0-13 12-8Z" fill="#6232bc"/>
+  <path d="M20 59c43 21 92 20 136-5v69q0 10-10 10H20q-12 0-12-12V67q0-13 12-8Z" fill="#8651ed"/>
+  <path d="M28 111v6h29" fill="none" stroke="#d9c6ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

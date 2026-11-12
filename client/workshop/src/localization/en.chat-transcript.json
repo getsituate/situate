@@ -1,0 +1,12 @@
+{
+  "retry": "Try again",
+  "activity": "Activity",
+  "step": "{count} step",
+  "steps": "{count} steps",
+  "input": "Input",
+  "result": "Result",
+  "bookShelf": "Using Book shelf",
+  "removed": "Removed",
+  "added": "Added",
+  "details": "Call details"
+}

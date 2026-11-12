@@ -1,0 +1,25 @@
+digraph DeviceProvisioning {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  login [label="Sign in on new device"];
+  route [label="Authorization\nroute available?", shape=diamond];
+  existing [label="Existing authorized device"];
+  recovery [label="User-held recovery key"];
+  authorize [label="Authorize device\nand provision keys", fillcolor="#eee7f9", color="#6232bc"];
+  service [label="Official sync service\nEncrypted content only", shape=cylinder];
+  local [label="Decrypt workspace locally"];
+  lost [label="No server-content recovery\nwithout a usable local copy"];
+
+  login -> route [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Login alone cannot decrypt</TD></TR></TABLE>>];
+  route -> existing [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Device route</TD></TR></TABLE>>];
+  route -> recovery [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Recovery-key route</TD></TR></TABLE>>];
+  route -> lost [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Neither</TD></TR></TABLE>>];
+  existing -> authorize;
+  recovery -> authorize;
+  authorize -> local [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>User-controlled key access</TD></TR></TABLE>>];
+  service -> local [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Encrypted transfer</TD></TR></TABLE>>];
+
+  { rank=same; existing; recovery; }
+}

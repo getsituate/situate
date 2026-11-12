@@ -1,0 +1,33 @@
+{
+  "name": "cto",
+  "label": "CTO",
+  "summary": "Technical direction, architecture decisions, security, delivery strategy, and operations.",
+  "useWhen": [
+    "Compare technical options and their consequences for product goals, cost, and risk.",
+    "Resolve cross-cutting system design, security, delivery, or operational decisions.",
+    "Maintain technical arc42 documentation and architecture decisions."
+  ],
+  "avoidWhen": [
+    "The task is primarily customer discovery, business strategy, pricing, or product prioritization.",
+    "The task is a scoped implementation, bug fix, or test change within agreed architecture; use Developer."
+  ],
+  "skills": [
+    "architecture-code-review-refactoring",
+    "writing-adrs",
+    "asciidoc-best-practices",
+    "diagramming-best-practices",
+    "writing-clearly-and-concisely",
+    "arc42-chapter-01-introduction-goals",
+    "arc42-chapter-02-architecture-constraints",
+    "arc42-chapter-03-context-scope",
+    "arc42-chapter-04-solution-strategy",
+    "arc42-chapter-05-building-block-view",
+    "arc42-chapter-06-runtime-view",
+    "arc42-chapter-07-deployment-view",
+    "arc42-chapter-08-cross-cutting-concepts",
+    "arc42-chapter-09-architecture-decisions",
+    "arc42-chapter-10-quality-requirements",
+    "arc42-chapter-11-risks-technical-debt",
+    "arc42-chapter-12-glossary"
+  ]
+}

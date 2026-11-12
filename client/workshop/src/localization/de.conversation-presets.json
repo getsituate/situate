@@ -1,0 +1,15 @@
+{
+  "ready": "Antwort fertig",
+  "working": "In Arbeit",
+  "changes": "Notizänderungen",
+  "question": "Frage",
+  "approval": "Freigabe erforderlich",
+  "notice": "Plugin verfügbar",
+  "stopped": "Gestoppt",
+  "error": "Unterbrochen",
+  "unavailable": "KI nicht verfügbar",
+  "empty": "Neues Gespräch",
+  "questionExample": "Fragebeispiel",
+  "followup": "Ergänzende Nachrichten",
+  "questionNote": "Ein anderes Fragebeispiel ersetzt den Text und leert den Entwurf."
+}

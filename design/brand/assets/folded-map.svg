@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 164" role="img" aria-labelledby="folded-map-title" aria-describedby="folded-map-desc">
+  <title id="folded-map-title">A route across a folded map</title>
+  <desc id="folded-map-desc">One violet route curves across three broad accordion-folded paper panels.</desc>
+  <path id="map-depth" d="m24 41 54-18 59 20 50-17c3-1 6 1 6 4v98c0 3-1 5-4 6l-52 18-59-20-50 17c-3 1-6-1-6-4V47c0-3 0-5 2-6Z" fill="#ad9284"/>
+  <g id="map-panels">
+    <path d="m18 35 54-18v109l-50 17c-3 1-6-1-6-4V41c0-3 0-5 2-6Z" fill="#fff7e3"/>
+    <path d="m72 17 59 20v109l-59-20Z" fill="#ffc3a3"/>
+    <path d="m131 37 50-17c3-1 6 1 6 4v98c0 3-1 5-4 6l-52 18Z" fill="#fff7e3"/>
+  </g>
+  <path id="route" d="M35 109c-5-26 12-46 32-36s35 44 52 15 29-43 50-31" fill="none" stroke="#8651ed" stroke-width="7" stroke-linecap="round"/>
+  <g id="route-ends" fill="#8651ed">
+    <circle cx="35" cy="109" r="6"/>
+    <circle cx="169" cy="57" r="6"/>
+  </g>
+</svg>

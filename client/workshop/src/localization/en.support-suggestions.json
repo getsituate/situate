@@ -1,0 +1,32 @@
+{
+  "controls": {
+    "ready": "10 · Support · suggestions ready",
+    "waiting": "10.2 · Support · analyzing",
+    "error": "10.3 · Support · analysis failed",
+    "empty": "10.4 · Support · no suggestions",
+    "fewer": "10.5 · Support · one suggestion"
+  },
+  "methodHeading": "Agreed working method",
+  "filesHeading": "Available imported files",
+  "cleanContext": "No destination files are referenced for this idea. Base this tool on the agreed working method.",
+  "notePurpose": "An idea to revisit. No development has been started for this note.",
+  "requestHeading": "Development request",
+  "board": {
+    "title": "Personal task board",
+    "detail": "See your tasks as cards in Options, Active and Done, without keeping a second task list.",
+    "reason": "You chose to limit how many tasks are active at once. A board could make that limit visible.",
+    "request": "Develop a local task-board plugin for this workspace. Show existing tasks by status, preserve their original files, and support the agreed active-work limit without duplicating tasks."
+  },
+  "review": {
+    "title": "Project review",
+    "detail": "See next actions and waiting items across your projects in one dashboard.",
+    "reason": "You chose a regular review. This would bring the items to review together instead of opening each project separately.",
+    "request": "Develop a local project-review plugin for this workspace. Reference existing project notes and tasks, show next actions and waiting items, and leave all source files unchanged."
+  },
+  "documents": {
+    "title": "Reading view",
+    "detail": "Browse your imported notes and read them in a focused view.",
+    "reason": "You’ve brought in notes to keep using. This would let you read them without changing where they’re stored.",
+    "request": "Develop a local reading-view plugin for this workspace's existing Markdown notes. Browse and read the imported destination files in place, preserve their contents, and require no external accounts or connections."
+  }
+}

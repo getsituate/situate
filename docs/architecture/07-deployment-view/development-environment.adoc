@@ -1,0 +1,31 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Development environment
+
+Client development uses a macOS workstation with Xcode for the macOS and iOS targets.
+The developer controls the checkout, local dependencies and test data; this environment is separate from release hosting and optional product services.
+
+[cols="2,3,3",options="header"]
+|===
+|Environment |Software and placement |Setup and evidence boundary
+
+|Local client development
+|The client has its own npm and Cargo workspaces under `client/`. Node.js and npm run through Volta's repository-pinned shims; native builds use the pinned Rust toolchain and Xcode.
+|Follow the link:{architecture-repository-root}/client/README.md[client guide] for prerequisites, commands and Apple builds. Client development does not require Pi, Herdr, a backend or model credentials; AI features require suitable configured access.
+
+|Browser and shared checks
+|Repository tooling runs on the development host or a shared CI host. Linux may host platform-independent checks without becoming a product target.
+|The link:{architecture-repository-root}/docs/development/testing.md[test guide] defines profiles and prerequisites. Browser assertions and shared tests do not replace native macOS/iOS qualification.
+
+|Native Apple verification and release packaging
+|macOS/Xcode builds application packages and runs native checks on the selected Apple device or simulator.
+|The link:{architecture-repository-root}/client/README.md#apple-distribution[Apple distribution guide] covers signing and export inputs. Building a package does not authorize upload or release publication, or prove signed installation and relaunch.
+|===
+
+Use the link:{architecture-repository-root}/docs/development/README.md[developer setup guide] for workstation tooling and local environment files.
+Keep dependencies local to each worktree and use the coordinated repository commands described in the test guide.
+Scripts consume only their supported environment variables or the private repository-root `.env`, parsed as data rather than executed; explicit environment values take precedence.
+Do not put credentials in tracked configuration, fixtures or build artifacts, or require scripts to fetch them from a secret manager.
+Local dictation development uses the model source described in link:{architecture-repository-root}/docs/development/README.md#local-dictation-models[local dictation models], separately from release model provisioning.

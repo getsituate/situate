@@ -1,0 +1,146 @@
+.chat-model-choice {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--situate-ink);
+}
+.composer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 44px;
+}
+.composer-meta.picker-hidden {
+  min-height: 0;
+}
+.composer-meta > :deep(.bend-status) {
+  flex: 1;
+  min-width: 0;
+  padding-top: 0;
+}
+.chat-choices {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin-left: auto;
+  max-width: min(100%, 260px);
+}
+.composer-meta:has(> .bend-status) .chat-choices {
+  max-width: min(45%, 260px);
+}
+.model-trigger {
+  min-width: 0;
+}
+.thinking-trigger {
+  flex: 0 1 auto;
+  max-width: 45%;
+}
+.composer-meta > :deep(.bend-status .bend-comment) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@container (max-width: 480px) {
+  .composer-meta:has(> .bend-status) {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .composer-meta > :deep(.bend-status) {
+    flex-basis: 100%;
+  }
+  .composer-meta:has(> .bend-status) .chat-choices {
+    max-width: min(100%, 260px);
+  }
+}
+button:not(:where(.situate-button)),
+input {
+  width: 100%;
+  min-width: 0;
+}
+button:not(:where(.situate-button)) {
+  min-height: 44px;
+  border: 1px solid var(--situate-control-line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  cursor: pointer;
+}
+button:not(:where(.situate-button)):disabled {
+  cursor: default;
+  color: var(--situate-muted);
+}
+:focus-visible {
+  outline: 2px solid var(--situate-cobalt);
+  outline-offset: var(--situate-focus-offset);
+}
+.manual-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--situate-muted);
+}
+.manual-trigger > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.manual-trigger :deep(svg) {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+dialog {
+  box-sizing: border-box;
+  max-width: none;
+  position: fixed;
+  transform: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--situate-line);
+  border-radius: 10px;
+  color: var(--situate-ink);
+  background: var(--situate-surface);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--situate-ink) 10%, transparent);
+  overflow: hidden;
+  font-size: 13px;
+}
+dialog::backdrop {
+  background: transparent;
+}
+.manual-model {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+.manual-fields {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.manual-fields p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+input {
+  width: 100%;
+  min-width: 0;
+}
+.manual-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 0 16px 12px;
+  flex: none;
+}
+@media (hover: hover) {
+  .manual-trigger:not(:disabled):hover {
+    color: var(--situate-ink);
+  }
+}

@@ -1,0 +1,42 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Technical context
+
+The business exchanges above identify what crosses the product boundary.
+The table below separates established technical constraints from unresolved interface details.
+The repository contains a client implementation and internal interfaces, described in <<current-client-packages>> and <<native-conversation-building-blocks>>.
+Their presence does not establish deployed Situate services or native and live-provider qualification; see the link:{architecture-repository-root}/docs/development/provider-qualification.md[provider qualification record].
+
+[cols="1,2,2",options="header"]
+|===
+|Boundary |Established requirement or constraint |Unresolved detail or verification
+|Connected email, calendar and supplementary services
+|Integrations use technically available access and the user's permissions. link:{architecture-repository-root}/requirements/data/requirements/REQ-0001-create-integrations.md[REQ-0001] permits user-requested integrations beyond a fixed catalog.
+|Protocols, authentication, permission scopes, failure handling and external-change detection for each integration.
+|Local folders and connected document sources
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0054-connect-document-sources.md[REQ-0054] requires agreed source subsets, permitted operations and filing rules without mandatory migration of originals. Local folder access remains subject to operating-system permissions; remote access also depends on the service's interfaces and permissions.
+|Shared connector capabilities, document metadata and source identity across moves, duplicates and copies.
+|Devices and official Situate synchronization
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013] requires optional synchronization while the workspace is open. Official synchronization must use end-to-end encryption that prevents operator decryption. New devices require an authorized device or the account's user-held recovery key; account login alone cannot unlock content. Users must save and confirm recovery material before official synchronization onboarding completes. Local reading and manual editing remain available without internet or AI.
+|Transport protocol, cryptographic key hierarchy, provisioning and revocation protocols, metadata protection and merge representation. Recovery policy is established; its cryptographic construction and provisioning interactions remain design work.
+|Custom synchronization storage or service
+|Custom plugins supply storage access and transport; the Application Core owns versioning, merge-conflict handling and history recovery. Custom plugins may use different content-encryption policies. Directory transfer alone does not establish consistent history; uncontrolled writes can corrupt it. Operational AI settings and credentials are excluded from every synchronization mode under REQ-0013.
+|Storage-specific protocols and authentication, consistent transfer mechanisms and verification of each transport's integration with core history handling.
+|User-configured AI model endpoints
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015] requires access configured per workspace and device, including compatible local or remote OpenAI-compatible endpoints. Authentication and model requests go directly to the selected provider; Situate-operated services neither store user-provided credentials nor broker their renewal. Local-network HTTP requires a destination-specific warning and explicit acknowledgement, without permitting insecure redirects or disabling HTTPS certificate validation.
+|Provider/authentication coverage and model capabilities require method-specific verification; protocol compatibility alone is insufficient. The qualification record identifies evidence and remaining gaps.
+|Situate managed AI and external model providers
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016] requires optional managed access through a Situate-operated router using separate device sessions and account entitlement, not uploaded user-provider credentials. The router may process authorized context in plaintext without exposing synchronization plaintext or keys. Supplied content must not be used for training by Situate or its managed providers. Situate-operated services must remain EU-hosted; managed providers may process outside the EU only when legal prerequisites are met. Managed availability must not silently replace the device's selected access.
+|Context-disclosure authorization, retention and deletion periods, routing criteria and service capacity/quality commitments.
+|Task scope and external actions
+|Execute actions within the user request and configured access without per-action approval.
+|How task scope, configured access, cancellation and durable intent/results are preserved across generated integrations.
+|===
+
+<<glossary-provider-transport,Provider Transport>> is the native host adapters' communication with a selected model endpoint, including authentication and streamed responses.
+It is distinct from <<glossary-model-access,Model Access>>, the internal capability through which conversation execution requests model work.
+These internal responsibilities are refined in <<native-conversation-building-blocks>>; they do not move an independently operated local model endpoint inside Situate's product boundary.
+
+Internal decomposition, deployment placement and technical safeguards are described or tracked as open questions in the subsequent architecture views and decisions.

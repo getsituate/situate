@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 184 158" role="img" aria-labelledby="pencil-trail-title" aria-describedby="pencil-trail-desc">
+  <title id="pencil-trail-title">A pencil and a curved line</title>
+  <desc id="pencil-trail-desc">A short, broad orange pencil has a cream sharpened tip beside a generous violet sweep.</desc>
+  <path d="M46 112c-31-3-30 30 10 29 44-1 109-15 108-48" fill="none" stroke="#8651ed" stroke-width="6" stroke-linecap="round"/>
+  <g transform="translate(65 10) rotate(34 16 48)">
+    <path d="M8 6h21q8 0 8 8v63l-16 33L5 77V14q0-8 3-8Z" fill="#da592f"/>
+    <path d="M8 0h16q8 0 8 8v63L16 104 0 71V8q0-8 8-8Z" fill="#ff874d"/>
+    <path d="M8 0v71H0V8q0-8 8-8Z" fill="#ffc3a3"/>
+    <path d="M25 0q7 1 7 8v63h-7Z" fill="#da592f"/>
+    <path d="m0 71 8 5 8-5 9 5 7-5-16 33Z" fill="#fff7e3"/>
+    <path d="m10 92 6 12 6-12Z" fill="#30203e"/>
+  </g>
+</svg>

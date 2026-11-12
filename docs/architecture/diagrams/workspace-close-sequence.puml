@@ -1,0 +1,79 @@
+@startuml
+hide footbox
+skinparam shadowing false
+skinparam backgroundColor #fffefa
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 14
+skinparam defaultFontColor #30203e
+skinparam roundcorner 12
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam BoxPadding 10
+skinparam sequence {
+  ArrowColor #6a5c70
+  ArrowFontColor #30203e
+  ArrowFontSize 13
+  LifeLineBorderColor #8c7a97
+  ParticipantBorderColor #6a5c70
+  ParticipantBackgroundColor #eee7f9
+  ParticipantFontColor #30203e
+  ActorBorderColor #6a5c70
+  ActorBackgroundColor #fffefa
+  ActorFontColor #30203e
+  GroupBorderColor #6a5c70
+  GroupBackgroundColor #f6f3ee
+  GroupHeaderFontColor #30203e
+  DividerBorderColor #8c7a97
+  DividerBackgroundColor #f6f3ee
+}
+skinparam note {
+  BackgroundColor #fff7e3
+  BorderColor #8c7a97
+  FontColor #30203e
+  FontSize 12
+}
+
+actor User
+participant "User Interface" as UI
+participant "Application Core" as Core
+participant "Agent Integration" as Agent
+participant "Plugin Runtime" as Runtime
+
+User -> UI: Close workspace
+UI -> Core: Request closure
+Core -> Agent: Block new starts; report active work
+Core -> Runtime: Block new starts; report active work
+Agent --> Core: Active agent work
+Runtime --> Core: Active plugin work
+
+opt Running actions exist
+  Core --> UI: Closure needs a decision
+  UI -> User: Cancel, or abort and close
+  User -> UI: Choose
+  UI -> Core: Return choice
+  alt Cancel closure
+    Core -> Agent: Restore normal operation
+    Core -> Runtime: Restore normal operation
+    Core --> UI: Cancelled; workspace stays open
+  else Abort and close
+    Core -> Agent: Abort running work
+    Core -> Runtime: Abort running work
+    Agent --> Core: Stopped; state retained
+    Runtime --> Core: Stopped; state retained
+  end
+end
+
+opt Closure not cancelled
+  ref over UI, Core
+    Assess pending synchronization
+    (next diagram)
+  end ref
+  opt Work stopped and chosen sync conditions satisfied
+    Core -> Agent: End workspace execution
+    Core -> Runtime: End workspace plugin execution
+    Core -> Core: Stop sync; complete closure
+    Core --> UI: Workspace closed
+    UI --> User: Show closed state
+  end
+end
+@enduml

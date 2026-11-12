@@ -1,0 +1,39 @@
+digraph NativeConversationBuildingBlocks {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  graph [newrank=true];
+  subgraph cluster_app {
+    label="Situate Application";
+    color="#6a5c70";
+    style="rounded";
+    margin=20;
+
+    frontend [label="Frontend views\nWebView presentation"];
+
+    subgraph cluster_native {
+      label="Native host (Rust)";
+      labeljust=l;
+      color="#6a5c70";
+      style="rounded";
+      margin=20;
+
+      subgraph cluster_agent {
+        label="Agent Integration";
+        labeljust=l;
+        labelloc=b;
+        color="#6232bc";
+        style="rounded";
+        margin=20;
+        gateway [label="Conversation Gateway\n& Registry"];
+        owner [label="Conversation Owner\nsituate-agent + Rig", fillcolor="#eee7f9"];
+        host [label="Native Host Adapters"];
+      }
+    }
+
+    frontend -> gateway [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Conversations (IPC)</TD></TR></TABLE>>];
+    gateway -> owner [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Owner actions<BR/>and observations</TD></TR></TABLE>>];
+    owner -> host [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Host: Model Access,<BR/>tools, history append</TD></TR></TABLE>>];
+  }
+}

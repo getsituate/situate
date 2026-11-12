@@ -1,0 +1,16 @@
+[[deployment-view]]
+== Deployment View
+
+Situate runs primarily on the user's devices; optional services and release hosting have separate operating boundaries.
+This chapter maps software and data to those locations, then describes delivery and the developer environment.
+Placement requirements do not establish that a service is deployed or a native release is qualified.
+
+:architecture-repository-root: ../..
+
+include::07-deployment-view/product-environments.adoc[]
+
+include::07-deployment-view/delivery-and-operations.adoc[]
+
+include::07-deployment-view/development-environment.adoc[]
+
+:!architecture-repository-root:

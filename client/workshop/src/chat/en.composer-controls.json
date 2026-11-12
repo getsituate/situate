@@ -1,0 +1,11 @@
+{
+  "model": "Chat model",
+  "thinking": "Thinking level",
+  "workspaceDefault": "Workspace default",
+  "recommended": "Recommended",
+  "explicit": "Conversation choice",
+  "scope": "Applies to the next message in this conversation on this device.",
+  "low": "Low",
+  "medium": "Medium",
+  "high": "High"
+}

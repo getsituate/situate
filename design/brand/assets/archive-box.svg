@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 158" role="img" aria-labelledby="archive-box-title" aria-describedby="archive-box-desc">
+  <title id="archive-box-title">Paper archive box with a lifted lid</title>
+  <desc id="archive-box-desc">A low peach paper box has a plain cream label and a lid hovering above its open top.</desc>
+  <g id="box-body">
+    <path d="M31 91 52 74h108l22 17v42q0 10-10 10H41q-10 0-10-10Z" fill="#ff874d"/>
+    <path d="M24 84 45 67h108l22 17v42q0 10-10 10H34q-10 0-10-10Z" fill="#ffc3a3"/>
+    <path d="m45 67 108 0 22 17-18 12H42L24 84Z" fill="#fff7e3"/>
+    <path d="M48 74h102l15 12-12 5H45l-10-5Z" fill="#6232bc"/>
+    <path d="M24 84q26 8 75 8t76-8v42q0 10-10 10H34q-10 0-10-10Z" fill="#ffc3a3"/>
+    <rect x="75" y="107" width="49" height="17" rx="4" fill="#fff7e3"/>
+  </g>
+  <g id="box-lid">
+    <path d="m21 44 30-22 121 13q6 1 6 6v7l-24 21q-3 3-8 2L27 58q-6-1-6-6Z" fill="#ff874d"/>
+    <path d="m14 37 30-22 121 13q6 1 6 6v7l-24 21q-3 3-8 2L20 51q-6-1-6-6Z" fill="#ffc3a3"/>
+    <path d="m18 33 26-18 121 13q7 1 2 5l-26 20L20 40q-10-1-2-7Z" fill="#fff7e3"/>
+  </g>
+</svg>

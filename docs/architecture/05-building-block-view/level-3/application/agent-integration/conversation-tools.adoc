@@ -1,0 +1,138 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../../../../..
+endif::[]
+
+[[conversation-tools]]
+====== Conversation modes and tools
+
+This reference describes the tool surface of <<native-conversation-building-blocks,Agent Integration>> in the current native implementation, not platform or provider qualification.
+Situate has two fixed conversation types: *normal chat* and *plugin development*.
+Development adds assignment-specific instructions, not a separate workspace or a restriction to one plugin.
+Under the same workspace, device capabilities and recovery state, both types have the same workspace writes, navigation, available shell access and eligible plugin tools, as required by link:{architecture-repository-root}/requirements/data/requirements/REQ-0001-create-integrations.md[REQ-0001], AC-32.
+Development-specific authoring tools and normal-chat handoff differ as shown below.
+
+The matrix assumes a writable native macOS workspace with history and conversation storage, outside guided onboarding.
+*Yes* means registered for that conversation type under those conditions, not guaranteed to execute successfully.
+*Conditional* means eligible plugin contributions must be available; *No* means not registered for that type.
+
+.Tool matrix
+[cols="2,5,2,2",options="header"]
+|===
+|Tool |Purpose |Normal chat |Plugin development
+|`read`
+|Read workspace text or supported images; return a revision for subsequent edits.
+|Yes |Yes
+|`ls`
+|List the immediate children of a workspace directory.
+|Yes |Yes
+|`find`
+|Find workspace paths containing a literal query, recursively.
+|Yes |Yes
+|`grep`
+|Search workspace text for a literal, case-sensitive query, with line numbers.
+|Yes |Yes
+|`list_conversations`
+|List submitted conversations in the same workspace with IDs, titles and record revisions.
+|Yes |Yes
+|`read_conversation`
+|Read submitted messages and recorded runs/events from a workspace conversation; exclude drafts, queued input and credential storage.
+|Yes |Yes
+|`history`
+|List retained versions of a workspace file.
+|Yes |Yes
+|`read_revision`
+|Read a retained file version without restoring it.
+|Yes |Yes
+|`write`
+|Create or replace a workspace text file using revision-checked, versioned storage.
+|Yes |Yes
+|`edit`
+|Apply exact, non-overlapping replacements at a known file revision.
+|Yes |Yes
+|`create_batch`
+|Create prepared new files from a workspace JSONL manifest. Inspect partial or uncertain file publication before retrying; do not replay the whole batch blindly.
+|Yes |Yes
+|`ask_question`
+|Ask for missing task information and wait for an answer, not per-action approval. Do not call further tools after the question in the same batch.
+|Yes |Yes
+|`shell`
+|Run a POSIX shell command starting in the workspace; access is not confined to that workspace.
+|Yes |Yes
+|`open_view`
+|Open a registered view in the focused pane when the user requests navigation.
+|Yes |Yes
+|`reveal_content`
+|Reveal content in a registered view, optionally at a retained revision, when the user requests navigation.
+|Yes |Yes
+|`open_conversation`
+|Show an existing conversation without creating one, sending input or starting work, when the user requests navigation.
+|Yes |Yes
+|`inspect_plugin`
+|List plugins, inspect source or validate source declarations without executing or enabling code. Development also supports package creation, source directory changes and capturing external source edits.
+|Yes |Yes
+|`read_plugin_design`
+|Read bundled interface guidance without network access or workspace mutation.
+|Yes |Yes
+|`start_plugin_development`
+|Prepare a separate retained development conversation and start its assignment once. A failed handoff retains the child; do not retry creation to resume it.
+|Yes |No
+|`inspect_plugin_changes`
+|Inspect a retained plugin activation publication outcome without retrying or resuming work.
+|No |Yes
+|`check_plugin_changes`
+|Functionally check related plugin revisions using synthetic fixtures and optional UI previews. Checks do not activate source.
+|No |Yes
+|`activate_plugin_changes`
+|Activate the exact related revisions covered by a successful Check Receipt.
+|No |Yes
+|Plugin-contributed tools (plugin-defined names)
+|Perform functions supplied by eligible, enabled plugins; names and purposes depend on installed plugins.
+|Conditional |Conditional
+|===
+
+Normal chat hands development work to a development conversation; development does not register another `start_plugin_development` handoff.
+
+.Availability and execution conditions
+[cols="2,7",options="header"]
+|===
+|Condition |Effect
+|Workspace capabilities
+|Registration of `write`, `edit` and `create_batch` requires writable storage. `history` and `read_revision` require history support. Conversation listing/reading requires conversation storage. `shell` is registered only when the host reports an available shell capability.
+|Platform and execution guards
+|Plugin authoring tool registration is selected by conversation type. Registration does not establish native iOS support or qualification. Execution still requires the relevant local storage, native services and available executor. Revision checks, editor drafts, missing access, cancellation, stale run state and invalid Check Receipts can prevent execution.
+|Navigation
+|Navigation tools are registered without a frontend callback filter. Their native execution must obtain the appropriate presentation response; unavailable presentation cannot count as successful navigation. Development, checks and activation do not themselves authorize navigation.
+|Guided onboarding
+|Native onboarding roles filter built-in tools and add role-specific tools. The matrix does not describe that separate role-dependent surface; onboarding is not a third conversation type.
+|Recovery
+|Recovery is an application startup state, not a conversation type. Source inspection/editing, checks and checked activation remain required capabilities. Suspended plugins contribute no active tools until resumed or successfully activated; unrelated plugins remain suspended. Native registration applies the same conversation-type selection during recovery.
+|Plugin lifecycle
+|Each model request captures eligible tools and service generations together. Later requests can observe activation or enabling; calls from the current response retain their captured services. No fixed list can enumerate every plugin-defined tool.
+|===
+
+The tools above are model-callable interfaces.
+Plugin source files use the ordinary file tools with explicit paths under `.situate/plugins/<pluginId>/code/`, retaining plugin-specific history, revision checks and limits.
+Workspace-root searches do not traverse these technical directories; other plugin internals remain excluded.
+`inspect_plugin` operations `create`, `mkdir`, `rename`, `remove` and `capture` are available only in development, without activating code.
+Retained conversations can still display historical `edit_plugin_sources` results.
+Plugin host APIs, skills, model selection, activity comments and compaction are not extra entries in this inventory.
+Skill mode assignments do not grant tool access.
+
+.Safety boundaries
+Workspace `write` and `edit` use revision checks and do not overwrite unsaved editor drafts.
+Preparing plugin source does not activate it.
+A successful <<glossary-check-receipt,Check Receipt>> identifies the revisions and checks covered; activation requires an applicable receipt.
+Plugin activation publication changes the <<glossary-active-revision-map,Active Revision Map>>, the record selecting active plugin code revisions.
+An uncertain file or plugin activation publication outcome must be inspected rather than retried blindly.
+
+Shell commands are not sandboxed and can reach files and networks outside the workspace.
+Plugin code is trusted code, not sandboxed code.
+Both conversation types execute actions within the requested task and configured access without per-action approval; exposing a tool or starting development does not authorize unrelated work.
+
+.Implementation references
+* link:{architecture-repository-root}/client/app/src-tauri/src/ai_conversations.rs[Native tool assembly and request capture] and link:{architecture-repository-root}/client/app/src-tauri/src/ai_builtin_tools.rs[built-in definitions, capability and onboarding-role filters].
+* link:{architecture-repository-root}/client/app/src-tauri/src/ai_plugin_tools.rs[Plugin authoring definitions and development restrictions] and link:{architecture-repository-root}/client/app/src-tauri/src/ai_plugin_tools_tests.rs[plugin tool registration tests].
+* link:{architecture-repository-root}/client/app/src-tauri/src/ai_executor.rs[Plugin contribution capture and execution], link:{architecture-repository-root}/client/app/src-tauri/src/file_tool.rs[file-tool contracts] and link:{architecture-repository-root}/client/app/src-tauri/src/plugin_checks.rs[plugin checks and activation].
+* link:{architecture-repository-root}/client/app/src/ai/plugin-development-instructions.md[Development instructions] and link:{architecture-repository-root}/docs/architecture/04-solution-strategy/application-and-agent.adoc[agent strategy].
+
+When changing registration, capability filters or tool names, update the matrix and its conditions together.

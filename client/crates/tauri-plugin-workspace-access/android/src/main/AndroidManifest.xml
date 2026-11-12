@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider android:name="dev.situate.access.WorkspaceContentProvider"
+            android:authorities="${applicationId}.workspace-content"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/workspace_content_paths" />
+        </provider>
+    </application>
+</manifest>

@@ -1,0 +1,49 @@
+title = "Situate secret scanning"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local root environment file, IDE workspace state, installed dependencies and generated build output"
+paths = [
+  '''^\.env$''',
+  '''(^|/)\.idea/workspace\.xml$''',
+  '''(^|/)node_modules/''',
+  '''(^|/)(target|dist|build|\.build|\.gradle|\.tauri|coverage|test-results|playwright-report|blob-report)/''',
+  '''^client/app/src-tauri/gen/''',
+  '''^client/artifacts/''',
+]
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Verified upstream QuickJS header checksum in historical engine provenance"
+condition = "AND"
+paths = ['''^client/runtime/plugin-engine/provenance\.json$''']
+regexTarget = "secret"
+regexes = ['''^b44cb8065f2eb2d4689b426bbc08fdf24ac996065cd909a09748566ce0b6a446$''']
+
+[[rules]]
+id = "jwt"
+
+[[rules.allowlists]]
+description = "Synthetic audience-verification JWTs with the fixture signing-key identifier"
+condition = "AND"
+paths = ['''^client/app/src-tauri/src/openai_audience_fixtures\.json$''']
+regexTarget = "secret"
+regexes = ['''^eyJhbGciOiJSUzI1NiIsImtpZCI6ImF1ZGllbmNlLWZpeHR1cmUiLCJ0eXAiOiJKV1QifQ\.''']
+
+[[rules]]
+id = "sourcegraph-access-token"
+
+[[rules.allowlists]]
+description = "Public Git revisions in the pinned CI tool source inventory"
+condition = "AND"
+paths = ['''^client/docker/ci-tool-notices\.json$''']
+regexTarget = "line"
+regexes = [
+  '''^\s*(?:"noticeSource":\s*)?"source:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[a-f0-9]{40}",?\s*$''',
+  '''^\s*"source:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[a-f0-9]{40}":\s*\{\s*$''',
+  '''^\s*"url":\s*"https://codeload\.github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tar\.gz/[a-f0-9]{40}",?\s*$''',
+]

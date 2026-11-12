@@ -1,0 +1,64 @@
+name: AuthLifecycle
+options:
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: NO
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  ProviderPlatform:
+    type: framework
+    platform: iOS
+    sources:
+      - ../Sources/ProviderAuthBrowser.swift
+      - ../Sources/ProviderKeyStore.swift
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: dev.situate.tests.provider-platform
+  ProviderUnitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [../Tests]
+    dependencies:
+      - target: ProviderPlatform
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: dev.situate.tests.provider-platform-unit-tests
+  AuthLifecycle:
+    type: application
+    platform: iOS
+    entitlements:
+      path: App/AuthLifecycle.entitlements
+      properties:
+        application-identifier: dev.situate.tests.auth-lifecycle
+        keychain-access-groups: [dev.situate.tests.auth-lifecycle]
+    sources:
+      - App
+      - ../Sources/ProviderAuthBrowser.swift
+      - ../Sources/ProviderKeyStore.swift
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: dev.situate.tests.auth-lifecycle
+      CODE_SIGNING_ALLOWED: YES
+      CODE_SIGN_IDENTITY: "-"
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+      LIBRARY_SEARCH_PATHS: "$(PROJECT_DIR)/rust/target/aarch64-apple-ios-sim/debug"
+      OTHER_LDFLAGS: ["$(inherited)", "-lsynthetic_loopback"]
+    dependencies:
+      - sdk: AuthenticationServices.framework
+      - sdk: Security.framework
+  LifecycleTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: AuthLifecycle
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: dev.situate.tests.auth-lifecycle-tests
+schemes:
+  AuthLifecycle:
+    build:
+      targets:
+        AuthLifecycle: all
+    test:
+      targets: [ProviderUnitTests, LifecycleTests]

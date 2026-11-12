@@ -1,0 +1,9 @@
+{
+  "native.layout.storage.failed": "The workspace layout could not be read or saved.",
+  "native.layout.storage.invalid": "The saved workspace layout is invalid. The original file has been kept.",
+  "native.layout.storage.unsupported": "This workspace layout uses an unsupported version. The original file has been kept.",
+  "native.layout.storage.conflict": "The workspace layout changed. Reload it before saving again.",
+  "native.layout.storage.tooLarge": "The workspace layout is too large to save.",
+  "native.layout.storage.busy": "The workspace layout is being saved elsewhere. Try again.",
+  "native.layout.storage.durability": "The layout was written, but its durability could not be confirmed. Reload it before saving again."
+}

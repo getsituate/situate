@@ -1,0 +1,200 @@
+{
+  "describeHeading": "Your way of working",
+  "reviewHeading": "How Situate will work with you",
+  "describe": "Describe how you organize things today and what you would like to improve.",
+  "describeHelp": "A few bullet points are enough. What works, and what could be easier?",
+  "describePlaceholder": "I keep notes in Apple Notes. Tasks sometimes get lost. I’d like to keep my project notes together.",
+  "inspiration": "Methods to include (optional)",
+  "inspirationHelp": "Choose any you would like your proposal to draw on. You can combine them.",
+  "selected": "Selected: {count}",
+  "learn": "About {method}",
+  "dialogTitle": "About {method}",
+  "features": "Core features",
+  "everydayExample": "An everyday example",
+  "effort": "What it asks of you",
+  "limits": "What it does not cover",
+  "close": "Close",
+  "include": "Include in my proposal",
+  "remove": "Remove from my proposal",
+  "combining": "How these fit together",
+  "combinedTasks": "Keep one shared set of tasks rather than copying them between lists, a board or a journal. Choose review habits that fit your routine.",
+  "combinedSchedule": "Count work as active when you start it, not just because it has a future time block.",
+  "combinedTime": "Use focus intervals within planned work blocks, leaving room for breaks and interruptions.",
+  "combinedKnowledge": "Keep reusable thinking notes connected across projects. Finishing a project need not archive every idea linked to it.",
+  "timeBlockingProposal": "Plan intended work in flexible time blocks, separate from appointments and deadlines.",
+  "pomodoroProposal": "Choose focused work, estimate its effort, use intervals and breaks, then compare the effort with your estimate. Decide on supporting tools later.",
+  "eisenhowerProposal": "Consider importance and urgency separately when reviewing tasks, without creating a second task list.",
+  "zettelkastenProposal": "Develop thinking notes with stable references, connections to related ideas and links to their sources.",
+  "generate": "Suggest a working method",
+  "generating": "Preparing your proposal",
+  "reviewBeforeConfirm": "You can review and change the proposal before confirming",
+  "openPoints": "Open points",
+  "openPointsHelp": "These preferences are still undecided. You can give feedback now or keep them open.",
+  "reviewUndecided": "Review frequency is undecided; do not schedule a recurring review.",
+  "proposalIntro": "A starting point, not a complete picture of how you work. Keep what fits and adjust the rest.",
+  "startingPoint": "What you shared",
+  "suggestions": "AGENTS.md",
+  "feedback": "Anything you would like to change?",
+  "feedbackHelp": "Tell Situate what you’d like to change. You can review the updated proposal before confirming.",
+  "feedbackPlaceholder": "Keep the capture list, but leave out the weekly review.",
+  "update": "Update instructions",
+  "updating": "Updating your proposal",
+  "updated": "Situate has updated the instructions. Review them before confirming.",
+  "unapplied": "Ask Situate to update the instructions so you can review your changes before confirming.",
+  "adjustment": "Your adjustment",
+  "confirm": "Confirm and continue",
+  "back": "Back",
+  "cancel": "Cancel",
+  "failed": "The proposal could not be prepared. Your answers are still here. Try again or change your input.",
+  "failedRevision": "The instructions could not be updated. Your feedback and the previous draft are still here.",
+  "controls": {
+    "intro": "Design simulation. Practices shape a fixed proposal; the selected revision example supplies its update. Free text is retained separately, not interpreted by AI. Source mapping uses a fictional export. No files or provider services are accessed.",
+    "result": "Method response",
+    "success": "Succeed immediately",
+    "wait": "Wait for manual completion",
+    "failure": "Fail immediately",
+    "complete": "Complete method response",
+    "fail": "Fail method response",
+    "revision": "Revision example",
+    "lighter": "Remove scheduled review and active-work limit",
+    "focus": "Add an active-work limit",
+    "reflect": "Add daily reflection",
+    "methodState": "06 · Working method · describe and explore",
+    "infoState": "06.2 · Learn about GTD",
+    "explanation": "Method explanation",
+    "none": "Closed",
+    "dialogScreen": "Onboarding · About {method}",
+    "briefState": "06.1 · Brief description · notes and loose tasks",
+    "waitingState": "07.1 · Updating the proposal",
+    "failedState": "07.2 · Proposal update failed"
+  },
+  "example": {
+    "description": "I keep notes in Apple Notes. Tasks sometimes get lost. I want to keep related notes together.",
+    "feedback": "Keep the capture list, but leave out the weekly review.",
+    "openPoint": "Would a regular review help, or would you rather review when needed?"
+  },
+  "methods": [
+    {
+      "id": "gtd",
+      "name": "GTD",
+      "description": "A method for turning everything that has your attention into clear, reviewable commitments and next actions.",
+      "features": [
+        "Capture: collect what has your attention in trusted places.",
+        "Clarify: decide what each item means and whether it needs action.",
+        "Organize: keep next actions, projects, waiting items and reference material where you can find them.",
+        "Reflect: review your commitments and keep the system current.",
+        "Engage: use that overview to choose what to do."
+      ],
+      "example": "A note about a broken chair becomes a project to get it repaired, a next action to contact a repair service, and a waiting item once you have requested a quote.",
+      "effort": "Process captured items and review your lists regularly. Capturing more without clarifying and reviewing creates another backlog.",
+      "limits": "GTD does not make every commitment fit into your available time, or replace a system for developing knowledge.",
+      "source": "https://gettingthingsdone.com/what-is-gtd/"
+    },
+    {
+      "id": "kanban",
+      "name": "Personal Kanban",
+      "description": "A visual way to understand your work and limit how much you take on at once.",
+      "features": [
+        "Make work visible rather than keeping it in your head.",
+        "Show how work moves through stages that fit your life.",
+        "Limit work in progress so starting something requires making room.",
+        "Notice blocked work and adjust the flow."
+      ],
+      "example": "A reading-corner project waits until one of your active projects is finished. Its card then moves into your active work.",
+      "effort": "Keep the board current and respect your chosen active-work limit. The columns alone are not the method.",
+      "limits": "A board does not automatically provide reminders, plan your calendar or decide which work matters most.",
+      "source": "https://www.personalkanban.com/pk/personal-kanban-101/"
+    },
+    {
+      "id": "journal",
+      "name": "Bullet Journal",
+      "description": "A notebook-based system that combines quick recording with reflection and deliberate decisions about unfinished work.",
+      "features": [
+        "Rapid logging: short entries distinguish tasks, events and notes.",
+        "An index and collections make related entries findable.",
+        "Future, monthly and daily logs connect different planning horizons.",
+        "Reflection and migration help you keep, move or drop unfinished commitments."
+      ],
+      "example": "At a monthly review, an unfinished reading task is either still worth carrying forward or no longer worth your attention.",
+      "effort": "Record regularly and make time to reconsider open entries. Migration is a decision, not just copying tasks to tomorrow.",
+      "limits": "A digital adaptation should preserve reflection without creating duplicate task lists. Bullet Journal does not automatically schedule your work.",
+      "source": "https://bulletjournal.com/pages/how-to-bullet-journal"
+    },
+    {
+      "id": "time-blocking",
+      "name": "Time Blocking",
+      "description": "Plan when you intend to work by giving activities a place in your available time.",
+      "features": [
+        "Divide the day into blocks and assign activities to them.",
+        "Account for existing appointments and other commitments.",
+        "Estimate how much time work will need.",
+        "Revise the remaining plan when interruptions or overruns occur."
+      ],
+      "example": "Reserve the morning for writing a proposal, then a shorter block for messages. Replan the afternoon if the writing takes longer.",
+      "effort": "Make a plan, check your estimates and adjust it as the day changes. The aim is intention, not a perfect schedule.",
+      "limits": "A time block is not a deadline. This technique does not capture all commitments or organize your information; calendar changes need separate agreement.",
+      "source": "https://calnewport.com/focus-week-take-control-of-your-time/"
+    },
+    {
+      "id": "pomodoro",
+      "name": "Pomodoro",
+      "description": "A time-management method for planning focused work, handling interruptions and learning from the effort it takes.",
+      "features": [
+        "Keep an activity inventory and choose work for today.",
+        "Estimate effort before starting.",
+        "Work on one activity during timed focus intervals, with regular breaks.",
+        "Handle interruptions deliberately rather than switching unnoticed.",
+        "Record effort and compare estimates with experience."
+      ],
+      "example": "Choose a writing task, estimate the focus intervals it needs, work with breaks, then compare the actual effort with your estimate.",
+      "effort": "Use the intervals, manage interruptions and reflect on the results. The full method is more than running a timer.",
+      "limits": "Focus intervals do not decide which commitments deserve attention or how to organize your notes. A timer or notifications are separate tool choices.",
+      "source": "https://www.pomodorotechnique.com/"
+    },
+    {
+      "id": "eisenhower",
+      "name": "Eisenhower Matrix",
+      "description": "A way to consider importance and urgency separately when deciding where to put your attention.",
+      "features": [
+        "Judge importance in relation to your goals and responsibilities.",
+        "Judge urgency separately from importance.",
+        "Sort work into four combinations of those two dimensions.",
+        "Make room for important work before it becomes urgent."
+      ],
+      "example": "An important plan without an immediate deadline can deserve time before a stream of urgent but less meaningful requests.",
+      "effort": "Make the judgments yourself and revisit them when circumstances change. Not every request will fit neatly into one quadrant.",
+      "limits": "The matrix does not estimate effort or resolve dependencies. Delegating may not be possible; a quadrant is not permission to delegate or delete anything.",
+      "source": "https://www.franklincovey.com/the-7-habits/habit-3/"
+    },
+    {
+      "id": "para",
+      "name": "PARA",
+      "description": "Organize information around what it supports now, using four broad categories.",
+      "features": [
+        "Projects: active efforts with a defined outcome.",
+        "Areas: ongoing responsibilities that need attention.",
+        "Resources: topics and material that may be useful.",
+        "Archives: material from the other categories that is no longer active."
+      ],
+      "example": "Notes for a current home-improvement project stay together. When the project ends, its supporting material can move to the archive.",
+      "effort": "Decide where material belongs and revisit that decision as its purpose changes.",
+      "limits": "PARA is an information structure, not a complete system for next actions, reminders, prioritization or developing ideas.",
+      "source": "https://fortelabs.com/blog/para/"
+    },
+    {
+      "id": "zettelkasten",
+      "name": "Zettelkasten",
+      "description": "Develop your thinking through a growing collection of notes that refer to and build on one another.",
+      "features": [
+        "Give notes stable addresses so you can refer to them.",
+        "Follow lines of thought and branch into related ideas.",
+        "Connect notes with explicit cross-references.",
+        "Use keyword entry points and references to sources."
+      ],
+      "example": "A reading note connects to an earlier argument and a contrasting example, giving you a starting point for a new piece of writing.",
+      "effort": "Write, connect and revisit notes. Useful relationships take consideration; a graph of links alone is not the method.",
+      "limits": "Zettelkasten does not manage deadlines or replace general document filing. A project ending does not necessarily make its connected ideas obsolete.",
+      "source": "https://zettelkasten.de/communications-with-zettelkastens/"
+    }
+  ]
+}

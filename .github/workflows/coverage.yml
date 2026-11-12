@@ -1,0 +1,118 @@
+name: Coverage
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  revisions:
+    runs-on: ubuntu-24.04
+    outputs:
+      head: ${{ steps.refs.outputs.head }}
+      main: ${{ steps.refs.outputs.main }}
+      repository: ${{ steps.refs.outputs.repository }}
+      sides: ${{ steps.refs.outputs.sides }}
+    steps:
+      - id: refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        run: |
+          MAIN_SHA=$(gh api "repos/$REPOSITORY/commits/main" --jq .sha)
+          {
+            echo "head=$HEAD_SHA"
+            echo "repository=$HEAD_REPOSITORY"
+            echo "main=$MAIN_SHA"
+            if test "$HEAD_SHA" = "$MAIN_SHA"; then
+              echo 'sides=["head"]'
+            else
+              echo 'sides=["head","main"]'
+            fi
+          } >> "$GITHUB_OUTPUT"
+  coverage:
+    needs: revisions
+    strategy:
+      fail-fast: false
+      matrix:
+        side: ${{ fromJSON(needs.revisions.outputs.sides) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
+      HEAD_SHA: ${{ needs.revisions.outputs.head }}
+      MAIN_SHA: ${{ needs.revisions.outputs.main }}
+      SIDE: ${{ matrix.side }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ needs.revisions.outputs.repository }}
+          ref: ${{ needs.revisions.outputs.head }}
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ matrix.side == 'head' && needs.revisions.outputs.repository || github.repository }}
+          ref: ${{ matrix.side == 'head' && needs.revisions.outputs.head || needs.revisions.outputs.main }}
+          path: source
+          persist-credentials: false
+      - uses: volta-cli/action@615a78f6c83e116339c53b94f3f82b4d6c0b7d18
+        with:
+          volta-version: 2.0.2
+          package-json-path: harness/package.json
+      - name: Activate the harness toolchain
+        working-directory: harness
+        shell: bash
+        run: volta install "node@$(node -p 'require("./package.json").volta.node')" "npm@$(node -p 'require("./package.json").volta.npm')"
+      - id: support
+        run: |
+          if test -f source/tools/test.mjs && grep -q -- '--coverage' source/tools/test.mjs; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: ./harness/.github/actions/ci-image
+        if: steps.support.outputs.available == 'true'
+        with:
+          directory: harness
+      - uses: ./harness/.github/actions/download-cache
+        if: steps.support.outputs.available == 'true'
+        with:
+          group: coverage
+          revision: ${{ hashFiles('harness/tools/ci-image.lock.json', 'source/client/package-lock.json', 'source/client/Cargo.lock') }}
+      - name: Measure the selected revision in the pinned image
+        if: always() && steps.support.outputs.available == 'true'
+        run: node harness/tools/ci-container.mjs --coverage source
+        env:
+          PREPARATION_STATUS: ${{ job.status }}
+      - name: Report a missing measurement
+        if: always()
+        run: |
+          if test ! -s report.json; then
+            node harness/tools/coverage.mjs source
+          fi
+        env:
+          PREPARATION_STATUS: ${{ steps.support.outputs.available == 'true' && 'failure' || job.status }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: coverage-${{ matrix.side }}-${{ github.run_attempt }}
+          path: report.json
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: source-coverage-${{ matrix.side }}-${{ github.run_attempt }}
+          path: source/client/target/coverage/
+          if-no-files-found: ignore
+          retention-days: 7

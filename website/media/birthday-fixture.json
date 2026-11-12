@@ -1,0 +1,76 @@
+{
+  "workspace": "Personal",
+  "project": "My birthday",
+  "title": "Birthday · Reply to Maya",
+  "request": "Draft a reply to Maya’s latest email about my birthday. Attach the running order and add the key handover to my calendar.",
+  "response": "Reply saved in Gmail · To Maya · Not sent\nRe: A few final details\nHi Maya,\n\nFor Saturday 19 June 2027, 18:00–23:00, we’ll have 24 guests — 18 standard meals, 4 vegetarian and 2 vegan. Dinner is at 19:00, and cake at 20:30. We’ll use the venue speakers; no microphone needed.\n\nThe running order is attached. Thanks!\n\nAttached: birthday-running-order.pdf\nGoogle Calendar: Key handover · Willow Room\nFriday 18 June 2027, 17:30–17:45 · Personal calendar\nEntry created from Maya’s confirmation. No guests or invitations.",
+  "reply": {
+    "subject": "Re: A few final details",
+    "to": "Maya <maya@willow-room.example>",
+    "body": "Hi Maya,\n\nFor Saturday 19 June 2027, 18:00–23:00, we’ll have 24 guests — 18 standard meals, 4 vegetarian and 2 vegan. Dinner is at 19:00, and cake at 20:30. We’ll use the venue speakers; no microphone needed.\n\nThe running order is attached. Thanks!",
+    "attachment": "birthday-running-order.pdf",
+    "status": "draft saved",
+    "sent": false
+  },
+  "calendar": {
+    "title": "Key handover · Willow Room",
+    "date": "2027-06-18",
+    "start": "17:30",
+    "end": "17:45",
+    "location": "Willow Room",
+    "calendar": "Personal",
+    "status": "created",
+    "guests": [],
+    "invitationsSent": false
+  },
+  "sources": [
+    {
+      "id": "latest-email",
+      "kind": "email",
+      "subject": "A few final details",
+      "from": "Maya <maya@willow-room.example>",
+      "date": "2027-06-14",
+      "content": "Could you send the final guest count, dietary requirements and running order? Let me know what sound equipment you need, too. Please confirm dinner and cake timings for Saturday 19 June 2027, 18:00–23:00. Thanks, Maya"
+    },
+    {
+      "id": "handover-confirmation",
+      "kind": "email",
+      "subject": "Re: Willow Room · Key handover",
+      "from": "Maya <maya@willow-room.example>",
+      "date": "2027-06-10",
+      "content": "Confirmed: we’ll meet for the key handover at Willow Room on Friday 18 June 2027, 17:30–17:45. See you then! Maya"
+    }
+  ],
+  "files": [
+    {
+      "name": "my-birthday.md",
+      "folder": "My birthday",
+      "content": "# My birthday\n\nSaturday 19 June 2027 · Willow Room\n\n## Guests and food\n\n24 guests confirmed.\n\n- **18 standard meals**\n- **4 vegetarian meals**\n- **2 vegan meals**\n\n## Music\n\nUse the venue speakers; no microphone needed.\n\n## Before the party\n\n- [x] Confirm the final guest count and dietary requirements.\n- [x] Save the running order.\n- [ ] Reply to Maya’s final-details email.\n- [ ] Collect the keys from Maya.\n"
+    },
+    {
+      "name": "venue-details.md",
+      "folder": "My birthday",
+      "content": "# Willow Room\n\nContact: Maya\n\nVenue for my birthday on Saturday 19 June 2027.\n\n## Sound\n\nVenue speakers available. No microphone needed.\n"
+    }
+  ],
+  "documents": [
+    {
+      "id": "running-order",
+      "title": "Birthday · Running order",
+      "filename": "birthday-running-order.pdf",
+      "date": "2027-06-13",
+      "tags": ["birthday", "plans"],
+      "excerpt": "Willow Room · Saturday 19 June 2027, 18:00–23:00. Dinner 19:00, cake 20:30. Venue speakers; no microphone.",
+      "page": "My birthday\nRunning order\n\nSaturday 19 June 2027\nWillow Room · 24 guests\n\n18:00    Guests arrive\n19:00    Dinner\n20:30    Cake\n23:00    Finish\n\n18 standard · 4 vegetarian · 2 vegan\nVenue speakers · No microphone"
+    },
+    {
+      "id": "venue-booking",
+      "title": "Willow Room · Booking confirmation",
+      "filename": "willow-room-booking.pdf",
+      "date": "2027-06-01",
+      "tags": ["birthday", "venue"],
+      "excerpt": "Birthday celebration · Saturday 19 June 2027, 18:00–23:00. Contact Maya. Venue speakers included.",
+      "page": "Willow Room\nBooking confirmation\n\nSaturday 19 June 2027\n18:00–23:00\n\nBirthday celebration\nContact: Maya\nVenue speakers included."
+    }
+  ]
+}

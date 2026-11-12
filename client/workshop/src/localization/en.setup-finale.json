@@ -1,0 +1,18 @@
+{
+  "heading": "Make yourself at home.",
+  "skip": "Go to workspace",
+  "pause": "Pause",
+  "resume": "Resume",
+  "controls": {
+    "screen": "Workspace celebration",
+    "startingState": "10.6 · Finish setup · celebration",
+    "frame": "Celebration frame",
+    "live": "Live playback",
+    "replay": "Replay celebration",
+    "finish": "Show workspace",
+    "celebrate": "Celebrate",
+    "invite": "Invitation",
+    "paper": "Into the paper",
+    "workspace": "Workspace"
+  }
+}

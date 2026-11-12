@@ -1,0 +1,58 @@
+@startuml
+hide footbox
+skinparam shadowing false
+skinparam backgroundColor #fffefa
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 14
+skinparam defaultFontColor #30203e
+skinparam roundcorner 12
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam BoxPadding 10
+skinparam sequence {
+  ArrowColor #6a5c70
+  ArrowFontColor #30203e
+  ArrowFontSize 13
+  LifeLineBorderColor #8c7a97
+  ParticipantBorderColor #6a5c70
+  ParticipantBackgroundColor #eee7f9
+  ParticipantFontColor #30203e
+  ActorBorderColor #6a5c70
+  ActorBackgroundColor #fffefa
+  ActorFontColor #30203e
+  GroupBorderColor #6a5c70
+  GroupBackgroundColor #f6f3ee
+  GroupHeaderFontColor #30203e
+  DividerBorderColor #8c7a97
+  DividerBackgroundColor #f6f3ee
+}
+skinparam note {
+  BackgroundColor #fff7e3
+  BorderColor #8c7a97
+  FontColor #30203e
+  FontSize 12
+}
+
+actor User
+participant "Agent Integration" as Agent
+participant "Plugin Runtime" as Runtime
+participant "Active plugins" as Active
+
+User -> Agent: Request plugin development
+Agent -> Agent: Edit workspace source;\ncapture code and dependencies
+Agent -> Runtime: Inspect dependencies;\nstage related changes
+note over Runtime, Active
+  Active versions keep serving existing workflows.
+  Editing source does not select active revisions.
+end note
+Agent -> Agent: Run synthetic checks;\nretain revision-bound Check Receipt
+
+alt Required checks fail
+  Agent --> User: Report failure; no activation
+else Required checks pass
+  ref over Agent, Active
+    Drain affected work and revalidate
+    (next diagram)
+  end ref
+end
+@enduml

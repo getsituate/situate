@@ -1,0 +1,14 @@
+{
+  "productName": "Situate Smoke",
+  "identifier": "dev.situate.client.smoke",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Situate Smoke",
+        "width": 768,
+        "height": 800
+      }
+    ]
+  }
+}

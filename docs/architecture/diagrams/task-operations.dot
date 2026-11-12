@@ -1,0 +1,22 @@
+digraph TaskOperations {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  defaults [label="Ready-to-use task plugin\nText, identity, open/completed", fillcolor="#eee7f9", color="#6232bc"];
+  customize [label="Customize workflow?", shape=diamond];
+  adapt [label="Adapt filters, ordering\nand operations with user"];
+  view [label="Task view"];
+  chat [label="Chat"];
+  complete [label="Shared complete-task operation\nApply user's completion rule"];
+  history [label="Record workspace history"];
+
+  defaults -> customize;
+  customize -> view [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>No</TD></TR></TABLE>>];
+  customize -> adapt [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Yes</TD></TR></TABLE>>];
+  adapt -> view;
+  defaults -> chat [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Available immediately</TD></TR></TABLE>>];
+  view -> complete [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Complete task</TD></TR></TABLE>>];
+  chat -> complete [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Complete task</TD></TR></TABLE>>];
+  complete -> history;
+}

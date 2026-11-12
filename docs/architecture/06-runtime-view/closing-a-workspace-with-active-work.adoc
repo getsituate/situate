@@ -1,0 +1,46 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+=== Closing a workspace with active work
+
+==== Trigger and preconditions
+
+The user explicitly closes an open workspace, including by closing its last window.
+Switching the displayed workspace on mobile or closing only a plugin view does not trigger this flow.
+The Application Core coordinates closure through Workspace Lifecycle; Agent Integration and Plugin Runtime report and control their respective work.
+The scenario assumes a responsive application during normal operation.
+
+==== Interaction
+
+.Explicit workspace closure: block new starts, handle active work and close only when the prerequisites are met.
+image::{architecture-diagrams-root}/workspace-close-sequence.svg["The core blocks new starts and asks whether to cancel closure or abort active work. Cancellation restores normal operation. Closure proceeds only after work has stopped and the chosen synchronization conditions are satisfied."]
+
+.Pending synchronization during closure. Action and synchronization choices are logically separate; these views do not prescribe two dialogs or a fixed presentation order. Sync Transport can be built in or supplied by a plugin.
+image::{architecture-diagrams-root}/workspace-close-sync.svg["The user chooses synchronization before closure or closure with local changes retained. Waiting keeps the workspace and transport active. Offline conditions, conflicts or failures leave synchronization pending and the workspace open."]
+
+. User Interface forwards the closure request to the Application Core through Workspace Lifecycle.
+. The core blocks new action starts in the affected workspace and obtains its active-work state from Agent Integration and Plugin Runtime.
+. If actions are running, the user chooses “Cancel” or “Abort now and close.” Cancellation discards the closure request and restores normal operation, including new starts and configured synchronization, without interrupting running work. The flow ends without scheduling automatic closure after that work finishes.
+. If the user proceeds, the core coordinates aborting running work. Aborting does not undo external effects already triggered.
+. If closure proceeds, the core assesses pending synchronization, including local changes retained after aborting work. A local-only workspace has no synchronization prerequisite.
+. If configured synchronization is pending, the user chooses to wait for successful synchronization or close while preserving local changes for reopening. Waiting keeps the workspace and the transport resources needed for synchronization active.
+. Once closure is still requested, running work has stopped and the chosen synchronization conditions are satisfied, the core completes closure. Agent work, including development conversations, plugin execution, automation and synchronization stop for this workspace; other open workspaces remain unaffected.
+
+Application quit applies the closure obligations to open workspaces without removing them from the remembered startup set.
+Individually closing a workspace removes it from that set.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013].
+
+==== Failure and recovery
+
+Offline operation, unresolved conflicts and exchange failures are not successful synchronization.
+When the user chose to wait, these conditions leave the workspace open with pending synchronization rather than reporting successful closure.
+Choosing closure with retained local changes does not discard those changes or claim that another device has received them.
+
+Operating-system suspension and forced termination cannot guarantee the interactive closure procedure.
+An abort request also cannot guarantee interruption of synchronous plugin code blocking the shared runtime; the separate recovery startup path remains necessary.
+On reopening, interrupted conversations await interaction rather than silently resuming; normal configured synchronization and trigger policies remain separate.
+Shutdown across the full plugin and synchronization design, tracking of nested actions and presentation of combined close choices remain open.

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320" role="img" aria-labelledby="bend-celebrate-curious-title" focusable="false" data-bend-pose="celebrate" data-bend-expression="curious">
+<title id="bend-celebrate-curious-title">Bend — celebrate, curious</title>
+<defs>
+<clipPath id="bend-celebrate-curious-left-exterior" clipPathUnits="userSpaceOnUse"><rect x="0" y="0" width="124" height="320"/></clipPath>
+<clipPath id="bend-celebrate-curious-right-exterior" clipPathUnits="userSpaceOnUse"><rect x="195" y="0" width="125" height="320"/></clipPath>
+</defs>
+<g data-bend-part="figure" style="transform-box:view-box;transform-origin:160px 270px">
+<g data-bend-part="rear-arms"><g clip-path="url(#bend-celebrate-curious-left-exterior)"><g data-bend-part="left-arm" data-bend-origin="103 169" style="transform-box:view-box;transform-origin:103px 169px"><path d="M103 169C70 170 55 154 45 124" fill="none" stroke="#a77bff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/></g></g><g clip-path="url(#bend-celebrate-curious-right-exterior)"><g data-bend-part="right-arm" data-bend-origin="225 169" style="transform-box:view-box;transform-origin:225px 169px"><path d="M225 169C249 173 264 150 270 125" fill="none" stroke="#a77bff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/></g></g></g>
+<g data-bend-part="body">
+<path data-bend-part="depth" d="M105 270V148c0-82 131-89 136-3l2 113c0 15-13 21-23 15l-9-8-2-115c-1-33-84-30-85 2v110c0 15-9 24-19 8Z" fill="#56329b"/>
+<path data-bend-part="front" d="M91 264V141c0-82 132-88 136-2l2 112c0 17-30 19-31 3l-3-111c-1-33-71-29-71 3v115c0 19-33 22-33 3Z" fill="#a77bff"/>
+<path data-bend-part="highlight" d="M101 257V142c0-35 22-61 54-64" fill="none" stroke="#d9c6ff" stroke-width="3" stroke-linecap="round"/>
+<path data-bend-part="inset" d="M204 143l2 106" fill="none" stroke="#7045bd" stroke-width="2" stroke-linecap="round"/>
+</g>
+<g data-bend-part="face" fill="none" stroke="#30203e" stroke-linecap="round" stroke-linejoin="round" style="transform-box:view-box;transform-origin:160px 100px"><path d="m144 90 8-2m15-4q5-4 10-1" stroke-width="2.4"/><path d="M149 98v4m24-8v8" stroke-width="5.5"/><ellipse cx="164" cy="112" rx="3.5" ry="4.5" stroke-width="2.6"/></g>
+<g data-bend-part="prop"><g transform="rotate(12 265 104)">
+<rect x="243" y="78" width="45" height="51" rx="8" fill="#d7ad38"/>
+<rect x="239" y="73" width="45" height="51" rx="8" fill="#f4f06d"/>
+<path d="m250 97 7 7 14-17" fill="none" stroke="#30203e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g></g>
+</g>
+</svg>

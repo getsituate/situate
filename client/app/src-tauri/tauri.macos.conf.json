@@ -1,0 +1,20 @@
+{
+  "build": {
+    "beforeDevCommand": "node ../scripts/generate-mobile-permissions.mjs --macos && npm run dev",
+    "beforeBuildCommand": "node ../scripts/generate-mobile-permissions.mjs --macos && npm run build"
+  },
+  "bundle": {
+    "resources": {
+      "macos-permissions/en.lproj/InfoPlist.strings": "en.lproj/InfoPlist.strings",
+      "macos-permissions/de.lproj/InfoPlist.strings": "de.lproj/InfoPlist.strings",
+      "dictation/Media/loader.pl": "dictation/loader.pl",
+      "dictation/THIRD-PARTY-NOTICES.txt": "dictation/THIRD-PARTY-NOTICES.txt"
+    },
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "frameworks": ["dictation/.build/media/libSituateMedia.dylib"],
+      "infoPlist": "Info.macos.plist",
+      "entitlements": "Entitlements.macos.plist"
+    }
+  }
+}

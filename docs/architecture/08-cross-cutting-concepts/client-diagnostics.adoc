@@ -1,0 +1,359 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+[[client-diagnostics]]
+=== Client diagnostics
+
+*Status: accepted design with a local client implementation; production plugin integration and device-specific verification remain separate.*
+link:{architecture-docs-root}/09-architecture-decisions/ADR-0008-device-local-diagnostics.adoc[ADR-0008] records the collection architecture.
+link:{architecture-docs-root}/09-architecture-decisions/ADR-0009-workspace-diagnostic-identity.adoc[ADR-0009] replaces its user-identity and launch-local workspace-alias choices with the portable <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>>.
+This random value correlates diagnostics across devices and workspace copies.
+link:{architecture-repository-root}/requirements/data/goals/GOAL-0006-diagnose-client-behavior.md[GOAL-0006] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0064-record-client-diagnostic-events.md[REQ-0064] through link:{architecture-repository-root}/requirements/data/requirements/REQ-0067-limit-diagnostic-data.md[REQ-0067] govern coverage, replacement, retention and data limits.
+An initial 256 MiB installation-wide log limit, asynchronous logging that does not interrupt application work, no application-level log encryption, and separate workspace, device and session correlation identifiers are confirmed constraints.
+The implementation uses the resource limits below. They are safety bounds, not measured optimal settings or real-time guarantees.
+
+==== Ownership and boundaries
+
+Use one application-owned diagnostic event contract, with JavaScript and Rust bindings, rather than expose a vendor SDK throughout the client.
+The JavaScript binding supports plain JavaScript plugins; TypeScript declarations aid host development but are not a plugin-authoring prerequisite.
+The native host owns the collector, destination selection and the sole local-file writer.
+Log storage operates at installation scope, including startup before a workspace opens, and does not use workspace storage or Git history.
+The Diagnostic Workspace Identifier is portable metadata supplied when the host opens and validates a workspace; consuming it does not make log files workspace content.
+The <<glossary-runtime-workspace-binding,Runtime Workspace Binding>> instead associates a request or loaded record with an authorized local session.
+The <<glossary-device-local-workspace-namespace,Device-local Workspace Namespace>> associates local AI settings with a workspace location; a diagnostic identifier is not that credential namespace.
+Initialize native collection before workspace restoration and plugin loading; a producer awaiting host readiness retains only its bounded local queue.
+
+[cols="2,4",options="header"]
+|===
+|Boundary |Responsibility
+|Application, Agent Integration and native operations
+|Emit semantic events at interaction and operation boundaries. Preserve causal context when crossing asynchronous or frontend/native boundaries; do not pass whole application objects to the logger.
+|Shared UI components
+|Accept an injected interaction-recording capability or expose semantic actions to their owner. Do not import application internals, Tauri or a destination SDK. The application supplies content-neutral action identifiers.
+|Plugin Runtime and SDK
+|Bind a logger to the plugin's origin, version and workspace context. Plugins emit through the same contract and constraints as built-in code; they do not select log files or destinations.
+|JavaScript binding
+|Validate allowed event fields, add producer sequence and timing, and enqueue bounded batches. Browser tests and the workshop can inject an in-memory destination without loading the native host.
+|Rust collector and writer
+|Revalidate incoming batches, attach host-owned context, assign receipt order, enforce queue and disk bounds, filter destinations and serialize file writes. Native operations enter the same collector without round-tripping through a WebView.
+|Future destinations
+|Consume validated events behind the collector boundary, with their own filters and bounded delivery policy. An unavailable destination must not block local recording. No external destination is implemented initially.
+|===
+
+Core code depends on the diagnostic contract, not Tauri handles or file paths.
+The host composes the implementation and provides the appropriate binding to core operations.
+One logical API does not mean importing one language-specific library everywhere.
+An internal no-op implementation supports isolated tests and unavailable logging; it is not a user-facing runtime setting.
+
+The link:{architecture-repository-root}/client/app/src-tauri/src/diagnostics.rs[native bridge] composes the link:{architecture-repository-root}/client/crates/situate-core/src/diagnostics/mod.rs[collector] before workspace restoration; the link:{architecture-repository-root}/client/app/src/diagnostics/index.ts[frontend facade] starts before mounting the application.
+Frontend batches contain at most 64 KiB of UTF-8 bytes, checked before event deserialization. Desktop and iOS deliver raw bodies; Android delivers Tauri's JSON array of byte values because https://github.com/tauri-apps/tauri/issues/10573[its IPC transport does not support raw bodies]. Only arrays of at most 65,536 integers in the range 0–255 are accepted on that path; structured event objects and other JSON representations are rejected. Tauri parses the transport envelope before command dispatch, so this limit does not bound framework-level JSON parsing. Both transports use the same event validation and window/session authorization.
+File, model, tool and OpenAI browser sign-in requests carry optional diagnostic context separately from their authorized application request.
+OpenAI browser sign-in records `operation.progress` with `component=openai_login`: allowlisted stages and error codes distinguish the callback, token exchange, identity verification, grant validation and connection persistence. HTTP status is recorded without URLs or response bodies; checkpoint durations are elapsed milliseconds since the operation began, not individual request durations.
+The dependency direction follows link:{architecture-docs-root}/index.adoc#current-client-packages[current client package boundaries].
+The production Plugin Runtime and its logger injection remain part of the broader unimplemented plugin integration.
+
+==== Event contract and causality
+
+Use versioned structured events and UTF-8 JSON Lines on disk: one complete JSON object per line.
+There is no arbitrary message string or unrestricted object field in the standard API.
+An event catalog defines each event's identifier, level, category and allowed attributes; both language bindings validate the same contract using shared fixtures.
+Changes that reinterpret existing fields require a schema version change rather than silently changing their meaning.
+
+[cols="2,4",options="header"]
+|===
+|Fields |Meaning and limits
+|`schema_version`, `event`, `level`, `category`
+|Contract version and catalog-defined event semantics. Built-in identifiers are static and independent of UI language or user content.
+|`timestamp_ms`, `received_at_ms`, `sequence`, `collector_sequence`
+|Producer and native collector acceptance times in epoch milliseconds, producer-local order and collector delivery order. Delivery order is not proof of causal execution order. Wall-clock changes do not determine durations.
+|`workspace_id`, `device_id`
+|The Diagnostic Workspace Identifier generated at creation and retained in portable workspace metadata, plus a device identifier generated once and retained locally. Synchronization, complete copies and restoration preserve the Diagnostic Workspace Identifier. Application events without workspace context omit `workspace_id`; no user identifier is recorded.
+|`session_id`, `producer_id`
+|Fresh random application-launch and producer identities. A restarted WebView has a new producer identity; the application's session identity remains until application restart.
+|`origin`, `app_version`, `platform`, `platform_version`
+|Host-bound origin and build/platform metadata. Unix desktop versions describe the numeric kernel release; unavailable versions are `unknown`. Plugin-specific aliases, versions and schema registration await the production runtime; they are not accepted v1 input fields.
+|`context.trace_id`, `context.span_id`, `context.parent_span_id`, `context.initiator`
+|Explicit causal context and whether work originates from a user, an agent or a background trigger. IDs are diagnostic correlation values, not authorization credentials or durable content identities.
+|`attributes.duration_ms`, `attributes.outcome`, other catalog attributes
+|Monotonic elapsed duration, defined result state and event-specific validated scalars. No nested arbitrary payload, exception serialization or stringified object.
+|===
+
+A user action or independent background operation starts a trace; nested operations create child spans.
+Pass the captured context explicitly through promises, IPC requests, callbacks and plugin calls rather than keep one mutable global current operation.
+Concurrent actions in different panes or workspaces must not inherit one another's context.
+Retries have distinct attempt spans; a completed write is not repeated merely because its diagnostic event is missing.
+Each IPC boundary validates correlation values separately from its existing window and workspace authorization.
+An event timestamp or caller-supplied workspace reference is not an access grant.
+
+The host supplies the validated Diagnostic Workspace Identifier separately from the Runtime Workspace Binding and keeps plugin alias mappings in memory.
+Resolve the context before producer enqueue; do not temporarily buffer private names or paths for later redaction.
+Diagnostic Workspace Identifiers and device identifiers persist across application launches; plugin aliases remain launch-local.
+Plugin aliases connect load and execution events within a launch, but identifying a personal plugin after that launch may require separately supplied context.
+
+Generate Diagnostic Workspace Identifiers and device identifiers randomly rather than hash a workspace path, email address, account name, serial number or hardware fingerprint.
+The host supplies them; producers cannot override bound workspace or device context on each event.
+Workspace creation persists its Diagnostic Workspace Identifier with portable metadata so every synchronization transport can preserve it without a user account.
+Complete copies and restorations keep that identifier; deliberately independent workspaces receive a new one without changing the original.
+An ordinary directory copy is not sufficient evidence of that intent. The explicit operation for making a copy independent remains undecided.
+Two local copies with the same Diagnostic Workspace Identifier retain separate Runtime Workspace Bindings; diagnostic correlation does not merge mutable state or grant access.
+
+Keep device identity outside synchronized workspace state so copying a workspace does not clone a device identity.
+Logging reads admitted context and never initializes or repairs workspace metadata as a side effect of emitting an event.
+The portable document is `.situate/workspace.json`, containing only `version: 1` and a canonical random UUIDv4 `id`, with a 1 KiB read limit.
+When the host opens a writable native legacy workspace, it initializes missing diagnostic metadata once through exclusive file publication; concurrent opens retain the winning document.
+Desktop and iOS adapters use hard links. The Android app-owned-directory adapter stages and synchronizes the complete document, then publishes that file through a descriptor-relative `renameat2(RENAME_NOREPLACE)` JNI primitive; it never replaces an existing target. This avoids requiring hard-link permission in the Android sandbox. Kernel, filesystem and seccomp compatibility remain platform constraints; bypassing the API-30 libc symbol does not establish runtime compatibility on older Android versions.
+Read-only, malformed or unsupported metadata remains untouched. Workspaces without an available Diagnostic Workspace Identifier remain usable but do not receive workspace-scoped diagnostic producers.
+Android document-provider workspaces without metadata cannot initialize the Diagnostic Workspace Identifier because the Storage Access Framework (SAF) has no exclusive named-create primitive. New provider workspaces receive metadata during creation under the existing provider trust boundary.
+Legacy copies opened independently can receive different Diagnostic Workspace Identifiers before the metadata is transferred; diagnostics does not infer that they previously shared content.
+Device identity survives while its local application data survives. Missing device metadata creates a new identifier; corrupt metadata disables diagnostic initialization without replacement. Reinstalling with retained application data retains identity; deleting that data does not.
+Stable identifiers and activity sequences are pseudonymous, not a guarantee of anonymous data.
+There is no `user_id` in the diagnostic contract and no account mapping or association of different workspaces with a person.
+
+==== Levels and instrumentation
+
+Use `error`, `warn`, `info`, `debug` and `trace`, with the default local threshold including `trace`.
+Category selection is independent of severity.
+Thresholds belong to implementation configuration and destination filters, not a user-facing settings control during a running session.
+
+[cols="1,4",options="header"]
+|===
+|Level |Use
+|`error`
+|An operation fails or an unhandled failure is observed. Record a stable failure code and safe technical context, not an exception's original message.
+|`warn`
+|Degraded operation, an expected retry, a detected interruption or known diagnostic loss.
+|`info`
+|Application lifecycle, important operation starts, successful completion and ordinary user cancellation. A routine rejection without degradation also uses `info`.
+|`debug`
+|Selected technical transitions, attempt boundaries and internal decisions necessary to explain an operation.
+|`trace`
+|Individual control activations, navigation and fine-grained technical steps. Do not record pointer movement, text-entry keystrokes, DOM snapshots or every model-stream token.
+|===
+
+Instrument shared control activation with explicit static action identifiers, including pointer and keyboard activation, and record domain execution separately.
+Custom controls and plugin views need equivalent explicit instrumentation; a global DOM listener cannot infer their meaning safely.
+Do not collect labels, text content, CSS selectors derived from data, coordinates or rendered HTML.
+A control activation establishes intent, not successful completion.
+Navigation records a view type and causal context, not a private tab name, document title or route containing a path.
+
+Record operation start and one observed terminal outcome, with elapsed time where available.
+The boundary that owns an operation records its terminal outcome; intermediate layers propagate the result and context rather than log the same failure again. Nested operations retain distinct spans.
+A user-requested cancellation is not an operational failure. A rejected operation with a conflict or availability error uses `warn`; a routine decision not to proceed is `info`.
+Unfinished execution is an interruption, not evidence of user cancellation. An observed native unwind is a failure classified as `panic`; neither classification promises that a crash record reaches disk.
+The same causal context joins UI intent, native persistence, agent/model activity and plugin operations.
+External calls record an adapter/operation classification and result code, not a raw URL, headers, query string or response body.
+Shell tool calls likewise omit command text, arguments, environment and stdout/stderr.
+No automatic forwarding of `console`, arbitrary dependency logs, panic payloads or raw provider errors is enabled.
+Third-party integrations need explicit adapters producing approved technical fields.
+
+The frontend installs Vue, script-error, resource-error and unhandled-rejection handlers before mounting the application. View boundaries that consume Vue errors record the failure before showing their fallback.
+These handlers emit `runtime.failed` with a finite boundary and error code; they do not inspect exception messages, stacks, rejection payloads or component objects. Unknown failures use `unknown`.
+Global callbacks without explicit causal or workspace context emit application-scoped events rather than infer a context from the currently visible pane.
+Overlapping callbacks for the same object in one microtask interval are coalesced with bounded temporary identity tracking. Logging failure does not recursively invoke failure reporting or suppress browser defaults.
+
+Native operation guards distinguish explicit completion, unfinished execution and an unwind observed while dropping the guard. Login worker supervisors observe task completion so a worker panic does not leave sign-in waiters pending indefinitely.
+Selected settings commands and watcher I/O transitions emit safe runtime-failure classifications at their result-owning boundaries. This is not blanket capture of every native thread or command.
+There is no application-wide panic hook: the current producer may allocate and validate, so it is not treated as a hook-safe emergency reporting path. Abort, process termination and failures before collector readiness can leave no retained failure event.
+
+==== Diagnostic data admission and plugin trust
+
+Diagnostic data admission accepts validated events into the bounded logging pipeline; it does not authorize agent or plugin execution through <<glossary-operation-admission,Operation Admission>>.
+Apply a field allowlist before an event enters a JavaScript queue, and again in the native collector before storage or routing.
+Permit bounded numbers, booleans, declared enumerations and host-issued opaque references; do not treat a field named `message`, `id` or `error` as inherently safe.
+Reject unknown events, attributes and malformed values without echoing their contents into a diagnostic error.
+A bounded loss counter may record the rejection reason and trusted origin.
+Oversized events are dropped as a whole rather than truncate JSON or preserve an arbitrary prefix of unsafe data.
+Pattern-based secret redaction can be a secondary check but is not the data boundary.
+
+For failures, normalize to known error classes/codes.
+Unknown errors record an unknown-failure classification and related operation context, not their original text.
+Stack capture, where supported, retains only validated shipped-code locations tied to a build; it excludes absolute local paths, source excerpts and local variables.
+An unclassifiable frame is omitted.
+This loses some immediate debugging detail and requires tests against representative failures rather than a claim of complete diagnosis from every exception.
+
+The v1 catalog is static, with finite scalar enums; arbitrary plugin event/schema registration is not implemented.
+A production plugin runtime must make any additional definitions declarative and namespaced under its bound plugin origin, with bounded schema size and field counts.
+Standard lifecycle events remain host-defined; plugin-specific definitions cannot enable arbitrary payload logging or override host context.
+The plugin logger is supplied as a bound host capability; plugin code does not provide its own origin or workspace on each call.
+A declaration alone does not prove that plugin-supplied values are non-sensitive.
+Installed plugins remain trusted code under the link:{architecture-repository-root}/requirements/data/foundations.md#plugin-trust-and-synchronization-ownership[plugin trust boundary]; this contract does not sandbox a malicious plugin or prevent it from sending data through other APIs.
+Schemas, generated plugin code and fixtures must be reviewed for the same data restrictions.
+Do not advertise logs as anonymous: timing, behavior and technical metadata can still be sensitive or indirectly identifying.
+
+==== Local files and retention
+
+Resolve an OS-local application data directory through the native host and store files in a dedicated `diagnostics` child directory, never under a selected workspace.
+Desktop logs use Tauri's `app_log_dir()/diagnostics`; device identity uses `app_local_data_dir()/diagnostics/device-id`.
+Android uses internal `noBackupFilesDir/diagnostics`; iOS uses Application Support `diagnostics` with backup exclusion requested. Both put segments in a `logs` child.
+Actual device backup, retrieval and suspension behavior still require device verification; host source tests cannot establish them.
+Do not fall back to a workspace, a synchronized directory or the current working directory when that location is unavailable.
+Use private filesystem permissions where supported. Local files have no additional application-level encryption, as confirmed for this scope; OS access controls and device protection do not constitute an application-level secrecy guarantee.
+Operating-system backups and crash-reporting facilities are distinct from Situate workspace synchronization.
+
+One native writer owns the installation log directory under an exclusive OS file lock.
+Additional application processes that cannot acquire it continue without a file writer; they must not rotate or append the owner's files.
+This is a logging-writer policy, not a new application single-instance restriction.
+Diagnostic queue admission and I/O are separate so the lock does not serialize application work.
+
+The initial storage limit is 256 MiB of logical log-file bytes per installation under link:{architecture-repository-root}/requirements/data/requirements/REQ-0066-bound-local-diagnostic-storage.md[REQ-0066].
+Segments are limited to 4 MiB with at most sixty-four files, including the active file.
+The capacity estimate below compares the selected limit with 64 MiB. It estimates several days of detailed activity under its assumptions, not a guaranteed retention period.
+Count all retained diagnostic files across sessions and schema versions, not one allowance per workspace, process or plugin.
+No compression, archive copies or persisted upload spool are introduced.
+A future spool must receive an explicit storage policy rather than silently escape this budget.
+
+Rotate before the next complete record would exceed a segment, deleting the oldest eligible segment before allocating a replacement.
+Startup scans the owned directory, accounts for existing files and establishes the bound before recording new events.
+File names and deletion candidates are host-generated and validated; do not follow symlinks or delete arbitrary files to recover budget.
+Unexpected files or failures to delete/rotate disable further file writes when the limit cannot be maintained.
+A restart does not reset accounting or create another storage allowance.
+
+Recover a partially written final line only while holding the writer lock, by truncating that incomplete suffix before further append.
+Previously completed lines remain readable independently; a corrupt file is not replayed as application state.
+Rotation can remove the beginning of a trace while its end remains, and no minimum retention duration or complete-trace retention is promised.
+The budget is for logical diagnostic file bytes, not filesystem allocation overhead, backups or a guarantee of free disk space.
+
+==== Capacity and lookback estimate
+
+This is a planning calculation, not measured application usage or a retention commitment.
+Compact UTF-8 JSON serialization of a synthetic operation event with the envelope, workspace/device/session identifiers, causal context, version, platform and small scalar attributes occupies roughly 0.7–0.8 KiB, depending on plugin context.
+Use 1 KiB per event as a working average, with 0.5–2 KiB as a sensitivity range rather than a measured distribution.
+Large allowed events and stack metadata can increase the average.
+
+[cols="1,2,2",options="header"]
+|===
+|Mean serialized event size |Events in 64 MiB |Events in 256 MiB
+|0.5 KiB |131,072 |524,288
+|1 KiB |65,536 |262,144
+|2 KiB |32,768 |131,072
+|===
+
+For the following scenarios, assume two active hours per day, no events during the remaining hours, 1 KiB per event, and no compression.
+Event rates include all components together, not clicks alone. One interaction can create an activation event and multiple operation, IPC, plugin and completion events.
+The rates are illustrative hypotheses, not claims about typical users.
+
+[cols="2,1,1,1,1",options="header"]
+|===
+|Scenario |Mean events/second while active |MiB/day |Days at 64 MiB |Days at 256 MiB
+|Light technical activity |1 |7.0 |9.1 |36.4
+|Detailed interaction and operations |5 |35.2 |1.8 |7.3
+|Sustained busy automation |20 |140.6 |0.46 |1.82
+|===
+
+At 20 events/second, 64 MiB holds about 55 minutes of active work, less than one assumed two-hour usage day.
+Background activity matters even with a closed view: one event every ten seconds for the remaining twenty-two hours adds 7,920 events, or about 7.7 MiB per day.
+Combined with the five-event/second scenario, this reduces lookback to about 1.5 days at 64 MiB or 6.0 days at 256 MiB.
+If the application is closed or suspended without execution, those background events do not occur.
+Doubling average event size or total event volume halves the lookback.
+
+These are nominal full-budget capacities. Whole-segment rotation removes up to roughly one segment of history at a time; partially filled segments, lifecycle rotation and omitted records can further reduce useful retained coverage.
+The 16 KiB per-event ceiling is a safety limit, not an expected average.
+Verify the planning assumptions behind the initial limit by measuring bytes/event and events/minute in synthetic interactive, agent-heavy, synchronization and idle runs, including bursts and supported mobile platforms.
+No particular number of days is guaranteed by a size-only budget.
+
+==== Bounded transport and failure behavior
+
+Application work must not depend on diagnostic delivery or storage. This asynchronous failure-isolation rule is confirmed.
+Producer calls perform bounded validation and a non-blocking enqueue; they never await file I/O or network delivery.
+Run file serialization, writing, flushing and rotation in a background worker, not on the UI thread or while holding application mutation locks.
+A dedicated native writer thread owns serialization and I/O; no additional OS process is started.
+Catch recoverable pipeline failures at the logging boundary rather than propagate them into the calling feature.
+Minimal event capture, validation, IPC encoding and diagnostic data admission still consume CPU and memory; shared disk and scheduling also have costs. Asynchrony cannot guarantee literally zero resource influence, so bounds and performance verification remain necessary.
+All producer queues, host queues, in-flight batches and individual records have explicit byte limits.
+A JavaScript producer sends at most one native batch at a time, preventing a slow bridge from creating an unbounded number of pending promises.
+Do not automatically retransmit a batch with an uncertain reply or start replacement requests while its native call remains unresolved; the bounded producer queue absorbs or drops subsequent activity.
+The native host validates serialized batch size before admitting individual events and reports diagnostic data admission status, not a durability acknowledgement.
+Closed producers release their buffers; the native collector also bounds the number of registered producers and schemas.
+
+[cols="2,2,3",options="header"]
+|===
+|Parameter |Initial value and status |Purpose
+|Local log files
+|256 MiB total; 4 MiB segments
+|Shared installation-wide disk bound, active file included; see capacity estimate
+|Serialized event
+|16 KiB maximum
+|Bound validation, serialization and file-write work for one event
+|JavaScript producer queue
+|256 KiB per producer
+|Bound backlog while the native bridge is slow or unavailable
+|IPC batch
+|64 KiB and 64 events; one IPC in flight per WebView, including registration and release
+|Avoid per-event IPC without creating an unbounded transport backlog
+|Native event queue
+|2 MiB total
+|Bound backlog independently of workspace and plugin count
+|Batch dispatch
+|At size threshold or after 250 ms while scheduled
+|Balance IPC frequency and recent-event exposure to termination
+|File-buffer flush
+|At least once per second while the writer is scheduled; earlier for errors
+|Reduce buffered loss without synchronously flushing every interaction
+|Graceful shutdown drain
+|At most one second
+|Best-effort retention without making logging an indefinite quit prerequisite
+|===
+
+Each WebView admits at most sixteen producers, including draining producers: at most 4 MiB of serialized queued payload plus one in-flight batch and bounded object overhead.
+The native bridge admits sixty-four registrations installation-wide and at most sixteen per window. The collector admits 128 producers including native operations.
+The native queue charges a conservative fixed allocation per validated record, including in-flight records; count and byte bounds both apply.
+No dynamic schemas or unbounded per-event loss keys are retained.
+Use bounded field counts and lengths, not unrestricted serialization followed by a size check.
+
+Under pressure, discard lower-priority queued events before higher-priority ones; if the bounded queue still cannot admit an event, drop it rather than delay application work.
+Maintain bounded counters by trusted origin, level and loss reason, and emit a synthetic loss summary when capacity returns.
+Do not recursively log failures of the logging pipeline.
+Repeated failures receive the same bounded diagnostic data admission policy; no additional deduplication or sampling is proposed initially because it could obscure event sequences.
+Even error records can be lost under sustained pressure, and loss counters in memory may disappear on termination.
+
+On disk-full, permission, lock or rotation failures, suspend file writes and retain only the bounded queue and loss counters.
+Retry storage readiness no more often than every five seconds while the application remains active; do not create a tight retry loop or a hidden post-quit process.
+Resumption applies normal rotation before writing queued events and a loss summary.
+Do not redirect raw records to stderr, a workspace or a network endpoint as a fallback.
+Logging failure must not fail a content save, authorize an external action, block navigation or claim that an operation succeeded.
+The logger does not acquire workspace mutation or conversation locks while performing I/O.
+
+Flush producer batches on orderly closure when possible, and attempt the bounded native drain after application work has quiesced.
+Do not call durable filesystem synchronization for every event.
+A queue acknowledgement or buffer flush is not a power-loss guarantee; recent data can be lost on crash, WebView termination, mobile suspension or an exhausted shutdown deadline.
+A retained session start without a retained normal end can be reported as an incomplete session, not proof of a crash or of its cause.
+No native crash dump, session replay or exactly-once diagnostic delivery is promised.
+
+==== Future delivery boundary
+
+Only the local-file destination ships initially.
+The collector contract permits an independently filtered in-memory test destination so replacement and fan-out can be verified without a real service.
+Keep destination-specific authentication, network retries and remote schemas out of event producers.
+No vendor dependency or general-purpose exporter framework is required to establish this boundary.
+
+A later diagnostic report would select retained records by time and causal context; it cannot recover records removed by rotation or dropped under pressure.
+Continuous delivery would need a separate bounded queue, authorization/participation policy, remote retention policy and failure semantics.
+Neither is activated by the mere presence of a replaceable API.
+The current host command is write-only diagnostic data admission; it does not give plugins an installation-wide log-reading or export capability.
+
+Product analytics is not defined by these diagnostic events alone.
+Persistent workspace/device pseudonyms enable cross-launch and cross-device workspace correlation, not person-level association across workspaces. Rotation, overload loss, launch-local plugin aliases and future participation choices still limit completeness and longitudinal analysis.
+A future analytics event contract and lawful data flow require separate decisions; adding a destination cannot retroactively make these records a complete usage dataset.
+
+==== Verification and remaining decisions
+
+Before delivery, verify the following with synthetic data and fault injection:
+
+* The same catalog fixtures validate in JavaScript and Rust; unknown and oversized fields are rejected without echoing content.
+* Sentinel content, credentials, private paths and error text never enter queues or file/test destinations, including from plugin and provider errors.
+* Concurrent actions in multiple panes and workspaces retain distinct causal contexts across IPC and plugin calls; clock changes do not corrupt durations.
+* Independent workspace creation assigns distinct Diagnostic Workspace Identifiers; complete copies, restoration and transport preserve them while retaining destination device/session context. Two local copies do not share runtime state merely because their Diagnostic Workspace Identifiers match.
+* Control activation is distinct from operation success, including keyboard activation, failed handlers and cancelled operations.
+* A slow or unavailable native bridge, flooded producer and blocked writer cannot grow queues or pending batches without bound; loss summaries expose known omissions.
+* Rotation during long sessions and after restart respects a reduced test budget, including partial lines, existing segments, multiple processes, deletion failure and symlink attempts.
+* Storage failure leaves content operations and quit behavior independent; no workspace files, histories or network endpoints receive fallback logs.
+* Replacing the writer with an in-memory destination does not change producers, and filtering one destination does not change another's accepted event set.
+* Desktop and mobile builds verify private directory resolution, file locking, lifecycle flush behavior and log retrieval through developer tooling. Browser tests alone cannot establish these properties.
+
+The link:{architecture-repository-root}/client/contracts/diagnostics.json[v1 catalog] and link:{architecture-repository-root}/docs/development/client-diagnostics-plan.md[development plan] define the implementation and verification boundary.
+An explicit operation for making a copied workspace independent remains unspecified. Production plugin/synchronization integration is deferred with those runtimes.
+Mobile device retrieval, backup behavior, suspension and non-host desktop behavior must be verified on their target platforms; finite queue tests do not establish zero resource overhead or a user-facing latency guarantee.

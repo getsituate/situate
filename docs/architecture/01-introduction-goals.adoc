@@ -1,0 +1,14 @@
+[[introduction-goals]]
+== Introduction and Goals
+
+:architecture-repository-root: ../..
+:architecture-docs-root: ..
+
+include::01-introduction-goals/requirements-overview.adoc[]
+
+include::01-introduction-goals/quality-goals.adoc[]
+
+include::01-introduction-goals/stakeholders.adoc[]
+
+:!architecture-repository-root:
+:!architecture-docs-root:

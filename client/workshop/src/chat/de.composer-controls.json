@@ -1,0 +1,11 @@
+{
+  "model": "Chatmodell",
+  "thinking": "Denkaufwand",
+  "workspaceDefault": "Arbeitsbereichsstandard",
+  "recommended": "Empfohlen",
+  "explicit": "Auswahl für diese Unterhaltung",
+  "scope": "Gilt für die nächste Nachricht dieser Unterhaltung auf diesem Gerät.",
+  "low": "Niedrig",
+  "medium": "Mittel",
+  "high": "Hoch"
+}

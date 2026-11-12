@@ -1,0 +1,38 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::strategy-diagrams-root[]
+:strategy-diagrams-root: ../diagrams
+endif::[]
+
+[[strategy-plugin-automation]]
+=== View-independent execution and triggers
+
+Plugin execution is independent of whether a plugin view is open.
+During normal operation with their workspace open, plugins can respond to shortcuts, intervals, scheduled times, application events and available operating-system events.
+Recovery startup suppresses those triggers across all restored workspaces.
+Requesting explicit workspace closure blocks new action starts while the user decides whether to cancel closure or abort running work and close.
+Cancelling closure restores normal operation without interrupting running work or scheduling later closure.
+Once the last window for that workspace closes, execution stops, even if Situate and other workspaces remain open.
+Mobile suspension and platform capability limits still apply; this does not introduce an always-running server agent or guarantee execution while the workspace is closed.
+
+Plugins define whether missed triggers are skipped or caught up after the workspace becomes available again.
+A configured trigger may start an agent run without an open chat, within its configured task and account access, without per-action approval.
+Each plugin chooses whether to present that work as a conversation or show only its result with history accessible on demand.
+Presentation does not waive traceable process history.
+See link:{strategy-requirements-root}/data/requirements/REQ-0005-record-process-history.md[REQ-0005] and link:{strategy-requirements-root}/data/requirements/REQ-0031-run-plugins-independently-of-views.md[REQ-0031].
+
+=== Cross-device execution policy
+
+A scheduled workflow normally aims to run once across devices using the same workspace, but per-device execution is also supported.
+The plugin defines whether it waits for coordination, runs offline or accepts possible duplicate execution.
+Completed results are synchronized when synchronization is configured and the workspace is open; execution coordination must not require mirroring in-flight conversations between devices.
+
+The core provides coordination capabilities alongside synchronization, without prescribing a universal offline policy or promising exactly-once execution.
+A marker synchronized between devices alone cannot exclude simultaneous starts or disconnected execution.
+The coordination protocol, transport capability requirements and recovery after a device disappears remain open.
+This preserves workflow choice at the cost of making duplicate handling and availability an explicit part of plugin development.
+See link:{strategy-requirements-root}/data/requirements/REQ-0013-synchronization-service.md[REQ-0013].
+
+.During normal operation, triggered work follows workspace availability and plugin policy, not an always-running service.
+image::{strategy-diagrams-root}/scheduled-execution.svg["A trigger can run only while its workspace and operating system permit it. Plugin policies govern catch-up, cross-device coordination and presentation; task scope and history remain required."]

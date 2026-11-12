@@ -1,0 +1,13 @@
+{
+  "title": "Ein ruhiger Samstag",
+  "label": "Systemnachricht",
+  "available": "„{pluginName}“ ist jetzt in diesem Arbeitsbereich verfügbar.",
+  "scenario": "Chat · Plugin nach Themenwechsel verfügbar",
+  "language": "Sprache der Systemnachricht",
+  "deliver": "Verfügbarkeit mitteilen",
+  "request": "Erstelle ein Plugin, das meine Leseliste organisiert.",
+  "handoff": "Die Entwicklung läuft in einem separaten Gespräch.",
+  "changedTopic": "Hilf mir inzwischen, einen ruhigen Samstag zu planen.",
+  "reply": "Lass den Vormittag frei und wähle einen Ausflug für den Nachmittag.",
+  "followup": "Lass den Abend auch frei."
+}

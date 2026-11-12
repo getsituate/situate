@@ -1,0 +1,1 @@
+{"version":2,"id":"compatibility","title":"Synthetic retained conversation","revision":1,"messages":[{"content":"Retained synthetic message","role":"user","timestamp":1}],"draft":"written by A","runtime":{"draftAttachments":[],"pending":[{"id":"queued-1","kind":"followUp","state":"pending","text":"Retained queued input","attachments":[],"timestamp":1}],"events":[],"runs":[]}}

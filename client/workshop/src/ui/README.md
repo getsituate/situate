@@ -1,0 +1,51 @@
+# Workshop UI
+
+These components belong to the independent workshop. Copy approved components and their relative dependencies manually when adopting a design; neither application imports the other's sources. New primitives depend only on Vue and `--situate-*` CSS tokens.
+
+## Native controls
+
+Native attributes and listeners reach the root element, including `class`, `style`, accessible labels, form attributes and disabled state. Native event targets remain native elements. `appearance="plain"` (or Button/IconButton `variant="plain"`) adds no component styling and does not reset feature styles.
+
+- **Button:** retains `type="button"` and `disabled`; `variant` is `primary` (default), `secondary`, `ghost`, `danger` or `plain`; `size` is `normal` or `small`. `busy` disables activation and sets `aria-busy`; supply any progress label separately. A supplied `title` becomes shared Tooltip text and a persistent `aria-description`, unless the caller supplies its own description. Exposes `element` and `focus(options?)`.
+- **Input / Textarea:** optional string/number `modelValue`, `update:modelValue`, `.trim`, `.lazy` and `.number`. Input `type="number"` also converts parseable values to numbers; empty values remain strings. Vue's native text-model directive preserves composition and focused lazy drafts through unrelated rerenders, and normalizes trimmed/numeric display values on change. As with native Vue bindings, modifiers are selected when the control mounts. Without a model, native `value` bindings work. Expose `element`, `focus(options?)`, `select()` and `setSelectionRange(start, end, direction?)`; selection methods retain native input-type restrictions.
+- **Checkbox:** optional boolean model; without it, native `checked` and `change` work. **Radio:** optional string/number model and `value` (default `"on"`); native `name` groups remain native. Both are bare inputs, suitable inside labels, and expose `element` and `focus(options?)`. Supply group/label markup outside them.
+- **Dialog:** defaults to `appearance="default"`. With `open` omitted it never opens itself; `:open="visible"` controls native modal opening on state transitions. Handle `@cancel.prevent` by changing that state. Exposes `element`, `showModal()`, `close(returnValue?)`, and `focus(options?)`; cancellation, close events and form submission retain browser behavior. Supply its accessible name and contents. `appearance="default"` supplies a bounded surface and the [brand dialog hierarchy](../../../../design/brand/docs/layout-and-components.md#dialog), with optional `header` and `actions` slots. Put the modal title in `header`; a nested custom layout can mark its title with `data-dialog-title`. Body headings use the section scale; `data-dialog-section` applies that role to another element, and `data-dialog-help` marks optional secondary text. Wrap rendered documents or code previews in `data-dialog-document` to retain their own hierarchy. `appearance="plain"` is reserved for unstyled specialist surfaces such as anchored choice popups, not a second task-dialog style. **DialogActions** provides the same wrapping action row inside forms; supply application Buttons with explicit variants. Native modality, focus restoration and Escape behavior require browser verification.
+- **IconButton:** optional `icon`, required caller-supplied `label`, or custom artwork in the default slot. Its `unavailableReason` is caller-supplied. `variant="plain"` preserves specialized appearances. It uses Tooltip for hover/focus help, retains existing description IDs, and forwards native attributes and listeners to its button. A supplied `title` becomes tooltip text rather than a second browser tooltip. Exposes `element` and `focus(options?)`.
+- **Switch:** native checkbox with `role="switch"` for an immediately applied setting. Supports boolean `modelValue` / `update:modelValue` or native `checked` / `change`. Supply an associated label and contextual help; use Checkbox for a form choice rather than an immediate setting. Exposes `element` and `focus(options?)`.
+- **FilterChip:** a removable active filter, not a status badge. Supply `removeLabel` with the full accessible action, slot content for its visible value, and optional `disabled`. Emits `remove(MouseEvent)`; the caller removes the condition and moves focus to the next filter or add control. Exposes `element` and `focus(options?)`.
+
+Input, Textarea, Checkbox and Radio default to `appearance="default"`. Input and Textarea also need `text-control.css` and `text-control.ts`.
+
+## Select
+
+**Select** presents a keyboard-accessible choice popup on desktop and a sheet on mobile or narrow windows. Supply `value`, `disabled`, `name`, `form` and `required` as needed; `option` and `optgroup` children belong in the default slot. `change` and `input` events retain an internal HTMLSelectElement as their target. That hidden element supports form submission and validation; the visible interface always uses the custom choice control.
+
+Associate labels with the visible combobox using `id`, a wrapping label or ARIA attributes. `appearance="toolbar"` provides compact controls; the default is `"field"`. The component depends on `select.css`, `select-context.ts`, its localized content and Icon. The optional environment injection supplies mobile presentation and a popup target for scoped preview geometry.
+
+## Menus and supplementary content
+
+**Menu** accepts `open`, `label`, optional `id`, `anchor` (HTMLElement) or `point` (`{ x, y }`), `initialFocus="first|last|checked"`, and `closeOnSelect` (default true). It emits `close`; the caller clears its open state. Supply Button children with `variant="plain"`, `role="menuitem|menuitemradio|menuitemcheckbox"`, `tabindex="-1"`, checked state and disabled state as appropriate. The surface owns arrow/Home/End/typeahead navigation, positioning, dismissal and focus return, not domain actions. Use `:close-on-select="false"` when a handler must read menu context before transitioning to a dialog, and close it in that handler.
+
+Triggers carry `aria-haspopup="menu"`, `aria-controls`, `aria-expanded` and `popovertarget` referencing the surface ID. Handle activation with `@click.prevent` to update the controlled open state without also invoking native toggling. Select remains a value-selection listbox, not a menu.
+
+**Popover** uses the same `open`, `label`, `id`, `anchor` / `point` and `close` contract for arbitrary supplementary content. It does not impose menu-item semantics. Both surfaces expose `element`. Keep forms or interactive help in Popover rather than Tooltip. Modal confirmation remains Dialog.
+
+**Tooltip** takes `text` and optional `disabled`. Bind its default slot's `triggerAttrs` to one focusable trigger; merge existing `aria-describedby` IDs when necessary. Alternatively, supply an `anchor` element and merge the ID emitted by `describe`; this mode preserves a caller's native root and teleports the text into its enclosing dialog or the document body. Hover and visible keyboard focus wait briefly; pointer activation does not leave a focused tooltip behind. Escape, blur, activation and resize dismiss it. Scrolling dismisses hover help, while keyboard-focused help follows its trigger within the usable boundary. The text remains hoverable and scrollable, and touch does not depend on hover. It supplies no accessible name for the trigger and must not be the only source of essential help or disabled-action explanations. IconButton and title-bearing Button adopt this behavior centrally.
+
+**Disclosure** retains native `details` / `summary` behavior. Supply `label` or the `label` slot, plus default content. Optional `open` / `update:open` controls expansion; without `open`, the browser owns it. The `toggle` event retains its native event object. Native root attributes such as `name` remain available. `element` is the details element; `focus(options?)` focuses the summary. It expands content, not a menu of actions.
+
+**Progress** requires `label`, with optional `value` and `max` (default 100). Finite values expose bounded numeric completion; absent, null or non-finite values remain indeterminate. The optional `estimate` is a visual fraction for pending feedback only: it stays below completion and never supplies an ARIA numeric value. Callers own estimation clocks, pause/reduced-motion behavior and terminal state. The component has no timer or animation. Keep visible status text beside it, outside an `aria-busy` region; meaningful results must not depend on the bar.
+
+## Content and associations
+
+**Field** accepts `id`, `label`, `help`, `error`, `warning`, `reserveFeedback` and `announce`. It generates a stable ID if omitted. Bind its `controlAttrs` slot property to exactly one control; it contains `id`, `aria-describedby`, `aria-invalid` and `data-field-tone`. Additional slot properties are `id`, `describedBy` and `invalid`. Error takes precedence over warning; warnings do not mark the value invalid. Feedback descriptions disappear on recovery while help remains. Merge any extra caller-owned description IDs when needed.
+
+`reserveFeedback` reserves two lines but allows longer text to grow. `announce` enables a polite, atomic feedback region; both default off. Callers own validation timing and focus, and should avoid combining live announcements with submission focus. The wrapper uses the workshop's central English feedback prefixes. See the [input-feedback proposal](../component-library/field-feedback-design-notes.md) for interaction policy, review steps and production localization handoff.
+
+```vue
+<SituateField :label="nameLabel" :error="nameError" v-slot="{ controlAttrs }">
+  <SituateInput v-bind="controlAttrs" v-model="name" />
+</SituateField>
+```
+
+**Badge** and **Notice** accept `tone="neutral|info|success|warning|danger"` and default-slot content. Tone does not invent a status label or live-region role; provide explicit text and choose `role="status"` or `role="alert"` only where appropriate. **Panel** supplies a neutral surface or `appearance="plain"`. **EmptyState** accepts optional `title` and `description`, plus `title`, default and `actions` slots; override the title slot to choose the heading level. All visible copy belongs to callers.

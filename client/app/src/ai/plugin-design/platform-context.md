@@ -1,0 +1,11 @@
+# Runtime and preview contracts
+
+Plugin views use the `vue` and `ui` supplied to the separate `uiEntry` factory, with plain JavaScript and locally compiled templates. Register shared components locally and use `vue.compile(template)` or `vue.h`. Component props, events, slots and exposed methods are the API; a component ref is not an HTMLElement. See components for exact contracts.
+
+Service tools and exports execute in a supervised Worker through `serviceEntry`. Initialization receives identity only and must have no effects. UI interactions call `service.invoke(exportName,args)` for native-admitted service work. Dependencies expose service RPC through `dependencies.invoke(pluginId,exportName,args)` and Vue components separately through `dependencies.component(pluginId,name)`; a component cannot pass through Worker serialization.
+
+The available pane can change independently of the window. Host navigation owns app chrome, tabs, panes and history. Resizing must preserve drafts and selection. Hiding a view does not stop workspace work; restoring presentation must not replay writes.
+
+Functional check scripts run in a supervised Worker with `plugin`, `host`, `preview` and `assert` locals. Use `plugin.invokeTool(name,args)` or `plugin.invokeExport(name,args)` to exercise service behavior. Open a view with `await preview.open({viewId:"sample:main"})`. Read text with `await preview.step({action:"read"})`, click with `{action:"click",selector}`, fill with `{action:"fill",selector,value}`, or request a capture receipt `{captured:true,mimeType:"image/png"}` with `{action:"capture"}`. Finish with `await preview.close()`. `host.preview` has the same methods. These operations await the UI responder. Native code retains the PNG and attaches it to the tool result separately; the script does not receive image bytes. Use these preview operations rather than `open_view` for checks. A missing or failed responder is not a successful preview. Service/script termination does not make ordinary Vue rendering independently stoppable; faulty views retain their hang/restart limitation.
+
+Preview checks do not qualify native iOS behavior. Report untested sizes, keyboard behavior and platform limitations rather than inferring support from screenshots.

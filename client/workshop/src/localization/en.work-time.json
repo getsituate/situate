@@ -1,0 +1,14 @@
+{
+  "controlsNote": "The clock advances automatically while work is ongoing. Follow-up messages stay in the same block. Finishing or asking a question ends it; the next message starts a new block. Waiting time is not counted. Use the controls to advance the clock or change the time-label language.",
+  "lessThanSecond": "less than 1 sec",
+  "seconds": "{seconds} sec",
+  "minutesSeconds": "{minutes} min {seconds} sec",
+  "worked": "Worked for {duration}",
+  "cancelled": "Stopped · worked for {duration}",
+  "error": "Ended with an error · worked for {duration}",
+  "question": "Which note should I use?",
+  "result": "Your reading list is ready. It includes three novels from your notes.",
+  "progress": "I’ll take that into account.",
+  "stoppedMessage": "The work was stopped.",
+  "errorMessage": "I couldn’t finish reading the notes."
+}

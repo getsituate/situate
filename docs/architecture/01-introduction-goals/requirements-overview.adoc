@@ -1,0 +1,52 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ../..
+endif::[]
+
+=== Requirements overview
+
+Situate is a personal organizational system for one person.
+Its core provides task, note, knowledge and document management.
+Situate connects these capabilities with external email, calendar and supplementary data sources.
+Tasks and notes managed by Situate are brought into its core; document originals may remain in connected sources.
+Situate uses AI for routine and preparatory work, drawing on personal context and the user's working methods.
+AI supports personal organization rather than defining the product category.
+
+People who consciously organize their personal lives currently have to maintain connections between information, tasks and commitments across multiple tools.
+Situate should reduce this maintenance and the effort of handling individual processes, while preserving the user's preferred organizational method.
+Technical expertise is not a prerequisite.
+The link:{architecture-repository-root}/requirements/data/foundations.md[foundations] define the audience, internal core, external services and single-person boundary.
+
+An <<glossary-organizational-process,organizational process>> is an ongoing matter that may involve information and next steps across tasks, notes, documents and external services.
+For example, a request for missing documents may require finding existing material, recording work needed to prepare the remainder, reserving time in a connected calendar and preparing a reply.
+Situate should retain the relationship between these steps when the remaining material becomes available, rather than treating each interaction as unrelated.
+This is an illustrative intended workflow, not evidence of implemented functionality.
+
+The <<glossary>> defines shared product and architecture terms. The catalog defines the desired outcomes:
+
+[cols="1,3",options="header"]
+|===
+|Goal |Intended outcome
+|link:{architecture-repository-root}/requirements/data/goals/GOAL-0001-connected-organization.md[GOAL-0001]
+|Keep personal organization connected without continual manual maintenance.
+|link:{architecture-repository-root}/requirements/data/goals/GOAL-0002-organizational-processes.md[GOAL-0002]
+|Handle organizational processes with less personal time and mental effort.
+|link:{architecture-repository-root}/requirements/data/goals/GOAL-0003-track-commitments.md[GOAL-0003]
+|Keep commitments and follow-up work visible without remembering them separately.
+|link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004]
+|Delegate internal and external actions within the user's request, without per-action approval. Internal changes remain reversible; users can inspect outcomes and stop ongoing work.
+|link:{architecture-repository-root}/requirements/data/goals/GOAL-0005-personal-connection.md[GOAL-0005]
+|Experience the system as personally fitting and supportive.
+|===
+
+Relevant capabilities include link:{architecture-repository-root}/requirements/data/requirements/REQ-0004-use-existing-context.md[using existing context], link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[maintaining process history], link:{architecture-repository-root}/requirements/data/requirements/REQ-0001-create-integrations.md[user-requested integrations] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[synchronization across the user's devices].
+The catalog also specifies link:{architecture-repository-root}/requirements/data/requirements/REQ-0034-adapt-task-workflows.md[adaptable task workflows], link:{architecture-repository-root}/requirements/data/requirements/REQ-0036-convert-imported-notes-and-tasks.md[import conversion] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0054-connect-document-sources.md[connected document sources], with link:{architecture-repository-root}/requirements/data/requirements/REQ-0055-search-document-content.md[content search] and a link:{architecture-repository-root}/requirements/data/requirements/REQ-0058-browse-document-collection.md[common document view].
+Their open questions include initial task filters, reconciliation after repeated imports and shared connector contracts.
+
+The link:{architecture-docs-root}/product-concept.md[product concept] describes the free local application and optional paid synchronization and managed AI services.
+These are intended capabilities and business direction, not a description of a shipped system.
+The repository contains a client implementation; <<current-client-packages>> describes its package responsibilities.
+That implementation does not establish complete product delivery or native platform qualification.
+Reported benefits are based on individual experience; broader demand and the extent of the benefit remain to be validated.

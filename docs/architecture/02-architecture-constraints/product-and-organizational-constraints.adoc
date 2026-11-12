@@ -1,0 +1,25 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Product and organizational constraints
+
+[cols="1,2,2",options="header"]
+|===
+|Constraint and source |Scope |Architectural consequence
+|Single developer and operator; link:{architecture-repository-root}/requirements/data/foundations.md#development-operation-and-technical-baseline[foundations]
+|Development, delivery and operation are handled by one person.
+|Implementation and operational complexity must fit that capacity. Four-digit monthly costs before revenue are conceivable, but no exact ceiling or spending authorization is established.
+|New technical baseline; link:{architecture-repository-root}/requirements/data/foundations.md#development-operation-and-technical-baseline[foundations]
+|No implementation from the previous prototype is carried forward.
+|There is no prototype technology or compatibility mandate. Accepted technology choices are recorded in <<solution-strategy>>.
+|Personal organizational core; link:{architecture-repository-root}/requirements/data/foundations.md#personal-organizational-core[foundations]
+|Tasks, knowledge and documents belong to Situate's core. Email and calendar remain external. Situate does not provide built-in workspaces shared by multiple users.
+|Built-in device synchronization serves one person, not collaborative editing between users. Custom plugins do not imply built-in collaboration guarantees. External integrations supplement rather than replace the core.
+|Optional paid services; link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015]
+|Local use with supported user-provided model access does not require paid Situate services.
+|Neither synchronization subscriptions nor the managed AI router may be mandatory dependencies for that use.
+|Personal working methods; link:{architecture-repository-root}/requirements/data/foundations.md#personal-working-methods[foundations]
+|No single organizational method is mandatory.
+|The content model and workflows must not require users to adopt a method such as Getting Things Done (GTD).
+|===

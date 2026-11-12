@@ -1,0 +1,61 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+=== Grouped plugin activation during ongoing work
+
+During normal operation, the Plugins destination can start development of a new or existing plugin; an agent tool can also open a separate development conversation with the task and context. The same native Conversation Owner handles normal and development conversations.
+Specialized instructions, a development background and header label distinguish it from a normal conversation; message, Activity and tool-call rendering remain shared.
+Agent Integration works in the same workspace with ordinary capabilities and task-scope rules, discovers affected packages and prepares their source changes.
+A <<glossary-check-receipt,check receipt>> records the code and dependency revisions covered by the checks; it does not impose a workspace-copy or single-package access boundary.
+Existing active versions continue serving other conversations while source is prepared.
+
+Related changes form one <<glossary-plugin-change-set,plugin change set>> that is checked and activated together.
+Automated checks of affected behavior, including UI behavior, use strictly synthetic data, test configurations and dependencies.
+Agentic investigation may read workspace content and accounts, but system instructions forbid incidental real external writes during trials; account access is not technically sandboxed.
+The Changes panel lists flat workspace-relative file paths and recorded source diffs. Standalone complete-plugin inspection remains available without executing disabled code.
+
+Failed normal change-set checks leave the change set unactivated.
+For adopted copies, the required local security review includes adaptations; a warning and proposed corrections accompany failure, and the explicit override in link:{architecture-repository-root}/requirements/data/requirements/REQ-0021-adapt-local-plugin-copies.md[REQ-0021] remains available.
+That override does not waive normal change-set checks.
+Once required checks pass, activation waits for affected running actions to finish without aborting or repeating them. Where adopted-copy review applies, its approval or warning override is also required; ordinary local workspace development has no additional security-review gate.
+Plugin activation publishes only checked code revisions and deliberately adapted dependencies, not trial data or test configuration.
+Ordinary workspace edits remain durable independently of activation or its outcome.
+The agent activates the group without another user click, including a previously disabled development target.
+Successful completion removes disposable candidate/check state and retains live source, recovery history and the development chat.
+Editable source stays in each package's code directory. Checks and running instances resolve immutable revisions from its <<glossary-plugin-code-history,Git-owned code history>>.
+The activation sequence follows link:{architecture-repository-root}/requirements/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033]:
+
+. Native <<glossary-operation-admission,operation admission>> first blocks new affected <<glossary-root-action,root actions>>: top-level tool or exported-function invocations. Existing root actions and their nested calls finish without abort or replay.
+. After affected root actions finish, native operation admission also blocks new affected host requests. Independent host requests retain their own <<glossary-worker-lease,worker leases>> until actual completion and cleanup; activation waits for them too.
+. Plugin activation publication records a durable attempt and atomically replaces the <<glossary-active-revision-map,active revision map>>, the workspace record selecting each active plugin's immutable code revision.
+. Plugin Runtime stages the related registrations during refresh. Operation admission remains blocked through publication and refresh, and is released after the coordinated refresh succeeds.
+
+.Prepare a revision-bound check receipt while active versions keep serving existing workflows.
+image::{architecture-diagrams-root}/plugin-change-preparation.svg["The agent prepares related source changes and runs synthetic checks. Failed checks leave the group unactivated; successful checks lead to draining and revalidation."]
+
+.Drain affected actions, then independent host requests, before revalidating checked revisions.
+image::{architecture-diagrams-root}/plugin-group-activation.svg["Operation Admission blocks new affected root actions, waits for existing actions, then blocks and drains host requests. Changed code or dependencies require fresh checks before publication."]
+
+.Publish checked activation, refresh registrations and release admission only after refresh succeeds.
+image::{architecture-diagrams-root}/plugin-activation-publication.svg["The core records a durable activation attempt and replaces the Active Revision Map. The runtime coordinates registration refresh and reports confirmed publication, refresh failure or uncertainty without blind replay."]
+
+A tool waiting for missing data keeps its existing execution associated with the old version and delays activation until that action finishes.
+An update must not replace the execution behind an already presented question.
+A durable plugin activation publication attempt distinguishes published, not-published, needs-recheck and unknown outcomes. Inspection never blindly repeats plugin activation publication or automatically repairs uncertain state. A failed refresh or notification after confirmed plugin activation publication does not mean the old code is still active.
+Code and dependency revisions may change while the workspace continues operating. Relevant changes require fresh applicable checks before activation; passing checks for earlier revisions does not establish compatibility with the revisions present at activation.
+These are selected design boundaries, not evidence of native platform qualification. Verification of interrupted activation and dependency drift remains necessary.
+See <<plugin-development-risks>>.
+
+Incomplete developments remain in the conversation list without automatic expiry.
+The MVP exposes no development-storage display or manual cleanup capability. Internal check completion, release and resource disposal remove disposable test state, not durable workspace edits or active code.
+Closing the view or pane, or navigating away, does not stop the agent or present a discard/pause dialog.
+Normal and development conversations show ongoing work in the conversation list.
+Closing the workspace stops its development work under the existing closure procedure.
+Application quit stops all work; an interrupted development waits for explicit user input after reopening, rather than restarting invisibly.
+Recovery startup temporarily suspends installed plugins while preserving ordinary development checks and previews.
+Checked activation resumes its target only; unrelated plugins remain suspended until individual resumption or resume-all.
+Neither action replays interrupted work, and testing faulty code can freeze the application again.

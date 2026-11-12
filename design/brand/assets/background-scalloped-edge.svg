@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-labelledby="background-scalloped-edge-title" aria-describedby="background-scalloped-edge-desc">
+  <title id="background-scalloped-edge-title">Scalloped edge</title>
+  <desc id="background-scalloped-edge-desc">Three broad rounded scallops share one straight lower edge and a small offset plane.</desc>
+  <path id="background-scalloped-edge-depth" d="M40 144C40 88 72 44 126 44C172 44 205 72 220 112C236 66 271 40 320 40C369 40 404 66 420 112C435 72 468 44 514 44C568 44 600 88 600 144V196Q600 204 592 204H48Q40 204 40 196Z" transform="translate(8 10)" fill="#d9d0df"/>
+  <path d="M40 144C40 88 72 44 126 44C172 44 205 72 220 112C236 66 271 40 320 40C369 40 404 66 420 112C435 72 468 44 514 44C568 44 600 88 600 144V196Q600 204 592 204H48Q40 204 40 196Z" fill="#eee7f9"/>
+</svg>

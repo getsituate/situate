@@ -1,0 +1,19 @@
+[package]
+name = "situate-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+situate-core = { path = "../situate-core" }
+rig-agent = { version = "=0.46.0", default-features = false }
+rig-core = { version = "=0.46.0", default-features = false }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "sync", "macros", "time"] }
+tokio-util = "=0.7.19"
+
+[dev-dependencies]
+tempfile = "3.23"
+tokio = { version = "1", features = ["time", "test-util"] }

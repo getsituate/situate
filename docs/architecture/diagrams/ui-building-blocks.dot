@@ -1,0 +1,29 @@
+digraph UiBuildingBlocks {
+  graph [rankdir=TB, bgcolor="#fffefa", pad=0.3, nodesep=0.45, ranksep=0.6, fontname="Helvetica", fontsize=14, fontcolor="#30203e"];
+  node [shape=box, style="rounded,filled", fillcolor="#f6f3ee", color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=15, margin="0.2,0.14", penwidth=1.2];
+  edge [color="#6a5c70", fontcolor="#30203e", fontname="Helvetica", fontsize=12, arrowsize=0.75];
+
+  subgraph cluster_ui {
+    label="User Interface — coordination\nLevel 3 · accepted target";
+    color="#6a5c70";
+    style="rounded";
+    margin=20;
+    shell [label="Application Shell"];
+    contributions [label="UI Contributions"];
+    renderer [label="Layout Renderer\nand View Host"];
+    coordinator [label="UI Coordinator", fillcolor="#eee7f9", color="#6232bc"];
+    layout [label="Tab and Layout State"];
+    navigation [label="Pane Navigation"];
+    registry [label="View Registry\nand Sessions"];
+
+    { rank=same; shell; contributions; renderer; }
+    { rank=same; layout; navigation; registry; }
+
+    shell -> coordinator [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Navigation and<BR/>layout intents</TD></TR></TABLE>>];
+    contributions -> coordinator [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Open / reveal</TD></TR></TABLE>>];
+    renderer -> coordinator [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Interaction intents</TD></TR></TABLE>>];
+    coordinator -> layout [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Tab / layout transitions</TD></TR></TABLE>>];
+    coordinator -> navigation [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>History transitions</TD></TR></TABLE>>];
+    coordinator -> registry [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD>Resolve targets<BR/>and sessions</TD></TR></TABLE>>];
+  }
+}

@@ -1,0 +1,114 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../../../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ../../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../../../../diagrams
+endif::[]
+
+[[native-conversation-building-blocks]]
+===== Agent Integration: Native conversation execution
+
+Parent: <<application-agent-integration,Agent Integration>> in Level 2.
+
+This decomposition follows link:{architecture-docs-root}/09-architecture-decisions/ADR-0013-native-conversation-execution.adoc[ADR-0013] with the storage representation selected in <<adr-0016,ADR-0016>>.
+Storage implementation and verification are tracked in the link:{architecture-repository-root}/docs/development/conversation-storage-implementation-plan.md[conversation storage plan].
+*Agent Integration* runs in the native application host and embeds Rig through `situate-agent`, owning conversation execution and completion independently of frontend views.
+Native provider, tool, persistence and projection adapters connect the owner to the application.
+See <<current-client-packages>> for package locations and link:{architecture-repository-root}/docs/development/provider-qualification.md[provider qualification] for evidence limits.
+IPC command names and wire encodings are separate from the capability contracts below.
+
+The storage boundary preserves published native conversation data through a numbered conversion in the existing <<workspace-migrations,workspace migration runner>>; the conversation-format rollout must satisfy REQ-0069.
+It does not import former Pi prototype chats or serialize Rig sessions.
+Conversation branching is a property of stored entry ancestry, not a Pi runtime dependency.
+
+====== Component placement
+
+.Native conversation ownership. Arrows point from a caller to a capability provider; replies, snapshots and events can return along the same interface. Boxes inside the native host are Rust components of the application, not separate services.
+image::{architecture-diagrams-root}/native-conversation-building-blocks.svg["Frontend views use the native Conversation Gateway and Registry, which retains a Conversation Owner implemented with situate-agent and Rig. The owner uses Native Host Adapters. Frontend views own neither the agent loop nor transcript persistence."]
+
+.Host interfaces for the same Native Host Adapters. Dashed arrows require an available JavaScript executor, which runs plugin functions rather than the agent loop.
+image::{architecture-diagrams-root}/native-host-adapters.svg["Native Host Adapters use Application Core capabilities, admitted model endpoints and a fallible JavaScript Tool Executor. They also request UI presentation. The executor returns scoped native calls through the host."]
+
+[cols="2,2,4",options="header"]
+|===
+|Building block |Location |Responsibility and owned state
+|Frontend views
+|`client/app/src`; WebView
+|Render conversation projections, collect user actions and own focus, selection, scroll and unacknowledged local input. Ordinary, onboarding and development views share the same native conversation owner. Views own neither execution nor the capability needed to finish saving a turn.
+|Conversation Gateway & Registry
+|Native application host, `client/app/src-tauri/src`
+|Authorize callers and resolve one owner per workspace-session generation and conversation. Bind snapshot/event attachment to that owner, route stable action identities to its Operation Admission state and coordinate its lifetime with workspace/application closure. Registry entries are device-local execution handles, not portable conversation records or a second history store.
+|Conversation Owner
+|`client/crates/situate-agent`, embedding Rig
+|Own accepted input, input consumption, derived branch context, question state, work periods, cancellation, observed outcomes and terminal completion. Serialize append and metadata operations; retain unsaved outcomes in memory while the process lives without repeating effects. Reconstruct history on reopen, not execution handles or an exact run continuation. Rig is a library inside this component, not an independent service or conversation authority.
+|Native Host Adapters
+|Native application host, `client/app/src-tauri/src`
+|Implement the owner's `Host` boundary using native model Operation Admission, Provider Transport, storage, tools and lifecycle services. Capture and revalidate Runtime Workspace Bindings, operation lifetime handles, connection/model settings and tool provenance. Own transport/tool resources until cleanup settles, including after cancellation or executor loss.
+|Rust Core and native lifecycle/platform services
+|`situate-core` plus the native application's workspace/platform adapters
+|The core crate supplies validated history entries, incremental history access, atomic metadata replacement, content history and path/reference policies without frontend or Rig ownership. The native host supplies window/session authorization, operation lifetime handles, credential/platform access and close/quit coordination. These are parts of the logical Application Core, not all responsibilities of the `situate-core` crate.
+|JavaScript Tool Executor
+|Supervised WebView and per-service-generation Workers in the Plugin Runtime
+|Run eligible JavaScript/plugin functions under native-issued invocation and executor-generation identities. Own only executor-local code and resources, not conversation state. Report structured results or disconnection; callbacks cannot acquire a new invocation or revive a revoked generation. Existing JavaScript/Vue authoring remains supported.
+|===
+
+A native owner survives detachment of all frontend observers while the workspace and application remain open.
+A JavaScript executor is a fallible tool dependency: it may use a WebView, but losing it must not discard native ownership or trigger automatic redispatch.
+This does not introduce a JavaScript engine for the agent loop or select a new sandbox for trusted plugins.
+Non-cooperative JavaScript and direct browser operations require effective executor supervision; generation revocation alone cannot stop them.
+
+====== Interfaces between the building blocks
+
+[cols="2,2,4",options="header"]
+|===
+|Interface |Caller → provider |Contract
+|Conversations
+|Frontend → Conversation Gateway & Registry; native IPC
+|Submit domain actions for input, draft/queue edits, answers, cancellation and persistence retry. Bind each action to the authorized workspace/conversation, stable action identity and applicable revision or pending decision. Return snapshots with matching event positions and ordered bounded updates. A gap, overflow or owner-generation change requires a new snapshot, not inferred execution or resubmission with a new identity. A submitted-input receipt follows saving its history entry. Draft edits do not promise crash recovery; transient progress is not a durable save acknowledgement. Subscription acknowledgements release delivery capacity only and grant no effect authority.
+|Owner actions and observations
+|Conversation Gateway & Registry → Conversation Owner; Rust API
+|Serialize domain mutations and expose owner state independently of a view. Repeated Operation Admission of the same action cannot start another run; conflicting reuse fails. Caller authorization stays in the native gateway, and the host revalidates the captured workspace session inside operations. Snapshot and subscription lifetimes do not determine execution lifetime.
+|Model Access; tool and history operations (`Host`)
+|Conversation Owner → Native Host Adapters; Rust API
+|Use the internal <<glossary-model-access,Model Access>> capability to request model work. Supply derived context, captured calls and new history entries through host operations. Save submitted input and tool calls before dispatch; append observed outcomes and compactions without replacing the transcript. Cancellation stops/drains active work. A storage failure blocks further effects and retains available unsaved outcomes in memory; reopening does not restore a durable execution journal or replay calls.
+|Workspace Storage & History; Workspace Lifecycle; Platform Access
+|Native Host Adapters → Application Core services; Rust APIs
+|Use validated entries, serialized history append, incremental reads and metadata replacement, alongside core-managed content history and native-held authorization/lease handles. Append referenced history before updating metadata. Distinguish accepted writes, durable success, conflicts and uncertain file or Git reference publication. A read-back may reconcile revision but does not establish durability after a failed write. Window/session, credential and operating-system services stay in native adapters rather than being imported into Vue or the agent library.
+|JavaScript tool execution
+|Native Host Adapters → JavaScript Tool Executor; host/executor messages
+|Dispatch a captured tool call with invocation, workspace and executor-generation identities. Validate structured replies and deduplicate acknowledgements; reject revoked or stale callbacks. Native calls made by that invocation return through scoped Operation Admission and keep their lifetime handles until cleanup finishes. After executor loss, preserve observed native outcomes or uncertainty; neither a replacement executor nor the owner automatically repeats the invocation.
+|UI Contributions and presentation requests
+|Native Host Adapters → User Interface / UI Coordinator
+|Route navigation and other view-dependent operations through existing semantic UI capabilities with explicit request identity and observed acknowledgement. Questions remain native domain state projected to views. Missing presentation cannot fabricate success or a user answer; the native owner retains any pending interaction without relying on a frontend continuation to save outcomes.
+|Provider Transport
+|Native Host Adapters → admitted model endpoint
+|Communicate with the selected endpoint through <<glossary-provider-transport,Provider Transport>>. Keep credential custody native, validate connections and destinations through Operation Admission, and assemble provider-specific streams. Preserve model capability and continuation metadata, cancellation/drain and usage accounting. Main turns, compaction, model checks, titles and comments use native request services with distinct purposes; auxiliary requests do not mutate another request's context or consume its pending input.
+|===
+
+Before each main model request, the host prepares current instructions, tools and service generations together.
+The admitted model, connection, thinking settings and limits remain fixed.
+Every tool call in one model response retains that request's captured services and revisions; a later main request can observe activation or enabling.
+The <<glossary-active-revision-map,Active Revision Map>> selects active plugin code revisions; it is distinct from the service generations already captured by a request.
+A retired call rejected before dispatch is unavailable, not an uncertain external effect.
+Executor loss after dispatch retains uncertainty and does not reroute or replay the call.
+
+The UI exchanges serializable Situate contracts, not Rig objects, raw host handles or replacement transcripts.
+A conversation ID, action ID or event position is correlation data, never an authorization grant.
+Opaque provider signatures and retained message content can be part of domain data; provider credentials and operational connection/model settings remain device-local rather than being copied into portable history.
+
+====== Dependency direction and data authority
+
+* `situate-agent` depends on Rig and the domain types/contracts in `situate-core`, and calls its host abstraction. It does not depend on Tauri, Vue or a particular JavaScript runtime.
+* `situate-core` does not depend on Rig, `situate-agent` or frontend modules. It validates and persists domain records; it does not become a second agent scheduler.
+* The native application composes both crates, implements the host operations and owns Operation Admission, registry and platform services. Frontend code depends on the public action/projection contracts rather than private agent modules.
+* The owner alone changes active execution state. Durable history is authoritative for saved information, not a serialized execution machine; model context and frontend snapshots are derived, not independently writable transcripts.
+* Each conversation uses `.situate/conversations/<id>/history.jsonl` and `metadata.json`. No separate pending-state file is introduced. Onboarding retains its separate domain record; unrelated content, attachment identities and device-local credentials keep their boundaries.
+* Portable history preserves original messages, calls, available outcomes, compactions and input-status information. Active execution and unsaved drafts remain in memory. Published records and opaque information must survive migration; damaged history is not silently reset. See <<conversation-format-safety>>.
+* Native Operation Admission and durable intent/result barriers do not create exactly-once external effects. On interrupted execution, retain observed results and uncertainty rather than inferring that cancellation undid an effect. Reopening after process exit waits for user interaction; it does not replay retained work.
+
+The <<current-client-packages,client package mapping>> records package-level responsibilities.
+Storage delivery and the final architecture-to-code reconciliation are defined in the link:{architecture-repository-root}/docs/development/conversation-storage-implementation-plan.md[conversation storage plan].
+The link:{architecture-repository-root}/docs/development/rig-implementation-plan.md[Rig replacement plan] records the earlier runtime replacement.

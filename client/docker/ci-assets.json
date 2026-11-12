@@ -1,0 +1,45 @@
+{
+  "cargo-deny": {
+    "version": "0.20.2",
+    "arm64": {
+      "url": "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-aarch64-unknown-linux-musl.tar.gz",
+      "sha256": "995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d"
+    },
+    "amd64": {
+      "url": "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz",
+      "sha256": "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+    }
+  },
+  "cargo-llvm-cov": {
+    "version": "0.9.1",
+    "sourceBuild": "cargo-install-locked",
+    "source": {
+      "url": "https://static.crates.io/crates/cargo-llvm-cov/cargo-llvm-cov-0.9.1.crate",
+      "sha256": "5e00647cc92940c4dd82249c480fe08fd3809767e89f056bcec46d8a7962ea5b",
+      "lockSha256": "a2aa3c30f8038a315ea325abeed4a8535c820c23ef983391b6cd6f302b196377"
+    },
+    "notices": [
+      {
+        "name": "LICENSE-APACHE",
+        "url": "https://raw.githubusercontent.com/taiki-e/cargo-llvm-cov/v0.9.1/LICENSE-APACHE",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      },
+      {
+        "name": "LICENSE-MIT",
+        "url": "https://raw.githubusercontent.com/taiki-e/cargo-llvm-cov/v0.9.1/LICENSE-MIT",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      }
+    ]
+  },
+  "gitleaks": {
+    "version": "8.24.3",
+    "arm64": {
+      "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_arm64.tar.gz",
+      "sha256": "5f2edbe1f49f7b920f9e06e90759947d3c5dfc16f752fb93aaafc17e9d14cf07"
+    },
+    "amd64": {
+      "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz",
+      "sha256": "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c"
+    }
+  }
+}

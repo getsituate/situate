@@ -1,0 +1,13 @@
+{
+  "options": "Options for {title}",
+  "actions": "Conversation actions",
+  "rename": "Rename",
+  "archive": "Archive",
+  "titleLabel": "Conversation title",
+  "save": "Save name",
+  "cancel": "Cancel rename",
+  "empty": "Enter a name before saving.",
+  "help": "Enter to save. Escape to cancel.",
+  "saved": "Conversation renamed.",
+  "cancelled": "Rename cancelled."
+}

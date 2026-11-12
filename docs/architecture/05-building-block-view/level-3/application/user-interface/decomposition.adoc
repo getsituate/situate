@@ -1,0 +1,154 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../../../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ../../../..
+endif::[]
+
+[[ui-building-blocks]]
+===== User Interface
+
+Parent: <<application-user-interface,User Interface>> in Level 2.
+The overall system and application views form Levels 1 and 2 respectively.
+The client implements this structure for workspace tabs, panes and built-in views; production plugin loading remains a separate integration boundary.
+The design combines an application shell, an explicit coordinator, a composite layout tree and unidirectional state changes.
+See link:{architecture-docs-root}/09-architecture-decisions/ADR-0001-ui-orchestration.adoc[ADR-0001] for rationale and alternatives, and link:{architecture-repository-root}/requirements/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026] for required behavior.
+
+The following diagrams show complementary dependencies within the User Interface: coordination, then rendering and registration.
+Repeated boxes denote the same logical components, not separate instances.
+Arrows point from consumers to capabilities they use, not the direction of returned data.
+External application components retain the interfaces shown at level 2.
+
+.Coordination: interaction intents enter through UI Coordinator, which coordinates layout, navigation and view sessions.
+image::{architecture-docs-root}/diagrams/ui-building-blocks.svg["Application Shell, UI Contributions and Layout Renderer and View Host send intents to UI Coordinator. The coordinator uses Tab and Layout State, Pane Navigation and View Registry and Sessions."]
+
+.Rendering and registration: the view host reads state and resolves views; UI Contributions registers view definitions.
+image::{architecture-docs-root}/diagrams/ui-view-host.svg["Application Shell composes Layout Renderer and View Host, which reads Tab and Layout State and Pane Navigation and uses View Registry and Sessions. UI Contributions registers views with the same registry."]
+
+[cols="2,3,3",options="header"]
+|===
+|Component |Responsibility and interface |Owned state and dependencies
+|Application Shell
+|Workspace-bound window surface, tab selection and naming, navigation controls and global UI. Sends semantic navigation and layout intents to UI Coordinator.
+|Transient shell presentation, such as an open navigation drawer. Uses existing Workspace Lifecycle and management interfaces; does not duplicate native window authorization or workspace closure coordination.
+|UI Coordinator
+|Single orchestration entry for built-in UI, plugin and agent navigation: open, activate, reveal, back, forward, move, resize, maximize and close. Resolves ordinary view opening to the focused pane, distinguishes conversation-list reveal from pane-local history navigation, and creates a destination only when no tab exists.
+|Coordinates state transitions through the model interfaces below. Does not own file contents, conversations, plugin execution or a second authoritative layout copy.
+|Tab and Layout State
+|Expose window tabs and each tab's composite layout; apply validated tab and layout transitions.
+|Ordered tab identities and names, active tab, per-tab split tree, active pane and temporary maximization. Split nodes hold direction, children and relative sizes; leaves reference panes. Depends on identifiers, not Vue instances or domain records.
+|Pane Navigation
+|Expose a pane's current target and independent back/forward transitions.
+|Per-pane ordered navigation entries and cursor. New navigation truncates the forward branch. Moving a pane retains this state; geometry changes do not create entries.
+|View Registry and Sessions
+|Register view types, resolve navigation targets to view instances, and retain or restore view-specific presentation state through supported view contracts.
+|Registered definitions and presentation sessions scoped to their workspace. A view type, view instance and content identity are distinct. Content and drafts remain owned by their respective domain modules.
+|Layout Renderer and View Host
+|Project the active tab into tiled, maximized or narrow presentation; mount the active view of each visible pane, manage focus and release view-scoped resources. Render state and send interaction intents to the coordinator rather than mutate model internals.
+|Mounted Vue instances and transient interaction resources. Reads layout and navigation state, resolves views through the registry, and uses the shared Situate component library.
+|UI Contributions
+|Accept plugin view registrations and supported extensions to the surrounding interface. Expose host navigation capabilities to plugins and Agent Integration through published contracts.
+|Contribution registrations tied to plugin availability. Uses the registry and coordinator, not direct access to their mutable state. Supported shell regions and conflict policies remain open under REQ-0028.
+|===
+
+These are logical module responsibilities, not a requirement for separate packages, classes, stores or processes.
+Built-in and plugin views use the same host placement and navigation path and the same shared component implementations.
+The shared library does not depend on application modules or own layout, navigation or domain state.
+
+====== Presentation hierarchy and ownership
+
+[source,text]
+----
+Workspace
+  Window presentation
+    Tab (user-defined name)
+      Split tree
+        Pane (navigation history and cursor)
+          Active view instance
+----
+
+Each tab belongs to exactly one workspace through its window presentation and contains one or more panes.
+A tab groups a topic's surface; it is not a storage, authorization or execution scope.
+On mobile, switching workspaces selects the corresponding workspace presentation without closing other open workspaces.
+Whether tabs can move between windows of the same workspace remains undecided.
+
+Each pane has exactly one active view instance, even when the pane is not currently visible.
+A history entry records a navigation target and any supported restorable presentation state, not a permanently mounted component or a copy of authoritative content.
+Pane identity survives movement independently of the active view and its content identity.
+Tab selection preserves its layout, active pane and pane histories.
+Names are display values, not tab identities. An empty name follows the first pane's current view title.
+Closing the last pane resets it to an empty chooser. Closing the last tab or all tabs opens one fresh empty tab with a focused pane and the normal view chooser; the next view-opening intent fills that pane. Closed tabs can be reopened with their arrangements and histories, without recreating content or execution.
+
+The layout tree uses the Composite pattern: split nodes arrange child nodes, and pane leaves display views.
+The narrow renderer normally shows only the active pane of the active tab and offers pane switching; it does not rewrite the tree into a single-pane layout.
+Maximization is likewise a projection of an existing layout, not a destructive tree transformation.
+Shared components additionally adapt to their own container width.
+
+====== Tab and pane controls
+
+The tab strip remains visible for a single tab. Desktop overflow offers an overview alongside horizontal scrolling and keyboard navigation; narrow presentation shows the active tab and exposes the overview when several tabs exist.
+Tab close buttons remain visible without hover or focus and occupy fixed-width targets. Closing an inactive tab does not select it first.
+Tab actions separate renaming from individual and bulk closure. Renaming from the overview returns there without activating the renamed tab; closing an entry retains the overview and moves focus to an available action.
+
+Only the active tab's pane count determines the control hierarchy. One pane uses history and layout controls in the tab row, without an additional tile header or footer. Multiple tiled panes have local headers, history controls and movement grips.
+Empty panes offer a new conversation, pinned views in main-menu order and access to all registered views. Choosing one fills the existing pane; pinning changes discovery order without navigating.
+Settings and plugin management are independent shell destinations outside the arrangement, which is retained when returning to the workspace. Both use host navigation and sidebar controls; plugin management is not a Settings subview or a modal.
+
+Pane movement stays within the current tab. Spatial drag targets and a labeled Move dialog offer the same four relative placements; the dialog names its source and uses native selects so option-picker behavior remains platform-owned.
+Dividers support pointer and keyboard resizing and balancing. Minimum pane geometry constrains resizing; large arrangements scroll instead of indefinitely shrinking controls.
+
+Narrow presentation uses a bounded horizontal pane-title switcher, separate from content gestures and pane-local history. It advances one pane per completed swipe and supports arrow and Home/End navigation without circular wrapping.
+Explicit maximization remains active across viewport changes until restoration. Its single compact row combines local history, the current title as a pane-selection trigger, Restore and pane actions, without a duplicate tile header or footer.
+The selection dialog exposes complete destination names even when the toolbar title truncates. Restore has the same inward-corner icon in the toolbar and menu, distinct from Split and Maximize; the icon-only toolbar control retains an accessible name and tooltip.
+Keyboard dismissal and system Back restore focus to the originating control. Pane-action and selection dialogs close when their source pane or tab disappears, rather than applying an action to a replacement destination.
+Maximization is workspace presentation, not operating-system or browser fullscreen.
+
+====== Navigation, effects and lifecycle
+
+The coordinator accepts semantic requests rather than DOM instructions or access to private stores.
+Ordinary built-in and plugin view opening advances the focused pane's history without creating a split, a new tab or a maximization change. Splitting and maximizing are explicit layout intents.
+Main-navigation conversation selection first looks for that conversation among the current targets of all panes in the workspace presentation, including inactive tabs and hidden panes. A match activates its tab and pane without appending history. Entries behind or ahead of a history cursor are not open instances. If history navigation has produced multiple instances, prefer the focused pane, then another pane in the active tab, then tab order and split-tree order.
+Back and forward affect only the addressed pane, even if that displays a conversation already open elsewhere. Multiple views share the conversation's draft, saved model override and execution; their display state is independent.
+Discarding a forward branch removes navigation entries, not content, conversations or running work.
+Revealing an entry uses the registered view's supported contract; the host does not interpret plugin-specific domain objects.
+Opening a different file, revision or conversation adds an entry; scrolling, selection and reading/source mode update the current entry's presentation state.
+The link:{architecture-repository-root}/docs/development/workspace-views.md[host registration and navigation guide] specifies the current client API; it does not establish a production plugin loader or a complete plugin SDK.
+
+State changes flow from intents through controlled transitions to rendered state.
+Layout and history transitions can be tested without Vue or a native window; mounting, focus, persistence and domain operations remain explicit effects outside those transitions.
+The coordinator must not become a general domain service: creating a referenced chat uses Conversations, while file reads and writes remain with their existing owners.
+A UI target's workspace identifier does not establish a <<glossary-runtime-workspace-binding,Runtime Workspace Binding>>; the native host independently authorizes the local workspace session.
+Deferred navigation captures a workspace, tab, pane and lifecycle generation before asynchronous work begins. Focus changes cannot retarget the result; closing and reopening a destination invalidates old operations even when persistent identifiers are reused.
+Removal or replacement of a view registration also invalidates its pending reveal results. Unavailable registrations retain their saved targets and histories rather than deleting them.
+
+Hiding a tab, navigating away or unmounting a view does not stop workspace-owned work.
+The host releases view-scoped resources without stopping independent plugin or agent execution.
+Content drafts cannot rely on keeping historical views mounted.
+Workspace closure continues to use Application Core coordination rather than being inferred from tab, pane or component counts.
+
+Persist versioned presentation state through core storage under the workspace's `.situate` directory, not in a device-only preference store. Persist tab identities, names and order, split geometry, active tab and pane, navigation histories, pinned views and supported presentation sessions. Restoring the synchronized workspace restores its open tabs and conversations; a device projects that arrangement for its available space. DOM references, mounted components, request handles and device viewport measurements are not persisted.
+File target/revision, reading/source mode, selection, cursor and scroll position, and chat scroll position are supported restorable state. Drafts and per-conversation model overrides remain in their domain stores, not duplicated in layout data. Missing targets retain their history entry and render an unavailable state with applicable recovery actions rather than redirecting silently.
+Pane histories initially have no product-imposed limit. Storage versioning, validation and write-failure handling must preserve existing data rather than silently replace unreadable state. Cross-device concurrent-edit reconciliation and assignment of multiple same-workspace windows remain separate design questions; persistence does not itself implement synchronization transport.
+The UI owns presentation semantics; Application Core provides storage and authorization.
+No global event bus, particular state-management library or docking dependency is selected by this decomposition.
+
+====== Layout persistence
+
+The native layout adapter stores a versioned envelope in `.situate/layout.json`, separate from conversation and file records.
+Byte-hash revisions, workspace locking and atomic replacement reject stale saves; frontend saves are serialized and uncertain outcomes require readback before another write.
+The envelope is bounded to 2 MiB. Invalid or newer state is preserved and reported, not replaced by an empty successful layout. A missing record is distinguished from a valid saved layout with zero tabs; the latter receives a fresh empty tab while retaining pins and closed histories.
+Close and quit coordination includes layout persistence alongside domain save barriers. Inactive but still-open workspace presentations retain their sessions; unmounting the shell does not discard pending saves.
+This storage protocol does not provide a synchronization transport, concurrent-device merge policy or atomic exclusion of noncooperating filesystem writers.
+
+====== Implementation mapping and verification boundary
+
+link:{architecture-repository-root}/client/app/src/components/AppShell.vue[AppShell.vue] composes workspace navigation, settings and the layout renderer.
+link:{architecture-repository-root}/client/app/src/layout/model.ts[The layout model] owns pure tab, pane and navigation transitions; link:{architecture-repository-root}/client/app/src/layout/registry.ts[the registry and coordinator] own view registration and effect routing.
+link:{architecture-repository-root}/client/app/src/layout/session.ts[Layout sessions] retain presentation state and persistence, while link:{architecture-repository-root}/client/app/src/layout/ViewHost.vue[ViewHost.vue] mounts registered targets.
+link:{architecture-repository-root}/client/crates/situate-core/src/layout_storage.rs[Core layout storage] provides the persistence primitive, and link:{architecture-repository-root}/client/app/src-tauri/src/layout.rs[the native adapter] enforces workspace access.
+link:{architecture-repository-root}/client/app/src/App.vue[App.vue] coordinates workspace and application lifecycle interactions; that responsibility must not migrate into pane closure.
+Existing file and conversation modules retain their domain state rather than being replaced by the layout model.
+
+Verification must cover independent pane histories, forward-branch truncation without content deletion, tab-switch state retention, pane movement, and restoration after narrow or maximized presentation.
+Integration checks must exercise built-in and plugin navigation through the same coordinator, referenced-chat opening, and continued workspace execution when views are hidden or closed.
+Focus and view cleanup require rendered interaction tests; pure state-transition tests alone do not establish their behavior.

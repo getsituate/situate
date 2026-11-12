@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 370" role="img" aria-labelledby="background-offset-discs-title" aria-describedby="background-offset-discs-desc">
+  <title id="background-offset-discs-title">Offset discs</title>
+  <desc id="background-offset-discs-desc">Two overlapping circular planes, one warm and one pale lilac.</desc>
+  <circle cx="345" cy="192" r="150" fill="#ffc3a3"/>
+  <circle cx="215" cy="178" r="150" fill="#eee7f9"/>
+</svg>

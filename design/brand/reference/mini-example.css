@@ -1,0 +1,106 @@
+#mini-bend {
+  scroll-margin-top: 88px;
+}
+.mini-specimens {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--situate-space-6);
+}
+.mini-surface {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: end;
+  gap: var(--situate-space-4);
+  padding: var(--situate-space-8) var(--situate-space-6);
+  background: var(--situate-surface);
+  border: 1px solid var(--situate-line);
+  border-radius: 20px;
+}
+.mini-surface.plum {
+  background: var(--situate-plum);
+  border-color: var(--situate-plum);
+}
+.mini-surface figure {
+  display: grid;
+  justify-items: center;
+  gap: var(--situate-space-4);
+  margin: 0;
+}
+.mini-surface figcaption {
+  font-size: 12px;
+}
+.mini-surface .bend-mini,
+#mini-mark .bend-mini {
+  margin-inline-end: 0;
+}
+.mini-caption {
+  margin-top: var(--situate-space-4);
+}
+.mini-example {
+  margin-top: var(--situate-space-8);
+  padding: var(--situate-space-8);
+  border: 1px solid var(--situate-line);
+  border-radius: var(--situate-radius-card);
+  background: var(--situate-surface);
+}
+.mini-example-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--situate-space-6);
+}
+.mini-example-heading h4 {
+  margin-top: var(--situate-space-2);
+  font: 600 28px/1.2 var(--situate-font-display);
+  letter-spacing: -0.03em;
+}
+.mini-example-heading label {
+  margin-bottom: var(--situate-space-2);
+}
+.mini-status-line {
+  display: flex;
+  align-items: center;
+  gap: var(--situate-space-3);
+  margin-block: var(--situate-space-6);
+  min-height: 44px;
+}
+#mini-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  min-height: 36px;
+  flex: none;
+}
+#mini-status {
+  overflow-wrap: anywhere;
+}
+.mini-example [aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+.mini-example [aria-disabled="true"]:hover {
+  transform: none;
+}
+.mini-note {
+  max-width: 65ch;
+  margin-top: var(--situate-space-6);
+  padding: var(--situate-space-6);
+  border-radius: var(--situate-radius-note);
+  background: var(--situate-note);
+}
+.mini-note h5 {
+  font: 600 18px/1.4 var(--situate-font-body);
+  margin-bottom: var(--situate-space-2);
+}
+.mini-note p {
+  font-size: 16px;
+}
+@media (max-width: 700px) {
+  .mini-specimens {
+    grid-template-columns: 1fr;
+  }
+  .mini-example {
+    padding: var(--situate-space-6);
+  }
+}

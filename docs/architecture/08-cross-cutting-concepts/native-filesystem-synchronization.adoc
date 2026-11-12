@@ -1,0 +1,51 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[native-filesystem-synchronization]]
+=== Filesystem durability and flush failures
+
+Content saves and Git history writes must distinguish visible changes from acknowledged durable results.
+Here, filesystem synchronization means flushing local files and directories; it is not workspace transfer through a <<glossary-synchronization-transport,Synchronization Transport>>.
+A successful content write followed by a history flush failure must not be reported as a complete save; see <<git-derived-file-references>> for partial and uncertain outcomes.
+
+Directory synchronization uses held filesystem capabilities rather than reconstructing their original absolute paths.
+Standalone directory synchronization clones the held directory handle and calls `sync_all()`.
+History synchronization on macOS and iOS batches files and directories: each held descriptor receives `fsync`, then one retained descriptor per filesystem receives `sync_all()` (`F_FULLFSYNC`).
+The final barriers cover the preceding file and directory flushes; an unfinished or failed batch does not establish durability.
+Filesystem identities come from held descriptors, so mounted child filesystems retain their own barriers.
+Other platforms retain individual `sync_all()` calls.
+
+Git object creation uses the repository's `core.fsyncObjectFiles` setting to flush object bytes before file publication.
+Existing immutable objects are reused without reopening them for a new file flush.
+Before Git reference publication, the core finishes the object-directory synchronization batch; afterward it finishes a separate batch for repository control files and directories.
+Control files are opened relative to held directories without following symbolic links.
+Acquisition, member-flush and final-barrier errors remain failures.
+
+Initial history is created in a staging directory, then published as `.situate/history.git` before the containing `.situate/` workspace marker directory is flushed.
+Opening an existing writable history first completes its recursive synchronization batch, including retained objects written by older versions.
+Opening a writable workspace also flushes that marker directory, even when the history repository already exists.
+This is an initialization durability fence: a repository made visible by an interrupted publication is not treated as durably initialized merely because it exists.
+A failed marker flush fails the open rather than acknowledging completed initialization.
+See link:{architecture-repository-root}/client/crates/situate-core/src/durable_storage.rs[directory flushing], link:{architecture-repository-root}/client/crates/situate-core/src/content/git_storage.rs[Git object and reference publication] and link:{architecture-repository-root}/client/crates/situate-core/src/content/mod.rs[history file flushing].
+
+These are implementation mechanisms, not formal power-loss qualification or a guarantee against physical storage damage.
+Native macOS/iOS verification must cover the active storage paths; read-only provider access does not gain write support from these mechanisms.
+
+==== Deferred-platform constraints
+
+Windows, Linux desktop and Android remain deferred product targets.
+Their existing implementations have additional handle and filesystem constraints; shared tests do not qualify these platforms.
+Linux directory capabilities opened with `O_PATH` are reopened relative to the held handle before `fsync`.
+Windows directory flushes also acquire a writable handle relative to the held capability; open and flush errors remain failures.
+
+On Windows, a new writable flush handle cannot be opened for a file carrying the `READONLY` attribute.
+The history-file flush helper rejects such files without changing their attributes.
+Attributes belong to the file object and affect every hardlink alias, including aliases outside the history directory; checking the link count cannot prevent a new alias from being created concurrently.
+Writable history files are flushed through verified, held handles, and acquisition or flush errors remain failures.
+Immutable Git object reuse avoids both reopening the object for a flush and libgit2's freshening behavior, which can clear `READONLY`.
+A read-only immutable object therefore does not by itself make history flushing fail; a control file that cannot be flushed still causes failure.
+
+During directory moves, Windows reference patches retain file-ID handles rather than relative-open readers, which can prevent ancestor renames.
+The original reader remains pinned until the new handle's regular-file type, volume and complete 128-bit identity have been verified; later patch checks also compare the complete identity.
+Only changed files inside the moved subtree use this mechanism. If the filesystem does not support it, patch preparation fails before the directory is renamed.

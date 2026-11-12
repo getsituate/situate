@@ -1,0 +1,34 @@
+{
+  "more": "More actions for {name}",
+  "menu": "Plugin actions",
+  "uninstall": "Uninstall…",
+  "confirm": "Uninstall plugin",
+  "title": "Uninstall {name}?",
+  "body": "Remove this plugin and its settings from this workspace.",
+  "keep": "Your notes, tasks, documents and chats stay.",
+  "disable": "Disable instead",
+  "cancel": "Cancel",
+  "close": "Close",
+  "dependencies": "Other plugins still need it",
+  "dependencyHelp": "Remove these plugins first, or change them to work without it.",
+  "runningHelp": "Wait for this plugin to finish its work.",
+  "pending": "Uninstalling plugin…",
+  "pendingHelp": "Keep this workspace open.",
+  "error": "Couldn’t uninstall. Try again.",
+  "retry": "Try again",
+  "success": "{name} uninstalled.",
+  "controls": {
+    "title": "Uninstall outcome",
+    "complete": "Complete uninstall",
+    "fail": "Fail uninstall",
+    "finish": "Finish running plugin actions"
+  },
+  "states": {
+    "uninstall": "Plugins · uninstall confirmation",
+    "uninstall-dependencies": "Plugins · uninstall with dependents",
+    "uninstall-running": "Plugins · uninstall with running actions",
+    "uninstall-pending": "Plugins · uninstall in progress",
+    "uninstall-error": "Plugins · uninstall failed",
+    "uninstall-disabled": "Plugins · uninstall disabled plugin"
+  }
+}

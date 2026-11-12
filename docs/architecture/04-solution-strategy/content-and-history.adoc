@@ -1,0 +1,141 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::strategy-diagrams-root[]
+:strategy-diagrams-root: ../diagrams
+endif::[]
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== File-based organizational core
+
+Notes and tasks use ordinary editable Markdown; imported documents and attachments remain ordinary files usable by appropriate applications.
+Situate supplies editing interfaces and operating-system file access, including a Finder location on macOS.
+While a workspace is open, external edits are detected and independently versioned, then synchronized when configured.
+This preserves tool choice and offline access, but requires handling partial writes, moves and invalid metadata.
+
+Files use Git-anchored references without embedded file IDs. The default task convention stores identity and extensible metadata in a structured HTML comment at the checkbox entry.
+Import, editing and workspace copies preserve existing content and user metadata; imported task copies receive fresh task identities.
+This is a Situate convention, not a Markdown standard. A database may support indexes and conversation metadata, but cannot be the sole readable representation of notes, tasks or documents; SQLite remains a candidate.
+Workspace-local application state belongs under `.situate/`; files elsewhere remain user content rather than implicit configuration.
+Device-local AI settings, credentials and diagnostics have separate storage boundaries.
+See link:{strategy-requirements-root}/data/requirements/REQ-0009-reuse-stored-content.md[REQ-0009] and <<client-diagnostics>>.
+
+=== Connected documents without mandatory migration
+
+Document originals may instead remain in external sources, including shared repositories.
+Reusable integration plugins connect the accounts and subsets agreed with the user; workflow plugins reuse their access and source-specific filing rules.
+An authorized filing workflow can store a document in a writable source and include it in the configured collection and search preparation, without creating a shared Situate workspace.
+Import is different: it leaves the source unchanged and creates workspace-local copies.
+
+The common document view and content search must cover that agreed collection, not only imported files.
+Search preparation includes OCR when needed within the agreed processing and provider boundaries; local read access does not authorize transmitting an unrestricted workspace to a model provider.
+Shared connector capabilities, document metadata and external-source reference continuity remain design questions. Git-anchored workspace file references do not by themselves identify external documents or reconcile imported copies with later source changes.
+See link:{strategy-requirements-root}/data/foundations.md#personal-organizational-core[the document boundary] and link:{strategy-requirements-root}/data/requirements/REQ-0054-connect-document-sources.md[REQ-0054].
+
+=== Workspace file editing
+
+A default Files view supports navigation and file-and-folder operations without an agent request.
+Markdown source editing and rendered reading are baseline capabilities; formatted editing is should-have and becomes the normal editing experience when available, with source still accessible.
+Both representations preserve metadata and unsupported constructs. Manual editing remains available offline and without AI.
+Text opens internally, Markdown supports rendered reading and binary files open externally; detection uses content, not the extension alone. Read failures and unsupported encodings remain errors.
+Technical internals are excluded from ordinary browsing except the editable `.situate/working-method.md` document.
+
+Edits save automatically. Pending writes and failures remain visible, and failed writes retain the draft for retry or recovery rather than being discarded when a view closes.
+Workspace closure and application quit offer retry, securing a copy, cancellation or confirmed discard; memory-only text is not represented as durable after persistence failure.
+The file-to-chat action waits for pending saves and captures the selected saved revision, then opens a new conversation with a composer reference and empty input without sending a message.
+Reference resolution, pane presentation and the shared save queue remain separate responsibilities.
+See link:{strategy-requirements-root}/data/requirements/REQ-0030-open-chats-with-content-references.md[REQ-0030], link:{strategy-requirements-root}/data/requirements/REQ-0023-browse-human-readable-note-structure.md[REQ-0023], link:{strategy-requirements-root}/data/requirements/REQ-0042-edit-markdown-source-and-read-rendered-content.md[REQ-0042] and link:{strategy-requirements-root}/data/requirements/REQ-0043-edit-formatted-markdown.md[REQ-0043].
+
+Normal editing preserves task identity and file-reference continuity. Deliberate task-ID overrides require a warning and are versioned, but cannot guarantee reference preservation; file frontmatter has no protected system identity.
+Malformed metadata is reported with a source-correction route, not silently repaired or allowed to block unrelated editing.
+Document HTML is not executable plugin content. Remote images may contact their hosts without a per-domain approval prompt and are not guaranteed offline availability.
+See <<document-rendering>> for the document/plugin trust boundary and image-resource scope, and the link:{architecture-repository-root}/client/README.md#files-and-history[file guide] for metadata and save behavior.
+
+==== Concurrent editor and file changes
+
+The core attempts a three-way Git merge of the editor's base, pending text and changed file.
+A conflict-free result saves silently and refreshes the live view without changing focus or navigation; unrelated files and historical inspection remain unchanged.
+External changes retain independent history. An unresolved conflict requires the user to select between complete candidates; dismissal leaves it unresolved, and applying a choice rechecks the underlying file rather than overwriting later changes.
+External deletion with a pending draft does not automatically recreate the file: the user can restore it, save a new file or discard the draft.
+These recovery responsibilities do not depend on AI and are separate from workspace-wide synchronization conflicts.
+See the link:{architecture-repository-root}/client/README.md#files-and-history[file guide] for the interaction and its noncooperating-writer limits.
+
+[[strategy-content-identity]]
+=== File-reference continuity and task identity
+
+<<adr-0012,ADR-0012>> selects one Git-anchored live-reference model for every workspace file, including Markdown.
+A reference stores its original path and commit anchor. Ordinary edits preserve continuity; confirmed managed moves advance its derived location; copies and restorations create separate file lineages.
+Known deletion ends the old lineage, even when another file later occupies that path. Restoring content does not revive old live references; historical access remains available.
+External moves or insufficient evidence leave references unresolved rather than guessing from equal bytes or rename similarity.
+
+Tasks instead use a locally generated UUID v4 in a YAML mapping in an HTML comment containing `situate-task-id`.
+That comment distinguishes a task from an ordinary checkbox and travels with it when moved. Moving or restoring the same task preserves its identity; copying through Situate creates a new one.
+Copies retarget recognized task links and relative Markdown links/images within the copied set while preserving outside targets; unsupported forms are not guessed.
+Unmarked checkboxes are not automatically promoted to tasks. Removing or changing an identifier can break references.
+
+External copies can duplicate task IDs despite practically collision-free generation.
+An ambiguous reference must not open or modify an arbitrary match: the user selects the intended entry, which keeps the ID, while other copies receive new IDs in a versioned repair.
+The agent follows the same restriction. Ambiguity is currently rejected; interactive selection and repair remain unimplemented.
+Accidental UUID-generation collisions may be reported without a dedicated recovery path; they are distinct from external duplication.
+See link:{strategy-requirements-root}/data/requirements/REQ-0035-preserve-file-and-task-identity.md[REQ-0035].
+
+.Resolving a task identity reference; files instead follow Git-anchored continuity.
+image::{strategy-diagrams-root}/reference-identity.svg["A task identity resolves to one entry, no entry or several externally copied tasks. User selection repairs ambiguity without arbitrary targeting."]
+
+=== Shared file-reference model
+
+Markdown, PDFs, images and other workspace files use the same model, avoiding embedded file IDs, companion files or an authoritative identity registry.
+Confirmed moves preserve references without rewriting conversations, at the cost of automatic rediscovery of external moves.
+Binary files participate in history; their reference model does not provide text extraction.
+See <<git-derived-file-references>> for the resolver and stored-selector contracts under ADR-0010 and ADR-0012.
+
+=== Stored conversation references
+
+Git owns confirmed operation facts and their result snapshots. The resolver derives current targets from that history without an independently writable move journal or durable identity witness.
+Structural operations record a boundary before filesystem changes and a matching completion commit afterward.
+Without a valid completion, the operation remains uncertain: restart may record observed state but must not continue or roll back filesystem effects, or infer continuity from matching bytes or Git rename heuristics.
+Working files and prior history remain preserved. File publication and Git reference publication are separate boundaries; failure does not prove that neither occurred.
+See <<git-derived-file-references>> for the detailed protocol and the original unpublished-format replacement. Its no-migration exception does not apply to published formats; later changes follow released-version compatibility and must not reset or delete existing workspaces.
+
+Portable selectors contain no runtime location IDs. On load, native storage associates them with the authorized session through a <<glossary-runtime-workspace-binding,Runtime Workspace Binding>>, without changing their anchors or storage revisions.
+A copied workspace can share its <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>> for correlation, but that identifier grants neither access nor shared runtime state or AI credentials.
+Historical references retain the exact commit and path, including inline-resource revisions. Sending resolves source text without fetching linked images.
+Opening retains the selector through loading, polling, discard and retry rather than falling back to an unguarded path read; unsupported stored selectors fail explicitly without conversion, overwrite or automatic recapture.
+See <<conversation-format-safety>> for record validation and overwrite protection.
+
+=== Versioned changes and explicit reversal
+
+All stored content, including binary attachments, has recoverable history. The file view exposes earlier versions and comparisons without Git commands or AI; Markdown comparisons include metadata changes, and inspection leaves current content unchanged.
+Initial history follows default `git log` behavior, without editing-session grouping. History follows confirmed managed moves, and a recovery entry point reaches deleted files independently of the current tree.
+Reversing a change, making a new historical copy and restoring a deleted file are distinct operations. Copies create new file lineages and task IDs; restoration preserves task IDs but does not reactivate old live file references, and an occupied destination requires a decision.
+A separate wholesale reset to an old snapshot is outside initial delivery; detailed recovery controls and non-text comparison presentation remain open.
+
+Users can undo individual changes or return to a branching conversation position with or without reversing associated content.
+Rollback adds compensating changes, preserves later independent edits and requires a user decision for conflicts; whole-file restoration is insufficient when it would overwrite unrelated work.
+Plugins use versioned core writes. External tools declare effects and supply an idempotent, precondition-checked revert operation or declare reversal unavailable.
+External rollback requires preview and confirmation; failed and unsupported reversal remains visible.
+
+Git is the chosen basis for versioned storage. Organizational content shares one history per workspace; each plugin's code and plugin-specific histories remain in its own directory, separately from general content history.
+Deleting that directory removes retained installation state, not unrelated content or general history.
+The path-backed core embeds libgit2 through `git2` without a Git CLI or networking dependency, using `.situate/history.git`; external applications edit content, not Git internals.
+Recovery drafts remain readable independently of damaged history. Durability requires more than writing a file or advancing a Git reference, and noncooperating external writers can still race a checked replacement.
+History has no initial product-imposed retention limit, increasing storage and synchronization costs.
+See link:{strategy-requirements-root}/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022], <<native-filesystem-synchronization>> and the link:{architecture-repository-root}/client/README.md#storage-api[storage API] for flushing, structural bounds, supported reference forms and reversal limits.
+Current writes support desktop filesystem workspaces and application-owned mobile folders; external mobile providers remain read-only without history initialization. Native platform qualification is separate from these source contracts.
+
+.Selective rollback preserves independent changes and separates local recovery from external reversal.
+image::{strategy-diagrams-root}/selective-rollback.svg["The user selects rollback scope. Local changes are compensated with conflict resolution; external effects require a preview, approval and tool-owned precondition checks."]
+
+[[strategy-history-corruption]]
+=== Damaged history and confirmed reinitialization
+
+Repository corruption is distinct from a merge conflict in usable history. The core reports unusable history without asserting an unverified cause; versioning cannot guarantee recovery of a damaged repository.
+Reinitialization requires explicit confirmation that the new repository will not contain the old history, and must first preserve the damaged repository as a backup.
+Existing content remains intact and becomes the new baseline. The backup preserves a possibility of recovery, not a guarantee.
+Recovery scope, backup placement and coordination with other devices remain open; local reinitialization does not authorize replacing remote histories or deleting other devices' history.
+See link:{strategy-requirements-root}/data/requirements/REQ-0022-explain-note-changes.md#damaged-repository-recovery[REQ-0022].
+
+.Local history reinitialization; subsequent synchronization is a separate, unresolved recovery step.
+image::{strategy-diagrams-root}/history-recovery.svg["Reinitialization requires confirmation and a preserved damaged-repository backup. Content becomes a new baseline, while the old history remains unavailable in the new repository."]

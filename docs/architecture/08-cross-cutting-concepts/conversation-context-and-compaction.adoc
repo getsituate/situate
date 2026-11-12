@@ -1,0 +1,58 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+[[conversation-context-compaction]]
+=== Conversation context and compaction
+
+The native <<glossary-conversation-owner,Conversation Owner>> derives model context from one ancestry path in <<conversation-format-safety,conversation history>>.
+Native adapters supply current instructions and tool schemas through <<glossary-model-access,Model Access>>.
+Neither a model request nor a frontend snapshot is another history authority.
+This supports link:{architecture-repository-root}/requirements/data/requirements/REQ-0004-use-existing-context.md[REQ-0004] without rewriting originals.
+
+.Shared ancestry. Arrows run from parent to child; each original entry is stored once.
+image::{architecture-diagrams-root}/append-conversation-context.svg["Entries A and B are shared by the branch through compaction K to G and the branch through E to F.",width=650]
+
+K summarizes A and B and retains originals beginning at C (`firstKeptEntryId`).
+
+.One path, different views. K affects model context, not the original UI history.
+image::{architecture-diagrams-root}/append-conversation-projections.svg["The model receives summary K plus C, D and G on path G; the UI shows its originals. Path F does not inherit compaction K.",width=700]
+
+==== Branch-relative selection
+
+Follow parent links from the selected entry to the root.
+Use only the latest compaction on that path: its summary, pre-compaction entries beginning at `firstKeptEntryId`, then later entries.
+A compaction before which a new branch diverges cannot affect that branch.
+The ID boundary can refer anywhere on the selected ancestry path; it is not a file offset or mutable message count.
+
+Keep complete tool-call/result groups in the recent suffix.
+The latest active user request remains verbatim even if it precedes that suffix.
+Waiting or recalled inputs remain visible history but do not enter a main model request until selected for consumption.
+System instructions and tools are assembled separately from original user and assistant content.
+
+==== Masking and summarization
+
+Context preparation may mask older large successful outputs of recognized repeatable observation tools, such as reads, listings and searches, and replace older tool images with omission notices.
+Failures and action receipts are not text-masked; an omission must not imply that an effect should be repeated.
+Masking never alters the stored original.
+
+Estimate the budget using messages, current instructions, tool schemas, image allowances and an output reserve.
+This is not an exact provider tokenizer or an acceptance guarantee.
+If needed, summarize older originals in bounded chunks with the previous applicable summary.
+Compaction uses summary-specific instructions and no tools.
+Preserve the active request, decisions, file identities, observed effects, uncertainty and open questions; source content is data, not executable instructions.
+Attachment references remain references; inline images become placeholders.
+
+==== Compaction publication
+
+Append a compaction entry only for a normally completed, nonempty summary with no tool calls.
+Select its context only after successful saving.
+Failure or cancellation leaves the previous usable context selected; compaction can be attempted again without replaying tools.
+A complete entry left behind by a failed metadata update remains history, not a reason to delete or rewrite older entries.
+
+Input arriving during compaction is saved as ordinary submitted input but does not join the summary request or an already prepared main request.
+See <<pending-input-stop-recall>> for consumption and Recall.
+Compaction bounds model context only; file growth and incremental history access follow <<conversation-format-safety>>.

@@ -1,0 +1,16 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[content-path-policies]]
+=== Portable writes and provider reads
+
+New writable content paths follow a stricter naming policy to reduce portability problems, including rejection of control characters and trailing dots or spaces.
+This is not a complete cross-filesystem compatibility guarantee; reserved names and other filesystem-specific restrictions still apply.
+Provider reads have a separate policy: existing provider filenames need not be renamed merely because they would not be accepted for a new portable file.
+Both policies exclude traversal and technical workspace internals.
+
+Path validation does not grant access to a workspace or replace operating-system permissions, native handle validation or symbolic-link protections.
+Shared fixtures define the expected distinctions for Rust, Swift and Kotlin adapters.
+They support consistency checks but do not prove real device permission or provider behavior.
+See link:{architecture-repository-root}/client/contracts/content-paths.json[path contracts] and <<current-client-packages>>.

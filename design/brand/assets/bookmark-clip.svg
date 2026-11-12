@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 180" role="img" aria-labelledby="bookmark-clip-title" aria-describedby="bookmark-clip-desc">
+  <title id="bookmark-clip-title">A folded ribbon bookmark</title>
+  <desc id="bookmark-clip-desc">A broad tangerine strip bends over the top edge of a cream page and hangs down its front.</desc>
+  <path id="bookmark-back" d="M65 35c0-14 8-21 21-21h7c13 0 22 10 22 23v46H85V35Z" fill="#da592f"/>
+  <g id="page">
+    <rect x="22" y="37" width="106" height="129" rx="8" fill="#ffc3a3"/>
+    <rect x="16" y="31" width="106" height="129" rx="8" fill="#fff7e3"/>
+    <path d="M32 62h17m-17 16h17m-17 49h66m-66 15h43" fill="none" stroke="#ad9284" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <path id="bookmark-front" d="M65 35c0-14 8-21 21-21h7c8 0 14 5 18 12h-6c-4 0-6 4-6 9v75c0 3-2 4-4 2l-13-9-13 9c-2 2-4 1-4-2Z" fill="#ff874d"/>
+</svg>

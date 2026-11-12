@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 400" role="img" aria-labelledby="background-folded-corner-title" aria-describedby="background-folded-corner-desc">
+  <title id="background-folded-corner-title">Folded corner</title>
+  <desc id="background-folded-corner-desc">A broad triangular paper plane with its far corner turned back.</desc>
+  <path d="M66 66Q66 56 74 62L418 257V346Q418 354 410 354H74Q66 354 66 346Z" fill="#d9d0df"/>
+  <path d="M56 56Q56 46 64 52L408 247V336Q408 344 400 344H64Q56 344 56 336Z" fill="#fff7e3"/>
+  <path d="M408 247V336Q408 344 400 344L294 310Q287 307 294 303Z" fill="#ffc3a3"/>
+</svg>

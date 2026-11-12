@@ -1,0 +1,177 @@
+.chat-screen {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--situate-surface);
+  container-type: inline-size;
+}
+.pane-tools {
+  display: flex;
+  flex-shrink: 0;
+}
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.chat-thread {
+  max-width: 752px;
+  margin: auto;
+  padding: 32px 32px 40px;
+}
+.chat-footer {
+  --chat-gutter: 28px;
+  position: relative;
+  padding: 12px var(--chat-gutter) 22px;
+  background: var(--situate-surface);
+}
+.chat-footer.is-scrolled-back::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 100%;
+  height: 72px;
+  background: linear-gradient(to bottom, transparent, var(--situate-surface));
+  pointer-events: none;
+  z-index: 1;
+}
+.chat-scroll-to-end {
+  position: absolute;
+  inset-inline-end: max(var(--chat-gutter), calc((100% - 688px) / 2));
+  inset-block-start: -52px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--situate-line);
+  border-radius: var(--situate-radius-pill);
+  background: var(--situate-surface);
+  color: var(--situate-ink);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--situate-ink) 8%, transparent);
+}
+.composer-area {
+  max-width: 688px;
+  margin: auto;
+}
+.composer-area :deep(.composer) {
+  margin-top: 0;
+}
+.has-question-dock {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 70%;
+  min-height: 0;
+}
+.question-dock {
+  position: relative;
+  flex: 1 1 auto;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  padding: 20px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--situate-accent-strong, var(--situate-violet-deep)) 18%,
+      var(--situate-line)
+    );
+  border-radius: var(--situate-radius-dialog);
+  background: linear-gradient(
+    135deg,
+    color-mix(
+      in srgb,
+      var(--situate-accent-soft, var(--situate-lilac)) 55%,
+      var(--situate-surface)
+    ),
+    var(--situate-surface) 85%
+  );
+  box-shadow: 0 4px 20px color-mix(in srgb, var(--situate-ink) 5%, transparent);
+}
+.composer-body {
+  display: contents;
+}
+.question-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.question-disclosure {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 10px;
+  z-index: 1;
+}
+.question-body :deep(.question-heading) {
+  padding-inline-end: 44px;
+}
+.question-dock--collapsed {
+  min-height: 66px;
+  justify-content: center;
+}
+.question-dock--collapsed .question-disclosure :deep(svg) {
+  transform: rotate(180deg);
+}
+.question-summary {
+  padding-inline-end: 44px;
+  font-size: 13px;
+  color: var(--situate-muted);
+}
+.question-dock :deep(.chat-composer) {
+  flex-shrink: 0;
+  margin-top: 16px;
+}
+.question-dock :deep(.chat-model-choice) {
+  flex-shrink: 0;
+}
+.chat-error {
+  border-inline-start: 3px solid #80534f;
+  padding: 12px 16px;
+  background: #faf0ed;
+  font-size: 14px;
+}
+@media (hover: hover) {
+  :deep(summary):hover,
+  .nav-button:hover {
+    background: var(--situate-paper);
+  }
+}
+@container (max-width:540px) {
+  .chat-thread {
+    padding: 24px 18px;
+  }
+  .chat-footer {
+    --chat-gutter: 16px;
+    padding: 10px var(--chat-gutter) 16px;
+  }
+  .question-dock {
+    padding: 16px;
+  }
+}
+@media (max-height: 480px) {
+  .question-body {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .question-body :deep(.question-prompt) {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+  .has-question-dock {
+    padding-top: 4px;
+    padding-bottom: 8px;
+  }
+  .question-dock {
+    padding: 12px;
+    border-radius: var(--situate-radius-note);
+  }
+  .question-dock :deep(.chat-composer) {
+    margin-top: 8px;
+  }
+}

@@ -1,0 +1,12 @@
+=== Level 2: Selected building blocks
+
+Only the <<situate-application,Situate Application>> is refined here.
+The optional services and deferred marketplace retain their Level 1 descriptions; their internal structure remains unspecified.
+
+include::application/decomposition.adoc[]
+
+include::application/named-interfaces.adoc[]
+
+include::application/ownership-and-lifecycle-rules.adoc[]
+
+include::application/current-client-package-boundaries.adoc[]

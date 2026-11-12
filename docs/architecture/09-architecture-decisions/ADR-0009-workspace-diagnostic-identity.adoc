@@ -1,0 +1,66 @@
+= ADR-0009: Correlate diagnostics by portable workspace identity
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: accepted
+Date:: 2026-10-10
+Implementation:: portable metadata and diagnostic context cache implemented; target-device verification remains
+Supersedes:: The user-identity and launch-local workspace-alias portions of link:{architecture-docs-root}/09-architecture-decisions/ADR-0008-device-local-diagnostics.adoc[ADR-0008]. Its remaining diagnostic architecture stays accepted.
+
+== Context
+
+Client diagnosis needs to connect activity involving the same workspace across sessions and devices, without requiring a user account or a selected synchronization service.
+A separately generated user identifier on each device would not identify one person across those devices.
+Providing an actual cross-device user identity would introduce account association beyond the local logging scope.
+
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0064-record-client-diagnostic-events.md[REQ-0064] instead requires workspace, device and session correlation.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0045-create-local-workspaces.md[REQ-0045] owns creation, while link:{architecture-repository-root}/requirements/data/requirements/REQ-0038-copy-portable-workspaces.md[REQ-0038] owns portable copying and restoration.
+
+== Decision
+
+Generate a random opaque link:{architecture-docs-root}/index.adoc#glossary-diagnostic-workspace-identifier[diagnostic workspace identifier] during workspace creation and retain it in portable workspace metadata. It correlates diagnostic events; it is not a credential namespace or runtime authorization handle.
+Use that identifier in workspace-related diagnostic events instead of a user identifier or a newly assigned workspace alias on every launch.
+Synchronization transports preserve this metadata, including whole-directory transfer; the official service is not required for identity continuity.
+Do not derive the identifier from a name, path, account or credential.
+
+Complete copies and restorations retain the diagnostic workspace identifier and are recognized as copies of the same workspace for diagnostic correlation.
+Creating a deliberately independent workspace requires a new identifier without changing the original.
+Do not infer that intent from an ordinary directory copy, path change or a second device opening the workspace.
+This identity rule does not select a new duplication interface or promise consistency of arbitrary live copies.
+
+Device identity is generated once and kept outside synchronized workspace state; each application launch has a fresh session identity.
+Events without workspace context, including startup before the host opens and authorizes a workspace, omit the diagnostic workspace identifier.
+Log files remain device-local and do not enter workspace history or synchronization.
+No user identifier, person lookup or cross-workspace person association is added.
+
+The host binds the validated diagnostic workspace identifier to diagnostic context separately from its link:{architecture-docs-root}/index.adoc#glossary-runtime-workspace-binding[runtime workspace binding], which associates requests with an authorized local workspace session.
+Two local copies sharing an identifier must not share mutable runtime state, credentials or access rights merely because diagnostics can correlate them.
+Logging consumes admitted context; it does not create or repair workspace metadata while emitting an event.
+
+== Alternatives
+
+* Keep a persistent user pseudonym per installation. This supports local continuity but conflates an installation with a person and cannot establish the requested cross-device association.
+* Require an account-backed user identifier. This could connect a person across devices but makes a local diagnostic capability depend on account and service policy that is not in scope.
+* Retain launch-local workspace aliases. These avoid stable content association but cannot recognize the same workspace on another device or after restart.
+* Regenerate identity for every copy. This distinguishes all physical copies but breaks backup, restoration and synchronization continuity; it also assumes independence without a user decision.
+
+== Consequences and verification
+
+Diagnostic workspace identifiers are portable metadata even though logs are not.
+Different workspaces belonging to one person are not identified as belonging to that person.
+Divergent copies can share a diagnostic workspace identifier until deliberately made independent; device, session, producer and operation context distinguish their diagnostic activity without merging their application state.
+These are pseudonymous records, not a guarantee of anonymity.
+The data exclusions in link:{architecture-repository-root}/requirements/data/requirements/REQ-0067-limit-diagnostic-data.md[REQ-0067] remain unchanged.
+
+Verify distinct identities at independent creation, stability across rename/reopen, preservation through complete copy/restore and transport, different device/session context, and application events with no workspace.
+When opening a workspace, the native host initializes only missing diagnostic metadata, through exclusive file publication. Corrupt or read-only metadata remains untouched and does not produce workspace-scoped logs. Existing Android SAF workspaces without metadata remain identity-unavailable because that provider API lacks exclusive named creation. Independently initialized legacy copies can acquire different identities before metadata transfer.
+Device identity follows retained local application data, not a hardware fingerprint. Missing data creates a new identifier; corrupt data disables diagnostics without replacement. The concept and development plan describe these lifecycle limits.
+The explicit operation for making a copied workspace independent remains unspecified.
+
+The link:{architecture-docs-root}/index.adoc#client-diagnostics[client diagnostics concept] describes the current event contract and collection boundary.

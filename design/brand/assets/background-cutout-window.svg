@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 380" role="img" aria-labelledby="background-cutout-window-title" aria-describedby="background-cutout-window-desc">
+  <title id="background-cutout-window-title">Cutout window</title>
+  <desc id="background-cutout-window-desc">An asymmetric paper plane surrounds one wide rounded opening, with a small offset edge.</desc>
+  <path d="M76 66L508 42Q537 40 543 67L569 286Q572 310 548 314L96 350Q69 353 64 327L44 112Q41 82 76 66ZM190 128Q168 130 168 152L168 240Q168 262 190 260L414 242Q436 240 436 218L436 130Q436 108 414 110Z" fill="#d9d0df" fill-rule="evenodd"/>
+  <path d="M68 56L500 32Q529 30 535 57L561 276Q564 300 540 304L88 340Q61 343 56 317L36 102Q33 72 68 56ZM182 118Q160 120 160 142L160 230Q160 252 182 250L406 232Q428 230 428 208L428 120Q428 98 406 100Z" fill="#fff7e3" fill-rule="evenodd"/>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 148" role="img" aria-labelledby="milestone-flag-title" aria-describedby="milestone-flag-desc">
+  <title id="milestone-flag-title">A flag beside a winding path</title>
+  <desc id="milestone-flag-desc">A small orange folded flag stands beside a quiet violet path that curves onward.</desc>
+  <path d="M17 124c25-31 42 19 74-5 24-18 39-36 71-17" fill="none" stroke="#8651ed" stroke-width="6" stroke-linecap="round"/>
+  <path d="m91 24-12 88" fill="none" stroke="#6232bc" stroke-width="6" stroke-linecap="round"/>
+  <path d="m91 30 32 8 32-9-5 37-32 9-31-10Z" fill="#da592f"/>
+  <path d="m85 24 32 8 32-9-5 37-32 9-31-10Z" fill="#ff874d"/>
+  <path d="m117 32 32-9-5 37-32 9Z" fill="#ffc3a3"/>
+  <path d="m85 18-12 88" fill="none" stroke="#8651ed" stroke-width="6" stroke-linecap="round"/>
+</svg>

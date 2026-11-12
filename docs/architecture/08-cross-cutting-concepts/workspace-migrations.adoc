@@ -1,0 +1,117 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+[[workspace-migrations]]
+=== Workspace compatibility and migrations
+
+Status: accepted design, implemented by the native opening gate and the independent link:{architecture-repository-root}/client/crates/situate-migrations[situate-migrations package].
+Exact published-binary provenance and native macOS/iOS release qualification remain separate verification requirements.
+See the link:{architecture-repository-root}/docs/development/workspace-migrations-plan.md[implementation plan] for package boundaries, delivery steps and verification.
+
+The workspace core is one compatibility unit: either it opens after migration or it remains closed.
+Plugins have separate code, data-format and app-capability checks; an incompatible plugin does not by itself block the core.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070].
+
+==== Compatibility boundary and migration position
+
+Persist two values centrally in `.situate`; no separate core format version or target-format setting is needed.
+The values live in `.situate/migrations.json`.
+The first migration creates this file without changing other managed records or increasing their minimum app version.
+
+[cols="1,3",options="header"]
+|===
+|Field |Meaning
+|`minimumAppVersion`
+|Lowest app release that can safely open and edit this workspace. Compare semantic versions, not strings. Migration does not automatically raise it; an incompatible change raises it deliberately.
+|`lastAppliedMigration`
+|Stable ID of the last successful migration in one linear sequence. No per-step execution history is required. An explicit initial position represents a workspace with no applied migrations.
+|===
+
+The app owns one central, ordered registry of migration IDs and implementations.
+Append new migrations after all published entries; never change a published migration, reuse its ID or insert a step before it.
+Corrections are new migrations.
+
+.Compatibility gate for valid metadata, with no recovery or cleanup pending.
+image::{architecture-diagrams-root}/workspace-compatibility.svg["An app below minimumAppVersion refuses opening. A compatible app migrates a known earlier position, or preserves a current or valid later position before opening the core.",width=700]
+
+An app below `minimumAppVersion` refuses normal opening before processing workspace content or writing it and requests an update.
+Other workspaces remain usable.
+An app meeting the minimum applies its remaining migrations before opening.
+When a compatible older app encounters a valid later migration ID outside its registry, it preserves that position: it neither downgrades the workspace nor repeats its own earlier migrations.
+Malformed metadata or a missing required migration path is an error, not an initial workspace.
+
+Keep old and new representations compatible wherever practical.
+Older writers must preserve unknown information; when two fields represent the same value, define which is authoritative and how later edits from older apps are reconciled.
+Raising the minimum is not routine cleanup after six months.
+REQ-0069 permits an earlier incompatible change only through an explicit decision for that change when transition effort is disproportionate; this does not waive public plugin-interface compatibility under REQ-0070.
+
+==== Opening and recovery
+
+Run migrations when opening a workspace, not at application startup.
+Keep normal core access, plugin execution and synchronization stopped until migration and its durable completion succeed.
+Serialize local opens and writes for the affected workspace throughout backup, migration and restoration.
+Editing the workspace outside Situate during this operation is unsupported; the runner does not reconcile or detect concurrent external changes.
+
+.One backup protects the entire pending chain; migration or validation failure restores the original state.
+image::{architecture-diagrams-root}/workspace-migration-lifecycle.svg["A compatible app retains exclusive local access, prepares a complete recovery backup, runs pending migrations, validates and persists metadata, then retires and deletes the backup before opening. Migration or validation failure restores the original state and reports an error without opening.",width=750]
+
+Backup, restoration or cleanup failure also leaves the workspace closed.
+The backup state determines recovery after an interruption.
+
+All migration writes stay inside `.situate`, which contains Situate-managed state, not user-authored working files.
+Back up the complete managed state that can be changed, including compatibility metadata, conversations, pending work, plugin state and histories; exclude the backup and temporary migration artifacts themselves.
+Do not modify or restore user files outside `.situate`, device-local app settings, credentials or external services.
+Migration must not execute plugins, resume conversations or replay tools.
+
+For a chain `M001 -> M002 -> M003`, failure in the final step restores the state before `M002`, including its original migration position, rather than retaining a partially upgraded workspace.
+After successful validation, persist the new migration position and any deliberate minimum-version increase before completing the attempt.
+Delete the backup before normal opening.
+
+.Backup states and recovery. Solid arrows change state; dashed arrows show the action on the next open.
+image::{architecture-diagrams-root}/workspace-migration-backup.svg["A temporary backup becomes recoverable only after complete durable publication, then retired after validated migration and durable metadata. On the next open, discard temporary backups, restore recoverable backups and retry, or finish deleting retired backups without restoring.",width=950]
+
+Migration cannot start from a temporary backup.
+A recoverable backup triggers full restoration and a silent retry even if conversion succeeded before interruption; only durable retirement ends that recovery rule.
+A retired archive is no longer a recovery source; finish deleting it before opening.
+No per-step migration progress is recorded.
+
+Publish and retire the recovery backup through atomic, durably acknowledged state transitions before starting migration or deleting backup contents, respectively.
+Keep the recoverable backup intact while restoring; an interrupted restoration is repeated from that same complete source.
+A failed restoration leaves the workspace closed and the backup retained.
+A failed migration restores the original state and reports an error; retry automatically on a later open, not in an unbounded loop.
+An unreadable or incomplete recovery source must never replace workspace state or become empty data.
+Recovery state lives in `.situate/.migrations/`: `workspace.lock`, `backup.tar.tmp`, `backup.tar` and `retired.tar`.
+Each backup is one uncompressed TAR archive containing `payload/` entries and a final `manifest.json`.
+The manifest records file sizes, normal permission bits and SHA-256 content digests.
+Validate the complete archive against its manifest before publication and before destructive restoration, without comparing it with a second scan of the live directory tree.
+Only the named archive files participate in recovery and cleanup; unrelated entries in the control directory are left untouched.
+The runner rejects oversized manifests, unsafe paths, duplicate entries and unsupported entry types.
+
+Archives use private file permissions (`0600` on POSIX); restoration makes the managed directory private (`0700`) before extracting files.
+Restore normal permission bits, but create files under the current user without restoring owner/group identities, ACLs or extended attributes.
+Archive entries contain independent file bytes, not links to live state.
+
+Metadata-free legacy markers are admitted without resetting their contents; malformed compatibility metadata is not treated as absence.
+Fresh staged workspaces initialize the current migration position before publication; existing markers, including the current iOS creation path, pass through the metadata bootstrap.
+Native session and in-flight authorization lifetimes retain shared workspace ownership; pending conversion requires exclusive local ownership.
+
+==== Synchronization and release verification
+
+Synchronization starts only after local migration completes.
+Another device may still edit its older copy during this time; the local backup is not a distributed lock or a rollback of remote changes.
+Synchronization must check incoming compatibility metadata and data before applying them, converting supported older writes or retaining incompatible input without unsafe processing.
+The synchronization protocol, conflict handling and compatibility changes received while open remain to be designed; transport alone does not own these rules.
+Recovery backups and temporary migration artifacts must not be synchronized as ordinary workspace state.
+
+Existing readers do not gain a minimum-version check retroactively.
+Before enabling an incompatible writer, verify that every affected published reader refuses it safely; merely adding the metadata is insufficient.
+Existing per-record versions and protections remain in place until their supported readers and writers have a tested transition; see <<conversation-format-safety>> and <<native-filesystem-synchronization>>.
+
+Qualify with synthetic released-format fixtures: skipped releases, old/new write round trips, retained unknown fields, newer migration IDs on compatible older apps, and refusal below the minimum.
+Interrupt backup creation, restoration, every migration step, completion, retirement and deletion; also cover disk-full and flush failures.
+Verify exact original-state recovery, unchanged files outside `.situate`, no repeated external effects and independence of other workspaces.
+Migration-path retention beyond the support window remains a release-policy decision, not an indefinite commitment.

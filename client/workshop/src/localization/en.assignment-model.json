@@ -1,0 +1,19 @@
+{
+  "title": "Bring notes into a reading view",
+  "request": "Connect an example note collection and show it in a reading view. Keep a short guide in the workspace.",
+  "reuseTitle": "Use notes in a second view",
+  "sharedTitle": "Extend note details across views",
+  "systemTitle": "Use a consistent preparation format across the workspace",
+  "connectionTitle": "Connect a note collection for conversations",
+  "parallelTitle": "Refine note preparation",
+  "parallelRequest": "Use a larger note limit when preparing a reading view.",
+  "guidePath": "Guides/reading.md",
+  "conventionPath": "Guides/preparation.md",
+  "checkFailure": "A consumer compatibility check failed.",
+  "dependencyChanged": "A dependency changed after checks. Check the related packages again.",
+  "dependencyMissing": "A required connection is missing or disabled.",
+  "viewName": "Notes view",
+  "digestName": "Notes digest",
+  "exampleAccount": "Example note collection",
+  "workspaceText": "# Reading guide\n\nReview the selected notes before preparing a reading list.\n"
+}

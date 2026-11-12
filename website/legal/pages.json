@@ -1,0 +1,414 @@
+[
+  {
+    "id": "legal-notice",
+    "path": "/legal-notice.html",
+    "titleKey": "legal.title",
+    "summaryKey": "legal.summary",
+    "sections": [
+      {
+        "id": "service-provider",
+        "headingKey": "legal.provider.title",
+        "blocks": [
+          { "type": "paragraph", "key": "legal.provider.basis" },
+          {
+            "type": "address",
+            "keys": [
+              "contact.name",
+              "contact.street",
+              "contact.city",
+              "contact.country"
+            ]
+          },
+          {
+            "type": "link",
+            "key": "contact.phone",
+            "href": "tel:+4915144935167"
+          },
+          {
+            "type": "link",
+            "key": "contact.email",
+            "href": "mailto:contact@backendhance.com"
+          }
+        ]
+      },
+      {
+        "id": "vat-identification-number",
+        "headingKey": "legal.vat.title",
+        "blocks": [{ "type": "paragraph", "key": "legal.vat.number" }]
+      },
+      {
+        "id": "editorial-responsibility",
+        "headingKey": "legal.editorial.title",
+        "blocks": [
+          {
+            "type": "address",
+            "keys": [
+              "contact.name",
+              "contact.street",
+              "contact.city",
+              "contact.country"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "consumer-dispute-resolution",
+        "headingKey": "legal.dispute.title",
+        "blocks": [{ "type": "paragraph", "key": "legal.dispute.body" }]
+      },
+      {
+        "id": "support-and-feedback",
+        "headingKey": "legal.support.title",
+        "blocks": [
+          { "type": "paragraph", "key": "legal.support.body" },
+          {
+            "type": "link",
+            "key": "contact.email",
+            "href": "mailto:contact@backendhance.com?subject=Situate%20support%20or%20feedback"
+          }
+        ]
+      },
+      {
+        "id": "icon-credits",
+        "headingKey": "download.credits",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "key": "credits.windows"
+          },
+          {
+            "type": "link",
+            "key": "credits.windowsGuidelines",
+            "href": "https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/mscle/documents/presentations/Windows_trademark_guidelines_2025.pdf"
+          },
+          {
+            "type": "paragraph",
+            "key": "credits.linux"
+          },
+          {
+            "type": "link",
+            "key": "credits.linuxSource",
+            "href": "https://commons.wikimedia.org/wiki/File:Tux.png"
+          },
+          {
+            "type": "paragraph",
+            "key": "credits.android"
+          },
+          {
+            "type": "link",
+            "key": "credits.androidLicense",
+            "href": "https://creativecommons.org/licenses/by/3.0/"
+          },
+          {
+            "type": "link",
+            "key": "credits.androidSource",
+            "href": "https://commons.wikimedia.org/wiki/File:Android_Robot_Head_2023.svg"
+          },
+          { "type": "paragraph", "key": "credits.posthog" },
+          {
+            "type": "link",
+            "key": "credits.posthogLicense",
+            "href": "https://getsituate.com/vendor/posthog-LICENSE.txt"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "privacy",
+    "path": "/privacy.html",
+    "titleKey": "privacy.title",
+    "summaryKey": "privacy.summary",
+    "sections": [
+      {
+        "id": "scope",
+        "headingKey": "privacy.scope.title",
+        "blocks": [{ "type": "paragraph", "key": "privacy.scope.body" }]
+      },
+      {
+        "id": "controller",
+        "headingKey": "privacy.controller.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.controller.body" },
+          {
+            "type": "address",
+            "keys": [
+              "contact.name",
+              "contact.street",
+              "contact.city",
+              "contact.country"
+            ]
+          },
+          {
+            "type": "link",
+            "key": "contact.email",
+            "href": "mailto:contact@backendhance.com"
+          },
+          {
+            "type": "link",
+            "key": "contact.phone",
+            "href": "tel:+4915144935167"
+          }
+        ]
+      },
+      {
+        "id": "website-hosting",
+        "headingKey": "privacy.hosting.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.hosting.provider" },
+          { "type": "paragraph", "key": "privacy.hosting.data" },
+          { "type": "paragraph", "key": "privacy.hosting.purpose" },
+          { "type": "paragraph", "key": "privacy.hosting.logs" },
+          { "type": "paragraph", "key": "privacy.hosting.securityLogs" },
+          {
+            "type": "link",
+            "key": "privacy.hosting.link",
+            "href": "https://docs.hetzner.com/general/others/data-protection/"
+          }
+        ]
+      },
+      {
+        "id": "downloads-and-updates",
+        "headingKey": "privacy.delivery.title",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "key": "privacy.delivery.macos"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.delivery.tracking"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.delivery.apple"
+          },
+          {
+            "type": "link",
+            "key": "privacy.delivery.appleLink",
+            "href": "https://www.apple.com/legal/privacy/data/en/app-store/"
+          }
+        ]
+      },
+      {
+        "id": "app-workspaces",
+        "headingKey": "privacy.app.local.title",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "key": "privacy.app.local.content"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.app.local.credentials"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.app.local.retention"
+          }
+        ]
+      },
+      {
+        "id": "app-ai-connections",
+        "headingKey": "privacy.app.ai.title",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "key": "privacy.app.ai.setup"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.app.ai.requests"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.app.ai.providers"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.app.ai.transfers"
+          },
+          {
+            "type": "link",
+            "key": "privacy.app.ai.openai",
+            "href": "https://openai.com/policies/privacy-policy/"
+          },
+          {
+            "type": "link",
+            "key": "privacy.app.ai.openaiApi",
+            "href": "https://developers.openai.com/api/docs/guides/your-data"
+          },
+          {
+            "type": "link",
+            "key": "privacy.app.ai.anthropic",
+            "href": "https://www.anthropic.com/legal/privacy"
+          },
+          {
+            "type": "link",
+            "key": "privacy.app.ai.anthropicRetention",
+            "href": "https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-my-data"
+          },
+          {
+            "type": "link",
+            "key": "privacy.app.ai.openrouter",
+            "href": "https://openrouter.ai/privacy"
+          }
+        ]
+      },
+      {
+        "id": "app-tools-and-remote-content",
+        "headingKey": "privacy.app.tools.title",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "key": "privacy.app.tools.body"
+          }
+        ]
+      },
+      {
+        "id": "app-diagnostics",
+        "headingKey": "privacy.app.diagnostics.title",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "key": "privacy.app.diagnostics.body"
+          },
+          {
+            "type": "paragraph",
+            "key": "privacy.app.diagnostics.sharing"
+          }
+        ]
+      },
+      {
+        "id": "cookies-and-external-content",
+        "headingKey": "privacy.browser.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.browser.storage" },
+          { "type": "paragraph", "key": "privacy.browser.analytics" },
+          { "type": "paragraph", "key": "privacy.browser.analyticsData" },
+          { "type": "paragraph", "key": "privacy.browser.analyticsStorage" },
+          { "type": "paragraph", "key": "privacy.browser.analyticsProvider" },
+          { "type": "paragraph", "key": "privacy.browser.analyticsRetention" },
+          {
+            "type": "link",
+            "key": "privacy.browser.posthogPrivacy",
+            "href": "https://posthog.com/privacy"
+          },
+          {
+            "type": "link",
+            "key": "privacy.browser.posthogSubprocessors",
+            "href": "https://posthog.com/subprocessors"
+          },
+          { "type": "paragraph", "key": "privacy.browser.links" }
+        ]
+      },
+      {
+        "id": "platform-updates",
+        "headingKey": "privacy.waitlist.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.waitlist.purpose" },
+          { "type": "paragraph", "key": "privacy.waitlist.providers" },
+          { "type": "paragraph", "key": "privacy.waitlist.confirmation" },
+          { "type": "paragraph", "key": "privacy.waitlist.retention" },
+          { "type": "paragraph", "key": "privacy.waitlist.transfers" },
+          {
+            "type": "link",
+            "key": "privacy.waitlist.emailoctopus",
+            "href": "https://emailoctopus.com/legal/privacy"
+          },
+          {
+            "type": "link",
+            "key": "privacy.waitlist.google",
+            "href": "https://policies.google.com/privacy"
+          },
+          {
+            "type": "link",
+            "key": "privacy.waitlist.terms",
+            "href": "https://policies.google.com/terms"
+          }
+        ]
+      },
+      {
+        "id": "contact-enquiries",
+        "headingKey": "privacy.contact.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.contact.data" },
+          { "type": "paragraph", "key": "privacy.contact.basis" },
+          { "type": "paragraph", "key": "privacy.contact.retention" },
+          { "type": "paragraph", "key": "privacy.contact.google" },
+          {
+            "type": "link",
+            "key": "privacy.contact.googleLink",
+            "href": "https://workspace.google.com/terms/dpa_terms.html"
+          }
+        ]
+      },
+      {
+        "id": "required-information",
+        "headingKey": "privacy.required.title",
+        "blocks": [{ "type": "paragraph", "key": "privacy.required.body" }]
+      },
+      {
+        "id": "automated-decisions",
+        "headingKey": "privacy.decisions.title",
+        "blocks": [{ "type": "paragraph", "key": "privacy.decisions.body" }]
+      },
+      {
+        "id": "your-rights",
+        "headingKey": "privacy.rights.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.rights.intro" },
+          {
+            "type": "list",
+            "keys": [
+              "privacy.rights.access",
+              "privacy.rights.correction",
+              "privacy.rights.erasure",
+              "privacy.rights.restriction",
+              "privacy.rights.portability"
+            ]
+          },
+          { "type": "paragraph", "key": "privacy.rights.contact" }
+        ]
+      },
+      {
+        "id": "right-to-object",
+        "headingKey": "privacy.objection.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.objection.body" },
+          {
+            "type": "link",
+            "key": "privacy.objection.link",
+            "href": "mailto:contact@backendhance.com?subject=Situate%20privacy%20request"
+          }
+        ]
+      },
+      {
+        "id": "complaints",
+        "headingKey": "privacy.complaint.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.complaint.body" },
+          {
+            "type": "address",
+            "keys": [
+              "privacy.complaint.name",
+              "privacy.complaint.street",
+              "privacy.complaint.city",
+              "contact.country"
+            ]
+          },
+          {
+            "type": "link",
+            "key": "privacy.complaint.link",
+            "href": "https://www.ldi.nrw.de/beschwerde"
+          }
+        ]
+      },
+      {
+        "id": "changes",
+        "headingKey": "privacy.changes.title",
+        "blocks": [{ "type": "paragraph", "key": "privacy.changes.body" }]
+      }
+    ]
+  }
+]

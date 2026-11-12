@@ -1,0 +1,2 @@
+{"version":1,"id":"migration-1","parentId":null,"type":"message","data":{"message":{"role":"user","content":"Original request","timestamp":1}}}
+{"version":1,"id":"migration-2","parentId":"migration-1","type":"legacy","data":{"scope":"record","field":"version","value":2}}

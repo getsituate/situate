@@ -1,0 +1,26 @@
+{
+  "name": "ceo",
+  "label": "CEO",
+  "summary": "Product direction, customer problems, business priorities, requirements, scope, and shared terminology.",
+  "useWhen": [
+    "Clarify customer needs, product value, business assumptions, and priorities.",
+    "Create or review goals, requirements, constraints, and exclusions.",
+    "Develop the business perspective of arc42 chapters 1, 2, 3, 10, and 12."
+  ],
+  "avoidWhen": [
+    "The task is primarily technical architecture, implementation, deployment, or debugging."
+  ],
+  "skills": [
+    "clarify-goals-and-user-problems",
+    "capture-and-maintain-requirements",
+    "review-requirements",
+    "asciidoc-best-practices",
+    "diagramming-best-practices",
+    "writing-clearly-and-concisely",
+    "arc42-chapter-01-introduction-goals",
+    "arc42-chapter-02-architecture-constraints",
+    "arc42-chapter-03-context-scope",
+    "arc42-chapter-10-quality-requirements",
+    "arc42-chapter-12-glossary"
+  ]
+}

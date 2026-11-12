@@ -1,0 +1,38 @@
+[[cross-cutting-concepts]]
+== Cross-cutting Concepts
+
+These concepts define the selected architecture; decision status and implementation evidence remain separate.
+Conversation storage follows <<adr-0016>>; its implementation and verification gates are tracked in the link:../development/conversation-storage-implementation-plan.md[conversation storage plan].
+They do not establish delivery of the broader plugin, synchronization or mobile execution strategy.
+
+:architecture-repository-root: ../..
+:architecture-docs-root: .
+:architecture-diagrams-root: diagrams
+
+include::08-cross-cutting-concepts/workspace-migrations.adoc[]
+
+include::08-cross-cutting-concepts/conversation-formats-and-overwrite-protection.adoc[]
+
+include::08-cross-cutting-concepts/conversation-context-and-compaction.adoc[]
+
+include::08-cross-cutting-concepts/document-rendering.adoc[]
+
+include::08-cross-cutting-concepts/portable-writes-and-provider-reads.adoc[]
+
+include::08-cross-cutting-concepts/git-derived-file-references.adoc[]
+
+include::08-cross-cutting-concepts/native-filesystem-synchronization.adoc[]
+
+include::08-cross-cutting-concepts/encrypted-git-synchronization.adoc[]
+
+include::08-cross-cutting-concepts/deferred-ai-runtime-loading.adoc[]
+
+include::08-cross-cutting-concepts/initial-javascript-budget.adoc[]
+
+include::08-cross-cutting-concepts/client-diagnostics.adoc[]
+
+include::08-cross-cutting-concepts/document-collection.adoc[]
+
+:!architecture-repository-root:
+:!architecture-docs-root:
+:!architecture-diagrams-root:

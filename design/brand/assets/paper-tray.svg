@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 138" role="img" aria-labelledby="paper-tray-title" aria-describedby="paper-tray-desc">
+  <title id="paper-tray-title">Paper tray with a note</title>
+  <desc id="paper-tray-desc">A cream note rests inside a low rounded cobalt tray.</desc>
+  <g id="tray-interior">
+    <path d="M39 47q3-7 12-7h101q9 0 13 7l24 40-7 25q-2 10-14 10H36q-12 0-15-11L14 87Z" fill="#6232bc"/>
+    <path d="M32 40q3-7 12-7h101q9 0 13 7l24 40-7 25q-2 10-14 10H29q-12 0-15-11L7 80Z" fill="#305cf4"/>
+    <path d="M42 43h104q5 0 7 5l20 32-12 18H31L18 80l19-32q2-5 5-5Z" fill="#6232bc"/>
+    <path d="m42 43-24 37 8 11 23-48Z" fill="#48b7ff"/>
+  </g>
+  <g id="tray-note">
+    <path d="m63 23 71 8q5 1 6 6l17 60-102-9 2-59q0-7 6-6Z" fill="#ffc3a3"/>
+    <path d="m58 17 71 8q5 1 6 6l17 60-102-9 2-59q0-7 6-6Z" fill="#fff7e3"/>
+    <path d="m70 41 45 5m-45 10 48 5m-47 10 30 3" fill="none" stroke="#ad9284" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <path id="tray-front" d="M7 80q0-6 7-5l42 5q8 1 11 6l3 5q3 5 10 5h42q7 0 11-5l5-6q4-5 12-6l25-4q8-1 7 6l-7 24q-2 10-14 10H29q-12 0-15-11Z" fill="#305cf4"/>
+</svg>

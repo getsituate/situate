@@ -1,0 +1,67 @@
+= ADR-0001: Coordinate named tab layouts and per-pane navigation
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: accepted
+Date:: 2026-10-06
+Implementation:: layout transitions, workspace persistence, coordinator and built-in views implemented; plugin integration and native verification remain
+
+== Context
+
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011] requires named topic tabs that preserve working arrangements when switching topics.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026] requires movable and resizable panes, responsive presentation, per-pane navigation history and plugin and agent view navigation.
+Host and plugin views use Vue and the same shared component implementations.
+The previous shell's visibility flags selected built-in views but did not model independent pane histories or multiple tab layouts.
+
+Layout must not own content or execution: hiding or closing a view is not workspace closure.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0030-open-chats-with-content-references.md[REQ-0030] also requires content-reference actions to open the standard chat through the same layout rather than a separate file-specific UI.
+
+== Decision
+
+Use an application shell and explicit UI Coordinator with unidirectional state transitions.
+Represent each tab's layout as a composite tree of split nodes and pane leaves.
+Each pane has one active view instance and an independent navigation history and cursor.
+Separate tab/layout state, pane navigation, registered view definitions and presentation sessions from mounted Vue components and domain state.
+
+Built-in UI, plugins and agents use semantic host navigation capabilities rather than private stores or DOM instructions.
+The renderer projects the existing layout into tiled, maximized or narrow presentation without destroying its arrangement.
+Tabs belong to exactly one workspace and do not introduce another content or execution scope.
+Ordinary view opening uses the focused pane; new tabs, splits and maximization are explicit layout actions. With no open tab, navigation creates a single destination.
+Conversation-list navigation reveals an existing current target, including in an inactive tab. Back and forward instead restore within the addressed pane, allowing multiple views of one conversation without duplicating its execution.
+Store versioned presentation state through core storage in the workspace's `.situate` directory. Restoration uses that portable, synchronizable state, not device-only preferences. Conversation records separately own drafts. Conversation model overrides and the workspace model default are link:{architecture-docs-root}/index.adoc#glossary-device-local-ai-settings[device-local AI settings], stored outside portable conversation records and workspace history.
+
+The original record assigned model overrides to conversation records. That assignment is corrected by the workspace-and-device ownership in link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0038-copy-portable-workspaces.md[REQ-0038], also described in link:{architecture-docs-root}/09-architecture-decisions/0002-portable-workspace-credentials.adoc[ADR-0002]. The portable layout and draft decisions are unchanged.
+
+See the link:{architecture-docs-root}/index.adoc#ui-building-blocks[User Interface level-3 decomposition] for responsibilities, state ownership, dependencies and verification boundaries.
+
+== Alternatives
+
+* Extend the current shell with local flags and component events. This remains suitable for a small fixed set of mutually exclusive views, but distributing tab layouts and independent histories across components would obscure state ownership and make programmatic navigation harder to verify.
+* Use a router as the primary UI state. A router can represent navigation targets, but simultaneous panes still require independent histories and a layout model; a single current route is insufficient. Routing can later support target addressing without owning the layout.
+* Adopt a docking framework's model and lifecycle as the application contract. This may reduce interaction implementation work, but plugin contracts and mobile presentation would inherit its assumptions. A rendering dependency can be evaluated later behind the host-owned model; none is selected here.
+
+In maximized presentation, a current-pane title and named switch list preserve horizontal content space and distinguish pane selection from the topic-tab strip.
+A persistent vertical rail consumes the space freed by maximization, especially in portrait; another scrollable strip risks confusing panes with topics and obscuring long labels.
+The switch list requires an extra activation, so its disclosure, complete labels, keyboard navigation and focus restoration are part of the interaction contract rather than evidence of a usability advantage.
+
+The selected structure makes layout and history transitions independently testable while leaving Vue responsible for rendering and existing modules responsible for content and execution.
+It does not require a particular store library, global event bus or separate process.
+
+== Consequences and limits
+
+The application must explicitly manage view-session restoration, focus, resource cleanup and coordination of asynchronous domain effects.
+The coordinator must remain an orchestration boundary, not absorb file, conversation or plugin domain logic.
+Unmounting historical or hidden views must not lose drafts or terminate independent work.
+
+Closing the last pane leaves an empty chooser; closing the last tab or all tabs opens one fresh empty tab with a focused pane. Closed tabs can be reopened with their layout and histories. Pane history has no initial product-imposed limit. Unavailable targets remain identifiable in history instead of silently navigating elsewhere.
+Restart restoration includes tab order and names, pane geometry, active selection, histories, pins and supported view state. Synchronization transport and reconciliation of simultaneous layout edits are not implemented by this decision. Transfers and presentation assignment between windows of the same workspace remain undecided.
+Extension regions and conflicting shell customizations remain open under link:{architecture-repository-root}/requirements/data/requirements/REQ-0028-extend-interface-elements-and-layout.md[REQ-0028].
+
+The client implements pure layout transitions, workspace persistence, the coordinator and rendered built-in views. The registry contract does not supply the production plugin loader or synchronization transport.
+Verification needs include independent histories, retained tab state, non-destructive responsive projection, shared built-in/plugin navigation and lifecycle separation. Browser profiles do not establish physical-device gestures, native picker usability or operating-system drag behavior.

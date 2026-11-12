@@ -1,0 +1,70 @@
+= ADR-0011: Select update authority through build-time distribution variants
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: accepted
+Date:: 2026-10-30
+Implementation:: Apple build-time update policy implemented; signed native installation and relaunch qualification remain open; Homebrew delivery remains deferred
+
+== Context
+
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068] assigns app-update discovery, download and installation either to Situate for direct installations or to the external store or package manager.
+Externally managed installations must not run Situate's own update checks or promote updates.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0071-support-desktop-package-managers.md[REQ-0071] leaves package-manager support and concrete channels deferred.
+
+A website DMG and a Homebrew cask could deliver the same signed macOS application, but its files and installation path would not reliably distinguish the installation route.
+Installer-maintained external markers would need installation-scoped ownership, upgrade, removal and channel-switch rules.
+The product has one developer and operator; maintaining additional release artifacts is preferable to introducing runtime origin detection and ambiguous ownership states.
+
+== Decision
+
+Use explicit build-time distribution variants from the same application source and shared release pipeline.
+Embed distribution identity before signing and derive update authority from that identity in the native host.
+The website macOS variant enables Situate's updater; a future Homebrew variant disables it, including automatic and manual checks, downloads and update promotion.
+
+Do not use runtime acquisition-channel heuristics or external installation markers to choose update authority.
+Missing or unknown release configuration must not default to self-updating.
+The embedded identity selects policy; it does not prove the artifact's acquisition history.
+Each distribution channel must publish the corresponding artifact.
+
+Treat Homebrew as a distribution variant, not another operating-system platform or source fork.
+Do not implement or ship its variant until Homebrew delivery is selected.
+Existing platform, architecture, store-signing and packaging distinctions remain necessary independently of this decision.
+App Store and TestFlight delivery on iOS both use external update authority.
+This decision does not select additional stores, package managers or deferred platform delivery.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Trade-off
+|One signed macOS payload with runtime heuristics
+|Minimizes produced artifacts.
+|Identical bundles can occupy identical paths; manager presence does not prove ownership of the running app.
+|One signed payload with explicit external installation metadata
+|Can retain identical application payloads while recording manager ownership.
+|Adds lifecycle and stale-marker handling outside the signed bundle, plus packaging integration to associate metadata with the right installation.
+|Build-time distribution variants (selected)
+|Deterministic update policy without origin detection, markers or user setup.
+|Adds release artifacts, signing and verification work; a channel referencing the wrong artifact selects the wrong policy.
+|===
+
+== Consequences
+
+Each released variant needs explicit artifact identification and update-policy verification.
+macOS website and Homebrew artifacts are separately signed and notarized while sharing source and automation.
+The direct update feed must contain direct-variant payloads only.
+Externally managed variants remain external when moved or copied; channel changes require explicit installation of the corresponding variant, not automatic inference.
+The channel-replacement workflow remains open; the implemented build configuration is described below.
+
+At acceptance, this decision selected no updater library or feed host. The link:{architecture-docs-root}/index.adoc#delivery-and-operations[delivery and operations view] records subsequent updater and hosting choices; no automatic rollback mechanism is selected.
+
+The link:{architecture-repository-root}/client/scripts/apple-release.mjs[Apple release builder] now embeds `SITUATE_DISTRIBUTION=direct|external` before signing. The native link:{architecture-repository-root}/client/app/src-tauri/src/updates/policy.rs[update policy] enables the updater only for an explicit macOS direct variant. Missing, unknown and external values do not enable it. This implements the build-time policy, not Homebrew delivery or a qualified signed update journey. Signed native installation, relaunch and lifecycle verification remain release gates.
+Acceptance does not establish store eligibility or native verification.
+The link:{architecture-docs-root}/index.adoc#delivery-and-operations[delivery and operations view] describes channel examples and required checks.

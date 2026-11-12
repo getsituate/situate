@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 164" role="img" aria-labelledby="collection-folder-title" aria-describedby="collection-folder-desc">
+  <title id="collection-folder-title">Open collection folder</title>
+  <desc id="collection-folder-desc">Two cream pages rise from a peach folder with a violet back.</desc>
+  <g id="folder-back">
+    <path d="M29 43q0-10 10-10h37q5 0 8 5l7 10h77q10 0 9 10l-8 79q-1 10-11 10H39q-10 0-10-10Z" fill="#6232bc"/>
+    <path d="M22 36q0-10 10-10h37q5 0 8 5l7 10h77q10 0 9 10l-8 79q-1 10-11 10H32q-10 0-10-10Z" fill="#8651ed"/>
+  </g>
+  <g id="folder-pages">
+    <path d="m42 22 66-7q6-1 7 5l10 100-76 8-12-99q-1-6 5-7Z" fill="#fff7e3"/>
+    <path d="m55 44 43-5m-41 18 32-4" fill="none" stroke="#ad9284" stroke-width="3" stroke-linecap="round"/>
+    <path d="m98 33 52 6q6 1 5 7l-10 85-65-7 11-85q1-7 7-6Z" fill="#ffc3a3"/>
+    <path d="m93 27 52 6q6 1 5 7l-10 85-65-7 11-85q1-7 7-6Z" fill="#fff7e3"/>
+    <path d="m102 51 31 4m-33 10 24 3" fill="none" stroke="#ad9284" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g id="folder-front">
+    <path d="M26 86q-8 0-6 9l12 46q2 9 12 9h117q10 0 12-10l14-61q2-9-7-8L90 86Z" fill="#ff874d"/>
+    <path d="M19 79q-8 0-6 9l12 46q2 9 12 9h117q10 0 12-10l14-61q2-9-7-8L83 79Z" fill="#ffc3a3"/>
+  </g>
+</svg>

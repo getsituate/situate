@@ -1,0 +1,92 @@
+= ADR-0010: Derive file references from Git-owned change history
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: accepted; Markdown file-UUID scope superseded by link:{architecture-docs-root}/09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc[ADR-0012]
+Date:: 2026-10-11
+Implementation:: Git facts, reference anchors and workspace-local stored selectors implemented; target-platform qualification remains separate
+
+ADR-0012 extends Git-anchored file references to Markdown and removes embedded file UUIDs. The original decision below records the earlier scope; its Git authority, file publication, Git reference publication and interruption rules remain applicable.
+
+== Context
+
+The path-backed content store maintains Git snapshots and a separate move/delete journal used by live path references.
+The journal also persists hardlink witnesses to reconcile interrupted filesystem operations.
+Some completed moves are already described in Git commit metadata, but reference resolution follows the independently maintained journal.
+This duplicates authority over completed structural changes and couples ordinary file operations to hardlink support, which is unavailable on the tested Android application-owned Documents storage.
+
+This decision's original direct-replacement scope concerned unpublished development formats. Situate is now publicly available. The exception applies only to formats verified never to have shipped publicly; later changes to published history and reference formats follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069].
+
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022] requires traceable, recoverable content and explicit handling of interrupted file operations, not automatic completion after restart.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0030-open-chats-with-content-references.md[REQ-0030] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0035-preserve-file-and-task-identity.md[REQ-0035] require known references to follow completed managed moves without guessing unrelated targets.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0038-copy-portable-workspaces.md[REQ-0038] keeps content, history and necessary reference information inside the portable workspace.
+
+== Decision
+
+Make the core-managed Git history the sole durable authority for confirmed content history and the structural-operation information needed to resolve file references.
+Publish explicit, versioned operation metadata in the same commit as its matching result tree.
+Only operations actually completed and validated by the writer may be recorded as completed; an intended operation, a content hash or Git's rename-similarity inference is not sufficient evidence.
+
+Replace the independent move/delete journal with a derived reference projection.
+Its contents must be reproducible from retained Git history and the stored reference anchor.
+An optional cache may accelerate resolution, but deleting it must not change the result of a rebuild or lose the only record of an operation or uncertainty boundary.
+Markdown UUIDs and explicit historical references retain their existing meanings; non-Markdown files do not acquire embedded IDs or an additional authoritative identity registry.
+
+Do not automatically replay, finish or roll back interrupted file operations on restart.
+Preserve the current working files and the durable pre-operation history, report uncertain or partial outcomes, and let a later user-directed action recheck the current state.
+An interruption is not proof that no effects occurred.
+References without sufficient continuity evidence remain unresolved rather than selecting the current occupant of an old path.
+Any durable continuity uncertainty that changes resolution must itself be reconstructible from Git, not exist only in a local cache.
+
+This decision does not make working-tree changes and Git reference publication one atomic transaction.
+Safe file publication, no-clobber checks, concurrent-change detection, synchronization before acknowledgement, retained drafts and workspace authorization remain responsibilities of the write path.
+A transient in-progress signal may identify an interruption, but must not become a second authoritative move history or an instruction to resume work.
+The implementation uses same-tree Git boundary commits and their validated immediate completion children; unmatched boundaries remain durable continuity gaps. No transient sidecar is needed.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Reason not selected
+|Retain Git and the independent witness journal
+|Preserves the existing automatic reconciliation mechanism.
+|Duplicates authority over completed moves and retains hardlink dependencies, ordering between file and Git reference publication, and restart complexity for an automatic-reconciliation guarantee that is not required.
+|Replace hardlink witnesses with another independent recovery journal
+|Could preserve the same automatic behavior on more filesystems.
+|Keeps the duplicated authority and requires another proof of cross-crash file identity instead of simplifying the product guarantee.
+|Infer every move from ordinary Git tree differences
+|Needs no explicit operation metadata.
+|Equal bytes and rename similarity cannot distinguish a managed move, an independent copy, deletion and path reuse reliably.
+|Relocate content/history or restrict normal structural operations on unsupported storage
+|May avoid a particular filesystem limitation or fail safely.
+|Relocation affects access and portability; restricting operations reduces the intended file-management functionality. Neither is selected as a substitute for correcting ownership.
+|===
+
+== Consequences
+
+The core has one durable history to validate, copy and use for reference reconstruction.
+The reference reader no longer needs durable physical-file witnesses for post-crash move inference.
+Partial operations can leave visible working-tree changes and unresolved references; this is explicit behavior, not a promise of all-or-nothing execution.
+
+Git metadata needs a reviewed format, lineage rules and validation against commit trees.
+Reconstruction has runtime cost; a bounded, invalidatable cache is permitted, but is not required for correctness.
+A commit hash identifies a retained state, not a physical file or proof of authorship; unsupported or inconsistent history must not authorize a guessed reference target.
+
+The original replacement of the development-era `pathEpoch`/`pathJournalId` format requires no data migration, compatibility readers, legacy mapping imports or mixed-version rollout only if that format never shipped publicly. This exception does not apply to subsequent changes to published formats.
+Update all writers, readers, contracts and synthetic fixtures together, using fresh test workspaces rather than converting earlier development data.
+Unsupported input still fails explicitly without being reinterpreted as a Git anchor or silently overwritten. Recreating obsolete development fixtures does not authorize automatic deletion or reset of arbitrary local data.
+
+No storage relocation, Android minimum-version change, new synchronization protocol, Git-history rewriting, diagnostic identity change or weakening of file durability is authorized by this decision.
+The current filesystem, conversation-format and provider-access boundaries remain applicable.
+
+== Design and implementation
+
+The link:{architecture-docs-root}/index.adoc#git-derived-file-references[Git-derived file-reference concept] defines ownership, normal and interrupted flows, reconstruction and the pre-release replacement boundary.
+The link:{architecture-repository-root}/docs/development/git-derived-file-references-plan.md[development plan] sequences the format decisions, direct replacement and platform verification.
+Acceptance requires equivalent reference results after a fresh Git-only rebuild, safe interrupted-operation behavior and correct new-format reference persistence; accepting this ADR does not establish those results.

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 110" role="img" aria-labelledby="day-strip-title" aria-describedby="day-strip-desc">
+  <title id="day-strip-title">A folded day strip</title>
+  <desc id="day-strip-desc">A horizontal paper strip folds into three unequal sections, with a violet marker tucked over the middle.</desc>
+  <path d="m19 39 32-9 100 14 53-11 7 53-53 11-100-14-32 9Z" fill="#ad9284"/>
+  <path d="m12 33 32-9 100 14 53-11 7 53-53 11-100-14-32 9Z" fill="#fff7e3"/>
+  <path d="m144 38 53-11 7 53-53 11Z" fill="#ffc3a3"/>
+  <path d="m44 24 7 53" fill="none" stroke="#ad9284" stroke-width="2" stroke-linecap="round"/>
+  <path d="m96 30-1-11q0-7 7-7h7q7 0 8 7l2 14Z" fill="#6232bc"/>
+  <path d="M102 12q7 0 8 7l6 43-10-5-8 8-6-43q-1-10 10-10Z" fill="#8651ed"/>
+</svg>

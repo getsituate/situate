@@ -1,0 +1,137 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Technical risks
+
+These entries describe risks in the documented design, not demonstrated implementation defects or proof of verified mitigation.
+The CTO owns technical assessment and verification for every entry; marketplace terms and operating commitments also require product and legal decisions.
+Marketplace review/report operations still need an agreed operational owner before delivery.
+
+Impact judgments describe potential consequences: high means possible loss of data or confidentiality, incompatible execution, or application-wide unavailability; medium means constrained delivery or degraded operation.
+Likelihood is unknown where occurrence rates and operating evidence are unavailable; the entries do not estimate probabilities.
+An accepted trade-off remains a risk, and a documented mechanism does not close its verification questions.
+
+[[plugin-development-risks]]
+==== Plugin development and adoption
+
+===== Source and active code can diverge
+
+Basis: link:{architecture-repository-root}/requirements/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033] and <<runtime-view>>.
+
+Reading editable source as the execution version could load unchecked code or combine incompatible plugin revisions.
+The runtime description separates editable source from immutable Git revisions.
+It records selected active revisions in the <<glossary-active-revision-map,Active Revision Map>>, replacing affected selections together during plugin activation publication.
+A <<glossary-check-receipt,Check Receipt>> records which revisions and checks were covered; it does not itself activate code.
+A durable plugin activation attempt distinguishes confirmed activation from an unresolved outcome.
+
+Assessment: high impact; likelihood unknown. Status: mechanisms documented; interrupted-switch and multi-plugin consistency verification remain open here.
+
+Verification and review trigger: when activation storage or switching changes, check interrupted activation, retained history and consistent loading of related plugins.
+Preserve known outcomes: a failed refresh or notification is not proof that activation failed and does not authorize blind repetition.
+
+===== Checks may cover outdated dependency revisions
+
+Basis: link:{architecture-repository-root}/requirements/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033].
+
+Concurrent developments can change dependencies or consumers after checks.
+A Check Receipt for earlier revisions does not establish compatibility with the activation state; activating unselected plugins could overwrite independent work.
+Source or dependency changes require fresh applicable checks before activation.
+Revision-bound checks and coordinated activation are documented, but they do not promise conflict-free concurrent development.
+Overlapping development may interfere with or overwrite changes without a development lock, base-version rejection, mandatory reconciliation or automatic merge.
+
+Assessment: high impact; likelihood unknown. Status: concurrent interference accepted; verification of dependency drift remains open here.
+
+Verification and review trigger: when dependency selection or activation coordination changes, check concurrent edits, stale receipts and long-running affected actions.
+Activation must wait for those actions without aborting or repeating them.
+Check failed-switch recovery within these constraints rather than introducing a competing-development lock or base-version rejection policy.
+
+===== Trial safety depends on instructions
+
+Basis: link:{architecture-repository-root}/requirements/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033].
+
+Agent-led investigation can read workspace data and connected accounts.
+Instructions forbidding incidental real external writes cannot technically prevent a model mistake, prompt injection or trusted plugin bypass.
+Source staging does not isolate external accounts.
+
+Assessment: high impact; likelihood unknown. Status: instruction-only boundary accepted; behavioral verification remains necessary.
+
+Verification and review trigger: when development instructions, tools or reusable connections change, verify instruction propagation, task scope and trial behavior across connection calls.
+Keep automated tests strictly synthetic.
+Any stronger technical restriction needs a separate decision; neither tests nor review imply an enforcement guarantee.
+
+===== Generated artifacts may contain personal material
+
+Basis: link:{architecture-repository-root}/requirements/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0019-share-plugins-through-marketplace.md[REQ-0019].
+
+Code, fixtures, screenshots or a marketplace publication copy can accidentally embed personal data or credentials, especially after real-data trials.
+
+Assessment: high impact; likelihood unknown. Status: artifact review required; no guarantee of harmlessness or legal clearance.
+
+Verification and review trigger: check generated artifacts after real-data investigation and review the separate marketplace publication copy before submission.
+Use synthetic screenshot data and exercise the complete store-page preview.
+Manual approval and local review reduce risk but do not guarantee that private material or third-party rights issues have been excluded.
+
+===== Incomplete developments may accumulate
+
+Basis: link:{architecture-repository-root}/requirements/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033].
+
+Leftover development artifacts may grow without a retention limit; actual sizes and growth rates are unmeasured.
+The MVP has no development-storage display or manual cleanup capability.
+Closing a view does not stop ongoing work or delete storage.
+
+Assessment: impact unknown until storage growth and disk pressure are measured; likelihood unknown. Status: leftover growth accepted for the MVP without age-based cleanup.
+
+Verification and review trigger: reassess storage policy if measured growth causes disk pressure.
+Continue removing disposable check state while preserving live files, active code, configurations, history, conversations and evidence of uncertain plugin activation outcomes.
+Workspace closure and application quit must stop development work; reopening interrupted work waits for user interaction.
+
+===== Marketplace review has capacity and protection limits
+
+Basis: link:{architecture-repository-root}/requirements/data/requirements/REQ-0019-share-plugins-through-marketplace.md[REQ-0019], link:{architecture-repository-root}/requirements/data/requirements/REQ-0020-automate-plugin-security-approval.md[REQ-0020] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0021-adapt-local-plugin-copies.md[REQ-0021].
+
+Initial manual per-version review requires operator capacity; automated malware/prompt-injection review is deferred.
+Blocking prevents adoption of a marketplace version but neither changes existing independent local copies nor warns their users of later security findings.
+Local security warnings and inconclusive results remain explicitly overridable for the exact candidate and relevant dependency revisions; an override does not waive failed functional or compatibility checks.
+
+Assessment: medium impact for review-capacity constraints; high impact for harmful adopted code; likelihood unknown. Status: manual review and independent-copy limits accepted; operating arrangements and publication terms remain open.
+
+Verification and review trigger: before marketplace delivery, agree review/report ownership and operations, and test immediate blocking at adoption, per-version approval and rejection feedback.
+Assess uniform reuse terms without promising legal clearance or selecting a project license.
+Reassess capacity when submission or report evidence becomes available, and protection limits when security findings arise after adoption.
+
+See <<strategy-plugin-updates>> and <<runtime-view>> for development and activation lifecycle boundaries.
+
+==== Application availability and history recovery
+
+===== A plugin view can freeze the application
+
+Basis: link:{architecture-repository-root}/requirements/data/foundations.md#plugin-trust-and-synchronization-ownership[plugin trust and synchronization ownership] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0032-manage-plugin-status-and-disabling.md[REQ-0032].
+
+Plugin views may run as ordinary Vue components in the host UI without an independently stoppable rendering context.
+A synchronous loop or other view failure can freeze the application, affect other open workspaces and require forced restart, with possible loss of unsaved state.
+In-app abort and view removal cannot guarantee stopping such code; service and chat-tool supervision remain unchanged.
+
+Assessment: high impact; likelihood unknown. Status: accepted availability trade-off, conditional on plugin-free startup and repair; platform-specific recovery entry still requires verification.
+
+Verification and review trigger: when plugin loading or recovery entry changes, verify that recovery is reachable after a frozen run and suppresses plugins before loading or execution across restored and subsequently opened workspaces.
+Built-in management and agent repair must remain usable without executing suspended plugins.
+Inspection or editing alone must not resume them; checked activation resumes its target only.
+Recovery is not a sandbox or rollback, and testing or resuming faulty code may freeze the application again.
+See <<glossary-recovery-mode,Recovery Mode>> and <<strategy-plugin-recovery-start>>.
+
+===== Uncontrolled internal-file synchronization can corrupt history
+
+Basis: link:{architecture-repository-root}/requirements/data/foundations.md#workspace-storage-and-history[workspace storage and history] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md#damaged-repository-recovery[REQ-0022: damaged repository recovery].
+
+Uncontrolled synchronization or modification of internal files can make repository history unusable.
+This <<glossary-repository-corruption,repository corruption>> is distinct from a merge conflict in an intact repository.
+Synchronization plugins supply transport; versioning, conflict handling and history recovery remain core responsibilities for every transport.
+A preserved damaged backup does not guarantee recoverable history, and history preservation does not protect against physical damage.
+
+Assessment: high impact; likelihood unknown. Status: recognized risk; the recovery procedure and synchronization protocol boundaries remain open.
+
+Verification and review trigger: before adopting or changing an internal-file transport or damaged-history recovery procedure, verify detection and reporting without asserting an unverified cause.
+History reinitialization requires explicit confirmation of prior-history loss and a preserved damaged-repository backup; it must not proceed if that backup cannot be preserved.
+Existing content remains the new baseline, and local reinitialization does not itself synchronize or delete histories elsewhere.
+See <<glossary-history-reinitialization,History Reinitialization>>.

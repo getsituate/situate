@@ -1,0 +1,21 @@
+digraph WorkspaceMigrationBackup {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.5, ranksep=0.6, fontname="Helvetica", fontsize=12];
+  node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  temporary [label="Temporary\nBackup may be incomplete"];
+  recoverable [label="Recoverable\nComplete, immutable original state", fillcolor="#e5effa"];
+  retired [label="Retired\nNo longer a restoration source"];
+  discard [label="Discard temporary backup\nOriginal state is unchanged"];
+  restore [label="Restore the original state\nThen retry the entire chain"];
+  cleanup [label="Finish deleting the backup\nNever restore from it"];
+
+  { rank=same; temporary; recoverable; retired; }
+  { rank=same; discard; restore; cleanup; }
+
+  temporary -> recoverable [label="Publish complete\nbackup durably"];
+  recoverable -> retired [label="Retire durably after\nvalidated migration + metadata"];
+  temporary -> discard [label="Next open", style=dashed];
+  recoverable -> restore [label="Next open", style=dashed];
+  retired -> cleanup [label="Next open", style=dashed];
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Appearance",
+  "accentColor": "Accent color",
+  "help": "Choose a color for {workspace}. Changes apply immediately.",
+  "default": "Default",
+  "colors": {
+    "violet": "Violet",
+    "cobalt": "Cobalt",
+    "sky": "Sky",
+    "tangerine": "Tangerine",
+    "peach": "Peach",
+    "lemon": "Lemon"
+  }
+}

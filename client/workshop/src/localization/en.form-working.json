@@ -1,0 +1,9 @@
+{
+  "controls": {
+    "title": "Estimated progress frame",
+    "live": "Resume live animation",
+    "playing": "Live animation",
+    "detail": "The bar is a visual estimate, not measured task completion. Frame inspection holds Mini Bend still. Completing or failing the operation removes the indicator immediately.",
+    "waitingState": "06.3 · Preparing the first proposal"
+  }
+}

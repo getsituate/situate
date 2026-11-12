@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "id": "one",
+  "title": "Retained work",
+  "revision": 4,
+  "messages": [
+    { "role": "user", "content": "Original request", "timestamp": 1 }
+  ],
+  "draft": "Retained draft",
+  "runtime": { "draftAttachments": [], "pending": [], "events": [], "runs": [] }
+}

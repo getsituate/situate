@@ -1,0 +1,28 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ../..
+endif::[]
+
+=== Legal and licensing constraints
+
+[cols="1,2,2",options="header"]
+|===
+|Constraint and source |Scope |Architectural consequence
+|EU hosting; link:{architecture-repository-root}/requirements/data/foundations.md#hosting-and-data-processing[foundations]
+|Situate-operated services must be hosted in the EU. Germany is preferred, not mandatory.
+|Deployment choices must respect that region boundary, including the Situate-operated AI router.
+|EU data protection; link:{architecture-repository-root}/requirements/data/foundations.md#hosting-and-data-processing[foundations]
+|Applicable EU requirements govern the actual data flows.
+|Legal prerequisites and safeguards must be assessed before processing. EU hosting alone does not establish compliance.
+|Managed AI processing; link:{architecture-repository-root}/requirements/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016]
+|The router may process content authorized for the relevant user request in plaintext. AI providers may process outside the EU when legal prerequisites are met. Supplied content must not be used for model training.
+|Provider agreements, configuration and data flows must preserve the no-training rule and the separation from encrypted synchronization. Authorization is not blanket access to the stored collection.
+|User-provided AI access; link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015]
+|Users choose their own providers and evaluate their terms. The managed service's no-training guarantee does not extend to those providers.
+|Situate remains responsible for how it transmits data and handles credentials. The device-local storage and direct-provider restrictions are described under <<constraints-technical,Technical constraints>>.
+|Software and artwork licensing; link:{architecture-repository-root}/LICENSING.md[licensing guide]
+|Original software and documentation use MIT; original artwork uses CC BY 4.0. Third-party material keeps its own terms. The separate link:{architecture-repository-root}/TRADEMARKS.md[trademark policy] addresses product identity and affiliation.
+|Preserve applicable license and attribution notices. Dependency and asset choices still require review of their actual terms; the project licenses do not override third-party rights.
+|===

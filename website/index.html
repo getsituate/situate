@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="{{meta.description}}" />
+    <title>{{meta.title}}</title>
+    <link
+      rel="icon"
+      href="/design/brand/assets/app-icon.svg"
+      type="image/svg+xml"
+    />
+    <link rel="stylesheet" href="/design/brand/tokens.css" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="/components.css" />
+    <link
+      rel="preload"
+      as="image"
+      href="./media/workspace.webp"
+      media="(min-width: 651px)"
+    />
+    <script src="/design/brand/bend/bend.js" defer></script>
+    <script src="/design/brand/bend/performance.js" defer></script>
+    <script src="/navigation.js" defer></script>
+    <script src="./script.js" defer></script>
+    <script src="./platform-waitlist.js" defer></script>
+    <script src="./download.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip" href="#main">{{skip}}</a>
+    {{site.header}}
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-backdrop" aria-hidden="true">
+          <div class="hero-orbit orbit-one"></div>
+          <div class="hero-orbit orbit-two"></div>
+          <img
+            class="hero-petal"
+            src="/design/brand/assets/background-petal-rosette.svg"
+            width="220"
+            height="220"
+            alt=""
+          />
+        </div>
+        <div class="hero-layout wrap">
+          <div class="hero-copy">
+            <h1 id="hero-title">
+              {{hero.line1}} <br />{{hero.line2}} <br /><em
+                >{{hero.line3}}<svg viewBox="0 0 470 32" aria-hidden="true">
+                  <path
+                    d="M8 20C133 3 317 4 458 17M50 29C167 13 296 14 394 23"
+                  /></svg
+              ></em>
+            </h1>
+            <p class="hero-product">{{hero.product}}</p>
+            <div class="hero-actions">
+              <a class="button" href="#story"
+                >{{hero.action}} <span aria-hidden="true">↓</span></a
+              ><a class="subtle-link" href="#download"
+                >{{hero.secondary}} <span aria-hidden="true">↗</span></a
+              >
+            </div>
+            <a class="hero-facts" href="/product.html">
+              <ul role="list">
+                <li>{{hero.fact.free}}</li>
+                <li>{{hero.fact.ai}}</li>
+                <li>{{hero.fact.files}}</li>
+              </ul>
+              <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+          <div class="hero-stage" data-motion-scene>
+            <div class="hero-sheet sheet-back" aria-hidden="true"></div>
+            <div class="hero-sheet sheet-middle" aria-hidden="true"></div>
+            <figure class="hero-screen screen-frame">
+              <figcaption>
+                <span class="frame-dot" aria-hidden="true"></span>{{hero.frame}}
+              </figcaption>
+              <a
+                href="./media/workspace.webp"
+                class="screen-link"
+                data-viewer
+                data-title="{{hero.frame}}"
+                ><picture
+                  ><source
+                    media="(max-width: 650px)"
+                    srcset="./media/mobile.webp" />
+                  <img
+                    src="./media/workspace.webp"
+                    width="1440"
+                    height="940"
+                    alt="{{hero.alt}}"
+                    fetchpriority="high" /></picture
+                ><span class="expand"
+                  >{{screen.expand}} <span aria-hidden="true">↗</span></span
+                ></a
+              >
+            </figure>
+            <div class="chore chore-one" aria-hidden="true">
+              {{hero.sort}} <span>↳</span>
+            </div>
+            <div class="chore chore-two" aria-hidden="true">
+              {{hero.tag}} <span>↳</span>
+            </div>
+            <div class="chore chore-three" aria-hidden="true">
+              {{hero.list}} <span>↳</span>
+            </div>
+            <div class="hero-bend" data-bend-rig="hero" aria-hidden="true">
+              <img
+                src="/design/brand/bend/svg/point-curious.svg"
+                width="320"
+                height="320"
+                alt=""
+              />
+            </div>
+          </div>
+        </div>
+        <div class="hero-foot wrap">
+          <button class="replay text-control" hidden type="button">
+            {{motion.replay}} <span aria-hidden="true">↻</span>
+          </button>
+        </div>
+      </section>
+      <div class="ribbon" aria-hidden="true" data-motion-scene>
+        <div class="ribbon-track">
+          <div class="ribbon-group">
+            <span>{{ribbon.one}}</span><i>✳</i><span>{{ribbon.two}}</span
+            ><i>✳</i>
+          </div>
+          <div class="ribbon-group">
+            <span>{{ribbon.one}}</span><i>✳</i><span>{{ribbon.two}}</span
+            ><i>✳</i>
+          </div>
+        </div>
+      </div>
+      <section class="overview" aria-label="{{overview.label}}">
+        <div class="wrap">
+          <ul class="overview-benefits" role="list">
+            <li>
+              <h2>{{overview.local.title}}</h2>
+              <p>{{overview.local.body}}</p>
+            </li>
+            <li>
+              <h2>{{overview.personal.title}}</h2>
+              <p>{{overview.personal.body}}</p>
+            </li>
+            <li>
+              <h2>{{overview.portable.title}}</h2>
+              <p>{{overview.portable.body}}</p>
+            </li>
+          </ul>
+          <a class="overview-link subtle-link" href="/product.html"
+            >{{overview.action}} <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </section>
+      <section class="story" id="story" aria-labelledby="story-title">
+        <div class="section-heading wrap">
+          <p class="eyebrow">{{story.eyebrow}}</p>
+          <h2 id="story-title">{{story.title}}</h2>
+          <p>{{story.intro}}</p>
+        </div>
+        <div class="story-layout wrap">
+          <div class="steps">
+            <article class="step" data-step="0">
+              <p class="eyebrow">{{step1.kicker}}</p>
+              <h3>{{step1.title}}</h3>
+              <p>{{step1.body}}</p>
+              <figure class="example">
+                <figcaption>{{step1.source}}</figcaption>
+                <blockquote>{{step1.quote}}</blockquote>
+              </figure>
+              <figure class="story-static">
+                <a
+                  href="./media/notes.webp"
+                  data-viewer
+                  data-title="{{story.screen1}}"
+                  ><img
+                    src="./media/notes.webp"
+                    width="1440"
+                    height="940"
+                    alt="{{story.alt1}}"
+                    loading="lazy"
+                /></a>
+                <figcaption>{{story.screen1}}</figcaption>
+              </figure>
+            </article>
+            <article class="step" data-step="1">
+              <p class="eyebrow">{{step2.kicker}}</p>
+              <h3>{{step2.title}}</h3>
+              <p>{{step2.body}}</p>
+              <figure class="example">
+                <figcaption>{{step2.source}}</figcaption>
+                <blockquote>{{step2.quote}}</blockquote>
+              </figure>
+              <figure class="story-static">
+                <a
+                  href="./media/workspace.webp"
+                  data-viewer
+                  data-title="{{story.screen2}}"
+                  ><img
+                    src="./media/workspace.webp"
+                    width="1440"
+                    height="940"
+                    alt="{{story.alt2}}"
+                    loading="lazy"
+                /></a>
+                <figcaption>{{story.screen2}}</figcaption>
+              </figure>
+            </article>
+            <article class="step" data-step="2">
+              <p class="eyebrow">{{step3.kicker}}</p>
+              <h3>{{step3.title}}</h3>
+              <p>{{step3.body}}</p>
+              <div class="example">
+                <p class="example-label">{{step3.source}}</p>
+                <ol>
+                  <li>{{step3.one}}</li>
+                  <li>{{step3.two}}</li>
+                  <li>{{step3.three}}</li>
+                </ol>
+              </div>
+              <figure class="story-static">
+                <a
+                  href="./media/conversation.webp"
+                  data-viewer
+                  data-title="{{story.screen3}}"
+                  ><img
+                    src="./media/conversation.webp"
+                    width="1440"
+                    height="940"
+                    alt="{{story.alt3}}"
+                    loading="lazy"
+                /></a>
+                <figcaption>{{story.screen3}}</figcaption>
+              </figure>
+            </article>
+          </div>
+          <div class="story-stage" data-step="0" data-motion-scene>
+            <div class="story-halo" aria-hidden="true"></div>
+            <div class="stage-pages">
+              <figure class="story-shot is-current" data-shot="0">
+                <a
+                  class="screen-link"
+                  href="./media/notes.webp"
+                  data-viewer
+                  data-title="{{story.screen1}}"
+                  ><img
+                    src="./media/notes.webp"
+                    width="1440"
+                    height="940"
+                    alt="{{story.alt1}}"
+                    loading="lazy"
+                  /><span class="expand">{{screen.expand}} ↗</span></a
+                >
+                <figcaption><span>01</span>{{story.screen1}}</figcaption>
+              </figure>
+              <figure class="story-shot" data-shot="1">
+                <a
+                  class="screen-link"
+                  href="./media/workspace.webp"
+                  data-viewer
+                  data-title="{{story.screen2}}"
+                  ><img
+                    src="./media/workspace.webp"
+                    width="1440"
+                    height="940"
+                    alt="{{story.alt2}}"
+                    loading="lazy"
+                  /><span class="expand">{{screen.expand}} ↗</span></a
+                >
+                <figcaption><span>02</span>{{story.screen2}}</figcaption>
+              </figure>
+              <figure class="story-shot" data-shot="2">
+                <a
+                  class="screen-link"
+                  href="./media/conversation.webp"
+                  data-viewer
+                  data-title="{{story.screen3}}"
+                  ><img
+                    src="./media/conversation.webp"
+                    width="1440"
+                    height="940"
+                    alt="{{story.alt3}}"
+                    loading="lazy"
+                  /><span class="expand">{{screen.expand}} ↗</span></a
+                >
+                <figcaption><span>03</span>{{story.screen3}}</figcaption>
+              </figure>
+            </div>
+            <img
+              class="story-bend"
+              src="/design/brand/bend/svg/point-curious.svg"
+              width="270"
+              height="270"
+              alt=""
+            /><span class="story-aside" aria-hidden="true"
+              >{{story.aside}}</span
+            >
+            <svg class="story-arrow" viewBox="0 0 220 120" aria-hidden="true">
+              <path d="M8 105C99 125 186 80 177 18m-15 19 15-22 20 19" />
+            </svg>
+          </div>
+        </div>
+      </section>
+      <section class="faq section-space" id="questions">
+        <div class="wrap faq-layout">
+          <div>
+            <p class="eyebrow">{{faq.eyebrow}}</p>
+            <h2>{{faq.title}}</h2>
+            <img
+              src="/design/brand/bend/svg/rest-curious.svg"
+              width="200"
+              height="200"
+              alt=""
+            />
+          </div>
+          <div class="faq-list">
+            <details>
+              <summary>{{faq.two.q}}<span aria-hidden="true">+</span></summary>
+              <p>{{faq.two.a}}</p>
+            </details>
+            <details>
+              <summary>
+                {{faq.three.q}}<span aria-hidden="true">+</span>
+              </summary>
+              <p>{{faq.three.a}}</p>
+            </details>
+          </div>
+        </div>
+      </section>
+      <section
+        class="downloads section-space wrap"
+        id="download"
+        aria-labelledby="download-title"
+      >
+        <div class="download-welcome">
+          <div class="download-invitation">
+            <div class="section-heading">
+              <p class="eyebrow">{{download.eyebrow}}</p>
+              <h2 id="download-title">{{download.title}}</h2>
+              <p>{{download.body}}</p>
+            </div>
+            <div class="download-featured" hidden></div>
+          </div>
+          <div class="download-art" aria-hidden="true">
+            <img
+              class="download-art-field"
+              src="/design/brand/assets/background-offset-discs.svg"
+              width="560"
+              height="370"
+              alt=""
+              loading="lazy"
+            />
+            <img
+              class="download-art-lamp"
+              src="/design/brand/assets/reading-lamp.svg"
+              width="176"
+              height="168"
+              alt=""
+              loading="lazy"
+            />
+            <img
+              class="download-art-book"
+              src="/design/brand/assets/open-book.svg"
+              width="280"
+              height="210"
+              alt=""
+              loading="lazy"
+            />
+            <img
+              class="download-art-cup"
+              src="/design/brand/assets/ribbon-cup.svg"
+              width="156"
+              height="174"
+              alt=""
+              loading="lazy"
+            />
+          </div>
+        </div>
+        <div class="download-options">
+          <div class="download-platforms">
+            <article class="download-platform" data-download-platform="macos">
+              <div class="platform-title">
+                <h3 data-featured-title="{{download.macosTitle}}">
+                  {{download.macos}}
+                </h3>
+                <p
+                  class="platform-status"
+                  id="macos-availability"
+                  role="status"
+                  data-unavailable="{{download.macosStatus}}"
+                  data-available="{{download.macosAvailable}}"
+                  data-universal="{{download.architecture.universal}}"
+                  data-aarch64="{{download.architecture.aarch64}}"
+                  data-x86_64="{{download.architecture.x86_64}}"
+                >
+                  {{download.macosStatus}}
+                </p>
+              </div>
+              <a
+                class="download-button"
+                data-platform="macos"
+                role="link"
+                referrerpolicy="no-referrer"
+                aria-label="{{download.macosAction}}"
+                aria-describedby="macos-availability"
+                aria-disabled="true"
+                tabindex="-1"
+              >
+                {{download.action}} <span aria-hidden="true">↓</span>
+              </a>
+            </article>
+            <article class="download-platform" data-download-platform="windows">
+              <div class="platform-title">
+                <h3 data-featured-title="{{download.windowsTitle}}">
+                  {{download.windows}}
+                </h3>
+                <p class="platform-status">{{download.comingSoon}}</p>
+              </div>
+              <a
+                class="download-button"
+                href="#platform-waitlist"
+                data-waitlist-platform="windows"
+                aria-label="{{download.windowsAction}}"
+              >
+                {{download.waitlistAction}}
+              </a>
+            </article>
+            <article class="download-platform" data-download-platform="linux">
+              <div class="platform-title">
+                <h3 data-featured-title="{{download.linuxTitle}}">
+                  {{download.linux}}
+                </h3>
+                <p class="platform-status">{{download.comingSoon}}</p>
+              </div>
+              <a
+                class="download-button"
+                href="#platform-waitlist"
+                data-waitlist-platform="linux"
+                aria-label="{{download.linuxAction}}"
+              >
+                {{download.waitlistAction}}
+              </a>
+            </article>
+            <article class="download-platform" data-download-platform="ios">
+              <div class="platform-title">
+                <h3 data-featured-title="{{download.iosTitle}}">
+                  {{download.ios}}
+                </h3>
+                <p class="platform-status">{{download.comingSoon}}</p>
+              </div>
+              <a
+                class="download-button"
+                href="#platform-waitlist"
+                data-waitlist-platform="ios"
+                aria-label="{{download.iosAction}}"
+              >
+                {{download.waitlistAction}}
+              </a>
+            </article>
+            <article class="download-platform" data-download-platform="android">
+              <div class="platform-title">
+                <h3 data-featured-title="{{download.androidTitle}}">
+                  {{download.android}}
+                </h3>
+                <p class="platform-status">{{download.comingSoon}}</p>
+              </div>
+              <a
+                class="download-button"
+                href="#platform-waitlist"
+                data-waitlist-platform="android"
+                aria-label="{{download.androidAction}}"
+              >
+                {{download.waitlistAction}}
+              </a>
+            </article>
+          </div>
+        </div>
+        <p class="download-costs">{{download.costs}}</p>
+        <section
+          class="platform-waitlist"
+          id="platform-waitlist"
+          aria-labelledby="platform-waitlist-title"
+        >
+          <div class="waitlist-intro">
+            <h3 id="platform-waitlist-title">{{waitlist.title}}</h3>
+            <p>{{waitlist.body}}</p>
+          </div>
+          <div class="waitlist-content">
+            <div class="waitlist-entry">
+              <button
+                class="button"
+                type="button"
+                id="load-platform-waitlist"
+                hidden
+              >
+                {{waitlist.open}} <span aria-hidden="true">→</span>
+              </button>
+            </div>
+            <p
+              id="platform-waitlist-status"
+              role="status"
+              data-loading="{{waitlist.loading}}"
+              data-failed="{{waitlist.failed}}"
+              data-required="{{waitlist.required}}"
+              data-email="{{waitlist.email}}"
+              data-platforms="{{waitlist.platforms}}"
+              data-beta="{{waitlist.beta}}"
+              data-submit="{{waitlist.submit}}"
+              data-verifying="{{waitlist.verifying}}"
+              data-sending="{{waitlist.sending}}"
+              data-uncertain="{{waitlist.uncertain}}"
+              data-confirm="{{waitlist.confirm}}"
+              data-selected="{{waitlist.selected}}"
+            ></p>
+
+            <div id="platform-waitlist-form" hidden></div>
+            <p class="waitlist-note" data-waitlist-subscription hidden>
+              {{waitlist.subscription}}
+              <a href="/privacy.html#platform-updates"
+                >{{waitlist.privacyLink}}</a
+              >
+            </p>
+            <p
+              class="waitlist-note waitlist-captcha"
+              data-waitlist-captcha
+              hidden
+            >
+              {{waitlist.captcha}}
+              <a href="https://policies.google.com/privacy"
+                >{{waitlist.googlePrivacy}}</a
+              >
+              {{waitlist.and}}
+              <a href="https://policies.google.com/terms"
+                >{{waitlist.googleTerms}}</a
+              >
+              {{waitlist.apply}}
+            </p>
+            <p class="waitlist-note" data-waitlist-help>
+              {{waitlist.contactIntro}}
+              <a
+                href="mailto:contact@backendhance.com?subject=Situate%20platform%20waitlist"
+                >{{waitlist.contact}}</a
+              >.
+            </p>
+            <noscript><p>{{waitlist.noScript}}</p></noscript>
+          </div>
+        </section>
+      </section>
+    </main>
+    {{site.footer}} {{site.viewer}}
+  </body>
+</html>

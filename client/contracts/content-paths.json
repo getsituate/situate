@@ -1,0 +1,202 @@
+[
+  {
+    "path": "note.md",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": "Notes/note.md",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": "Unicode/\u03bb-\u00e9-\ud83c\udf31.md",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": "café.md",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": ".gitignore",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": ".situated/notes",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": " leading.md",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": "a...b",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": "name.",
+    "provider": true,
+    "portable": false
+  },
+  {
+    "path": "name ",
+    "provider": true,
+    "portable": false
+  },
+  {
+    "path": "Notes /note.md",
+    "provider": true,
+    "portable": false
+  },
+  {
+    "path": "tab\tname.md",
+    "provider": true,
+    "portable": false
+  },
+  {
+    "path": "line\nname.md",
+    "provider": true,
+    "portable": false
+  },
+  {
+    "path": "delname",
+    "provider": true,
+    "portable": false
+  },
+  {
+    "path": "controlname",
+    "provider": true,
+    "portable": false
+  },
+  {
+    "path": "name‍.md",
+    "provider": true,
+    "portable": true
+  },
+  {
+    "path": "",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "/note",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "note/",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "a//b",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "..",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "a/../b",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "a/./b",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "a\\b",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "a\u0000b",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "note:stream",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "C:/note",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "https://host/note",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".git/config",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".GIT/config",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": "a/.SiTuAtE/state",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".situate",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".situate-write-pending",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".SITUATE-WRITE-pending",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".git. /config",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".situate /state",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".. /note",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": ".../note",
+    "provider": false,
+    "portable": false
+  },
+  {
+    "path": " /note",
+    "provider": false,
+    "portable": false
+  }
+]

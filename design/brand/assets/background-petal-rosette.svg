@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-labelledby="background-petal-rosette-title" aria-describedby="background-petal-rosette-desc">
+  <title id="background-petal-rosette-title">Rounded paper rosette</title>
+  <desc id="background-petal-rosette-desc">Four large peach and orange lobes turn around a shared fold.</desc>
+  <g transform="translate(6 7)" fill="#da592f">
+    <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z"/>
+    <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z" transform="rotate(90 160 160)"/>
+    <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z" transform="rotate(180 160 160)"/>
+    <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z" transform="rotate(270 160 160)"/>
+  </g>
+  <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z" fill="#ffc3a3"/>
+  <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z" fill="#ff874d" transform="rotate(90 160 160)"/>
+  <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z" fill="#ffc3a3" transform="rotate(180 160 160)"/>
+  <path d="M160 160C116 146 84 35 139 26 197 13 230 68 207 110 196 131 179 151 160 160Z" fill="#ff874d" transform="rotate(270 160 160)"/>
+</svg>

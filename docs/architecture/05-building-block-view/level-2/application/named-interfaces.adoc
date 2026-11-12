@@ -1,0 +1,61 @@
+[[building-block-interfaces]]
+===== Named interfaces
+
+Consumers use the published interfaces rather than reaching into another component's private modules or mutable internal state.
+Callbacks and events are part of those contracts, not permission to bypass ownership boundaries.
+This is an architectural rule for trusted code, not a security sandbox against malicious plugins.
+
+[cols="2,2,2,4",options="header"]
+|===
+|Interface |Provider |Consumers |Purpose and boundary
+|Workspace Lifecycle
+|Application Core
+|User Interface, Plugin Runtime, Agent Integration
+|Open and close workspaces, report lifecycle state and coordinate work. Execution components report active work and completion, and respond to blocking new starts, cancelling closure and aborting work. The core need not understand the domain meaning of each action.
+|Workspace Storage & History
+|Application Core
+|User Interface, plugins, Agent Integration
+|Read workspace content, make versioned changes and inspect history. Durable runtime and agent state also use core persistence. A shared storage boundary does not make every record use an identical format or retention policy. Under <<git-derived-file-references>>, confirmed file-operation facts belong to Git and reference resolution is reconstructible, not an independently writable ledger. Native persistence stores workspace-local reference selectors. On load, the host establishes a <<glossary-runtime-workspace-binding,Runtime Workspace Binding>> to the authorized local workspace session. Portable selectors contain no absolute workspace locations and cannot authorize another copy.
+|Platform Access
+|Application Core
+|User Interface, Plugin Runtime and plugins, Agent Integration
+|Expose the operating-system capabilities shipped with the host, subject to platform permissions. The exact supported operations remain open; plugins do not add downloaded native binaries.
+|Plugin Management
+|Plugin Runtime
+|User Interface, Agent Integration
+|Inspect status and dependencies, stage changes, coordinate activation and disable plugins. Lifecycle coordination with the core remains necessary; this interface does not independently authorize external effects.
+|Plugin Exports
+|Individual plugins, registered through Plugin Runtime
+|Declared dependent plugins, User Interface and Agent Integration where applicable
+|Provide explicitly exported functions, tools and components. Each plugin defines its domain contracts; unexported implementation details remain private. Agent tool descriptions and read/write declarations belong to this boundary.
+|UI Contributions
+|User Interface
+|Plugin Runtime and plugins, Agent Integration for navigation
+|Register and mount views or other UI contributions, use shared components and manage view-scoped cleanup. Published navigation capabilities route plugin and agent view-opening and reveal requests through UI Coordinator. Questions can obtain missing task data; ordinary action dispatch has no approval interaction. Shared component contracts and registration contracts are distinct parts of this interface.
+|Conversations
+|Agent Integration
+|User Interface
+|Submit domain actions and observe native-owned conversation state through authorized snapshots and ordered events. Covers input, drafts/queues, answers, cancellation and persistence retry without frontend-owned transcript saving or lease release. See <<native-conversation-building-blocks>>.
+|Model Access
+|Native Host Adapters within Agent Integration
+|Conversation Owner, driving Rig
+|Provide the Conversation Owner with the internal <<glossary-model-access,Model Access>> capability for requesting model work. Native adapters use <<glossary-provider-transport,Provider Transport>> to communicate with the selected endpoint directly or through the Situate AI Router. They retain credential custody and validate each request's caller, workspace, connection and destination through <<glossary-operation-admission,Operation Admission>>. Credentials, model defaults and conversation overrides remain device-local, associated with the workspace's <<glossary-device-local-workspace-namespace,Device-local Workspace Namespace>>; portable conversation history does not contain them. Capability differences require adapters or checks rather than an assumption of universal compatibility.
+|Sync Transport
+|Built-in transport adapter or custom synchronization plugin
+|Application Core
+|Transfer data through the selected service or storage backend. The core owns versioning, merge-conflict handling and history recovery for every transport; transfer success alone does not establish a consistent workspace history.
+|===
+
+Model Access and Sync Transport are adapter interfaces within the application.
+They are not names for the external providers' network protocols.
+Likewise, external email or calendar APIs are consumed by the corresponding integration plugin, not standardized into a universal core integration API.
+
+The <<client-diagnostics,Client Diagnostics>> interface is provided by the Application Core in the accepted design to the User Interface, Agent Integration, Plugin Runtime and plugins.
+It accepts validated, bounded structured events through JavaScript and Rust bindings; this diagnostic data admission does not authorize execution.
+The native host owns installation-local retention, separate from Workspace Storage & History.
+The portable <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>> correlates events across devices and workspace copies. It neither selects a device-local credential namespace nor establishes a Runtime Workspace Binding.
+It does not provide installation-wide log reading or export to plugins.
+ADR-0008 records the decision; it is not yet an implemented SDK capability.
+
+The SDK presents supported host interfaces to plugins; it does not create a second implementation of storage, lifecycle or UI behavior.
+Its exact packaging, compatibility rules and JavaScript-to-Rust bindings remain design work.

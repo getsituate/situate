@@ -1,0 +1,201 @@
+[[delivery-and-operations]]
+=== Delivery and operations
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+==== Infrastructure state and execution
+
+link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0014-host-production-state-in-hcp-terraform.adoc[ADR-0014] selects HCP Terraform for authoritative infrastructure state, separate from the Hetzner application host and developer disk.
+The production workspace uses Local execution: Terraform runs on the operator's machine, while HCP stores state versions and coordinates locking.
+A future authorized GitHub Actions runner can use the same workspace without introducing another state owner.
+No CI apply or VCS-triggered infrastructure execution is enabled by this choice.
+
+The production wrapper checks the organization, immutable workspace ID, execution mode and current state version before adoption.
+Plans are bound to that identity and their exact bytes; local inspection plans cannot be reused.
+Workspace setup, resource ownership handoff and restore verification remain operator gates, not consequences of adding configuration.
+Keep independent encrypted state exports and recoverable HCP account access; hosted history is not protection against account loss or workspace deletion.
+The link:{architecture-repository-root}/infrastructure/production/README.md[production runbook] describes credentials, operation boundaries and recovery.
+
+==== Distribution variants and update authority
+
+link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0011-build-time-distribution-variants.adoc[ADR-0011] selects build-time distribution variants instead of runtime installation-origin detection.
+The Apple release builder embeds `SITUATE_DISTRIBUTION=direct|external` before signing; only an explicit macOS direct build enables the native updater.
+The current MVP covers macOS direct distribution and iOS App Store distribution.
+Homebrew and other package-manager channels remain deferred, not prerequisites for either release.
+The authoritative behavior is recorded in link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0071-support-desktop-package-managers.md[REQ-0071].
+
+A distribution variant is a release configuration of the same application source and build pipeline, not a separate product platform or source fork.
+Each supported variant embeds its distribution identity before code signing.
+The native host derives update authority from that identity before any app-update network request; the UI consumes the same policy.
+Direct variants enable the built-in update area, manual checks, scheduling, downloads and installation.
+Externally managed variants disable these functions rather than merely hiding the installation button.
+Actual workspace and plugin incompatibility explanations remain independent of update authority.
+Unknown or missing release configuration must not silently enable the direct updater.
+
+Do not infer distribution identity from installation paths, package-manager presence, receipts or external marker files.
+Distribution identity describes the artifact's selected update policy, not a verified history of who copied it onto the device.
+A future Homebrew recipe must therefore reference the Homebrew artifact, never the website artifact.
+Moving that Homebrew app does not change its update authority; changing channels requires installing the appropriate variant.
+The concrete replacement workflow remains open.
+
+==== Channel examples
+
+[cols="2,3,3",options="header"]
+|===
+|Channel |Build and packaging |Update authority
+
+|macOS website DMG
+|Build the direct variant, then Developer-ID sign and notarize it. Its DMG and updater archive carry the same direct-variant application payload.
+|Situate's built-in updater.
+
+|macOS Homebrew cask (deferred)
+|Build a separate Homebrew variant from the same source and pipeline; sign and notarize its own payload. The cask references that artifact, not the website DMG. No Homebrew build is introduced until the channel is selected for delivery.
+|Homebrew; no built-in checks, downloads or update promotion.
+
+|iOS App Store and TestFlight
+|Use the iOS App Store Connect build/export pipeline. TestFlight and public delivery both use external update authority; separate updater-specific variants are unnecessary for these two routes.
+|Apple's distribution services; no built-in updater.
+
+|Mac App Store (optional, not selected)
+|Reuse application source with a store-specific export, signing and required sandbox configuration. Store eligibility of plugin execution and local process access needs separate assessment.
+|App Store; no built-in updater.
+
+|Windows website installer (deferred)
+|Build the Windows direct variant and package it in the selected installer and direct-update format.
+|Situate's built-in updater when Windows returns to active scope.
+
+|Windows package manager or Microsoft Store (not selected, deferred)
+|Use an externally managed variant. Store/MSIX packaging may also require a separate wrapper and signing profile. Which managers can share an external variant remains open.
+|The selected external manager; no origin detection or built-in updater.
+
+|Linux direct package (format open, deferred)
+|Use a direct variant in a selected directly updatable format; no format is selected now.
+|Situate's built-in updater if the selected format supports it.
+
+|Linux package manager (not selected, deferred)
+|Use externally managed variants and native wrappers such as deb or rpm where selected. Compatible payloads may be reused across wrappers; sandbox-based formats can require further adaptation.
+|The selected external manager; no built-in updater.
+
+|Android store (deferred)
+|Build the Android application with store-appropriate packaging when Android returns to active scope.
+|The selected store; no built-in updater.
+|===
+
+Separate variants share application code and release automation, but add artifact production, signing, checksums and verification work.
+A shared pipeline must make the variant explicit and preserve it in release manifests and artifact names to prevent channel mix-ups.
+The Apple release builder defaults to external update authority and requires an explicit direct-distribution selection for website releases.
+No package-manager identity needs to be selected or implemented for the MVP.
+
+==== Direct updater
+
+The native Rust Tauri updater plugin handles direct macOS artifact downloads, version-bound signature verification and installation.
+Situate bounds feed metadata to 1 MiB and a 30-second deadline, enforces HTTPS redirects, and passes accepted metadata through the plugin's version and target validation.
+Situate owns scheduling, application-lifetime update state, UI and reversible shutdown coordination rather than implementing a separate installer.
+The host integration resides in `client/app/src-tauri/src/updates/`; the plugin and signing-tool pins must remain compatible with version-bound signatures.
+Host tests and successful compilation do not establish signed native installation or relaunch qualification.
+Tauri documents a macOS application archive and a separate update signature; its required update signature is additional to Apple code signing and notarization.
+The release pipeline must create the updater container from the final signed, notarized and stapled direct-variant payload and verify that order before release publication.
+The direct update feed must publish only direct-variant payloads, preserving update authority across updates.
+
+Scheduling, quiet notification and user-confirmed restart follow REQ-0068.
+Installation confirmation is bound to the selected verified artifact and rechecked before replacement.
+The native coordinator reserves the gate for application closure and installation, called link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-lifecycle-admission[Lifecycle Admission], so competing lifecycle operations cannot start during preparation.
+It prepares every application window, including windows without an open workspace.
+This gate is distinct from link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-operation-admission[Operation Admission], which validates individual requests for execution.
+
+If actions are running, the user must postpone installation or explicitly abort them.
+Each window prepares its file edits, drafts, layouts and dictation state; replacement can begin only after every participant confirms readiness.
+File sessions are finally closed only after successful replacement. Cancellation or a failure known to leave the bundle unchanged restores prepared sessions without replaying aborted actions.
+The workspace-only *Close anyway…* escape path is unavailable during update preparation.
+See link:{architecture-repository-root}/docs/architecture/index.adoc#current-application-quit[application quit coordination] for the related window-preparation protocol; update installation additionally validates the selected artifact and replacement outcome.
+Native lifecycle and signed two-version update qualification are release gates.
+
+==== Installation failure and recovery
+
+If an installation attempt fails and the application bundle is known unchanged, release reversible preparation, keep the original installation usable and retain the verified package for a later user-requested attempt.
+Do not automatically replay actions that were explicitly aborted for the update.
+If bundle replacement or relaunch has an uncertain outcome, preserve recovery evidence and explain the known state and recovery steps without an automatic install retry or restart.
+Require explicit user action and renewed package/installation-state validation before another installation attempt.
+Where manual recovery is required, use a trusted installer of the same or a newer version without deleting or resetting workspaces.
+Do not introduce an application-owned automatic rollback mechanism or promise that the original bundle remains intact after uncertain replacement.
+
+==== Update-check scheduling and retry
+
+Follow REQ-0068 for the retained 24-hour successful-check interval, bounded retry schedule, check deadline and connectivity recovery.
+Coalesce automatic and manual checks into one in-flight request; manual checks remain independent of automatic waiting periods.
+Persist successful checks only, and keep download retry state separate so that download failure after successful discovery does not impose a new 24-hour wait.
+The update-check deadline is not an overall artifact-download deadline.
+Automatic check failures do not open dialogs or interrupt ongoing work.
+
+==== Update download retention
+
+Keep update packages in an application-owned, private device-local cache outside workspaces and their histories.
+Retain at most one verified package plus one in-progress download/verification candidate.
+Completed packages remain available across application restarts, with signature/version verification before reuse.
+Replace an older cached package only after verifying its replacement, and remove the installed package after a confirmed successful upgrade.
+
+Restart interrupted downloads from the beginning; resumable partial downloads are not part of this delivery.
+Use REQ-0068's independent download retry schedule without waiting for the next daily check.
+Account for the pinned updater's peak memory and temporary disk use even when retaining completed packages on disk.
+
+==== Update signing keys
+
+Use one dedicated updater-signing keypair for direct macOS updates, separate from Apple code-signing credentials.
+The operator stores the private key in 1Password and verifies account/key recovery before distributing updater-enabled builds.
+Only the public key is embedded in the application and may be committed to the repository.
+Supply private signing inputs through explicitly supported environment variables or a private key file; release scripts must not invoke 1Password, require its CLI or fetch secrets automatically.
+Confine private-key access to signing and exclude it from broad build environments, Terraform, logs and distribution artifacts.
+
+Do not introduce a key server or automatic rotation service for this delivery.
+Loss without recovery can prevent installed applications from accepting future updates; recovery may require manual installation of a new trusted build.
+Document compromise and loss handling before the first updater-enabled release without promising transparent key replacement.
+
+==== Direct release hosting
+
+Serve the static JSON update feed, versioned DMGs and updater archives from the existing Hetzner host, using Nginx behind the Caddy HTTPS proxy at `getsituate.com`.
+Use a new release namespace separate from prototype metadata; no prototype migration or continuing prototype-client compatibility is required.
+No additional application backend, object storage or CDN is introduced for this delivery.
+Serve the new release paths without download counting, tracking identifiers or analytics integration.
+
+Upload and verify all immutable artifacts before activating metadata that advertises a release.
+Website download metadata and the updater feed must identify the same complete published release.
+Keep mutable metadata revalidated and versioned artifact URLs immutable; website deployment and rollback must not delete artifacts or rewind the app feed.
+The implemented publisher verifies and stages immutable releases, activates website/feed metadata through one atomic pointer and reconciles uncertain release publication only for the same version and identical bytes.
+See link:{architecture-repository-root}/infrastructure/releases/README.md[release publication] and link:{architecture-repository-root}/infrastructure/production/README.md[service and traffic activation] for the separate operator commands and recovery procedures.
+The production publisher remains restricted to `https://getsituate.com/releases/` and the production embedded feed endpoint.
+The public preview at `https://reboot.getsituate.com` can expose independently published test artifacts; its download page accepts only that preview origin, not production artifacts.
+Preview delivery does not establish Terraform adoption, apex cutover or production approval, and requires no additional DNS record.
+This hosting selection does not authorize release publication.
+
+==== Faulty release handling
+
+Correct a faulty application release by publishing a fix with a higher version number.
+Do not introduce an application-version rollback or downgrade workflow, rewind the direct update feed or website download metadata to an older release, or replace published artifact bytes under the same version.
+An operator may pause availability while preparing the fix without advertising an older application version.
+Reconciliation of an interrupted release publication may reuse only the same approved version and identical artifacts, not activate an older release.
+
+No additional package-revocation system is included in this delivery.
+Changing or pausing feed metadata does not reliably revoke a package that has already been downloaded and validly signed.
+Operational recovery of website/runtime deployments remains separate and must not rewind application-release metadata.
+
+==== Verification and unresolved decisions
+
+Verify each released artifact against its declared variant and update authority.
+Externally managed variants must not contact the direct update feed, download app updates or expose manual update checks.
+Direct updates must retain direct authority after installation; package-manager upgrades must retain external authority.
+Verify signature validity for each delivered variant and ensure that release recipes reference the correct artifacts.
+Moving an app or having a package manager installed must not change its embedded policy.
+These are verification needs, not claims of completed native qualification.
+
+Release-publication reconciliation and signing-key compromise/loss guidance are documented in the release publication guide; exercising recovery remains an operator release gate.
+An explicit channel-replacement workflow remains open.
+The Homebrew variant and its release checks are deferred until Homebrew delivery is selected.
+
+==== External references
+
+* https://docs.brew.sh/Cask-Cookbook[Homebrew Cask Cookbook]: cask recipes select downloadable artifacts and app installation destinations.
+* https://developer.apple.com/macos/distribution/[Apple macOS distribution]: store and Developer ID distribution have different delivery and sandbox requirements.
+* https://help.apple.com/xcode/mac/current/en.lproj/dev31de635e5.html[Apple distribution methods]: App Store Connect covers TestFlight and App Store delivery; Developer ID covers external macOS delivery.
+* https://v2.tauri.app/plugin/updater/[Tauri updater]: signed update artifacts, desktop configuration and macOS archive format.

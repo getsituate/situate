@@ -1,0 +1,39 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+=== Direct plugin action execution
+
+==== Trigger and preconditions
+
+In an open workspace, an agent invokes an available plugin tool within the user's request, or the user invokes a plugin export from a view.
+Configured account access, read-only connector restrictions, capabilities, validation and OS permissions still apply.
+The native host binds each request to its authorized local workspace session through a <<glossary-runtime-workspace-binding,runtime workspace binding>>; a captured identifier alone does not grant access.
+Ordinary execution, including external HTTP writes and manual exports, has no approval or allow/deny interaction.
+Questions obtain missing task data; they are not action approval gates.
+Deliberate plugin installation/activation and destructive workspace or user-content protections remain separate decisions.
+
+==== Interaction
+
+.Direct execution with durable intent and observed outcomes. Arrows identify logical interactions, not a selected messaging protocol.
+image::{architecture-diagrams-root}/plugin-tool-confirmation.svg["Sequence showing native operation admission, durable intent before plugin execution, an external request, cleanup and persisted results before outcome presentation."]
+
+. Agent Integration or a manual export request supplies its captured workspace, plugin and invocation identity to native <<glossary-operation-admission,operation admission>>. The host checks whether that specific request may execute.
+. The native owner validates scope, capabilities, current plugin state and cancellation, then persists intent before admitting an effect.
+. Plugin Runtime executes the tool or export and its host requests without asking the user to allow or deny them. Nested calls share the execution context of the originating <<glossary-root-action,root action>>, the top-level tool or exported-function invocation.
+. The native owner drains owned operations and records the observed result or uncertainty. A lost view or executor cannot turn a missing result into success.
+. Agent Integration or the manual-operation receipt exposes the outcome. Presentation does not own persistence or authorize redispatch.
+
+This is the execution contract under link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005], not evidence that every direct-execution case has been qualified.
+Trusted plugins remain responsible for task scope and declared read/write behavior; the host does not infer arbitrary plugin side effects or sandbox malicious code.
+
+==== Failure and recovery
+
+Cancellation prevents new operation admission and waits for owned cleanup; it does not undo effects already triggered.
+An external call can fail or leave its outcome uncertain after interruption. Failure, cancellation or a missing result is not proof that no effect occurred.
+Persist observed outcomes without requiring a surviving frontend continuation. While the process lives, a failed save retains the unsaved outcome in memory; explicit persistence retry repeats saving, not generation or the external action.
+Conversation history follows <<conversation-format-safety>>; no separate durable execution journal guarantees recovery of an outcome lost with the process.
+Reopening or reattaching never automatically replays an uncertain action. Later user-directed investigation remains with the agent and model, without a separate automatic outcome-recovery protocol or a guarantee of resolution.

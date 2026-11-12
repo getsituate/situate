@@ -1,0 +1,6 @@
+<resources>
+    <string name="situate_provider_auth_channel" formatted="false">Sign-in activity</string>
+    <string name="situate_provider_auth_title" formatted="false">Signing in</string>
+    <string name="situate_provider_auth_body" formatted="false">Finish signing in in your browser. You can cancel in Situate.</string>
+    <string name="situate_provider_auth_cancel" formatted="false">Cancel sign-in</string>
+</resources>

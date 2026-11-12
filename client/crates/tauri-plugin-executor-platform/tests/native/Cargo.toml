@@ -1,0 +1,21 @@
+[package]
+name = "executor-platform-native-test"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+tauri = { version = "=2.12.3", features = [] }
+tauri-plugin-executor-platform = { path = "../.." }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time"] }
+
+base64 = "0.22"
+objc2 = "=0.6.4"
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSData"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSBitmapImageRep", "NSImageRep", "NSColor"] }
+
+[build-dependencies]
+tauri-build = "=2.7.2"

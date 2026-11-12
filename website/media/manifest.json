@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "source": "client/workshop",
+  "status": "Workshop design previews; not evidence of production availability or provider qualification.",
+  "language": "en",
+  "syntheticData": true,
+  "attribution": {
+    "artwork": "Original artwork by Situate contributors, CC BY 4.0; see LICENSING.md and design/brand/docs/provenance.md. Captures retain the licenses of their underlying material; trademark rights are separate.",
+    "providerIcons": "Lobe Icons, copyright (c) 2023 LobeHub, MIT. See provider-icons-license.txt and client/workshop/src/ai/assets/providers/SOURCES.md. Provider marks belong to their respective owners; no endorsement is implied."
+  },
+  "fixture": {
+    "file": "birthday-fixture.json",
+    "sha256": "6e78c3b0e4dfdfbf0eff5431c671a59da2782471efa294a21f3259caaf8ae218"
+  },
+  "renderer": {
+    "browser": "155.0.8059.79",
+    "deviceScaleFactor": 2,
+    "colorScheme": "light",
+    "reducedMotion": "reduce"
+  },
+  "method": "Actual Vue workshop rendered in an isolated browser session. Workspace, navigation, editor and document fixtures are composed in memory and delivered through the workshop transport. Conversation title and events are supplied separately through the existing ChatView conversation prop by setting ChatView.props.conversation.default before mounting. No DOM text replacement, UI overlays or image compositing.",
+  "reproduction": "Run npm ci in client, install cwebp and Chrome, then run node website/capture-workshop.mjs from the repository root. The script starts and closes its own ephemeral-port Vite server; it never attaches to an existing server.",
+  "limitations": [
+    "Browser geometry is not native-device qualification. Mobile uses the workshop iOS profile with synthetic safe areas and no keyboard.",
+    "Responses and document pages are authored synthetic examples; no AI requests, accounts, personal workspaces or external services are used.",
+    "Provider and plugin screens retain the workshop’s existing options and fixtures; they do not establish shipped integrations or real account access.",
+    "Rasterization can vary between runs and across hosts and browsers; hashes describe these captured files, not guaranteed pixel equality."
+  ],
+  "images": [
+    {
+      "file": "workspace.webp",
+      "startingState": "files-chat",
+      "steps": [
+        "Load existing workshop starting state",
+        "Compose birthday-fixture.json through workshop simulation model and transport",
+        "Capture clean preview"
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 940
+      },
+      "platformProfile": "mac",
+      "width": 2880,
+      "height": 1880,
+      "bytes": 72864,
+      "sha256": "e569dc746097c8e58e8e62d908fa2d105a68280001ba5c8ea5e5ee168e1e25b8",
+      "encoding": "lossless WebP",
+      "checks": {
+        "horizontalOverflow": false,
+        "missingImages": 0,
+        "browserErrors": 0,
+        "externalRequests": 0,
+        "controlsVisible": false
+      }
+    },
+    {
+      "file": "notes.webp",
+      "startingState": "files-read",
+      "steps": [
+        "Load existing workshop starting state",
+        "Compose birthday-fixture.json through workshop simulation model and transport",
+        "Capture clean preview"
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 940
+      },
+      "platformProfile": "mac",
+      "width": 2880,
+      "height": 1880,
+      "bytes": 63630,
+      "sha256": "c0e1cbc43271e4a8e0abb29ee341089679f64dc93f7bc2d4d4815aa7ee5036fe",
+      "encoding": "lossless WebP",
+      "checks": {
+        "horizontalOverflow": false,
+        "missingImages": 0,
+        "browserErrors": 0,
+        "externalRequests": 0,
+        "controlsVisible": false
+      }
+    },
+    {
+      "file": "conversation.webp",
+      "startingState": "chat-complete",
+      "steps": [
+        "Load existing workshop starting state",
+        "Compose birthday-fixture.json through workshop simulation model and transport",
+        "Set ChatView.props.conversation.default to supply the title and events as a component-prop fixture before mounting, separately from transport state",
+        "Open Activity and verify all four call details, then collapse Activity to keep the full reply visible",
+        "Capture clean preview"
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 940
+      },
+      "platformProfile": "mac",
+      "width": 2880,
+      "height": 1880,
+      "bytes": 70578,
+      "sha256": "479f115763c659fc6db88f44a60f11e18dc2be067e852b2be78b34f2319848f0",
+      "encoding": "lossless WebP",
+      "checks": {
+        "horizontalOverflow": false,
+        "missingImages": 0,
+        "browserErrors": 0,
+        "externalRequests": 0,
+        "controlsVisible": false
+      }
+    },
+    {
+      "file": "documents.webp",
+      "startingState": "documents-find",
+      "steps": [
+        "Load existing workshop starting state",
+        "Compose birthday-fixture.json through workshop simulation model and transport",
+        "Capture clean preview"
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 940
+      },
+      "platformProfile": "mac",
+      "width": 2880,
+      "height": 1880,
+      "bytes": 61006,
+      "sha256": "e9fcc0b69ee2990d70787cc7f7c412a71c77bca6807d82ff50f6984c06fbf86c",
+      "encoding": "lossless WebP",
+      "checks": {
+        "horizontalOverflow": false,
+        "missingImages": 0,
+        "browserErrors": 0,
+        "externalRequests": 0,
+        "controlsVisible": false
+      }
+    },
+    {
+      "file": "models.webp",
+      "startingState": "settings-ai",
+      "steps": [
+        "Load existing workshop starting state",
+        "Set shared synthetic navigation context",
+        "Capture clean preview"
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 940
+      },
+      "platformProfile": "mac",
+      "width": 2880,
+      "height": 1880,
+      "bytes": 69924,
+      "sha256": "0a582e82ab9bda3a20ded714615fde1fb07ab5ab0cdd5581acfd5138826ec5c6",
+      "encoding": "lossless WebP",
+      "checks": {
+        "horizontalOverflow": false,
+        "missingImages": 0,
+        "browserErrors": 0,
+        "externalRequests": 0,
+        "controlsVisible": false
+      }
+    },
+    {
+      "file": "plugins.webp",
+      "startingState": "plugins-list-illustrated",
+      "steps": [
+        "Load existing workshop starting state",
+        "Set shared synthetic navigation context",
+        "Capture clean preview"
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 940
+      },
+      "platformProfile": "mac",
+      "width": 2880,
+      "height": 1880,
+      "bytes": 75588,
+      "sha256": "56580bab14f77489cc244765ec38326bec363236c98141654a86bdeaf16650a4",
+      "encoding": "lossless WebP",
+      "checks": {
+        "horizontalOverflow": false,
+        "missingImages": 0,
+        "browserErrors": 0,
+        "externalRequests": 0,
+        "controlsVisible": false
+      }
+    },
+    {
+      "file": "mobile.webp",
+      "startingState": "files-read",
+      "steps": [
+        "Load existing workshop starting state",
+        "Compose birthday-fixture.json through workshop simulation model and transport",
+        "Capture clean preview"
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "platformProfile": "ios",
+      "width": 780,
+      "height": 1688,
+      "bytes": 27944,
+      "sha256": "55eb1e335917e75386df9dd751acf95605c03087ae5a54705b25c719c5493f18",
+      "encoding": "lossless WebP",
+      "checks": {
+        "horizontalOverflow": false,
+        "missingImages": 0,
+        "browserErrors": 0,
+        "externalRequests": 0,
+        "controlsVisible": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+/derived/
+/AuthLifecycle.xcodeproj/
+/rust/target/
+/rust/Cargo.lock

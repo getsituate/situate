@@ -1,0 +1,113 @@
+[[adr-0016]]
+= ADR-0016: Append conversation history and derive branch context
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-11
+Implementation plan:: link:{architecture-repository-root}/docs/development/conversation-storage-implementation-plan.md[Conversation storage implementation plan]
+Related decision:: link:ADR-0013-native-conversation-execution.adoc[ADR-0013]
+Compatibility:: one-way conversion from published v2 data; app 0.1.6 or newer required, with no older writer or reverse conversion
+Requirements:: link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005], link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069]
+
+== Problem
+
+The published v2 store replaces a complete conversation JSON document at every checkpoint.
+Its 16 MiB guard can prevent saving the next result; removing the guard alone leaves small changes rewriting growing history.
+Earlier onboarding results also repeated cumulative file-reference inventories; the existing deduplication reduces growth but does not remove this storage constraint.
+
+Retained history and model context have different lifetimes: history preserves original messages and available outcomes; context selects one branch and may summarize older entries.
+
+== Decision
+
+Use one directory per conversation and one append-only JSONL history, without compaction-based file rotation or a database.
+Each history entry has a stable ID and parent ID; compaction is another entry, not a rewrite or deletion of original messages.
+
+.Storage: append history; replace conversation metadata separately.
+image::{architecture-diagrams-root}/append-conversation-storage.svg["The Conversation Owner first appends history.jsonl, then atomically replaces metadata.json in the conversation directory.",width=650]
+
+* `metadata.json`: title, timestamps and selected entry ID; no transcript copies.
+* `history.jsonl`: original messages, tool calls, observed results and compaction entries. New branches share ancestors rather than copying them.
+
+No separate pending-state file or durable execution journal is introduced.
+Save submitted inputs as user messages, including those waiting while a run is active; reopening does not execute them automatically.
+Active execution stays in memory. Unsaved draft text may be lost after a crash; exact execution resumption is not required.
+
+A compaction records its summary and `firstKeptEntryId`.
+Build model context from the latest compaction on the selected ancestry path, retained originals and subsequent messages.
+UI history follows original entries on that path; tree navigation exposes alternative paths.
+
+.Shared ancestry. Arrows run from parent to child, not in physical file order.
+image::{architecture-diagrams-root}/append-conversation-context.svg["Entries A and B are shared ancestors. One branch continues through C, D, compaction K and G; the other continues through E and F.",width=650]
+
+In this example, K summarizes A and B; its `firstKeptEntryId` is C.
+
+.Derived views. Each letter denotes the original entry; only K contributes a summary.
+image::{architecture-diagrams-root}/append-conversation-projections.svg["Path G gives the model summary K plus C, D and G, while the UI shows originals A, B, C, D and G. Path F has no compaction and gives the model A, B, E and F.",width=700]
+
+There is no fixed total conversation-size ceiling.
+Compaction bounds model context, not history bytes, individual result size or application memory.
+Read history incrementally and load older UI content on demand; a bounded hot cache and ephemeral disk lookup hints accelerate entry lookup without retaining the full tree in memory.
+Only `metadata.json` and `history.jsonl` are authoritative; the temporary index contains no message payloads and can be rebuilt.
+Do not require retaining the entire tree in memory to continue a conversation.
+
+== Durability and recovery
+
+Serialize writes through the native conversation owner; append history before updating metadata that references it.
+Replace metadata through a temporary file and atomic rename.
+An interrupted metadata update may leave the old selection and an additional history entry; do not roll back or delete that entry.
+Use a compaction only after its complete entry is saved; otherwise retain the previous context and allow a later compaction attempt.
+
+Appending to a regular file is not an atomic transaction: short writes and incomplete trailing JSONL entries are possible.
+Detect an incomplete final entry, preserve its bytes before repairing the append boundary, and retain the complete preceding history.
+Do not silently skip corruption elsewhere or append after an unrepaired partial entry.
+Use operating-system flush/sync facilities rather than a custom durability engine; select flush points during implementation and distinguish write acceptance from durable acknowledgement.
+Surface write, disk-full and flush failures instead of continuing as if saving succeeded.
+
+After interruption, do not automatically resume execution or replay tools.
+An incomplete response may lose its unsaved suffix; a tool effect may exist without a saved result.
+Present that outcome as unknown, not as proof of failure or absence of effects.
+Later user-directed agent work may inspect current state and decide how to proceed, without guaranteeing reconstruction of missing results.
+No exact-once execution, cross-file transaction or automatic rollback of external effects is promised.
+
+== Alternatives and consequences
+
+[cols="1,3",options="header"]
+|===
+|Alternative |Trade-off
+|Raise/remove the v2 ceiling
+|Small initial change; retains full-history rewriting and allocation.
+|Segment history files
+|Smaller physical units; adds segment publication and cross-file lookup. Not needed to append entries or represent branches.
+|SQLite
+|Transactions and indexed queries; adds schema and database lifecycle work. Reconsider if measured access or transaction needs justify it.
+|===
+
+JSONL removes whole-history rewrites but supplies no transactions or indexes by itself.
+Opening and searching without an index still scans growing history; appending alone does not establish bounded memory or crash durability.
+Branch navigation changes conversation context, not workspace files or external effects.
+Independent exported conversations may copy history; in-conversation branches do not.
+
+== Rollout and verification
+
+The v2 format has shipped.
+Use the implemented <<workspace-migrations,workspace migration runner>> for a numbered, validated conversion before opening, with its existing whole-chain backup and recovery.
+This transition uses the specific REQ-0069 exception for a one-way v2-to-JSONL conversion: earlier app releases are unsupported for migrated workspaces, and `minimumAppVersion` becomes `0.1.6`.
+Do not dual-write old conversation records or provide reverse conversion. Public plugin-interface obligations under REQ-0070 remain unchanged.
+Apps implementing the workspace compatibility gate reject a migrated workspace below that minimum before normal access.
+Apps predating the gate cannot acquire that check retroactively; safe refusal by those binaries is not established and remains a release-safety gap. Do not reopen a migrated workspace in them.
+
+Verify partial trailing writes, history-before-metadata ordering, failed flush/disk-full handling, saved queued inputs without automatic execution, branch-local compaction, duplicate-free reconstruction and large-history continuation without load-all behavior.
+Upgrade/reopen fixtures must preserve supported published data, drafts, queues, opaque fields and uncertain outcomes, including skipped releases and interrupted migration.
+
+== Reference
+
+Pi 1.5.2's session format and session manager use append-only JSONL entries linked by `id`/`parentId`, with compaction boundaries referencing retained originals.
+Its examined manager loads all entries into memory; that behavior is not adopted here.
+See https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/session-manager.ts[Pi session manager] (upstream may differ from the inspected version).

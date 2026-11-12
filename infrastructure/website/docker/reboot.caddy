@@ -1,0 +1,4 @@
+reboot.getsituate.com {
+	encode zstd gzip
+	reverse_proxy situate-reboot:8080
+}

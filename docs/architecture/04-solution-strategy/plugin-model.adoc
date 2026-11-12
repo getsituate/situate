@@ -1,0 +1,138 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::strategy-diagrams-root[]
+:strategy-diagrams-root: ../diagrams
+endif::[]
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Trusted extensions with core-owned content rules
+
+Installed plugins are trusted code with broad access.
+The core relies on declared effects and reversal capabilities rather than trying to infer arbitrary side effects.
+Task scope and configured access remain binding, but this contract does not prevent malicious or defective plugins from bypassing them.
+This reduces initial isolation complexity at the cost of a larger trust boundary.
+Separate workers or WebViews are not a mandatory isolation layer for plugin execution or rendering.
+Faulty synchronous plugin code can consequently block the application's shared UI runtime; exception handlers or timeouts on that blocked runtime cannot guarantee a usable disable action.
+Trust in plugin code does not remove operating-system boundaries or store obligations.
+Mobile extensions use JavaScript and the host's available interfaces, not an unrestricted desktop process environment.
+See the link:{strategy-requirements-root}/data/foundations.md#plugin-trust-and-synchronization-ownership[plugin trust boundary].
+
+[[strategy-plugin-contracts]]
+=== Reusable integrations and individual workflows
+
+Integration plugins own external connections and account configuration within their workspace and expose reusable capabilities.
+Workflow plugins compose those capabilities into individual workflows and views; their internal functions are not automatically public interfaces. Integration and workflow are roles that can coexist in one plugin; a purely visual extension need not be a workflow plugin.
+Each consuming plugin selects the accounts relevant to its purpose, rather than inheriting every newly connected account.
+This avoids duplicate connection setup without imposing the same account selection on unrelated workflows.
+
+The core supplies explicit exports, declared dependencies and invocation mechanisms, not domain contracts for mail, inbox entries or particular organizational methods.
+The development agent discovers existing integrations and their consumers within the workspace, designs reusable interfaces and extends them when necessary.
+Types can describe plugin-defined contracts; their format and compatibility scheme remain open.
+Host SDK and supplied shared-component compatibility separately follow link:{strategy-requirements-root}/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070]; that policy does not require every user-authored plugin change to support older apps.
+Plugins can depend on a concrete plugin or a plugin-defined shared provider interface with interchangeable implementations.
+Dependencies are initially required; optional dependencies are deferred.
+Required installations are presented together for user confirmation.
+
+Integrations can be used directly through chat without a separate workflow plugin.
+Their designated chat tools are all available from the start; specialized functions can be omitted from that tool list while remaining callable by plugins or code.
+Tool-list selection controls context size and discoverability, not authorization.
+Dynamic tool discovery is not part of the initial approach; tool visibility does not expand task scope or configured access.
+See link:{strategy-requirements-root}/data/requirements/REQ-0001-create-integrations.md[REQ-0001] and link:{strategy-requirements-root}/data/requirements/REQ-0029-use-integration-tools-in-chat.md[REQ-0029].
+
+=== Independent plugin copies and histories
+
+Local plugin management is delivered first; the shared marketplace is deferred under the link:{strategy-requirements-root}/data/foundations.md#initial-plugin-management-delivery[delivery boundary].
+The planned marketplace distributes free versioned templates that become independent local copies and serve as development starting points.
+The agent adapts them to the user's workflow and existing integrations, consulting the user when additional integrations are needed.
+Templates can convey a presentation and workflow without prescribing the user's external accounts or a core-owned domain interface.
+There are no automatic updates or upstream merges; ongoing development belongs to the user and their local agent.
+Use a Git-backed marketplace and a separate Git repository for each plugin's code history.
+Client source histories use embedded Git; plugin activation selects checked code and dependency revisions. Marketplace hosting and provider-interface details remain open; optional dependencies remain deferred.
+The planned catalog offers descriptions, optional previews and autonomous agent search for reusable templates, including combinations of their parts, without download-count ranking.
+
+The agent prepares a separate marketplace submission copy with English user-visible plugin text without altering the personal plugin.
+Adoption adapts that text to the user's language under link:{strategy-requirements-root}/data/requirements/REQ-0049-adapt-plugin-language.md[REQ-0049].
+Code, fixtures and marketplace material must exclude personal data and credentials; optional screenshots use synthetic data.
+A complete store-page preview precedes explicit Publish, which submits for manual administrator review rather than immediate marketplace publication.
+Any signed-in user may submit; every version needs approval. Rejection feedback, reporting and immediate blocking at adoption follow link:{strategy-requirements-root}/data/requirements/REQ-0019-share-plugins-through-marketplace.md[REQ-0019].
+Blocking does not warn existing adopters or remotely disable their independent copies.
+
+Initially, general marketplace terms provide uniform rights to reuse, modify, combine and redistribute free templates, without publisher-selected licenses or guarantees of legal clearance.
+The actual terms and review procedures require legal and operational work; these product rules do not select the repository's license.
+Automated malware and prompt-injection review remains deferred under link:{strategy-requirements-root}/data/requirements/REQ-0020-automate-plugin-security-approval.md[REQ-0020], not a prerequisite replacing initial manual review.
+Local security review before use, including adaptations, is required under link:{strategy-requirements-root}/data/requirements/REQ-0021-adapt-local-plugin-copies.md[REQ-0021].
+A failed local review produces a warning and proposed corrections; the existing explicit user override remains available.
+Marketplace approval does not replace that review or guarantee safety.
+See link:{strategy-requirements-root}/data/requirements/REQ-0019-share-plugins-through-marketplace.md[REQ-0019].
+
+The core supplies Git-backed versioned storage for plugin-owned data and configuration inside the owning plugin directory, alongside its separate code history.
+Retained runtime metadata and development drafts also belong to that directory; its absence cannot be overridden by an external installation index.
+Uninstallation removes the complete directory while preserving ordinary user content and general workspace history.
+See link:{strategy-requirements-root}/data/requirements/REQ-0032-manage-plugin-status-and-disabling.md#uninstallation-and-directory-ownership[plugin directory ownership].
+It does not supply a universal reverse-migration framework.
+The agent may independently reconcile earlier code with later data using the histories, but must preserve independent changes and surface unresolved conflicts.
+This permits flexible plugin evolution while placing migration correctness on the local agent and its tests.
+See link:{strategy-requirements-root}/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022].
+
+[[strategy-plugin-updates]]
+=== Coordinated development and activation
+
+Development uses a separate native-owned conversation with specialized instructions and ordinary workspace capabilities and task-scope rules.
+The selected plugin supplies starting context, not an access boundary: an assignment can span integrations, consumers and ordinary files.
+Shared chat presentation exposes recorded source diffs; complete-plugin inspection remains available without executing disabled code under link:{strategy-requirements-root}/data/requirements/REQ-0017-inspect-plugin-instructions.md[REQ-0017].
+
+A temporary workspace copy is not a mandatory development access boundary.
+Editable source and active code revisions remain separate: preparing source does not replace the installed version before successful checks and activation.
+Ordinary workspace edits use normal versioned writes and become durable independently of plugin activation.
+See the link:{strategy-requirements-root}/data/foundations.md#plugin-development-copies-and-publication[source preparation and publication boundary].
+Automated tests, including UI tests, use strictly synthetic data, test configurations and test dependencies.
+Agentic investigation may read workspace data and connected accounts; system instructions forbid incidental real external writes during trials.
+This is a behavioral instruction to the agent, not a technical sandbox or access-control guarantee.
+Personal data and credentials must not be embedded in generated code or test fixtures.
+
+A requested change can span a reusable integration and its dependent workflow plugins.
+The development agent may update the affected local plugins autonomously within that request, while preserving their established behavior.
+These related changes form one plugin change set for checking, activation and rollback, even when their code histories live in separate repositories.
+Generated or modified code within an explicit development request can be activated after successful checks without a separate activation approval, including after recovery startup; task scope and configured account access remain unchanged.
+
+Active versions remain available while replacements are prepared and checked. A <<glossary-check-receipt,Check Receipt>> retains which code and dependency revisions passed the required checks; it does not itself activate code or prove safety against malicious code.
+Plugin activation publication replaces the affected selections together in the <<glossary-active-revision-map,Active Revision Map>>, the workspace record of active immutable plugin revisions.
+It must first wait for affected running work without aborting or repeating it. That includes a <<glossary-root-action,Root Action>> (a top-level plugin tool or export call and its nested calls) and independent native requests retaining a <<glossary-worker-lease,Worker Lease>> until completion and cleanup.
+Long-running work can therefore delay activation. Trial data and test configuration are never activated; ordinary workspace edits can already be durable when checks or activation fail.
+The agent activates the checked group without a further user click, including a disabled or temporarily suspended target, while unrelated suspensions remain.
+Unknown plugin activation publication outcomes must not be blindly retried or automatically repaired. The link:{architecture-repository-root}/docs/architecture/06-runtime-view/grouped-plugin-activation-during-ongoing-work.adoc[grouped activation scenario] and link:{architecture-repository-root}/client/README.md#checks-and-grouped-activation[client contracts] define revision checks, Operation Admission, draining and outcome inspection.
+
+Incomplete development remains in the conversation list without automatic expiry; the MVP has no development-storage display, manual cleanup or age-based retention policy.
+Successful completion removes disposable candidate/check state but retains live source, conversation and recovery history. Stopping work does not reverse durable workspace edits or activated code.
+Closing or hiding a view does not stop work; workspace closure and application quit do. Reopening an interrupted conversation waits for explicit user input.
+This is a development lifecycle, not an additional security sandbox.
+
+Rollback compensates the related changes together while preserving later independent edits and exposing conflicts for user resolution.
+Tests reduce regressions but cannot guarantee the absence of defects.
+Remaining data-compatibility and interrupted-switch scenarios still need design or verification. The selected activation coordination and retained-outcome protocol do not settle every dependency-drift or recovery question; see <<plugin-development-risks>>.
+See link:{strategy-requirements-root}/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md[REQ-0033] and link:{strategy-requirements-root}/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022].
+
+.Coordinated plugin changes. Existing active versions remain usable during preparation; affected running work must finish before activation.
+image::{strategy-diagrams-root}/plugin-change-lifecycle.svg["A requested change is prepared and checked as a group while existing versions remain usable. Activation waits for running actions to finish."]
+
+=== Plugin status and lifecycle
+
+The built-in Plugins destination manages plugins independently of plugin-provided views and Settings contributions. Disabled code and Settings views are not loaded or executed, while code, configuration and data remain stored for later re-enabling.
+After confirmation, disabling blocks new actions, pauses triggers and removes chat tools. Running actions normally finish; users may abort instead, with a warning that existing external effects are not undone.
+Required dependencies expose the affected consumers before confirmation and block their use too. Re-enabling a dependency does not re-enable its dependents; each requires an explicit choice.
+The dependency graph therefore serves both development impact analysis and operational visibility.
+See link:{strategy-requirements-root}/data/requirements/REQ-0032-manage-plugin-status-and-disabling.md[REQ-0032].
+
+[[strategy-plugin-recovery-start]]
+=== Recovery mode
+
+Recovery mode suppresses all plugin execution before loading any plugin code, across restored and subsequently opened workspaces, while preserving code, configuration and data.
+Built-in management and the agent can disable, remove or repair plugins without invoking their tools. This temporary startup suspension is distinct from persistent disabling.
+Users can resume individual plugins or all previously enabled ones without restarting; permanently disabled plugins stay disabled on resume-all.
+Requested development permits previews, executable checks and checked target activation without resuming unrelated plugins or replaying interrupted work. Recovery ends when no temporary suspensions remain.
+The entry path and repair interface must work without executing faulty plugins or relying on a previously frozen UI. Concrete target-platform entry and qualification work remains below.
+This supplies a repair path, not a sandbox, reversal of damage or freeze prevention: testing or resuming faulty code can freeze the application again.
+See link:{strategy-requirements-root}/data/requirements/REQ-0032-manage-plugin-status-and-disabling.md[REQ-0032] and link:{strategy-requirements-root}/data/requirements/REQ-0037-keep-workspaces-independent.md[REQ-0037].

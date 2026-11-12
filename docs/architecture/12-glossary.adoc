@@ -1,0 +1,8 @@
+[[glossary]]
+== Glossary
+
+:architecture-repository-root: ../..
+
+include::12-glossary/terms.adoc[]
+
+:!architecture-repository-root:

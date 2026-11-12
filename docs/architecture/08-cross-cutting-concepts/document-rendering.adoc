@@ -1,0 +1,22 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[document-rendering]]
+=== Document rendering and resource boundaries
+
+Documents are data, not trusted plugin templates.
+The Rust Markdown renderer escapes raw HTML as text and hides HTML comments, including task metadata, without changing the source.
+The Vue reader filters the generated HTML to passive elements and attributes and inserts it without compiling document content as a Vue template.
+Reading plugin source through the file view likewise does not activate that code; plugin execution has a separate trust boundary.
+See link:{architecture-repository-root}/client/crates/situate-core/src/rendering.rs[the Rust renderer] and link:{architecture-repository-root}/client/app/src/files/RenderedFile.vue[the Vue reader].
+
+The native file host resolves local image resources within the workspace; historical document views read local images from the selected Git revision, not the current working files.
+Plugin source inspection instead resolves local images within that plugin's `code/` directory, not its sibling configuration or data directories.
+Internet-hosted images are fetched automatically for display without an approval prompt or a per-domain permission gate.
+Rendering can therefore contact remote image hosts; remote images are not guaranteed to be available offline or preserved by the document's historical revision.
+These resource rules are implemented in link:{architecture-repository-root}/client/app/src-tauri/src/files.rs[the native file host] and follow link:{architecture-repository-root}/requirements/data/requirements/REQ-0042-edit-markdown-source-and-read-rendered-content.md[REQ-0042].
+
+Display and model processing are separate flows.
+Sending a document reference to a model resolves its source text without fetching linked images; displaying those images does not implicitly include their bytes in the model request.
+See link:{architecture-repository-root}/client/app/src-tauri/src/ai_conversations.rs[native conversation input resolution].

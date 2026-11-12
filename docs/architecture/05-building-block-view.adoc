@@ -1,0 +1,21 @@
+[[building-block-view]]
+== Building Block View
+
+This view records the accepted decomposition of the selected solution strategy.
+It defines component responsibilities, interfaces and client package boundaries.
+Logical interface names describe capability contracts rather than method signatures or transport encodings.
+The components are logical boundaries, not separate processes or services unless explicitly stated.
+
+:architecture-repository-root: ../..
+:architecture-docs-root: .
+:architecture-diagrams-root: diagrams
+
+include::05-building-block-view/level-1/overall-system.adoc[]
+
+include::05-building-block-view/level-2/application.adoc[]
+
+include::05-building-block-view/level-3/application.adoc[]
+
+:!architecture-repository-root:
+:!architecture-docs-root:
+:!architecture-diagrams-root:

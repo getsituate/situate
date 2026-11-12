@@ -1,0 +1,77 @@
+[[adr-0015]]
+= ADR-0015: Client-encrypted incremental Git pack transport
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+
+Status:: proposed
+Date:: 2026-11-12
+Implementation:: Not implemented; cryptographic construction, cross-device reconciliation and native feasibility remain unverified
+
+== Context
+
+How should the official synchronization service transfer Git-based workspace data without allowing its operator to decrypt content?
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013] requires end-to-end encryption and client-owned merging and recovery; link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008] requires initial replication of workspace content and retained history.
+Device-local AI settings and provider credentials are excluded from transfer.
+
+An ordinary Git smart server needs access to repository objects to construct fetch packs. A service unable to inspect plaintext cannot perform that negotiation and pack construction in the ordinary way.
+Repeated complete snapshots can retransmit unchanged content and history, while copying live mutable internals does not itself produce a consistent snapshot.
+Implementation and operational complexity must fit one developer and operator, with macOS and iOS as the active product targets.
+
+== Proposed decision
+
+Use client-built incremental Git packs and encrypted indexes for the official transport.
+Clients construct and compress packs before encrypting them. Encrypted indexes identify the contained objects and required dependencies for authorized receiving clients.
+The service stores ciphertext and manages authorization and publication without traversing the plaintext Git graph or merging content.
+The Application Core retains validation, reconciliation and recovery responsibilities through the replaceable Sync Transport interface.
+
+The rationale is to reuse Git's existing histories, object representation, compression and deltas while avoiding complete workspace uploads for every change.
+The trade-off is ownership of encrypted indexes, dependency handling and a secure publication and key protocol rather than reliance on an ordinary Git server.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Limitation
+|Plaintext Git hosting
+|Existing object negotiation and reference-update protocols.
+|Violates the official service's operator-decryption prohibition. TLS and server-disk encryption do not remove operator access.
+|Encrypted complete snapshots
+|Simpler transfer representation and useful as a prototype baseline.
+|Repeated snapshots can retransmit unchanged content and history. Copying live mutable internals does not itself produce a consistent snapshot.
+|Client-encrypted incremental Git packs (proposed)
+|Reuse Git objects, compression and deltas while retaining local merge ownership.
+|Requires encrypted indexes, bounded dependency handling, durable publication and a reviewed key protocol.
+|Existing encrypted Git platform
+|May reduce custom protocol work.
+|Mobile embedding, workspace-scoped grants, account-wide recovery and operational complexity still need evaluation; an existing platform is not evidence of fit or security for Situate.
+|===
+
+== Consequences and limits
+
+* Returning devices could retrieve missing packs rather than complete workspace snapshots. A new device still needs the required content and retained history; incremental does not mean byte-minimal for every device.
+* Clients must validate dependency closure and imported history. The server cannot independently verify encrypted Git completeness or a client's claimed uncompressed content size.
+* Pack, index and dependency growth require measurements on macOS/iOS. Thin packs and later pack compaction are optional optimizations, not prerequisites for this direction.
+* The current core's merge and file-reference limitations remain unresolved. This proposal does not select merge semantics or permit guessed continuity or automatic replay of interrupted file mutations under ADR-0010 and ADR-0012.
+* Published data formats remain subject to REQ-0069 and REQ-0070, including supported compatibility, tested migrations and any explicitly approved format-specific exception. Choosing a transport does not waive those policies.
+
+The decision scope is transport representation only, not a finalized cryptographic suite, key hierarchy, enrollment/recovery protocol, conversation reconciliation rule, hosting stack or network encoding.
+It does not establish service API compatibility, pricing, capacity, availability or recovery-time commitments, and does not imply ordinary Git remote-helper compatibility.
+The proposed conversation-tree model remains a separate open design question.
+
+== Related design and verification
+
+The link:{architecture-docs-root}/index.adoc#encrypted-git-synchronization[encrypted synchronization concept] describes candidate publication boundaries, protection rules, conversation branching and the unresolved evidence needed for integration, account recovery, resource control and deletion-safe restoration.
+Before a detailed implementation commitment, resolve merge-aware operation/reference semantics, component export ancestry and reconciliation, and account recovery across partial workspace grants.
+Cryptographic review, native resource measurements, interruption tests and restoration tests are still needed after a design is chosen.
+Acceptance of this transport proposal would not establish successful implementation or security verification.
+
+== Technical references
+
+* https://git-scm.com/docs/gitprotocol-pack[Git pack transfer protocol]
+* https://git-scm.com/docs/pack-format[Git pack format]

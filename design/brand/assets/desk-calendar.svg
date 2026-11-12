@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 148" role="img" aria-labelledby="desk-calendar-title" aria-describedby="desk-calendar-desc">
+  <title id="desk-calendar-title">A folded desk calendar</title>
+  <desc id="desk-calendar-desc">A cream calendar sheet rests on a violet folded stand, with sparse day dots and one orange day.</desc>
+  <path d="M48 21h83l33 109q2 7-5 7H24Z" fill="#6232bc"/>
+  <path d="M45 15h79q7 0 5 7l-19 109H16q-5 0-4-5L37 22q2-7 8-7Z" fill="#8651ed"/>
+  <path d="M44 26h82l-16 88q-1 5-6 5H26Z" fill="#ffc3a3"/>
+  <path d="M41 22h82l-16 87q-1 5-6 5H22Z" fill="#fff7e3"/>
+  <path d="m63 13-3 17m45-17-3 17" fill="none" stroke="#30203e" stroke-width="5" stroke-linecap="round"/>
+  <g fill="#ad9284">
+    <circle cx="47" cy="51" r="3"/>
+    <circle cx="67" cy="51" r="3"/>
+    <circle cx="87" cy="51" r="3"/>
+    <circle cx="107" cy="51" r="3"/>
+    <circle cx="43" cy="73" r="3"/>
+    <circle cx="63" cy="73" r="3"/>
+    <circle cx="103" cy="73" r="3"/>
+    <circle cx="39" cy="95" r="3"/>
+    <circle cx="59" cy="95" r="3"/>
+    <circle cx="79" cy="95" r="3"/>
+    <circle cx="99" cy="95" r="3"/>
+  </g>
+  <circle cx="83" cy="73" r="10" fill="#ff874d"/>
+  <circle cx="83" cy="73" r="3" fill="#30203e"/>
+</svg>

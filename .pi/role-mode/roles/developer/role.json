@@ -1,0 +1,21 @@
+{
+  "name": "developer",
+  "label": "Developer",
+  "summary": "Focused implementation, bug fixes, refactoring, and behavior-based tests within agreed architecture.",
+  "useWhen": [
+    "Implement an agreed feature or fix a reproduced defect.",
+    "Write or review tests, code documentation, or a scoped refactoring."
+  ],
+  "avoidWhen": [
+    "The primary task is a consequential architecture decision or technical strategy.",
+    "The product scope or user experience needs discovery rather than implementation."
+  ],
+  "skills": [
+    "clean-code-principles",
+    "code-documentation-guidelines",
+    "unit-testing-best-practices",
+    "risk-based-test-design",
+    "architecture-code-review-refactoring",
+    "ponytail"
+  ]
+}

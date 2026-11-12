@@ -1,0 +1,96 @@
+ifndef::strategy-requirements-root[]
+:strategy-requirements-root: ../../../requirements
+endif::[]
+ifndef::strategy-diagrams-root[]
+:strategy-diagrams-root: ../diagrams
+endif::[]
+
+=== Replaceable synchronization transport
+
+Synchronization is configured separately per workspace, including the choice not to synchronize it.
+Only an open workspace synchronizes; reopening detects external edits and resumes the configured synchronization.
+Existing local content is immediately usable without waiting for remote changes, and the synchronization state remains visible.
+When connectivity permits, synchronization runs automatically in the background without user-managed saves, Git commits or manual synchronization steps.
+Transfer batching and cadence remain implementation choices.
+
+The core owns versioning, conflict detection, merging and history recovery regardless of transport.
+Synchronization plugins provide storage access and transfer; they may use a Git server or transfer the entire workspace directory, including `.situate/history.git` and other internal files.
+This flexibility does not make an arbitrary copy of live internal state consistent, nor does it transfer conflict or recovery ownership away from the core.
+Uncontrolled modification or transfer of Git internals can damage a repository rather than produce an ordinary merge conflict.
+
+External changes from other programs are detected and incorporated through local file reconciliation or the applicable transport, subject to conflict resolution.
+How a transport represents and retrieves changes must match its storage format; arbitrary external edits to the official encrypted representation are not assumed to be interoperable.
+<<adr-0015,ADR-0015>> proposes client-encrypted incremental Git packs for the official transport, with client-owned reconciliation and an operator-blind service.
+<<encrypted-git-synchronization>> develops the candidate mechanisms and required evidence.
+The detailed protocol, merge-aware integration, consistent treatment of active internal state and security verification remain open.
+
+Initially every device synchronizing a workspace retains all of its workspace-local content and full history, including earlier attachments.
+This does not require migrating externally retained document originals into the workspace.
+This simplifies availability and recovery at the cost of disk usage and transfer volume.
+Selective document download, offline pinning and cache eviction are later stretch goals, not part of the initial implementation scope.
+Notes and tasks remain fully local in that future direction.
+Git LFS-like references to remotely stored file versions are an option for later history optimization.
+See link:{strategy-requirements-root}/data/requirements/REQ-0008-local-content-availability.md[REQ-0008] and link:{strategy-requirements-root}/data/requirements/REQ-0013-synchronization-service.md[REQ-0013].
+
+[[strategy-sync-conflicts]]
+=== User-resolved merge conflicts
+
+Non-conflicting Git changes merge automatically, except when plugin source revisions genuinely diverge under the same declared version.
+That case requires the user to select one revision even if a textual merge would be clean; the unselected revision remains in history.
+A later return to the retained revision is a new checked change, not a reset of newer plugin data. Source selection is not automatic activation.
+See link:{strategy-requirements-root}/data/requirements/REQ-0033-stage-and-activate-plugin-changes.md#data-formats-and-synchronized-changes[plugin source divergence].
+
+A merge conflict in an intact repository requires the user to choose either version or work with the agent in chat on a combined result, which the user approves before application.
+Manual resolution remains possible without AI.
+For conflicting binary files, users can keep either version or retain both as separate files; automatic binary merging is not assumed.
+
+An unresolved merge conflict pauses synchronization for the entire affected workspace.
+Other local edits remain possible, and other open workspaces continue independently.
+Synchronization resumes after the blocking conflicts are resolved; partial synchronization around unresolved conflicts is not part of the initial approach.
+
+No additional domain-semantic conflict pass is required during synchronization.
+Practically negligible UUID-generation collisions may be reported as errors without special recovery.
+Externally copied identifiers remain a separate case: ambiguity is resolved when a reference is used under link:{strategy-requirements-root}/data/requirements/REQ-0035-preserve-file-and-task-identity.md[REQ-0035].
+See link:{strategy-requirements-root}/data/requirements/REQ-0013-synchronization-service.md[REQ-0013].
+
+.History reconciliation in the core, independent of the chosen transport. Plugin source selection does not activate code; a later return to the retained revision requires a new checked change.
+image::{strategy-diagrams-root}/sync-conflict-resolution.svg["The core separates damaged history, divergent plugin source revisions and Git merge conflicts. Divergent plugin sources require explicit selection before synchronization can resume."]
+
+.Git merge-conflict resolution for usable history. Other workspaces continue independently.
+image::{strategy-diagrams-root}/sync-merge-conflicts.svg["Non-conflicting changes synchronize automatically. A conflict pauses this workspace's synchronization while the user resolves text or binary versions. Local editing remains available."]
+
+=== Closing with pending synchronization
+
+Before closing a workspace with unsynchronized changes, Situate offers synchronization before closing or immediate closure with local changes retained.
+Synchronization before closing keeps the workspace open until the exchange completes; offline conditions, unresolved conflicts or transfer failures must not be presented as successful completion.
+Immediate closure stops synchronization, retaining changes for the next opening rather than continuing work in the background.
+The synchronization state and decisions needed from the user must be recognizable; notification prominence, placement and exact UI remain open.
+
+=== Encryption and device provisioning
+
+The official synchronization service provides mandatory end-to-end encryption; neither it nor the operator can decrypt synchronized content.
+Alternative plugins may use other content-encryption policies, including unencrypted storage chosen by the user.
+Provider connections, credentials, endpoints, selected access, model defaults, conversation overrides and endpoint consent belong to the workspace on each device, outside its portable directory and histories.
+Neither official nor custom synchronization transfers these operational settings or credentials, including reusable API keys.
+A new device configures access independently without replacing another device's settings or credentials.
+Provider secrets remain protected by OS secure storage; authentication, model requests and token renewal go directly to the provider, not through a Situate credential broker.
+Separate device sessions must not share rotating refresh tokens or silently displace another device's session.
+
+For the official service, a new device signs in and is then provisioned through an existing authorized device or a user-held recovery key.
+Account login alone does not unlock content.
+One recovery key per Situate account recovers all officially synchronized workspaces while their configuration and runtime access remain independent.
+Onboarding requires saving and confirming the recovery material, offers PDF export, explains loss consequences and recommends a separately stored printed copy.
+An authorized device can reveal/export it again after explicit action and additional OS authentication where available.
+Ordinary use requires no extra Situate password, default application lock or routine biometric prompts beyond OS storage access restrictions.
+Without a usable local copy or authorized device and without the recovery key, Situate cannot recover the encrypted server content.
+QR-assisted provisioning is a possible interaction, not a selected security protocol.
+Local-only and custom-synchronized workspaces require no Situate recovery setup or portable credential vault.
+The device-local storage design in <<adr-0002,ADR-0002>> is separate from content recovery; the account recovery hierarchy and provisioning protocol are not yet selected.
+
+This keeps recovery outside operator control but places key-custody responsibility on the user.
+Authorized plaintext AI processing remains a separate flow and must not expose keys or plaintext to the official synchronization service.
+Cryptographic protocols, key separation, rotation, revocation and metadata protection remain to be designed.
+See link:{strategy-requirements-root}/data/requirements/REQ-0013-synchronization-service.md[REQ-0013].
+
+.Authorization routes for the official service; this is not a cryptographic handshake specification.
+image::{strategy-diagrams-root}/device-provisioning.svg["A new device needs authorization through an existing authorized device or the user-held recovery key. The official service transfers encrypted content and cannot recover it without a user recovery route."]

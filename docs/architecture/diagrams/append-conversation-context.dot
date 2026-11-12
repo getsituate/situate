@@ -1,0 +1,22 @@
+digraph AppendConversationContext {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.5, ranksep=0.55, fontname="Helvetica", fontsize=13];
+  node [shape=box, style="rounded,filled", fillcolor="#e5effa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", arrowsize=0.8];
+
+  a [label="A"];
+  b [label="B"];
+  c [label="C"];
+  d [label="D"];
+  compact [label="K\nCompaction", fillcolor="#fff3d6"];
+  g [label="G"];
+  e [label="E"];
+  f [label="F"];
+
+  a -> b;
+  b -> c;
+  c -> d;
+  d -> compact;
+  compact -> g;
+  b -> e;
+  e -> f;
+}

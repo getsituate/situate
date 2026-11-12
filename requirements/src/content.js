@@ -1,0 +1,25 @@
+export const deliveryText = {
+  milestones: "Milestones",
+  milestone: "Milestone",
+  acceptanceCriteria: "Acceptance criteria",
+  criterion: "Criterion",
+  implementation: "Implementation",
+  overall: "Overall implementation",
+  unplanned: "Not planned",
+  empty: "No milestones yet",
+  emptyHelp:
+    "Assign a milestone name to acceptance criteria in the requirement source files.",
+  unplannedEmpty: "No unplanned criteria",
+  missing: "Milestone not found",
+  missingHelp: "No acceptance criteria are assigned to this milestone.",
+  scope: "Milestone scope",
+  trackedOnly:
+    "Only structured acceptance criteria are included. Requirements without implementation tracking are not counted.",
+  untracked: "Implementation not tracked",
+  open: "Open",
+  "in-progress": "In progress",
+  partial: "Partially implemented",
+  implemented: "Implemented",
+  count: (done, total) => `${done} of ${total} criteria implemented`,
+  back: "← Milestones",
+};

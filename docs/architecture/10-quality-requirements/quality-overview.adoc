@@ -1,0 +1,54 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ../..
+endif::[]
+
+=== Quality overview
+
+The link:{architecture-repository-root}/requirements/README.md[requirements catalog] remains the source of product goals and obligations.
+The following map connects the quality goals in <<introduction-goals>> to concrete scenarios and gaps in verification.
+Catalog priority `must` applies to the linked requirements; it does not rank them against one another or establish their implementation status.
+Stakeholder importance and technical difficulty have not been ranked here.
+
+[cols="2,3,3",options="header"]
+|===
+|Quality goal and attributes |Authoritative basis |Scenario coverage
+|Decision authority and recoverability — reliability and user control
+|link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004]; link:{architecture-repository-root}/requirements/data/requirements/REQ-0022-explain-note-changes.md[REQ-0022] (`must`)
+|<<quality-preservation-scenarios,Save, closure and interruption safeguards>> support recovery. They do not establish the full scope of undo or handling of uncertain external outcomes; see <<quality-open-evidence>>.
+|Context continuity and traceability — reliability
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0004-use-existing-context.md[REQ-0004], link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005] (both `must`)
+|<<quality-preservation-scenarios,Conversation overwrite protection>> preserves stored records. It does not establish that subsequent work uses the relevant context or that process history distinguishes prepared from performed actions; see <<quality-open-evidence>>.
+|Content availability and portability — availability and interoperability
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008], link:{architecture-repository-root}/requirements/data/requirements/REQ-0009-reuse-stored-content.md[REQ-0009] (both `must`)
+|<<quality-portability-scenarios,Reference reconstruction after directory transfer>> checks one portability boundary. Offline manual use and reuse without Situate have separate acceptance conditions in <<quality-open-evidence>>.
+|Personal fit and understandable organization — operability
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0006-preserve-personal-note-structure.md[REQ-0006], link:{architecture-repository-root}/requirements/data/requirements/REQ-0023-browse-human-readable-note-structure.md[REQ-0023] (both `must`)
+|<<quality-open-evidence,Navigation and organizational-fit evaluation>> still need representative collections and tasks. Storage and reference checks alone cannot establish understandability.
+|===
+
+The current-client scenarios describe safeguards and their verification boundaries, not complete implementation of the target architecture or a passing result for a particular revision.
+Data preservation, workspace independence and explicit failure reporting take precedence over silently completing an unsafe operation.
+Engineering checks are listed separately from product outcomes.
+
+==== Verification policy
+
+The repository uses one link:{architecture-repository-root}/tools/test.mjs[test runner] for unit, integration, browser, native and static checks.
+Quick checks provide local feedback; the default MVP suite covers additional boundaries and dependencies on its selected host.
+Expensive extended checks and deferred product platforms are not implied by an MVP pass.
+Missing tools or services are reported as failures rather than silently omitted from a selected suite.
+Formatting checks are read-only; applying formatting is a separate developer action.
+Tool versions are pinned so local and CI results can be compared against known inputs.
+See link:{architecture-docs-root}/development/testing.md[the test suite guide] for commands, platform coverage and CI triggers.
+
+Coverage reports show which instrumented source was executed by tests, not whether all relevant outcomes were asserted.
+Pull-request feedback compares coverage with a measured `main` revision and identifies both revisions.
+An unavailable baseline must be shown as unavailable, not as zero coverage; a decrease informs review without imposing a universal percentage gate.
+Test failures remain failures independently of the coverage percentage.
+
+macOS and iOS are the active MVP targets; Android development and verification are deferred.
+Automated iOS device verification is not currently provisioned, and the retained mobile workflow is disabled.
+Native iOS checks remain explicit development and release work; macOS, browser and workflow-contract checks do not establish iOS qualification.
+See link:{architecture-docs-root}/development/testing.md#mobile-ci-disabled[mobile CI limitations] and link:{architecture-docs-root}/development/testing.md#native-ios-application-journey[the explicit iOS application journey].

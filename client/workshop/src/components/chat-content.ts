@@ -1,0 +1,17 @@
+export const chatContent = {
+  message: "Message",
+  placeholder: "Message…",
+  send: "Send message",
+  stop: "Stop",
+  you: "You",
+  assistant: "Situate",
+  working: "Situate is working",
+  pauseAnimation: "Pause animation",
+  resumeAnimation: "Resume animation",
+  unavailable: "Messaging is unavailable.",
+  empty: "Write a message to send.",
+  dictate: "Dictate text",
+  dictationUnavailable: "Dictation is unavailable.",
+  attach: "Attach file",
+  attachmentsUnavailable: "File attachments are unavailable.",
+} as const;

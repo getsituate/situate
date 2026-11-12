@@ -1,0 +1,11 @@
+{
+  "build": {
+    "beforeDevCommand": "node ../scripts/generate-mobile-permissions.mjs && npm run dev",
+    "beforeBuildCommand": "node ../scripts/generate-mobile-permissions.mjs && npm run build"
+  },
+  "bundle": {
+    "iOS": {
+      "template": "src-tauri/ios-project.yml.template"
+    }
+  }
+}

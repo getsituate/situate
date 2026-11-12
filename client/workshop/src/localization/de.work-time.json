@@ -1,0 +1,14 @@
+{
+  "controlsNote": "Die Uhr läuft während der Bearbeitung automatisch weiter. Ergänzende Nachrichten bleiben im selben Abschnitt. Ein Abschluss oder eine Rückfrage beendet ihn; die nächste Nachricht beginnt einen neuen Abschnitt. Wartezeit wird nicht mitgezählt. Über die Controls kannst du die Uhr vorstellen oder die Sprache der Zeitangaben ändern.",
+  "lessThanSecond": "Weniger als 1 Sek.",
+  "seconds": "{seconds} Sek.",
+  "minutesSeconds": "{minutes} Min. {seconds} Sek.",
+  "worked": "{duration} gearbeitet",
+  "cancelled": "Gestoppt · {duration} gearbeitet",
+  "error": "Durch Fehler beendet · {duration} gearbeitet",
+  "question": "Welche Notiz soll ich verwenden?",
+  "result": "Deine Leseliste ist fertig. Sie enthält drei Romane aus deinen Notizen.",
+  "progress": "Ich berücksichtige deine Ergänzung.",
+  "stoppedMessage": "Die Bearbeitung wurde gestoppt.",
+  "errorMessage": "Ich konnte die Notizen nicht zu Ende lesen."
+}

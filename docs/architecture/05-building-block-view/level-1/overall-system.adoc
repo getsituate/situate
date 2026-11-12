@@ -1,0 +1,44 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../../diagrams
+endif::[]
+
+[[system-building-blocks]]
+=== Level 1: Overall system
+
+The Situate product boundary includes the application, optional Situate synchronization and managed AI services, and the deferred marketplace.
+External model endpoints and connected email, calendar and document systems remain outside this boundary, as defined in <<context-scope>>.
+
+.Product components and external dependencies. Arrows point from the caller to the capability it uses; responses can flow in the reverse direction.
+image::{architecture-diagrams-root}/system-building-blocks.svg["The Situate application uses optional Situate synchronization and AI services, or user-configured alternatives. Model endpoints and connected external systems remain outside the Situate product boundary."]
+
+[cols="1,3,2",options="header"]
+|===
+|Component |Responsibility |Data boundary
+|[[situate-application]]Situate Application
+|Local content management, manual interaction, plugin execution and agent execution. It remains usable for local manual work without either Situate service or an AI model.
+|Workspace content, conversations, plugins, configuration and histories reside on the device.
+|Situate Synchronization Service
+|Optional exchange of end-to-end encrypted workspace data between the user's devices. Clients retain responsibility for versioning, merge decisions and recovery.
+|The service must not be able to decrypt synchronized user content. Device-local AI settings and credentials are excluded from synchronization; see <<glossary-device-local-ai-settings>>.
+|Situate Marketplace (deferred)
+|Shared template discovery, marketplace publication submissions, per-version manual approval, reports and blocking. Local plugin management does not depend on marketplace delivery.
+|Public templates and store pages, submission state and administrator review feedback; not personal workspace content. Hosting and service internals remain unspecified.
+|Situate AI Router
+|Optional managed model access, routing authorized requests to model providers. It does not replace the agent loop inside the application.
+|It may process the content authorized for a model request in plaintext, but has no general access to the user's workspaces or decryption capability for synchronized content.
+|===
+
+The application can access a user-configured model endpoint directly instead of using the Situate AI Router.
+The endpoint can be remote or local, including on the same device; physical proximity does not put an independently operated model endpoint inside the Situate product boundary.
+AI functions require a suitable model, but neither the Situate AI Router nor a Situate-provided model subscription is required for user-provided access.
+Agent Integration runs inside the application and uses these model endpoints; Rig is not itself the model.
+The <<native-conversation-building-blocks,native conversation service>> executes in the native application host, independently of frontend views.
+
+Plugins connect to external email, calendar and document systems through their respective provider APIs.
+Custom synchronization plugins can use alternative storage or transport services.
+Neither kind of integration changes ownership of the external system or authorizes unrelated work.
+Service internals, authentication protocols and deployment placement are not refined here.
+See link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013], link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016].

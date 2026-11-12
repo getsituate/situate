@@ -1,0 +1,39 @@
+@media (forced-colors: none) {
+  .situate-scrollbars,
+  .situate-scrollbars * {
+    --situate-scrollbar-thumb: transparent;
+  }
+  .situate-scrollbars[data-situate-scrolling],
+  .situate-scrollbars [data-situate-scrolling] {
+    --situate-scrollbar-thumb: var(--situate-muted);
+  }
+  /* Non-auto standard values override WebKit's thumb styling. */
+  @supports not selector(::-webkit-scrollbar) {
+    .situate-scrollbars,
+    .situate-scrollbars * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--situate-scrollbar-thumb) transparent;
+    }
+  }
+  .situate-scrollbars::-webkit-scrollbar,
+  .situate-scrollbars *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    background: transparent;
+  }
+  .situate-scrollbars::-webkit-scrollbar-thumb,
+  .situate-scrollbars *::-webkit-scrollbar-thumb {
+    background: var(--situate-scrollbar-thumb);
+    border-radius: 8px;
+  }
+  .situate-scrollbars::-webkit-scrollbar-track,
+  .situate-scrollbars *::-webkit-scrollbar-track,
+  .situate-scrollbars::-webkit-scrollbar-corner,
+  .situate-scrollbars *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  .situate-scrollbars::-webkit-scrollbar-button,
+  .situate-scrollbars *::-webkit-scrollbar-button {
+    display: none;
+  }
+}

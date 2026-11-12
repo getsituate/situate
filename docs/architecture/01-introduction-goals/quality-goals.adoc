@@ -1,0 +1,34 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+=== Quality goals
+
+The following concerns derive from approved catalog entries; their order does not establish a priority ranking.
+
+[cols="1,2,2",options="header"]
+|===
+|Concern |User value |Authoritative basis
+|Decision authority and recoverability
+|Internal work remains reversible. Internal and external actions execute within user requests without per-action approval; users can inspect outcomes and stop ongoing work.
+|link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004]
+|Context continuity and traceability
+|Subsequent work uses the known state, and users can distinguish prepared work from completed actions.
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0004-use-existing-context.md[REQ-0004], link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005]
+|Content availability and portability
+|Stored personal content remains accessible when a Situate service is unavailable and can be reused without Situate.
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008], link:{architecture-repository-root}/requirements/data/requirements/REQ-0009-reuse-stored-content.md[REQ-0009]
+|Personal fit and understandable organization
+|Users retain their working method and can navigate their own notes without relying on AI to explain them.
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0006-preserve-personal-note-structure.md[REQ-0006], link:{architecture-repository-root}/requirements/data/requirements/REQ-0023-browse-human-readable-note-structure.md[REQ-0023]
+|===
+
+Existing scenarios in <<quality-requirements>> address parts of these concerns:
+
+* Decision authority and recoverability: a lost quit-cancellation notification must not let delayed messages cancel a newer attempt; see <<current-application-quit>>. Interrupted file operations preserve files and prior history without automatic replay or rollback; see <<git-derived-file-references>>.
+* Context continuity and traceability: malformed or newer-format conversations must not be overwritten with empty history; see <<conversation-format-safety>>. An interrupted file operation may leave its outcome uncertain rather than recorded as complete.
+* Content availability and portability: restarting without derived reference state or copying a closed workspace must preserve reference-resolution results from retained Git history and anchors; see <<git-derived-file-references>>. This does not establish service-independent access or reuse of all stored content.
+
+These scenarios do not fully cover the four concerns. End-to-end scenarios for user control, context reuse, offline use, reuse without Situate and personal fit remain to be specified.
+Priority ranking requires stakeholder agreement and remains open.
+No quantitative targets are established here.
