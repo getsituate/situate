@@ -247,6 +247,27 @@ test("reuses success across executors, with private digest-only state", async (t
   }
 });
 
+test("Docker lease changes reuse successes without suppressing execution environment", async (t) => {
+  const f = await fixture(t);
+  const observed = [];
+  f.behavior = async (_suite, options) => {
+    observed.push(options.environment.SITUATE_DOCKER_LEASE);
+    return { status: "passed", exitCode: 0, durationMs: 1 };
+  };
+  f.environment.SITUATE_DOCKER_LEASE = "/tmp/lease-one/container.json";
+  assert.equal((await f.run()).reused, false);
+  f.environment.SITUATE_DOCKER_LEASE = "/tmp/lease-two/container.json";
+  assert.equal((await f.run()).reused, true);
+  f.environment.NODE_ENV = "production";
+  assert.equal((await f.run()).reused, false);
+  assert.deepEqual(observed, [
+    "/tmp/lease-one/container.json",
+    "/tmp/lease-two/container.json",
+  ]);
+  delete f.environment.SITUATE_DOCKER_LEASE;
+  assert.equal((await f.run()).reused, true);
+});
+
 test("dirty client inputs remain reusable when only docs and planner reasons change", async (t) => {
   const f = await fixture(t);
   f.selector = suiteAffectedFiles;

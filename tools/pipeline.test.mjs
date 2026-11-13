@@ -668,6 +668,26 @@ test("publication never uses builder or source verification lanes", async (t) =>
   assert.deepEqual(calls, ["download", "verify", "promote"]);
 });
 
+test("only tool containers retain the pinned NSS runtime for arbitrary numeric users", () => {
+  const runtime = {
+    LD_PRELOAD: "/opt/ci-tools/libnss_wrapper.so",
+    NSS_WRAPPER_PASSWD: "/tmp/situate-ci-home/ci-passwd",
+    NSS_WRAPPER_GROUP: "/tmp/situate-ci-home/ci-group",
+  };
+  assert.deepEqual(ordinaryEnvironment(runtime), {});
+  assert.deepEqual(
+    ordinaryEnvironment({ ...runtime, SITUATE_TOOL_CONTAINER: "1" }),
+    { ...runtime, SITUATE_TOOL_CONTAINER: "1" },
+  );
+  assert.equal(
+    ordinaryEnvironment({
+      SITUATE_TOOL_CONTAINER: "1",
+      LD_PRELOAD: "/tmp/untrusted.so",
+    }).LD_PRELOAD,
+    undefined,
+  );
+});
+
 test("ordinary subprocess environments contain no signing/publication/provider credentials", () => {
   assert.deepEqual(
     ordinaryEnvironment({

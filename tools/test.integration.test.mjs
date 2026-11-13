@@ -1,4 +1,5 @@
 import test from "node:test";
+import { suiteAvailable } from "./test-scope.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -46,7 +47,7 @@ test("CLI plans identify supported suites and optional diagnostics in JSON and t
   const extended = JSON.parse(run("--extended", "--json"));
   assert.equal(extended.scope, "extended");
   assert.equal(extended.profile, "all");
-  assert.deepEqual(extended.deferredSuiteIds, []);
+  assert.ok(extended.deferredSuiteIds.every((id) => !suiteAvailable({ id })));
   assert.ok(extended.suites.some((suite) => suite.id === "client-visual"));
   assert.match(
     run("--extended", "--feedback"),

@@ -20,12 +20,22 @@ export const laneHosts = {
   policy: "linux",
   tooling: "linux",
   "tooling-macos": "macos",
+  "docker-integration": "linux",
   frontend: "linux",
+  rust: "linux",
   "macos-code": "macos",
-  "macos-browser": "macos",
+  browser: "linux",
   "macos-native": "macos",
 };
 export const repository = "getsituate/situate";
+export function imageBuildRequired(event, current, pinned) {
+  if (
+    !["push", "workflow_dispatch"].includes(event) ||
+    ![current, pinned].every((value) => /^[a-f0-9]{64}$/.test(value))
+  )
+    throw new Error("Invalid image-build selection inputs.");
+  return event === "workflow_dispatch" || current !== pinned;
+}
 export function digest(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
@@ -246,6 +256,32 @@ export function resolveMergeGroupHeads(source, env, execute = run) {
   }
   return selected.map(({ head }) => head.sha);
 }
+export async function diagnosticPlan(selection, target) {
+  if (
+    !["coverage", "design"].includes(selection) ||
+    !["portable", "native", "docker"].includes(target)
+  )
+    throw new Error("Unknown diagnostic selection or execution environment.");
+  const { createPlan } = await import("./test.mjs");
+  const { suiteExecution } = await import("./test-scope.mjs");
+  const plan = createPlan({
+    coverage: selection === "coverage",
+    extended: selection === "design",
+    platform: target === "native" ? "darwin" : "linux",
+  });
+  const execution = {
+    portable: "container",
+    native: "native",
+    docker: "host-docker",
+  }[target];
+  const suites = plan.suites.filter(
+    (suite) => suiteExecution(suite) === execution,
+  );
+  if (!suites.length)
+    throw new Error("No diagnostics selected for this execution environment.");
+  return { ...plan, suites };
+}
+
 export async function main(
   args = process.argv.slice(2),
   env = process.env,
@@ -311,39 +347,17 @@ export async function main(
     return result;
   }
   if (command === "monitor") {
-    const { readImageLock } = await import("./ci-image.mjs");
-    const lock = readImageLock(root);
-    execute(
-      "docker",
-      [
-        "run",
-        "--rm",
-        "--platform",
-        "linux/amd64",
-        "--user",
-        `${process.getuid()}:${process.getgid()}`,
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges",
-        "--env",
-        "HOME=/tmp/home",
-        "--env",
-        "CARGO_HOME=/tmp/cargo",
-        "--env",
-        "npm_config_cache=/tmp/npm",
-        "--env",
-        "PATH=/opt/volta/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin",
-        "--volume",
-        `${root}:/workspace`,
-        "--workdir",
-        "/workspace",
-        lock.image,
-        "node",
-        "tools/dependency-monitoring.mjs",
-      ],
-      { stdio: "inherit" },
-    );
+    if (env.SITUATE_TOOL_CONTAINER === "1") {
+      execute(process.execPath, ["tools/dependency-monitoring.mjs"], {
+        stdio: "inherit",
+      });
+    } else {
+      execute(
+        "python3",
+        ["tools/pipeline-container.py", "actions", "monitor"],
+        { stdio: "inherit" },
+      );
+    }
     return;
   }
   if (command === "monitoring-policy") {
@@ -357,30 +371,23 @@ export async function main(
     };
   }
   if (command === "prepare-diagnostics") {
-    const suites = {
-      coverage: ["client-rust-coverage"],
-      design: [
-        "root-secrets",
-        "root-rust",
-        "root-swift",
-        "dev-tui-unit",
-        "client-browser",
-        "client-native",
-      ],
-      provider: ["client-agent-e2e"],
-      visual: [],
-    }[env.DIAGNOSTIC_SELECTION];
-    if (!suites) throw new Error("Unknown diagnostic selection.");
+    const selection = env.DIAGNOSTIC_SELECTION;
+    const target = env.DIAGNOSTIC_TARGET;
+    if (target === "portable") return;
     const { prepareLane } = await import("./pipeline-setup.mjs");
-    await prepareLane(
+    if (target === "docker")
+      return prepareLane(
+        { host: "linux", execution: "host-docker", suites: [] },
+        { environment: env, execute },
+      );
+    const suites =
+      selection === "provider"
+        ? ["client-agent-e2e"]
+        : (await diagnosticPlan(selection, target)).suites.map(({ id }) => id);
+    return prepareLane(
       { id: "diagnostics", host: "macos", suites },
       { environment: env, execute },
     );
-    for (const target of ["client", "requirements"])
-      execute(process.execPath, ["tools/npm-ci.mjs", target], {
-        stdio: "inherit",
-      });
-    return;
   }
   if (command === "diagnostics") {
     if (
@@ -389,38 +396,88 @@ export async function main(
       env.GITHUB_EVENT_NAME !== "workflow_dispatch"
     )
       throw new Error("Diagnostics require an explicit trusted main dispatch.");
-    const commands = {
-      coverage: ["tools/test.mjs", "--coverage"],
-      design: ["tools/test.mjs", "--extended"],
-      visual: ["tools/ci-container.mjs", "--visual", "check"],
-      provider: [
-        "client/scripts/test-agent-e2e.mjs",
-        "--provider",
-        "openai",
-        "--max-requests",
-        "24",
-        "--build-timeout",
-        "1800",
-      ],
-    };
     const selection = values.lane ?? env.DIAGNOSTIC_SELECTION;
-    if (!commands[selection]) throw new Error("Unknown diagnostic selection.");
-    if (
-      selection === "provider" &&
-      (!env.TEST_OPENAI_API_KEY || env.PAID_DIAGNOSTICS_AUTHORIZED !== "true")
-    )
-      throw new Error(
-        "Paid diagnostics require protected authorization and a scoped test credential.",
+    if (selection === "provider") {
+      if (
+        env.DIAGNOSTIC_TARGET !== "native" ||
+        !env.TEST_OPENAI_API_KEY ||
+        env.PAID_DIAGNOSTICS_AUTHORIZED !== "true"
+      )
+        throw new Error(
+          "Paid diagnostics require protected authorization on macOS and a scoped test credential.",
+        );
+      execute(
+        process.execPath,
+        [
+          "tools/run-coordinated.mjs",
+          "--",
+          process.execPath,
+          "client/scripts/test-agent-e2e.mjs",
+          "--provider",
+          "openai",
+          "--max-requests",
+          "24",
+          "--build-timeout",
+          "1800",
+        ],
+        { stdio: "inherit" },
       );
-    const args = commands[selection];
+      return;
+    }
+    if (selection === "visual") {
+      if (env.DIAGNOSTIC_TARGET !== "docker")
+        throw new Error(
+          "Visual diagnostics require host Docker orchestration.",
+        );
+      execute(
+        process.execPath,
+        [
+          "tools/run-coordinated.mjs",
+          "--",
+          process.execPath,
+          "tools/ci-container.mjs",
+          "--visual",
+          "check",
+        ],
+        { stdio: "inherit" },
+      );
+      return;
+    }
+    await diagnosticPlan(selection, env.DIAGNOSTIC_TARGET);
     execute(
       process.execPath,
-      ["coverage", "design"].includes(selection)
-        ? args
-        : ["tools/run-coordinated.mjs", "--", process.execPath, ...args],
+      [
+        "tools/run-coordinated.mjs",
+        "--",
+        process.execPath,
+        "tools/diagnostic-checks.mjs",
+        selection,
+        env.DIAGNOSTIC_TARGET,
+      ],
       { stdio: "inherit" },
     );
     return;
+  }
+  if (command === "image-policy") {
+    if (
+      env.GITHUB_REPOSITORY !== repository ||
+      env.GITHUB_REF !== "refs/heads/main"
+    )
+      throw new Error("Image planning requires trusted main.");
+    const { inputDigest, validateLock, checkBrowserPins } =
+      await import("./ci-image.mjs");
+    const lock = JSON.parse(
+      readFileSync(join(root, "tools/ci-image.lock.json"), "utf8"),
+    );
+    validateLock(lock, lock.inputsSha256);
+    checkBrowserPins(root);
+    const needed = imageBuildRequired(
+      env.GITHUB_EVENT_NAME,
+      inputDigest(root),
+      lock.inputsSha256,
+    );
+    output({ needed: String(needed) }, env);
+    return { needed };
   }
   if (
     ["image-transfer-gate", "image-upload", "image-download"].includes(command)
@@ -648,37 +705,21 @@ export async function main(
       if (execute("git", ["rev-parse", "HEAD"]).trim() !== plan.source)
         throw new Error("Checkout does not match planned source.");
       const receipt = join(directory, "runner.json");
-      if (process.platform === "linux" && env.GITHUB_ACTIONS === "true") {
-        const { readImageLock } = await import("./ci-image.mjs");
-        const { linuxLaneArguments } = await import("./pipeline-setup.mjs");
-        execute(
-          "docker",
-          linuxLaneArguments(
-            root,
-            directory,
-            workflow,
-            values.lane,
-            readImageLock(root).image,
-          ),
-          { stdio: "inherit" },
-        );
-      } else {
-        execute(
-          process.execPath,
-          [
-            "tools/pipeline.mjs",
-            "run",
-            workflow,
-            "--plan",
-            planFile,
-            "--lane",
-            values.lane,
-            "--receipt",
-            receipt,
-          ],
-          { stdio: "inherit" },
-        );
-      }
+      execute(
+        process.execPath,
+        [
+          "tools/pipeline.mjs",
+          "run",
+          workflow,
+          "--plan",
+          planFile,
+          "--lane",
+          values.lane,
+          "--receipt",
+          receipt,
+        ],
+        { stdio: "inherit" },
+      );
       const result = JSON.parse(readFileSync(receipt, "utf8"));
       if (
         result.status !== "passed" ||

@@ -356,6 +356,8 @@ test("native updater modules and fixtures select the existing complete Rust host
     "situate-core",
     "--exclude",
     "situate-migrations",
+    "--exclude",
+    "situate-agent",
     "--locked",
   ]);
 });

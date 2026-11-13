@@ -240,6 +240,18 @@ export function suiteInventory(files, host = process.platform) {
     add("dev-tui-unit", "dev-tui", "unit", "tools/dev-tui", "cargo", [
       "test",
       "--locked",
+      "--",
+      "--skip",
+      "dragging_logs_exposes_copy_without_disabling_mouse_controls",
+    ]);
+    add("dev-tui-macos", "dev-tui", "integration", "tools/dev-tui", "cargo", [
+      "test",
+      "--locked",
+      "--test",
+      "terminal",
+      "dragging_logs_exposes_copy_without_disabling_mouse_controls",
+      "--",
+      "--exact",
     ]);
     add("dev-tui-format", "dev-tui", "check", "tools/dev-tui", "cargo", [
       "fmt",
@@ -271,13 +283,7 @@ export function suiteInventory(files, host = process.platform) {
     "--config",
     ".gitleaks.toml",
   ]);
-  for (const name of [
-    "kotlin",
-    "rust",
-    "secrets",
-    "audit",
-    ...(host === "darwin" ? ["swift"] : []),
-  ]) {
+  for (const name of ["kotlin", "rust", "secrets", "audit", "swift"]) {
     add(`root-${name}`, "runner", "check", ".", ...npm(`quality:${name}`));
   }
   nodeTests(
@@ -363,6 +369,17 @@ export function suiteInventory(files, host = process.platform) {
     "situate-core",
     "--locked",
   ]);
+  add("client-core-macos", "client", "integration", "client", "cargo", [
+    "test",
+    "-p",
+    "situate-core",
+    "--lib",
+    "--locked",
+    "--",
+    "durable_storage::",
+    "content::git_storage::sync_tests::",
+    "content::observation::scan_tests::",
+  ]);
   add("client-host", "client", "integration", "client", "cargo", [
     "test",
     "--workspace",
@@ -370,6 +387,8 @@ export function suiteInventory(files, host = process.platform) {
     "situate-core",
     "--exclude",
     "situate-migrations",
+    "--exclude",
+    "situate-agent",
     "--locked",
   ]);
   add("client-workshop-host", "client", "integration", "client", "cargo", [
@@ -403,7 +422,27 @@ export function suiteInventory(files, host = process.platform) {
   ]);
   add("client-clippy", "client", "check", "client", "cargo", [
     "clippy",
+    "-p",
+    "situate-core",
+    "-p",
+    "situate-agent",
+    "-p",
+    "situate-migrations",
+    "--all-targets",
+    "--locked",
+    "--",
+    "-D",
+    "warnings",
+  ]);
+  add("client-host-clippy", "client", "check", "client", "cargo", [
+    "clippy",
     "--workspace",
+    "--exclude",
+    "situate-core",
+    "--exclude",
+    "situate-agent",
+    "--exclude",
+    "situate-migrations",
     "--all-targets",
     "--locked",
     "--",
@@ -639,7 +678,15 @@ export function suiteInventory(files, host = process.platform) {
   );
 
   for (const suite of suites) {
-    if (["root-lint", "root-format", "design-unit"].includes(suite.id))
+    if (
+      [
+        "root-lint",
+        "root-format",
+        "design-unit",
+        "runner-unit",
+        "runner-integration",
+      ].includes(suite.id)
+    )
       suite.npm = ".";
     if (
       [
@@ -665,6 +712,11 @@ export function suiteInventory(files, host = process.platform) {
     )
       suite.npm = "client";
     if (suite.project === "requirements") suite.npm = "requirements";
+    if (suite.id === "client-browser") suite.browsers = ["chromium", "webkit"];
+    if (
+      ["client-executor-integration", "requirements-browser"].includes(suite.id)
+    )
+      suite.browsers = ["chromium"];
   }
 
   const covered = new Set(suites.flatMap((suite) => suite.covers));
@@ -931,6 +983,7 @@ export function executeSuite(
     timeout = 600,
     environment = process.env,
     output = process.stderr,
+    stdout = output,
     terminationGraceMs = 2000,
     buildLease = true,
     detached = true,
@@ -1009,7 +1062,7 @@ export function executeSuite(
           }
         }
       });
-    child.stdout.pipe(output, { end: false });
+    child.stdout.pipe(stdout, { end: false });
     child.stderr.pipe(output, { end: false });
     let stopped,
       escalation,
@@ -1350,7 +1403,47 @@ const parallelSafeSuites = new Set([
   "pi-unit",
 ]);
 
-export async function runPlan(
+export async function runPlan(plan, configuration = {}) {
+  const jobs =
+    configuration.jobs ??
+    (["quick", "feedback"].includes(plan.profile) ? 2 : 1);
+  if (!Number.isInteger(jobs) || jobs < 1 || jobs > 8)
+    throw new Error("jobs must be an integer from 1 to 8.");
+  if (
+    configuration.toolContainers === true &&
+    plan.profile !== "quick" &&
+    plan.suites.length &&
+    (configuration.environment ?? process.env).SITUATE_TOOL_CONTAINER !== "1"
+  ) {
+    const { selectContainerSuites, runContainerPlan } =
+      await import("./test-container.mjs");
+    const portable = selectContainerSuites(plan);
+    if (
+      configuration.externalPiRoot &&
+      portable.some((suite) => suite.environment === "pi")
+    )
+      throw new Error(
+        "External Pi installations are unavailable in tool-container checks. Remove --pi-package-root to use repository dependencies.",
+      );
+    if (portable.length) {
+      const { execute, prepare, ...containerOptions } = configuration;
+      return runContainerPlan(plan, {
+        ...containerOptions,
+        execute: executeSuite,
+        portable,
+        runHost: (hostPlan, hostOptions) =>
+          runHostPlan(hostPlan, {
+            ...hostOptions,
+            ...(execute ? { execute } : {}),
+            ...(prepare ? { prepare } : {}),
+          }),
+      });
+    }
+  }
+  return runHostPlan(plan, configuration);
+}
+
+async function runHostPlan(
   plan,
   {
     execute = executeSuite,
@@ -1365,6 +1458,7 @@ export async function runPlan(
 ) {
   if (!Number.isInteger(jobs) || jobs < 1 || jobs > 8)
     throw new Error("jobs must be an integer from 1 to 8.");
+
   if (
     plan.profile === "quick" &&
     plan.suites.some((suite) => !isQuickSuite(suite) || suite.npm)
@@ -1644,7 +1738,7 @@ No options runs supported suites available on this host, not optional diagnostic
   --jobs <1-8>     Concurrent safe suites for --unit/--quick/--feedback (feedback: 2; unit: 1)
   --timeout <sec>  Timeout per suite (default 600); failures do not stop later suites
   --pi-package-root <path>  Pi installation for extension tests (overrides PI_PACKAGE_ROOT)
-  --success-cache <path>  Private successful-suite cache for local --quick/--feedback --changed
+  --success-cache <path>  Private host-check cache for local --quick/--feedback --changed
   --help           Show this help
 
 Examples:
@@ -1652,9 +1746,10 @@ Examples:
   node tools/test.mjs --changed --base origin/main
   node tools/test.mjs --unit --changed --base HEAD~1 --list --json
 
-Outside --quick, missing npm dependencies are installed with npm ci --include=dev.
-Install browsers, Pi and native prerequisites first. Does not install browsers or hooks,
-accept SDK licenses, or commit/push this checkout.
+Outside --quick, portable checks require Docker and the pinned tool image.
+Project dependencies and selected browsers are prepared inside the container.
+Native and Docker-integration checks run on the host; install their prerequisites first.
+Does not accept SDK licenses, install hooks, or commit/push this checkout.
 See docs/development/testing.md for projects, categories and prerequisites.`;
 
 export async function main(args = process.argv.slice(2)) {
@@ -1728,6 +1823,13 @@ export async function main(args = process.argv.slice(2)) {
       : undefined;
     const report = await runPlan(plan, {
       execute,
+      toolContainers: !options.quick && plan.suites.length > 0,
+      ...(options["pi-package-root"]
+        ? { externalPiRoot: resolve(options["pi-package-root"]) }
+        : {}),
+      ...(options["success-cache"]
+        ? { successCacheDirectory: resolve(options["success-cache"]) }
+        : {}),
       signal: quickDeadline
         ? AbortSignal.any([controller.signal, quickDeadline])
         : controller.signal,

@@ -9,12 +9,11 @@ const deferred = new Set([
 ]);
 
 const appleHostOnly = new Set([
-  "client-browser",
-  "client-executor-integration",
-  "client-agent-runtime",
-  "client-core",
+  "client-core-macos",
   "client-host",
-  "client-clippy",
+  "client-host-clippy",
+  "client-workshop-host",
+  "client-workshop-clippy",
   "client-native",
   "client-agent-e2e",
   "client-onboarding-e2e",
@@ -22,10 +21,7 @@ const appleHostOnly = new Set([
   "client-workspace-access-swift",
   "client-dictation-swift",
   "client-rust-coverage",
-  "root-swift",
-  "dev-tui-unit",
-  "dev-tui-format",
-  "dev-tui-clippy",
+  "dev-tui-macos",
 ]);
 
 const diagnostics = new Set([
@@ -48,16 +44,21 @@ export function supportedSuiteEnabled(suite) {
 }
 
 export function suiteHost(suite) {
-  if (
-    appleHostOnly.has(suite.id) ||
-    ["client-migrations", "client-format", "root-rust"].includes(suite.id)
-  )
-    return "macos";
+  if (appleHostOnly.has(suite.id)) return "macos";
   return "linux";
 }
 
+export function suiteExecution(suite) {
+  if (["client-docker-context", "design-website-hosting"].includes(suite.id))
+    return "host-docker";
+  return suiteHost(suite) === "macos" ? "native" : "container";
+}
+
 export function suiteAvailable(suite, platform = process.platform) {
-  return suiteHost(suite) !== "macos" || platform === "darwin";
+  if (suiteHost(suite) === "macos") return platform === "darwin";
+  if (suite.id.startsWith("dev-tui-"))
+    return ["darwin", "linux"].includes(platform);
+  return true;
 }
 
 export function mvpSuiteEnabled(suite, platform = process.platform) {

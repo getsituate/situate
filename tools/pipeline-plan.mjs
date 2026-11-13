@@ -11,7 +11,11 @@ import {
   requiresFullSelection,
   suiteSelectionReasons,
 } from "./test-inputs.mjs";
-import { supportedSuiteEnabled, suiteHost } from "./test-scope.mjs";
+import {
+  supportedSuiteEnabled,
+  suiteHost,
+  suiteExecution,
+} from "./test-scope.mjs";
 
 const execute = promisify(execFile);
 const families = [
@@ -24,6 +28,8 @@ const families = [
       "root-secrets",
       "root-commits",
       "root-history-secrets",
+      "root-rust",
+      "root-swift",
       "design-contracts",
       "requirements-catalog",
     ],
@@ -38,41 +44,50 @@ const families = [
       "delivery-migrations",
       "client-scripts-unit",
       "client-scripts-integration",
-      "client-docker-context",
       "requirements-unit",
       "requirements-integration",
       "requirements-build",
       "requirements-browser",
       "design-unit",
-      "design-website-hosting",
       "pi-unit",
       "pi-mcp",
       "pi-test-hook",
+      "dev-tui-unit",
+      "dev-tui-format",
+      "dev-tui-clippy",
     ],
   ],
+  ["tooling-macos", "macos", ["dev-tui-macos"]],
   [
-    "tooling-macos",
-    "macos",
-    ["dev-tui-unit", "dev-tui-format", "dev-tui-clippy"],
+    "docker-integration",
+    "linux",
+    ["client-docker-context", "design-website-hosting"],
+    "host-docker",
   ],
   ["frontend", "linux", ["client-vue", "client-types"]],
   [
-    "macos-code",
-    "macos",
+    "rust",
+    "linux",
     [
       "client-agent-runtime",
       "client-migrations",
       "client-core",
-      "client-host",
       "client-format",
       "client-clippy",
-      "client-dictation-swift",
-      "client-workspace-access-swift",
-      "root-rust",
-      "root-swift",
     ],
   ],
-  ["macos-browser", "macos", ["client-browser", "client-executor-integration"]],
+  [
+    "macos-code",
+    "macos",
+    [
+      "client-core-macos",
+      "client-host",
+      "client-host-clippy",
+      "client-dictation-swift",
+      "client-workspace-access-swift",
+    ],
+  ],
+  ["browser", "linux", ["client-browser", "client-executor-integration"]],
   [
     "macos-native",
     "macos",
@@ -101,6 +116,11 @@ function select(paths, { mode, inventory, appImpact }) {
       throw new Error(`Missing or ambiguous lane assignment: ${suite.id}`);
     if (assignments[0][1] !== suiteHost(suite))
       throw new Error(`Inconsistent suite host assignment: ${suite.id}`);
+    const execution =
+      assignments[0][3] ??
+      (assignments[0][1] === "macos" ? "native" : "container");
+    if (execution !== suiteExecution(suite))
+      throw new Error(`Inconsistent suite execution assignment: ${suite.id}`);
   }
   const full = mode === "release" && appImpact;
   const selected = mandatory.flatMap((suite) => {
@@ -108,10 +128,12 @@ function select(paths, { mode, inventory, appImpact }) {
     const family = families.find(([, , ids]) => ids.includes(suite.id))[0];
     if (
       full &&
-      (["frontend", "macos-code", "macos-browser", "macos-native"].includes(
+      (["frontend", "rust", "browser", "macos-code", "macos-native"].includes(
         family,
       ) ||
         [
+          "root-rust",
+          "root-swift",
           "delivery-unit",
           "delivery-migrations",
           "client-scripts-unit",
@@ -121,13 +143,22 @@ function select(paths, { mode, inventory, appImpact }) {
       reasons.push("Complete macOS source verification for an app release.");
     return reasons.length ? [{ ...suite, reasons }] : [];
   });
-  const lanes = families.flatMap(([id, host, ids]) => {
+  const lanes = families.flatMap(([id, host, ids, execution]) => {
     const suites = selected.filter((suite) => ids.includes(suite.id));
     return suites.length
       ? [
           {
             id,
             host,
+            ...(execution ? { execution } : {}),
+            timeoutSeconds: [
+              "rust",
+              "browser",
+              "macos-code",
+              "macos-native",
+            ].includes(id)
+              ? 1800
+              : 600,
             suites: suites.map((suite) => suite.id),
             reasons: [...new Set(suites.flatMap((suite) => suite.reasons))],
           },

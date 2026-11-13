@@ -45,7 +45,8 @@ test("developer-only inputs and required declarations do not activate app lanes"
             ![
               "frontend",
               "macos-code",
-              "macos-browser",
+              "rust",
+              "browser",
               "macos-native",
             ].includes(lane.id),
         ),
@@ -61,7 +62,7 @@ test("developer-only inputs and required declarations do not activate app lanes"
   const tui = planPaths(["tools/dev-tui/Cargo.lock"]);
   assert.deepEqual(
     tui.lanes.find((lane) => lane.id === "tooling-macos").suites,
-    ["dev-tui-unit", "dev-tui-format", "dev-tui-clippy"],
+    ["dev-tui-macos"],
   );
 });
 
@@ -70,8 +71,8 @@ test("app consumers and native harnesses have explicit host assignments", () => 
   assert.equal(frontend.appImpact, true);
   assert.ok(suites(frontend).includes("client-vue"));
   assert.equal(
-    frontend.lanes.find((lane) => lane.id === "macos-browser").host,
-    "macos",
+    frontend.lanes.find((lane) => lane.id === "browser").host,
+    "linux",
   );
   assert.equal(
     frontend.lanes.find((lane) => lane.id === "frontend").host,
@@ -132,7 +133,7 @@ test("explicit execution rejects missing hosts and IDs and preserves historical 
   );
   assert.throws(() => testPlan({ suite: ["unknown"] }), /Unknown suite/);
   assert.throws(
-    () => testPlan({ suite: ["client-browser"], platform: "linux" }),
+    () => testPlan({ suite: ["client-native"], platform: "linux" }),
     /macOS host/,
   );
   assert.equal(testPlan().scope, "supported");

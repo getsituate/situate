@@ -177,7 +177,7 @@ node tools/test.mjs --changed --base origin/main
 node tools/test.mjs --quick --changed
 ```
 
-The default runs supported suites available on the current host. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
+The default runs supported suites available on the current host. Portable suites use the same pinned Linux tool image locally and in CI; start a Linux Docker engine first. Only native macOS suites need host Apple/Rust tools. Quick checks and selection previews do not start Docker. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
 
 ## Development terminal
 

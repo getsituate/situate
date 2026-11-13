@@ -7,18 +7,12 @@ import {
   parseOptions as parseRunnerOptions,
   root,
   runPlan,
-  sourceFiles,
-  suiteInventory,
 } from "./test.mjs";
 
 import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
 
-export function activeLinuxSuite(suite) {
-  return (
-    supportedSuiteEnabled(suite) &&
-    suiteAvailable(suite, "linux") &&
-    !["browser", "native"].includes(suite.kind)
-  );
+export function activeHostSuite(suite, platform = "linux") {
+  return supportedSuiteEnabled(suite) && suiteAvailable(suite, platform);
 }
 
 export const browserShards = Object.freeze([
@@ -46,6 +40,8 @@ export const quickSuiteIds = Object.freeze([
 ]);
 
 export function partitionPlan(plan) {
+  if (!plan.suites.length)
+    throw new Error("No suites selected for CI partitioning.");
   const partitions = Object.fromEntries(shards.map((name) => [name, []]));
   const ids = new Set();
   for (const suite of plan.suites) {
@@ -65,9 +61,6 @@ export function partitionPlan(plan) {
     else throw new Error(`Unclassified CI suite: ${suite.id} (${suite.kind}).`);
     partitions[shard].push(suite);
   }
-  for (const shard of shards)
-    if (!partitions[shard].length)
-      throw new Error(`No suites selected for CI shard: ${shard}.`);
   return Object.fromEntries(
     shards.map((shard) => [
       shard,
@@ -108,16 +101,14 @@ export function createShardPlan(
   shard,
   directory = root,
   selection,
-  { extended = false } = {},
+  { extended = false, platform = "linux" } = {},
 ) {
   if (!shards.includes(shard))
     throw new Error(`--shard must be one of: ${shards.join(", ")}.`);
-  const plan = createPlan({ extended: true }, directory);
-  // Listing on other hosts still describes the Linux CI commands.
-  if (process.platform !== "linux")
-    plan.suites = suiteInventory(sourceFiles(directory), "linux").map(
-      ({ covers: _covers, ...suite }) => suite,
-    );
+  if (!["linux", "darwin"].includes(platform))
+    throw new Error("CI shard platform must be linux or darwin.");
+  const plan = createPlan({ extended: true, platform }, directory);
+  const active = (suite) => activeHostSuite(suite, platform);
   const partitions = partitionPlan(plan);
   const selected =
     selection === undefined
@@ -126,14 +117,14 @@ export function createShardPlan(
   selected.deferredSuiteIds = extended
     ? []
     : partitions[shard].suites
-        .filter((suite) => !activeLinuxSuite(suite))
+        .filter((suite) => !active(suite))
         .map(({ id }) => id);
   if (!extended) {
-    if (selection && selected.suites.some((suite) => !activeLinuxSuite(suite)))
+    if (selection && selected.suites.some((suite) => !active(suite)))
       throw new Error("CI selection contains deferred suites.");
-    selected.suites = selected.suites.filter(activeLinuxSuite);
+    selected.suites = selected.suites.filter(active);
   }
-  selected.scope = extended ? "extended" : "macos";
+  selected.scope = extended ? "extended" : "supported";
   selected.profile = extended ? "all" : "supported";
   if (!selected.suites.length)
     throw new Error(`No suites selected for CI shard: ${shard}.`);

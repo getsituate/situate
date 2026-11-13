@@ -322,7 +322,7 @@ For Android, set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME` in the local shell. 
 
 ## Run and check
 
-For the complete repository suite, including this client's browser, native, and Docker context tests, use `node tools/test.mjs` from the repository root. Its `--unit` and `--changed` options are described in the [test suite guide](../docs/development/testing.md). The commands below target the client only.
+For the complete repository suite, including this client's browser, native, and Docker context tests, use `node tools/test.mjs` from the repository root. Portable checks use the pinned Linux tool container; native macOS checks and Docker-steering tests run on the host. Its `--unit` and `--changed` options are described in the [test suite guide](../docs/development/testing.md). The commands below target the client only.
 
 Enter the client directory from the repository root:
 

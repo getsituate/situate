@@ -474,9 +474,11 @@ test("verification delegates selected lanes directly from planning without optio
       "policy",
       "tooling",
       "tooling-macos",
+      "docker-integration",
       "frontend",
+      "rust",
       "macos-code",
-      "macos-browser",
+      "browser",
       "macos-native",
     ]) {
       const block = source
@@ -489,9 +491,14 @@ test("verification delegates selected lanes directly from planning without optio
           `contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, '${lane}')`,
         ),
       );
+      const native = lane.startsWith("macos-") || lane === "tooling-macos";
+      const command =
+        native || lane === "docker-integration"
+          ? "node tools/actions-adapter.mjs"
+          : "python3 tools/pipeline-container.py actions";
       assert.ok(
         block.includes(
-          `run: node tools/actions-adapter.mjs lane --workflow ${workflow} --lane ${lane}`,
+          `run: ${command} lane --workflow ${workflow} --lane ${lane}`,
         ),
       );
       assert.match(
@@ -518,16 +525,18 @@ test("verification delegates selected lanes directly from planning without optio
         "policy",
         "tooling",
         "tooling-macos",
+        "docker-integration",
         "frontend",
+        "rust",
         "macos-code",
-        "macos-browser",
+        "browser",
         "macos-native",
       ].sort(),
     );
     assert.match(required, /if: always\(\)/);
     assert.ok(
       source.includes(
-        `run: node tools/actions-adapter.mjs aggregate --workflow ${workflow}`,
+        `run: python3 tools/pipeline-container.py actions aggregate --workflow ${workflow}`,
       ),
     );
   }

@@ -49,17 +49,22 @@ test("only replacement workflows remain and pinned checkout is the sole action",
     for (const match of workflow.matchAll(/run: ([^\n]+)/g))
       assert.match(
         match[1],
-        /^(?:python3 tools\/pipeline-bootstrap\.py|node tools\/[a-z-]+\.mjs(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*)$/,
+        /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
       );
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
       .split(/\n {2}[a-z][a-z-]*:\n/)
       .slice(1)
       .filter((body) => body.includes("    steps:"))) {
-      assert.ok(
-        body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
-          body.indexOf("run: node "),
-      );
+      if (body.includes("run: node ")) {
+        assert.ok(body.includes("run: python3 tools/pipeline-bootstrap.py"));
+        assert.ok(
+          body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
+            body.indexOf("run: node "),
+        );
+      } else {
+        assert.match(body, /run: python3 tools\/pipeline-container\.py/);
+      }
     }
     assert.doesNotMatch(
       workflow,
@@ -94,17 +99,26 @@ test("fixed independent families depend on planning and aggregate every selected
       assert.match(lane, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
       assert.match(lane, /ref:.*github\.sha/);
       assert.doesNotMatch(lane, /needs: \[/);
-      assert.ok(
-        lane.indexOf("actions-adapter.mjs setup") <
-          lane.indexOf("actions-adapter.mjs lane"),
-      );
+      if (host === "macos" || id === "docker-integration") {
+        assert.ok(
+          lane.indexOf("actions-adapter.mjs setup") <
+            lane.indexOf("actions-adapter.mjs lane"),
+        );
+        assert.match(lane, /pipeline-bootstrap\.py/);
+      } else {
+        assert.match(lane, /pipeline-container\.py actions lane/);
+        assert.doesNotMatch(
+          lane,
+          /pipeline-bootstrap|run: node |actions-adapter\.mjs setup/,
+        );
+      }
     }
     const aggregate = job(workflow, "required");
     assert.match(aggregate, /if: always\(\)/);
     for (const id of Object.keys(laneHosts))
       assert.ok(aggregate.split("    if:")[0].includes(id));
     assert.match(aggregate, /PIPELINE_NEEDS:.*toJSON\(needs\)/);
-    assert.match(aggregate, /actions-adapter\.mjs aggregate/);
+    assert.match(aggregate, /pipeline-container\.py actions aggregate/);
   }
 });
 

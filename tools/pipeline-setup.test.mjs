@@ -10,82 +10,70 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import {
-  linuxLaneArguments,
-  prerequisites,
-  prepareLane,
-} from "./pipeline-setup.mjs";
+import { prerequisites, prepareLane } from "./pipeline-setup.mjs";
 
 const root = new URL("../", import.meta.url).pathname;
-test("selected suites alone determine tool installation, not advisory databases", () => {
+test("portable tools come from the image and native setup contains only Apple-host prerequisites", () => {
   assert.deepEqual(prerequisites({ host: "linux", suites: ["root-secrets"] }), {
     image: true,
+    docker: false,
     rust: false,
-    cargoDeny: false,
-    gitleaks: false,
     coverage: false,
-    swiftTools: false,
     swift: false,
-    browsers: false,
     native: false,
   });
-  const tooling = prerequisites({ host: "macos", suites: ["dev-tui-unit"] });
+  const tooling = prerequisites({ host: "macos", suites: ["dev-tui-macos"] });
   assert.equal(tooling.rust, true);
-  assert.equal(tooling.swiftTools, false);
-  assert.equal(tooling.browsers, false);
-  const code = prerequisites({
-    host: "macos",
-    suites: ["root-rust", "root-swift"],
-  });
-  assert.equal(code.cargoDeny, true);
-  assert.equal(code.swiftTools, true);
+  assert.equal(tooling.swift, false);
   const native = prerequisites({ host: "macos", suites: ["client-native"] });
   assert.equal(native.native, true);
   assert.equal(native.rust, true);
+  assert.equal(native.swift, true);
 });
-test("Linux setup consumes reviewed digest-pinned image anonymously", async () => {
+test("portable setup cannot fall back to installing tools on the host", async () => {
+  await assert.rejects(
+    prepareLane(
+      { host: "linux", suites: ["root-secrets"] },
+      { environment: {} },
+    ),
+    /tool-container/,
+  );
+  await assert.rejects(
+    prepareLane(
+      { host: "macos", suites: ["root-swift"] },
+      { platform: "darwin" },
+    ),
+    /tool image/,
+  );
+});
+test("Docker integration setup checks the host daemon without installing project packages", async () => {
   const calls = [];
   await prepareLane(
-    { host: "linux", id: "policy", suites: ["root-secrets"] },
-    { execute: (...args) => calls.push(args) },
+    {
+      host: "linux",
+      execution: "host-docker",
+      suites: ["client-docker-context"],
+    },
+    {
+      platform: "linux",
+      execute: (...args) => calls.push(args),
+    },
   );
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "docker");
-  assert.deepEqual(calls[0][1].slice(0, 3), [
-    "pull",
-    "--platform",
-    "linux/amd64",
-  ]);
-  assert.match(
-    calls[0][1][3],
-    /^ghcr\.io\/getsituate\/situate-ci-linux@sha256:[a-f0-9]{64}$/,
-  );
-  const args = linuxLaneArguments(
-    "/source",
-    "/state",
-    "verify",
-    "policy",
-    calls[0][1][3],
-    1001,
-    1001,
-  );
-  assert.ok(args.includes("/source:/workspace"));
-  assert.ok(args.includes("/state:/pipeline-state"));
-  assert.ok(
-    args.includes("/opt/ci-tools/ci-user.sh") ||
-      args.some((value) => value.includes("source /opt/ci-tools/ci-user.sh")),
-  );
-  assert.ok(
-    !args.some((value) => /TOKEN|SECRET|docker.sock|privileged/.test(value)),
+  assert.deepEqual(
+    calls.map(([command, args]) => [command, args]),
+    [
+      ["docker", ["info"]],
+      ["docker", ["buildx", "version"]],
+    ],
   );
 });
-test("macOS tooling setup is pinned, selected and exposes its binary path", async (t) => {
+test("native macOS setup retains pinned Rust and exposes its binary path", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-setup-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const githubPath = join(directory, "path");
-  const calls = [];
+  const githubPath = join(directory, "path"),
+    calls = [];
   await prepareLane(
-    { id: "tooling-macos", host: "macos", suites: ["dev-tui-unit"] },
+    { id: "tooling-macos", host: "macos", suites: ["dev-tui-macos"] },
     {
       platform: "darwin",
       environment: { RUNNER_TEMP: directory, GITHUB_PATH: githubPath },
@@ -94,7 +82,6 @@ test("macOS tooling setup is pinned, selected and exposes its binary path", asyn
   );
   assert.equal(calls.length, 2);
   assert.ok(calls[1][1].includes("fetch"));
-  assert.ok(calls[0][1].includes("rustup"));
   assert.ok(calls[0][1].includes("1.98.1"));
   assert.match(readFileSync(githubPath, "utf8"), /situate-tools-.*\/bin/);
   await assert.rejects(

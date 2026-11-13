@@ -115,8 +115,38 @@ test("measurement reuses the central plan and distinguishes absent support, fail
     assert.equal(workspace, "client");
     return { release() {} };
   };
+  const writeReports = () => {
+    mkdirSync(join(directory, "client/target/coverage/vue"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "client/target/coverage/vue/lcov.info"),
+      lcov,
+    );
+    writeFileSync(join(directory, "client/target/coverage/rust.lcov"), lcov);
+  };
+  let linuxExecutions = 0;
+  let linuxPreparations = 0;
   assert.deepEqual(
     await measure(directory, {
+      platform: "linux",
+      prepare: async () => {
+        linuxPreparations++;
+        return { release() {} };
+      },
+      execute: async () => {
+        linuxExecutions++;
+        writeReports();
+        return { status: "passed" };
+      },
+    }),
+    { status: "unavailable" },
+  );
+  assert.equal(linuxExecutions, 0);
+  assert.equal(linuxPreparations, 0);
+  assert.deepEqual(
+    await measure(directory, {
+      platform: "darwin",
       prepare,
       execute: async () => ({ status: "failed" }),
     }),
@@ -124,6 +154,7 @@ test("measurement reuses the central plan and distinguishes absent support, fail
   );
   assert.deepEqual(
     await measure(directory, {
+      platform: "darwin",
       prepare,
       execute: async () => ({ status: "passed" }),
     }),
@@ -131,18 +162,12 @@ test("measurement reuses the central plan and distinguishes absent support, fail
   );
   const calls = [];
   const result = await measure(directory, {
+    platform: "darwin",
     prepare,
     execute: async (suite, options) => {
       calls.push(suite);
       assert.equal(options.directory, directory);
-      mkdirSync(join(directory, "client/target/coverage/vue"), {
-        recursive: true,
-      });
-      writeFileSync(
-        join(directory, "client/target/coverage/vue/lcov.info"),
-        lcov,
-      );
-      writeFileSync(join(directory, "client/target/coverage/rust.lcov"), lcov);
+      writeReports();
       return { status: "passed" };
     },
   });
@@ -359,6 +384,7 @@ test("coverage dispatch invokes the shared runner only for trusted explicit diag
     GITHUB_REF: "refs/heads/main",
     GITHUB_EVENT_NAME: "workflow_dispatch",
     DIAGNOSTIC_SELECTION: "coverage",
+    DIAGNOSTIC_TARGET: "native",
   };
   const calls = [];
   const execute = (command, args) => {
@@ -367,7 +393,17 @@ test("coverage dispatch invokes the shared runner only for trusted explicit diag
   };
   await actions(["diagnostics"], environment, execute);
   assert.deepEqual(calls, [
-    [process.execPath, ["tools/test.mjs", "--coverage"]],
+    [
+      process.execPath,
+      [
+        "tools/run-coordinated.mjs",
+        "--",
+        process.execPath,
+        "tools/diagnostic-checks.mjs",
+        "coverage",
+        "native",
+      ],
+    ],
   ]);
   calls.length = 0;
   for (const overrides of [
@@ -397,7 +433,16 @@ test("coverage is a read-only explicit diagnostic, separate from required verifi
     diagnostics,
     /pull_request|workflow_run|pull-requests: write/,
   );
-  const steps = diagnostics.split("    steps:\n")[1];
+  const portable = diagnostics
+    .split("\n  portable:\n")[1]
+    ?.split("\n  native:\n")[0];
+  assert.match(portable, /runs-on: ubuntu-24.04/);
+  assert.match(portable, /pipeline-container\.py actions diagnostics/);
+  assert.doesNotMatch(portable, /secrets\.|pipeline-bootstrap|run: node /);
+  const steps = diagnostics
+    .split("\n  native:\n")[1]
+    ?.split("\n  docker:\n")[0];
+  assert.match(steps, /runs-on: macos-latest/);
   assert.match(steps, /run: node tools\/actions-adapter\.mjs diagnostics\n/);
   const coverageStep = steps
     .split("      - run: node tools/actions-adapter.mjs diagnostics\n")[1]

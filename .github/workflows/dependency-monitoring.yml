@@ -24,9 +24,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
       - id: policy
-        run: node tools/actions-adapter.mjs monitoring-policy
+        run: python3 tools/pipeline-container.py actions monitoring-policy
         env:
           MONITORING_WEEKLY: ${{ vars.DEPENDENCY_MONITORING_WEEKLY }}
 
@@ -41,5 +40,4 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs monitor
+      - run: python3 tools/pipeline-container.py actions monitor

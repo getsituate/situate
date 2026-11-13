@@ -25,9 +25,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
       - id: plan
-        run: node tools/actions-adapter.mjs plan --workflow create
+        run: python3 tools/pipeline-container.py actions plan --workflow create
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -47,10 +46,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs setup --workflow create --lane policy
       - id: lane
-        run: node tools/actions-adapter.mjs lane --workflow create --lane policy
+        run: python3 tools/pipeline-container.py actions lane --workflow create --lane policy
 
   tooling:
     needs: plan
@@ -68,10 +65,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs setup --workflow create --lane tooling
       - id: lane
-        run: node tools/actions-adapter.mjs lane --workflow create --lane tooling
+        run: python3 tools/pipeline-container.py actions lane --workflow create --lane tooling
 
   tooling-macos:
     needs: plan
@@ -94,6 +89,27 @@ jobs:
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow create --lane tooling-macos
 
+  docker-integration:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'docker-integration')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane docker-integration
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane docker-integration
+
   frontend:
     needs: plan
     if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'frontend')
@@ -110,10 +126,27 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs setup --workflow create --lane frontend
       - id: lane
-        run: node tools/actions-adapter.mjs lane --workflow create --lane frontend
+        run: python3 tools/pipeline-container.py actions lane --workflow create --lane frontend
+
+  rust:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'rust')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: lane
+        run: python3 tools/pipeline-container.py actions lane --workflow create --lane rust
 
   macos-code:
     needs: plan
@@ -136,10 +169,10 @@ jobs:
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow create --lane macos-code
 
-  macos-browser:
+  browser:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-browser')
-    runs-on: macos-latest
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'browser')
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
       receipt: ${{ steps.lane.outputs.receipt }}
@@ -152,10 +185,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-browser
       - id: lane
-        run: node tools/actions-adapter.mjs lane --workflow create --lane macos-browser
+        run: python3 tools/pipeline-container.py actions lane --workflow create --lane browser
 
   macos-native:
     needs: plan
@@ -186,9 +217,11 @@ jobs:
         policy,
         tooling,
         tooling-macos,
+        docker-integration,
         frontend,
+        rust,
         macos-code,
-        macos-browser,
+        browser,
         macos-native,
       ]
     if: always()
@@ -199,8 +232,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs aggregate --workflow create
+      - run: python3 tools/pipeline-container.py actions aggregate --workflow create
         env:
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
@@ -215,9 +247,11 @@ jobs:
         policy,
         tooling,
         tooling-macos,
+        docker-integration,
         frontend,
+        rust,
         macos-code,
-        macos-browser,
+        browser,
         macos-native,
       ]
     if: needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true'

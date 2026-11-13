@@ -139,12 +139,13 @@ Assume compilation/native journeys dominate the critical path and planning is co
 
 | Family                     | Host and scheduling                                                                                          |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Plan                       | Suitable Linux/local host, no product SDKs; emits exact suite/host/app-impact selection                      |
+| Plan                       | Pinned Linux tool image; emits exact suite/host/app-impact selection without product SDKs                    |
 | Repository policy          | Linux tools; declaration/commit/review, applicable formatting/docs and secret scanning                       |
-| Developer/delivery tooling | Host required by selected suites; DevTUI native/toolchain checks on `macos-latest`                           |
-| Client frontend            | Linux tools; applicable units/types/builds, not product browser/native flows                                 |
-| macOS Rust/Swift           | Isolated `macos-latest` job; serialize commands sharing Cargo/Swift outputs                                  |
-| macOS product browser      | Separate `macos-latest` job alongside code/native checks                                                     |
+| Developer/delivery tooling | Linux tool image for portable contracts and DevTUI; focused Darwin-only cases on `macos-latest`              |
+| Docker integration         | Explicit host Node/Docker orchestration; no socket in ordinary tool containers                               |
+| Client frontend            | Linux tool image; applicable units/types/builds                                                              |
+| Portable Rust and browsers | Separate Linux tool-image jobs; no native macOS qualification claims                                         |
+| macOS Rust/Swift           | Native storage/host/Swift execution on `macos-latest`; serialize commands sharing Cargo/Swift outputs        |
 | macOS native fixtures      | Separate `macos-latest` job; one journey per owned desktop at a time                                         |
 | Aggregate                  | Requires every selected suite receipt; deliberate unselection differs from missing, failed or cancelled work |
 

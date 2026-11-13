@@ -33,6 +33,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
+      needed: ${{ steps.policy.outputs.needed }}
       provenance: ${{ steps.build.outputs.provenance }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -41,12 +42,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
+      - id: policy
+        run: node tools/actions-adapter.mjs image-policy
       - run: node tools/actions-adapter.mjs image-transfer-gate
+        if: steps.policy.outputs.needed == 'true'
         env:
           CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
       - id: build
+        if: steps.policy.outputs.needed == 'true'
         run: node tools/actions-adapter.mjs image-build
       - run: node tools/actions-adapter.mjs image-upload
+        if: steps.policy.outputs.needed == 'true'
         env:
           PROVENANCE: ${{ steps.build.outputs.provenance }}
           CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
@@ -55,7 +61,7 @@ jobs:
 
   publish:
     needs: build
-    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
+    if: needs.build.outputs.needed == 'true' && github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:

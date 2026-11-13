@@ -71,6 +71,63 @@ export function checkBrowserPins(directory = root) {
       );
   }
 }
+export function checkToolPins(directory = root) {
+  const json = (name) =>
+    JSON.parse(readFileSync(resolve(directory, name), "utf8"));
+  const quality = json("tools/toolchain.quality.json");
+  const assets = json("client/docker/ci-assets.json");
+  const swift = json("client/docker/ci-swift-tools.json");
+  const dockerfile = readFileSync(
+    resolve(directory, "client/docker/Dockerfile"),
+    "utf8",
+  );
+  if (
+    assets.gh?.version !== quality.gh?.version ||
+    !/^2\.[0-9]+\.[0-9]+$/.test(quality.gh?.version ?? "")
+  )
+    throw new Error("Update GitHub CLI image and quality pins together.");
+  if (
+    swift.schemaVersion !== 1 ||
+    !/^swift:6\.[0-9]+\.[0-9]+-bookworm@sha256:[a-f0-9]{64}$/.test(
+      swift.compiler?.image ?? "",
+    ) ||
+    !dockerfile.includes(`FROM ${swift.compiler.image} AS ci-swift`)
+  )
+    throw new Error(
+      "Swift compiler image must match the digest-pinned source build.",
+    );
+  for (const name of ["swift-format", "swiftlint"]) {
+    const tool = swift.tools?.[name];
+    if (
+      tool?.version !== quality[name]?.version ||
+      tool.lock !== `ci-${name}.resolved.json` ||
+      (quality[name].revision &&
+        swift.artifacts[tool.source]?.revision !== quality[name].revision)
+    )
+      throw new Error(`Update ${name} source build and quality pins together.`);
+    const lock = readFileSync(resolve(directory, "client/docker", tool.lock));
+    if (createHash("sha256").update(lock).digest("hex") !== tool.lockSha256)
+      throw new Error(
+        `${name} build lock changed; refresh its reviewed source inventory.`,
+      );
+    const pins = JSON.parse(lock).pins;
+    if (
+      !Array.isArray(pins) ||
+      pins.length !== Object.keys(tool.dependencies).length ||
+      pins.some((pin) => {
+        const artifact = swift.artifacts[tool.dependencies[pin.identity]];
+        return (
+          !artifact ||
+          artifact.revision !== pin.state?.revision ||
+          artifact.repository.toLowerCase() !==
+            pin.location?.replace(/\.git$/, "").toLowerCase()
+        );
+      })
+    )
+      throw new Error(`${name} SwiftPM dependency source inventory differs.`);
+  }
+}
+
 export function readImageLock(directory = root) {
   checkBrowserPins(directory);
   return validateLock(
@@ -90,6 +147,7 @@ if (
   const directory = values.directory ? resolve(values.directory) : root;
   if (values.inputs) {
     checkBrowserPins(directory);
+    checkToolPins(directory);
     console.log(inputDigest(directory));
   } else console.log(JSON.stringify(readImageLock(directory)));
 }

@@ -26,7 +26,7 @@ link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-pres
 .Target placement and artifact flow. Production credentials never enter PR runners.
 image::{architecture-diagrams-root}/release-trust-boundaries.svg["Reviewed source enters protected release jobs; final packages pass isolated native qualification before artifact storage and channel delivery.",width=760]
 
-* GitHub Actions is one execution adapter for version-controlled scripts. macOS jobs use `macos-latest` and record resolved image, architecture and toolchain identity; additional runner/OS/architecture matrices are outside this increment. Linux may run shared checks.
+* GitHub Actions is one execution adapter for version-controlled scripts. macOS jobs use `macos-latest` and record resolved image, architecture and toolchain identity; additional runner/OS/architecture matrices are outside this increment. Portable checks use the same digest-pinned Linux tool image locally and in CI. Only macOS-specific host behavior and Apple tooling execute natively. Docker-steering integration tests remain host orchestration; ordinary tool containers receive neither a Docker socket nor a privileged nested daemon.
 * Qualification uses disposable synthetic workspaces, not personal data or credentials.
 * Supply credentials through supported CI environment variables only to authorized operations, never to dependency installation or ordinary tests. No automatic secret-manager access is introduced.
 * Distribute intended public packages only; signing material and private notarization/publication diagnostics stay outside them.

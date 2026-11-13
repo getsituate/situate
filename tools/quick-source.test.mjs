@@ -91,10 +91,21 @@ test("quick source checks reject expired budgets and external paths", async (t) 
 test("large source selections check every script and report syntax errors at the end", async (t) => {
   const root = fixture(t);
   const files = scripts(root, 163);
-  writeFileSync(join(root, files.at(-1)), "export const = 1;\n");
-  assert.deepEqual(await checkSources(root, files), [
+  const children = syntaxProcesses(t);
+  const checking = checkSources(root, files);
+  let finished = 0;
+  while (finished < files.length) {
+    const batch = children.filter((child) => !child.closed);
+    for (const child of batch) {
+      child.finish(child.path === join(root, files.at(-1)) ? 1 : 0);
+      finished++;
+    }
+    await new Promise(setImmediate);
+  }
+  assert.deepEqual(await checking, [
     "input-162.mjs: JavaScript syntax check failed",
   ]);
+  assert.equal(children.length, files.length);
 });
 
 test("syntax checks run at most four processes and retain mutation checks", async (t) => {

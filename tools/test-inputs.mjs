@@ -8,6 +8,7 @@ const workshopConfig =
 const platformInput =
   /^tools\/bootstrap-mobile|^client\/scripts\/(?:ios-|test-native-ios|native-ios-|generate-mobile-permissions)/;
 const declarations = /^changes\//;
+const swiftPolicy = /^\.(?:swift-format|swiftlint\.yml)$/;
 const delivery =
   /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery))(?:\.test)?\.mjs$/;
 const migrationContracts =
@@ -130,11 +131,13 @@ const rules = {
     /^client\/crates\/situate-migrations\//.test(file),
   "client-agent-runtime": core,
   "client-core": core,
+  "client-core-macos": core,
   "client-rust-coverage": core,
   "client-host": core,
   "client-workshop-host": (file) => core(file) || workshopConfig.test(file),
   "client-format": (file) => rust.test(file),
   "client-clippy": core,
+  "client-host-clippy": core,
   "client-workshop-clippy": (file) => core(file) || workshopConfig.test(file),
   "workshop-format": (file) => rust.test(file) || workshopConfig.test(file),
   "client-native": native,
@@ -145,6 +148,7 @@ const rules = {
   "client-workspace-access-swift": (file) => rust.test(file),
   "client-docker-context": (file) => /^client\/docker\//.test(file),
   "dev-tui-unit": dev,
+  "dev-tui-macos": dev,
   "dev-tui-format": (file) => file.startsWith("tools/dev-tui/"),
   "dev-tui-clippy": dev,
   "requirements-unit": requirements,
@@ -182,7 +186,7 @@ const rules = {
   "root-audit": () => false,
   "root-rust": (file) => rust.test(file),
   "root-kotlin": (file) => rust.test(file),
-  "root-swift": (file) => rust.test(file),
+  "root-swift": (file) => rust.test(file) || swiftPolicy.test(file),
 };
 
 export function hasSuiteInputRule(suite) {
@@ -212,6 +216,7 @@ function knownInput(file) {
     clientConfig.test(file) ||
     appConfig.test(file) ||
     declarations.test(file) ||
+    swiftPolicy.test(file) ||
     /^(tools\/dev-tui\/|requirements\/|\.pi\/|\.github\/|client\/scripts\/|client\/docker\/)/.test(
       file,
     )

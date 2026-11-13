@@ -15,11 +15,12 @@ import {
   sourceFiles,
   suiteInventory,
 } from "./test.mjs";
+import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
 
-const linuxSuites = () =>
-  suiteInventory(sourceFiles(root), "linux").map(
-    ({ covers: _covers, ...suite }) => suite,
-  );
+const hostSuites = (platform) =>
+  suiteInventory(sourceFiles(root), platform)
+    .filter((suite) => suiteAvailable(suite, platform))
+    .map(({ covers: _covers, ...suite }) => suite);
 const fixture = () => ({
   profile: "all",
   suites: [
@@ -34,7 +35,6 @@ const fixture = () => ({
     { id: "client-docker-context", kind: "integration" },
   ],
 });
-
 function cli(args, selection) {
   const environment = { ...process.env };
   delete environment.NODE_TEST_CONTEXT;
@@ -48,7 +48,7 @@ function cli(args, selection) {
   });
 }
 
-test("nonempty disjoint shards exactly cover the full Linux registry", () => {
+test("nonempty disjoint diagnostic shards exactly cover the available Linux registry", () => {
   assert.deepEqual(shards, [
     "quick",
     "checks",
@@ -58,119 +58,169 @@ test("nonempty disjoint shards exactly cover the full Linux registry", () => {
     "native",
     "docker",
   ]);
-  const plans = shards.map((shard) =>
-    createShardPlan(shard, root, undefined, { extended: true }),
-  );
-  const combined = plans.flatMap((plan) => plan.suites);
-  assert.equal(
-    new Set(combined.map((suite) => suite.id)).size,
-    combined.length,
-  );
+  const inventory = hostSuites("linux");
+  const partitions = partitionPlan({ suites: inventory });
+  const plans = shards
+    .filter((shard) => partitions[shard].suites.length)
+    .map((shard) =>
+      createShardPlan(shard, root, undefined, {
+        extended: true,
+        platform: "linux",
+      }),
+    );
+  const combined = plans.flatMap(({ suites }) => suites);
+  assert.equal(new Set(combined.map(({ id }) => id)).size, combined.length);
   const byId = (suites) => [...suites].sort((a, b) => a.id.localeCompare(b.id));
-  assert.deepEqual(byId(combined), byId(linuxSuites()));
+  assert.deepEqual(byId(combined), byId(inventory));
   for (const plan of plans) {
     assert.ok(plan.suites.length > 0);
     assert.equal(plan.profile, "all");
     assert.equal(plan.changed, false);
     assert.equal(plan.base, null);
   }
-  assert.deepEqual(
-    plans[1].suites.filter(
-      (suite) => !["unit", "integration", "check"].includes(suite.kind),
-    ),
-    [],
+  assert.deepEqual(partitions.native.suites, []);
+  assert.throws(
+    () =>
+      createShardPlan("native", root, undefined, {
+        extended: true,
+        platform: "linux",
+      }),
+    /No suites selected/,
   );
-  assert.ok(plans[2].suites.every((suite) => suite.kind === "browser"));
+  assert.ok(
+    partitions.checks.suites.every(({ kind }) =>
+      ["unit", "integration", "check"].includes(kind),
+    ),
+  );
+  assert.ok(partitions.browser.suites.every(({ kind }) => kind === "browser"));
   for (const shard of ["workshop-chromium", "workshop-webkit"]) {
     assert.deepEqual(
-      plans.find((plan) => plan.shard === shard).suites.map(({ id }) => id),
+      partitions[shard].suites.map(({ id }) => id),
       [shard],
     );
-    assert.ok(!plans[2].suites.some(({ id }) => id === shard));
+    assert.ok(!partitions.browser.suites.some(({ id }) => id === shard));
   }
   assert.deepEqual(
-    plans[2].suites.map(({ id }) => id),
-    linuxSuites()
+    partitions.docker.suites.map(({ id }) => id),
+    ["client-docker-context", "design-website-hosting"],
+  );
+});
+
+test("integration diagnostics follow declared host availability while native journeys remain macOS-only", () => {
+  for (const platform of ["linux", "darwin"])
+    for (const extended of [false, true]) {
+      const checks = createShardPlan("checks", root, undefined, {
+        platform,
+        extended,
+      });
+      const owner = hostSuites(platform).find(
+        ({ id }) => id === "client-executor-integration",
+      );
+      assert.equal(
+        checks.suites.some(({ id }) => id === "client-executor-integration"),
+        Boolean(owner && (extended || supportedSuiteEnabled(owner))),
+      );
+      assert.ok(
+        checks.suites.every((suite) => suiteAvailable(suite, platform)),
+      );
+    }
+  const native = createShardPlan("native", root, undefined, {
+    platform: "darwin",
+    extended: true,
+  });
+  assert.deepEqual(
+    native.suites.map(({ id }) => id),
+    [
+      "client-native",
+      "client-agent-e2e",
+      "client-onboarding-e2e",
+      "client-plugins-e2e",
+    ],
+  );
+  assert.ok(native.suites.every(({ command }) => command === process.execPath));
+  assert.deepEqual(native.suites[0].args, ["scripts/test-native.mjs"]);
+});
+
+test("extended plans include diagnostics only when available on the requested host", () => {
+  for (const platform of ["linux", "darwin"])
+    assert.deepEqual(
+      createPlan({ extended: true, platform }).suites,
+      hostSuites(platform),
+    );
+});
+
+test("supported Linux shards retain portable tooling and exclude macOS or opt-in checks", () => {
+  const checks = createShardPlan("checks", root, undefined, {
+    platform: "linux",
+  });
+  assert.equal(checks.scope, "supported");
+  assert.equal(checks.profile, "supported");
+  assert.ok(checks.deferredSuiteIds.includes("root-kotlin"));
+  assert.ok(!checks.deferredSuiteIds.includes("client-core"));
+  const supportedIds = new Set(
+    createPlan({ platform: "linux" }).suites.map(({ id }) => id),
+  );
+  assert.deepEqual(
+    checks.suites,
+    partitionPlan({ suites: hostSuites("linux") }).checks.suites.filter(
+      ({ id }) => supportedIds.has(id),
+    ),
+  );
+  assert.ok(
+    checks.suites.every(
+      (suite) => suiteAvailable(suite, "linux") && supportedSuiteEnabled(suite),
+    ),
+  );
+  assert.ok(!checks.suites.some(({ id }) => id === "root-kotlin"));
+  assert.ok(
+    createShardPlan("quick", root, undefined, {
+      platform: "linux",
+    }).suites.some(({ id }) => id === "client-vue"),
+  );
+  assert.deepEqual(
+    createShardPlan("browser", root, undefined, {
+      platform: "linux",
+    }).suites.map(({ id }) => id),
+    hostSuites("linux")
       .filter(
-        ({ kind, id }) =>
-          kind === "browser" &&
-          !["workshop-chromium", "workshop-webkit"].includes(id),
+        (suite) => suite.kind === "browser" && supportedSuiteEnabled(suite),
       )
       .map(({ id }) => id),
   );
-  assert.ok(plans[5].suites.every((suite) => suite.kind === "native"));
-  assert.deepEqual(
-    plans[6].suites.map((suite) => suite.id),
-    ["client-docker-context", "design-website-hosting"],
-  );
-  const native = plans[5].suites.find((suite) => suite.id === "client-native");
-  assert.equal(native.command, "dbus-run-session");
-  assert.deepEqual(native.args.slice(0, 4), [
-    "--",
-    "xvfb-run",
-    "-a",
-    process.execPath,
-  ]);
-});
-
-test("macOS executor boundaries are excluded from shared checks and retain their diagnostic owner", () => {
-  const id = "client-executor-integration";
-  const checks = createShardPlan("checks");
-  assert.ok(!checks.suites.some((suite) => suite.id === id));
-  assert.equal(
-    createShardPlan("checks", root, undefined, { extended: true }).suites.find(
-      (suite) => suite.id === id,
-    ).kind,
-    "integration",
-  );
-  assert.ok(checks.deferredSuiteIds.includes(id));
-  assert.ok(!createShardPlan("quick").suites.some((suite) => suite.id === id));
-  assert.ok(
-    !createShardPlan("browser", root, undefined, {
-      extended: true,
-    }).suites.some((suite) => suite.id === id),
-  );
-});
-
-test("the extended host plan remains full and unfiltered", () => {
-  assert.deepEqual(
-    createPlan({ extended: true }).suites,
-    suiteInventory(sourceFiles(root)).map(
-      ({ covers: _covers, ...suite }) => suite,
-    ),
-  );
-});
-
-test("shared shard plans exclude macOS-host suites while diagnostics preserve raw partitions", () => {
-  const checks = createShardPlan("checks");
-  assert.equal(checks.scope, "macos");
-  assert.equal(checks.profile, "supported");
-  assert.ok(checks.deferredSuiteIds.includes("client-core"));
-  assert.ok(checks.deferredSuiteIds.includes("root-kotlin"));
-  for (const id of [
-    "client-core",
-    "client-host",
-    "client-clippy",
-    "root-kotlin",
-    "dev-tui-unit",
-  ])
-    assert.ok(!checks.suites.some((suite) => suite.id === id), id);
-  assert.ok(
-    createShardPlan("quick").suites.some(({ id }) => id === "client-vue"),
-  );
-  for (const shard of [
-    "browser",
-    "workshop-chromium",
-    "workshop-webkit",
-    "native",
-  ])
-    assert.throws(() => createShardPlan(shard), /No suites selected/);
+  for (const shard of ["workshop-chromium", "workshop-webkit", "native"])
+    assert.throws(
+      () => createShardPlan(shard, root, undefined, { platform: "linux" }),
+      /No suites selected/,
+    );
   const selection = Object.fromEntries(shards.map((shard) => [shard, []]));
-  selection.browser = ["client-browser"];
-  assert.throws(() => createShardPlan("browser", root, selection), /deferred/);
+  selection["workshop-chromium"] = ["workshop-chromium"];
+  assert.throws(
+    () =>
+      createShardPlan("workshop-chromium", root, selection, {
+        platform: "linux",
+      }),
+    /deferred/,
+  );
   assert.equal(
-    createShardPlan("browser", root, selection, { extended: true }).scope,
+    createShardPlan("workshop-chromium", root, selection, {
+      extended: true,
+      platform: "linux",
+    }).scope,
     "extended",
+  );
+  selection.native = ["client-native"];
+  assert.throws(
+    () =>
+      createShardPlan("native", root, selection, {
+        extended: true,
+        platform: "linux",
+      }),
+    /Invalid suite/,
+  );
+  assert.ok(
+    createShardPlan("checks", root, undefined, {
+      platform: "darwin",
+    }).suites.some(({ id }) => id === "client-core"),
   );
 });
 
@@ -195,28 +245,21 @@ test("new suites join their category automatically; unknown categories fail", ()
   );
 });
 
-test("empty shards and duplicate suite IDs fail rather than report success", () => {
-  for (const id of [
-    "runner-unit",
-    "browser",
-    "workshop-chromium",
-    "workshop-webkit",
-    "native",
-    "client-docker-context",
-  ]) {
-    const plan = fixture();
-    plan.suites = plan.suites.filter((suite) => suite.id !== id);
-    assert.throws(() => partitionPlan(plan), /No suites selected/);
-  }
+test("unselected empty families do not block other shards, but empty selections never pass", () => {
   const plan = fixture();
-  plan.suites = plan.suites.filter(
-    (suite) => !["unit", "check", "integration"].includes(suite.id),
-  );
-  assert.throws(() => partitionPlan(plan), /No suites selected.*checks/);
+  plan.suites = plan.suites.filter(({ kind }) => kind !== "native");
+  const partitions = partitionPlan(plan);
+  assert.deepEqual(partitions.native.suites, []);
+  assert.equal(partitions.checks.suites.length, 3);
   assert.throws(() => partitionPlan({ suites: [] }), /No suites selected/);
   const duplicate = fixture();
   duplicate.suites.push(duplicate.suites[0]);
   assert.throws(() => partitionPlan(duplicate), /Duplicate suite/);
+  const selection = Object.fromEntries(shards.map((shard) => [shard, []]));
+  assert.throws(
+    () => createShardPlan("checks", root, selection, { platform: "linux" }),
+    /No suites selected/,
+  );
 });
 
 test("options require a valid shard and bounded per-suite timeout", () => {
@@ -240,35 +283,49 @@ test("options require a valid shard and bounded per-suite timeout", () => {
       () => parseOptions(["--shard", "checks", "--timeout", timeout]),
       /--timeout/,
     );
+  assert.throws(
+    () => createShardPlan("checks", root, undefined, { platform: "win32" }),
+    /platform must/,
+  );
 });
 
-test("CLI lists Linux JSON plans without executing suites and reports option errors", () => {
-  const listed = cli(["--shard", "native", "--list", "--json", "--extended"]);
+test("CLI lists available Linux JSON plans without executing suites and reports option errors", () => {
+  const listed = cli(["--shard", "checks", "--list", "--json", "--extended"]);
   assert.equal(listed.status, 0, listed.stderr);
   assert.deepEqual(JSON.parse(listed.stdout), {
-    ...createShardPlan("native", root, undefined, { extended: true }),
+    ...createShardPlan("checks", root, undefined, {
+      extended: true,
+      platform: "linux",
+    }),
     status: "planned",
   });
-  const invalid = cli(["--shard", "missing", "--json"]);
-  assert.equal(invalid.status, 2);
-  assert.equal(JSON.parse(invalid.stdout).status, "error");
+  for (const args of [
+    ["--shard", "missing", "--json"],
+    ["--shard", "native", "--list", "--json", "--extended"],
+  ]) {
+    const invalid = cli(args);
+    assert.equal(invalid.status, 2);
+    assert.equal(JSON.parse(invalid.stdout).status, "error");
+  }
   if (process.platform !== "linux") {
-    const execution = cli(["--shard", "native", "--json"]);
+    const execution = cli(["--shard", "checks", "--json"]);
     assert.equal(execution.status, 2);
     assert.match(JSON.parse(execution.stdout).error, /only execute on Linux/);
   }
 });
 
-test("selection filters only registered suites in their assigned shard", () => {
+test("selection filters only registered suites in their host and assigned shard", () => {
   const selection = Object.fromEntries(shards.map((shard) => [shard, []]));
   selection.quick = ["root-lint"];
-  selection.browser = ["client-browser"];
+  selection.browser = ["requirements-browser"];
   assert.deepEqual(
-    createShardPlan("quick", root, selection).suites.map(({ id }) => id),
+    createShardPlan("quick", root, selection, { platform: "linux" }).suites.map(
+      ({ id }) => id,
+    ),
     ["root-lint"],
   );
   assert.throws(
-    () => createShardPlan("native", root, selection),
+    () => createShardPlan("native", root, selection, { platform: "linux" }),
     /No suites selected/,
   );
   for (const invalid of [
@@ -279,13 +336,17 @@ test("selection filters only registered suites in their assigned shard", () => {
     { ...selection, checks: ["root-lint"] },
     { ...selection, browser: ["unknown"] },
   ])
-    assert.throws(() => createShardPlan("quick", root, invalid));
+    assert.throws(() =>
+      createShardPlan("quick", root, invalid, { platform: "linux" }),
+    );
   assert.throws(
     () =>
-      createShardPlan("quick", root, {
-        ...selection,
-        quick: ["root-lint", "root-lint"],
-      }),
+      createShardPlan(
+        "quick",
+        root,
+        { ...selection, quick: ["root-lint", "root-lint"] },
+        { platform: "linux" },
+      ),
     /Duplicate selected suite/,
   );
 });

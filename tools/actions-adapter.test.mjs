@@ -19,7 +19,55 @@ import {
   matrices,
   resolveMergeGroupHeads,
   validatePlan,
+  diagnosticPlan,
+  imageBuildRequired,
 } from "./actions-adapter.mjs";
+
+test("tool-image selection ignores unchanged tool inputs and honors an explicit rebuild", () => {
+  const pinned = "a".repeat(64);
+  assert.equal(imageBuildRequired("push", pinned, pinned), false);
+  assert.equal(imageBuildRequired("push", "b".repeat(64), pinned), true);
+  assert.equal(imageBuildRequired("workflow_dispatch", pinned, pinned), true);
+  assert.throws(
+    () => imageBuildRequired("pull_request", pinned, pinned),
+    /selection/,
+  );
+});
+
+test("optional diagnostics separate portable coverage, native coverage and Docker orchestration", async () => {
+  assert.deepEqual(
+    (await diagnosticPlan("coverage", "portable")).suites.map(({ id }) => id),
+    ["client-vue-coverage"],
+  );
+  assert.deepEqual(
+    (await diagnosticPlan("coverage", "native")).suites.map(({ id }) => id),
+    ["client-rust-coverage"],
+  );
+  const portable = (await diagnosticPlan("design", "portable")).suites.map(
+    ({ id }) => id,
+  );
+  for (const id of [
+    "root-swift",
+    "client-browser",
+    "client-core",
+    "dev-tui-unit",
+  ])
+    assert(portable.includes(id));
+  for (const id of [
+    "client-host",
+    "client-native",
+    "client-core-macos",
+    "client-docker-context",
+  ])
+    assert(!portable.includes(id));
+  assert.deepEqual(
+    (await diagnosticPlan("design", "docker")).suites
+      .map(({ id }) => id)
+      .sort(),
+    ["client-docker-context", "design-website-hosting"],
+  );
+  await assert.rejects(diagnosticPlan("provider", "portable"), /selection/);
+});
 
 const source = "a".repeat(40);
 const base = "b".repeat(40);

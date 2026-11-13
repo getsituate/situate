@@ -60,12 +60,29 @@ export function ordinaryEnvironment(environment = process.env) {
     "CARGO_HOME",
     "RUSTUP_HOME",
     "CARGO_NET_OFFLINE",
+    "RUSTUP_TOOLCHAIN",
+    "npm_config_cache",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "CARGO_INCREMENTAL",
+    "CARGO_PROFILE_DEV_DEBUG",
+    "CARGO_PROFILE_TEST_DEBUG",
+    "LIBGL_ALWAYS_SOFTWARE",
+    "WEBKIT_DISABLE_DMABUF_RENDERER",
+    "SITUATE_CI_IMAGE",
+    "SITUATE_TOOL_CONTAINER",
     "SITUATE_COORDINATED_WORKTREE",
     "SITUATE_NATIVE_EXECUTOR",
     "SITUATE_NATIVE_VM_CONFIG",
     "SITUATE_COMPILER_CACHE",
     "SCCACHE_DIR",
   ];
+  if (environment.SITUATE_TOOL_CONTAINER === "1") {
+    names.push("NSS_WRAPPER_PASSWD", "NSS_WRAPPER_GROUP");
+    if (environment.SITUATE_TOOL_BUILD_SLOTS === "1")
+      names.push("SITUATE_TOOL_BUILD_SLOTS");
+    if (environment.LD_PRELOAD === "/opt/ci-tools/libnss_wrapper.so")
+      names.push("LD_PRELOAD");
+  }
   return Object.fromEntries(
     names
       .filter((key) => Object.hasOwn(environment, key))
@@ -352,13 +369,45 @@ export async function runLane(
       };
     return suite;
   });
+  if (lane.host === "linux" && lane.execution !== "host-docker" && !runner) {
+    if (environment.SITUATE_TOOL_CONTAINER !== "1") {
+      const { runContainerLane } = await import("./pipeline-container.mjs");
+      return runContainerLane(root, plan, laneId, {
+        environment,
+        signal,
+        onEvent,
+      });
+    }
+    assert(
+      process.platform === "linux" && existsSync("/.dockerenv"),
+      "Portable checks require the pinned Linux tool container",
+    );
+    const { readImageLock } = await import("./ci-image.mjs");
+    assert.equal(
+      environment.SITUATE_CI_IMAGE,
+      readImageLock(root).image,
+      "Unexpected tool image",
+    );
+  }
+  if (environment.SITUATE_TOOL_CONTAINER === "1" && !runner) {
+    const { prepareContainerLane } =
+      await import("./pipeline-container-entry.mjs");
+    prepareContainerLane(root, suites);
+  }
+  const executionEnvironment =
+    lane.execution === "host-docker"
+      ? (await import("./pipeline-container.mjs")).hostContainerEnvironment(
+          environment,
+        )
+      : ordinaryEnvironment(environment);
   const report = await (runner ?? tests.runPlan)(
     { profile: "supported", suites },
     {
       directory: root,
       jobs: 1,
+      timeout: lane.timeoutSeconds ?? 600,
       output: process.stderr,
-      environment: ordinaryEnvironment(environment),
+      environment: executionEnvironment,
       ...(execute ? { execute } : {}),
       ...(prepare ? { prepare } : {}),
       signal,
