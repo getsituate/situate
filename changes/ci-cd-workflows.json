@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "ci-cd-workflows",
-  "behaviorDigest": "a64f5c057ebfdee0ec64957d81cfd2c0ed69e89226d60351ea04434bfe71ea02",
+  "behaviorDigest": "7319a6eee88c5124bea237d0d65a5e28a64c2c253a9f4da76f79332ba8265518",
   "locales": {
     "en": {
       "title": "Changes",
@@ -15,12 +15,12 @@
   "emptyReason": "Delivery automation and verification tooling; no application-facing release notes.",
   "translationApprovals": {
     "de": {
-      "sourceHash": "6ad59a30343c12ba7a4011a80f7ee8aa12d33c5bf135830b697125f64a108ba4",
-      "translationHash": "52b9c1ad160c1777284f1fdbd4a7ef84f8528aa4637061c7b8cf442dcdd29080"
+      "sourceHash": "83b81977bd340e7b8e519b4e3f14df112625cf8f896d8f166665b01f947e301b",
+      "translationHash": "97c2349e1d101ea3ddedcbb0963fe14e29400f7f0cc2c6ba89786dd5d33f485d"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "6ad59a30343c12ba7a4011a80f7ee8aa12d33c5bf135830b697125f64a108ba4"
+    "sourceHash": "83b81977bd340e7b8e519b4e3f14df112625cf8f896d8f166665b01f947e301b"
   }
 }
