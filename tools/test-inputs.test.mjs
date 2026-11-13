@@ -34,6 +34,27 @@ test("plain documentation is not a runtime input, but remains a link contract in
   ]);
 });
 
+test("security policy selects document checks without runtime or build suites", () => {
+  const file = "SECURITY.md";
+  const documentChecks = new Set([
+    "quick-source",
+    "root-format",
+    "root-secrets",
+    "design-contracts",
+  ]);
+  assert.equal(requiresFullSelection(file), false);
+  for (const suite of suiteInventory(sourceFiles(root), "darwin"))
+    assert.deepEqual(
+      affected(suite.id, file),
+      documentChecks.has(suite.id) ? [file] : [],
+      suite.id,
+    );
+  assert.deepEqual(
+    affected("client-vue", "client/app/src/prompts/SECURITY.md"),
+    ["client/app/src/prompts/SECURITY.md"],
+  );
+});
+
 test("release content retains compiler, packaging, app and terminal consumers", () => {
   const files = [
     "releases/1.10.0/release.json",

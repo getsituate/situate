@@ -1,4 +1,4 @@
-name: Dependency audit
+name: Rust dependency audit
 
 on:
   schedule:
@@ -15,13 +15,9 @@ concurrency:
 
 jobs:
   audit:
-    name: Dependency vulnerabilities (${{ matrix.ecosystem }})
+    name: Rust advisories and crate maintenance
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        ecosystem: [npm, cargo]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -31,16 +27,13 @@ jobs:
           volta-version: 2.0.2
       - id: image
         uses: ./.github/actions/ci-image
-      - name: Audit locked dependencies
+      - name: Audit locked Rust dependencies
         env:
           CI_IMAGE: ${{ steps.image.outputs.image }}
-          ECOSYSTEM: ${{ matrix.ecosystem }}
         run: |
-          if test "$ECOSYSTEM" = npm; then check=audit; else check=rust-audit; fi
           docker run --rm --init --user "$(id -u):$(id -g)" \
             --cap-drop ALL --security-opt no-new-privileges \
             -e HOME=/tmp/audit-home -e CARGO_HOME=/tmp/audit-cargo \
-            -e npm_config_cache=/tmp/audit-npm \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
             "$CI_IMAGE" bash -euo pipefail -c \
-            'mkdir -p "$HOME" "$CARGO_HOME" "$npm_config_cache"; source /opt/ci-tools/ci-user.sh; exec node tools/quality.mjs "$1"' audit "$check"
+            'mkdir -p "$HOME" "$CARGO_HOME"; source /opt/ci-tools/ci-user.sh; exec node tools/quality.mjs rust-audit'
