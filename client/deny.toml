@@ -22,6 +22,8 @@ targets = [
 
 [advisories]
 version = 2
+# Include transitive unsoundness advisories such as glib's RUSTSEC-2024-0429.
+unsound = "all"
 # Temporary exception for an unmaintained build dependency in Tauri's GTK 0.18 stack.
 # Remove when a supported Tauri/GTK update eliminates proc-macro-error from Cargo.lock.
 # https://github.com/tauri-apps/tauri/issues/10910
