@@ -40,7 +40,7 @@ test("Quality runs only active MVP jobs and leaves coverage explicitly manual", 
   assert.doesNotMatch(coverage, /^ {2}(schedule|push|pull_request):/m);
 });
 
-test("dependency audits run separately on a schedule or manual dispatch", () => {
+test("Rust advisories retain a scheduled and manual audit alongside Dependabot", () => {
   const audit = readFileSync(
     join(root, ".github/workflows/dependency-audit.yml"),
     "utf8",
@@ -48,9 +48,8 @@ test("dependency audits run separately on a schedule or manual dispatch", () => 
   assert.match(audit, /^ {2}schedule:/m);
   assert.match(audit, /^ {2}workflow_dispatch:/m);
   assert.doesNotMatch(audit, /^ {2}(pull_request|push):/m);
-  assert.match(audit, /ecosystem: \[npm, cargo\]/);
-  assert.match(audit, /fail-fast: false/);
-  assert.match(audit, /check=audit; else check=rust-audit/);
+  assert.match(audit, /exec node tools\/quality\.mjs rust-audit/);
+  assert.doesNotMatch(audit, /matrix:|ECOSYSTEM|check=audit|npm/);
   assert.match(audit, /\.\/\.github\/actions\/ci-image/);
   assert.doesNotMatch(quality, /dependency-audit|rust-audit/);
 });
@@ -64,6 +63,10 @@ test("Dependabot limits routine dependency updates without disabling security up
     assert.ok(config.includes(`- ${directory}\n`));
   assert.equal((config.match(/open-pull-requests-limit: 0/g) ?? []).length, 2);
   assert.doesNotMatch(config, /ignore:/);
+  assert.equal((config.match(/applies-to: security-updates/g) ?? []).length, 2);
+  assert.equal((config.match(/prefix: "fix\(deps\)"/g) ?? []).length, 2);
+  assert.match(config, /open-pull-requests-limit: 5/);
+  assert.match(config, /prefix: "ci\(deps\)"/);
 });
 
 test("macOS starts after planning and retains product browsers, Rust and Swift checks", () => {

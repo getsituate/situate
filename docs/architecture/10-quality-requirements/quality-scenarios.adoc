@@ -73,7 +73,7 @@ They are not additional catalog priorities or evidence that all user-facing qual
 |link:{architecture-repository-root}/client/scripts/bundle-report.mjs[Bundle policy] and link:{architecture-repository-root}/client/scripts/bundle-report.test.mjs[manifest-based tests]; see <<frontend-bundle-budget>>. Size does not measure native startup or first-use latency.
 |A dependency violates the configured advisory, license, ban or source policy.
 |The applicable dependency check reports a failure rather than suppressing the finding to keep CI green.
-|link:{architecture-repository-root}/client/deny.toml[Rust dependency policy] and link:{architecture-docs-root}/development/testing.md#ci-gates[CI gates]. Advisory audits run in the separate link:{architecture-repository-root}/.github/workflows/dependency-audit.yml[Dependency audit workflow], not the required host-quality gate. These scans do not establish the absence of every vulnerability.
+|link:{architecture-repository-root}/client/deny.toml[Rust dependency policy] and link:{architecture-docs-root}/development/testing.md#ci-gates[CI gates]. Rust advisory audits run in the separate link:{architecture-repository-root}/.github/workflows/dependency-audit.yml[Rust dependency audit workflow], not the required host-quality gate. Dependabot monitors npm vulnerabilities and supplies security updates for npm and Cargo. These scans do not establish the absence of every vulnerability.
 |The secret scanner detects credentials in source history.
 |The history scan reports failure.
 |link:{architecture-docs-root}/development/testing.md#ci-gates[Quality workflow secret scanning]. Automated scans do not detect all forms of confidential information.
