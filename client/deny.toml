@@ -1,5 +1,17 @@
 [graph]
 # Audit the macOS/iOS MVP targets, independently of the CI host OS.
+# glib 0.18.5 (RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g) remains in both
+# client/Cargo.lock and client/workshop/src-tauri/Cargo.lock via Tauri's GTK stack.
+# With the locked Tauri 2.12.3, neither workspace has a normal, build or dev
+# dependency path to glib on any Apple target below, even with all features.
+# Recheck both manifests after dependency/feature changes from the repository root:
+# cargo tree --locked --manifest-path <manifest> --all-features \
+#   --edges normal,build,dev --target <target-below> --invert glib@0.18.5
+# The same command with --target x86_64-unknown-linux-gnu still finds glib.
+# Linux remains affected; do not add an advisory ignore or resume its support
+# without a fixed upstream stack and renewed target-specific review.
+# https://github.com/tauri-apps/tauri/issues/12564
+# https://github.com/gtk-rs/gtk-rs-core/pull/2009
 targets = [
   "aarch64-apple-darwin",
   "x86_64-apple-darwin",
@@ -10,6 +22,8 @@ targets = [
 
 [advisories]
 version = 2
+# Include transitive unsoundness advisories such as glib's RUSTSEC-2024-0429.
+unsound = "all"
 # Temporary exception for an unmaintained build dependency in Tauri's GTK 0.18 stack.
 # Remove when a supported Tauri/GTK update eliminates proc-macro-error from Cargo.lock.
 # https://github.com/tauri-apps/tauri/issues/10910
