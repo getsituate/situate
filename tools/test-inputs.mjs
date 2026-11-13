@@ -1,5 +1,19 @@
 const shared =
-  /(^|\/)(package(?:-lock)?\.json|Cargo\.(toml|lock)|rust-toolchain(?:\.toml)?|\.node-version|[^/]+\.config\.[^/]+|tsconfig[^/]*\.json|\.prettier[^/]*|\.editorconfig|\.gitignore)$/;
+  /^(package(?:-lock)?\.json|\.node-version|\.prettier[^/]*|prettier\.config\.[^/]+|eslint\.config\.[^/]+|\.editorconfig|\.gitignore)$/;
+const clientConfig =
+  /^client\/(package(?:-lock)?\.json|Cargo\.(toml|lock)|rust-toolchain(?:\.toml)?|\.node-version)$/;
+const appConfig = /^client\/app\/[^/]+$/;
+const workshopConfig =
+  /^client\/workshop\/[^/]+$|^client\/workshop\/src-tauri\//;
+const platformInput =
+  /^tools\/bootstrap-mobile|^client\/scripts\/(?:ios-|test-native-ios|native-ios-|generate-mobile-permissions)/;
+const declarations = /^changes\//;
+const delivery =
+  /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery))(?:\.test)?\.mjs$/;
+const migrationContracts =
+  /^tools\/(?:migration-history|published-migrations)(?:\.test)?\.mjs$/;
+const migrationConsumers =
+  /^(?:tools\/(?:release|release-catalog|release-inputs|release-qualification)|client\/scripts\/apple-release|infrastructure\/releases\/(?:publish|transport))(?:\.test)?\.mjs$|^client\/crates\/situate-migrations\/|^releases\//;
 const fixture =
   /(^|\/)(fixtures?|__fixtures__|tests?|src|data|templates|contracts|prompts)(\/|$)/;
 
@@ -25,7 +39,7 @@ const onboarding = /^docs\/marketing\/onboarding\//;
 const capabilityCatalog =
   /^docs\/(?:product-capability-catalog\/(?:[^/]+\.md|generate-reading-edition\.py)|(?:note|task-management|email)-capabilities-fact-check\.(?:md|pdf))$/;
 const rust =
-  /^client\/(crates|src-tauri|native|contracts)\/|^client\/(app|workshop)\/src-tauri\//;
+  /^client\/(crates|src-tauri|native|contracts)\/|^client\/app\/src-tauri\//;
 const tools = /^tools\/(?!dev-tui\/)/;
 const design = /^(design|website|infrastructure\/website)\//;
 const productionInfrastructure = /^infrastructure\/(production|releases)\//;
@@ -37,7 +51,10 @@ const product = (file) =>
 const productUnit = (file) =>
   file !== "client/app/src/plugins/executor-boundary.test.ts" && product(file);
 const workshopInput = (file) =>
-  workshop.test(file) || frontend(file) || rust.test(file);
+  workshop.test(file) ||
+  workshopConfig.test(file) ||
+  frontend(file) ||
+  rust.test(file);
 const nativeHarness =
   /^(tools\/native-vm[^/]*\.(mjs|py)|client\/scripts\/(test-native[^/]*|test-agent-e2e|native-vm[^/]*|native-smoke[^/]*|native-desktop-session|coordinated-native[^/]*|agent-e2e-runtime|document-source-fixtures)\.mjs)$/;
 const native = (file) =>
@@ -71,7 +88,30 @@ const core = (file) =>
 const rules = {
   "runner-fast": runner,
   "quick-source": () => true,
-  "runner-unit": runner,
+  "runner-unit": (file) =>
+    runner(file) && !delivery.test(file) && !migrationContracts.test(file),
+  "delivery-migrations": (file) =>
+    migrationContracts.test(file) ||
+    migrationConsumers.test(file) ||
+    [
+      "tools/test.mjs",
+      "tools/test-inputs.mjs",
+      "tools/test-scope.mjs",
+    ].includes(file),
+  "delivery-unit": (file) =>
+    delivery.test(file) ||
+    declarations.test(file) ||
+    /^releases\//.test(file) ||
+    file === "tools/test.mjs" ||
+    file === "tools/test-inputs.mjs" ||
+    file === "tools/test-scope.mjs",
+  "runner-platform": (file) => /^tools\/bootstrap-mobile/.test(file),
+  "client-scripts-platform": (file) =>
+    /^client\/scripts\/(?:ios-|test-native-ios|native-ios-|generate-mobile-permissions)/.test(
+      file,
+    ),
+  "client-scripts-platform-integration": (file) =>
+    /^client\/scripts\/ios-/.test(file),
   "runner-integration": runner,
   "client-scripts-unit": scripts,
   "client-scripts-integration": scripts,
@@ -92,11 +132,11 @@ const rules = {
   "client-core": core,
   "client-rust-coverage": core,
   "client-host": core,
-  "client-workshop-host": core,
+  "client-workshop-host": (file) => core(file) || workshopConfig.test(file),
   "client-format": (file) => rust.test(file),
   "client-clippy": core,
-  "client-workshop-clippy": core,
-  "workshop-format": (file) => rust.test(file),
+  "client-workshop-clippy": (file) => core(file) || workshopConfig.test(file),
+  "workshop-format": (file) => rust.test(file) || workshopConfig.test(file),
   "client-native": native,
   "client-agent-e2e": native,
   "client-onboarding-e2e": native,
@@ -137,6 +177,8 @@ const rules = {
   "root-format": () => true,
   "root-lint": (file) => /\.[cm]?[jt]sx?$|\.vue$/.test(file),
   "root-secrets": () => true,
+  "root-commits": () => true,
+  "root-history-secrets": () => true,
   "root-audit": () => false,
   "root-rust": (file) => rust.test(file),
   "root-kotlin": (file) => rust.test(file),
@@ -155,16 +197,24 @@ export function requiresFullSelection(file) {
 function knownInput(file) {
   return (
     isPlainDocumentation(file) ||
+    file === ".env.example" ||
     onboarding.test(file) ||
     capabilityCatalog.test(file) ||
     app.test(file) ||
     workshop.test(file) ||
+    workshopConfig.test(file) ||
     ui.test(file) ||
     rust.test(file) ||
     design.test(file) ||
     productionInfrastructure.test(file) ||
     releaseInputs(file) ||
-    /^(tools\/dev-tui\/|requirements\/|\.pi\/)/.test(file)
+    tools.test(file) ||
+    clientConfig.test(file) ||
+    appConfig.test(file) ||
+    declarations.test(file) ||
+    /^(tools\/dev-tui\/|requirements\/|\.pi\/|\.github\/|client\/scripts\/|client\/docker\/)/.test(
+      file,
+    )
   );
 }
 
@@ -174,9 +224,57 @@ export function suiteAffectedFiles(suite, files) {
   if (!hasSuiteInputRule(id)) return [...files];
   const rule = rules[id];
   return files.filter((file) => {
-    if (id === "root-format" || id === "root-secrets" || id === "quick-source")
+    if (
+      [
+        "root-format",
+        "root-secrets",
+        "root-commits",
+        "root-history-secrets",
+        "quick-source",
+      ].includes(id)
+    )
       return true;
-    if (shared.test(file)) return true;
+    if (file === ".env.example")
+      return [
+        "runner-unit",
+        "runner-integration",
+        "client-scripts-unit",
+        "client-scripts-integration",
+      ].includes(id);
+    if (/^(?:tools|client\/scripts)\/.*\.test\.mjs$/.test(file))
+      return (
+        (!id.startsWith("client-") || id.startsWith("client-scripts-")) &&
+        !id.startsWith("workshop-") &&
+        rule(file)
+      );
+    if (shared.test(file)) return id !== "root-audit";
+    if (workshopConfig.test(file))
+      return (
+        id.startsWith("workshop-") ||
+        id.startsWith("client-workshop-") ||
+        id.startsWith("client-scripts-")
+      );
+    if (platformInput.test(file))
+      return (
+        (rule(file) && !id.startsWith("client-")) ||
+        (id.startsWith("client-scripts-") && rule(file))
+      );
+    if (clientConfig.test(file))
+      return (
+        id.startsWith("client-") ||
+        id.startsWith("workshop-") ||
+        id === "root-rust" ||
+        id === "root-swift" ||
+        id === "runner-unit" ||
+        (id === "delivery-migrations" &&
+          /^client\/(?:Cargo\.(?:toml|lock)|rust-toolchain(?:\.toml)?)$/.test(
+            file,
+          ))
+      );
+    if (appConfig.test(file))
+      return id.startsWith("client-") || id === "runner-unit";
+    if (/^requirements\/(package(?:-lock)?\.json|[^/]*config[^/]*)$/.test(file))
+      return id.startsWith("requirements-");
     if (isPlainDocumentation(file))
       return (
         id === "design-contracts" ||
@@ -195,6 +293,29 @@ export function suiteAffectedFiles(suite, files) {
     if (id === "root-lint") return rule(file);
     return rule(file) || !knownInput(file);
   });
+}
+
+export function appAffected(file) {
+  if (/^(?:tools|client\/scripts)\/.*\.test\.mjs$/.test(file)) return false;
+  if (
+    isPlainDocumentation(file) ||
+    declarations.test(file) ||
+    workshopConfig.test(file) ||
+    workshop.test(file) ||
+    platformInput.test(file)
+  )
+    return false;
+  if (requiresFullSelection(file)) return true;
+  return (
+    product(file) ||
+    clientConfig.test(file) ||
+    appConfig.test(file) ||
+    nativeHarness.test(file) ||
+    /^client\/scripts\/(?:apple-|updater-|qualify-direct|release|bundle-report|localization|ai-catalog|auth-callback|native-licenses)/.test(
+      file,
+    ) ||
+    /^infrastructure\/releases\//.test(file)
+  );
 }
 
 export function suiteSelectionReasons(suite, files) {

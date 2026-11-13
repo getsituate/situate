@@ -1,284 +1,475 @@
 use crate::{
-    actions::CommandSpec,
-    app::{App, Dialog},
-    process,
+    actions::{CommandSpec, Task},
+    app::{App, Dialog, Status},
+    process::Outcome,
 };
 use crossterm::event::{KeyCode, KeyEvent};
-use serde::Deserialize;
-use std::{collections::BTreeMap, path::Path};
+use serde_json::Value;
+use std::{path::Path, process::Command};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Operation {
+pub enum Action {
+    Plan,
+    Run,
     Status,
-    StartLocal,
-    CompleteLocal,
+    Inspect,
+    Reconcile,
 }
-impl Operation {
-    pub fn name(self) -> &'static str {
+impl Action {
+    pub fn argument(self) -> &'static str {
         match self {
+            Self::Plan => "plan",
+            Self::Run => "run",
             Self::Status => "status",
-            Self::StartLocal => "start-local",
-            Self::CompleteLocal => "complete-local",
+            Self::Inspect => "inspect",
+            Self::Reconcile => "reconcile",
         }
     }
-}
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Preparation {
-    pub version: String,
-    pub phase: String,
-    pub source_path: String,
-    pub locale_paths: BTreeMap<String, String>,
-    pub baseline: Option<String>,
-    pub revision: Option<String>,
-    pub locales: Vec<String>,
-    pub error: Option<String>,
-    #[serde(default)]
-    pub checkout_changes: String,
-}
-#[derive(Default)]
-pub struct Release {
-    pub saved: Option<Preparation>,
-    pub version: String,
-    pub baseline: String,
-    pub input: String,
-    pub error: String,
-    pub build_task: Option<crate::actions::Task>,
-}
-pub fn command(root: &Path, operation: &str, version: &str) -> CommandSpec {
-    let mut spec = CommandSpec::new("node", &["tools/release.mjs", operation], root);
-    if !version.is_empty() {
-        spec.args.extend(["--version".into(), version.into()]);
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Plan => "Release · Plan",
+            Self::Run => "Release · Run",
+            Self::Status => "Release · Status",
+            Self::Inspect => "Release · Inspect",
+            Self::Reconcile => "Release · Reconcile",
+        }
     }
-    if operation == "status" {
-        spec.args.push("--json".into());
-        spec.report = true;
+    pub fn writes(self) -> bool {
+        matches!(self, Self::Run | Self::Reconcile)
     }
+}
+
+pub fn command(root: &Path, action: Action, args: &[String]) -> CommandSpec {
+    let mut spec = CommandSpec::new("node", &["tools/pipeline.mjs", action.argument()], root);
+    spec.args.extend_from_slice(args);
+    spec.report = true;
+    spec.events = action != Action::Plan;
     spec
 }
 
-fn sha(value: &str) -> bool {
-    value.len() == 40 && value.bytes().all(|b| b.is_ascii_hexdigit())
+#[derive(Default)]
+pub struct Workflow {
+    pub workflow: String,
+    pub fields: Vec<(String, String)>,
+    pub field: usize,
+    pub plan: Option<Value>,
+    file: Option<tempfile::NamedTempFile>,
+    pending: Option<usize>,
+    inspection: Option<Value>,
+    recovery: bool,
 }
-impl App {
-    pub fn release_refresh(&mut self) {
-        self.release_start(Operation::Status, vec![]);
-    }
-    fn release_start(&mut self, operation: Operation, extra: Vec<String>) {
-        let task = crate::actions::Task::Preparation(operation);
-        let mut spec = command(&self.root, operation.name(), &self.release.version);
-        spec.args.extend(extra);
-        if self.conflict(task).is_none() {
-            self.release.saved = None;
-            if operation != Operation::Status {
-                self.release.error.clear();
-            }
-        }
-        self.launch_spec(task, spec);
-    }
-    pub fn release_finished(&mut self, operation: Operation, outcome: &process::Outcome) {
-        if operation == Operation::Status {
-            self.release.saved = None;
-            match serde_json::from_slice::<Preparation>(&outcome.report) {
-                Ok(saved) if outcome.success() => {
-                    if self.release.version.is_empty() {
-                        self.release.version = saved.version.clone();
-                    }
-                    if let Some(error) = &saved.error {
-                        self.release.error = error.clone();
-                    } else if saved.phase == "ready" {
-                        self.release.error.clear();
-                    }
-                    self.release.baseline = saved.baseline.clone().unwrap_or_default();
-                    let ready = saved.phase == "ready" && saved.error.is_none();
-                    let needs_baseline = saved.phase == "unprepared"
-                        && saved.checkout_changes.is_empty()
-                        && self.release.build_task.is_some()
-                        && self.dialog == Some(Dialog::Preparation);
-                    self.release.saved = Some(saved);
-                    if ready {
-                        self.resume_prepared_release();
-                    } else if needs_baseline {
-                        self.release.input.clear();
-                        self.dialog = Some(Dialog::PreparationInput(true));
-                    }
-                }
-                _ => {
-                    self.release.error =
-                        "Cannot read release status. Check command output and refresh.".into()
-                }
-            }
+impl Workflow {
+    pub fn confirmation_label(&self) -> &'static str {
+        if self.inspection.is_some() {
+            "y Reconcile inspected operation"
         } else {
-            self.release.saved = None;
-            self.release.error = if outcome.success() {
-                String::new()
+            "y Authorize exact plan"
+        }
+    }
+    pub fn description(&self) -> String {
+        if let Some(observation) = &self.inspection {
+            return format!(
+                "Action: Reconcile existing operation\n{}\n\nReview the exact operation, remote observation and reconciliation digest. No automatic retry or rollback.",
+                serde_json::to_string_pretty(observation).unwrap()
+            );
+        }
+        if let Some(plan) = &self.plan {
+            return format!(
+                "Action: {}\n{}\n\nReview every identity and stage before authorizing.\nNo automatic retry or rollback.",
+                "Run workflow",
+                serde_json::to_string_pretty(plan).unwrap()
+            );
+        }
+        let mut lines = vec![format!("Workflow: {}", self.workflow)];
+        for (index, (name, value)) in self.fields.iter().enumerate() {
+            lines.push(format!(
+                "{} {name}: {value}{}",
+                if index == self.field { ">" } else { " " },
+                if index == self.field { "_" } else { "" }
+            ));
+        }
+        lines.push("Tab selects a field; Enter plans. Use the original operation identity for recovery. Inspect before reconciliation.".into());
+        lines.join("\n")
+    }
+    fn arguments(&self) -> Result<Vec<String>, String> {
+        let mut args = vec![self.workflow.clone()];
+        for (name, value) in &self.fields {
+            if value.is_empty() || value.starts_with('-') || value.chars().any(char::is_control) {
+                return Err(format!("Enter an explicit {name}."));
+            }
+            if matches!(name.as_str(), "source" | "base")
+                && (value.len() != 40 || !value.bytes().all(|b| b.is_ascii_hexdigit()))
+            {
+                return Err(format!("{name} must be an exact 40-character Git SHA."));
+            }
+            args.extend([format!("--{name}"), value.clone()]);
+        }
+        if self.workflow == "publish" {
+            args.extend(["--repository".into(), "getsituate/situate".into()]);
+        }
+        Ok(args)
+    }
+    fn operation_arguments(&self) -> Result<Vec<String>, String> {
+        let operation = self
+            .fields
+            .iter()
+            .find(|(name, _)| name == "operation")
+            .map(|(_, value)| value.as_str())
+            .unwrap_or_default();
+        if operation.is_empty()
+            || operation.len() > 80
+            || !operation
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+            || !operation.as_bytes()[0].is_ascii_alphanumeric()
+        {
+            return Err("Enter the original operation ID.".into());
+        }
+        Ok(vec![
+            self.workflow.clone(),
+            "--operation".into(),
+            operation.into(),
+        ])
+    }
+    fn validate_observation(&self, value: &Value) -> Result<(), String> {
+        let operation = self.operation_arguments()?;
+        if value["schemaVersion"] != 1
+            || value["operationId"] != operation[2]
+            || !["planDigest", "stateDigest", "reconciliationDigest"]
+                .iter()
+                .all(|key| valid_digest(&value[*key]))
+            || !value
+                .as_object()
+                .is_some_and(|object| object.contains_key("remote"))
+        {
+            return Err(
+                "Invalid inspection or operation identity. Inspect again before reconciliation."
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+    fn validate_journal(&self, value: &Value) -> Result<(), String> {
+        let operation = self.operation_arguments()?;
+        if value["schemaVersion"] != 1
+            || value["operationId"] != operation[2]
+            || value["plan"]["workflow"] != self.workflow
+            || !digest(&value["plan"])
+            || !value["stages"].is_array()
+            || !value["status"].is_string()
+        {
+            return Err("Invalid operation journal or workflow identity.".into());
+        }
+        Ok(())
+    }
+    fn validate_plan(&self, bytes: &[u8]) -> Result<Value, String> {
+        let plan: Value =
+            serde_json::from_slice(bytes).map_err(|_| "Invalid or incomplete workflow plan.")?;
+        if plan["schemaVersion"] != 1 || plan["workflow"] != self.workflow || !digest(&plan) {
+            return Err("Unsupported workflow plan or missing authorization digest.".into());
+        }
+        for (name, value) in &self.fields {
+            let key = if name == "release-id" {
+                "releaseId"
             } else {
-                "Preparation incomplete. Check command output before retrying.".into()
+                name
             };
-            if !self.quitting {
-                self.release_refresh();
+            if plan[key].as_str() != Some(value)
+                && !(key == "releaseId"
+                    && plan[key]
+                        .as_u64()
+                        .is_some_and(|id| id.to_string() == *value))
+            {
+                return Err(format!("The plan changed {name}; request a new plan."));
             }
         }
-    }
-    pub fn release_text(&self) -> String {
-        if let Some(saved) = self
-            .release
-            .saved
-            .as_ref()
-            .filter(|_| self.release_blocked())
-        {
-            let changes = saved
-                .checkout_changes
-                .lines()
-                .take(8)
-                .collect::<Vec<_>>()
-                .join("\n");
-            return format!(
-                "Version: {}\n\nRelease preparation requires a clean checkout. Commit or preserve your changes, then refresh (9).\n\nChanged files (up to 8):\n{changes}\n\nRun git status in this checkout for the full list.",
-                saved.version
-            );
+        if self.workflow == "publish" && plan["repository"] != "getsituate/situate" {
+            return Err("The plan targets a different repository.".into());
         }
-        let state = if let Some(s) = &self.release.saved {
-            format!(
-                "Version: {}\nState: {}\nBaseline: {}\nAnalysis revision: {}\nLanguages: {}\nSource: {}\n{}",
-                s.version,
-                s.phase,
-                s.baseline.as_deref().unwrap_or("not selected"),
-                s.revision.as_deref().unwrap_or("not captured"),
-                s.locales.join(", "),
-                s.source_path,
-                s.locale_paths
-                    .iter()
-                    .map(|(l, p)| format!("{l}: {p}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            )
-        } else if let Some(run) =
-            self.runs.iter().rev().find(|r| {
-                r.status.active() && matches!(r.task, crate::actions::Task::Preparation(_))
-            })
-        {
-            format!(
-                "Version: {}\nState: {} ({})",
-                self.release.version,
-                run.task.name(),
-                run.status.label()
-            )
-        } else {
-            "No validated preparation status. Refresh to read saved files.".into()
-        };
-        if self
-            .release
-            .saved
-            .as_ref()
-            .is_some_and(|s| s.phase == "ready")
-            && self.release.error.is_empty()
-        {
-            return format!(
-                "{state}\n\nThe changelog is committed. Choose Build current version to continue to the release build options."
-            );
+        Ok(plan)
+    }
+}
+fn digest(value: &Value) -> bool {
+    valid_digest(&value["authorizationDigest"])
+}
+fn valid_digest(value: &Value) -> bool {
+    value
+        .as_str()
+        .is_some_and(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+pub fn result(bytes: &[u8]) -> Result<Value, String> {
+    let mut terminal = None;
+    for line in bytes.split(|b| *b == b'\n').filter(|line| !line.is_empty()) {
+        let value: Value =
+            serde_json::from_slice(line).map_err(|_| "Invalid or partial workflow event.")?;
+        if terminal.is_some() {
+            return Err("Unexpected data after workflow result.".into());
         }
-        let guidance = if self
-            .release
-            .saved
-            .as_ref()
-            .is_some_and(|s| s.phase == "unprepared")
-        {
-            "No changelog draft exists yet. Start the Pi agent to write the English notes."
-        } else {
-            "Review the draft in the Pi pane. Ask the agent to translate when ready."
-        };
-        format!(
-            "{state}\n{}\n{guidance}\nConfirm below after reviewing all languages to commit the version and changelog together. Builds remain separate.",
-            self.release.error
-        )
+        match value["type"].as_str() {
+            Some("result") => terminal = Some(value),
+            Some("stage" | "suite") => {}
+            None if value["schemaVersion"] == 1 && value["operationId"].is_string() => {
+                terminal = Some(value)
+            }
+            _ => return Err("Unknown workflow event.".into()),
+        }
     }
-    pub fn release_blocked(&self) -> bool {
-        self.release
-            .saved
-            .as_ref()
-            .is_some_and(|s| !s.checkout_changes.is_empty())
-    }
-    pub fn release_key(&mut self, key: KeyEvent, dialog: Dialog) {
-        if self.release_blocked()
-            && matches!(
-                (dialog, key.code),
-                (Dialog::Preparation, KeyCode::Char('1' | '2'))
-                    | (Dialog::PreparationConfirm(_), KeyCode::Char('y'))
-            )
-        {
-            self.dialog = Some(Dialog::Preparation);
-            self.notice = "Commit or preserve the listed changes, then refresh (9).".into();
+    terminal.ok_or_else(|| {
+        "Workflow ended without a structured result. Inspect before retrying.".into()
+    })
+}
+
+impl App {
+    pub fn open_workflow(&mut self, workflow: &str) {
+        if self.workflow.pending.is_some() {
+            self.notice =
+                "Wait for the active workflow or stop it before selecting another operation."
+                    .into();
             return;
         }
-        match dialog {
-            Dialog::Preparation => match key.code {
-                KeyCode::Esc => {
-                    self.release.build_task = None;
-                    self.dialog = None;
+        let source = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&self.root)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let mut fields = if workflow == "publish" {
+            vec![("release-id".into(), String::new())]
+        } else {
+            vec![("source".into(), source), ("base".into(), String::new())]
+        };
+        if workflow != "verify" {
+            fields.extend([
+                ("destination".into(), String::new()),
+                ("operation".into(), String::new()),
+            ]);
+        }
+        self.workflow = Workflow {
+            workflow: workflow.into(),
+            fields,
+            ..Workflow::default()
+        };
+        self.notice.clear();
+        self.dialog = Some(Dialog::WorkflowInput);
+    }
+    fn workflow_start(&mut self, action: Action) {
+        if self.workflow.pending.is_some() {
+            return;
+        }
+        let args = if matches!(action, Action::Inspect | Action::Status | Action::Reconcile) {
+            match self.workflow.operation_arguments().and_then(|mut args| {
+                if action == Action::Reconcile {
+                    let observation = self
+                        .workflow
+                        .inspection
+                        .as_ref()
+                        .ok_or("Inspect this operation first.")?;
+                    self.workflow.validate_observation(observation)?;
+                    args.extend([
+                        "--confirm".into(),
+                        observation["reconciliationDigest"].as_str().unwrap().into(),
+                    ]);
                 }
-                KeyCode::Char('1') => {
-                    self.release.input.clear();
-                    self.dialog = Some(Dialog::PreparationInput(self.release.build_task.is_some()));
+                Ok(args)
+            }) {
+                Ok(args) => args,
+                Err(error) => {
+                    self.notice = error;
+                    return;
                 }
-                KeyCode::Char('2') => {
-                    self.dialog = Some(Dialog::PreparationConfirm(Operation::CompleteLocal))
+            }
+        } else if action == Action::Run {
+            let Some(plan) = &self.workflow.plan else {
+                return;
+            };
+            if self.workflow.recovery {
+                self.notice = "Inspect this operation first.".into();
+                return;
+            }
+            let Some(file) = &self.workflow.file else {
+                return;
+            };
+            vec![
+                self.workflow.workflow.clone(),
+                "--plan".into(),
+                file.path().to_string_lossy().into_owned(),
+                "--confirm".into(),
+                plan["authorizationDigest"].as_str().unwrap().into(),
+            ]
+        } else {
+            match self.workflow.arguments() {
+                Ok(args) => args,
+                Err(error) => {
+                    self.notice = error;
+                    return;
                 }
-                KeyCode::Char('c') => {
-                    if let Some(task) = self.release.build_task {
-                        self.build_current_release(task);
-                    } else {
-                        self.dialog = Some(Dialog::Releases);
-                    }
+            }
+        };
+        let mut spec = command(&self.root, action, &args);
+        if action == Action::Plan {
+            self.workflow.plan = None;
+            match tempfile::NamedTempFile::new() {
+                Ok(file) => {
+                    spec.args.extend([
+                        "--output".into(),
+                        file.path().to_string_lossy().into_owned(),
+                    ]);
+                    self.workflow.file = Some(file);
                 }
-                KeyCode::Char('9') => self.release_refresh(),
-                _ => {}
-            },
-            Dialog::PreparationInput(baseline) => match key.code {
-                KeyCode::Esc => self.dialog = Some(Dialog::Preparation),
-                KeyCode::Backspace => {
-                    self.release.input.pop();
+                Err(error) => {
+                    self.notice = error.to_string();
+                    return;
                 }
-                KeyCode::Char(c) if self.release.input.len() < 64 && !c.is_control() => {
-                    self.release.input.push(c)
-                }
-                KeyCode::Enter => {
-                    if baseline {
-                        let input = self.release.input.trim();
-                        if !input.is_empty() && !sha(input) {
-                            self.notice = "Enter a full 40-character Git SHA, or leave empty to select the previous release automatically.".into();
-                            return;
-                        }
-                        self.release.baseline = input.into();
-                        self.dialog = Some(Dialog::PreparationConfirm(Operation::StartLocal));
-                    } else {
-                        if crate::version::number(&self.release.input).is_none() {
-                            self.notice = "Enter a numeric major.minor.patch version.".into();
-                            return;
-                        }
-                        self.release.version = self.release.input.clone();
-                        self.release.input.clear();
-                        self.dialog = Some(Dialog::PreparationInput(true));
-                    }
-                    self.notice.clear();
-                }
-                _ => {}
-            },
-            Dialog::PreparationConfirm(op) => match key.code {
-                KeyCode::Esc | KeyCode::Char('n') => self.dialog = Some(Dialog::Preparation),
-                KeyCode::Char('y') => {
-                    let extra = if op == Operation::StartLocal && !self.release.baseline.is_empty()
-                    {
-                        vec!["--baseline".into(), self.release.baseline.clone()]
-                    } else {
-                        vec![]
-                    };
-                    self.dialog = Some(Dialog::Preparation);
-                    self.release_start(op, extra);
-                }
-                _ => {}
-            },
+            }
+        }
+        let previous = self.runs.last().map(|r| r.id);
+        self.launch_spec(Task::Workflow(action), spec);
+        if let Some(run) = self.runs.last().filter(|r| Some(r.id) != previous) {
+            self.workflow.pending = Some(run.id);
+            if action.writes() && self.workflow.workflow != "verify" {
+                self.workflow.recovery = true;
+                self.workflow.inspection = None;
+            }
+            self.dialog = None;
+        }
+    }
+    pub fn workflow_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.workflow.plan = None;
+                self.dialog = None;
+            }
+            KeyCode::Tab | KeyCode::Down if self.dialog == Some(Dialog::WorkflowInput) => {
+                self.workflow.field = (self.workflow.field + 1) % self.workflow.fields.len();
+            }
+            KeyCode::BackTab | KeyCode::Up if self.dialog == Some(Dialog::WorkflowInput) => {
+                self.workflow.field = (self.workflow.field + self.workflow.fields.len() - 1)
+                    % self.workflow.fields.len();
+            }
+            KeyCode::Backspace if self.dialog == Some(Dialog::WorkflowInput) => {
+                self.workflow.fields[self.workflow.field].1.pop();
+                self.workflow.inspection = None;
+                self.workflow.recovery = false;
+            }
+            KeyCode::Enter if self.dialog == Some(Dialog::WorkflowInput) => {
+                self.workflow_start(Action::Plan)
+            }
+            KeyCode::Char('y') if self.dialog == Some(Dialog::WorkflowConfirm) => self
+                .workflow_start(if self.workflow.inspection.is_some() {
+                    Action::Reconcile
+                } else {
+                    Action::Run
+                }),
+            KeyCode::F(2) if self.dialog == Some(Dialog::WorkflowInput) => {
+                self.workflow_start(Action::Inspect)
+            }
+            KeyCode::F(3) if self.dialog == Some(Dialog::WorkflowInput) => {
+                self.workflow_start(Action::Status)
+            }
+            KeyCode::Char(c)
+                if self.dialog == Some(Dialog::WorkflowInput)
+                    && !c.is_control()
+                    && self.workflow.fields[self.workflow.field].1.len() < 512 =>
+            {
+                self.workflow.fields[self.workflow.field].1.push(c);
+                self.workflow.inspection = None;
+                self.workflow.recovery = false;
+            }
             _ => {}
+        }
+    }
+    pub fn workflow_finished(&mut self, id: usize, action: Action, outcome: &Outcome) {
+        if self.workflow.pending != Some(id) {
+            return;
+        }
+        self.workflow.pending = None;
+        let original_dialog = self.dialog;
+        let closing = self.quitting || original_dialog == Some(Dialog::Quit);
+        if action == Action::Plan && outcome.success() {
+            let parsed = self
+                .workflow
+                .validate_plan(&outcome.report)
+                .and_then(|plan| {
+                    let bytes = std::fs::read(self.workflow.file.as_ref().unwrap().path())
+                        .map_err(|e| e.to_string())?;
+                    let saved: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+                    if saved != plan {
+                        return Err("Saved plan differs from the displayed plan.".into());
+                    }
+                    Ok(plan)
+                });
+            match parsed {
+                Ok(plan) => {
+                    self.workflow.plan = Some(plan);
+                    self.dialog = Some(Dialog::WorkflowConfirm);
+                }
+                Err(error) => {
+                    self.workflow_fail(id, error);
+                    self.dialog = Some(Dialog::WorkflowInput);
+                }
+            }
+        } else if action != Action::Plan {
+            let decoded = match action {
+                Action::Inspect | Action::Status => {
+                    serde_json::from_slice::<Value>(&outcome.report)
+                        .map_err(|_| "Invalid or partial operation JSON.".to_string())
+                }
+                _ => result(&outcome.report),
+            };
+            let checked = decoded.and_then(|value| {
+                match action {
+                    Action::Inspect => self.workflow.validate_observation(&value)?,
+                    Action::Status | Action::Reconcile => self.workflow.validate_journal(&value)?,
+                    Action::Run if value["type"] != "result" => {
+                        return Err("Missing workflow result.".into());
+                    }
+                    _ => {}
+                }
+                if !outcome.success() {
+                    return Err("Workflow command failed. Inspect before reconciliation.".into());
+                }
+                if matches!(action, Action::Run | Action::Reconcile)
+                    && !matches!(value["status"].as_str(), Some("passed" | "completed"))
+                {
+                    return Err(
+                        "Workflow did not complete successfully. Inspect before reconciliation."
+                            .into(),
+                    );
+                }
+                Ok(value)
+            });
+            self.workflow.plan = None;
+            match checked {
+                Ok(value) if action == Action::Inspect => {
+                    self.workflow.inspection = Some(value);
+                    self.workflow.recovery = true;
+                    self.dialog = Some(Dialog::WorkflowConfirm);
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    self.workflow.inspection = None;
+                    self.workflow_fail(id, error);
+                }
+            }
+        }
+        if closing {
+            self.dialog = original_dialog;
+        }
+    }
+    fn workflow_fail(&mut self, id: usize, error: String) {
+        self.notice = error.clone();
+        if let Some(run) = self.runs.iter_mut().find(|r| r.id == id) {
+            if run.status != Status::Cancelled {
+                run.status = Status::Failed;
+            }
+            run.logs.push_back(error);
+            if matches!(run.task, Task::Workflow(action) if action.writes()) {
+                run.logs
+                    .push_back(crate::text::PUBLICATION_UNCERTAIN.into());
+            }
         }
     }
 }
@@ -286,248 +477,171 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::process::Outcome;
-
     #[test]
-    fn status_restores_saved_identity_and_never_starts_work() {
-        let (tx, _) = tokio::sync::mpsc::channel(8);
-        let mut app = App::new("/checkout".into(), String::new(), tx);
-        let json = br#"{"version":"1.2.3","phase":"ready-to-commit","sourcePath":"/checkout/source.json","localePaths":{"en":"/checkout/source.json","de":"/checkout/de.json"},"baseline":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","revision":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","locales":["en","de"]}"#;
-        app.release_finished(
-            Operation::Status,
-            &Outcome {
-                code: Some(0),
-                report: json.to_vec(),
-                ..Outcome::default()
-            },
-        );
-        assert_eq!(app.release.version, "1.2.3");
-        assert!(app.release_text().contains("State: ready-to-commit"));
-        assert!(app.release_text().contains("de: /checkout/de.json"));
-        assert!(
-            app.release_text()
-                .contains("version and changelog together")
-        );
-        assert!(app.runs.is_empty());
-        app.release_finished(
-            Operation::Status,
-            &Outcome {
-                code: Some(0),
-                report: b"{}".to_vec(),
-                ..Outcome::default()
-            },
-        );
-        assert!(app.release.saved.is_none());
-        assert!(app.release_text().contains("Cannot read release status"));
-        assert!(app.runs.is_empty());
-    }
-
-    fn status_outcome(phase: &str) -> Outcome {
-        Outcome {
-            code: Some(0),
-            report: serde_json::to_vec(&serde_json::json!({
-                "version": "0.1.1", "phase": phase,
-                "sourcePath": "/checkout/en.json", "localePaths": {},
-                "locales": ["en", "de"]
-            }))
-            .unwrap(),
-            ..Outcome::default()
-        }
-    }
-
-    #[test]
-    fn only_ready_notes_continue_to_tests_for_the_selected_build() {
-        use crate::actions::Task;
-        for task in [Task::ReleaseMacos, Task::ReleaseIos(5), Task::ReleaseAll(5)] {
-            let mut app = crate::app::tests::app();
-            app.dialog = Some(Dialog::Preparation);
-            app.release.build_task = Some(task);
-            for phase in [
-                "draft",
-                "awaiting-approval",
-                "approved",
-                "translated",
-                "ready-to-commit",
-                "stale",
-            ] {
-                app.release_finished(Operation::Status, &status_outcome(phase));
-                assert_eq!(app.dialog, Some(Dialog::Preparation));
-                assert_eq!(app.release.build_task, Some(task));
-                assert!(app.runs.is_empty());
-            }
-            app.release_finished(Operation::Status, &status_outcome("ready"));
-            assert_eq!(app.dialog, Some(Dialog::ReleaseTestPrompt(task)));
-            assert!(app.release.build_task.is_none());
-            assert_eq!(app.release_app_version, "0.1.1");
-            assert!(app.runs.is_empty());
-        }
-    }
-
-    #[test]
-    fn dirty_checkout_shows_files_and_blocks_preparation_until_refreshed() {
-        let mut app = crate::app::tests::app();
-        app.dialog = Some(Dialog::Preparation);
-        app.release.build_task = Some(crate::actions::Task::ReleaseMacos);
-        let mut outcome = status_outcome("unprepared");
-        let mut status: serde_json::Value = serde_json::from_slice(&outcome.report).unwrap();
-        status["checkoutChanges"] = serde_json::json!(" M client/package.json\n?? scratch.txt");
-        outcome.report = serde_json::to_vec(&status).unwrap();
-        app.release_finished(Operation::Status, &outcome);
-        assert_eq!(app.dialog, Some(Dialog::Preparation));
-        assert!(app.release_blocked());
-        assert!(app.release_text().contains("clean checkout"));
-        assert!(app.release_text().contains(" M client/package.json"));
-        assert!(app.release_text().contains("?? scratch.txt"));
-        assert!(!app.release_text().contains("Start the Pi agent"));
-        for (dialog, key) in [
-            (Dialog::Preparation, '1'),
-            (Dialog::Preparation, '2'),
-            (Dialog::PreparationConfirm(Operation::StartLocal), 'y'),
-            (Dialog::PreparationConfirm(Operation::CompleteLocal), 'y'),
+    fn malformed_partial_and_missing_results_fail_closed() {
+        for bytes in [
+            b"".as_slice(),
+            b"{",
+            b"{\"type\":\"stage\",\"stage\":\"build\"}\n",
+            b"{\"type\":\"result\"}\n{",
+            b"{\"type\":\"unknown\"}",
         ] {
-            app.release_key(KeyEvent::from(KeyCode::Char(key)), dialog);
-            assert_eq!(app.dialog, Some(Dialog::Preparation));
-            assert!(app.runs.is_empty());
+            assert!(result(bytes).is_err());
         }
-        app.release_finished(Operation::Status, &status_outcome("unprepared"));
-        assert!(!app.release_blocked());
-        assert_eq!(app.dialog, Some(Dialog::PreparationInput(true)));
-        assert!(app.runs.is_empty());
+        assert_eq!(result(b"{\"type\":\"stage\",\"stage\":\"build\",\"status\":\"passed\"}\n{\"type\":\"result\",\"status\":\"passed\"}\n").unwrap()["status"], "passed");
     }
-
-    #[test]
-    fn unprepared_release_prompts_for_baseline_without_an_extra_start_action() {
-        use crate::actions::Task;
-        for task in [Task::ReleaseMacos, Task::ReleaseIos(5), Task::ReleaseAll(5)] {
+    #[tokio::test]
+    async fn core_response_shapes_preserve_reports_and_fail_closed() {
+        let observation = serde_json::json!({
+            "schemaVersion":1, "operationId":"original", "planDigest":"a".repeat(64),
+            "stateDigest":"b".repeat(64), "remote":{"state":"unknown"},
+            "reconciliationDigest":"c".repeat(64)
+        });
+        let journal = serde_json::json!({
+            "schemaVersion":1, "operationId":"original",
+            "plan":{"workflow":"publish","authorizationDigest":"a".repeat(64)},
+            "status":"completed","stages":[]
+        });
+        let progress = "{\"type\":\"suite\",\"suite\":\"unit\",\"status\":\"passed\"}\n{\"type\":\"stage\",\"stage\":\"promote\",\"status\":\"passed\"}\n";
+        let mut cases = vec![
+            (
+                Action::Run,
+                format!("{progress}{{\"type\":\"result\",\"status\":\"completed\"}}\n"),
+                true,
+            ),
+            (
+                Action::Run,
+                format!("{progress}{{\"type\":\"result\",\"status\":\"passed\"}}\n"),
+                true,
+            ),
+            (
+                Action::Run,
+                format!("{progress}{{\"type\":\"result\",\"status\":\"failed\"}}\n"),
+                false,
+            ),
+            (Action::Run, progress.into(), false),
+            (Action::Run, format!("{progress}{{"), false),
+            (
+                Action::Inspect,
+                serde_json::to_string_pretty(&observation).unwrap(),
+                true,
+            ),
+            (
+                Action::Status,
+                serde_json::to_string_pretty(&journal).unwrap(),
+                true,
+            ),
+            (Action::Reconcile, format!("{progress}{journal}\n"), true),
+            (Action::Inspect, "{\"schemaVersion\":1".into(), false),
+            (Action::Status, "{\"schemaVersion\":1".into(), false),
+            (
+                Action::Reconcile,
+                format!("{progress}{{\"schemaVersion\":1"),
+                false,
+            ),
+        ];
+        for key in [
+            "operationId",
+            "planDigest",
+            "stateDigest",
+            "reconciliationDigest",
+        ] {
+            let mut invalid = observation.clone();
+            invalid[key] = "different".into();
+            cases.push((Action::Inspect, invalid.to_string(), false));
+        }
+        for (action, report, passed) in cases {
             let mut app = crate::app::tests::app();
-            app.dialog = Some(Dialog::Preparation);
-            app.release.build_task = Some(task);
-            app.release_finished(Operation::Status, &status_outcome("unprepared"));
-            assert_eq!(app.dialog, Some(Dialog::PreparationInput(true)));
-            assert!(app.release_text().contains("No changelog draft exists yet"));
+            app.workflow = Workflow {
+                workflow: "publish".into(),
+                fields: vec![("operation".into(), "original".into())],
+                pending: Some(0),
+                ..Workflow::default()
+            };
+            app.runs
+                .push(crate::app::tests::fake_run(Task::Workflow(action)));
+            let bytes = report.into_bytes();
+            app.event(crate::process::Event::Finished(
+                0,
+                Outcome {
+                    code: Some(0),
+                    report: bytes.clone(),
+                    ..Outcome::default()
+                },
+            ));
+            assert_eq!(
+                app.runs[0].status == Status::Passed,
+                passed,
+                "{action:?}: {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            assert_eq!(app.runs[0].raw_report, bytes);
+            assert_eq!(
+                app.workflow.inspection.is_some(),
+                passed && action == Action::Inspect
+            );
+            assert_eq!(
+                app.dialog == Some(Dialog::WorkflowConfirm),
+                passed && action == Action::Inspect
+            );
+        }
+    }
+    #[test]
+    fn recovery_requires_only_the_original_operation_identity() {
+        let workflow = Workflow {
+            workflow: "create".into(),
+            fields: vec![
+                ("source".into(), String::new()),
+                ("base".into(), String::new()),
+                ("operation".into(), "original".into()),
+            ],
+            ..Workflow::default()
+        };
+        assert_eq!(
+            workflow.operation_arguments().unwrap(),
+            ["create", "--operation", "original"]
+        );
+        assert!(workflow.arguments().is_err());
+    }
+    #[test]
+    fn plan_binds_all_requested_identities() {
+        let workflow = Workflow {
+            workflow: "publish".into(),
+            fields: vec![
+                ("release-id".into(), "42".into()),
+                ("destination".into(), "host".into()),
+                ("operation".into(), "operation-1".into()),
+            ],
+            ..Workflow::default()
+        };
+        let mut plan = serde_json::json!({"schemaVersion":1,"workflow":"publish","releaseId":"42","destination":"host","operation":"operation-1","repository":"getsituate/situate","authorizationDigest":"a".repeat(64)});
+        assert!(
+            workflow
+                .validate_plan(&serde_json::to_vec(&plan).unwrap())
+                .is_ok()
+        );
+        for key in [
+            "releaseId",
+            "destination",
+            "operation",
+            "repository",
+            "authorizationDigest",
+        ] {
+            let saved = plan[key].clone();
+            plan[key] = "different".into();
             assert!(
-                !app.release_text()
-                    .contains("Review the draft in the Pi pane")
+                workflow
+                    .validate_plan(&serde_json::to_vec(&plan).unwrap())
+                    .is_err()
             );
-            assert!(app.runs.is_empty());
-            app.release.input = "a".repeat(40);
-            app.release_key(KeyEvent::from(KeyCode::Enter), app.dialog.unwrap());
-            assert_eq!(
-                app.dialog,
-                Some(Dialog::PreparationConfirm(Operation::StartLocal))
-            );
-            assert_eq!(app.release.baseline, "a".repeat(40));
-            assert!(app.runs.is_empty());
+            plan[key] = saved;
         }
-    }
-
-    #[test]
-    fn closing_preparation_cancels_the_build_continuation() {
-        let mut app = crate::app::tests::app();
-        app.dialog = Some(Dialog::Preparation);
-        app.release.build_task = Some(crate::actions::Task::ReleaseMacos);
-        app.release_key(KeyEvent::from(KeyCode::Esc), Dialog::Preparation);
-        app.release_finished(Operation::Status, &status_outcome("ready"));
-        assert!(app.dialog.is_none());
-        assert!(app.release.build_task.is_none());
-        assert!(app.runs.is_empty());
-    }
-
-    #[test]
-    fn failed_completion_keeps_build_current_available_even_with_dirty_status() {
-        use crate::actions::Task;
-        let mut app = crate::app::tests::app();
-        app.dialog = Some(Dialog::Preparation);
-        app.release.build_task = Some(Task::ReleaseMacos);
-        app.quitting = true;
-        app.release_finished(
-            Operation::CompleteLocal,
-            &Outcome {
-                code: Some(1),
-                ..Outcome::default()
-            },
+        assert!(
+            !workflow
+                .arguments()
+                .unwrap()
+                .iter()
+                .any(|arg| arg.contains("GITHUB_"))
         );
-        app.quitting = false;
-        let mut outcome = status_outcome("draft");
-        let mut status: serde_json::Value = serde_json::from_slice(&outcome.report).unwrap();
-        status["checkoutChanges"] = serde_json::json!("?? scratch.txt");
-        outcome.report = serde_json::to_vec(&status).unwrap();
-        app.release_finished(Operation::Status, &outcome);
-        assert_eq!(app.release.build_task, Some(Task::ReleaseMacos));
-        assert!(app.release_blocked());
-        assert_eq!(app.dialog, Some(Dialog::Preparation));
-        app.release_key(KeyEvent::from(KeyCode::Char('c')), Dialog::Preparation);
-        assert_eq!(
-            app.dialog,
-            Some(Dialog::ReleaseTestPrompt(Task::ReleaseMacos))
-        );
-        assert!(app.runs.is_empty());
-    }
-
-    #[test]
-    fn committed_completion_recovers_when_status_is_ready() {
-        let mut app = crate::app::tests::app();
-        app.dialog = Some(Dialog::Preparation);
-        app.release.build_task = Some(crate::actions::Task::ReleaseMacos);
-        app.quitting = true;
-        app.release_finished(
-            Operation::CompleteLocal,
-            &Outcome {
-                code: Some(1),
-                ..Outcome::default()
-            },
-        );
-        app.quitting = false;
-        app.release_finished(Operation::Status, &status_outcome("ready"));
-        assert_eq!(
-            app.dialog,
-            Some(Dialog::ReleaseTestPrompt(
-                crate::actions::Task::ReleaseMacos
-            ))
-        );
-        assert!(app.release.build_task.is_none());
-        assert!(app.release.error.is_empty());
-        assert!(app.runs.is_empty());
-    }
-
-    #[test]
-    fn commands_use_local_agent_and_explicit_completion() {
-        let root = Path::new("/checkout with spaces");
-        let status = command(root, "status", "");
-        assert_eq!(status.args, ["tools/release.mjs", "status", "--json"]);
-        assert!(status.report);
-        assert_eq!(status.cwd, root);
-        for operation in [Operation::StartLocal, Operation::CompleteLocal] {
-            let spec = command(root, operation.name(), "1.2.3");
-            assert_eq!(
-                spec.args,
-                ["tools/release.mjs", operation.name(), "--version", "1.2.3"]
-            );
-            assert!(!spec.report);
-        }
-    }
-
-    #[test]
-    fn selecting_version_only_updates_input_until_start_is_confirmed() {
-        let (tx, _) = tokio::sync::mpsc::channel(8);
-        let mut app = App::new("/checkout".into(), String::new(), tx);
-        app.release.input = "1.2.4".into();
-        app.release_key(
-            KeyEvent::from(KeyCode::Enter),
-            Dialog::PreparationInput(false),
-        );
-        assert_eq!(app.release.version, "1.2.4");
-        assert_eq!(app.dialog, Some(Dialog::PreparationInput(true)));
-        app.release_key(
-            KeyEvent::from(KeyCode::Enter),
-            Dialog::PreparationInput(true),
-        );
-        assert_eq!(
-            app.dialog,
-            Some(Dialog::PreparationConfirm(Operation::StartLocal))
-        );
-        app.release_key(KeyEvent::from(KeyCode::Char('n')), app.dialog.unwrap());
-        assert_eq!(app.dialog, Some(Dialog::Preparation));
-        assert!(app.runs.is_empty());
     }
 }

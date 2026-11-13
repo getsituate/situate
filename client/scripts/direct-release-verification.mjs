@@ -9,7 +9,8 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { verifyUpdaterSignature } from "./updater-signing.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { run } from "./ios-xcode.mjs";
 import { verifyReleaseHistoryResource } from "./release-history.mjs";
@@ -46,6 +47,39 @@ export async function verifyDirectPayloads(
   artifact,
   { execute = run, env, signal } = {},
 ) {
+  for (const item of [
+    artifact,
+    artifact.updater,
+    {
+      path: artifact.updater.signaturePath,
+      sha256: artifact.updater.signatureSha256,
+    },
+  ]) {
+    if (typeof item.path !== "string" || basename(item.path) !== item.path)
+      throw new Error("Invalid direct package path.");
+    const path = join(directory, item.path);
+    const stat = lstatSync(path);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.nlink !== 1 ||
+      createHash("sha256").update(readFileSync(path)).digest("hex") !==
+        item.sha256
+    )
+      throw new Error("Final direct package hash does not match the manifest.");
+  }
+  const signature = readFileSync(
+    join(directory, artifact.updater.signaturePath),
+    "utf8",
+  ).trim();
+  if (signature !== artifact.updater.signature)
+    throw new Error("Updater signature asset differs from the manifest.");
+  verifyUpdaterSignature(
+    join(directory, artifact.updater.path),
+    signature,
+    artifact.buildConfiguration.publicKey,
+    artifact.version,
+  );
   if (process.platform !== "darwin")
     throw new Error("Direct payload verification requires macOS.");
   const temporary = mkdtempSync(join(tmpdir(), "situate-release-verify-"));
@@ -60,7 +94,7 @@ export async function verifyDirectPayloads(
       "python3",
       [
         "-c",
-        "import tarfile,sys\nwith tarfile.open(sys.argv[1], 'r:gz') as archive:\n for member in archive.getmembers():\n  if member.name.split('/')[0] != 'Situate.app' or member.islnk(): raise ValueError('Unexpected archive member')\n archive.extractall(sys.argv[2], filter='data')",
+        "import tarfile,sys\nwith tarfile.open(sys.argv[1], 'r:gz') as archive:\n for member in archive.getmembers():\n  if member.name.split('/')[0] != 'Situate.app' or '..' in member.name.split('/') or member.islnk(): raise ValueError('Unexpected archive member')\n archive.extractall(sys.argv[2], filter='data')",
         join(directory, artifact.updater.path),
         archive,
       ],
@@ -104,9 +138,30 @@ export async function verifyDirectPayloads(
         info.CFBundleIdentifier !== artifact.identifier ||
         info.CFBundleShortVersionString !== artifact.version ||
         info.LSMinimumSystemVersion !== artifact.minimumSystemVersion ||
+        (artifact.buildNumber &&
+          info.CFBundleVersion !== artifact.buildNumber) ||
         !isDeepStrictEqual(identity, artifact.buildConfiguration)
       )
         throw new Error("Direct app identity does not match the manifest.");
+      const inputs = identity.releaseInputs;
+      if (
+        inputs &&
+        (createHash("sha256")
+          .update(
+            readFileSync(join(app, "Contents/Resources/release-inputs.json")),
+          )
+          .digest("hex") !== inputs.sha256 ||
+          createHash("sha256")
+            .update(
+              readFileSync(
+                join(app, "Contents/Resources/situate-release-history.json"),
+              ),
+            )
+            .digest("hex") !== inputs.catalogSha256)
+      )
+        throw new Error(
+          "Signed generated release input resources differ from the manifest.",
+        );
       verifyReleaseHistoryResource(
         app,
         artifact.releaseContent,

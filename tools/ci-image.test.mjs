@@ -40,9 +40,11 @@ test("CI helper and project-license changes invalidate image inputs and trigger 
   const changedHelper = inputDigest(directory);
   writeFileSync(join(directory, "LICENSE"), read("LICENSE") + "\n");
   assert.notEqual(inputDigest(directory), changedHelper);
-  const workflow = read(".github/workflows/ci-image.yml");
-  assert.ok(workflow.includes("client/docker/ci-*.py"));
+  const workflow = read(".github/workflows/ci-tool-image.yml");
+  assert.ok(workflow.includes("      - client/docker/ci-*\n"));
   assert.ok(workflow.includes("      - LICENSE\n"));
+  assert.match(workflow, /run: node tools\/actions-adapter\.mjs image-build/);
+  assert.match(workflow, /run: node tools\/actions-adapter\.mjs image-publish/);
 });
 
 test("CI tool pins bind prebuilt binaries or locked source builds to the quality toolchain", () => {
@@ -120,8 +122,6 @@ test("CI stage is separate from project installs and release targets", () => {
     stage,
     /npm ci|COPY client\/|windows-toolchain|ENTRYPOINT/,
   );
-  assert.match(dockerfile, /FROM dependencies AS linux/);
-  assert.match(dockerfile, /FROM windows-toolchain AS windows/);
   assert.match(stage, /from=ci-inputs,target=\/ci-input,readonly/);
   const installer = read("client/docker/ci-install.mjs");
   assert.match(installer, /"install-deps"/);

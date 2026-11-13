@@ -1,0 +1,273 @@
+name: Release macOS
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-macos
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      digest: ${{ steps.plan.outputs.digest }}
+      app_impact: ${{ steps.plan.outputs.app_impact }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - id: plan
+        run: node tools/actions-adapter.mjs plan --workflow create
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  policy:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'policy')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane policy
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane policy
+
+  tooling:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane tooling
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane tooling
+
+  tooling-macos:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane tooling-macos
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane tooling-macos
+
+  frontend:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'frontend')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane frontend
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane frontend
+
+  macos-code:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-code
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane macos-code
+
+  macos-browser:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-browser')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-browser
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane macos-browser
+
+  macos-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-native
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane macos-native
+
+  required:
+    name: Integrated verification
+    needs:
+      [
+        plan,
+        policy,
+        tooling,
+        tooling-macos,
+        frontend,
+        macos-code,
+        macos-browser,
+        macos-native,
+      ]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs aggregate --workflow create
+        env:
+          PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+          PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+          PIPELINE_NEEDS: ${{ toJSON(needs) }}
+
+  create:
+    name: Create GitHub Release
+    needs:
+      [
+        plan,
+        required,
+        policy,
+        tooling,
+        tooling-macos,
+        frontend,
+        macos-code,
+        macos-browser,
+        macos-native,
+      ]
+    if: needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true'
+    runs-on: macos-latest
+    environment: macos-release
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_RELEASE_ENABLED }}
+      PIPELINE_CONFIGURATION_SHA256: ${{ vars.MACOS_RELEASE_CONFIGURATION_SHA256 }}
+      PIPELINE_DESTINATION: ${{ vars.MACOS_RELEASE_DESTINATION }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs release-gate --workflow create
+      - run: node tools/actions-adapter.mjs create-prepare
+        env:
+          PIPELINE_CONFIGURATION_JSON: ${{ secrets.MACOS_RELEASE_CONFIGURATION_JSON }}
+          PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+          PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+          PIPELINE_NEEDS: ${{ toJSON(needs) }}
+      - run: node tools/actions-adapter.mjs prepare-release
+      - run: node tools/actions-adapter.mjs create-stage --stage inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.MACOS_RELEASE_SSH_KNOWN_HOSTS }}
+      - run: node tools/actions-adapter.mjs create-stage --stage build
+        env:
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.MACOS_RELEASE_SSH_KNOWN_HOSTS }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_MACOS_SIGNING_IDENTITY: ${{ vars.APPLE_MACOS_SIGNING_IDENTITY }}
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          SITUATE_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_UPDATER_PUBLIC_KEY }}
+          SITUATE_UPDATER_ENDPOINT: ${{ vars.SITUATE_UPDATER_ENDPOINT }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - run: node tools/actions-adapter.mjs create-stage --stage qualify
+      - run: node tools/actions-adapter.mjs create-stage --stage github
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.MACOS_RELEASE_SSH_KNOWN_HOSTS }}

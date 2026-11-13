@@ -79,6 +79,7 @@ async fn read_output(
     id: usize,
     tx: mpsc::Sender<Event>,
     report: bool,
+    events: bool,
 ) -> io::Result<Capture> {
     let mut buffer = [0; 4096];
     let mut capture = Capture {
@@ -95,7 +96,8 @@ async fn read_output(
             let available = REPORT_LIMIT.saturating_sub(capture.bytes.len());
             capture.bytes.extend_from_slice(&buffer[..n.min(available)]);
             capture.overflow |= n > available;
-        } else {
+        }
+        if !report || events {
             for byte in &buffer[..n] {
                 if *byte == b'\n' || *byte == b'\r' || line.len() >= LINE_LIMIT {
                     if !line.is_empty() {
@@ -209,8 +211,14 @@ pub async fn execute(
         || Box::new(tokio::io::empty()) as _,
         |pipe| Box::new(pipe) as _,
     );
-    let mut stdout = tokio::spawn(read_output(stdout, id, tx.clone(), spec.report));
-    let mut stderr = tokio::spawn(read_output(stderr, id, tx, false));
+    let mut stdout = tokio::spawn(read_output(
+        stdout,
+        id,
+        tx.clone(),
+        spec.report,
+        spec.events,
+    ));
+    let mut stderr = tokio::spawn(read_output(stderr, id, tx, false, false));
     let mut outcome = Outcome::default();
     let mut stop_deadline = None;
     let mut refresh = tokio::time::interval(Duration::from_millis(200));
@@ -393,23 +401,6 @@ pub fn start(
     stop: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        if let Some(root) = &spec.release_validation {
-            let mut validation = crate::release::command(root, "validate", "");
-            if spec
-                .args
-                .windows(2)
-                .any(|args| args == ["--distribution", "direct"])
-            {
-                validation
-                    .args
-                    .extend(["--distribution".into(), "direct".into()]);
-            }
-            let outcome = execute(validation, id, tx.clone(), stop.clone()).await;
-            if !outcome.success() {
-                let _ = tx.send(Event::Finished(id, outcome)).await;
-                return;
-            }
-        }
         let mut outcome = if spec.open_browser {
             let opener = browser_target(&spec.cwd, "");
             execute_with_browser(spec, opener, id, tx.clone(), stop.clone()).await
@@ -545,13 +536,16 @@ mod tests {
             0,
             tx.clone(),
             true,
+            false,
         )
         .await
         .unwrap();
         assert!(capture.overflow);
         assert_eq!(capture.bytes.len(), REPORT_LIMIT);
         let bytes = vec![b'x'; LINE_LIMIT * 3 + 1];
-        read_output(bytes.as_slice(), 0, tx, false).await.unwrap();
+        read_output(bytes.as_slice(), 0, tx, false, false)
+            .await
+            .unwrap();
         let mut lengths = vec![];
         while let Ok(Event::Output(_, line)) = rx.try_recv() {
             lengths.push(line.len());

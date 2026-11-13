@@ -1,0 +1,43 @@
+name: Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      selection:
+        description: Optional diagnostic family
+        required: true
+        type: choice
+        options: [coverage, design, visual, provider]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnostics-${{ inputs.selection }}
+  cancel-in-progress: false
+
+jobs:
+  diagnostics:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    environment: ${{ inputs.selection == 'provider' && 'agent-live' || 'diagnostics' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs prepare-diagnostics
+        env:
+          DIAGNOSTIC_SELECTION: ${{ inputs.selection }}
+      - run: node tools/actions-adapter.mjs diagnostics
+        if: inputs.selection != 'provider'
+        env:
+          DIAGNOSTIC_SELECTION: ${{ inputs.selection }}
+      - run: node tools/actions-adapter.mjs diagnostics --lane provider
+        if: inputs.selection == 'provider'
+        env:
+          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+          PAID_DIAGNOSTICS_AUTHORIZED: ${{ vars.PAID_DIAGNOSTICS_AUTHORIZED }}

@@ -10,7 +10,11 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { qualifyPublishedMigrations } from "./published-migrations.mjs";
+import {
+  qualifyPublishedMigrations,
+  qualifyPublicCompatibilityMigrations,
+  mergeCompatibilityHistories,
+} from "./published-migrations.mjs";
 import { readPublicationHistory } from "../infrastructure/releases/transport.mjs";
 
 function fixture(t) {
@@ -102,6 +106,81 @@ test("publication history protects every released prefix and records exact compa
       history: f.history([...releases, f.record("0.3.0", second)]),
     }).migrations,
     2,
+  );
+});
+
+test("compatibility union includes a public GitHub release never promoted to the host", async (t) => {
+  const f = fixture(t);
+  f.migrations(["m0001_metadata"]);
+  const publicRevision = f.commit();
+  f.migrations(["m0001_metadata", "m0002_history"]);
+  f.commit();
+  const host = f.history([f.record("0.1.0", f.legacy)]);
+  const github = f.history([f.record("2026.11.1", publicRevision)]);
+  const result = await qualifyPublicCompatibilityMigrations(f.root, {
+    history: host,
+    readGitHubHistory: async () => github,
+  });
+  assert.deepEqual(
+    result.releases.map((release) => release.version),
+    ["0.1.0", "2026.11.1"],
+  );
+  f.put(
+    `${f.source}migrations/m0001_metadata.rs`,
+    "pub struct ModifiedMigration;\n",
+  );
+  f.commit();
+  await assert.rejects(
+    qualifyPublicCompatibilityMigrations(f.root, {
+      history: host,
+      readGitHubHistory: async () => github,
+    }),
+    /Published migration changed/,
+  );
+});
+
+test("compatibility union preserves read failures, strict ancestry and conflicting identities", async (t) => {
+  const f = fixture(t);
+  const host = f.history([f.record("0.1.0", f.legacy)]);
+  assert.deepEqual(
+    mergeCompatibilityHistories(host, host).releases,
+    host.releases,
+  );
+  assert.throws(
+    () =>
+      mergeCompatibilityHistories(
+        host,
+        f.history([{ ...host.releases[0], manifestSha256: "f".repeat(64) }]),
+      ),
+    /Conflicting/,
+  );
+  await assert.rejects(
+    qualifyPublicCompatibilityMigrations(f.root, {
+      history: host,
+      readGitHubHistory: async () => {
+        throw new Error("GitHub unavailable");
+      },
+    }),
+    /GitHub unavailable/,
+  );
+  await assert.rejects(
+    qualifyPublicCompatibilityMigrations(f.root, {
+      readHistory: () => {
+        throw new Error("Host unavailable");
+      },
+      readGitHubHistory: async () => f.history([]),
+    }),
+    /Host unavailable/,
+  );
+  f.git("checkout", "--orphan", "unrelated");
+  f.put("unrelated.txt", "synthetic\n");
+  f.commit();
+  await assert.rejects(
+    qualifyPublicCompatibilityMigrations(f.root, {
+      history: f.history([]),
+      readGitHubHistory: async () => host,
+    }),
+    /ancestor/,
   );
 });
 

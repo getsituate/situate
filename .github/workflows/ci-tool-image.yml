@@ -1,0 +1,81 @@
+name: CI tool image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ci-tool-image.yml
+      - tools/actions-adapter.mjs
+      - tools/ci-publish.mjs
+      - LICENSE
+      - package.json
+      - client/docker/Dockerfile
+      - client/docker/Dockerfile.dockerignore
+      - client/docker/ci-*
+      - client/.node-version
+      - client/rust-toolchain.toml
+      - tools/toolchain.quality.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-tool-image
+  cancel-in-progress: false
+
+env:
+  WORKFLOW_SHA: ${{ github.workflow_sha }}
+
+jobs:
+  build:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      provenance: ${{ steps.build.outputs.provenance }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs image-transfer-gate
+        env:
+          CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
+      - id: build
+        run: node tools/actions-adapter.mjs image-build
+      - run: node tools/actions-adapter.mjs image-upload
+        env:
+          PROVENANCE: ${{ steps.build.outputs.provenance }}
+          CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
+          CI_IMAGE_TRANSFER_SSH_PRIVATE_KEY: ${{ secrets.CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY }}
+          CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS: ${{ secrets.CI_IMAGE_TRANSFER_KNOWN_HOSTS }}
+
+  publish:
+    needs: build
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs image-download
+        env:
+          PROVENANCE: ${{ needs.build.outputs.provenance }}
+          CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_READ_HOST }}
+          CI_IMAGE_TRANSFER_SSH_PRIVATE_KEY: ${{ secrets.CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY }}
+          CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS: ${{ secrets.CI_IMAGE_TRANSFER_KNOWN_HOSTS }}
+      - run: node tools/actions-adapter.mjs image-publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVENANCE: ${{ needs.build.outputs.provenance }}
+          DOCKER_CONFIG: ${{ runner.temp }}/ci-registry-auth

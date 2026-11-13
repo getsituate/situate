@@ -127,14 +127,16 @@ test("source deadlines stop scheduling and await every aborted process", async (
   const root = fixture(t);
   const files = scripts(root, 9);
   const children = syntaxProcesses(t);
-  await assert.rejects(
-    checkSources(root, files, { deadline: performance.now() + 100 }),
-    (error) => {
-      assert.match(error.message, /budget/);
-      assert.ok(error.cause instanceof Error);
-      return true;
-    },
-  );
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const checking = checkSources(root, files, {
+    deadline: performance.now() + 60_000,
+  });
+  t.mock.timers.tick(60_000);
+  await assert.rejects(checking, (error) => {
+    assert.match(error.message, /budget/);
+    assert.ok(error.cause instanceof Error);
+    return true;
+  });
   assert.equal(children.length, 4);
   assert.ok(children.every((child) => child.closed));
 });

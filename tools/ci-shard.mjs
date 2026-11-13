@@ -11,11 +11,12 @@ import {
   suiteInventory,
 } from "./test.mjs";
 
-import { mvpSuiteEnabled } from "./test-scope.mjs";
+import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
 
 export function activeLinuxSuite(suite) {
   return (
-    mvpSuiteEnabled(suite, "linux") &&
+    supportedSuiteEnabled(suite) &&
+    suiteAvailable(suite, "linux") &&
     !["browser", "native"].includes(suite.kind)
   );
 }
@@ -132,8 +133,8 @@ export function createShardPlan(
       throw new Error("CI selection contains deferred suites.");
     selected.suites = selected.suites.filter(activeLinuxSuite);
   }
-  selected.scope = extended ? "extended" : "mvp";
-  selected.profile = extended ? "all" : "mvp";
+  selected.scope = extended ? "extended" : "macos";
+  selected.profile = extended ? "all" : "supported";
   if (!selected.suites.length)
     throw new Error(`No suites selected for CI shard: ${shard}.`);
   return selected;

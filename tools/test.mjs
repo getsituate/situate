@@ -19,7 +19,7 @@ import { parseArgs } from "node:util";
 import { cachedQualitySuite } from "./quality-cache.mjs";
 import { cargoEnvironment } from "./cargo-environment.mjs";
 import { compilerCacheEnvironment } from "./compiler-cache.mjs";
-import { mvpSuiteEnabled } from "./test-scope.mjs";
+import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
 import {
   QUICK_BUDGET_MS,
   QUICK_EXECUTION_MS,
@@ -187,12 +187,54 @@ export function suiteInventory(files, host = process.platform) {
   };
   const matching = (pattern) => files.filter((file) => pattern.test(file));
   const executorBoundary = "client/app/src/plugins/executor-boundary.test.ts";
+  const platformOnly = (file) =>
+    /^tools\/bootstrap-mobile\.test\.mjs$/.test(file) ||
+    /^client\/scripts\/(?:ios-xcode(?:\.integration)?|test-native-ios|native-ios-ipc-trace|generate-mobile-permissions)\.test\.mjs$/.test(
+      file,
+    );
+  for (const [id, project, pattern] of [
+    ["runner-platform", "runner", /^tools\/.*\.test\.mjs$/],
+    [
+      "client-scripts-platform",
+      "client",
+      /^client\/scripts\/[^/]+(?<!\.integration)\.test\.mjs$/,
+    ],
+    [
+      "client-scripts-platform-integration",
+      "client",
+      /^client\/scripts\/[^/]+\.integration\.test\.mjs$/,
+    ],
+  ]) {
+    const tests = matching(pattern).filter(platformOnly);
+    if (tests.length)
+      nodeTests(
+        id,
+        project,
+        id.endsWith("integration") ? "integration" : "unit",
+        tests,
+      );
+  }
 
+  const migrationTests = matching(
+    /^tools\/(?:migration-history|published-migrations)\.test\.mjs$/,
+  );
+  if (migrationTests.length)
+    nodeTests("delivery-migrations", "runner", "unit", migrationTests);
+  const deliveryTests = matching(
+    /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery))\.test\.mjs$/,
+  );
+  if (deliveryTests.length)
+    nodeTests("delivery-unit", "runner", "unit", deliveryTests);
   nodeTests(
     "runner-unit",
     "runner",
     "unit",
-    matching(/^tools\/.*(?<!\.integration)\.test\.mjs$/),
+    matching(/^tools\/.*(?<!\.integration)\.test\.mjs$/).filter(
+      (file) =>
+        !platformOnly(file) &&
+        !deliveryTests.includes(file) &&
+        !migrationTests.includes(file),
+    ),
   );
   if (host === "darwin" || host === "linux") {
     add("dev-tui-unit", "dev-tui", "unit", "tools/dev-tui", "cargo", [
@@ -220,6 +262,15 @@ export function suiteInventory(files, host = process.platform) {
       : ["npm", ["run", script]];
   add("root-lint", "runner", "check", ".", ...npm("lint"));
   add("root-format", "runner", "check", ".", ...npm("format:check"));
+  node("root-commits", "runner", "check", ["tools/commit-check.mjs"]);
+  add("root-history-secrets", "runner", "check", ".", "gitleaks", [
+    "git",
+    ".",
+    "--redact",
+    "--no-banner",
+    "--config",
+    ".gitleaks.toml",
+  ]);
   for (const name of [
     "kotlin",
     "rust",
@@ -239,13 +290,17 @@ export function suiteInventory(files, host = process.platform) {
     "client-scripts-unit",
     "client",
     "unit",
-    matching(/^client\/scripts\/[^/]+(?<!\.integration)\.test\.mjs$/),
+    matching(/^client\/scripts\/[^/]+(?<!\.integration)\.test\.mjs$/).filter(
+      (file) => !platformOnly(file),
+    ),
   );
   nodeTests(
     "client-scripts-integration",
     "client",
     "integration",
-    matching(/^client\/scripts\/[^/]+\.integration\.test\.mjs$/),
+    matching(/^client\/scripts\/[^/]+\.integration\.test\.mjs$/).filter(
+      (file) => !platformOnly(file),
+    ),
   );
   add(
     "client-vue",
@@ -590,6 +645,8 @@ export function suiteInventory(files, host = process.platform) {
       [
         "client-scripts-unit",
         "client-scripts-integration",
+        "client-scripts-platform",
+        "client-scripts-platform-integration",
         "client-vue",
         "client-executor-integration",
         "client-types",
@@ -633,6 +690,7 @@ export function createPlan(
     checks = false,
     coverage = false,
     extended = false,
+    suite: requestedSuites = [],
     platform = process.platform,
     changed = false,
     base,
@@ -644,9 +702,23 @@ export function createPlan(
       "Choose only one of --unit, --quick, --feedback, --checks or --coverage.",
     );
   if (base && !changed) throw new Error("--base requires --changed.");
+  const explicit =
+    typeof requestedSuites === "string" ? [requestedSuites] : requestedSuites;
+  if (
+    explicit.length &&
+    (unit || quick || feedback || checks || coverage || changed)
+  )
+    throw new Error("--suite cannot be combined with profiles or --changed.");
+  const inventory = suiteInventory(sourceFiles(directory), "darwin");
+  for (const id of explicit) {
+    const suite = inventory.find((entry) => entry.id === id);
+    if (!suite) throw new Error(`Unknown suite: ${id}`);
+    if (!suiteAvailable(suite, platform))
+      throw new Error(`Suite ${id} requires a macOS host.`);
+  }
   const files = changed ? changedFiles(directory, base) : [];
   const selected = changed ? affectedProjects(files) : [...projects];
-  let suites = suiteInventory(sourceFiles(directory), platform).filter(
+  let suites = inventory.filter(
     (suite) =>
       (!unit || suite.kind === "unit") &&
       (!feedback || isFeedbackSuite(suite)) &&
@@ -744,15 +816,17 @@ export function createPlan(
         ...suite,
         reasons: suiteSelectionReasons(suite, files),
       }));
-  const deferredSuiteIds = extended
-    ? []
-    : suites
-        .filter((suite) => !mvpSuiteEnabled(suite, platform))
-        .map((suite) => suite.id);
-  if (!extended)
-    suites = suites.filter((suite) => mvpSuiteEnabled(suite, platform));
+  const enabled = (suite) =>
+    suiteAvailable(suite, platform) &&
+    (explicit.length
+      ? explicit.includes(suite.id)
+      : extended || coverage || supportedSuiteEnabled(suite));
+  const deferredSuiteIds = suites
+    .filter((suite) => !enabled(suite))
+    .map((suite) => suite.id);
+  suites = suites.filter(enabled);
   return {
-    scope: extended ? "extended" : "mvp",
+    scope: extended ? "extended" : "supported",
     deferredSuiteIds,
     profile: unit
       ? "unit"
@@ -766,7 +840,7 @@ export function createPlan(
               ? "coverage"
               : extended
                 ? "all"
-                : "mvp",
+                : "supported",
     changed,
     base: base ?? null,
     changedFiles: files,
@@ -1489,6 +1563,7 @@ export function parseOptions(args, environment = process.env) {
       checks: { type: "boolean" },
       coverage: { type: "boolean" },
       extended: { type: "boolean" },
+      suite: { type: "string", multiple: true },
       "require-tests": { type: "boolean" },
       changed: { type: "boolean" },
       base: { type: "string" },
@@ -1553,7 +1628,8 @@ export function parseOptions(args, environment = process.env) {
 
 const help = `Usage: node tools/test.mjs [options]
 
-No options runs the macOS+iOS MVP scope for this host, not exhaustive coverage.
+No options runs supported suites available on this host, not optional diagnostics.
+  --suite <id>     Run an explicit suite (repeatable); requires its execution host
   --extended       Restore the comprehensive current-host inventory, including deferred suites
   --unit           Unit and contract tests; no browsers, servers or native app builds
   --quick          Dependency-free source checks and fast contracts; five-second total budget
@@ -1616,18 +1692,14 @@ export async function main(args = process.argv.slice(2)) {
           `${plan.suites.length} suites selected (${plan.scope} scope, ${plan.profile} profile).`,
         );
         if (plan.deferredSuiteIds.length)
-          console.log(
-            `Deferred by MVP scope: ${plan.deferredSuiteIds.join(", ")}`,
-          );
+          console.log(`Not selected: ${plan.deferredSuiteIds.join(", ")}`);
       }
       return 0;
     }
     if (!json) {
       console.error(`Test scope: ${plan.scope}; profile: ${plan.profile}.`);
       if (plan.deferredSuiteIds.length)
-        console.error(
-          `Deferred by MVP scope: ${plan.deferredSuiteIds.join(", ")}`,
-        );
+        console.error(`Not selected: ${plan.deferredSuiteIds.join(", ")}`);
     }
     let execute = options.feedback
       ? (suite, executionOptions) =>

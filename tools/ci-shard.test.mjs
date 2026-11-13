@@ -113,14 +113,17 @@ test("nonempty disjoint shards exactly cover the full Linux registry", () => {
   ]);
 });
 
-test("executor browser boundaries remain in the default integration checks shard", () => {
+test("macOS executor boundaries are excluded from shared checks and retain their diagnostic owner", () => {
   const id = "client-executor-integration";
   const checks = createShardPlan("checks");
+  assert.ok(!checks.suites.some((suite) => suite.id === id));
   assert.equal(
-    checks.suites.find((suite) => suite.id === id).kind,
+    createShardPlan("checks", root, undefined, { extended: true }).suites.find(
+      (suite) => suite.id === id,
+    ).kind,
     "integration",
   );
-  assert.ok(!checks.deferredSuiteIds.includes(id));
+  assert.ok(checks.deferredSuiteIds.includes(id));
   assert.ok(!createShardPlan("quick").suites.some((suite) => suite.id === id));
   assert.ok(
     !createShardPlan("browser", root, undefined, {
@@ -138,10 +141,10 @@ test("the extended host plan remains full and unfiltered", () => {
   );
 });
 
-test("default shard plans enforce MVP scope while explicit diagnostics preserve raw partitions", () => {
+test("shared shard plans exclude macOS-host suites while diagnostics preserve raw partitions", () => {
   const checks = createShardPlan("checks");
-  assert.equal(checks.scope, "mvp");
-  assert.equal(checks.profile, "mvp");
+  assert.equal(checks.scope, "macos");
+  assert.equal(checks.profile, "supported");
   assert.ok(checks.deferredSuiteIds.includes("client-core"));
   assert.ok(checks.deferredSuiteIds.includes("root-kotlin"));
   for (const id of [

@@ -1,4 +1,5 @@
-import { createPrivateKey } from "node:crypto";
+import { createPrivateKey, randomBytes } from "node:crypto";
+import { run } from "./ios-xcode.mjs";
 import {
   closeSync,
   constants,
@@ -185,6 +186,125 @@ export async function withAppleCredentials(
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+export async function withSigningKeychain(
+  { root, environment = process.env, execute = run, signal },
+  use,
+) {
+  const names = [
+    "APPLE_DEVELOPER_ID_P12_FILE",
+    "APPLE_DEVELOPER_ID_P12_PASSWORD",
+  ];
+  const local =
+    environment.CI === "true" ||
+    names.every((name) => Object.hasOwn(environment, name))
+      ? {}
+      : readAppleEnv(root, names);
+  const values = Object.fromEntries(
+    names.map((name) => [
+      name,
+      Object.hasOwn(environment, name) ? environment[name] : local[name],
+    ]),
+  );
+  const certificate = values.APPLE_DEVELOPER_ID_P12_FILE;
+  const certificatePassword = values.APPLE_DEVELOPER_ID_P12_PASSWORD;
+  if (!certificate || typeof certificatePassword !== "string")
+    throw new Error(
+      "Signing requires APPLE_DEVELOPER_ID_P12_FILE and APPLE_DEVELOPER_ID_P12_PASSWORD for an isolated temporary keychain.",
+    );
+  const stat = lstatSync(certificate);
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.nlink !== 1 ||
+    (typeof process.getuid === "function" &&
+      (stat.uid !== process.getuid() || (stat.mode & 0o077) !== 0))
+  )
+    throw new Error(
+      "Developer ID certificate must be an owned private regular file without links.",
+    );
+  const directory = mkdtempSync(join(tmpdir(), "situate-signing-"));
+  const keychain = join(directory, "signing.keychain-db");
+  const password = randomBytes(32).toString("hex");
+  const env = Object.fromEntries(
+    ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME"]
+      .filter((name) => environment[name] !== undefined)
+      .map((name) => [name, environment[name]]),
+  );
+  const options = { env, signal, capture: true };
+  let created = false;
+  let result;
+  let failure;
+  try {
+    // Command failures must not expose security's arguments or private input.
+    try {
+      await execute(
+        "security",
+        ["create-keychain", "-p", password, keychain],
+        options,
+      );
+      created = true;
+      await execute(
+        "security",
+        ["set-keychain-settings", "-lut", "21600", keychain],
+        options,
+      );
+      await execute(
+        "security",
+        ["unlock-keychain", "-p", password, keychain],
+        options,
+      );
+      await execute(
+        "security",
+        [
+          "import",
+          certificate,
+          "-k",
+          keychain,
+          "-P",
+          certificatePassword,
+          "-T",
+          "/usr/bin/codesign",
+          "-T",
+          "/usr/bin/security",
+        ],
+        options,
+      );
+      await execute(
+        "security",
+        [
+          "set-key-partition-list",
+          "-S",
+          "apple-tool:,apple:,codesign:",
+          "-s",
+          "-k",
+          password,
+          keychain,
+        ],
+        options,
+      );
+    } catch {
+      throw new Error("Temporary Developer ID keychain setup failed.");
+    }
+    result = await use(keychain);
+  } catch (error) {
+    failure = { error };
+  }
+  try {
+    if (created)
+      await execute("security", ["delete-keychain", keychain], {
+        ...options,
+        signal: undefined,
+      });
+    rmSync(directory, { recursive: true, force: true });
+  } catch {
+    throw new Error(
+      "Temporary signing keychain cleanup failed; inspect the private signing temporary directory before retrying.",
+    );
+  }
+  if (failure) throw failure.error;
+  return result;
 }
 
 export function notaryAuthentication(settings) {

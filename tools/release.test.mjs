@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { compileBuildReleaseHistory } from "../client/scripts/release-history.mjs";
 import {
   catalogDigest,
@@ -29,48 +29,32 @@ import {
   translateRelease,
   withReleaseLock,
 } from "./release-preparation.mjs";
-import { agentEnvironment, createReleaseAgent } from "./release-agent.mjs";
 import { runReleaseCommand } from "./release.mjs";
-import {
-  acceptLocalTranslations,
-  completeLocal,
-  startLocal,
-} from "./release-local.mjs";
 
-function localHerdr(t, calls = [], failure) {
-  const original = process.env.HERDR_ENV;
-  process.env.HERDR_ENV = "1";
-  t.after(() => {
-    if (original === undefined) delete process.env.HERDR_ENV;
-    else process.env.HERDR_ENV = original;
-  });
-  return async (args) => {
-    calls.push(args);
-    if (failure) throw failure;
-    if (args[0] === "pane" && args[1] === "split")
-      return { result: { pane: { pane_id: "fixture:p2" } } };
-    if (args[1] === "process-info") {
-      assert.deepEqual(args, ["pane", "process-info", "--pane", "fixture:p2"]);
-      return {
-        result: {
-          process_info: { shell_pid: 123, foreground_process_group_id: 123 },
-        },
-      };
-    }
-    return { result: {} };
-  };
+function snapshot(root) {
+  return Object.fromEntries(
+    fs
+      .readdirSync(root, { recursive: true })
+      .filter((file) => file !== ".git" && !file.startsWith(`.git${path.sep}`))
+      .filter((file) => fs.lstatSync(path.join(root, file)).isFile())
+      .sort()
+      .map((file) => [
+        file,
+        fs.readFileSync(path.join(root, file)).toString("base64"),
+      ]),
+  );
 }
-test("local preparation reports dirty files before starting an agent", async (t) => {
+
+test("historical status reports dirty files without modifying them or preparing a release", async (t) => {
   const f = fixture(t);
-  const calls = [];
-  const herdr = localHerdr(t, calls);
-  assert.equal(releaseStatus(f.root, "1.11.0").checkoutChanges, "");
   f.write("scratch.txt", "Untracked work\n");
   f.write("client/package.json", {
     version: f.version,
     description: "Local edit",
   });
   f.git("add", "client/package.json");
+  const before = snapshot(f.root);
+  const head = f.git("rev-parse", "HEAD");
   const status = await runReleaseCommand(f.root, [
     "status",
     "--version",
@@ -79,40 +63,12 @@ test("local preparation reports dirty files before starting an agent", async (t)
   assert.equal(status.phase, "unprepared");
   assert.match(status.checkoutChanges, /M {2}client\/package.json/u);
   assert.match(status.checkoutChanges, /\?\? scratch.txt/u);
-  await assert.rejects(
-    () =>
-      runReleaseCommand(
-        f.root,
-        ["start-local", "--version", "1.11.0", "--baseline", f.baseline],
-        { herdr },
-      ),
-    (error) => {
-      assert.match(error.message, /clean checkout/u);
-      assert.match(error.message, /client\/package.json/u);
-      assert.match(error.message, /scratch.txt/u);
-      return true;
-    },
-  );
-  assert.deepEqual(calls, []);
-  assert.equal(
-    fs.readFileSync(path.join(f.root, "scratch.txt"), "utf8"),
-    "Untracked work\n",
-  );
-  assert.equal(
-    fs.existsSync(
-      path.join(f.root, ".release-preparation/1.11.0/local-session.json"),
-    ),
-    false,
-  );
-  f.git("restore", "--staged", "client/package.json");
-  f.git("restore", "client/package.json");
-  fs.rmSync(path.join(f.root, "scratch.txt"));
-  assert.equal(releaseStatus(f.root, "1.11.0").checkoutChanges, "");
-  await startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr });
-  assert.ok(calls.some((args) => args[0] === "agent" && args[1] === "start"));
+  assert.deepEqual(snapshot(f.root), before);
+  assert.equal(f.git("rev-parse", "HEAD"), head);
+  assert.equal(fs.existsSync(path.join(f.root, ".release-preparation")), false);
 });
 
-test("local release checks honor global ignore rules without hiding other changes", async (t) => {
+test("historical status honors global ignore rules without hiding other changes", async (t) => {
   const f = fixture(t);
   const configRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), "situate-git-config-"),
@@ -132,57 +88,18 @@ test("local release checks honor global ignore rules without hiding other change
   );
   f.write(".idea/misc.xml", "Local IDE settings\n");
   f.write("requirements/.idea/misc.xml", "Nested IDE settings\n");
-  assert.equal(releaseStatus(f.root, "1.11.0").checkoutChanges, "");
+  assert.equal(
+    (await runReleaseCommand(f.root, ["status"])).checkoutChanges,
+    "",
+  );
   f.write("scratch.txt", "Untracked work\n");
+  const before = snapshot(f.root);
   assert.match(
-    releaseStatus(f.root, "1.11.0").checkoutChanges,
+    (await runReleaseCommand(f.root, ["status"])).checkoutChanges,
     /\?\? scratch.txt/u,
   );
-  await assert.rejects(
-    () =>
-      startLocal(f.root, "1.11.0", {
-        baseline: f.baseline,
-        herdr: localHerdr(t),
-      }),
-    /scratch.txt/u,
-  );
-  fs.rmSync(path.join(f.root, "scratch.txt"));
-  const target = await localDraft(t, f);
-  assert.equal((await completeLocal(f.root, target)).phase, "ready");
-  validateReleaseForBuild(f.root, target);
-  f.write("client/package.json", {
-    version: target,
-    description: "Local edit",
-  });
-  assert.match(
-    releaseStatus(f.root, target).checkoutChanges,
-    /client\/package.json/u,
-  );
-  assert.throws(
-    () => validateReleaseForBuild(f.root, target),
-    /clean checkout/u,
-  );
-  assert.equal(
-    fs.readFileSync(path.join(f.root, ".idea/misc.xml"), "utf8"),
-    "Local IDE settings\n",
-  );
+  assert.deepEqual(snapshot(f.root), before);
 });
-
-async function localDraft(t, f, target = "1.11.0") {
-  await startLocal(f.root, target, {
-    baseline: f.baseline,
-    herdr: localHerdr(t),
-  });
-  f.write(`.release-preparation/${target}/en.json`, notes());
-  const hash = releaseStatus(f.root, target).sourceHash;
-  approveRelease(f.root, target, hash);
-  f.write(
-    `.release-preparation/${target}/de.json`,
-    notes("Geprüfte Änderungen"),
-  );
-  acceptLocalTranslations(f.root, target, hash);
-  return target;
-}
 
 const notes = (title = "Reviewed changes") => ({
   title,
@@ -315,6 +232,19 @@ function fixture(t, version = "1.10.0") {
   };
 }
 
+async function finalizeFixture(
+  f,
+  version = f.version,
+  options = { baseline: f.baseline },
+) {
+  prepareRelease(f.root, version, options);
+  f.write(`.release-preparation/${version}/en.json`, notes());
+  approveRelease(f.root, version, releaseStatus(f.root, version).sourceHash);
+  await translateRelease(f.root, version, f.fake);
+  finalizeRelease(f.root, version);
+  f.commit("docs(release): retain fixture notes");
+}
+
 test("distribution validation requires trusted migration history without changing legacy release records", async (t) => {
   const f = fixture(t);
   const original = process.env.SITUATE_MIGRATIONS_PUBLISHED_REVISION;
@@ -332,11 +262,8 @@ test("distribution validation requires trusted migration history without changin
   f.write(`${source}migrations/mod.rs`, "pub(crate) mod m0001_metadata;\n");
   f.write(`${source}migrations/m0001_metadata.rs`, "pub struct Migration;\n");
   f.commit("feat: initialize compatibility metadata");
-  await localDraft(t, f, f.version);
-  assert.equal((await completeLocal(f.root, f.version)).phase, "ready");
-  const commit = f.git("rev-parse", "HEAD");
-  assert.equal((await completeLocal(f.root, f.version)).phase, "ready");
-  assert.equal(f.git("rev-parse", "HEAD"), commit);
+  await finalizeFixture(f);
+  const retained = snapshot(f.root);
   assert.throws(
     () => validateReleaseForBuild(f.root, f.version),
     /explicit full published Git commit/u,
@@ -351,6 +278,7 @@ test("distribution validation requires trusted migration history without changin
     validateReleaseForBuild(f.root, f.version).installedVersion,
     f.version,
   );
+  assert.deepEqual(snapshot(f.root), retained);
 });
 
 test("external release history requires the supplied full published source commit", async (t) => {
@@ -363,8 +291,7 @@ test("external release history requires the supplied full published source commi
   f.write(`${source}migrations/mod.rs`, "pub(crate) mod m0001_metadata;\n");
   f.write(`${source}migrations/m0001_metadata.rs`, "pub struct Migration;\n");
   f.commit("feat: initialize migrations");
-  await localDraft(t, f, f.version);
-  await completeLocal(f.root, f.version);
+  await finalizeFixture(f);
   assert.equal(
     (
       await compileBuildReleaseHistory(f.root, f.version, {
@@ -387,24 +314,17 @@ test("external release history requires the supplied full published source commi
     );
 });
 
-test("first release preparation uses an explicit Git baseline without previous release records", async (t) => {
+test("historical preparation status retains the explicit source and baseline commits", async (t) => {
   const f = fixture(t);
-  await assert.rejects(
-    runReleaseCommand(f.root, ["prepare"]),
-    /explicit Git comparison revision/u,
-  );
-  const prepared = await runReleaseCommand(f.root, [
-    "prepare",
-    "--baseline",
-    f.baseline,
-  ]);
+  f.prepare();
+  const prepared = await runReleaseCommand(f.root, ["status"]);
   assert.equal(prepared.phase, "draft");
   assert.equal(prepared.baseline, f.baseline);
   assert.equal(prepared.revision, f.revision);
   assert.equal(fs.existsSync(path.join(f.root, "releases/index.json")), false);
 });
 
-test("fresh-root releases retain approval, automatic baselines and source binding without agents", async (t) => {
+test("historical finalized records retain approval, automatic baselines and source binding", async (t) => {
   const f = fixture(t, "0.1.6");
   assert.equal(f.git("rev-list", "--max-parents=0", "HEAD"), f.baseline);
   assert.equal(f.git("remote"), "");
@@ -412,47 +332,29 @@ test("fresh-root releases retain approval, automatic baselines and source bindin
     compileReleaseCatalog(f.root, { version: f.version }).releases,
     [],
   );
-  await assert.rejects(
-    runReleaseCommand(f.root, ["prepare"]),
-    /explicit Git comparison revision/u,
-  );
-  const first = await runReleaseCommand(f.root, [
-    "prepare",
-    "--baseline",
-    f.baseline,
-  ]);
+  const first = prepareRelease(f.root, f.version, { baseline: f.baseline });
   assert.equal(first.baseline, f.baseline);
   assert.equal(first.revision, f.revision);
   for (const version of [f.version, "0.1.7"]) {
     if (version !== f.version) {
       setVersion(f.root, version);
-      f.commit("chore(release): select next version");
+      f.commit("build: select fixture version");
       f.write("client/source.txt", "More retained drafts\n");
       const revision = f.commit("fix: retain more drafts");
-      const next = await runReleaseCommand(f.root, ["prepare"]);
+      const next = prepareRelease(f.root, version);
       assert.equal(next.baseline, first.revision);
       assert.equal(next.revision, revision);
     }
     f.write(`.release-preparation/${version}/en.json`, notes());
     const hash = releaseStatus(f.root, version).sourceHash;
-    await assert.rejects(
-      runReleaseCommand(f.root, ["finalize"]),
+    assert.throws(
+      () => finalizeRelease(f.root, version),
       /approval|translations/u,
     );
-    await runReleaseCommand(f.root, ["approve", "--source-hash", hash]);
-    f.write(
-      `.release-preparation/${version}/de.json`,
-      notes("Geprüfte Änderungen"),
-    );
-    await runReleaseCommand(f.root, [
-      "accept-local-translations",
-      "--version",
-      version,
-      "--source-hash",
-      hash,
-    ]);
-    await runReleaseCommand(f.root, ["finalize"]);
-    f.commit(`chore(release): finalize ${version}`);
+    approveRelease(f.root, version, hash);
+    await translateRelease(f.root, version, f.fake);
+    finalizeRelease(f.root, version);
+    f.commit(`docs(release): retain ${version}`);
     assert.equal(
       validateReleaseForBuild(f.root, version).installedVersion,
       version,
@@ -475,46 +377,74 @@ test("fresh-root releases retain approval, automatic baselines and source bindin
   );
 });
 
-test("an empty baseline uses the highest earlier committed release notes", async (t) => {
+test("historical records preserve the highest earlier committed release baseline", async (t) => {
   const f = fixture(t, "1.9.0");
   await f.finalize();
-  assert.throws(
-    () => prepareRelease(f.root, "1.11.0", { local: true }),
-    /explicit Git comparison revision/u,
-  );
-  f.commit("chore(release): prepare 1.9.0");
-  const target = await localDraft(t, f, "1.10.0");
-  const previousRevision = releaseStatus(f.root, target).revision;
-  await completeLocal(f.root, target);
+  f.commit("docs(release): retain 1.9.0");
+  setVersion(f.root, "1.10.0");
+  f.commit("build: select fixture version");
+  const previousRevision = f.git("rev-parse", "HEAD");
+  await finalizeFixture(f, "1.10.0", {});
+  setVersion(f.root, "1.11.0");
   f.write("client/source.txt", "Another product change\n");
   const head = f.commit("fix: retain more drafts");
-  const prepared = await runReleaseCommand(
-    f.root,
-    ["start-local", "--version", "1.11.0"],
-    { herdr: localHerdr(t) },
-  );
+  prepareRelease(f.root, "1.11.0");
+  const prepared = await runReleaseCommand(f.root, [
+    "status",
+    "--version",
+    "1.11.0",
+  ]);
   assert.equal(prepared.baseline, previousRevision);
   assert.equal(prepared.revision, head);
   assert.equal(prepared.phase, "draft");
   assert.equal(fs.existsSync(path.join(f.root, "releases/index.json")), false);
 });
 
-test("removed import commands and options are rejected without writing preparation files", async (t) => {
+test("retired release preparation commands and options cannot write files or create commits", async (t) => {
   const f = fixture(t);
-  await assert.rejects(
-    runReleaseCommand(f.root, ["import-historical"]),
-    /Usage/u,
-  );
+  const before = snapshot(f.root);
+  const head = f.git("rev-parse", "HEAD");
+  for (const command of [
+    "start-local",
+    "complete-local",
+    "accept-local-translations",
+    "prepare",
+    "generate",
+    "approve",
+    "translate",
+    "finalize",
+    "set-version",
+    "import-historical",
+    "record-publication",
+  ]) {
+    await assert.rejects(
+      runReleaseCommand(f.root, [command, "--version", f.version]),
+      /Usage/u,
+    );
+  }
   for (const option of [
+    "--baseline",
+    "--revision",
+    "--source-hash",
+    "--provider",
+    "--model",
+    "--api-key-env",
+    "--date",
+    "--feedback",
+    "--allow-model-call",
+    "--retry-failed-model-call",
+    "--revise-draft",
     "--input",
     "--content-revision",
     "--allow-unpublished-baseline",
   ]) {
     await assert.rejects(
-      runReleaseCommand(f.root, ["prepare", option]),
+      runReleaseCommand(f.root, ["status", option]),
       /Unknown option/u,
     );
   }
+  assert.deepEqual(snapshot(f.root), before);
+  assert.equal(f.git("rev-parse", "HEAD"), head);
   assert.equal(fs.existsSync(path.join(f.root, ".release-preparation")), false);
 });
 
@@ -732,98 +662,6 @@ test("interrupted finalization has no valid marker and resumes only identical fi
   assert.throws(() => finalizeRelease(f.root, f.version), /content changed/u);
 });
 
-test("cancellation and failed model outcomes require explicit retry; completed calls resume", async (t) => {
-  const f = fixture(t);
-  f.prepare();
-  let calls = 0;
-  const controller = new AbortController();
-  await assert.rejects(
-    generateRelease(
-      f.root,
-      f.version,
-      async (request) => {
-        calls++;
-        if (calls === 2) {
-          controller.abort(new Error("cancelled"));
-          throw new Error("cancelled");
-        }
-        return f.fake(request);
-      },
-      { signal: controller.signal },
-    ),
-    /cancelled/u,
-  );
-  const completed = calls;
-  await assert.rejects(
-    generateRelease(f.root, f.version, f.fake),
-    /explicitly retry/u,
-  );
-  assert.equal(calls, completed);
-  await generateRelease(
-    f.root,
-    f.version,
-    async (request) => {
-      calls++;
-      return f.fake(request);
-    },
-    { retryFailedModelCall: true },
-  );
-  assert.equal(releaseStatus(f.root, f.version).phase, "awaiting-approval");
-  const after = calls;
-  await f.generate();
-  assert.equal(calls, after);
-  f.approve();
-  let translations = 0;
-  await translateRelease(f.root, f.version, async () => {
-    translations++;
-    return notes("Translation");
-  });
-  await translateRelease(f.root, f.version, async () => {
-    throw new Error("must not call again");
-  });
-  assert.equal(translations, 1);
-});
-
-test("explicit draft revision archives approved source, resets translation and uses fresh requests", async (t) => {
-  const f = fixture(t);
-  await f.translated();
-  const oldHash = releaseStatus(f.root, f.version).sourceHash;
-  await assert.rejects(f.generate(), /preserved/u);
-  let calls = 0;
-  await generateRelease(
-    f.root,
-    f.version,
-    async (request) => {
-      calls++;
-      if (request.task === "generate")
-        return {
-          source: notes("Revised draft"),
-          evidence: { "keep-drafts": [f.revision] },
-          uncertainties: [],
-        };
-      return f.fake(request);
-    },
-    { reviseDraft: true, feedback: "Shorten the title" },
-  );
-  assert.equal(calls > 0, true);
-  assert.equal(releaseStatus(f.root, f.version).phase, "awaiting-approval");
-  const archive = fs.readdirSync(
-    path.join(f.root, `.release-preparation/archive/${f.version}`),
-  );
-  assert.equal(archive.length, 1);
-  const saved = readJson(
-    f.root,
-    `.release-preparation/archive/${f.version}/${archive[0]}/state.json`,
-  );
-  assert.equal(saved.sourceApproval.sourceHash, oldHash);
-  assert.equal(
-    fs.existsSync(
-      path.join(f.root, `.release-preparation/${f.version}/de.json`),
-    ),
-    false,
-  );
-});
-
 test("Git evidence is bounded, includes legacy commits and final reverts, excludes duplicate merge records", (t) => {
   const f = fixture(t);
   f.git("checkout", "-b", "feature");
@@ -894,7 +732,7 @@ test("removed publication commands and options are rejected", async (t) => {
     "--evidence",
   ])
     await assert.rejects(
-      runReleaseCommand(f.root, ["prepare", option]),
+      runReleaseCommand(f.root, ["validate", option]),
       /Unknown option/u,
     );
 });
@@ -925,41 +763,6 @@ test("release inputs reject symlinks, hardlinks, oversized files, unknown locale
   await withReleaseLock(f.root, async () => {
     assert.throws(() => withReleaseLock(f.root, () => {}), /locked/u);
   });
-  assert.deepEqual(agentEnvironment("/private-fixture"), {
-    PATH: path.dirname(process.execPath),
-    HOME: "/private-fixture",
-    TMPDIR: "/private-fixture",
-    LANG: "en_US.UTF-8",
-    NO_COLOR: "1",
-  });
-  assert.throws(() => createReleaseAgent({}), /allow-model-call/u);
-  assert.throws(
-    () => createReleaseAgent({}, { allowModelCall: true }),
-    /Configure provider/u,
-  );
-});
-
-test("set-version updates only intended package and workspace pins", (t) => {
-  const f = fixture(t);
-  const result = setVersion(f.root, "2.0.0");
-  assert.equal(result.paths.length, 6);
-  assert.equal(
-    JSON.parse(
-      fs.readFileSync(path.join(f.root, "client/app/package.json"), "utf8"),
-    ).version,
-    "2.0.0",
-  );
-  assert.equal(
-    JSON.parse(
-      fs.readFileSync(path.join(f.root, "client/package-lock.json"), "utf8"),
-    ).packages.app.version,
-    "2.0.0",
-  );
-  validateVersionPins(f.root, "2.0.0");
-  assert.equal(
-    f.git("log", "--format=%s", "-1"),
-    "legacy draft retention change",
-  );
 });
 
 test("finalized histories sort numerically and preserve the installed ceiling without a publication index", async (t) => {
@@ -1046,394 +849,186 @@ test("finalized histories sort numerically and preserve the installed ceiling wi
   );
 });
 
-test("malformed agent output cannot approve or finalize content", async (t) => {
+test("malformed retained source cannot appear approved or finalized during inspection", async (t) => {
   const f = fixture(t);
   f.prepare();
-  await assert.rejects(
-    generateRelease(f.root, f.version, async () => ({
-      observations: "bad",
-      uncertainties: [],
-    })),
-    /Malformed/u,
-  );
-  assert.equal(releaseStatus(f.root, f.version).phase, "draft");
-  await assert.rejects(
-    generateRelease(f.root, f.version, f.fake),
-    /explicitly retry/u,
-  );
-  await generateRelease(f.root, f.version, f.fake, {
-    retryFailedModelCall: true,
+  f.write(`.release-preparation/${f.version}/en.json`, {
+    observations: "invalid source",
   });
-  assert.equal(releaseStatus(f.root, f.version).phase, "awaiting-approval");
-  assert.throws(() => finalizeRelease(f.root, f.version));
+  const before = snapshot(f.root);
+  const status = await runReleaseCommand(f.root, ["status"]);
+  assert.equal(status.phase, "stale");
+  assert.equal(status.sourceHash, null);
+  assert.ok(status.error);
+  await assert.rejects(
+    runReleaseCommand(f.root, ["validate"]),
+    /not finalized/u,
+  );
+  assert.deepEqual(snapshot(f.root), before);
   assert.equal(
     fs.existsSync(path.join(f.root, `releases/${f.version}/release.json`)),
     false,
   );
 });
 
-test("local startup captures HEAD and keeps version pins unchanged; status discovers its target", async (t) => {
+test("historical status discovers retained targets and leaves uncertain completion journals untouched", async (t) => {
   const f = fixture(t);
-  const calls = [];
-  const herdr = localHerdr(t, calls);
-  await assert.rejects(
-    startLocal(f.root, "1.11.0", { herdr }),
-    /explicit Git comparison/u,
-  );
-  assert.equal(calls.length, 0);
-  const result = await runReleaseCommand(
-    f.root,
-    ["start-local", "--version", "1.11.0", "--baseline", f.baseline],
-    { herdr },
-  );
-  assert.equal(result.revision, f.revision);
-  assert.equal(readJson(f.root, "client/package.json").version, f.version);
-  assert.equal((await runReleaseCommand(f.root, ["status"])).version, "1.11.0");
-  assert.deepEqual(
-    calls.map((args) => args.slice(0, 2)),
-    [
-      ["pane", "split"],
-      ["pane", "process-info"],
-      ["agent", "start"],
-      ["agent", "prompt"],
-    ],
-  );
-  assert.ok(calls[0].includes("SITUATE_AUTO_TESTS=0"));
-  const prompt = calls.at(-1).at(-1);
-  assert.match(prompt, /First write English only/u);
-  assert.match(prompt, /STOP and wait/u);
-  assert.match(prompt, /Never open an editor, commit/u);
-  assert.match(prompt, /AGENTS.md/u);
-  assert.match(prompt, /Write for people using Situate, not for developers/u);
-  assert.match(prompt, /Default to one short sentence in one paragraph/u);
-  assert.match(
-    prompt,
-    /Do not explain the technical cause or recovery internals/u,
-  );
-  assert.match(prompt, /never hide consequences merely to shorten an entry/u);
-  assert.match(
-    prompt,
-    /Omit purely internal changes without a meaningful user-visible effect/u,
-  );
-  assert.match(prompt, /Do not create one entry per commit/u);
-  assert.match(
-    prompt,
-    /Apply the same brevity and natural language to translations/u,
-  );
-  await assert.rejects(
-    startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-    /already requested/u,
-  );
-  assert.equal(calls.length, 4);
-});
-
-test("local completion makes one normal hooked commit with versions and catalogs and can be repeated", async (t) => {
-  const f = fixture(t);
-  const target = await localDraft(t, f);
-  f.git("config", "user.name", "Fixture");
-  f.git("config", "user.email", "fixture@example.invalid");
-  f.write(
-    ".git/hooks/pre-commit",
-    "#!/bin/sh\nprintf hooked > .release-preparation/hook-ran\n",
-  );
-  fs.chmodSync(path.join(f.root, ".git/hooks/pre-commit"), 0o700);
-  const before = f.git("rev-list", "--count", "HEAD");
-  assert.equal(
-    (await runReleaseCommand(f.root, ["complete-local", "--version", target]))
-      .phase,
-    "ready",
-  );
-  assert.equal(
-    Number(f.git("rev-list", "--count", "HEAD")),
-    Number(before) + 1,
-  );
-  assert.equal(
-    fs.readFileSync(path.join(f.root, ".release-preparation/hook-ran"), "utf8"),
-    "hooked",
-  );
-  const files = f
-    .git("diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD")
-    .split("\n");
-  assert.equal(files.length, 9);
-  assert.ok(files.includes("client/Cargo.lock"));
-  assert.ok(files.includes(`releases/${target}/release.json`));
-  assert.equal(f.git("status", "--porcelain"), "");
-  validateReleaseForBuild(f.root, target);
-  const commit = f.git("rev-parse", "HEAD");
-  assert.equal((await completeLocal(f.root, target)).phase, "ready");
-  assert.equal(f.git("rev-parse", "HEAD"), commit);
-  const next = await startLocal(f.root, "1.12.0", { herdr: localHerdr(t) });
-  assert.equal(next.baseline, releaseStatus(f.root, target).revision);
-});
-
-test("local completion refuses user changes and rolls back after a hook failure for explicit retry", async (t) => {
-  const f = fixture(t);
-  const target = await localDraft(t, f);
-  f.write("personal.txt", "retain this staged file\n");
-  f.git("add", "personal.txt");
-  await assert.rejects(() => completeLocal(f.root, target), /clean checkout/u);
-  assert.equal(f.git("diff", "--cached", "--name-only"), "personal.txt");
-  f.git("reset", "--", "personal.txt");
-  fs.rmSync(path.join(f.root, "personal.txt"));
-  f.git("config", "user.name", "Fixture");
-  f.git("config", "user.email", "fixture@example.invalid");
-  f.write(".git/hooks/pre-commit", "#!/bin/sh\nexit 1\n");
-  fs.chmodSync(path.join(f.root, ".git/hooks/pre-commit"), 0o700);
-  await assert.rejects(() => completeLocal(f.root, target));
-  assert.equal(f.git("status", "--porcelain"), "");
-  assert.equal(readJson(f.root, "client/package.json").version, f.version);
-  assert.equal(releaseStatus(f.root, target).phase, "translated");
-  fs.rmSync(path.join(f.root, ".git/hooks/pre-commit"));
-  assert.equal((await completeLocal(f.root, target)).phase, "ready");
-});
-
-test("manual translations cannot bind to edited English and application edits cannot hide in version files", async (t) => {
-  const f = fixture(t);
-  const target = await localDraft(t, f);
-  const hash = releaseStatus(f.root, target).sourceHash;
-  f.write(`.release-preparation/${target}/en.json`, notes("Revised English"));
-  assert.throws(
-    () => acceptLocalTranslations(f.root, target, hash),
-    /changed or is not approved/u,
-  );
-  await assert.rejects(
-    () => completeLocal(f.root, target),
-    /complete all translations/u,
-  );
+  const target = "1.11.0";
+  prepareRelease(f.root, target, { baseline: f.baseline, local: true });
   f.write(`.release-preparation/${target}/en.json`, notes());
-  f.write("client/app/src-tauri/tauri.conf.json", {
-    version: f.version,
-    identifier: "changed.application",
+  const hash = releaseStatus(f.root, target).sourceHash;
+  approveRelease(f.root, target, hash);
+  f.write(".release-preparation/active.json", { version: target });
+  f.write(`.release-preparation/${target}/local-session.json`, {
+    phase: "prompting",
+    paneId: "fixture:p2",
+    retained: "unknown outcome",
   });
-  f.commit("feat: change application identifier");
-  assert.equal(releaseStatus(f.root, target).phase, "stale");
-  await assert.rejects(
-    () => completeLocal(f.root, target),
-    /complete all translations/u,
-  );
-});
-
-test("a failing hook that deletes an existing version file retains recovery data", async (t) => {
-  const f = fixture(t);
-  const target = await localDraft(t, f);
-  f.git("config", "user.name", "Fixture");
-  f.git("config", "user.email", "fixture@example.invalid");
+  f.write(`.release-preparation/${target}/completion.json`, {
+    head: f.revision,
+    originals: { "client/package.json": "retained bytes" },
+    updates: {},
+    retained: "unknown field",
+  });
+  const call = "a".repeat(64);
+  f.write(`.release-preparation/${target}/calls/${call}.pending.json`, {
+    identity: call,
+    state: "incomplete",
+  });
+  const archived = `.release-preparation/archive/${target}/retained`;
   f.write(
-    ".git/hooks/pre-commit",
-    "#!/bin/sh\nrm client/package.json\nexit 1\n",
+    `${archived}/state.json`,
+    readJson(f.root, `.release-preparation/${target}/state.json`),
   );
-  fs.chmodSync(path.join(f.root, ".git/hooks/pre-commit"), 0o700);
-  await assert.rejects(completeLocal(f.root, target));
-  assert.equal(fs.existsSync(path.join(f.root, "client/package.json")), false);
-  assert.ok(
-    readJson(f.root, `.release-preparation/${target}/completion.json`)
-      .originals["client/package.json"],
-  );
-  assert.equal(f.git("rev-parse", "HEAD"), f.revision);
-});
-
-test("cancellation observed before commit restores prepared files without committing", async (t) => {
-  const f = fixture(t);
-  const target = await localDraft(t, f);
-  const controller = new AbortController();
-  const completing = completeLocal(f.root, target, {
-    signal: controller.signal,
-  });
-  controller.abort(new Error("cancelled before commit"));
-  await assert.rejects(completing, /cancelled before commit/u);
-  assert.equal(f.git("status", "--porcelain"), "");
-  assert.equal(f.git("rev-parse", "HEAD"), f.revision);
-});
-
-test("completion preserves staging that appears immediately before the real index lock", async (t) => {
-  const f = fixture(t);
-  const target = await localDraft(t, f);
-  const open = fs.openSync;
-  let staged = false;
-  t.mock.method(fs, "openSync", function (file, ...args) {
-    if (!staged && file === path.join(f.root, ".git/index.lock")) {
-      staged = true;
-      f.write("personal.txt", "retain staged content\n");
-      f.git("add", "personal.txt");
-    }
-    return open.call(this, file, ...args);
-  });
-  await assert.rejects(() => completeLocal(f.root, target), /clean checkout/u);
-  assert.equal(staged, true);
-  assert.equal(f.git("diff", "--cached", "--name-only"), "personal.txt");
-  assert.equal(readJson(f.root, "client/package.json").version, f.version);
-  assert.equal(f.git("rev-parse", "HEAD"), f.revision);
-});
-
-test("local preparation rejects Git environment overrides, detached HEAD, active operations and older versions", async (t) => {
-  const f = fixture(t);
-  const herdr = localHerdr(t);
-  await assert.rejects(
-    startLocal(f.root, "1.9.0", { baseline: f.baseline, herdr }),
-    /older/u,
-  );
-  for (const name of [
-    "GIT_INDEX_FILE",
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_COMMON_DIR",
-  ]) {
-    const previous = process.env[name];
-    try {
-      process.env[name] = "";
-      await assert.rejects(
-        startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-        /Unset GIT_/u,
-      );
-      await assert.rejects(
-        () => completeLocal(f.root, "1.11.0"),
-        /Unset GIT_/u,
-      );
-    } finally {
-      if (previous === undefined) delete process.env[name];
-      else process.env[name] = previous;
-    }
+  f.write(`${archived}/en.json`, notes());
+  const before = snapshot(f.root);
+  const index = fs.readFileSync(path.join(f.root, ".git/index"));
+  for (const args of [["status"], ["status", "--version", target, "--json"]]) {
+    const status = await runReleaseCommand(f.root, args);
+    assert.equal(status.version, target);
+    assert.equal(status.phase, "approved");
+    assert.equal(status.sourceHash, hash);
+    assert.equal(status.revision, f.revision);
   }
-  f.git("checkout", "--detach", "HEAD");
-  await assert.rejects(
-    startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-    /named branch/u,
-  );
-  f.git("checkout", "main");
-  f.write(".git/MERGE_HEAD", `${f.baseline}\n`);
-  await assert.rejects(
-    startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-    /active Git operation/u,
-  );
-  fs.rmSync(path.join(f.root, ".git/MERGE_HEAD"));
   assert.equal(
-    (await startLocal(f.root, f.version, { baseline: f.baseline, herdr }))
-      .phase,
-    "draft",
+    readJson(f.root, `${archived}/state.json`).sourceApproval.sourceHash,
+    hash,
   );
-});
-
-test("local startup waits for shell initialization and retries only a rejected busy start", async (t) => {
-  const f = fixture(t);
-  const calls = [];
-  const invoke = localHerdr(t, calls);
-  let inspections = 0;
-  let starts = 0;
-  const herdr = async (args) => {
-    const result = await invoke(args);
-    if (args[1] === "process-info") {
-      inspections++;
-      result.result.process_info.foreground_processes =
-        inspections === 1 ? [{ pid: 123 }, { pid: 456 }] : [{ pid: 123 }];
-    }
-    if (args[0] === "agent" && args[1] === "start") {
-      assert.ok(inspections > 1);
-      if (++starts === 1)
-        throw Object.assign(new Error("Herdr rejected startup"), {
-          stderr: JSON.stringify({ error: { code: "agent_pane_busy" } }),
-        });
-    }
-    return result;
-  };
-  await startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr });
-  assert.equal(starts, 2);
-  assert.equal(calls.filter((args) => args[1] === "split").length, 1);
-  assert.equal(calls.filter((args) => args[1] === "prompt").length, 1);
   assert.equal(
-    readJson(f.root, ".release-preparation/1.11.0/local-session.json").phase,
-    "prompted",
+    readJson(
+      f.root,
+      `.release-preparation/${target}/calls/${call}.pending.json`,
+    ).state,
+    "incomplete",
   );
-});
-
-test("local startup never retries an uncertain start or a failed prompt", async (t) => {
-  for (const [operation, stderr] of [
-    ["start", "connection lost"],
-    ["start", JSON.stringify({ error: { code: "agent_not_ready" } })],
-    ["prompt", JSON.stringify({ error: { code: "agent_pane_busy" } })],
-  ]) {
-    await t.test(`${operation}: ${stderr}`, async (t) => {
-      const f = fixture(t);
-      const calls = [];
-      const invoke = localHerdr(t, calls);
-      const herdr = async (args) => {
-        const result = await invoke(args);
-        if (args[0] === "agent" && args[1] === operation)
-          throw Object.assign(new Error("Startup outcome unknown"), { stderr });
-        return result;
-      };
-      await assert.rejects(
-        startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-        /did not finish/u,
-      );
-      assert.equal(calls.filter((args) => args[1] === "start").length, 1);
-      assert.equal(
-        calls.filter((args) => args[1] === "prompt").length,
-        operation === "prompt" ? 1 : 0,
-      );
-      const before = calls.length;
-      await assert.rejects(
-        startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-        /already requested/u,
-      );
-      assert.equal(calls.length, before);
-    });
-  }
-});
-
-test("waiting for a rejected busy start remains cancellable", async (t) => {
-  const f = fixture(t);
-  const calls = [];
-  const invoke = localHerdr(t, calls);
-  const controller = new AbortController();
-  const herdr = async (args) => {
-    const result = await invoke(args);
-    if (args[0] === "agent" && args[1] === "start") {
-      controller.abort(new Error("cancelled"));
-      throw Object.assign(new Error("Herdr rejected startup"), {
-        stderr: JSON.stringify({ error: { code: "agent_pane_busy" } }),
-      });
-    }
-    return result;
-  };
-  await assert.rejects(
-    startLocal(f.root, "1.11.0", {
-      baseline: f.baseline,
-      herdr,
-      signal: controller.signal,
-    }),
-    /did not finish/u,
-  );
-  assert.equal(calls.filter((args) => args[1] === "start").length, 1);
-  assert.equal(calls.filter((args) => args[1] === "prompt").length, 0);
-  assert.equal(
-    readJson(f.root, ".release-preparation/1.11.0/local-session.json").phase,
-    "starting",
-  );
-});
-
-test("uncertain Herdr startup and cancellation preserve private state without resubmitting", async (t) => {
-  const f = fixture(t);
-  const calls = [];
-  const herdr = localHerdr(t, calls, new Error("connection lost"));
-  await assert.rejects(
-    startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-    /did not finish/u,
-  );
-  await assert.rejects(
-    startLocal(f.root, "1.11.0", { baseline: f.baseline, herdr }),
-    /already requested/u,
-  );
-  assert.equal(calls.length, 1);
-  const controller = new AbortController();
-  controller.abort(new Error("cancelled"));
-  await assert.rejects(
-    startLocal(f.root, "1.12.0", {
-      baseline: f.baseline,
-      herdr,
-      signal: controller.signal,
-    }),
-    /cancelled/u,
-  );
-  assert.equal(calls.length, 1);
+  assert.deepEqual(snapshot(f.root), before);
+  assert.deepEqual(fs.readFileSync(path.join(f.root, ".git/index")), index);
   assert.equal(f.git("rev-parse", "HEAD"), f.revision);
+});
+
+test("historical readers reject invalid targets and report partial state without replacing retained files", async (t) => {
+  const f = fixture(t);
+  f.write(".release-preparation/active.json", { version: "../invalid" });
+  let before = snapshot(f.root);
+  await assert.rejects(runReleaseCommand(f.root, ["status"]), /numeric/u);
+  assert.deepEqual(snapshot(f.root), before);
+  f.write(".release-preparation/active.json", { version: f.version });
+  f.write(`.release-preparation/${f.version}/state.json`, '{"schemaVersion":');
+  before = snapshot(f.root);
+  const status = await runReleaseCommand(f.root, ["status"]);
+  assert.equal(status.phase, "stale");
+  assert.ok(status.error);
+  await assert.rejects(
+    runReleaseCommand(f.root, ["validate"]),
+    /not finalized/u,
+  );
+  assert.deepEqual(snapshot(f.root), before);
+});
+
+test("historical CLI reads status and rejects mutation without a command queue or agent helpers", (t) => {
+  const f = fixture(t);
+  for (const file of [
+    "release.mjs",
+    "release-preparation.mjs",
+    "release-catalog.mjs",
+    "release-version.mjs",
+    "migration-history.mjs",
+  ])
+    f.write(
+      `tools/${file}`,
+      fs.readFileSync(new URL(`./${file}`, import.meta.url), "utf8"),
+    );
+  f.commit("test: install historical CLI fixture");
+  const before = snapshot(f.root);
+  const invoke = (...args) =>
+    spawnSync(
+      process.execPath,
+      [fs.realpathSync(path.join(f.root, "tools/release.mjs")), ...args],
+      {
+        cwd: f.root,
+        encoding: "utf8",
+        timeout: 10000,
+        env: {
+          PATH: process.env.PATH,
+          HOME: f.root,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+        },
+      },
+    );
+  const status = invoke("status", "--json");
+  assert.equal(status.status, 0, status.stderr);
+  assert.equal(JSON.parse(status.stdout).phase, "unprepared");
+  assert.equal(JSON.parse(status.stdout).version, f.version);
+  const validate = invoke("validate");
+  assert.equal(validate.status, 1);
+  assert.match(validate.stderr, /not finalized/u);
+  for (const command of [
+    "start-local",
+    "complete-local",
+    "generate",
+    "set-version",
+  ]) {
+    const result = invoke(command, "--version", f.version);
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(
+      result.stderr,
+      /Usage: node tools\/release\.mjs <status\|validate>/u,
+    );
+  }
+  assert.deepEqual(snapshot(f.root), before);
+});
+
+test("historical validation returns the retained digest without rewriting catalog or private state", async (t) => {
+  const f = fixture(t);
+  await f.finalize();
+  f.commit("docs(release): retain finalized notes");
+  f.write(`.release-preparation/${f.version}/completion.json`, {
+    head: f.revision,
+    commit: f.git("rev-parse", "HEAD"),
+    retained: "recovery evidence",
+  });
+  const before = snapshot(f.root);
+  const head = f.git("rev-parse", "HEAD");
+  const result = await runReleaseCommand(f.root, [
+    "validate",
+    "--version",
+    f.version,
+    "--distribution",
+    "external",
+    "--json",
+  ]);
+  assert.equal(result.version, f.version);
+  assert.equal(result.phase, "ready");
+  assert.equal(
+    result.sha256,
+    catalogDigest(
+      compileReleaseCatalog(f.root, {
+        version: f.version,
+        requireCurrent: true,
+      }),
+    ),
+  );
+  assert.deepEqual(snapshot(f.root), before);
+  assert.equal(f.git("rev-parse", "HEAD"), head);
 });

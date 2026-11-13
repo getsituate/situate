@@ -40,6 +40,8 @@ test("security policy selects document checks without runtime or build suites", 
     "quick-source",
     "root-format",
     "root-secrets",
+    "root-commits",
+    "root-history-secrets",
     "design-contracts",
   ]);
   assert.equal(requiresFullSelection(file), false);
@@ -372,9 +374,6 @@ test("runtime sources affect fingerprints and unknown suites and inputs are cons
     "new-area/input.md",
     "client/packages/new/input.md",
     "package-lock.json",
-    "client/package-lock.json",
-    "client/Cargo.lock",
-    "client/app/vite.config.ts",
   ])
     for (const id of [
       "client-core",

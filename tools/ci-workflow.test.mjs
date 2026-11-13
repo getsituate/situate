@@ -1,160 +1,221 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
-import { root } from "./test.mjs";
+import { laneHosts } from "./actions-adapter.mjs";
 
-const quality = readFileSync(
-  join(root, ".github/workflows/quality.yml"),
-  "utf8",
-);
-const coverage = readFileSync(
-  join(root, ".github/workflows/coverage.yml"),
-  "utf8",
-);
-
-function job(name) {
-  const body = quality.match(
-    new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z]+:|$)`),
+const read = (name) =>
+  readFileSync(
+    new URL(`../.github/workflows/${name}.yml`, import.meta.url),
+    "utf8",
+  );
+const names = [
+  "verify",
+  "release-macos",
+  "publish-macos",
+  "dependency-monitoring",
+  "ci-tool-image",
+  "diagnostics",
+  "release-recovery",
+];
+function job(workflow, id) {
+  const body = workflow.match(
+    new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z-]*:|$)`),
   )?.[1];
-  assert.ok(body, name);
+  assert.ok(body, `Missing job ${id}`);
   return body;
 }
 
-test("workflow events emit the MVP selection consumed by downstream jobs", () => {
-  const script = quality.match(
-    / {10}case "\$EVENT"[\s\S]*?node tools\/ci-selection\.mjs[^\n]+/,
-  )?.[0];
-  assert.ok(script);
-  const base = spawnSync("git", ["rev-parse", "HEAD"], {
-    cwd: root,
-    encoding: "utf8",
-  }).stdout.trim();
-  for (const [event, mode, draft, full] of [
-    ["push", "full", "false", false],
-    ["pull_request", "full", "false", false],
-    ["pull_request", "full", "true", false],
-    ["workflow_dispatch", "full", "false", true],
-    ["workflow_dispatch", "quick", "false", false],
-  ]) {
-    const directory = mkdtempSync(join(tmpdir(), "ci-workflow-"));
-    try {
-      const output = join(directory, "outputs");
-      const env = {
-        ...process.env,
-        EVENT: event,
-        MODE: mode,
-        DRAFT: draft,
-        BASE_SHA: base,
-        GITHUB_OUTPUT: output,
-      };
-      delete env.NODE_TEST_CONTEXT;
-      const result = spawnSync("bash", ["-euo", "pipefail", "-c", script], {
-        cwd: root,
-        env,
-        encoding: "utf8",
-      });
-      assert.equal(result.status, 0, result.stderr);
-      const values = Object.fromEntries(
-        readFileSync(output, "utf8")
-          .trim()
-          .split("\n")
-          .map((line) => {
-            const split = line.indexOf("=");
-            return [line.slice(0, split), line.slice(split + 1)];
-          }),
+test("only replacement workflows remain and pinned checkout is the sole action", () => {
+  assert.deepEqual(
+    readdirSync(new URL("../.github/workflows/", import.meta.url)).sort(),
+    names.map((name) => `${name}.yml`).sort(),
+  );
+  assert.equal(
+    existsSync(new URL("../.github/actions", import.meta.url)),
+    false,
+  );
+  assert.equal(
+    existsSync(new URL("../.github/disabled-workflows", import.meta.url)),
+    false,
+  );
+  for (const name of names) {
+    const workflow = read(name);
+    for (const match of workflow.matchAll(/uses: (\S+)/g))
+      assert.match(match[1], /^actions\/checkout@[a-f0-9]{40}$/);
+    assert.doesNotMatch(
+      workflow,
+      /run: \||run: >|continue-on-error|pull_request_target/,
+    );
+    for (const match of workflow.matchAll(/run: ([^\n]+)/g))
+      assert.match(
+        match[1],
+        /^(?:python3 tools\/pipeline-bootstrap\.py|node tools\/[a-z-]+\.mjs(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*)$/,
       );
-      const selection = JSON.parse(values.selection);
-      assert.equal(selection.scope, "mvp");
-      assert.equal(selection.full, full, `${event}/${mode}/${draft}`);
-      assert.equal(values.host, String(full));
-      assert.equal(values.windows, undefined);
-      assert.deepEqual(JSON.parse(values.linux), full ? ["checks"] : []);
-      assert.ok(selection.quick.length > 0);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
+    assert.match(workflow, /persist-credentials: false/);
+    for (const body of workflow
+      .split(/\n {2}[a-z][a-z-]*:\n/)
+      .slice(1)
+      .filter((body) => body.includes("    steps:"))) {
+      assert.ok(
+        body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
+          body.indexOf("run: node "),
+      );
     }
+    assert.doesNotMatch(
+      workflow,
+      /runs-on: (?:windows|macos-1[0-9])|--target.*(?:ios|android)/,
+    );
   }
 });
 
-test("Apple browser diagnostics survive failed browser checks", () => {
-  const step = job("host").match(
-    / {6}- name: Retain browser diagnostics\n([\s\S]*?)(?= {6}- name:)/,
-  )?.[1];
-  assert.ok(step);
-  assert.match(step, /if: always\(\)/);
-  assert.match(step, /uses: actions\/upload-artifact@[a-f0-9]{40}/);
-  assert.match(step, /name: apple-browser-diagnostics/);
-  assert.match(step, /client\/test-results\/browser\//);
-  assert.match(step, /retention-days: 7/);
-  assert.match(step, /if-no-files-found: ignore/);
-  assert.doesNotMatch(step, /workshop|visual/);
-});
-
-test("shared Linux jobs retain results and downloads without native build caches", () => {
-  const linux = job("linux");
-  assert.match(linux, /fail-fast: false/);
-  assert.doesNotMatch(linux, /continue-on-error|rust-build-cache/);
-  assert.match(
-    linux,
-    /shard: \$\{\{ fromJSON\(needs.plan.outputs.linux\) \}\}/,
-  );
-  assert.match(linux, /name: linux-\$\{\{ matrix.shard \}\}-results/);
-  assert.equal(
-    (linux.match(/uses: \.\/\.github\/actions\/download-cache/g) ?? []).length,
-    2,
-  );
-  assert.equal(
-    (linux.match(/group: \$\{\{ matrix.shard \}\}/g) ?? []).length,
-    2,
-  );
-  assert.match(linux, /phase: save/);
-  assert.match(linux, /if: always\(\)/);
-  assert.doesNotMatch(linux, /Retain visual comparisons|workshop-chromium/);
-});
-
-test("Apple checks run alongside quick checks and the aggregate enforces both", () => {
-  for (const name of ["linux", "docker"]) {
-    const body = job(name);
-    assert.match(body, /needs: \[plan, quick\]/);
-    assert.match(body, /if: needs.plan.outputs\./);
+test("fixed independent families depend on planning and aggregate every selected receipt", () => {
+  for (const name of ["verify", "release-macos"]) {
+    const workflow = read(name);
+    assert.doesNotMatch(
+      workflow.split("\n  create:")[0],
+      /secrets\.|actions: write|contents: write|packages: write|ACTIONS_RUNTIME/,
+    );
+    assert.match(
+      job(workflow, "plan"),
+      /outputs:[\s\S]*plan:.*steps\.plan\.outputs\.plan[\s\S]*digest:/,
+    );
+    for (const [id, host] of Object.entries(laneHosts)) {
+      const lane = job(workflow, id);
+      assert.match(lane, /needs: plan\n/);
+      assert.match(
+        lane,
+        new RegExp(
+          `runs-on: ${host === "macos" ? "macos-latest" : "ubuntu-24.04"}`,
+        ),
+      );
+      assert.ok(lane.includes(`.lanes.*.id, '${id}')`));
+      assert.match(lane, /receipt:.*steps\.lane\.outputs\.receipt/);
+      assert.match(lane, /PIPELINE_PLAN_DIGEST:.*needs\.plan\.outputs\.digest/);
+      assert.match(lane, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
+      assert.match(lane, /ref:.*github\.sha/);
+      assert.doesNotMatch(lane, /needs: \[/);
+      assert.ok(
+        lane.indexOf("actions-adapter.mjs setup") <
+          lane.indexOf("actions-adapter.mjs lane"),
+      );
+    }
+    const aggregate = job(workflow, "required");
+    assert.match(aggregate, /if: always\(\)/);
+    for (const id of Object.keys(laneHosts))
+      assert.ok(aggregate.split("    if:")[0].includes(id));
+    assert.match(aggregate, /PIPELINE_NEEDS:.*toJSON\(needs\)/);
+    assert.match(aggregate, /actions-adapter\.mjs aggregate/);
   }
-  const host = job("host");
-  assert.match(host, /needs: plan\n/);
-  assert.match(host, /if: needs.plan.outputs.host == 'true'/);
-  assert.match(host, /npm run test:browser -- --forbid-only/);
-  assert.match(host, /cargo test --workspace --locked/);
-  assert.match(
-    host,
-    /DEVELOPER_DIR: \/Applications\/Xcode_26\.0\.1\.app\/Contents\/Developer/,
+});
+
+test("PR check covers draft, ready, fork and merge-queue events without path filtering or secrets", () => {
+  const workflow = read("verify");
+  assert.match(workflow, /ready_for_review, converted_to_draft/);
+  assert.match(workflow, /merge_group:/);
+  assert.match(workflow, /name: PR verification/);
+  assert.doesNotMatch(
+    workflow,
+    /paths:|paths-ignore:|secrets\.|environment:|schedule:|push:/,
   );
-  assert.match(
-    host,
-    /swift test --package-path client\/app\/src-tauri\/dictation --disable-automatic-resolution/,
+});
+
+test("creator and publisher have gated execution paths with signing scoped to build only", () => {
+  const creator = job(read("release-macos"), "create");
+  assert.match(creator, /app_impact == 'true'/);
+  assert.match(creator, /contents: write/);
+  assert.match(creator, /create-prepare/);
+  assert.ok(
+    creator.indexOf("prepare-release") <
+      creator.indexOf("create-stage --stage build"),
   );
-  assert.match(host, /node scripts\/test-native.mjs/);
-  assert.doesNotMatch(host, /continue-on-error|needs: \[plan, quick\]/);
-  assert.match(
-    job("required"),
-    /needs: \[plan, quick, linux, docker, host, security\]/,
+  for (const stage of ["inputs", "build", "qualify", "github"])
+    assert.ok(creator.includes(`create-stage --stage ${stage}`));
+  const build = creator
+    .split(
+      "      - run: node tools/actions-adapter.mjs create-stage --stage build",
+    )[1]
+    .split("      - run:")[0];
+  assert.match(build, /APPLE_DEVELOPER_ID_P12_BASE64/);
+  assert.doesNotMatch(
+    creator.split("create-stage --stage build")[0],
+    /APPLE_DEVELOPER_ID_P12_BASE64/,
   );
-  assert.match(job("required"), /node tools\/ci-required.mjs/);
   assert.equal(
-    (
-      quality.match(
-        /SITUATE_CI_SELECTION: \$\{\{ needs.plan.outputs.selection \}\}/g,
-      ) ?? []
-    ).length,
+    (creator.match(/APPLE_DEVELOPER_ID_P12_BASE64:/g) ?? []).length,
+    1,
+  );
+  assert.match(build, /APPLE_API_PRIVATE_KEY/);
+  assert.match(build, /TAURI_SIGNING_PRIVATE_KEY/);
+  assert.doesNotMatch(
+    creator.split("create-stage --stage qualify")[1],
+    /APPLE_|TAURI_SIGNING/,
+  );
+  for (const name of ["release-macos", "publish-macos"])
+    assert.match(read(name), /actions-adapter\.mjs release-gate/);
+  assert.match(
+    read("release-recovery"),
+    /run: node tools\/actions-adapter\.mjs recovery/,
+  );
+  const publisher = read("publish-macos");
+  assert.match(publisher, /workflow_run:[\s\S]*workflows: \[Release macOS\]/);
+  assert.match(publisher, /release_id:/);
+  assert.match(
+    publisher,
+    /head_repository\.full_name == 'getsituate\/situate'/,
+  );
+  assert.match(publisher, /head_branch == 'main'/);
+  assert.match(publisher, /publish-prepare --workflow publish/);
+  assert.match(publisher, /publish-run --workflow publish/);
+  assert.match(job(publisher, "publish"), /runs-on: macos-latest/);
+  assert.match(publisher, /APPLE_TEAM_ID:.*vars\.APPLE_TEAM_ID/);
+  assert.doesNotMatch(
+    creator.split("create-stage --stage inputs")[0],
+    /SITUATE_RELEASE_SSH_PRIVATE_KEY|SITUATE_RELEASE_SSH_KNOWN_HOSTS/,
+  );
+  const qualification = creator
+    .split("create-stage --stage qualify")[1]
+    .split("create-stage --stage github")[0];
+  assert.doesNotMatch(qualification, /SITUATE_RELEASE_SSH|SSH_AUTH_SOCK/);
+  assert.equal(
+    (creator.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY:/g) ?? []).length,
     3,
   );
-  assert.match(quality, /ready_for_review, converted_to_draft/);
-  assert.doesNotMatch(quality, /^ {2}(windows|coverage|schedule):/m);
-  assert.doesNotMatch(
-    quality,
-    /full-quality-v1|steps.weekly|workflows\/coverage.yml/,
+  assert.equal(
+    (publisher.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY:/g) ?? []).length,
+    1,
   );
-  assert.doesNotMatch(coverage, /^ {2}(pull_request|push|schedule):/m);
-  assert.match(coverage, /^ {2}workflow_dispatch:/m);
+  assert.doesNotMatch(
+    publisher,
+    /releases\/latest|--release-id latest|APPLE_API_|APPLE_DEVELOPER_ID_|APPLE_MACOS_SIGNING|TAURI_SIGNING|contents: write|packages: write/,
+  );
+});
+
+test("tool image preserves build/publisher separation and read-only build credentials", () => {
+  const workflow = read("ci-tool-image");
+  const build = job(workflow, "build");
+  const publish = job(workflow, "publish");
+  assert.doesNotMatch(
+    build.split("actions-adapter.mjs image-upload")[0],
+    /secrets\.|GH_TOKEN|packages: write/,
+  );
+  assert.match(build, /actions-adapter\.mjs image-upload/);
+  assert.match(build, /CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY/);
+  assert.doesNotMatch(build, /ACTIONS_RUNTIME|ACTIONS_RESULTS|GH_TOKEN/);
+  assert.match(build, /actions-adapter\.mjs image-build/);
+  assert.match(publish, /needs: build/);
+  assert.match(publish, /packages: write/);
+  assert.match(publish, /PROVENANCE:.*needs\.build\.outputs\.provenance/);
+  assert.match(publish, /GH_TOKEN:.*github\.token/);
+  assert.match(publish, /actions-adapter\.mjs image-publish/);
+  const [download, publication] = publish.split(
+    "      - run: node tools/actions-adapter.mjs image-publish",
+  );
+  assert.match(download, /actions-adapter\.mjs image-download/);
+  assert.match(download, /CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY/);
+  assert.doesNotMatch(download, /GH_TOKEN/);
+  assert.doesNotMatch(
+    publication,
+    /CI_IMAGE_TRANSFER_SSH_PRIVATE_KEY|CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS/,
+  );
+  assert.match(workflow, /client\/docker\/ci-\*/);
 });

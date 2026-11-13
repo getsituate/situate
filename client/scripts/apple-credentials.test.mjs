@@ -27,6 +27,7 @@ import {
   notaryAuthentication,
   readAppleEnv,
   withAppleCredentials,
+  withSigningKeychain,
 } from "./apple-credentials.mjs";
 
 const { privateKey } = generateKeyPairSync("ec", {
@@ -391,5 +392,89 @@ test("numeric App ID is required only when uploading", async (t) => {
       () => assert.fail("Must not upload"),
     ),
     /APPLE_APP_ID/,
+  );
+});
+
+test("Developer ID import is isolated, operation-scoped and cleaned after callback failure", async (t) => {
+  const { root, directory } = fixture(t);
+  const certificate = join(directory, "synthetic.p12");
+  writeFileSync(certificate, "synthetic certificate", { mode: 0o600 });
+  const calls = [];
+  let keychain;
+  await assert.rejects(
+    withSigningKeychain(
+      {
+        root,
+        environment: {
+          PATH: "/usr/bin",
+          HOME: directory,
+          CI: "true",
+          APPLE_DEVELOPER_ID_P12_FILE: certificate,
+          APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-pass",
+          OTHER_SECRET: "excluded",
+        },
+        execute: async (command, args, options) => {
+          calls.push({ command, args, options });
+          assert.equal(options.env.OTHER_SECRET, undefined);
+          return "";
+        },
+      },
+      async (path) => {
+        keychain = path;
+        throw new Error("synthetic build failure");
+      },
+    ),
+    /synthetic build failure/,
+  );
+  assert.ok(keychain.includes("situate-signing-"));
+  assert.equal(calls[0].args[0], "create-keychain");
+  assert.equal(calls.at(-1).args[0], "delete-keychain");
+  assert.equal(calls.at(-1).args[1], keychain);
+  assert.equal(calls.at(-1).options.signal, undefined);
+  assert.ok(
+    !calls.some(({ args }) =>
+      ["default-keychain", "list-keychains"].includes(args[0]),
+    ),
+  );
+  assert.ok(!existsSync(join(keychain, "..")));
+});
+
+test("Developer ID setup errors do not leak arguments and cleanup never reports success on failure", async (t) => {
+  const { root, directory } = fixture(t);
+  const certificate = join(directory, "synthetic.p12");
+  writeFileSync(certificate, "synthetic certificate", { mode: 0o600 });
+  const options = {
+    root,
+    environment: {
+      CI: "true",
+      APPLE_DEVELOPER_ID_P12_FILE: certificate,
+      APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-pass",
+    },
+  };
+  await assert.rejects(
+    withSigningKeychain(
+      {
+        ...options,
+        execute: async (_command, args) => {
+          if (args[0] === "import") throw new Error("synthetic-pass PRIVATE");
+        },
+      },
+      () => assert.fail("must not build"),
+    ),
+    (error) =>
+      error.message === "Temporary Developer ID keychain setup failed.",
+  );
+  await assert.rejects(
+    withSigningKeychain(
+      {
+        ...options,
+        execute: async (_command, args) => {
+          if (args[0] === "delete-keychain")
+            throw new Error("synthetic-pass PRIVATE");
+        },
+      },
+      () => "built",
+    ),
+    /cleanup failed/,
   );
 });

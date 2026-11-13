@@ -1,6 +1,6 @@
 # Situate client
 
-The active MVP target is **macOS only**. iOS, Windows, Linux desktop and Android are deferred and are not currently supported. Their source, build commands and diagnostic instructions below are retained for optional future work, not as current compatibility or release guarantees. Routine development does not require their SDKs or verification. See the [platform scope](../requirements/data/foundations.md#mvp-platform-scope).
+The active product target is **macOS only**. iOS, Windows, Linux desktop and Android are deferred and are not currently supported. Their source, build commands and diagnostic instructions below are retained for optional future work, not as current compatibility or release guarantees. Routine development does not require their SDKs or verification. See the [platform scope](../requirements/data/foundations.md#mvp-platform-scope).
 
 The client opens the last-open workspaces, or shows **Workspaces** when none can be reopened. Each macOS workspace has its own 1280 × 800 px window. The retained, deferred mobile implementation keeps multiple open sessions and displays one at a time. The main screen uses the [production app shell](app/src/components/AppShell.vue) and canonical brand assets. Below 1184 CSS px, the sidebar opens as a modal drawer with keyboard focus handling, Escape and backdrop dismissal.
 
@@ -306,7 +306,7 @@ The requirements viewer remains a separate npm project.
 
 Use [Volta](../docs/development/README.md#install-volta) for the Node.js and npm versions pinned in the root `package.json`, and Rust installed through rustup. [`rust-toolchain.toml`](rust-toolchain.toml) selects the compiler, formatter, Clippy and LLVM tools. LLVM tools support the Swift bridge's symbol handling with Xcode 27. Keep the rustup-managed executables ahead of any separately installed Rust compiler on `PATH`.
 
-Native builds also need the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). Only the macOS row is required for MVP development; iOS runtimes, mobile SDKs and the other rows below are deferred reference material:
+Native builds also need the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). Only the macOS row is required for current development; iOS runtimes, mobile SDKs and the other rows below are deferred reference material:
 
 | Build host   | Additional tools                                                                                                       |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
@@ -499,53 +499,27 @@ For an interactive provider test, finish both ordinary smoke launches first, the
 
 ## Local release packages
 
-For current macOS work, run the release script on macOS after installing dependencies and running the checks above. Other targets in the reference table are deferred:
+Local test packages are separate from release creation and are not publishable artifacts. On macOS, run from `client/`:
 
 ```sh
-npm run release
 npm run release -- --platform macos
-npm run release -- --help
 ```
 
-The default builds only the current desktop platform. `--platform all` builds all targets supported by the current host: its desktop platform, Android, and additionally iOS Simulator on macOS. It does **not** cross-build the other desktop platforms. An explicit incompatible target fails before building unless the Linux-to-Windows cross-build mode is explicitly enabled. For containerised Linux builds and opt-in Windows NSIS cross-builds, use the separate [Docker build commands](docker/README.md).
+These ad-hoc-signed packages are neither Developer-ID distribution-signed nor notarized. The command does not publish. Use synthetic workspaces and launch the test app without replacing an existing installation. A build alone does not qualify installation, updates or retained data. Other product platforms remain deferred.
 
-| Target    | Local artifact                                                     | Build host                                            |
-| --------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
-| `macos`   | `.app` and `.dmg`                                                  | macOS; native Rust host architecture                  |
-| `windows` | NSIS installer (`.exe`)                                            | Windows with C++ build tools and WebView2             |
-| `linux`   | `.deb` and `.AppImage`                                             | Linux with the native dependencies above              |
-| `android` | Installable APK for ARM64 and x86_64, signed with a local test key | Any supported desktop host with the Android toolchain |
-| `ios`     | Unsigned Simulator `.app`, not a device IPA                        | macOS with Xcode, XcodeGen and CocoaPods              |
-
-Rust and Swift builds use release optimization. macOS bundles use ad-hoc signing so their local code signatures are valid without a developer certificate. No packages are distribution-signed or notarized. The script performs no uploads or publication. Tauri's `--ci` flag only selects non-interactive command-line operation; it does not invoke a hosted CI service.
-
-Before including Android, install both Rust targets and set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME` as described above:
-
-```sh
-rustup target add aarch64-linux-android x86_64-linux-android
-```
-
-For iOS Simulator, install `aarch64-apple-ios-sim` on Apple Silicon or `x86_64-apple-ios` on Intel. The script initializes generated native projects but does not install SDKs or accept their licenses. Do not run other native builds concurrently with a release build in the same checkout. A lock at `target/local-release/build.lock` prevents overlapping release runs and records the owning process ID. After an interrupted run, confirm that this process and any child native builds have stopped before manually deleting that lock. The script never removes an existing lock automatically.
-
-Each invocation creates a new `artifacts/release-*/` directory with platform subdirectories and a `manifest.json`. The manifest records version, host and target Rust triples, target architecture, selected platforms, completed builds and artifact paths. Require `status: "complete"` before using a set of packages; failed runs retain a `failed` manifest and any already completed artifacts. Nothing is collected from an earlier build. Build caches, artifacts and local signing material are ignored by Git.
-
-Android release APKs must be signed to install. The script creates and reuses `target/local-release/android-test.keystore`, using the standard Android debug-key password. It aligns the APK for 16 KB pages, signs it, and verifies the signature. This key is **only for local testing**, not production signing. Removing it changes the signing identity; uninstall an older test installation if Android rejects the replacement signature. Only the signed APK is copied to the artifact directory, never the keystore. App data can be lost when uninstalling, so use test content.
-
-Install the packages inside the matching VM, emulator or simulator and inspect the shell, resizing and compact navigation drawer there. Use the native smoke configuration to verify storage. On macOS, launch the `.app` directly from the artifact directory rather than replacing an existing Situate installation. A successful package build alone does not establish runtime compatibility. Unsigned desktop packages may require local operating-system approval; do not disable system-wide security protections to test them.
-
-The current configuration permits Android API 24+ and iOS 16+. These are deployment settings, not evidence of successful testing on every supported version. Physical-device behavior, minimum-version compatibility, distribution, signing and store approval require separate verification.
+Native builds share checkout-local locks. After interruption, inspect recorded owners and child builds before removing a stale lock. Retain incomplete manifests and artifacts for investigation rather than distributing them.
 
 ## Apple distribution
 
-Use `release:apple` on macOS for Developer-ID-signed, notarized DMGs. The iOS export and upload options described below are retained deferred reference paths, not part of current delivery. The existing `release` command continues to produce local test packages. Neither command uploads to App Store Connect by default; macOS `release:apple` does submit packages to Apple's notarization service. Add `--upload-testflight` to `release:apple` to upload the new iOS package after a successful build. iOS signing uses Xcode automatic provisioning, which can register identifiers and create or update signing assets in the selected Apple developer team.
+Production delivery uses the shared macOS release creation and publication workflows below. Only universal direct macOS packages are supported; iOS exports, TestFlight uploads and other target packages are not release workflow options. Retained historical artifact readers do not establish current target support.
 
 ### One-time account setup
 
-1. Use the paid Apple Developer team intended to own the app. In **Xcode → Settings → Accounts**, sign in and select that team. Complete Xcode's first-launch setup. Install Python 3.12 or newer and the [macOS client prerequisites](#prerequisites). XcodeGen and CocoaPods are needed only for deferred iOS work.
-2. Install a **Developer ID Application** certificate and its private key in your login Keychain for macOS. List valid identities with `security find-identity -v -p codesigning`. Do not use Apple Development, Apple Distribution or ad-hoc signing for the DMG. Deferred iOS work additionally requires an Apple signing identity and access to automatic App Store provisioning; Xcode can manage the distribution certificate.
+1. Use the paid Apple Developer team intended to own the app. In **Xcode → Settings → Accounts**, sign in and select that team. Complete Xcode's first-launch setup. Install Python 3.12 or newer and the [macOS client prerequisites](#prerequisites).
+2. Export the intended **Developer ID Application** certificate and private key as a password-protected `.p12` file kept outside the checkout. Supply its absolute path through `APPLE_DEVELOPER_ID_P12_FILE` and its password through `APPLE_DEVELOPER_ID_P12_PASSWORD`. Signing imports it into an isolated temporary keychain and removes that keychain afterward. Do not use Apple Development, Apple Distribution or ad-hoc signing for the DMG.
 3. Use `com.getsituate.app` as the permanent bundle identifier. An iOS App Store Connect app record is not needed for current macOS delivery. Distribution must not use the development launcher's checkout-specific identifier. Accept any pending Apple agreements. Keep the identifier unchanged across updates.
-4. Create an App Store Connect **team API key** authorized for notarization and build uploads under **Users and Access → Integrations → App Store Connect API**. Download its `.p8` private key, and record its Key ID and Issuer ID. Use the least role that permits the required operations; Apple's Developer role supports build uploads. The key's Apple permissions are determined by its role, not by a local vault or bundle identifier. App Store upload permission and iOS provisioning are not macOS release requirements.
-5. Set `APPLE_TEAM_ID` and `APPLE_MACOS_SIGNING_IDENTITY` in the repository-root `.env` or environment, using the intended team and an installed Developer ID Application identity. See [Credentials](#credentials) below. No `.apple-release.local.json` is required. The iOS bundle identifier defaults to the tracked `app/src-tauri/tauri.conf.json` identifier, `com.getsituate.app`.
+4. Create an App Store Connect **team API key** authorized for notarization under **Users and Access → Integrations → App Store Connect API**. Download its `.p8` private key, and record its Key ID and Issuer ID. Use the least role that permits notarization. The key's Apple permissions are determined by its role, not by a local vault or bundle identifier. App Store upload permission and iOS provisioning are not macOS release requirements.
+5. Set `APPLE_TEAM_ID` and `APPLE_MACOS_SIGNING_IDENTITY` in the repository-root `.env` or environment, using the intended team and an installed Developer ID Application identity. See [Credentials](#credentials) below. No `.apple-release.local.json` is required.
 
 6. Install the Rust targets from `client/`. Universal macOS packages contain both Apple Silicon and Intel executables:
 
@@ -560,60 +534,80 @@ Store Apple signing settings and credentials in the Git-ignored `.env` at the **
 ```dotenv
 APPLE_TEAM_ID=TEAM123456
 APPLE_MACOS_SIGNING_IDENTITY="Developer ID Application: Example (TEAM123456)"
+APPLE_DEVELOPER_ID_P12_FILE=/PRIVATE/PATH/developer-id.p12
+APPLE_DEVELOPER_ID_P12_PASSWORD="<certificate password>"
 APPLE_API_KEY=EXAMPLE1234
 APPLE_API_ISSUER=11111111-2222-3333-4444-555555555555
 APPLE_API_PRIVATE_KEY="<paste the complete .p8 PEM here, including header, body and footer>"
 ```
 
-The example values are not usable credentials. `APPLE_APP_ID` is the numeric iOS app-record ID from App Store Connect, not an email address or bundle identifier; it is needed only for upload. Use literal newlines within the quoted private-key value. Do not `source` the file: the scripts parse it as data and consume only the Apple variables needed by the operation. Environment variables take precedence even when explicitly empty. With `CI=true`, no `.env` is read. Incomplete credentials fail rather than falling back to another account.
+The example values are not usable credentials. Use literal newlines within the quoted private-key value. Do not `source` the file: the scripts parse it as data and consume only the Apple variables needed by the operation. Environment variables take precedence even when explicitly empty. With `CI=true`, no `.env` is read. Incomplete credentials fail rather than falling back to another account.
 
-Signing settings use this precedence: explicit environment values, root `.env`, then the optional legacy `client/.apple-release.local.json`. Explicit empty values do not fall back. Existing JSON settings such as `notaryProfile`, `appStoreConnect` and an explicitly configured `iosBundleIdentifier` remain available locally; the scripts do not create or rewrite that file. Without a legacy iOS override, the tracked app identifier is used. In CI, both local configuration files are ignored; supply settings and credentials through the environment. A Developer ID certificate and its private key must still be installed in the Keychain; these environment values select an identity, not create or import one.
+Signing settings use this precedence: explicit environment values, root `.env`, then the optional legacy `client/.apple-release.local.json`. Explicit empty values do not fall back. Existing JSON settings such as `notaryProfile` and `appStoreConnect` remain readable locally; the scripts do not create or rewrite that file. In CI, both local configuration files are ignored; supply settings and credentials through the environment. In the hosted workflow, set `APPLE_DEVELOPER_ID_P12_BASE64` to the certificate's canonical base64 data and `APPLE_DEVELOPER_ID_P12_PASSWORD` to its password, rather than supplying a runner-local path. The adapter creates a private certificate file for the build step and removes it afterward; do not supply both file and base64 inputs. The selected identity must match the supplied Developer ID certificate; the builder imports that certificate only for its signing operation.
 
 Apple tools require a key file. The scripts create a private temporary `.p8` outside the checkout, pass only its path and the key identifiers to Apple's tools, and delete it after completion or handled failure/cancellation. Raw credential values are not forwarded to frontend or Rust builds. Forced process termination can leave a `situate-apple-key-*` directory in the system temporary directory; inspect ownership and active processes before removing an abandoned directory. Do not share `.env`, the key, or private diagnostics with installers.
 
 Existing local configurations can explicitly select a Keychain `notaryProfile` or an `appStoreConnect` key-file configuration instead when no Apple credential variables are defined. There is no automatic credential discovery or fallback to them after invalid `.env` values.
 
-Deferred iOS reference: `app/src-tauri/PrivacyInfo.xcprivacy` declares file-timestamp access for application-container files and user-selected files/directories (`C617.1`, `3B52.1`), used by workspace metadata and change checks. The builder includes it through the standard generated Xcode target and verifies it in the exported IPA. Review additional required-reason APIs when dependencies change; this is not an exhaustive binary audit. Before the first TestFlight upload, review encryption export compliance and current Apple SDK submission requirements. Do not declare encryption exempt without reviewing the app's cryptography. Missing compliance answers can prevent TestFlight availability.
-
 ### Build and verify
 
-Complete [release-note preparation](../docs/development/release-preparation.md) first: choose the product version, approve the English source, translate every supported language, finalize and commit the release files. Distribution builds require consistent npm/Cargo/Tauri versions and a clean source revision throughout the macOS build. Retained deferred-platform exports use the same validation. They validate and embed the finalized history without invoking an agent. Ordinary development and local test builds do not require finalized release notes.
+Use the shared release workflow from the repository root. The development terminal invokes the same commands; it does not assign versions, commit notes or provide a test bypass. A local test package or a successful source-only check is not a qualified release.
 
-Run from `client/`, with no other native build or development session using that checkout:
+Unattended creation and publication remain unqualified until repository protections, controlled-host coordination, credentials, isolated native qualification and recovery are provisioned and exercised. Keep explicit operator authorization in place during that transition. The scripts do not provision those controls.
+
+Commit the reviewed implementation and its [versionless declaration](../docs/development/release-preparation.md), then select the exact full source and comparison SHAs, operation ID, destination and private configuration:
 
 ```sh
-npm run release:apple -- --check
-npm run release:apple
+node tools/pipeline.mjs plan create --repository getsituate/situate --source SOURCE_SHA --base BASE_SHA --operation create-CANDIDATE_ID --destination SSH_HOST --configuration /PATH/TO/private-release-config.json --output /PATH/TO/create-plan.json
+node tools/pipeline.mjs run create --plan /PATH/TO/create-plan.json --confirm PLAN_AUTHORIZATION_DIGEST
 ```
 
-The default is a universal macOS DMG with external update authority. Use `--macos-arch arm64` or `--macos-arch x64` for a single architecture. For iOS, choose an integer build number from 1 to 9999 that is higher than every previous upload of the current marketing version, including uploads from other machines. The marketing version comes from `app/src-tauri/tauri.conf.json`; the build number is applied without modifying tracked files. The development console can [update and commit the app version before building](../docs/development/README.md#development-terminal). Its `--expected-version X.Y.Z` argument binds the build to the selected configured version and refuses a mismatch. App Store Connect remains authoritative for previously uploaded numbers.
+Review the plan before copying its `authorizationDigest` into `--confirm`. The source checkout must match that commit and remain clean. Planning resolves the preceding completed GitHub Release or verified legacy baseline; source and fragment history must be complete. Documentation/tooling-only plans run their affected checks without reserving or building an app. An actual app candidate requires the complete selected macOS/shared source verification and final-artifact qualification, not merely its PR results.
 
-`--check` reads tool availability, installed Rust targets and signing identities, and authenticates to the notary service for macOS. It does not build, upload packages or modify provisioning. A successful check does not establish iOS provisioning, app-record existence, store eligibility or device compatibility.
+Creation reserves a `YYYY.M.N` public version and separate Apple build number against the reviewed source. It generates sealed inputs outside tracked source, builds the universal direct app, signs/notarizes/staples it, verifies the DMG and updater archive contain the same final app, qualifies those exact artifacts, and completes a GitHub Release. It does not update version pins, create a source commit or activate the host's website/update pointer. Reservations and failed drafts do not establish public delivery.
 
-Each build writes a new `artifacts/apple-*/` directory containing `manifest.json`, `SHA256SUMS`, the selected DMG/IPA and, for iOS, `Situate.xcarchive` with its archived symbols. The manifest records the source revision, clean-checkout state and `releaseContent` identity (version, catalog digest and locales). The catalog is also a signed app resource. Require `status: "complete"` before distributing packages. Share the DMG, not the entire build directory or archive. The DMG contains a stapled app and an Applications shortcut; the outer disk image is separately signed, notarized and stapled. Signature, ticket and Gatekeeper checks must all pass. The iOS export is checked for the requested identifier, version, device platform, signing team and a nonexpired App Store provisioning profile. Rust and Swift use release optimization with SwiftPM's default build system.
+The public files are `release-inputs.json`, `situate-release-history.json`, `manifest.json`, `release-qualification.json` and the package assets declared by the manifest. External GitHub evidence binds their identities and hashes. Keep signing material, private configuration, local download receipts and raw diagnostics outside public assets. See the [publication runbook](../infrastructure/releases/README.md#plan-and-run-publication) for the separately executable `plan publish` and `run publish` commands, selected by exact numeric GitHub Release ID.
 
-The scripts do not install or launch the app, overwrite an existing installation, or access personal workspaces. Test installation, restart and updates using disposable workspaces before relying on data preservation. A complete package set is not a runtime acceptance result; iOS product support remains deferred.
+### Release workflow configuration
 
-Native builds share `target/local-release/build.lock`; iOS also uses the existing Xcode session lock. Check recorded owners and descendant build processes before removing stale locks. Failed builds retain an incomplete manifest and recovery files in `target/apple-release/staging-*/`. Never distribute a failed run. `target/apple-release/notary-pending.json` records each attempt before submission and blocks subsequent macOS builds until the attempt is accepted or manually reconciled. Submission IDs are saved before waiting. A timeout does not cancel Apple's processing; inspect `notarytool info`/`log` for the recorded ID (using the same Apple credential source), or `notarytool history` if submission failed without an ID. Remove the journal only after resolving the attempt and deciding whether a new submission is appropriate. There are no automatic retries.
+Supply `--configuration /PATH/TO/private-release-config.json` while planning, or set `SITUATE_RELEASE_CONFIG_FILE`. The default path is `.release-operations/config.json` at the repository root. It must be a regular, non-symlink, single-link file with mode `0600`; the plan binds its exact digest. Review configuration changes through a new plan rather than modifying an authorized plan's inputs.
+
+| Field              | Purpose                                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion`    | `1`.                                                                                                                                                                               |
+| `artifactRoot`     | Absolute output directory outside tracked source. If omitted, generated operation assets use the system temporary directory. Retain durable recovery evidence separately.          |
+| `sshIdentity`      | Optional absolute SSH identity path for the controlled host. Host keys must already be independently verified.                                                                     |
+| `updaterPublicKey` | Public updater verification key for publication; never the signing private key.                                                                                                    |
+| `recoveryEvidence` | Path or inline object containing independently verified backup, restore, signing-key and account-access recovery evidence bound to the exact destination.                          |
+| `qualification`    | Reviewed configuration for the isolated macOS account, real accessibility journeys, retained-data assertions, exact host-channel predecessor and private production-HTTPS routing. |
+
+The qualification configuration is validated by [`validateFinalArtifactConfiguration`](scripts/final-artifact-qualification.mjs) and the [routing validator](scripts/final-artifact-routing.mjs). It is not a switch that marks native tests passed. Provision and authorize the real account, accessibility access, HTTPS listener and routing before execution. Preserve the app's embedded production URL and TLS verification; endpoint overrides or manually replacing the app cannot qualify the production updater. A universal bundle check does not establish native Intel or minimum-OS behavior.
+
+Ordinary checks and dependency installation must receive no production credentials. Signing receives only the Apple/updater inputs it needs; qualification uses synthetic data without personal workspaces or signing/publication keys. The publisher needs read-only GitHub access and controlled-host publication access, not builder credentials.
 
 ### Direct macOS releases
 
-Select direct distribution explicitly; existing invocations default to external update authority. iOS always embeds `SITUATE_DISTRIBUTION=external`, including combined builds.
+The workflow supports universal macOS direct distribution only. Direct builds require `SITUATE_UPDATER_PUBLIC_KEY` and `TAURI_SIGNING_PRIVATE_KEY`, with optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, in the root private `.env` or environment. These are separate from Apple credentials. Explicit environment values, including empty ones, take precedence; CI uses only environment values. The builder does not generate keys or invoke a secret manager.
+
+The production endpoint is `https://getsituate.com/releases/current/update.json`. The builder embeds direct-distribution configuration and the generated version/history before signing. Frontend and native packaging consume the same `situate-release-history.json` bytes; `SITUATE_RELEASE_VERSION` supplies the reserved frontend and native application version without changing tracked Tauri or Cargo versions. Distribution validation still requires the exact clean reviewed source.
+
+The `-direct.dmg` and `-direct.app.tar.gz` contain the same final signed, notarized, stapled app. The archive preserves symbolic links and has a version-bound updater signature. The manifest records artifact hashes/sizes, signature, version, architectures, bundle digest, public configuration, source-suite results, public-release compatibility and runner/toolchain identity. Package verification checks signature, DMG/archive equality, signing identity, architecture, notarization tickets and Gatekeeper assessment. Python 3.12 or newer is required for safe extraction.
+
+Update installation prepares every application window, including those without a workspace. Cancellation before replacement releases prepared sessions and retains the verified package without replaying aborted work. Uncertain replacement or relaunch retains recovery state; do not assume cancellation or retry was safe. Recovery uses a trusted same/newer installer without resetting workspaces.
+
+### Interrupted creation
+
+Keep the operation ID, private journal and generated inputs. Inspect before reconciling any uncertain tag reservation, notarization submission, GitHub release operation or host publication:
 
 ```sh
-npm run release:apple -- --distribution direct --check
-npm run release:apple -- --distribution direct
+node tools/pipeline.mjs status --operation OPERATION_ID
+node tools/pipeline.mjs inspect --operation OPERATION_ID
+node tools/pipeline.mjs reconcile --operation OPERATION_ID --confirm RECONCILIATION_DIGEST
 ```
 
-Direct builds require `SITUATE_UPDATER_PUBLIC_KEY` (Tauri public-key content) and `TAURI_SIGNING_PRIVATE_KEY` (the dedicated updater private-key content), with optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, in the root private `.env` or environment. These are separate from Apple credentials. Explicit environment values, including empty ones, take precedence; CI uses only environment values. The builder does not generate keys or invoke a secret manager. An absent signing configuration fails even with `--check`.
+Inspection returns a `reconciliationDigest` bound to the observed operation state. Reconciliation does not authorize a different source, version, destination or set of bytes. Some creation-stage outcomes require explicit stage-specific investigation and remain blocked; the command must not blindly repeat an external request. An inspected creation attempt with no durable reservation can be resolved with `--resolution abandon`; this releases its coordination claim without reserving a version or running later stages. Reserved tags and uncertain publication outcomes cannot be discarded this way.
 
-The builder supplies `SITUATE_DISTRIBUTION=direct`, the public key and `SITUATE_UPDATER_ENDPOINT` explicitly before signing. The endpoint defaults to `https://getsituate.com/releases/current/update.json`; an override must be HTTPS without credentials, query or fragment. Production publication requires that exact default endpoint. Public build configuration and clean source revision are also included as a signed bundle resource. Direct builds require a clean committed checkout and reject source changes detected before completion. Only the signer subprocess receives updater private inputs; signer output and errors are not printed.
-
-The `-direct.dmg` and `-direct.app.tar.gz` contain the same final signed, notarized, stapled app. The archive preserves symbolic links and is signed afterward with the pinned Tauri CLI's `signer sign --app-version`. The manifest records both artifact hashes/sizes, the signature sidecar, version, architectures, bundle digest, identity and public configuration. Before completion, the builder verifies the version-bound signature, extracts the archive, mounts the DMG read-only and compares both bundles, signing identity, architecture, tickets and Gatekeeper assessment. Python 3.12 or newer is required for safe archive extraction.
-
-Update installation binds confirmation to the selected verified artifact and prepares every application window, including windows without an open workspace. Cancellation before bundle replacement resumes prepared sessions and retains the verified package without replaying aborted actions. After an installation failure, preparation is released only when the bundle is independently established to be unchanged. In-progress or uncertain replacement is not a safe cancellation point; uncertain replacement or relaunch retains recovery state and requires recovery guidance and explicit revalidation, not automatic retry or restart. Recovery uses a trusted same/newer installer without resetting workspaces.
-
-Use the separate [release publisher](../infrastructure/releases/README.md) for local staging and approved publication. It requires verified universal macOS artifacts built from a clean reviewed commit available in the local Git history. The publication checkout may be on a different revision or contain local edits; it does not rebuild the app. Building never publishes. Local test packages and external variants are not accepted by that publisher. Signed two-version native update qualification of the final intended release configuration remains necessary before production delivery.
+Retained older builds may have `target/apple-release/notary-pending.json`, staging directories or native build locks. A timeout does not cancel Apple's processing. Inspect the recorded submission using `notarytool info`/`log`, or `notarytool history` when no submission ID was saved, with the same credential source. Confirm recorded owners and child builds have stopped before removing stale locks. Preserve unresolved journals and never distribute an incomplete manifest.
 
 ### Observe an exact-artifact macOS update
 
@@ -636,46 +630,13 @@ Replace the example team with the unchanged release team. Both observations reva
 
 These receipts prove on-disk bundle identity and preservation of the two synthetic files, not that the updater performed the replacement, that relaunch succeeded, or that all application state survived. Record those native observations separately, including update cancellation, unsaved edits, multiwindow preparation and restart behavior. Do not manually replace A with B and call that an updater test. Access to B through A's embedded production HTTPS endpoint requires separately approved hosting or an isolated test-network arrangement that preserves the URL and TLS validation. An endpoint override, preview feed, synthetic signature or fixture-only check does not qualify the final production configuration. The observer does not establish download quarantine or first-launch Gatekeeper behavior; test those on the actual downloaded DMG separately.
 
-### Upload to TestFlight
+### Retained historical upload records
 
-**Deferred reference:** iOS build/upload tooling is retained, but no iOS submission or deployment is part of current scope. This section does not add prerequisites to macOS delivery.
-
-For the scripted upload, use **Xcode 27 or newer** and the [Apple credentials](#credentials) above. Set `APPLE_APP_ID` to the app record matching `iosBundleIdentifier`. The uploader uses the configured key directly and does not search other credential directories.
-
-To build and upload in one command:
-
-```sh
-npm run release:apple -- --platform ios --build-number 1 --upload-testflight
-npm run release:apple -- --platform all --build-number 2 --upload-testflight
-```
-
-The combined command checks local upload credentials and tool availability before building. It uploads only the iOS package returned by that invocation, after all selected platforms finish successfully. `--check --upload-testflight` checks prerequisites without building or uploading. If upload fails, the completed packages remain available; inspect `upload.json` and App Store Connect before retrying. Do not start another upload while the previous outcome is uncertain.
-
-To upload an already completed build separately:
-
-```sh
-npm run release:apple:upload -- --release artifacts/apple-<run>
-```
-
-The uploader verifies the IPA checksum and configured identifier, validates with Apple, then uploads once. It creates `upload.json` before contacting the validation/upload service. An existing receipt blocks another submission, including after an interrupted or uncertain upload. Check App Store Connect before manually removing a receipt to retry. `processing` means `altool --wait` finished transferring the build, not that Apple finished processing, approved a beta, or made it available to testers. The captured command output is retained in the `stdout` field of the private `upload-response.json`, including multiple JSON documents or status messages; do not share account diagnostics with installers. No public App Store submission, tester invitation or automatic tester distribution is performed.
-
-Alternatively, open `Situate.xcarchive` in Xcode Organizer and use its App Store Connect distribution flow. After processing, resolve compliance questions in App Store Connect and add the build to the intended internal testing group. Internal testers need appropriate App Store Connect access; external testing may require beta review. Both routes require installing Apple's TestFlight app on the test devices.
-
-References: [macOS signing](https://v2.tauri.app/distribute/sign/macos/), [iOS signing](https://v2.tauri.app/distribute/sign/ios/), [App Store distribution](https://v2.tauri.app/distribute/app-store/).
+Older iOS archives and `upload.json`/`upload-response.json` files are recovery evidence, not inputs to the macOS release workflow. An interrupted upload may already have reached Apple. Inspect its recorded identity and App Store Connect before any separately authorized recovery; do not remove a receipt to force another upload. `processing` records transfer completion, not beta approval or availability. Keep private account diagnostics out of public artifacts.
 
 ## Docker builds
 
-A Docker-capable host can produce Linux packages without installing the native Linux toolchain locally:
-
-```sh
-npm run release:docker
-npm run release:docker -- --arch x64
-npm run release:docker -- --check
-```
-
-The default follows the Docker engine's architecture. The images pin their base digests and use a dated Debian 12 package snapshot. Build caches stay in Docker volumes, separate from native builds. Output is exported beneath `artifacts/docker-*/`.
-
-Windows x64 NSIS cross-builds use a separate image target and require explicit acknowledgement of Microsoft component terms. See [container setup, licensing, checks and cache recovery](docker/README.md). macOS builds require macOS and Xcode. Retained iOS and Android commands are deferred reference paths.
+Docker hosts shared CI tools and locked visual checks, not a supported Linux or Windows product release. See the [CI image guide](docker/ci-README.md) for image inputs and redistribution obligations. macOS packaging and native qualification require macOS and Xcode.
 
 ## Local data
 

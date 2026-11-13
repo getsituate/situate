@@ -187,20 +187,14 @@ test("native inventory includes new files but excludes deleted tracked files", a
   }
 });
 
-test("Rust dependency policy checks product targets independently of the CI host", async () => {
+test("Rust dependency policy checks supported macOS targets independently of the CI host", async () => {
   const config = await readFile(join(root, "client/deny.toml"), "utf8");
   const graph = config.match(/\[graph\]([\s\S]*?)(?=\n\[)/)?.[1];
   assert.ok(graph, "dependency policy must declare its target graph");
   const targets = [...graph.matchAll(/"([a-z0-9_-]+)"/g)].map(
     (match) => match[1],
   );
-  assert.deepEqual(targets, [
-    "aarch64-apple-darwin",
-    "x86_64-apple-darwin",
-    "aarch64-apple-ios",
-    "aarch64-apple-ios-sim",
-    "x86_64-apple-ios",
-  ]);
+  assert.deepEqual(targets, ["aarch64-apple-darwin", "x86_64-apple-darwin"]);
   for (const advisory of [
     "RUSTSEC-2026-0385",
     "RUSTSEC-2026-0370",

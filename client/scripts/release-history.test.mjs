@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import {
   emptyReleaseHistory,
+  compileBuildReleaseHistory,
   releaseContent,
   releaseHistoryAsset,
   releaseHistoryBytes,
@@ -277,6 +278,70 @@ test("bundle resources cannot substitute symlinks to checkout content", (t) => {
     /regular bundle resource/,
   );
   assert.equal(readFileSync(external, "utf8"), releaseHistoryBytes(value));
+});
+
+test("generated direct builds reuse the frontend catalog bytes without committed version pins", async (t) => {
+  const { root } = fixture(t);
+  const value = catalog();
+  value.installedVersion = "2026.11.3";
+  value.releases.unshift({
+    version: "2026.11.3",
+    locales: {
+      en: { title: "Changes", entries: [] },
+      de: { title: "Änderungen", entries: [] },
+    },
+  });
+  const file = join(root, "generated.json");
+  writeFileSync(file, releaseHistoryBytes(value));
+  const environment = {
+    SITUATE_RELEASE_VERSION: value.installedVersion,
+    SITUATE_RELEASE_HISTORY_FILE: file,
+    SITUATE_RELEASE_HISTORY_SHA256: releaseHistoryDigest(value),
+  };
+  assert.deepEqual(
+    await compileBuildReleaseHistory(
+      "/no/source/checkout",
+      value.installedVersion,
+      { distribution: "direct", environment },
+    ),
+    value,
+  );
+  const plugin = releaseHistoryPlugin({
+    repoRoot: "/no/source/checkout",
+    version: value.installedVersion,
+    environment,
+  });
+  const result = await plugin.config();
+  assert.deepEqual(
+    JSON.parse(result.define.__SITUATE_RELEASE_HISTORY__),
+    value,
+  );
+  const emitted = [];
+  plugin.generateBundle.call({ emitFile: (asset) => emitted.push(asset) });
+  assert.equal(emitted[0].source, readFileSync(file, "utf8"));
+  assert.equal(Object.hasOwn(value.releases[0], "date"), false);
+  await assert.rejects(
+    () =>
+      releaseHistoryPlugin({
+        version: value.installedVersion,
+        environment: { SITUATE_RELEASE_VERSION: value.installedVersion },
+      }).config(),
+    /bound history/,
+  );
+  const future = structuredClone(value);
+  future.releases.push({ ...future.releases[0], version: "2027.1.1" });
+  writeFileSync(file, releaseHistoryBytes(future));
+  await assert.rejects(
+    () =>
+      compileBuildReleaseHistory(root, value.installedVersion, {
+        distribution: "direct",
+        environment: {
+          ...environment,
+          SITUATE_RELEASE_HISTORY_SHA256: releaseHistoryDigest(future),
+        },
+      }),
+    /not newer/,
+  );
 });
 
 test("binding validators reject missing current notes and inconsistent locale inventories", () => {

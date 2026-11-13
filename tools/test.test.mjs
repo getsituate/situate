@@ -1,5 +1,9 @@
 import test from "node:test";
-import { mvpSuiteEnabled } from "./test-scope.mjs";
+import {
+  mvpSuiteEnabled,
+  supportedSuiteEnabled,
+  suiteAvailable,
+} from "./test-scope.mjs";
 import { suiteAffectedFiles } from "./test-inputs.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -105,9 +109,16 @@ test("extended plan includes every category and both reference modes", () => {
   );
 });
 
-test("MVP scope defers expensive sweeps and non-Apple product gates without deleting inventory", () => {
+test("supported selection defers diagnostics and unavailable hosts without deleting inventory", () => {
   const alwaysDeferred = [
     "root-kotlin",
+    "root-audit",
+    "runner-platform",
+    "client-scripts-platform",
+    "client-scripts-platform-integration",
+    "workshop-vue",
+    "workshop-types",
+    "workshop-format",
     "client-workshop-host",
     "client-workshop-clippy",
     "client-visual",
@@ -126,6 +137,16 @@ test("MVP scope defers expensive sweeps and non-Apple product gates without dele
   ];
   const nonAppleDeferred = [
     "client-browser",
+    "client-executor-integration",
+    "client-migrations",
+    "client-format",
+    "root-rust",
+    "root-swift",
+    "client-workspace-access-swift",
+    "client-dictation-swift",
+    "client-agent-e2e",
+    "client-onboarding-e2e",
+    "client-plugins-e2e",
     "client-agent-runtime",
     "client-core",
     "client-host",
@@ -138,10 +159,18 @@ test("MVP scope defers expensive sweeps and non-Apple product gates without dele
     const expected = [
       ...alwaysDeferred,
       ...(platform === "darwin" ? [] : nonAppleDeferred),
-      ...(platform === "linux" ? ["dev-tui-unit", "dev-tui-clippy"] : []),
-    ].sort();
-    assert.equal(plan.scope, "mvp");
-    assert.equal(plan.profile, "mvp");
+      ...(platform === "darwin"
+        ? []
+        : ["dev-tui-unit", "dev-tui-format", "dev-tui-clippy"]),
+    ]
+      .filter((id) =>
+        suiteInventory(sourceFiles(root), "darwin").some(
+          (suite) => suite.id === id,
+        ),
+      )
+      .sort();
+    assert.equal(plan.scope, "supported");
+    assert.equal(plan.profile, "supported");
     assert.deepEqual([...plan.deferredSuiteIds].sort(), expected, platform);
     assert.deepEqual(
       plan.suites,
@@ -149,11 +178,7 @@ test("MVP scope defers expensive sweeps and non-Apple product gates without dele
     );
     for (const id of [
       "root-secrets",
-      "root-audit",
-      "root-rust",
       "client-vue",
-      "workshop-vue",
-      "workshop-types",
       "design-unit",
       "design-contracts",
     ]) {
@@ -205,21 +230,34 @@ test("scope composes with every profile and reports only suites deferred from it
       assert.equal(plan.profile, profile);
       assert.equal(extended.profile, profile);
       assert.equal(extended.scope, "extended");
-      assert.deepEqual(extended.deferredSuiteIds, []);
+      assert.ok(
+        extended.deferredSuiteIds.every(
+          (id) => !suiteAvailable({ id }, platform),
+        ),
+      );
       assert.deepEqual(
         [
           ...plan.suites.map((suite) => suite.id),
           ...plan.deferredSuiteIds,
         ].sort(),
-        extended.suites.map((suite) => suite.id).sort(),
+        [
+          ...extended.suites.map((suite) => suite.id),
+          ...extended.deferredSuiteIds,
+        ].sort(),
       );
-      assert.ok(plan.suites.every((suite) => mvpSuiteEnabled(suite, platform)));
+      assert.ok(
+        plan.suites.every(
+          (suite) =>
+            (profile === "coverage" || supportedSuiteEnabled(suite)) &&
+            suiteAvailable(suite, platform),
+        ),
+      );
       const report = await runPlan(plan, {
         execute: async () => ({ status: "passed", exitCode: 0 }),
         prepare: async () => ({ release() {} }),
       });
       assert.equal(report.status, "passed");
-      assert.equal(report.scope, "mvp");
+      assert.equal(report.scope, "supported");
       assert.deepEqual(report.deferredSuiteIds, plan.deferredSuiteIds);
     }
   }
@@ -244,9 +282,11 @@ test("the visual fixture suite fails when its test files are absent", (t) => {
   assert.match(result.stderr, /Could not find/);
 });
 
-test("executor Chromium checks are a default MVP integration, never a unit or coverage run", () => {
+test("executor Chromium checks require macOS and remain outside unit and coverage profiles", () => {
   const id = "client-executor-integration";
-  const integration = createPlan().suites.find((suite) => suite.id === id);
+  const integration = createPlan({ platform: "darwin" }).suites.find(
+    (suite) => suite.id === id,
+  );
   assert.equal(integration.kind, "integration");
   assert.equal(integration.cwd, "client/app");
   assert.equal(integration.npm, "client");
@@ -258,7 +298,10 @@ test("executor Chromium checks are a default MVP integration, never a unit or co
     "--allowOnly=false",
   ]);
   for (const platform of ["darwin", "linux", "win32"])
-    assert.ok(createPlan({ platform }).suites.some((suite) => suite.id === id));
+    assert.equal(
+      createPlan({ platform }).suites.some((suite) => suite.id === id),
+      platform === "darwin",
+    );
   for (const profile of ["quick", "unit", "feedback", "checks", "coverage"])
     assert.ok(
       !createPlan({ [profile]: true }).suites.some((suite) => suite.id === id),
@@ -307,12 +350,9 @@ test("feedback adds fast static checks; checks and coverage are explicit profile
       .filter((suite) => !unitIds.has(suite.id))
       .map((suite) => suite.id),
     [
-      ...(["darwin", "linux"].includes(process.platform)
-        ? ["dev-tui-format"]
-        : []),
+      ...(process.platform === "darwin" ? ["dev-tui-format"] : []),
       "root-lint",
       "root-format",
-      "workshop-types",
       "client-types",
       "client-format",
     ],
@@ -453,7 +493,12 @@ test("unit profile excludes real servers, browsers, Docker and the native host b
   const scripts = plan.suites.find(
     (suite) => suite.id === "client-scripts-unit",
   );
-  assert.ok(scripts.args.includes("client/scripts/ios-xcode.test.mjs"));
+  assert.ok(!scripts.args.includes("client/scripts/ios-xcode.test.mjs"));
+  assert.ok(
+    plan.suites
+      .find((suite) => suite.id === "client-scripts-platform")
+      .args.includes("client/scripts/ios-xcode.test.mjs"),
+  );
   assert.ok(scripts.args.every((arg) => !arg.includes(".integration.")));
   assert.deepEqual(
     plan.suites.find((suite) => suite.id === "client-core").args,
@@ -522,7 +567,7 @@ test("workshop interactions and models have independent suites", () => {
       "client/workshop/tests/browser/workshop-conflicts.spec.ts",
     ),
   );
-  const unit = createPlan({ unit: true });
+  const unit = createPlan({ unit: true, extended: true });
   assert.ok(
     !unit.suites.some((candidate) =>
       ["workshop-chromium", "workshop-webkit"].includes(candidate.id),
@@ -688,13 +733,20 @@ test("feedback client selection follows frontend boundaries and keeps shared con
     "client/Cargo.toml",
     "client/app/src-tauri/src/lib.rs",
     "client/package-lock.json",
-    "client/scripts/new.mjs",
-    "tools/test.mjs",
+
     "unknown.ts",
     "client/packages/new/src/index.ts",
-    "client/app/vite.config.ts",
   ])
     assert.deepEqual(ids([file]), clientSuites, file);
+  assert.deepEqual(ids(["client/scripts/new.mjs"]), ["client-scripts-unit"]);
+  assert.deepEqual(ids(["tools/test.mjs"]), []);
+  assert.deepEqual(ids(["client/app/vite.config.ts"]), [
+    "client-core",
+    "client-format",
+    "client-scripts-unit",
+    "client-types",
+    "client-vue",
+  ]);
 });
 
 test("changed profiles share frontend boundaries while retaining their test categories", (t) => {
@@ -709,13 +761,7 @@ test("changed profiles share frontend boundaries while retaining their test cate
   const feedback = createPlan({ feedback: true, changed: true }, directory);
   assert.deepEqual(
     feedback.suites.map((s) => s.id),
-    [
-      "root-lint",
-      "root-format",
-      "client-scripts-unit",
-      "workshop-vue",
-      "workshop-types",
-    ],
+    ["root-lint", "root-format", "client-scripts-unit"],
   );
   assert.deepEqual(
     createPlan(
@@ -853,7 +899,8 @@ test("document selection is shared by unit, feedback and full changed profiles",
     put(file, "# Example\n");
     for (const profile of [{ unit: true }, { feedback: true }, {}]) {
       const expected = profile.unit ? [] : ["root-format"];
-      if (!profile.unit && !profile.feedback) expected.push("root-secrets");
+      if (!profile.unit && !profile.feedback)
+        expected.push("root-commits", "root-history-secrets", "root-secrets");
       if (file.startsWith("requirements/data/"))
         expected.push("requirements-unit", "requirements-catalog");
       expected.push("design-contracts");
@@ -1003,7 +1050,7 @@ test("a fully deferred changed selection remains no-tests rather than passed", a
     createPlan({ ...options, extended: true }, directory).suites.map(
       (s) => s.id,
     ),
-    ["dev-tui-unit"],
+    [],
   );
 });
 
@@ -1730,7 +1777,6 @@ test("only npm-dependent suites request workspace setup", () => {
     [
       "client-scripts-unit",
       "client-vue",
-      "workshop-vue",
       "requirements-unit",
       "requirements-catalog",
       "design-unit",

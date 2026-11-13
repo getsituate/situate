@@ -32,25 +32,25 @@ test("all npm projects inherit the root Volta pins", () => {
   }
 });
 
-test("CI uses pinned Volta setup instead of an independent Node installation", () => {
-  for (const directory of [".github/workflows", ".github/disabled-workflows"]) {
-    for (const name of readdirSync(
-      new URL(`../${directory}/`, import.meta.url),
-    )) {
-      if (!name.endsWith(".yml")) continue;
-      const workflow = read(`${directory}/${name}`);
-      assert.doesNotMatch(workflow, /actions\/setup-node/);
-      if (!workflow.includes("volta-cli/action@")) continue;
+test("CI delegates toolchain setup to the shared bootstrap after pinned checkout", () => {
+  const workflows = readdirSync(
+    new URL("../.github/workflows/", import.meta.url),
+  ).filter((name) => name.endsWith(".yml"));
+  assert.ok(workflows.length > 0);
+  for (const name of workflows) {
+    const workflow = read(`.github/workflows/${name}`);
+    assert.doesNotMatch(
+      workflow,
+      /actions\/setup-node|volta-cli\/action|run:.*(?:volta install|curl|npm install)/,
+    );
+    const steps = workflow.split(/^ {4}steps:\n/m).slice(1);
+    assert.ok(steps.length > 0, name);
+    for (const block of steps) {
+      assert.match(block, /^ {6}- uses: actions\/checkout@[a-f0-9]{40}\n/);
       assert.match(
-        workflow,
-        /volta-cli\/action@[a-f0-9]{40}\n {8}with:\n {10}volta-version: 2\.0\.2/,
+        block,
+        /persist-credentials: false[\s\S]*?- run: python3 tools\/pipeline-bootstrap\.py\n/,
       );
-      if (workflow.includes("package-json-path: harness/package.json")) {
-        assert.match(
-          workflow,
-          /working-directory: harness\n {8}shell: bash\n {8}run: volta install/,
-        );
-      }
     }
   }
 });

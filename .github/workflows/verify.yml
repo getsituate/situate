@@ -1,0 +1,211 @@
+name: Verify
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      digest: ${{ steps.plan.outputs.digest }}
+      app_impact: ${{ steps.plan.outputs.app_impact }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - id: plan
+        run: node tools/actions-adapter.mjs plan --workflow verify
+        env:
+          GH_TOKEN: ${{ github.event_name == 'merge_group' && github.token || '' }}
+
+  policy:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'policy')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane policy
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane policy
+
+  tooling:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane tooling
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane tooling
+
+  tooling-macos:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane tooling-macos
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane tooling-macos
+
+  frontend:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'frontend')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane frontend
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane frontend
+
+  macos-code:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-code
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-code
+
+  macos-browser:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-browser')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-browser
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-browser
+
+  macos-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-native
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-native
+
+  required:
+    name: PR verification
+    needs:
+      [
+        plan,
+        policy,
+        tooling,
+        tooling-macos,
+        frontend,
+        macos-code,
+        macos-browser,
+        macos-native,
+      ]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs aggregate --workflow verify
+        env:
+          PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+          PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+          PIPELINE_NEEDS: ${{ toJSON(needs) }}
