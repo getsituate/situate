@@ -43,6 +43,10 @@ npm run build
 
 See [the requirements viewer documentation](requirements/README.md) for the data format and browser tests.
 
+## Security
+
+See the [security policy](SECURITY.md) for confidential vulnerability reporting and versions receiving security fixes. Do not report vulnerability details in public issues.
+
 ## License
 
 Original software and documentation are licensed under the [MIT License](LICENSE). Original illustrations, Bend, wordmarks and app-icon artwork are licensed under [CC BY 4.0](LICENSES/CC-BY-4.0.txt). Third-party components retain their respective licenses and notices.
