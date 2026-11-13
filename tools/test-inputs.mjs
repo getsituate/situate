@@ -7,7 +7,7 @@ export function isPlainDocumentation(file) {
   if (fixture.test(file) || file.startsWith(".pi/")) return false;
   return (
     /(^|\/)(docs|concepts)\/.*\.(md|mdx|adoc|rst|txt)$/.test(file) ||
-    /(^|\/)(README|AGENTS|CHANGELOG|CONTRIBUTING|LICENSE|NOTICE)(\.(md|mdx|adoc|rst|txt))?$/.test(
+    /(^|\/)(README|AGENTS|CHANGELOG|CONTRIBUTING|SECURITY|LICENSE|NOTICE)(\.(md|mdx|adoc|rst|txt))?$/.test(
       file,
     )
   );
