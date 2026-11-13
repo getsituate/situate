@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
-import { hostContainerEnvironment } from "./pipeline-container.mjs";
+import { hostContainerEnvironment } from "./pipeline-environment.mjs";
 import { suiteExecution, supportedSuiteEnabled } from "./test-scope.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));

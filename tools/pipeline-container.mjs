@@ -3,24 +3,8 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ordinaryEnvironment } from "./pipeline.mjs";
-
-export function hostContainerEnvironment(environment) {
-  const allowed = ordinaryEnvironment(environment);
-  for (const key of [
-    "SITUATE_DOCKER_LEASE",
-    "DOCKER_HOST",
-    "DOCKER_CONTEXT",
-    "DOCKER_CONFIG",
-    "DOCKER_TLS_VERIFY",
-    "DOCKER_CERT_PATH",
-    "DOCKER_API_VERSION",
-    "SSH_AUTH_SOCK",
-  ])
-    if (Object.hasOwn(environment, key)) allowed[key] = environment[key];
-  return allowed;
-}
-
+import { hostContainerEnvironment } from "./pipeline-environment.mjs";
+export { hostContainerEnvironment } from "./pipeline-environment.mjs";
 export async function runContainerLane(
   root,
   plan,

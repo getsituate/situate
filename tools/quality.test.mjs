@@ -242,10 +242,7 @@ test("Rust policy and vulnerability checks run separately", async () => {
       { mode: 0o755 },
     );
     for (const [name, args] of [
-      [
-        "rust",
-        ["--offline", "--locked", "check", "licenses", "bans", "sources"],
-      ],
+      ["rust", ["--locked", "check", "licenses", "bans", "sources"]],
       ["rust-audit", ["--locked", "check", "advisories"]],
     ]) {
       const result = command("tools/quality.mjs", [name], {

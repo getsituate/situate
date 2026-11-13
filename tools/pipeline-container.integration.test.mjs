@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
-import { root } from "./test.mjs";
+import { root, sourceFiles, suiteInventory } from "./test.mjs";
+import { imageInputs } from "./ci-image.mjs";
 
 test(
   "suite entry emits only progress events and saves its final report separately",
@@ -15,8 +24,43 @@ test(
         : false,
   },
   (t) => {
-    const directory = mkdtempSync(join(tmpdir(), "situate-entry-protocol-"));
+    const directory = realpathSync(
+      mkdtempSync(join(tmpdir(), "situate-entry-protocol-")),
+    );
     t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const repository = join(directory, "repository");
+    for (const name of [
+      ...imageInputs(root),
+      "tools/ci-image.lock.json",
+      "client/package-lock.json",
+      "requirements/package-lock.json",
+      "tools/commit-check.mjs",
+      "tools/commit-policy.mjs",
+    ]) {
+      const destination = join(repository, name);
+      mkdirSync(dirname(destination), { recursive: true });
+      copyFileSync(join(root, name), destination);
+    }
+    for (const suite of suiteInventory(sourceFiles(root), "linux")) {
+      if (!suite.args.includes("--test")) continue;
+      const name = suite.args.find((argument) =>
+        /\.test\.[cm]?js$/.test(argument),
+      );
+      if (!name) continue;
+      const destination = join(repository, name);
+      mkdirSync(dirname(destination), { recursive: true });
+      writeFileSync(destination, "");
+    }
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.name", "Synthetic Maintainer"],
+      ["config", "user.email", "maintainer@example.invalid"],
+      ["add", "."],
+      ["commit", "-qm", "test: protocol fixture"],
+    ]) {
+      const git = spawnSync("git", args, { cwd: repository, encoding: "utf8" });
+      assert.equal(git.status, 0, git.stderr);
+    }
     const plan = join(directory, "plan.json");
     const report = join(directory, "report.json");
     writeFileSync(
@@ -29,9 +73,14 @@ test(
     );
     const child = spawnSync(
       process.execPath,
-      ["tools/pipeline-container-entry.mjs", "suites", plan, report],
+      [
+        join(root, "tools/pipeline-container-entry.mjs"),
+        "suites",
+        plan,
+        report,
+      ],
       {
-        cwd: root,
+        cwd: repository,
         encoding: "utf8",
         timeout: 60000,
       },
