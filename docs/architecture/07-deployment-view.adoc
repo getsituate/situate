@@ -6,11 +6,17 @@ This chapter maps software and data to those locations, then describes delivery 
 Placement requirements do not establish that a service is deployed or a native release is qualified.
 
 :architecture-repository-root: ../..
+:architecture-docs-root: .
+:architecture-diagrams-root: diagrams
 
 include::07-deployment-view/product-environments.adoc[]
 
 include::07-deployment-view/delivery-and-operations.adoc[]
 
+include::07-deployment-view/release-workflow.adoc[]
+
 include::07-deployment-view/development-environment.adoc[]
 
 :!architecture-repository-root:
+:!architecture-docs-root:
+:!architecture-diagrams-root:

@@ -48,7 +48,7 @@ Pull-request feedback compares coverage with a measured `main` revision and iden
 An unavailable baseline must be shown as unavailable, not as zero coverage; a decrease informs review without imposing a universal percentage gate.
 Test failures remain failures independently of the coverage percentage.
 
-macOS and iOS are the active MVP targets; Android development and verification are deferred.
-Automated iOS device verification is not currently provisioned, and the retained mobile workflow is disabled.
-Native iOS checks remain explicit development and release work; macOS, browser and workflow-contract checks do not establish iOS qualification.
+macOS is the only active MVP target; iOS, Windows, Linux desktop and Android are deferred.
+The retained mobile workflow is disabled. iOS runtime, device, signing and store checks are optional deferred work, not macOS development or release gates.
+Historical iOS fixtures and simulator results do not establish current iOS support.
 See link:{architecture-docs-root}/development/testing.md#mobile-ci-disabled[mobile CI limitations] and link:{architecture-docs-root}/development/testing.md#native-ios-application-journey[the explicit iOS application journey].

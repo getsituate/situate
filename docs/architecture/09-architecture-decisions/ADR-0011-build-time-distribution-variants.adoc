@@ -10,6 +10,7 @@ endif::[]
 
 Status:: accepted
 Date:: 2026-10-30
+Current platform scope:: macOS only under link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]; iOS statements below retain earlier design context or evidence, not current delivery gates
 Implementation:: Apple build-time update policy implemented; signed native installation and relaunch qualification remain open; Homebrew delivery remains deferred
 
 == Context

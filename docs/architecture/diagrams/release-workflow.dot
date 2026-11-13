@@ -1,0 +1,18 @@
+digraph ReleaseWorkflow {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.6, ranksep=0.45, fontname="Helvetica", fontsize=13];
+  node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  pr [label="PR checks\nAffected tests + build checks"];
+  main [label="Integrated main\nFull active verification"];
+  prepare [label="Release inputs\nVersion + approved content", fillcolor="#e5effa"];
+  mac_build [label="macOS direct\nUniversal signed packages"];
+  mac_qualify [label="macOS qualification\nExact installation + update"];
+  mac_publish [label="Publish automatically\nDownload + update feed", fillcolor="#e5effa"];
+
+  pr -> main [label="Protected merge"];
+  main -> prepare [label="Shared checks pass"];
+  prepare -> mac_build [label="macOS source checks pass"];
+  mac_build -> mac_qualify [label="Final bytes"];
+  mac_qualify -> mac_publish [label="Pass"];
+}

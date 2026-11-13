@@ -16,7 +16,7 @@ Follow the [client setup guide](../../client/README.md) for native prerequisites
 - Python 3 for coordinated test and dependency commands.
 - [sccache](https://github.com/mozilla/sccache) is recommended for reusing Rust compilation results across local builds.
 
-Develop the current MVP on macOS with Xcode for macOS and iOS. Windows, Linux desktop and Android are deferred and do not require compatibility work or SDK setup. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [MVP platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
+Develop the current MVP on macOS with Xcode for macOS. iOS, Windows, Linux desktop and Android are deferred and do not require compatibility work, SDK setup, simulators or store provisioning. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [MVP platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
 
 ## Install Volta
 
@@ -177,7 +177,7 @@ node tools/test.mjs --changed --base origin/main
 node tools/test.mjs --quick --changed
 ```
 
-The default runs the active macOS/iOS MVP scope. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
+The default runs the active macOS MVP scope. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
 
 ## Development terminal
 
@@ -196,7 +196,7 @@ This launches `situate-dev`, the independent Rust workspace in `tools/dev-tui/`,
 - `a`: render and open architecture documentation.
 - `w`: build the website, serve the generated files locally and open the browser.
 - `r`: build the requirements viewer, serve the generated files locally and open the browser.
-- `R` (Shift+r): release menu (`1`: Universal macOS DMG, `2`: iOS with TestFlight upload, `3`: both Apple platforms, `4`: select an existing macOS release for publication or inspection, `5`: prepare release notes). Apple builds require an app version; iOS also prompts for a build number. Builds, publication and starting a release-notes agent retain separate confirmation.
+- `R` (Shift+r): release menu (`1`: Universal macOS DMG, `4`: select an existing macOS release for publication or inspection, `5`: prepare release notes). Retained options `2` (iOS/TestFlight) and `3` (combined Apple builds) are deferred reference paths, not current release work. Builds, publication and starting a release-notes agent retain separate confirmation.
 - `Tab`: switch focus; arrows or `j`/`k`: select or scroll.
 - `s`: stop; `Ctrl+r`: rerun; `e`: open results or process logs; `End`: follow output.
 - `i`: exit the console and inspect the viewed run with Pi in the same terminal. Also available in the release-test results dialog.
@@ -215,17 +215,17 @@ Client actions use the [client setup prerequisites](../../client/README.md). If 
 
 Prepare the product version and reviewed localized notes through [release preparation](release-preparation.md) before a distribution build. The guide includes a manual command-line path without an agent. For the console's optional agent-assisted path, choose **Start Pi agent** to select the version and open a Herdr pane using your local Pi setup. Review the English draft yourself and ask the agent to translate when ready. After reviewing all languages, return to the console and choose **Changelog prepared** to validate the files and create one commit containing the version change and release notes. No editor opens automatically. The preparation agent never commits, publishes or signs an app. Follow the [commit conventions](commit-conventions.md) for new commits; local hook installation is optional.
 
-Before an Apple build, the console shows the current app version and asks for the desired `major.minor.patch` version. A new version, or a current version without finalized notes, opens changelog preparation. If no preparation exists yet, the console asks for the comparison baseline and confirmation to start Pi. Review the draft and translations, then confirm **Changelog prepared**. The console commits the version and notes together and returns to the test prompt for the selected platform and iOS build number. Nothing is built until you confirm the build separately.
+Before an Apple build, the console shows the current app version and asks for the desired `major.minor.patch` version. A new version, or a current version without finalized notes, opens changelog preparation. If no preparation exists yet, the console asks for the comparison baseline and confirmation to start Pi. Review the draft and translations, then confirm **Changelog prepared**. The console commits the version and notes together and returns to the test prompt for the selected macOS release. Nothing is built until you confirm the build separately.
 
-Re-entering a version with finalized notes permits another build without another preparation or commit, for example a new iOS build number. Older versions, leading zeroes and prerelease suffixes are rejected. Publishing an existing macOS artifact uses its manifest version unchanged; it does not rewrite the artifact or source version.
+Re-entering a version with finalized notes permits another build without another preparation or commit. Older versions, leading zeroes and prerelease suffixes are rejected. Publishing an existing macOS artifact uses its manifest version unchanged; it does not rewrite the artifact or source version.
 
 Preparation requires a clean checkout and index on a named branch, without an active merge or rebase. Existing Git hooks and signing settings apply; interactive signing may need an already-unlocked signing agent. Unrelated changes are refused rather than staged or committed. After a failed or interrupted preparation, inspect the run and private recovery files before retrying. The selected version and finalized notes are checked again before the Apple release script starts, including after dependency setup.
 
 Before an Apple build or macOS publication, the release dialog asks whether to run the complete regular MVP suite (`node tools/test.mjs --json`, without `--changed`). Choose **Run all MVP tests** or **Skip tests**. The test run appears in the run list with live output and can be stopped normally. When it finishes, the dialog shows the overall status and each suite's result, duration, exit code and available errors. Scroll with Page Up/Down or the mouse wheel. Tests never start a release automatically: choose **Continue** after a passing run, then review and confirm the build or publication separately. You can also retry or cancel. Failed, cancelled, empty or invalid test results are not treated as a pass; **Continue without passing tests** explicitly bypasses them before the separate release confirmation. Skips and overrides are shown in that confirmation and apply only to the selected release attempt. Test results remain available in the run's **Results** and **Logs** views after closing the dialog.
 
-This runs the default macOS/iOS MVP scope, not the opt-in extended workshop, design-browser or screenshot sweeps. Tests check the current checkout; publishing an existing artifact still requires its separate exact-artifact native qualification. Release retries ask about tests again rather than reusing an earlier approval.
+This runs the default macOS MVP scope, not the opt-in extended workshop, design-browser or screenshot sweeps. Tests check the current checkout; publishing an existing artifact still requires its separate exact-artifact native qualification. Release retries ask about tests again rather than reusing an earlier approval.
 
-Apple releases require macOS and the [Apple signing setup](../../client/README.md#apple-distribution) in the client guide. The console runs `release:apple` and shows its output and artifact directory. Selecting iOS adds `--upload-testflight`: after all selected packages build successfully, the new IPA is validated and uploaded. The confirmation dialog includes the upload; no public App Store release is submitted. Apple processing, compliance and tester access may still need attention. Use a new iOS build number for each upload. Rerunning an iOS release lets you edit the number before confirming. After a failed or interrupted upload, inspect App Store Connect and the run's `upload.json` before retrying; the console does not automatically retry. Release operations cannot overlap client, test, or other release runs in this console.
+Apple releases require macOS and the [Apple signing setup](../../client/README.md#apple-distribution) in the client guide. The console runs `release:apple` and shows its output and artifact directory. In the retained, deferred iOS path, selecting iOS adds `--upload-testflight`: after all selected packages build successfully, the new IPA is validated and uploaded. The confirmation dialog includes the upload; no public App Store release is submitted. Apple processing, compliance and tester access may still need attention. Use a new iOS build number for each upload. Rerunning an iOS release lets you edit the number before confirming. After a failed or interrupted upload, inspect App Store Connect and the run's `upload.json` before retrying; the console does not automatically retry. Release operations cannot overlap client, test, or other release runs in this console.
 
 ### Inspect a run with Pi
 
@@ -320,9 +320,9 @@ Tests use the repository-local pinned Pi package. To deliberately test another i
 
 ## Mobile prototype toolchains on macOS
 
-The retained prototype instructions below include optional Android tooling. Android is deferred during the macOS/iOS MVP; do not install its SDKs or emulators for routine development. Apple builds require Xcode and the relevant iOS runtime. Install requested host tools once rather than separately in every worktree; framework dependencies belong to the individual prototype.
+The retained instructions below are deferred mobile reference material, not macOS MVP setup. Do not install iOS runtimes, Android SDKs, simulators or emulators for routine macOS work. Install requested host tools once rather than separately in every worktree; framework dependencies belong to the individual prototype.
 
-Install Xcode from Apple, complete its first-launch setup, and install an iOS simulator runtime. Keep the separate Command Line Tools current through Software Update as well; Homebrew may reject source builds when they are older than the installed OS.
+Only for explicitly requested mobile work, install Xcode from Apple, complete its first-launch setup, and install an iOS simulator runtime. Keep the separate Command Line Tools current through Software Update as well; Homebrew may reject source builds when they are older than the installed OS.
 
 ```sh
 brew install --cask flutter android-commandlinetools

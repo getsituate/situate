@@ -21,6 +21,6 @@ Use these documents as references when planning content, answering community que
 
 ## Product status and examples
 
-The pack describes Situate's intended experience. The product introduction also identifies what the separate Apple Silicon Mac prototype already offers, including conversations, notes and tasks, custom tools and Apple connections. The main application is in development for macOS and iOS; its complete experience is not yet established as available end to end.
+The pack describes Situate's intended experience. The product introduction also identifies what the separate Apple Silicon Mac prototype already offers, including conversations, notes and tasks, custom tools and Apple connections. The main application currently targets macOS only, with iOS deferred; its complete experience is not yet established as available end to end.
 
 Check the current product documentation before presenting a workflow as available. Interface previews use invented content and should carry an illustrative-preview label wherever they are shared.

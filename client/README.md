@@ -1,8 +1,8 @@
 # Situate client
 
-The active MVP targets are **macOS and iOS**. Windows, Linux desktop and Android are deferred. Their source, build commands and diagnostic instructions below are retained for optional future work, not as current compatibility or release guarantees. Routine development does not require their SDKs or verification. See the [platform scope](../requirements/data/foundations.md#mvp-platform-scope).
+The active MVP target is **macOS only**. iOS, Windows, Linux desktop and Android are deferred and are not currently supported. Their source, build commands and diagnostic instructions below are retained for optional future work, not as current compatibility or release guarantees. Routine development does not require their SDKs or verification. See the [platform scope](../requirements/data/foundations.md#mvp-platform-scope).
 
-The client opens the last-open workspaces, or shows **Workspaces** when none can be reopened. Each desktop workspace has its own 1280 × 800 px window. Mobile keeps multiple open sessions and displays one at a time. The main screen uses the [production app shell](app/src/components/AppShell.vue) and canonical brand assets. Below 1184 CSS px, the sidebar opens as a modal drawer with keyboard focus handling, Escape and backdrop dismissal.
+The client opens the last-open workspaces, or shows **Workspaces** when none can be reopened. Each macOS workspace has its own 1280 × 800 px window. The retained, deferred mobile implementation keeps multiple open sessions and displays one at a time. The main screen uses the [production app shell](app/src/components/AppShell.vue) and canonical brand assets. Below 1184 CSS px, the sidebar opens as a modal drawer with keyboard focus handling, Escape and backdrop dismissal.
 
 Desktop windows retain separate native titlebars; workspace entry fills the content area beneath them. Creation fields scroll independently of Cancel/Create. On Android, the native WebView container consumes system-bar, cutout and keyboard insets; on iOS, CSS safe areas and the visual viewport constrain content.
 
@@ -27,9 +27,9 @@ The assistant can read public HTML, plain-text and Markdown pages, with bounded 
 - Closing a workspace removes it from startup restoration but leaves it listed. Quitting preserves the restore set. Closing all workspaces returns to Workspaces. An inaccessible restored location stays available for Retry or Grant access; other accessible workspaces can still open.
 - **Bring a workspace from sync** is disabled. No synchronization service is contacted.
 
-Creation proposes the OS Documents folder when available. On Android and iOS, **Documents — Situate** means application-owned Documents, not a shared provider folder. Application-owned data can be removed when the app is uninstalled. Choose another location through the native folder chooser when appropriate; no cache or temporary directory is substituted if Documents is unavailable. iOS application Documents is also exposed through Files.
+Creation proposes the OS Documents folder when available. In the retained, deferred Android and iOS implementations, **Documents — Situate** means application-owned Documents, not a shared provider folder. Application-owned data can be removed when the app is uninstalled. Choose another location through the native folder chooser when appropriate; no cache or temporary directory is substituted if Documents is unavailable. iOS application Documents is also exposed through Files.
 
-Android provider access uses Storage Access Framework tree URIs and persistent grants. iOS provider access uses security-scoped bookmarks and coordinated directory operations. These handles are not ordinary paths. Providers must allow readable, writable directories and the literal `.situate` name. Unavailable, read-only or unsupported locations produce errors, not replacement workspaces. Android providers can rename colliding requests; such a result is rejected and any leftover directory is identified rather than silently accepted.
+Deferred mobile reference: Android provider access uses Storage Access Framework tree URIs and persistent grants. iOS provider access uses security-scoped bookmarks and coordinated directory operations. These handles are not ordinary paths. Providers must allow readable, writable directories and the literal `.situate` name. Unavailable, read-only or unsupported locations produce errors, not replacement workspaces. Android providers can rename colliding requests; such a result is rejected and any leftover directory is identified rather than silently accepted.
 
 Path-backed creation holds the parent and new child directory open, rejects child symlinks and nonempty children, and writes `.situate` relative to the held child. Identity checks before initialization and after location/bookmark creation reject detected replacements. These checks are not a filesystem sandbox: `mkdir` and opening the new directory are separate operations, so an empty directory substituted before the first child handle is acquired cannot reliably be distinguished from the newly created directory. Locations can also change after the final check. Do not move or replace the target during creation. Errors preserve partial directories rather than deleting paths whose ownership may have changed.
 
@@ -194,7 +194,7 @@ Use `host.files` for workspace content discovery rather than starting a shell:
 
 Initial scan or listener failure rejects `watch`. Later listener failure stops the subscription. Scans run one second after the preceding scan and asynchronous listener finish, without overlap. This is current-state metadata polling, not a filesystem event log: edits may be coalesced and transient states may be missed. Delivery can also be delayed by operating-system suspension. Caller cancellation, host disposal and the returned stop function cancel polling and suppress late results.
 
-Subscribe before reading initial content, process the reset and subsequent invalidations in order, and re-read changed files using `readMany`. Keep derived domain state in the plugin and stop subscriptions when that state is no longer needed. These methods use the shared temporary workspace during plugin checks; they never read the live workspace through the check host. Native iOS behavior requires separate qualification.
+Subscribe before reading initial content, process the reset and subsequent invalidations in order, and re-read changed files using `readMany`. Keep derived domain state in the plugin and stop subscriptions when that state is no longer needed. These methods use the shared temporary workspace during plugin checks; they never read the live workspace through the check host. iOS is deferred; these checks do not establish iOS support.
 
 ### Checks and grouped activation
 
@@ -222,7 +222,7 @@ Retained legacy conversations can still use `check_plugin_draft` and `activate_p
 
 Use disposable workspaces for evaluation. An external writer can still race replacement and lose an unobserved change; platform durability is not fully verified.
 
-Editing is available in desktop filesystem workspaces and application-owned mobile Documents folders. External mobile provider workspaces are read-only: browsing does not initialize history or normalize their content. Text files open internally, including code, structured text and files without an extension. Markdown opens rendered with a source mode; other text opens as source with syntax highlighting where supported. Classification uses file content rather than the extension alone. Binary files open in the default external application; iOS hands a temporary read-only copy to the activity interface. Unreadable files, oversized text and unsupported text encodings produce errors rather than an external handoff. Plugin management uses the same explorer and reading behavior, scoped to the selected plugin’s code and without editing or activation. The document chat button is visible but disabled.
+Current supported editing targets macOS filesystem workspaces. The retained mobile implementation supports application-owned Documents folders, but mobile product support and qualification are deferred. External mobile provider workspaces are read-only: browsing does not initialize history or normalize their content. Text files open internally, including code, structured text and files without an extension. Markdown opens rendered with a source mode; other text opens as source with syntax highlighting where supported. Classification uses file content rather than the extension alone. Binary files open in the default external application; iOS hands a temporary read-only copy to the activity interface. Unreadable files, oversized text and unsupported text encodings produce errors rather than an external handoff. Plugin management uses the same explorer and reading behavior, scoped to the selected plugin’s code and without editing or activation. The document chat button is visible but disabled.
 
 Use the document’s **File actions** (`…`) menu to switch between **Read** and **Edit source**. Clicking a rendered text block also opens its source position. Read-only documents and historical versions offer **View source**; switching representation keeps the selected version. File-row menus provide creation, rename, move, duplicate and delete actions. The browser’s **+** menu creates at the workspace root and opens **Deleted files**; contextual creation places new items beside a file or inside a folder. New files without an extension receive `.md`.
 
@@ -254,7 +254,7 @@ Agent `write` and `edit` use versioned publication. New-file writes and bounded 
 
 Existing manifest-based calls remain accepted: `manifestPath` selects a `.situate/batch-<name>.jsonl` file instead of `entries`, and its `sourcePath` entries remain restricted to `.situate/import-<name>/`. These legacy inputs remain unchanged; they are not automatically deleted.
 
-Native content adapters expose bounded reads and directory listing through the host for Android document-provider handles and scoped iOS URLs. Native reads are capped at 16 MiB and never silently truncated. Only native-validated application-owned mobile folders become filesystem roots for Git-backed writes; provider handles never become paths. Provider-backed versioned writing still needs a publication protocol. iOS access retains scope and coordination through filesystem work and releases it before external UI handoff. Cross-compilation does not establish real provider grant, interruption or revocation behavior.
+Deferred mobile adapters expose bounded reads and directory listing through the host for Android document-provider handles and scoped iOS URLs. Native reads are capped at 16 MiB and never silently truncated. Only native-validated application-owned mobile folders become filesystem roots for Git-backed writes; provider handles never become paths. Provider-backed versioned writing still needs a publication protocol. iOS access retains scope and coordination through filesystem work and releases it before external UI handoff. Cross-compilation does not establish real provider grant, interruption or revocation behavior.
 
 On macOS, exercise the native directory and content helpers with:
 
@@ -306,7 +306,7 @@ The requirements viewer remains a separate npm project.
 
 Use [Volta](../docs/development/README.md#install-volta) for the Node.js and npm versions pinned in the root `package.json`, and Rust installed through rustup. [`rust-toolchain.toml`](rust-toolchain.toml) selects the compiler, formatter, Clippy and LLVM tools. LLVM tools support the Swift bridge's symbol handling with Xcode 27. Keep the rustup-managed executables ahead of any separately installed Rust compiler on `PATH`.
 
-Native builds also need the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). Only the macOS and iOS rows are required for MVP development; the other rows document deferred targets:
+Native builds also need the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). Only the macOS row is required for MVP development; iOS runtimes, mobile SDKs and the other rows below are deferred reference material:
 
 | Build host   | Additional tools                                                                                                       |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
@@ -392,6 +392,8 @@ npm run screenshot:native -- --pid <process-id> --output test-results/native-cur
 Native capture requires Swift, the normal desktop build prerequisites, and macOS screen-recording permission for the terminal if requested by the OS. It captures only one visible window belonging to the specified process and refuses ambiguous multiple-window selections or an existing output file. Native capture on other operating systems is not provided by this command. Screenshots can expose workspace names and locations; keep them in ignored `test-results/` and review them before sharing.
 
 ## Mobile builds
+
+**Deferred reference:** iOS and Android are not currently supported. These retained commands and device instructions are not macOS prerequisites or release gates.
 
 Install the Rust target for each build:
 
@@ -497,13 +499,11 @@ For an interactive provider test, finish both ordinary smoke launches first, the
 
 ## Local release packages
 
-Run the same release script on each native build host or VM, after installing dependencies and running the checks above:
+For current macOS work, run the release script on macOS after installing dependencies and running the checks above. Other targets in the reference table are deferred:
 
 ```sh
 npm run release
-npm run release -- --platform macos,android,ios
-npm run release -- --platform windows
-npm run release -- --platform linux
+npm run release -- --platform macos
 npm run release -- --help
 ```
 
@@ -537,20 +537,20 @@ The current configuration permits Android API 24+ and iOS 16+. These are deploym
 
 ## Apple distribution
 
-Use `release:apple` on macOS for Developer-ID-signed, notarized DMGs and App Store Connect iOS exports. The existing `release` command continues to produce local test packages. Neither command uploads to App Store Connect by default; macOS `release:apple` does submit packages to Apple's notarization service. Add `--upload-testflight` to `release:apple` to upload the new iOS package after a successful build. iOS signing uses Xcode automatic provisioning, which can register identifiers and create or update signing assets in the selected Apple developer team.
+Use `release:apple` on macOS for Developer-ID-signed, notarized DMGs. The iOS export and upload options described below are retained deferred reference paths, not part of current delivery. The existing `release` command continues to produce local test packages. Neither command uploads to App Store Connect by default; macOS `release:apple` does submit packages to Apple's notarization service. Add `--upload-testflight` to `release:apple` to upload the new iOS package after a successful build. iOS signing uses Xcode automatic provisioning, which can register identifiers and create or update signing assets in the selected Apple developer team.
 
 ### One-time account setup
 
-1. Use the paid Apple Developer team intended to own the app. In **Xcode → Settings → Accounts**, sign in and select that team. Complete Xcode's first-launch setup. Install XcodeGen, CocoaPods, Python 3 and the [client prerequisites](#prerequisites).
-2. Install a **Developer ID Application** certificate and its private key in your login Keychain for macOS. List valid identities with `security find-identity -v -p codesigning`. Do not use Apple Development, Apple Distribution or ad-hoc signing for the DMG. iOS requires an Apple signing identity and access to automatic App Store provisioning; Xcode can manage the distribution certificate.
-3. Register `com.getsituate.app` as the permanent bundle identifier and create a matching iOS app in App Store Connect. Distribution must not use the development launcher's checkout-specific identifier. Accept any pending Apple agreements. Keep the identifier unchanged across updates.
-4. Create an App Store Connect **team API key** authorized for notarization and build uploads under **Users and Access → Integrations → App Store Connect API**. Download its `.p8` private key, and record its Key ID and Issuer ID. Use the least role that permits the required operations; Apple's Developer role supports build uploads. The key's Apple permissions are determined by its role, not by a local vault or bundle identifier. iOS provisioning continues to use the account configured in Xcode.
+1. Use the paid Apple Developer team intended to own the app. In **Xcode → Settings → Accounts**, sign in and select that team. Complete Xcode's first-launch setup. Install Python 3.12 or newer and the [macOS client prerequisites](#prerequisites). XcodeGen and CocoaPods are needed only for deferred iOS work.
+2. Install a **Developer ID Application** certificate and its private key in your login Keychain for macOS. List valid identities with `security find-identity -v -p codesigning`. Do not use Apple Development, Apple Distribution or ad-hoc signing for the DMG. Deferred iOS work additionally requires an Apple signing identity and access to automatic App Store provisioning; Xcode can manage the distribution certificate.
+3. Use `com.getsituate.app` as the permanent bundle identifier. An iOS App Store Connect app record is not needed for current macOS delivery. Distribution must not use the development launcher's checkout-specific identifier. Accept any pending Apple agreements. Keep the identifier unchanged across updates.
+4. Create an App Store Connect **team API key** authorized for notarization and build uploads under **Users and Access → Integrations → App Store Connect API**. Download its `.p8` private key, and record its Key ID and Issuer ID. Use the least role that permits the required operations; Apple's Developer role supports build uploads. The key's Apple permissions are determined by its role, not by a local vault or bundle identifier. App Store upload permission and iOS provisioning are not macOS release requirements.
 5. Set `APPLE_TEAM_ID` and `APPLE_MACOS_SIGNING_IDENTITY` in the repository-root `.env` or environment, using the intended team and an installed Developer ID Application identity. See [Credentials](#credentials) below. No `.apple-release.local.json` is required. The iOS bundle identifier defaults to the tracked `app/src-tauri/tauri.conf.json` identifier, `com.getsituate.app`.
 
 6. Install the Rust targets from `client/`. Universal macOS packages contain both Apple Silicon and Intel executables:
 
    ```sh
-   rustup target add aarch64-apple-darwin x86_64-apple-darwin aarch64-apple-ios
+   rustup target add aarch64-apple-darwin x86_64-apple-darwin
    ```
 
 ### Credentials
@@ -563,7 +563,6 @@ APPLE_MACOS_SIGNING_IDENTITY="Developer ID Application: Example (TEAM123456)"
 APPLE_API_KEY=EXAMPLE1234
 APPLE_API_ISSUER=11111111-2222-3333-4444-555555555555
 APPLE_API_PRIVATE_KEY="<paste the complete .p8 PEM here, including header, body and footer>"
-APPLE_APP_ID=1234567890
 ```
 
 The example values are not usable credentials. `APPLE_APP_ID` is the numeric iOS app-record ID from App Store Connect, not an email address or bundle identifier; it is needed only for upload. Use literal newlines within the quoted private-key value. Do not `source` the file: the scripts parse it as data and consume only the Apple variables needed by the operation. Environment variables take precedence even when explicitly empty. With `CI=true`, no `.env` is read. Incomplete credentials fail rather than falling back to another account.
@@ -574,20 +573,17 @@ Apple tools require a key file. The scripts create a private temporary `.p8` out
 
 Existing local configurations can explicitly select a Keychain `notaryProfile` or an `appStoreConnect` key-file configuration instead when no Apple credential variables are defined. There is no automatic credential discovery or fallback to them after invalid `.env` values.
 
-`app/src-tauri/PrivacyInfo.xcprivacy` declares file-timestamp access for application-container files and user-selected files/directories (`C617.1`, `3B52.1`), used by workspace metadata and change checks. The builder includes it through the standard generated Xcode target and verifies it in the exported IPA. Review additional required-reason APIs when dependencies change; this is not an exhaustive binary audit. Before the first TestFlight upload, review encryption export compliance and current Apple SDK submission requirements. Do not declare encryption exempt without reviewing the app's cryptography. Missing compliance answers can prevent TestFlight availability.
+Deferred iOS reference: `app/src-tauri/PrivacyInfo.xcprivacy` declares file-timestamp access for application-container files and user-selected files/directories (`C617.1`, `3B52.1`), used by workspace metadata and change checks. The builder includes it through the standard generated Xcode target and verifies it in the exported IPA. Review additional required-reason APIs when dependencies change; this is not an exhaustive binary audit. Before the first TestFlight upload, review encryption export compliance and current Apple SDK submission requirements. Do not declare encryption exempt without reviewing the app's cryptography. Missing compliance answers can prevent TestFlight availability.
 
 ### Build and verify
 
-Complete [release-note preparation](../docs/development/release-preparation.md) first: choose the product version, approve the English source, translate every supported language, finalize and commit the release files. Distribution builds require consistent npm/Cargo/Tauri versions and a clean source revision throughout the build on both Apple platforms. They validate and embed the finalized history without invoking an agent. Ordinary development and local test builds do not require finalized release notes.
+Complete [release-note preparation](../docs/development/release-preparation.md) first: choose the product version, approve the English source, translate every supported language, finalize and commit the release files. Distribution builds require consistent npm/Cargo/Tauri versions and a clean source revision throughout the macOS build. Retained deferred-platform exports use the same validation. They validate and embed the finalized history without invoking an agent. Ordinary development and local test builds do not require finalized release notes.
 
 Run from `client/`, with no other native build or development session using that checkout:
 
 ```sh
 npm run release:apple -- --check
 npm run release:apple
-npm run release:apple -- --platform ios --build-number 1 --check
-npm run release:apple -- --platform ios --build-number 1
-npm run release:apple -- --platform all --build-number 2
 ```
 
 The default is a universal macOS DMG with external update authority. Use `--macos-arch arm64` or `--macos-arch x64` for a single architecture. For iOS, choose an integer build number from 1 to 9999 that is higher than every previous upload of the current marketing version, including uploads from other machines. The marketing version comes from `app/src-tauri/tauri.conf.json`; the build number is applied without modifying tracked files. The development console can [update and commit the app version before building](../docs/development/README.md#development-terminal). Its `--expected-version X.Y.Z` argument binds the build to the selected configured version and refuses a mismatch. App Store Connect remains authoritative for previously uploaded numbers.
@@ -596,7 +592,7 @@ The default is a universal macOS DMG with external update authority. Use `--maco
 
 Each build writes a new `artifacts/apple-*/` directory containing `manifest.json`, `SHA256SUMS`, the selected DMG/IPA and, for iOS, `Situate.xcarchive` with its archived symbols. The manifest records the source revision, clean-checkout state and `releaseContent` identity (version, catalog digest and locales). The catalog is also a signed app resource. Require `status: "complete"` before distributing packages. Share the DMG, not the entire build directory or archive. The DMG contains a stapled app and an Applications shortcut; the outer disk image is separately signed, notarized and stapled. Signature, ticket and Gatekeeper checks must all pass. The iOS export is checked for the requested identifier, version, device platform, signing team and a nonexpired App Store provisioning profile. Rust and Swift use release optimization with SwiftPM's default build system.
 
-The scripts do not install or launch the app, overwrite an existing installation, or access personal workspaces. Test installation, restart and updates using disposable workspaces before relying on data preservation. A complete package set is not a runtime acceptance result; AI access is currently unavailable on iOS.
+The scripts do not install or launch the app, overwrite an existing installation, or access personal workspaces. Test installation, restart and updates using disposable workspaces before relying on data preservation. A complete package set is not a runtime acceptance result; iOS product support remains deferred.
 
 Native builds share `target/local-release/build.lock`; iOS also uses the existing Xcode session lock. Check recorded owners and descendant build processes before removing stale locks. Failed builds retain an incomplete manifest and recovery files in `target/apple-release/staging-*/`. Never distribute a failed run. `target/apple-release/notary-pending.json` records each attempt before submission and blocks subsequent macOS builds until the attempt is accepted or manually reconciled. Submission IDs are saved before waiting. A timeout does not cancel Apple's processing; inspect `notarytool info`/`log` for the recorded ID (using the same Apple credential source), or `notarytool history` if submission failed without an ID. Remove the journal only after resolving the attempt and deciding whether a new submission is appropriate. There are no automatic retries.
 
@@ -642,6 +638,8 @@ These receipts prove on-disk bundle identity and preservation of the two synthet
 
 ### Upload to TestFlight
 
+**Deferred reference:** iOS build/upload tooling is retained, but no iOS submission or deployment is part of current scope. This section does not add prerequisites to macOS delivery.
+
 For the scripted upload, use **Xcode 27 or newer** and the [Apple credentials](#credentials) above. Set `APPLE_APP_ID` to the app record matching `iosBundleIdentifier`. The uploader uses the configured key directly and does not search other credential directories.
 
 To build and upload in one command:
@@ -677,7 +675,7 @@ npm run release:docker -- --check
 
 The default follows the Docker engine's architecture. The images pin their base digests and use a dated Debian 12 package snapshot. Build caches stay in Docker volumes, separate from native builds. Output is exported beneath `artifacts/docker-*/`.
 
-Windows x64 NSIS cross-builds use a separate image target and require explicit acknowledgement of Microsoft component terms. See [container setup, licensing, checks and cache recovery](docker/README.md). macOS/iOS builds still require macOS and Xcode; Android continues to use the native release command.
+Windows x64 NSIS cross-builds use a separate image target and require explicit acknowledgement of Microsoft component terms. See [container setup, licensing, checks and cache recovery](docker/README.md). macOS builds require macOS and Xcode. Retained iOS and Android commands are deferred reference paths.
 
 ## Local data
 

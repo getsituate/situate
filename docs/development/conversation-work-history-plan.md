@@ -91,7 +91,7 @@ Use the [repository test guide](testing.md), not workshop passes, as the product
 2. Extend product flows in `client/app/tests/browser/` for working before first output, timer progression, completion, stop/interruption with hidden failed calls, explicit inspection, questions, direct external effects, confirmed changes, call-local plugin provenance hidden with folded history during and after execution, unavailable AI, scrolling and retained drafts. Cover English/German, desktop/mobile geometry, keyboard and touch.
 3. Add checkpoints to those flows using `localizationMode: "real"` and the existing `@visual-desktop`/`@visual-mobile` convention. Update intentional baselines with `cd client && npm run test:visual:update`, then run `npm run test:visual` and inspect the PNGs. Keep baseline generation in the locked Docker environment.
 4. Run focused checks and the product build first. Run `node tools/test.mjs --quick --changed` for integration feedback. Before a PR, refresh the base and run `node tools/test.mjs --changed --base origin/main` so committed branch changes are included.
-5. Check the real macOS client and an iOS simulator/device: opening and closing panes, active work during navigation, elapsed-time continuity, focus, touch targets, keyboard occlusion and lifecycle interruption. Browser profiles do not qualify native iOS behavior. Report missing device/tool prerequisites and unrun checks explicitly.
+5. Check the real macOS client: opening and closing panes, active work during navigation, elapsed-time continuity, focus, touch targets, keyboard occlusion and lifecycle interruption. iOS device verification is deferred; browser profiles do not qualify it. Report missing macOS prerequisites and unrun checks explicitly.
 
 ## Completion boundary
 

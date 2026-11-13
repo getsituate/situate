@@ -1,5 +1,7 @@
 # Prepare app release notes
 
+Current product delivery is macOS-only. Retained iOS examples below are deferred reference material, not current build or submission requirements. The selected [continuous release workflow](../architecture/07-deployment-view/release-workflow.adoc) is not yet implemented; this guide describes the existing preparation tools.
+
 Prepare reviewed English notes and translations for every supported interface language before a distribution build. You can write them manually or use the development terminal's optional Pi/Herdr workflow. Neither path builds or publishes an app.
 
 Use the repository's [Volta toolchain](README.md#install-volta) and begin with a clean checkout.

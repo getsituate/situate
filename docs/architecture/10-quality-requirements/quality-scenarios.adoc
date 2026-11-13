@@ -90,7 +90,7 @@ They remain required outcomes, not claims of missing implementation or passing t
 |Quality outcome and basis |Acceptance condition from the catalog |Open verification question
 |Offline manual use — link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008] (`must`).
 |With internet access disabled and AI unavailable, a user can read and manually edit locally stored content and reopen saved changes after restart. Local content is usable without waiting for background synchronization; retained offline edits remain available for later configured synchronization.
-|Which native macOS/iOS evidence covers reading, editing, restart and later synchronization together? This does not require offline AI or access to external services.
+|Which native macOS evidence covers reading, editing, restart and later synchronization together? This does not require offline AI or access to external services.
 |Reuse without Situate — link:{architecture-repository-root}/requirements/data/requirements/REQ-0009-reuse-stored-content.md[REQ-0009] (`must`).
 |Stored notes and tasks open in an ordinary text editor, and documents in appropriate applications, without a special export or a Situate service. Transfer preserves content.
 |Which representative destination tools, content types, metadata and relationships demonstrate transferability? Whole-directory reference reconstruction alone does not answer this.

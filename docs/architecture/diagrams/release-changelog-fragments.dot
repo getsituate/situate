@@ -1,0 +1,25 @@
+digraph ReleaseChangelogFragments {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.5, ranksep=0.45, fontname="Helvetica", fontsize=13];
+  node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  declaration [label="PR declaration\nUnique versionless ID"];
+  relevant [shape=diamond, style=filled, label="User-facing\nentries?"];
+  english [label="Review and approve\nEnglish source"];
+  translate [label="Translate and review\nAll interface languages"];
+  empty [label="Empty entry list\nInternal reason", fillcolor="#fff4db"];
+  gate [label="Required declaration check\nMerge reviewed PR"];
+  assemble [label="Assemble after merge\nBind version + content hash", fillcolor="#e5effa"];
+  history [label="Finalized localized history\nBundle with candidate"];
+
+  { rank=same; english; empty; }
+
+  declaration -> relevant;
+  relevant -> english [label="Yes"];
+  relevant -> empty [label="No"];
+  english -> translate;
+  translate -> gate;
+  empty -> gate;
+  gate -> assemble;
+  assemble -> history [label="Public entries only"];
+}

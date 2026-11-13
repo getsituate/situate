@@ -1,0 +1,115 @@
+[[release-workflow]]
+=== Continuous macOS release workflow
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+This is the selected delivery design, not an operational pipeline.
+The current link:{architecture-repository-root}/docs/development/testing.md#ci-gates[CI gates], link:{architecture-repository-root}/docs/development/release-preparation.md[release preparation] and link:{architecture-repository-root}/client/README.md#apple-distribution[Apple distribution commands] remain the implementation references until the transition is qualified.
+GitHub Actions currently runs quality and tooling workflows; Apple app builds and publication remain operator-invoked.
+
+The target is automatic macOS direct publication after successful qualification, with no additional per-release approval after merge.
+The pipeline builds and delivers macOS only. iOS and all other product platforms are deferred; no mobile candidates, store submissions or device gates are included.
+User-controlled installation remains asynchronous.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070] govern mixed-version use; a shared release date cannot replace compatibility.
+
+==== Execution locations and trust boundaries
+
+.Target placement and artifact flow. Production credentials never enter PR runners.
+image::{architecture-diagrams-root}/release-trust-boundaries.svg["Reviewed source enters protected release jobs; final packages pass isolated native qualification before artifact storage and channel delivery.",width=760]
+
+* GitHub Actions orchestrates the repository tools; macOS packaging uses pinned Xcode and native toolchains on macOS. Linux may run shared checks.
+* Qualification uses disposable synthetic workspaces, not personal data or credentials.
+* Supply credentials through supported CI environment variables only to authorized operations, never to dependency installation or ordinary tests. No automatic secret-manager access is introduced.
+* Distribute intended public packages only; signing material and private notarization/publication diagnostics stay outside them.
+* The existing host uses restricted publication access and verified SSH keys. Website deployment does not own its app-release pointer.
+* No additional storage service or paid runner capacity is selected; the protected and native environments still need provisioning.
+
+==== Triggers and qualification
+
+.Target macOS delivery path. Final-artifact qualification precedes publication.
+image::{architecture-diagrams-root}/release-workflow.svg["PR checks precede integrated main verification, release preparation, macOS packaging, exact-artifact qualification and automatic publication.",width=400]
+
+PR checks validate the declaration, source review, translations and affected tests/builds through the shared suite registry.
+PR packages are not production releases.
+After merge, run the complete active MVP verification for the integrated source; PR results alone are insufficient.
+
+Failed shared or macOS qualification blocks publication.
+Missing prerequisites or evidence, failed cleanup and cancellation are not passing skips.
+Documentation/tooling-only changes need not publish an app, but an empty changelog does not establish that a release is unnecessary.
+Test app-impact selection independently of changelog contents.
+
+Workshop/design sweeps, screenshot comparisons, coverage and paid live-provider tests retain their explicit scope.
+Job partitioning, release-audit policy and runner budgets remain open.
+
+==== Release identity and content
+
+link:{architecture-docs-root}/09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[ADR-0017] selects `YYYY.M.N` public versions with separate platform build identifiers.
+link:{architecture-docs-root}/09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018] requires a new changelog declaration in every PR, including an explicit empty declaration when nothing merits a user-facing entry.
+Neither policy is currently enforced by the release pipeline.
+
+Reserve the version centrally after merge and bind source, configuration and approved content as shown in link:{architecture-docs-root}/index.adoc#adr-0017[ADR-0017].
+Parallel PRs do not edit shared version pins; builds assemble approved content without generating prose.
+Retain historical catalogs and undelivered changes; failed builds do not consume them.
+
+The existing builders require consistent committed npm, Cargo and Tauri versions and a clean revision.
+The mechanism for materializing automatic versions and generated catalogs must be settled before replacing that contract.
+Whether this uses a controlled release commit or explicitly supported immutable build inputs remains open.
+Any derived release revision must be recorded and verified; checks of a different source revision alone are insufficient.
+
+==== Final packages and promotion
+
+Build the macOS direct variant as a universal application, Developer-ID sign it, notarize and staple it, then produce the DMG and separately signed updater archive from the same final app.
+Verify hashes, version-bound updater signatures, application identity, architecture, Gatekeeper assessment and equality of the application bundles in both containers.
+Qualify download/first launch and the signed two-version update, including retained data, unsaved changes, multiwindow preparation and restart behavior.
+Instrumented native smoke builds cannot substitute for these exact artifacts.
+
+The update test must retain the embedded production HTTPS endpoint and TLS validation without advertising the unqualified candidate as the current public update.
+An isolated network/routing arrangement still needs design and authorization.
+Changing the embedded endpoint or manually replacing the app does not establish production updater qualification.
+
+After final qualification, promote the same bytes without rebuilding or re-signing.
+The macOS publisher uploads and verifies immutable packages before atomically activating the common download/feed pointer, as described in link:{architecture-repository-root}/infrastructure/releases/README.md[release publication].
+
+==== Ordering, evidence and recovery
+
+Tests and preliminary builds may run in parallel.
+Initially serialize final migration-baseline qualification, macOS release builds and publication so a concurrent publication cannot silently invalidate a candidate's checked history.
+Read baselines from trusted immutable publication evidence, not a comparison revision chosen by the candidate change.
+Revalidate a candidate against current publication evidence before publication without changing its artifacts.
+Reject stale publication baselines and prevent an older completed candidate from replacing a newer public version.
+
+Protect the release branch and workflow configuration, require selected merge checks and restrict release credentials to trusted events.
+These repository/environment controls must be provisioned separately; a workflow definition alone does not enforce them.
+A reviewed merge becomes the standing release authorization only after those controls and the automated gates are enabled.
+Until then, the existing operator approvals remain in force.
+
+Record source and any derived release revision, public version, build identifier, variant, content digest, toolchain identity, artifact hashes and qualification outcomes.
+Keep build, qualification, notarization and public-availability states distinct, including an explicit unknown outcome.
+Retain release packages, symbols and recovery/publication receipts beyond ordinary short-lived CI diagnostics; storage, access and retention details remain to be selected.
+Do not treat artifact-storage presence or a successful upload as proof of public availability.
+
+Overtaken PR checks may be cancelled.
+Do not automatically cancel an active notarization or publication because a newer commit arrived.
+Persist operation identity and recovery evidence before external effects; inspect uncertain outcomes before any explicit reconciliation.
+Never blindly repeat an uncertain submission or publish differing bytes under an existing version.
+Correct a faulty release with a higher version; pausing availability must not advertise an older app.
+
+==== Transition gates
+
+Before enabling unattended publication:
+
+* Implement and test CalVer reservation, compatible version ordering, PR declarations, localized assembly and immutable release inputs.
+* Provision branch/environment protections, recoverable signing access, trusted Apple build hosts and native qualification environments.
+* Automate exact-artifact macOS installation/update tests.
+* Exercise interrupted notarization and publication recovery, and retain evidence without disclosing credentials or private diagnostics.
+* Settle artifact retention, app-impact selection, dependency-audit blocking policy and acceptable runner cost.
+
+No existing compatibility reader, historical catalog, migration baseline or native macOS release gate is removed by this design.

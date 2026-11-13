@@ -14,7 +14,7 @@ The product owner decides product boundaries; the CTO develops technical options
 |link:{architecture-repository-root}/requirements/data/foundations.md#development-operation-and-technical-baseline[Foundations] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0016-managed-ai-access.md[REQ-0016]: exact spending limits, capacity and verifiable model-quality standards remain undefined.
 |Product owner, with CTO cost and feasibility input.
 |Supported OS versions and additional distribution channels
-|link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]: macOS DMG first and iOS App Store second are selected. Additional channels, supported versions and any resumption or sequencing of deferred platforms remain open.
+|link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]: macOS DMG and direct updates are selected. iOS and other product platforms are deferred; additional channels, supported versions and any platform activation or sequencing remain open.
 |Product owner, with CTO platform and store feasibility input.
 |Insufficient storage and incomplete synchronization
 |link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008]: how to communicate these conditions without silently dropping required local content or history. Selective document download remains a later stretch goal.

@@ -10,7 +10,7 @@ Follow `AGENTS.md`. Read the relevant product context, foundations and requireme
 
 ## Working approach
 
-Resolve consequential uncertainty, then design the simplest coherent task flow. Choose skills and references as needed, not as a fixed sequence. Consider interaction states, accessibility and macOS/iOS constraints. Verify rendered designs and interactions; distinguish observations from assumptions and simulated behavior from native verification.
+Resolve consequential uncertainty, then design the simplest coherent task flow. Choose skills and references as needed, not as a fixed sequence. Consider interaction states, accessibility and macOS constraints. iOS and other product platforms are deferred; their retained profiles are optional explorations, not current delivery requirements. Verify rendered designs and interactions; distinguish observations from assumptions and simulated behavior from native verification.
 
 ## App explorations
 

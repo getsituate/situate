@@ -4,7 +4,7 @@ endif::[]
 
 === Development environment
 
-Client development uses a macOS workstation with Xcode for the macOS and iOS targets.
+Client development uses a macOS workstation with Xcode for the macOS target. iOS runtimes, provisioning and device verification are not current prerequisites.
 The developer controls the checkout, local dependencies and test data; this environment is separate from release hosting and optional product services.
 
 [cols="2,3,3",options="header"]
@@ -17,10 +17,10 @@ The developer controls the checkout, local dependencies and test data; this envi
 
 |Browser and shared checks
 |Repository tooling runs on the development host or a shared CI host. Linux may host platform-independent checks without becoming a product target.
-|The link:{architecture-repository-root}/docs/development/testing.md[test guide] defines profiles and prerequisites. Browser assertions and shared tests do not replace native macOS/iOS qualification.
+|The link:{architecture-repository-root}/docs/development/testing.md[test guide] defines profiles and prerequisites. Browser assertions and shared tests do not replace native macOS qualification.
 
-|Native Apple verification and release packaging
-|macOS/Xcode builds application packages and runs native checks on the selected Apple device or simulator.
+|Native macOS verification and release packaging
+|macOS/Xcode builds macOS packages and runs native checks on an isolated macOS host or VM.
 |The link:{architecture-repository-root}/client/README.md#apple-distribution[Apple distribution guide] covers signing and export inputs. Building a package does not authorize upload or release publication, or prove signed installation and relaunch.
 |===
 
