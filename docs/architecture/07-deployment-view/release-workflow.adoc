@@ -15,7 +15,8 @@ This is the selected delivery design, not an operational pipeline.
 The current link:{architecture-repository-root}/docs/development/testing.md#ci-gates[CI gates], link:{architecture-repository-root}/docs/development/release-preparation.md[release preparation] and link:{architecture-repository-root}/client/README.md#apple-distribution[Apple distribution commands] remain the implementation references until the transition is qualified.
 GitHub Actions currently runs quality and tooling workflows; Apple app builds and publication remain operator-invoked.
 
-The target is automatic macOS direct publication after successful qualification, with no additional per-release approval after merge.
+The target is automatic creation of qualified macOS GitHub Releases followed by a separate host-publication workflow, with no additional routine release approval after a protected merge.
+The host publisher consumes the exact GitHub Release assets; GitHub Release completion and website/update availability are distinct outcomes.
 The pipeline builds and delivers macOS only. iOS and all other product platforms are deferred; no mobile candidates, store submissions or device gates are included.
 User-controlled installation remains asynchronous.
 link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070] govern mixed-version use; a shared release date cannot replace compatibility.
@@ -25,12 +26,28 @@ link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-pres
 .Target placement and artifact flow. Production credentials never enter PR runners.
 image::{architecture-diagrams-root}/release-trust-boundaries.svg["Reviewed source enters protected release jobs; final packages pass isolated native qualification before artifact storage and channel delivery.",width=760]
 
-* GitHub Actions orchestrates the repository tools; macOS packaging uses pinned Xcode and native toolchains on macOS. Linux may run shared checks.
+* GitHub Actions is one execution adapter for version-controlled scripts. macOS jobs use `macos-latest` and record resolved image, architecture and toolchain identity; additional runner/OS/architecture matrices are outside this increment. Linux may run shared checks.
 * Qualification uses disposable synthetic workspaces, not personal data or credentials.
 * Supply credentials through supported CI environment variables only to authorized operations, never to dependency installation or ordinary tests. No automatic secret-manager access is introduced.
 * Distribute intended public packages only; signing material and private notarization/publication diagnostics stay outside them.
 * The existing host uses restricted publication access and verified SSH keys. Website deployment does not own its app-release pointer.
-* No additional storage service or paid runner capacity is selected; the protected and native environments still need provisioning.
+* GitHub Releases hold intended public packages and generated release inputs. Existing host storage retains publication state and private recovery evidence; no additional paid runner capacity or dedicated native hosts are selected.
+
+==== Shared scripts and local release execution
+
+Under the link:{architecture-repository-root}/requirements/data/foundations.md#local-execution-of-ci-and-release-workflows[local execution constraint], every operation executed in Actions is also executable and testable through repository scripts on a suitably provisioned local host.
+Workflow definitions declare events, dependencies, runner placement and permissions, then invoke scripts; they contain no independent verification, packaging, publication or recovery implementation.
+A commit-pinned checkout action is the sole bootstrap exception; all subsequent executable operations are repository scripts.
+The same workflow definition drives CI, the CLI and the development terminal, including stage order, mandatory gates, evidence and interruption handling.
+The development terminal's existing release sequence must be replaced, not retained beside the shared workflow.
+
+Authorized local macOS delivery must remain possible without GitHub Actions, including an Actions outage with reviewed source and dependencies already available.
+Reservations, release locks, packages, review evidence and recovery records cannot depend exclusively on Actions storage, concurrency or APIs.
+CI and local execution share the same durable release authority.
+Local operator authorization replaces the CI trigger authorization, not qualification; missing or failed gates still block delivery.
+Git tag/release creation and uncached release-asset retrieval require Git/GitHub access; independence from Actions does not promise independence from all GitHub services.
+Apple notarization, production-endpoint qualification and publication remain network-dependent operations.
+Use the same source/translation review scripts locally and in CI, with their existing approval/hash semantics, rather than a separate approval service.
 
 ==== Triggers and qualification
 
@@ -39,7 +56,12 @@ image::{architecture-diagrams-root}/release-workflow.svg["PR checks precede inte
 
 PR checks validate the declaration, source review, translations and affected tests/builds through the shared suite registry.
 PR packages are not production releases.
-After merge, run the complete active MVP verification for the integrated source; PR results alone are insufficient.
+After merge, determine affected checks and app-release impact before scheduling verification for the integrated source; PR results alone are insufficient.
+Pure developer-tool or documentation changes run their relevant checks without starting client verification or an app release.
+An app-release candidate still requires the complete macOS verification plan, including relevant shared suites, for its exact integrated inputs.
+Under the link:{architecture-repository-root}/requirements/data/foundations.md#platform-specific-verification[platform-specific verification constraint], target platform, execution host and test profile are separate inputs.
+macOS is the only active product target; its component suites report individual results.
+A Linux-hosted shared check contributes to that plan without becoming Linux product qualification, and missing native macOS execution cannot produce a complete passing result.
 
 Failed shared or macOS qualification blocks publication.
 Missing prerequisites or evidence, failed cleanup and cancellation are not passing skips.
@@ -47,7 +69,10 @@ Documentation/tooling-only changes need not publish an app, but an empty changel
 Test app-impact selection independently of changelog contents.
 
 Workshop/design sweeps, screenshot comparisons, coverage and paid live-provider tests retain their explicit scope.
-Job partitioning, release-audit policy and runner budgets remain open.
+The link:{architecture-repository-root}/docs/development/ci-cd-replacement-plan.md[implementation plan] defines an initial parallel job partition based on dependencies, without comparative runtime experiments.
+Externally changing vulnerability monitoring runs independently against main, not as a required PR or release status; upstream advisories are addressed in separate fix PRs.
+Secret scanning and source-bound dependency/license policy remain required.
+Scheduled npm monitoring alongside Dependabot is proposed; cadence and runner-budget limits remain to be finalized.
 
 ==== Release identity and content
 
@@ -59,10 +84,13 @@ Reserve the version centrally after merge and bind source, configuration and app
 Parallel PRs do not edit shared version pins; builds assemble approved content without generating prose.
 Retain historical catalogs and undelivered changes; failed builds do not consume them.
 
-The existing builders require consistent committed npm, Cargo and Tauri versions and a clean revision.
-The mechanism for materializing automatic versions and generated catalogs must be settled before replacing that contract.
-Whether this uses a controlled release commit or explicitly supported immutable build inputs remains open.
-Any derived release revision must be recorded and verified; checks of a different source revision alone are insufficient.
+The existing builders require consistent committed npm, Cargo and Tauri versions and a clean revision; their replacement contract must support immutable generated version/catalog inputs bound to the original reviewed source.
+Do not create a release commit or update tracked pins/fragments during release creation.
+Git-derived fragment membership and immutable release tags are the preferred identity mechanism; exact tag metadata, atomic reservation and Apple build-number mapping remain implementation design work.
+A reserved tag is not proof of completed packages or public delivery.
+Completed GitHub Release history determines assigned content; host publication evidence independently governs website/update availability and host-channel race baselines.
+Public GitHub Releases are also published app versions: compatibility and migration qualification must include their verified source/manifests, including releases never promoted to the host, alongside legacy host publication evidence.
+If a GitHub Release is not promoted to the host, later releases retain its finalized history rather than losing those notes.
 
 ==== Final packages and promotion
 
@@ -72,15 +100,19 @@ Qualify download/first launch and the signed two-version update, including retai
 Instrumented native smoke builds cannot substitute for these exact artifacts.
 
 The update test must retain the embedded production HTTPS endpoint and TLS validation without advertising the unqualified candidate as the current public update.
-An isolated network/routing arrangement still needs design and authorization.
+Use a private HTTPS test listener and restricted tunnel/routing in the test environment, retaining the production URL and normal TLS validation.
+Keep certificate keys on the controlled TLS host; validate and authorize the concrete listener/routing configuration before relying on it.
 Changing the embedded endpoint or manually replacing the app does not establish production updater qualification.
 
-After final qualification, promote the same bytes without rebuilding or re-signing.
-The macOS publisher uploads and verifies immutable packages before atomically activating the common download/feed pointer, as described in link:{architecture-repository-root}/infrastructure/releases/README.md[release publication].
+After final qualification, complete a GitHub Release containing sealed packages, generated inputs and public qualification evidence; exclude keys, private journals and raw diagnostics.
+A separate publication workflow reads the exact repository/release/tag/asset identities, verifies hashes and source/evidence bindings, then uploads the same bytes without rebuilding or re-signing.
+Retain the macOS publisher's immutable package verification and atomic common download/feed activation, as described in link:{architecture-repository-root}/infrastructure/releases/README.md[release publication].
+Workflow chaining must account for event suppression by the default workflow token; the implementation plan proposes a trusted successful-workflow completion trigger with explicit release identity, not selection of a mutable latest release.
 
 ==== Ordering, evidence and recovery
 
-Tests and preliminary builds may run in parallel.
+Independent selected checks and preliminary builds may run in parallel after relevance planning, with isolated outputs and native-desktop ownership.
+There is no global fast-check barrier before unrelated native or browser jobs; all required results still gate publication.
 Initially serialize final migration-baseline qualification, macOS release builds and publication so a concurrent publication cannot silently invalidate a candidate's checked history.
 Read baselines from trusted immutable publication evidence, not a comparison revision chosen by the candidate change.
 Revalidate a candidate against current publication evidence before publication without changing its artifacts.
@@ -93,7 +125,8 @@ Until then, the existing operator approvals remain in force.
 
 Record source and any derived release revision, public version, build identifier, variant, content digest, toolchain identity, artifact hashes and qualification outcomes.
 Keep build, qualification, notarization and public-availability states distinct, including an explicit unknown outcome.
-Retain release packages, symbols and recovery/publication receipts beyond ordinary short-lived CI diagnostics; storage, access and retention details remain to be selected.
+Retain ordinary diagnostics for seven days and resolved unpublished candidates for thirty days; unresolved operations have no automatic deletion.
+Initially retain finalized release packages, generated inputs, symbols and release/recovery evidence without automatic deletion, with private material excluded from public assets and an encrypted independent backup.
 Do not treat artifact-storage presence or a successful upload as proof of public availability.
 
 Overtaken PR checks may be cancelled.
@@ -106,10 +139,11 @@ Correct a faulty release with a higher version; pausing availability must not ad
 
 Before enabling unattended publication:
 
+* Implement and test the shared script workflow, minimal Actions adapters and replacement development-terminal flow; qualify local delivery and cross-executor recovery without GitHub Actions.
 * Implement and test CalVer reservation, compatible version ordering, PR declarations, localized assembly and immutable release inputs.
-* Provision branch/environment protections, recoverable signing access, trusted Apple build hosts and native qualification environments.
+* Provision protected main/release tags, least-privilege environment access and recoverable signing credentials. Use `macos-latest`; report limits of actual native coverage without adding another qualification matrix.
 * Automate exact-artifact macOS installation/update tests.
 * Exercise interrupted notarization and publication recovery, and retain evidence without disclosing credentials or private diagnostics.
-* Settle artifact retention, app-impact selection, dependency-audit blocking policy and acceptable runner cost.
+* Implement separate GitHub Release creation/asset-consuming publication, selected retention and affected-input policies, independent dependency monitoring and authorized runner-cost limits.
 
 No existing compatibility reader, historical catalog, migration baseline or native macOS release gate is removed by this design.
