@@ -52,7 +52,8 @@ const configureMarkdown: NodeRendererProps["customMarkdownIt"] = (md) =>
   font: inherit;
   overflow-wrap: anywhere;
 }
-.chat-markdown :deep(p) {
+.chat-markdown :deep(p),
+.chat-markdown :deep(p .text-node) {
   white-space: normal;
 }
 .chat-markdown :deep(pre) {
