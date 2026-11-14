@@ -107,6 +107,31 @@ test(
   },
 );
 
+test(
+  "local terminal startup requires no Actions environment or release arguments",
+  { skip: !supported, timeout: 10000 },
+  async (t) => {
+    const { root, env } = fixture(t);
+    const localEnv = Object.fromEntries(
+      Object.entries(env).filter(
+        ([name]) => !name.startsWith("GITHUB_") && !name.startsWith("ACTIONS_"),
+      ),
+    );
+    const run = launch(t, process.execPath, [join(root, "tools/dev.mjs")], {
+      cwd: root,
+      env: localEnv,
+    });
+    assert.deepEqual(await run.closed, [17, null], run.output().stderr);
+    const invocation = JSON.parse(run.output().stdout);
+    assert.deepEqual(invocation.args, [
+      "run",
+      "--locked",
+      "--manifest-path",
+      "Cargo.toml",
+    ]);
+  },
+);
+
 for (const launcher of ["node", "script"]) {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     test(

@@ -102,7 +102,7 @@ fn initialize(app: &tauri::AppHandle) -> std::io::Result<Runtime> {
     let identity = HostIdentity {
         device_id,
         session_id: launch_session,
-        app_version: env!("CARGO_PKG_VERSION").into(),
+        app_version: situate_core::application_version().into(),
         platform: std::env::consts::OS.into(),
         platform_version,
     };

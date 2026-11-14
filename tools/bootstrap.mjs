@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { readImageLock } from "./ci-image.mjs";
+import { createPlan } from "./test.mjs";
+import { suiteExecution } from "./test-scope.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -13,86 +15,98 @@ export function prerequisites(
   {
     coverage = false,
     extended = false,
+    quick = false,
+    suite = [],
     platform = process.platform,
-    environment = process.env,
+    suites = createPlan(
+      { coverage, extended, quick, suite, platform },
+      directory,
+    ).suites,
+    readLock = readImageLock,
   } = {},
 ) {
-  const checks = [
-    [
-      "root dependencies (npm ci)",
-      "node_modules/@earendil-works/pi-coding-agent/dist/index.js",
-    ],
-    [
-      "client dependencies (npm ci --prefix client)",
-      "client/node_modules/vitest/vitest.mjs",
-    ],
-    [
-      "requirements dependencies (npm ci --prefix requirements)",
-      "requirements/node_modules/vite/bin/vite.js",
-    ],
-  ].map(([name, path]) => ({ name, path: join(directory, path) }));
-  if (environment.PI_PACKAGE_ROOT)
-    checks[0].path = join(environment.PI_PACKAGE_ROOT, "dist/index.js");
-  for (const [name, command, args] of [
-    ["Volta", "volta", ["--version"]],
-    ["Git", "git", ["--version"]],
-    [
-      "Python for workflow contract tests",
-      platform === "win32" ? "python" : "python3",
-      ["--version"],
-    ],
-    ["Bash for workflow contract tests", "bash", ["--version"]],
-    ...(extended ? [["Kotlin linter", "ktlint", ["--version"]]] : []),
-    ["Rust dependency policy tool", "cargo-deny", ["--version"]],
-    ["Secret scanner", "gitleaks", ["version"]],
-    ...(platform === "darwin"
-      ? [
-          ["Swift formatter", "swift-format", ["--version"]],
-          ["Swift linter", "swiftlint", ["version"]],
-        ]
-      : []),
-    ["Rust toolchain", "cargo", ["--version"]],
-    ["Rust formatting component", "cargo", ["fmt", "--version"]],
-    ...(platform === "darwin" || extended
-      ? [["Rust Clippy component", "cargo", ["clippy", "--version"]]]
-      : []),
-    ["Docker engine", "docker", ["info"]],
-    ["Docker Buildx", "docker", ["buildx", "version"]],
-    ...(platform === "darwin"
-      ? [
-          ["Apple Swift", "swift", ["--version"]],
-          ["Xcode", "xcodebuild", ["-version"]],
-        ]
-      : []),
-    ...(platform === "linux" && extended
-      ? [
-          ["D-Bus session launcher", "dbus-run-session", ["--version"]],
-          ["Xvfb launcher", "xvfb-run", ["--help"]],
-          [
-            "WebKitGTK 4.1 development files",
-            "pkg-config",
-            ["--exists", "webkit2gtk-4.1"],
-          ],
-          [
-            "AppIndicator development files",
-            "pkg-config",
-            ["--exists", "ayatana-appindicator3-0.1"],
-          ],
-        ]
-      : []),
-    ...(coverage
-      ? [["Rust LLVM coverage tool", "cargo", ["llvm-cov", "--version"]]]
-      : []),
-  ])
-    checks.push({ name, command, args });
-  if (coverage)
+  const checks = [];
+  const add = (name, command, args, extra = {}) => {
+    if (
+      !checks.some(
+        (check) =>
+          check.command === command &&
+          JSON.stringify(check.args) === JSON.stringify(args),
+      )
+    )
+      checks.push({ name, command, args, ...extra });
+  };
+  add("Volta", "volta", ["--version"]);
+  add("Git", "git", ["--version"]);
+  if (quick) return checks;
+  const execution = suiteExecution;
+  const portable = suites.some((entry) => execution(entry) === "container");
+  const docker = suites.some((entry) => execution(entry) === "host-docker");
+  if (portable || docker) {
+    add("Docker CLI", "docker", ["--version"]);
+    add("Docker engine", "docker", ["info"]);
+  }
+  if (portable) {
+    const lock = readLock(directory);
+    add(
+      "Pinned portable-check image",
+      "docker",
+      ["image", "inspect", lock.image, "--format", "{{.Os}}/{{.Architecture}}"],
+      { expected: lock.platform },
+    );
+  }
+  if (
+    suites.some(
+      (entry) =>
+        execution(entry) === "host-docker" &&
+        entry.id === "client-docker-context",
+    )
+  )
+    add("Docker Buildx", "docker", ["buildx", "version"]);
+  const native = suites.filter((entry) => execution(entry) === "native");
+  if (native.length && platform !== "darwin") {
     checks.push({
-      name: "Vitest V8 coverage provider",
-      path: join(
-        directory,
-        "client/node_modules/@vitest/coverage-v8/package.json",
-      ),
+      name: "Native macOS suites",
+      problem: "Selected native suites require macOS.",
     });
+    return checks;
+  }
+  for (const entry of native) {
+    const args = entry.args ?? [];
+    const rust = entry.command === "cargo" || entry.kind === "native";
+    if (rust) {
+      add("Rust toolchain", "cargo", ["--version"]);
+      add("Rust compiler", "rustc", ["--version"]);
+    }
+    if (entry.command === "cargo" && args[0] === "clippy")
+      add("Rust Clippy component", "cargo", ["clippy", "--version"]);
+    if (entry.command === "cargo" && args[0] === "fmt")
+      add("Rust formatting component", "cargo", ["fmt", "--version"]);
+    if (entry.id === "client-rust-coverage") {
+      add("Rust LLVM coverage tool", "cargo", ["llvm-cov", "--version"]);
+      add(
+        "Rust LLVM tools component",
+        "rustup",
+        ["component", "list", "--installed"],
+        { pattern: /^llvm-tools(?:-|\s|$)/m },
+      );
+    }
+    const swift =
+      entry.command === "swift" ||
+      entry.kind === "native" ||
+      args.some((arg) => arg.endsWith("test-workspace-access-swift.mjs")) ||
+      (entry.command === "cargo" &&
+        entry.project === "client" &&
+        args.includes("--workspace"));
+    if (swift || (entry.command === "cargo" && entry.project === "client")) {
+      add("Xcode", "xcodebuild", ["-version"]);
+      add("Apple compiler", "xcrun", ["--find", "clang"]);
+    }
+    if (swift) add("Apple Swift", "swift", ["--version"]);
+    if (entry.kind === "native") {
+      add("Python for native qualification", "python3", ["--version"]);
+    }
+  }
   return checks;
 }
 
@@ -105,90 +119,101 @@ export function toolchainProblems(pins, node, npm) {
     );
 }
 
-export function main(args = process.argv.slice(2)) {
+export function main(
+  args = process.argv.slice(2),
+  {
+    directory = root,
+    platform = process.platform,
+    environment = process.env,
+    nodeVersion = process.versions.node,
+    execute = spawnSync,
+    readLock = readImageLock,
+    selectSuites = (options, location) => createPlan(options, location).suites,
+    log = console.log,
+    error = console.error,
+  } = {},
+) {
   const { values } = parseArgs({
     args,
     options: {
       coverage: { type: "boolean" },
       extended: { type: "boolean" },
+      quick: { type: "boolean" },
+      suite: { type: "string", multiple: true },
     },
   });
-  const missing = [];
-  const { volta } = JSON.parse(
-    readFileSync(join(root, "package.json"), "utf8"),
+  const env = Object.fromEntries(
+    [
+      "PATH",
+      "HOME",
+      "USER",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "VOLTA_HOME",
+      "RUSTUP_HOME",
+      "CARGO_HOME",
+      "DOCKER_HOST",
+      "DOCKER_CONTEXT",
+      "DOCKER_CONFIG",
+      "DOCKER_TLS_VERIFY",
+      "DOCKER_CERT_PATH",
+      "DOCKER_API_VERSION",
+      "SSH_AUTH_SOCK",
+      "DEVELOPER_DIR",
+    ]
+      .filter((key) => Object.hasOwn(environment, key))
+      .map((key) => [key, environment[key]]),
   );
-  const npm = spawnSync("npm", ["--version"], {
-    cwd: root,
-    encoding: "utf8",
-    timeout: 15000,
-  });
-  missing.push(
-    ...toolchainProblems(volta, process.versions.node, npm.stdout?.trim()),
-  );
-  for (const check of prerequisites(root, values)) {
-    const result = check.path
-      ? { status: existsSync(check.path) ? 0 : 1 }
-      : spawnSync(check.command, check.args, {
-          cwd: join(root, "client"),
-          encoding: "utf8",
-          timeout: 15000,
-          stdio: "pipe",
-        });
-    if (result.status !== 0)
-      missing.push(
-        `${check.name}: ${check.path ?? [check.command, ...check.args].join(" ")}${result.error ? ` (${result.error.message})` : ""}`,
-      );
-  }
-  if (values.coverage) {
-    const options = {
-      cwd: join(root, "client"),
+  const run = (command, arguments_) =>
+    execute(command, arguments_, {
+      cwd: directory,
       encoding: "utf8",
       timeout: 15000,
-    };
-    const sysroot = spawnSync("rustc", ["--print", "sysroot"], options);
-    const compiler = spawnSync("rustc", ["-vV"], options);
-    const host = compiler.stdout?.match(/^host: (.+)$/m)?.[1];
-    if (sysroot.status !== 0 || compiler.status !== 0 || !host)
-      missing.push(
-        "Active Rust compiler sysroot and host (rustc --print sysroot; rustc -vV)",
-      );
-    else
-      for (const tool of ["llvm-profdata", "llvm-cov"]) {
-        const path = join(
-          sysroot.stdout.trim(),
-          "lib/rustlib",
-          host,
-          "bin",
-          `${tool}${process.platform === "win32" ? ".exe" : ""}`,
+      stdio: "pipe",
+      env,
+    });
+  const missing = [];
+  try {
+    const { volta } = JSON.parse(
+      readFileSync(join(directory, "package.json"), "utf8"),
+    );
+    const npm = run("npm", ["--version"]);
+    missing.push(
+      ...toolchainProblems(
+        volta,
+        nodeVersion,
+        npm.status === 0 ? npm.stdout?.trim() : undefined,
+      ),
+    );
+    const suites = selectSuites({ ...values, platform }, directory);
+    for (const check of prerequisites(directory, {
+      ...values,
+      platform,
+      readLock,
+      suites,
+    })) {
+      if (check.problem) {
+        missing.push(check.problem);
+        continue;
+      }
+      const result = run(check.command, check.args);
+      if (
+        result.status !== 0 ||
+        (check.expected && result.stdout?.trim() !== check.expected) ||
+        (check.pattern && !check.pattern.test(result.stdout ?? ""))
+      )
+        missing.push(
+          `${check.name}: ${[check.command, ...check.args].join(" ")}`,
         );
-        if (!existsSync(path))
-          missing.push(
-            `Rust LLVM tool: ${path}. Put the pinned rustup toolchain on PATH and install its llvm-tools component.`,
-          );
-      }
-  }
-  for (const [project, browsers] of [
-    ...(process.platform === "darwin" || values.extended
-      ? [["client", ["chromium", "webkit"]]]
-      : []),
-    ["requirements", ["chromium"]],
-  ]) {
-    try {
-      const require = createRequire(join(root, project, "package.json"));
-      const playwright = require("playwright");
-      for (const browser of browsers) {
-        const executable = playwright[browser].executablePath();
-        if (!existsSync(executable))
-          missing.push(`${project} Playwright ${browser}: ${executable}`);
-      }
-    } catch (error) {
-      missing.push(`${project} Playwright installation: ${error.message}`);
     }
+  } catch (cause) {
+    missing.push(cause.message);
   }
-  for (const item of missing) console.error(`Missing prerequisite: ${item}`);
+  for (const item of missing) error(`Missing prerequisite: ${item}`);
   if (!missing.length)
-    console.log(
-      "Host test prerequisites found. Runtime permissions and device access still require execution.",
+    log(
+      "Selected test prerequisites found. Runtime dependencies, permissions and device access still require execution.",
     );
   return missing.length ? 1 : 0;
 }

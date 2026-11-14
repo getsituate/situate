@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import {
   copyFileSync,
   mkdirSync,
@@ -10,7 +13,12 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { imageInputs, inputDigest } from "./ci-image.mjs";
+import {
+  checkToolPins,
+  imageInputs,
+  inputDigest,
+  validateLock,
+} from "./ci-image.mjs";
 import {
   sourceRequests,
   sourceArchiveNames,
@@ -40,9 +48,11 @@ test("CI helper and project-license changes invalidate image inputs and trigger 
   const changedHelper = inputDigest(directory);
   writeFileSync(join(directory, "LICENSE"), read("LICENSE") + "\n");
   assert.notEqual(inputDigest(directory), changedHelper);
-  const workflow = read(".github/workflows/ci-image.yml");
-  assert.ok(workflow.includes("client/docker/ci-*.py"));
+  const workflow = read(".github/workflows/ci-tool-image.yml");
+  assert.ok(workflow.includes("      - client/docker/ci-*\n"));
   assert.ok(workflow.includes("      - LICENSE\n"));
+  assert.match(workflow, /run: node tools\/actions-adapter\.mjs image-build/);
+  assert.match(workflow, /run: node tools\/actions-adapter\.mjs image-publish/);
 });
 
 test("CI tool pins bind prebuilt binaries or locked source builds to the quality toolchain", () => {
@@ -50,6 +60,7 @@ test("CI tool pins bind prebuilt binaries or locked source builds to the quality
   assert.deepEqual(Object.keys(assets).sort(), [
     "cargo-deny",
     "cargo-llvm-cov",
+    "gh",
     "gitleaks",
   ]);
   for (const [name, tool] of Object.entries(assets)) {
@@ -120,8 +131,6 @@ test("CI stage is separate from project installs and release targets", () => {
     stage,
     /npm ci|COPY client\/|windows-toolchain|ENTRYPOINT/,
   );
-  assert.match(dockerfile, /FROM dependencies AS linux/);
-  assert.match(dockerfile, /FROM windows-toolchain AS windows/);
   assert.match(stage, /from=ci-inputs,target=\/ci-input,readonly/);
   const installer = read("client/docker/ci-install.mjs");
   assert.match(installer, /"install-deps"/);
@@ -174,6 +183,10 @@ test("Docker context includes the exact CI installer inputs", () => {
     "client/docker/ci-user.sh",
     "client/docker/ci-sources.mjs",
     "client/docker/ci-sources.json",
+    "client/docker/ci-swift-tools.py",
+    "client/docker/ci-swift-tools.json",
+    "client/docker/ci-swift-format.resolved.json",
+    "client/docker/ci-swiftlint.resolved.json",
     "client/docker/ci-assets.json",
     "client/docker/ci-npm.json",
     "client/docker/ci-browsers.json",
@@ -250,5 +263,203 @@ test("Temurin source provenance rejects mismatched binary releases", () => {
   );
   assert.throws(() =>
     verifyJavaRelease(release, { ...pin, buildCommit: "c".repeat(40) }),
+  );
+});
+
+test("Swift source tools bind reviewed locks and a narrow Debian runtime export", (t) => {
+  checkToolPins();
+  const dockerfile = read("client/docker/Dockerfile");
+  const manifest = JSON.parse(read("client/docker/ci-swift-tools.json"));
+  assert.ok(dockerfile.includes(`FROM ${manifest.compiler.image} AS ci-swift`));
+  assert.ok(
+    dockerfile.includes(
+      "COPY --from=ci-swift /export/opt/ci-tools/ /opt/ci-tools/",
+    ),
+  );
+  assert.doesNotMatch(dockerfile, /COPY --from=ci-swift \/(?: |$)/m);
+  assert.deepEqual(Object.keys(manifest.tools).sort(), [
+    "swift-format",
+    "swiftlint",
+  ]);
+  for (const name of Object.keys(manifest.tools)) {
+    assert.equal(manifest.tools[name].version, quality[name].version);
+    assert.ok(
+      imageInputs().includes(`client/docker/${manifest.tools[name].lock}`),
+    );
+  }
+  const temporary = mkdtempSync(join(tmpdir(), "situate-swift-image-pins-"));
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  for (const file of imageInputs()) {
+    const target = join(temporary, file);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(new URL(`../${file}`, import.meta.url), target);
+  }
+  const before = inputDigest(temporary);
+  const lock = join(temporary, "client/docker/ci-swift-format.resolved.json");
+  writeFileSync(lock, readFileSync(lock, "utf8") + "\n");
+  assert.throws(() => checkToolPins(temporary), /build lock changed/);
+  assert.notEqual(inputDigest(temporary), before);
+  const published = JSON.parse(read("tools/ci-image.lock.json"));
+  assert.throws(
+    () => validateLock(published, "0".repeat(64)),
+    /Build and verify a new image/,
+  );
+});
+
+test("source-free verifier pins Swift inventories and exercises SourceKit rather than skipping rules", () => {
+  const verify = read("client/docker/ci-verify.mjs");
+  for (const [key, file] of [
+    ["swiftManifest", "ci-swift-tools.json"],
+    ["swiftVerifier", "ci-swift-tools.py"],
+  ]) {
+    const checksum = createHash("sha256")
+      .update(read(`client/docker/${file}`))
+      .digest("hex");
+    assert.ok(
+      verify.replaceAll(/\s/g, "").includes(`${key}:"${checksum}"`),
+      file,
+    );
+  }
+  assert.ok(verify.includes('output("gh", ["api", "--help"])'));
+  assert.match(verify, /--slurp/);
+  assert.match(verify, /statement_position/);
+  assert.match(verify, /SourceKit-dependent lint must detect/);
+  assert.match(verify, /skipping\|prohibited\|could not load/);
+});
+
+test("Swift source extraction rejects traversal, escaping links and unexpected runtime libraries", () => {
+  const helper = fileURLToPath(
+    new URL("../client/docker/ci-swift-tools.py", import.meta.url),
+  );
+  execFileSync(
+    "python3",
+    [
+      "-c",
+      `
+import importlib.util, io, pathlib, tarfile, tempfile
+spec = importlib.util.spec_from_file_location("swift_tools", ${JSON.stringify(helper)})
+n = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(n)
+def rejected(action):
+    try: action()
+    except ValueError: return
+    raise AssertionError("unsafe input accepted")
+with tempfile.TemporaryDirectory() as temporary:
+    root = pathlib.Path(temporary)
+    for index, name in enumerate(["../escaped", "/escaped", "source/link"]):
+        archive = root / (str(index) + ".tar.gz")
+        with tarfile.open(archive, "w:gz") as output:
+            entry = tarfile.TarInfo(name)
+            if index == 2:
+                entry.type = tarfile.SYMTYPE
+                entry.linkname = "../../escaped"
+                output.addfile(entry)
+            else:
+                entry.size = 4
+                output.addfile(entry, io.BytesIO(b"data"))
+        destination = root / ("tree" + str(index))
+        destination.mkdir()
+        rejected(lambda: n.extract_tree(archive, destination))
+    archive = root / "valid.tar.gz"
+    with tarfile.open(archive, "w:gz") as output:
+        entry = tarfile.TarInfo("source/example.swift")
+        entry.size = 4
+        output.addfile(entry, io.BytesIO(b"data"))
+    destination = root / "valid"
+    destination.mkdir()
+    n.extract_tree(archive, destination)
+    n.tree_matches(archive, destination / "source")
+    (destination / "source/example.swift").write_bytes(b"changed")
+    rejected(lambda: n.tree_matches(archive, destination / "source"))
+closure = n.runtime_closure(["tool"], lambda _: "libswiftCore.so => /usr/lib/swift/linux/libswiftCore.so (0x0)\\nlibc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x0)")
+assert pathlib.Path("/usr/lib/swift/linux/libswiftCore.so") in closure
+assert not any(path.name == "libc.so.6" for path in closure)
+rejected(lambda: n.runtime_closure(["tool"], lambda _: "library => /tmp/foreign.so (0x0)"))
+rejected(lambda: n.runtime_closure(["tool"], lambda _: "library => not found"))
+`,
+    ],
+    {
+      stdio: "pipe",
+      env: { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1" },
+    },
+  );
+});
+
+test("Swift source-build receipts reject changed outputs, aliases and compiler identity", () => {
+  const helper = fileURLToPath(
+    new URL("../client/docker/ci-swift-tools.py", import.meta.url),
+  );
+  execFileSync(
+    "python3",
+    [
+      "-c",
+      `
+import importlib.util, io, json, pathlib, platform, tarfile, tempfile
+spec = importlib.util.spec_from_file_location("swift_tools", ${JSON.stringify(helper)})
+n = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(n)
+def rejected(action):
+    try: action()
+    except ValueError: return
+    raise AssertionError("tampered source build accepted")
+with tempfile.TemporaryDirectory() as temporary:
+    root = pathlib.Path(temporary)
+    source = root / "swift-sources"
+    source.mkdir()
+    archive = source / "input.tar.gz"
+    with tarfile.open(archive, "w:gz") as output:
+        entry = tarfile.TarInfo("source/LICENSE")
+        entry.size = 15
+        output.addfile(entry, io.BytesIO(b"synthetic terms"))
+    archive_sha = n.file_digest(archive)
+    pinned = source / (archive_sha + ".tar.gz")
+    archive.rename(pinned)
+    notices = n.notice_inventory(pinned)
+    (source / "notices").mkdir()
+    (source / "notices" / notices[0]["sha256"]).write_bytes(b"synthetic terms")
+    runtime = root / "swift-runtime/usr/lib"
+    runtime.mkdir(parents=True)
+    (runtime / "libsourcekitdInProc.so").write_bytes(b"synthetic runtime")
+    (root / "swift-runtime/LICENSE.txt").write_bytes(b"synthetic terms")
+    selected = {}
+    quality = {}
+    for name, version in [("swift-format", "600.0.0"), ("swiftlint", "0.65.1")]:
+        (root / name).mkdir()
+        (root / name / name).write_bytes(b"synthetic tool")
+        lock = root / ("ci-" + name + ".resolved.json")
+        lock.write_text(json.dumps({"version": 2, "pins": []}))
+        selected[name] = {"version": version, "source": "fixture", "lock": lock.name, "lockSha256": n.file_digest(lock), "dependencies": {}}
+        quality[name] = {"version": version}
+    (root / "toolchain.quality.json").write_text(json.dumps(quality))
+    repository = "https://github.com/example/tool"
+    revision = "a" * 40
+    manifest = {"schemaVersion": 1, "tools": selected, "compiler": {"image": "swift:6.2.4-bookworm@sha256:" + "b" * 64, "version": "6.2.4", "sources": ["fixture"], "licenseSha256": n.digest(b"synthetic terms")}, "artifacts": {"fixture": {"repository": repository, "revision": revision, "url": "https://codeload.github.com/example/tool/tar.gz/" + revision, "sha256": archive_sha, "notices": notices}}}
+    manifest_path = root / "ci-swift-tools.json"
+    manifest_path.write_text(json.dumps(manifest))
+    files = {str(path.relative_to(root)): n.file_digest(path) for path in root.rglob("*") if path.is_file()}
+    receipt = {"schemaVersion": 1, "method": "swift-build-locked", "arguments": n.BUILD_ARGS, "manifestSha256": n.file_digest(manifest_path), "builderSha256": n.file_digest(${JSON.stringify(helper)}), "compilerImage": manifest["compiler"]["image"], "architecture": platform.machine(), "compiler": "Swift version 6.2.4 (swift-6.2.4-RELEASE)", "files": files}
+    receipt_path = root / "swift-source-build.json"
+    receipt_path.write_text(json.dumps(receipt))
+    n.verify(manifest, manifest_path, root)
+    for path in [root / "swiftlint/swiftlint", runtime / "libsourcekitdInProc.so"]:
+        original = path.read_bytes()
+        path.write_bytes(b"changed")
+        rejected(lambda: n.verify(manifest, manifest_path, root))
+        path.write_bytes(original)
+    tool = root / "swiftlint/swiftlint"
+    tool.rename(root / "aliased-tool")
+    tool.symlink_to(root / "aliased-tool")
+    rejected(lambda: n.verify(manifest, manifest_path, root))
+    tool.unlink()
+    (root / "aliased-tool").rename(tool)
+    receipt["compilerImage"] = "unreviewed"
+    receipt_path.write_text(json.dumps(receipt))
+    rejected(lambda: n.verify(manifest, manifest_path, root))
+`,
+    ],
+    {
+      stdio: "pipe",
+      env: { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1" },
+    },
   );
 });

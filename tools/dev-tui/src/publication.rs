@@ -1,42 +1,9 @@
-use crate::{actions::CommandSpec, text};
+use crate::text;
 use serde::Deserialize;
 use std::{
     fs, io,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action {
-    Check,
-    Stage,
-    Publish,
-    Inspect,
-    Reconcile,
-}
-impl Action {
-    pub fn argument(self) -> &'static str {
-        match self {
-            Self::Check => "check",
-            Self::Stage => "stage",
-            Self::Publish => "publish",
-            Self::Inspect => "inspect",
-            Self::Reconcile => "reconcile",
-        }
-    }
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Check => text::PUBLICATION_CHECK,
-            Self::Stage => text::PUBLICATION_STAGE,
-            Self::Publish => text::PUBLICATION_PUBLISH,
-            Self::Inspect => text::PUBLICATION_INSPECT,
-            Self::Reconcile => text::PUBLICATION_RECONCILE,
-        }
-    }
-    pub fn writes_remote(self) -> bool {
-        matches!(self, Self::Publish | Self::Reconcile)
-    }
-}
 
 #[derive(Deserialize)]
 struct Manifest {
@@ -128,6 +95,49 @@ pub fn discover(root: &Path) -> io::Result<Vec<Candidate>> {
     Ok(candidates)
 }
 
+pub fn drafts(root: &Path) -> String {
+    let Ok(entries) = fs::read_dir(root.join(".release-preparation")) else {
+        return String::new();
+    };
+    let mut paths = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    paths.sort();
+    let mut output = String::new();
+    for directory in paths {
+        let Ok(files) = fs::read_dir(&directory) else {
+            continue;
+        };
+        let mut files = files
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "json")
+            })
+            .collect::<Vec<_>>();
+        files.sort();
+        for path in files {
+            if output.len() >= 64 * 1024 {
+                return output;
+            }
+            if let Ok(bytes) = metadata(&path) {
+                output.push_str(&format!(
+                    "\n\n{}\n{}",
+                    crate::process::clean(path.to_string_lossy().as_bytes()),
+                    crate::process::clean(&bytes)
+                        .chars()
+                        .take(8192)
+                        .collect::<String>()
+                ));
+            }
+        }
+    }
+    output
+}
+
 impl Candidate {
     pub fn description(&self) -> String {
         format!(
@@ -145,98 +155,7 @@ impl Candidate {
             self.journal_summary
         )
     }
-    pub fn command(
-        &self,
-        root: &Path,
-        action: Action,
-        confirmation: &str,
-    ) -> Result<CommandSpec, String> {
-        if action == Action::Publish
-            && (self.journal
-                || fs::symlink_metadata(self.directory.join("publication-journal.json")).is_ok())
-        {
-            return Err(text::PUBLICATION_EXISTING_JOURNAL.into());
-        }
-        let mut spec = crate::actions::Task::Publication(action).command(root);
-        spec.args.extend([
-            "--release".into(),
-            self.directory.to_string_lossy().into_owned(),
-        ]);
-        if action != Action::Inspect {
-            spec.args
-                .extend(["--reviewed-revision".into(), self.revision.clone()]);
-        }
-        if matches!(action, Action::Stage | Action::Publish | Action::Reconcile) {
-            let stage = if action == Action::Reconcile {
-                let bytes = metadata(&self.directory.join("publication-journal.json"))
-                    .map_err(|_| text::PUBLICATION_METADATA_ERROR.to_string())?;
-                let journal: serde_json::Value = serde_json::from_slice(&bytes)
-                    .map_err(|_| text::PUBLICATION_METADATA_ERROR.to_string())?;
-                journal["stage"]
-                    .as_str()
-                    .ok_or(text::PUBLICATION_METADATA_ERROR)?
-                    .to_string()
-            } else {
-                self.directory
-                    .with_file_name(format!(
-                        "publication-{}",
-                        self.directory
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                    ))
-                    .to_string_lossy()
-                    .into_owned()
-            };
-            spec.args.extend(["--stage".into(), stage]);
-        }
-        if action.writes_remote() {
-            if !valid_confirmation(confirmation, &self.version) {
-                return Err(text::PUBLICATION_TARGET_INVALID.into());
-            }
-            spec.args.extend(["--confirm".into(), confirmation.into()]);
-        }
-        Ok(spec)
-    }
 }
-
-pub fn destination(root: &Path, version: &str) -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct Destination {
-        host: String,
-    }
-    if crate::version::number(version).is_none() {
-        return Err(text::PUBLICATION_METADATA_ERROR.into());
-    }
-    let output = Command::new("node")
-        .args(["infrastructure/releases/publish.mjs", "destination"])
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|_| text::PUBLICATION_DESTINATION_FAILED.to_string())?;
-    if !output.status.success() || output.stdout.len() > 4096 {
-        return Err(text::PUBLICATION_DESTINATION_FAILED.into());
-    }
-    let destination: Destination = serde_json::from_slice(&output.stdout)
-        .map_err(|_| text::PUBLICATION_DESTINATION_FAILED.to_string())?;
-    let confirmation = format!("{}:{version}", destination.host);
-    if !valid_confirmation(&confirmation, version) {
-        return Err(text::PUBLICATION_DESTINATION_FAILED.into());
-    }
-    Ok(confirmation)
-}
-
-pub fn valid_confirmation(value: &str, version: &str) -> bool {
-    let Some((host, selected_version)) = value.split_once(':') else {
-        return false;
-    };
-    !host.is_empty()
-        && selected_version == version
-        && host
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "@._-".contains(c))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,60 +166,38 @@ mod tests {
         discover(root).unwrap().remove(0)
     }
     #[test]
-    fn discovers_explicit_candidates_and_builds_argument_vectors() {
+    fn historical_journals_remain_readable_without_enabling_publication() {
         let dir = tempfile::tempdir().unwrap();
         let candidate = fixture(dir.path());
-        assert_eq!(candidate.platforms, "macos");
-        for action in [
-            Action::Check,
-            Action::Stage,
-            Action::Publish,
-            Action::Inspect,
-        ] {
-            let command = candidate
-                .command(dir.path(), action, "operator@host:1.2.3")
-                .unwrap();
-            assert_eq!(command.args[4], action.argument());
-            assert_eq!(
-                command.args.contains(&"--confirm".into()),
-                action.writes_remote()
-            );
-            assert_eq!(
-                command.args.contains(&"--reviewed-revision".into()),
-                action != Action::Inspect
-            );
-        }
-        assert!(
-            candidate
-                .command(dir.path(), Action::Publish, "host:2.0.0")
-                .is_err()
-        );
-        assert!(!valid_confirmation("host;touch:1.2.3", "1.2.3"));
-    }
-    #[test]
-    fn journal_blocks_republication_and_preserves_reconciliation_stage() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut candidate = fixture(dir.path());
-        candidate.journal = true;
-        assert!(
-            candidate
-                .command(dir.path(), Action::Publish, "host:1.2.3")
-                .is_err()
-        );
-        let stage = dir.path().join("original stage");
         fs::write(
             candidate.directory.join("publication-journal.json"),
-            serde_json::json!({"stage":stage}).to_string(),
+            r#"{"host":"host","state":"unknown","stage":"retained-stage"}"#,
         )
         .unwrap();
-        let command = candidate
-            .command(dir.path(), Action::Reconcile, "host:1.2.3")
-            .unwrap();
-        assert_eq!(
-            command.args[command.args.iter().position(|a| a == "--stage").unwrap() + 1],
-            stage.to_string_lossy()
+        let candidates = discover(dir.path()).unwrap();
+        assert!(candidates[0].journal);
+        assert!(
+            candidates[0]
+                .description()
+                .contains("host / unknown / retained-stage")
         );
     }
+    #[test]
+    fn retained_drafts_are_read_only_and_do_not_follow_linked_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let draft = dir.path().join(".release-preparation/1.2.3");
+        fs::create_dir_all(&draft).unwrap();
+        let original = br#"{"phase":"draft","version":"1.2.3"}"#;
+        fs::write(draft.join("state.json"), original).unwrap();
+        fs::write(dir.path().join("outside.json"), "outside-content").unwrap();
+        std::os::unix::fs::symlink(dir.path().join("outside.json"), draft.join("linked.json"))
+            .unwrap();
+        let description = drafts(dir.path());
+        assert!(description.contains("draft"));
+        assert!(!description.contains("outside-content"));
+        assert_eq!(fs::read(draft.join("state.json")).unwrap(), original);
+    }
+
     #[test]
     fn malformed_metadata_and_symlinked_builds_are_not_candidates() {
         let dir = tempfile::tempdir().unwrap();

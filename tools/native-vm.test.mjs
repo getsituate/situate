@@ -401,10 +401,15 @@ test("an uncertain earlier owner blocks execution and ownership mismatch blocks 
 
 test("execution timeout does not include time waiting for the VM lease", async (t) => {
   const f = await fixture(t);
+  // Keep runtime startup outside this lease-clock test, including under emulation.
+  const job = path.join(f.directory, "fixture-job");
   await writeFile(
-    path.join(f.packageDirectory, "entry.mjs"),
-    "import {writeFileSync} from 'node:fs'; if(process.argv[2]==='hold'){writeFileSync('ready','1'); setInterval(()=>{},1000);}",
+    job,
+    '#!/bin/sh\nif [ "$2" = hold ]; then printf 1 > ready; exec sleep 60; fi\nprintf executed > completed\n',
+    { mode: 0o700 },
   );
+  await writeFile(f.configFile, JSON.stringify({ ...f.config, node: job }));
+  await writeFile(path.join(f.packageDirectory, "entry.mjs"), "");
   const abort = new AbortController();
   const first = await createNativeVmRun({
     environment: f.environment,
@@ -443,6 +448,10 @@ test("execution timeout does not include time waiting for the VM lease", async (
     abort.abort();
     await assert.rejects(holding);
     assert.equal(await queued, 0);
+    assert.equal(
+      await readFile(path.join(f.guestRoot(second), "completed"), "utf8"),
+      "executed",
+    );
     await second.cleanup();
   } finally {
     abort.abort();

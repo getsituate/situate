@@ -1,0 +1,478 @@
+{
+  "schemaVersion": 1,
+  "compiler": {
+    "image": "swift:6.2.4-bookworm@sha256:87947bfd51a61c86f487986ccf6390fc9cd4035cf98d74f7b8c9a7cb92d9282a",
+    "version": "6.2.4",
+    "licenseSha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55",
+    "sources": [
+      "swiftlang/swift@ee343b46aef81c3ac7c5d7960cb35a41a88c5a9b",
+      "swiftlang/swift-corelibs-foundation@f3a7a34302317a95665bf4ff1a62ee1b459c1695",
+      "swiftlang/swift-corelibs-libdispatch@2df91f94651f2d924d7506c9d14685929386d779",
+      "swiftlang/swift-foundation@7242fa9cb8993aaf9a0a72522206b96a45da9c28",
+      "swiftlang/swift-foundation-icu@ddd11fa3f970bd34924c418835986167b8e6efeb",
+      "swiftlang/llvm-project@8f0d2ca924db37c8f8161d55c21b9097b05b72f3",
+      "swiftlang/swift-syntax@5a87516fc3dddbd23cb76358eb489915ee86b444"
+    ]
+  },
+  "tools": {
+    "swift-format": {
+      "version": "600.0.0",
+      "source": "swiftlang/swift-format@65f9da9aad84adb7e2028eb32ca95164aa590e3b",
+      "lock": "ci-swift-format.resolved.json",
+      "lockSha256": "3c5449da5743dd68531d846f0f8aa25c861b69358eb760802bb3dc4b012ad08d",
+      "dependencies": {
+        "swift-argument-parser": "apple/swift-argument-parser@6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "swift-cmark": "swiftlang/swift-cmark@08ddb528923cc1a6527e02b7a1aee9e516ca749a",
+        "swift-markdown": "apple/swift-markdown@25cb61d3482054b09ae76ca4f281b1bfe7fe5a43",
+        "swift-syntax": "swiftlang/swift-syntax@0687f71944021d616d34d922343dcef086855920"
+      }
+    },
+    "swiftlint": {
+      "version": "0.65.1",
+      "source": "realm/SwiftLint@6aba03e3d8302b33f106e0f922210f35ca4b52cf",
+      "lock": "ci-swiftlint.resolved.json",
+      "lockSha256": "97c13df6e0483ec54d5ae2c7129b769df4103dd45b774a2f62529cf1e4617aa9",
+      "dependencies": {
+        "collectionconcurrencykit": "JohnSundell/CollectionConcurrencyKit@b4f23e24b5a1bff301efc5e70871083ca029ff95",
+        "cryptoswift": "krzyzanowskim/CryptoSwift@f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
+        "sourcekitten": "jpsim/SourceKitten@821fc0eaa7c07fc98df1e9d3d43371cace697644",
+        "swift-argument-parser": "apple/swift-argument-parser@6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "swift-filename-matcher": "ileitch/swift-filename-matcher@eef5ac0b6b3cdc64b3039b037bed2def8a1edaeb",
+        "swift-syntax": "swiftlang/swift-syntax@a8b1c535647243d603b6772e7e8306c993a0c188",
+        "swiftytexttable": "scottrhoyt/SwiftyTextTable@c6df6cf533d120716bff38f8ff9885e1ce2a4ac3",
+        "swxmlhash": "drmohundro/SWXMLHash@a853604c9e9a83ad9954c7e3d2a565273982471f",
+        "yams": "jpsim/Yams@a27b21e0c81c5bf42049b897a62aaf387e80f279"
+      }
+    }
+  },
+  "artifacts": {
+    "JohnSundell/CollectionConcurrencyKit@b4f23e24b5a1bff301efc5e70871083ca029ff95": {
+      "repository": "https://github.com/JohnSundell/CollectionConcurrencyKit",
+      "revision": "b4f23e24b5a1bff301efc5e70871083ca029ff95",
+      "url": "https://codeload.github.com/JohnSundell/CollectionConcurrencyKit/tar.gz/b4f23e24b5a1bff301efc5e70871083ca029ff95",
+      "sha256": "6d6ea0da0c04d3b63ce0687b3c8402243bd6b9067e073550b88ee20505525118",
+      "notices": [
+        {
+          "path": "CollectionConcurrencyKit-b4f23e24b5a1bff301efc5e70871083ca029ff95/LICENSE.md",
+          "sha256": "b50c631274aca563574440f17718c52e20ea7027313616cfcf68eff44ade9b5b"
+        }
+      ]
+    },
+    "apple/swift-argument-parser@6a52f3251125d74daf04fcbd5e6f08a75d074382": {
+      "repository": "https://github.com/apple/swift-argument-parser",
+      "revision": "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+      "url": "https://codeload.github.com/apple/swift-argument-parser/tar.gz/6a52f3251125d74daf04fcbd5e6f08a75d074382",
+      "sha256": "23ab82e8be3b82b199a008e0044229ae327a8824734d917b78bcdde64ce81ec1",
+      "notices": [
+        {
+          "path": "swift-argument-parser-6a52f3251125d74daf04fcbd5e6f08a75d074382/LICENSE.txt",
+          "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+        },
+        {
+          "path": "swift-argument-parser-6a52f3251125d74daf04fcbd5e6f08a75d074382/Tools/generate-manual/DSL/Authors.swift",
+          "sha256": "f19fc26442b0667c8ec27bfecd484a4960bfc14bd715ef169f19c067cfc217f8"
+        }
+      ]
+    },
+    "apple/swift-markdown@25cb61d3482054b09ae76ca4f281b1bfe7fe5a43": {
+      "repository": "https://github.com/apple/swift-markdown",
+      "revision": "25cb61d3482054b09ae76ca4f281b1bfe7fe5a43",
+      "url": "https://codeload.github.com/apple/swift-markdown/tar.gz/25cb61d3482054b09ae76ca4f281b1bfe7fe5a43",
+      "sha256": "a621a696875d004dc2f1d0ffe8a3c91775b32347399b517773dec4d688e44184",
+      "notices": [
+        {
+          "path": "swift-markdown-25cb61d3482054b09ae76ca4f281b1bfe7fe5a43/LICENSE.txt",
+          "sha256": "167beb36f181bd163c93c6feb45c68e5f9462fe1af55b278f7bfd1df20e673a3"
+        },
+        {
+          "path": "swift-markdown-25cb61d3482054b09ae76ca4f281b1bfe7fe5a43/NOTICE.txt",
+          "sha256": "ee7da43afcac4a52196a2141024573ec2ceb84b14e74dfed38522d94586fbc52"
+        }
+      ]
+    },
+    "drmohundro/SWXMLHash@a853604c9e9a83ad9954c7e3d2a565273982471f": {
+      "repository": "https://github.com/drmohundro/SWXMLHash",
+      "revision": "a853604c9e9a83ad9954c7e3d2a565273982471f",
+      "url": "https://codeload.github.com/drmohundro/SWXMLHash/tar.gz/a853604c9e9a83ad9954c7e3d2a565273982471f",
+      "sha256": "b48f1723996ec98af4b9df334ce4d104fb730f0840f16663c8358e9ee2cc9e4a",
+      "notices": [
+        {
+          "path": "SWXMLHash-a853604c9e9a83ad9954c7e3d2a565273982471f/LICENSE",
+          "sha256": "5417876a0d3256a5df0c8d7bc9eddd0022a57290bc648f56a04cac6c3cea0d42"
+        }
+      ]
+    },
+    "ileitch/swift-filename-matcher@eef5ac0b6b3cdc64b3039b037bed2def8a1edaeb": {
+      "repository": "https://github.com/ileitch/swift-filename-matcher",
+      "revision": "eef5ac0b6b3cdc64b3039b037bed2def8a1edaeb",
+      "url": "https://codeload.github.com/ileitch/swift-filename-matcher/tar.gz/eef5ac0b6b3cdc64b3039b037bed2def8a1edaeb",
+      "sha256": "54f9f3447e59a8e52b53e3cd1f56cfe4062b37d1c6c3557acb476be50e74f5fb",
+      "notices": [
+        {
+          "path": "swift-filename-matcher-eef5ac0b6b3cdc64b3039b037bed2def8a1edaeb/LICENSE.md",
+          "sha256": "5b56d27f2d56781dfd28fd984290d4aa2b83629b7203aef7f519e0863867452e"
+        }
+      ]
+    },
+    "jpsim/SourceKitten@821fc0eaa7c07fc98df1e9d3d43371cace697644": {
+      "repository": "https://github.com/jpsim/SourceKitten",
+      "revision": "821fc0eaa7c07fc98df1e9d3d43371cace697644",
+      "url": "https://codeload.github.com/jpsim/SourceKitten/tar.gz/821fc0eaa7c07fc98df1e9d3d43371cace697644",
+      "sha256": "f817cfb7e763742ff55eb7836335e2ef41f693f67a4a843e1fe4cf933e308782",
+      "notices": [
+        {
+          "path": "SourceKitten-821fc0eaa7c07fc98df1e9d3d43371cace697644/LICENSE",
+          "sha256": "070521df29feedeb5d9a0123ae03298cdb383410f86d092a6e96fb7a990de27e"
+        }
+      ]
+    },
+    "jpsim/Yams@a27b21e0c81c5bf42049b897a62aaf387e80f279": {
+      "repository": "https://github.com/jpsim/Yams",
+      "revision": "a27b21e0c81c5bf42049b897a62aaf387e80f279",
+      "url": "https://codeload.github.com/jpsim/Yams/tar.gz/a27b21e0c81c5bf42049b897a62aaf387e80f279",
+      "sha256": "e23de46509bdb3673117b5af1981b4a04e06345a53abb3fec92b7e96c746c6de",
+      "notices": [
+        {
+          "path": "Yams-a27b21e0c81c5bf42049b897a62aaf387e80f279/LICENSE",
+          "sha256": "0354b0ea403d2e78059c5ae0510a2cfae9f8eb306fcef094ac9fff5b47e20bed"
+        }
+      ]
+    },
+    "krzyzanowskim/CryptoSwift@f2a627b84c1ff96f21ac2fcb623ab36142dd5512": {
+      "repository": "https://github.com/krzyzanowskim/CryptoSwift",
+      "revision": "f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
+      "url": "https://codeload.github.com/krzyzanowskim/CryptoSwift/tar.gz/f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
+      "sha256": "a478c4d04ef5f02c4a262251369215c672680e28ba4085c4159d3760e8ba4291",
+      "notices": [
+        {
+          "path": "CryptoSwift-f2a627b84c1ff96f21ac2fcb623ab36142dd5512/LICENSE",
+          "sha256": "e4ea9188602dd4217309aec044481b0a7d2f9d539b1d1673b9a1809709c804e0"
+        }
+      ]
+    },
+    "realm/SwiftLint@6aba03e3d8302b33f106e0f922210f35ca4b52cf": {
+      "repository": "https://github.com/realm/SwiftLint",
+      "revision": "6aba03e3d8302b33f106e0f922210f35ca4b52cf",
+      "url": "https://codeload.github.com/realm/SwiftLint/tar.gz/6aba03e3d8302b33f106e0f922210f35ca4b52cf",
+      "sha256": "c63bd37f8d9aebfa10870d07dd75a92326b7c53f97a4b9ad6f1839747b8eb74b",
+      "notices": [
+        {
+          "path": "SwiftLint-6aba03e3d8302b33f106e0f922210f35ca4b52cf/LICENSE",
+          "sha256": "6a4395f3b744b8cd94b6c810bc705440a75f1929689b65d2f557ee3e9895632f"
+        }
+      ]
+    },
+    "scottrhoyt/SwiftyTextTable@c6df6cf533d120716bff38f8ff9885e1ce2a4ac3": {
+      "repository": "https://github.com/scottrhoyt/SwiftyTextTable",
+      "revision": "c6df6cf533d120716bff38f8ff9885e1ce2a4ac3",
+      "url": "https://codeload.github.com/scottrhoyt/SwiftyTextTable/tar.gz/c6df6cf533d120716bff38f8ff9885e1ce2a4ac3",
+      "sha256": "a3d4be741c205a9c53222a7f397eae0b7c8ea4111f398ce610745c45a3ab0c3e",
+      "notices": [
+        {
+          "path": "SwiftyTextTable-c6df6cf533d120716bff38f8ff9885e1ce2a4ac3/LICENSE",
+          "sha256": "7bcb71f3c6879ed28cb4b3bb387df0207b4af6f98f188c21aebda0c1f83ede17"
+        }
+      ]
+    },
+    "swiftlang/llvm-project@8f0d2ca924db37c8f8161d55c21b9097b05b72f3": {
+      "repository": "https://github.com/swiftlang/llvm-project",
+      "revision": "8f0d2ca924db37c8f8161d55c21b9097b05b72f3",
+      "url": "https://codeload.github.com/swiftlang/llvm-project/tar.gz/8f0d2ca924db37c8f8161d55c21b9097b05b72f3",
+      "sha256": "54c3b7e41d5c9e72c3b16436e80ddfe5bdde1f81f120fef37709849262435ec5",
+      "notices": [
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/LICENSE.TXT",
+          "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/bolt/LICENSE.TXT",
+          "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/clang-tools-extra/LICENSE.TXT",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/clang-tools-extra/clang-tidy/cert/LICENSE.TXT",
+          "sha256": "d8e09a37202601346ed9f3962c843cf60d985570111602399a9b845c44a654ba"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/clang-tools-extra/clang-tidy/hicpp/LICENSE.TXT",
+          "sha256": "271b9c47cbf07475b8012f708fe08a348821261d66795daefed400e9238db379"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/clang/LICENSE.TXT",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/clang/tools/clang-format-vs/ClangFormat/license.txt",
+          "sha256": "3a39bb490f4e22550ba351ecfe3357f51a6bcd3d2ad20830b7216152bb0fe45a"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/compiler-rt/LICENSE.TXT",
+          "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/cross-project-tests/debuginfo-tests/dexter/LICENSE.txt",
+          "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/flang/LICENSE.TXT",
+          "sha256": "94b301bb652ae351f5941655bf533f1a136300ad1396be7452c8a04ff2c91374"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/flang/test/Semantics/OpenMP/copying.f90",
+          "sha256": "976ff27305a486bec99de9aa0e1756ffeaa726618fc4ba7752b42d165f876dee"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/libc/LICENSE.TXT",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/libclc/LICENSE.TXT",
+          "sha256": "3c536c052db9afd997809e38785c9f2a9e54e2892330fa7c5b438e18a7413479"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/libcxx/LICENSE.TXT",
+          "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/libcxxabi/LICENSE.TXT",
+          "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/libunwind/LICENSE.TXT",
+          "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/lld/LICENSE.TXT",
+          "sha256": "f7891568956e34643eb6a0db1462db30820d40d7266e2a78063f2fe233ece5a0"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/lldb/LICENSE.TXT",
+          "sha256": "76be4deddeef87f6fa9940f4992a9506c7bb222af60eb3b2a47cf65719528bbe"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/lldb/tools/lldb-dap/LICENSE.TXT",
+          "sha256": "94b301bb652ae351f5941655bf533f1a136300ad1396be7452c8a04ff2c91374"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/llvm/LICENSE.TXT",
+          "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/llvm/include/llvm/Support/LICENSE.TXT",
+          "sha256": "54cbc326a78b9400065bfc5830a57fdcdaf808286d4ac35d8a9e324aa77b7241"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/llvm/lib/Support/BLAKE3/LICENSE",
+          "sha256": "6a94bedb8b707ed97f6e310d0d015ab14e0683ffa0a612b02958581b9cc9fc0e"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/llvm/lib/Support/COPYRIGHT.regex",
+          "sha256": "0424e57d4303164dc59a8509c20dae0518b853692e5c2b0e98b11816fdbc97c7"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/llvm/test/YAMLParser/LICENSE.txt",
+          "sha256": "d0d8b09800a45cd982e9568fc7669d9c1a4c330e275a821bbe24d54366d16fe9"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/llvm/utils/lit/LICENSE.TXT",
+          "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/mlir/LICENSE.TXT",
+          "sha256": "94b301bb652ae351f5941655bf533f1a136300ad1396be7452c8a04ff2c91374"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/openmp/LICENSE.TXT",
+          "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/openmp/runtime/src/thirdparty/ittnotify/LICENSE.txt",
+          "sha256": "cf48cdd9ed87c2031b68fb1b9f4cfb55d00dcf815b21a30bf8304aa1e5e6f76a"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/polly/LICENSE.TXT",
+          "sha256": "eef85b40250d830eb76577fb44933cc5d81a8650f3848e5f3d89229e6995ffd3"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/polly/lib/External/isl/AUTHORS",
+          "sha256": "b32faff016b6e7ed7a8887672cdb2ec5607964193a5e03590db4cea48c1d3ca8"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/polly/lib/External/isl/LICENSE",
+          "sha256": "3a2c398103f6bca0f50a9a9465deca9230b370b0212af5fdf31ed88a36215c30"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/polly/lib/External/isl/imath/LICENSE",
+          "sha256": "4556b2d9e53920d10c972b2a4a78fbbb3aedb510686f2a1cd8d41e6a8adf24e5"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/pstl/LICENSE.TXT",
+          "sha256": "0ca8cbe9219a841f9bc8fbb1f8ecdf5e39b1b0e23ee10fb6b0c090d8987dd1eb"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/third-party/benchmark/AUTHORS",
+          "sha256": "01381fc0a41026d63b697593dcdef93ed6fe4402f02f6378e9c3b739aca592ed"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/third-party/benchmark/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/third-party/unittest/googlemock/LICENSE.txt",
+          "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+        },
+        {
+          "path": "llvm-project-8f0d2ca924db37c8f8161d55c21b9097b05b72f3/third-party/unittest/googletest/LICENSE.TXT",
+          "sha256": "9702de7e4117a8e2b20dafab11ffda58c198aede066406496bef670d40a22138"
+        }
+      ]
+    },
+    "swiftlang/swift-cmark@08ddb528923cc1a6527e02b7a1aee9e516ca749a": {
+      "repository": "https://github.com/swiftlang/swift-cmark",
+      "revision": "08ddb528923cc1a6527e02b7a1aee9e516ca749a",
+      "url": "https://codeload.github.com/swiftlang/swift-cmark/tar.gz/08ddb528923cc1a6527e02b7a1aee9e516ca749a",
+      "sha256": "84bbb47d2c2ef9144786916bdce22b01dd5bd1d724ba0ec7b7b794e94616a73d",
+      "notices": [
+        {
+          "path": "swift-cmark-08ddb528923cc1a6527e02b7a1aee9e516ca749a/COPYING",
+          "sha256": "c22e885f33b821bddb24cf007145e5540655b6c0f403e49e6c76a93c28e6d9a9"
+        }
+      ]
+    },
+    "swiftlang/swift-corelibs-foundation@f3a7a34302317a95665bf4ff1a62ee1b459c1695": {
+      "repository": "https://github.com/swiftlang/swift-corelibs-foundation",
+      "revision": "f3a7a34302317a95665bf4ff1a62ee1b459c1695",
+      "url": "https://codeload.github.com/swiftlang/swift-corelibs-foundation/tar.gz/f3a7a34302317a95665bf4ff1a62ee1b459c1695",
+      "sha256": "434e35fa728b259e07bc053d21d1da5c1e7c138bb6d6c30b7ef8e3275a4b9eb5",
+      "notices": [
+        {
+          "path": "swift-corelibs-foundation-f3a7a34302317a95665bf4ff1a62ee1b459c1695/LICENSE",
+          "sha256": "0ca84095d1de77cad1a866ebbad28f8db98a0826c6055d92b0608c5baa1643e2"
+        }
+      ]
+    },
+    "swiftlang/swift-corelibs-libdispatch@2df91f94651f2d924d7506c9d14685929386d779": {
+      "repository": "https://github.com/swiftlang/swift-corelibs-libdispatch",
+      "revision": "2df91f94651f2d924d7506c9d14685929386d779",
+      "url": "https://codeload.github.com/swiftlang/swift-corelibs-libdispatch/tar.gz/2df91f94651f2d924d7506c9d14685929386d779",
+      "sha256": "4c6a469a6b2e6e0cebb54dcac8de2e347c1e7daa55c8908e333a1638df7d22cf",
+      "notices": [
+        {
+          "path": "swift-corelibs-libdispatch-2df91f94651f2d924d7506c9d14685929386d779/LICENSE",
+          "sha256": "0ca84095d1de77cad1a866ebbad28f8db98a0826c6055d92b0608c5baa1643e2"
+        }
+      ]
+    },
+    "swiftlang/swift-format@65f9da9aad84adb7e2028eb32ca95164aa590e3b": {
+      "repository": "https://github.com/swiftlang/swift-format",
+      "revision": "65f9da9aad84adb7e2028eb32ca95164aa590e3b",
+      "url": "https://codeload.github.com/swiftlang/swift-format/tar.gz/65f9da9aad84adb7e2028eb32ca95164aa590e3b",
+      "sha256": "67cea16f22cf54ab37e5513d2c2f093c4baff67288c34fac4f61a93ede587e81",
+      "notices": [
+        {
+          "path": "swift-format-65f9da9aad84adb7e2028eb32ca95164aa590e3b/LICENSE.txt",
+          "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+        }
+      ]
+    },
+    "swiftlang/swift-foundation-icu@ddd11fa3f970bd34924c418835986167b8e6efeb": {
+      "repository": "https://github.com/swiftlang/swift-foundation-icu",
+      "revision": "ddd11fa3f970bd34924c418835986167b8e6efeb",
+      "url": "https://codeload.github.com/swiftlang/swift-foundation-icu/tar.gz/ddd11fa3f970bd34924c418835986167b8e6efeb",
+      "sha256": "dde8f9385f171886522dd17ada9f9689781579b97626bb0b520658bf3bdbb8fb",
+      "notices": [
+        {
+          "path": "swift-foundation-icu-ddd11fa3f970bd34924c418835986167b8e6efeb/LICENSE.md",
+          "sha256": "2245a990b635558be210fb3eb4f8a6f7a49aebc0fefbf5859146a65ddc7ddcf3"
+        }
+      ]
+    },
+    "swiftlang/swift-foundation@7242fa9cb8993aaf9a0a72522206b96a45da9c28": {
+      "repository": "https://github.com/swiftlang/swift-foundation",
+      "revision": "7242fa9cb8993aaf9a0a72522206b96a45da9c28",
+      "url": "https://codeload.github.com/swiftlang/swift-foundation/tar.gz/7242fa9cb8993aaf9a0a72522206b96a45da9c28",
+      "sha256": "681490a149a2eb23d413ea0f2a54b4fa177b7173f910e83640b4f1677c41dd8d",
+      "notices": [
+        {
+          "path": "swift-foundation-7242fa9cb8993aaf9a0a72522206b96a45da9c28/LICENSE.md",
+          "sha256": "2245a990b635558be210fb3eb4f8a6f7a49aebc0fefbf5859146a65ddc7ddcf3"
+        },
+        {
+          "path": "swift-foundation-7242fa9cb8993aaf9a0a72522206b96a45da9c28/NOTICE.txt",
+          "sha256": "c2e757911b86a76230099804831d8d847a865e88b5912171627492a7a49f0456"
+        },
+        {
+          "path": "swift-foundation-7242fa9cb8993aaf9a0a72522206b96a45da9c28/Tests/FoundationEssentialsTests/Resources/JSON5/spec/LICENSE.md",
+          "sha256": "e1db2a9e1a27b3896a0ae653658ee7d51b548a80fc982b839459fae76a3be1a7"
+        }
+      ]
+    },
+    "swiftlang/swift-syntax@0687f71944021d616d34d922343dcef086855920": {
+      "repository": "https://github.com/swiftlang/swift-syntax",
+      "revision": "0687f71944021d616d34d922343dcef086855920",
+      "url": "https://codeload.github.com/swiftlang/swift-syntax/tar.gz/0687f71944021d616d34d922343dcef086855920",
+      "sha256": "39d3edc3b071bb5fb150c6a01c5ab0d5a1ff85d5942ca347a5782f56a41f18e4",
+      "notices": [
+        {
+          "path": "swift-syntax-0687f71944021d616d34d922343dcef086855920/CodeGeneration/Sources/Utils/CopyrightHeader.swift",
+          "sha256": "e6f42836a6b2a294c131ef6237091b19b3f92e546fb724fe3d3e5f92d7e90747"
+        },
+        {
+          "path": "swift-syntax-0687f71944021d616d34d922343dcef086855920/LICENSE.txt",
+          "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+        }
+      ]
+    },
+    "swiftlang/swift-syntax@5a87516fc3dddbd23cb76358eb489915ee86b444": {
+      "repository": "https://github.com/swiftlang/swift-syntax",
+      "revision": "5a87516fc3dddbd23cb76358eb489915ee86b444",
+      "url": "https://codeload.github.com/swiftlang/swift-syntax/tar.gz/5a87516fc3dddbd23cb76358eb489915ee86b444",
+      "sha256": "d5ad4e6e6cddfdfa6fbfdafe89cfd165f504e47cd474dcbed3ccea790a510f97",
+      "notices": [
+        {
+          "path": "swift-syntax-5a87516fc3dddbd23cb76358eb489915ee86b444/CodeGeneration/Sources/Utils/CopyrightHeader.swift",
+          "sha256": "a2445ba1687aef55459b853f968c40c59f95fed003a29eb278b71dadbe645671"
+        },
+        {
+          "path": "swift-syntax-5a87516fc3dddbd23cb76358eb489915ee86b444/LICENSE.txt",
+          "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+        }
+      ]
+    },
+    "swiftlang/swift-syntax@a8b1c535647243d603b6772e7e8306c993a0c188": {
+      "repository": "https://github.com/swiftlang/swift-syntax",
+      "revision": "a8b1c535647243d603b6772e7e8306c993a0c188",
+      "url": "https://codeload.github.com/swiftlang/swift-syntax/tar.gz/a8b1c535647243d603b6772e7e8306c993a0c188",
+      "sha256": "ea8cababf2b23d0759c94e792a1b47968fa56aeb8bf5a0b299e853b383060e20",
+      "notices": [
+        {
+          "path": "swift-syntax-a8b1c535647243d603b6772e7e8306c993a0c188/CodeGeneration/Sources/Utils/CopyrightHeader.swift",
+          "sha256": "a2445ba1687aef55459b853f968c40c59f95fed003a29eb278b71dadbe645671"
+        },
+        {
+          "path": "swift-syntax-a8b1c535647243d603b6772e7e8306c993a0c188/LICENSE.txt",
+          "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+        }
+      ]
+    },
+    "swiftlang/swift@ee343b46aef81c3ac7c5d7960cb35a41a88c5a9b": {
+      "repository": "https://github.com/swiftlang/swift",
+      "revision": "ee343b46aef81c3ac7c5d7960cb35a41a88c5a9b",
+      "url": "https://codeload.github.com/swiftlang/swift/tar.gz/ee343b46aef81c3ac7c5d7960cb35a41a88c5a9b",
+      "sha256": "8d9e622ba3bb39317d5d4c1c73ac90e88c0d14b89c53c70398bec751cacf736f",
+      "notices": [
+        {
+          "path": "swift-ee343b46aef81c3ac7c5d7960cb35a41a88c5a9b/LICENSE.txt",
+          "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+        },
+        {
+          "path": "swift-ee343b46aef81c3ac7c5d7960cb35a41a88c5a9b/utils/UnicodeData/COPYRIGHT.txt",
+          "sha256": "a7dc1de7052d8122e9fa216a563885a8d90d07195610c94e95324838a06cfc6f"
+        }
+      ]
+    }
+  }
+}

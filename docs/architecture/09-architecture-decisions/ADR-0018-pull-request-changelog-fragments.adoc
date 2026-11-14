@@ -1,0 +1,90 @@
+[[adr-0018]]
+= ADR-0018: Require changelog declarations in every pull request
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-13
+Implementation:: Planned; fragment format, required PR check and automatic release assembly are not implemented; existing release-level preparation remains operational
+
+== Context
+
+The current link:{architecture-repository-root}/docs/development/release-preparation.md[release preparation] captures committed changes, approves English source, accepts translations and finalizes a version-specific catalog.
+Preparing that material after each merge would introduce a manual release queue.
+Editing one shared changelog or assigning release versions in parallel PRs would instead create contention.
+
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068] requires user-oriented, optional offline version history, not commit lists or automatic announcements.
+link:{architecture-repository-root}/requirements/data/requirements/REQ-0053-enforce-interface-translation-completeness.md[REQ-0053] requires complete product translations.
+The link:{architecture-repository-root}/requirements/data/foundations.md#app-version-numbers-and-release-communication[release policy] retains explicit English approval before translation.
+
+== Decision
+
+Require every PR to add a new, uniquely identified, versionless changelog declaration.
+Independent fragments avoid shared-file contention; identifiers must be available before the PR number exists.
+
+.Target content lifecycle. An explicit empty declaration is valid; a missing one is not.
+image::{architecture-diagrams-root}/release-changelog-fragments.svg["Each PR declares public entries or an empty list with an internal reason; approved English entries are translated and reviewed before the required check and post-merge assembly.",width=500]
+
+* Every PR participates, including documentation, infrastructure, tests and bots. No bypass label replaces the declaration.
+* A declaration holds zero or more entries. Empty lists need an internal reason that never appears in public notes; do not generate filler text.
+* Public entries explain observable effects, necessary actions and limitations. Keep `new`, `changed`, `fixed` and `important` categories and explicit platform applicability. Current release entries target macOS; preserve historical catalog metadata for deferred platforms.
+* English approval precedes translation into every supported interface language; translations are reviewed before merge. Source edits invalidate approval and translation bindings; later behavior changes require renewed content review.
+* The merge check inspects the PR's new declaration, rejects reused IDs, malformed or incomplete entries, missing empty reasons and changes to immutable published catalogs. It does not establish factual or translation accuracy.
+* Configure required checks and review protections separately from workflow definitions. The fragment schema and directory remain implementation choices.
+
+== Release assembly
+
+Assign the public version after merge under link:{architecture-docs-root}/09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[ADR-0017].
+Assembly binds source, version, fragments and content digest before signing; no agent generates or rewrites public prose.
+The link:{architecture-docs-root}/index.adoc#release-workflow[release workflow] keeps input materialization open rather than choosing a fragment tool here.
+
+* Keep declarations and release assignments traceable. Failed, cancelled or uncertain delivery does not consume entries or establish public delivery.
+* One macOS candidate may contain several PRs; unpublished changes remain available to later candidates.
+* Preserve offline history at or below the installed version, including skipped versions. Exclude newer uninstalled releases and automatic display; retain existing finalized catalogs without historical imports or retroactive notes.
+* Bundled history needs no separate publication record. A release may have an empty public entry list.
+* Changelog relevance is not app-release impact: internal application/dependency changes may require delivery; documentation-only changes may not.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Trade-off
+|Release-level preparation after merge
+|Allows one coherent editorial pass across a release.
+|Retains a manual step for every continuous release and moves review away from the change.
+|One shared changelog edited in every PR
+|Immediately readable and requires little tooling.
+|Parallel changes compete for the same sections; version assignment and localization remain release-time work.
+|Independent PR fragments, including explicit empty declarations (selected)
+|Review stays beside the change; parallel PRs do not share changelog lines.
+|Adds fragment validation, translation coordination and release/channel assignment.
+|Generate notes from commit subjects
+|Low contributor effort and easy automation.
+|Commit subjects do not establish user impact, factual accuracy, platform applicability or approved translations.
+|===
+
+== Consequences and verification
+
+Every PR gains a small declaration obligation, including bot PRs; contributor and automation tooling must support empty declarations.
+The final factual/content judgment stays with reviewers.
+A structurally valid fragment is not evidence that a planned feature shipped or that a test passed.
+Content approval remains distinct from permission to build, upload or publish; protected-branch release automation supplies its own authorization boundary.
+
+Existing release approval, source-binding and catalog readers need a compatible transition rather than being bypassed.
+Keep old catalog formats readable by supported released apps and retain hash-bound finalized bytes.
+Test missing declarations, explicit empty lists, reused IDs, stale translations, concurrent PRs, failed release assembly, retries, unpublished changes and aggregation across skipped macOS candidates.
+Verify that internal reasons and entries for newer uninstalled versions never appear in app history.
+
+== Reference
+
+https://towncrier.readthedocs.io/en/stable/tutorial.html[Towncrier] demonstrates independent change fragments and release-time assembly.
+The fragment pattern is selected; adopting Towncrier, Changesets or another dependency is not.

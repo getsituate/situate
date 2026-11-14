@@ -1,5 +1,5 @@
 import test from "node:test";
-import { mvpSuiteEnabled } from "./test-scope.mjs";
+import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
 import { suiteAffectedFiles } from "./test-inputs.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -74,7 +74,7 @@ const command = (id, code) => ({
 });
 
 test("extended plan includes every category and both reference modes", () => {
-  const plan = createPlan({ extended: true });
+  const plan = createPlan({ extended: true, platform: "darwin" });
   assert.equal(plan.scope, "extended");
   assert.deepEqual(plan.deferredSuiteIds, []);
   assert.equal(plan.profile, "all");
@@ -105,9 +105,30 @@ test("extended plan includes every category and both reference modes", () => {
   );
 });
 
-test("MVP scope defers expensive sweeps and non-Apple product gates without deleting inventory", () => {
-  const alwaysDeferred = [
+test("supported selection separates diagnostics from unavailable native hosts", () => {
+  const native = [
+    "client-core-macos",
+    "client-host",
+    "client-host-clippy",
+    "client-workshop-host",
+    "client-workshop-clippy",
+    "client-native",
+    "client-agent-e2e",
+    "client-onboarding-e2e",
+    "client-plugins-e2e",
+    "client-workspace-access-swift",
+    "client-dictation-swift",
+    "dev-tui-macos",
+  ];
+  const diagnostics = [
     "root-kotlin",
+    "root-audit",
+    "runner-platform",
+    "client-scripts-platform",
+    "client-scripts-platform-integration",
+    "workshop-vue",
+    "workshop-types",
+    "workshop-format",
     "client-workshop-host",
     "client-workshop-clippy",
     "client-visual",
@@ -124,76 +145,50 @@ test("MVP scope defers expensive sweeps and non-Apple product gates without dele
     "design-first-hello-browser",
     "design-listening-room-browser",
   ];
-  const nonAppleDeferred = [
-    "client-browser",
-    "client-agent-runtime",
-    "client-core",
-    "client-host",
-    "client-clippy",
-    "client-native",
-  ];
+  const inventory = suiteInventory(sourceFiles(root), "darwin");
   for (const platform of ["darwin", "linux", "win32"]) {
     const plan = createPlan({ platform });
     const extended = createPlan({ platform, extended: true });
-    const expected = [
-      ...alwaysDeferred,
-      ...(platform === "darwin" ? [] : nonAppleDeferred),
-      ...(platform === "linux" ? ["dev-tui-unit", "dev-tui-clippy"] : []),
-    ].sort();
-    assert.equal(plan.scope, "mvp");
-    assert.equal(plan.profile, "mvp");
+    const unavailable = [
+      ...(platform === "darwin" ? [] : native),
+      ...(platform === "win32"
+        ? ["dev-tui-unit", "dev-tui-format", "dev-tui-clippy"]
+        : []),
+    ];
+    const expected = [...new Set([...diagnostics, ...unavailable])]
+      .filter((id) => inventory.some((suite) => suite.id === id))
+      .sort();
+    assert.equal(plan.scope, "supported");
+    assert.equal(plan.profile, "supported");
     assert.deepEqual([...plan.deferredSuiteIds].sort(), expected, platform);
     assert.deepEqual(
       plan.suites,
-      extended.suites.filter((suite) => !expected.includes(suite.id)),
+      extended.suites.filter((suite) => !diagnostics.includes(suite.id)),
+    );
+    assert.deepEqual(
+      extended.suites.map((suite) => suite.id).sort(),
+      inventory
+        .filter((suite) => !unavailable.includes(suite.id))
+        .map((suite) => suite.id)
+        .sort(),
     );
     for (const id of [
       "root-secrets",
-      "root-audit",
       "root-rust",
-      "client-vue",
-      "workshop-vue",
-      "workshop-types",
-      "design-unit",
-      "design-contracts",
-    ]) {
+      "root-swift",
+      "client-browser-chromium",
+      "client-browser-webkit",
+      "client-executor-integration",
+      "client-agent-runtime",
+      "client-migrations",
+      "client-core",
+      "client-clippy",
+    ])
       assert.ok(
         plan.suites.some((suite) => suite.id === id),
         `${platform}: ${id}`,
       );
-    }
-    if (platform === "darwin") {
-      for (const id of [
-        ...nonAppleDeferred,
-        "root-swift",
-        "client-workspace-access-swift",
-        "client-agent-e2e",
-        "client-onboarding-e2e",
-        "client-plugins-e2e",
-      ]) {
-        assert.ok(
-          plan.suites.some((suite) => suite.id === id),
-          id,
-        );
-      }
-    }
   }
-  for (const id of [
-    "root-swift",
-    "client-workspace-access-swift",
-    "client-agent-e2e",
-    "client-onboarding-e2e",
-    "client-plugins-e2e",
-    "client-rust-coverage",
-  ]) {
-    assert.equal(mvpSuiteEnabled({ id }, "linux"), false, id);
-    assert.equal(mvpSuiteEnabled({ id }, "win32"), false, id);
-    assert.equal(mvpSuiteEnabled({ id }, "darwin"), true, id);
-  }
-  assert.equal(
-    mvpSuiteEnabled({ id: "client-core" }),
-    process.platform === "darwin",
-  );
 });
 
 test("scope composes with every profile and reports only suites deferred from its selection", async () => {
@@ -205,21 +200,34 @@ test("scope composes with every profile and reports only suites deferred from it
       assert.equal(plan.profile, profile);
       assert.equal(extended.profile, profile);
       assert.equal(extended.scope, "extended");
-      assert.deepEqual(extended.deferredSuiteIds, []);
+      assert.ok(
+        extended.deferredSuiteIds.every(
+          (id) => !suiteAvailable({ id }, platform),
+        ),
+      );
       assert.deepEqual(
         [
           ...plan.suites.map((suite) => suite.id),
           ...plan.deferredSuiteIds,
         ].sort(),
-        extended.suites.map((suite) => suite.id).sort(),
+        [
+          ...extended.suites.map((suite) => suite.id),
+          ...extended.deferredSuiteIds,
+        ].sort(),
       );
-      assert.ok(plan.suites.every((suite) => mvpSuiteEnabled(suite, platform)));
+      assert.ok(
+        plan.suites.every(
+          (suite) =>
+            (profile === "coverage" || supportedSuiteEnabled(suite)) &&
+            suiteAvailable(suite, platform),
+        ),
+      );
       const report = await runPlan(plan, {
         execute: async () => ({ status: "passed", exitCode: 0 }),
         prepare: async () => ({ release() {} }),
       });
       assert.equal(report.status, "passed");
-      assert.equal(report.scope, "mvp");
+      assert.equal(report.scope, "supported");
       assert.deepEqual(report.deferredSuiteIds, plan.deferredSuiteIds);
     }
   }
@@ -244,9 +252,11 @@ test("the visual fixture suite fails when its test files are absent", (t) => {
   assert.match(result.stderr, /Could not find/);
 });
 
-test("executor Chromium checks are a default MVP integration, never a unit or coverage run", () => {
+test("executor Chromium checks are portable and remain outside unit and coverage profiles", () => {
   const id = "client-executor-integration";
-  const integration = createPlan().suites.find((suite) => suite.id === id);
+  const integration = createPlan({ platform: "darwin" }).suites.find(
+    (suite) => suite.id === id,
+  );
   assert.equal(integration.kind, "integration");
   assert.equal(integration.cwd, "client/app");
   assert.equal(integration.npm, "client");
@@ -258,7 +268,10 @@ test("executor Chromium checks are a default MVP integration, never a unit or co
     "--allowOnly=false",
   ]);
   for (const platform of ["darwin", "linux", "win32"])
-    assert.ok(createPlan({ platform }).suites.some((suite) => suite.id === id));
+    assert.equal(
+      createPlan({ platform }).suites.some((suite) => suite.id === id),
+      true,
+    );
   for (const profile of ["quick", "unit", "feedback", "checks", "coverage"])
     assert.ok(
       !createPlan({ [profile]: true }).suites.some((suite) => suite.id === id),
@@ -298,21 +311,20 @@ test("executor Chromium checks are a default MVP integration, never a unit or co
 
 test("feedback adds fast static checks; checks and coverage are explicit profiles", () => {
   const unitIds = new Set(
-    createPlan({ unit: true }).suites.map((suite) => suite.id),
+    createPlan({ unit: true, platform: "darwin" }).suites.map(
+      (suite) => suite.id,
+    ),
   );
-  const feedback = createPlan({ feedback: true });
+  const feedback = createPlan({ feedback: true, platform: "darwin" });
   assert.equal(feedback.profile, "feedback");
   assert.deepEqual(
     feedback.suites
       .filter((suite) => !unitIds.has(suite.id))
       .map((suite) => suite.id),
     [
-      ...(["darwin", "linux"].includes(process.platform)
-        ? ["dev-tui-format"]
-        : []),
+      "dev-tui-format",
       "root-lint",
       "root-format",
-      "workshop-types",
       "client-types",
       "client-format",
     ],
@@ -322,7 +334,11 @@ test("feedback adds fast static checks; checks and coverage are explicit profile
       (suite) => suite.kind === "check",
     ),
   );
-  const coverage = createPlan({ coverage: true, extended: true });
+  const coverage = createPlan({
+    coverage: true,
+    extended: true,
+    platform: "darwin",
+  });
   assert.deepEqual(
     coverage.suites.map((suite) => suite.id),
     ["client-vue-coverage", "client-rust-coverage"],
@@ -386,7 +402,28 @@ test("dev TUI has independent locked Rust suites on supported hosts", () => {
           kind: "unit",
           cwd: "tools/dev-tui",
           command: "cargo",
-          args: ["test", "--locked"],
+          args: [
+            "test",
+            "--locked",
+            "--",
+            "--skip",
+            "dragging_logs_exposes_copy_without_disabling_mouse_controls",
+          ],
+        },
+        {
+          id: "dev-tui-macos",
+          kind: "integration",
+          cwd: "tools/dev-tui",
+          command: "cargo",
+          args: [
+            "test",
+            "--locked",
+            "--test",
+            "terminal",
+            "dragging_logs_exposes_copy_without_disabling_mouse_controls",
+            "--",
+            "--exact",
+          ],
         },
         {
           id: "dev-tui-format",
@@ -447,13 +484,18 @@ test("new tool tests are discovered by category", () => {
 });
 
 test("unit profile excludes real servers, browsers, Docker and the native host build", () => {
-  const plan = createPlan({ unit: true, extended: true });
+  const plan = createPlan({ unit: true, extended: true, platform: "darwin" });
   assert.ok(plan.suites.length > 0);
   assert.ok(plan.suites.every((suite) => suite.kind === "unit"));
   const scripts = plan.suites.find(
     (suite) => suite.id === "client-scripts-unit",
   );
-  assert.ok(scripts.args.includes("client/scripts/ios-xcode.test.mjs"));
+  assert.ok(!scripts.args.includes("client/scripts/ios-xcode.test.mjs"));
+  assert.ok(
+    plan.suites
+      .find((suite) => suite.id === "client-scripts-platform")
+      .args.includes("client/scripts/ios-xcode.test.mjs"),
+  );
   assert.ok(scripts.args.every((arg) => !arg.includes(".integration.")));
   assert.deepEqual(
     plan.suites.find((suite) => suite.id === "client-core").args,
@@ -522,7 +564,7 @@ test("workshop interactions and models have independent suites", () => {
       "client/workshop/tests/browser/workshop-conflicts.spec.ts",
     ),
   );
-  const unit = createPlan({ unit: true });
+  const unit = createPlan({ unit: true, extended: true });
   assert.ok(
     !unit.suites.some((candidate) =>
       ["workshop-chromium", "workshop-webkit"].includes(candidate.id),
@@ -688,13 +730,20 @@ test("feedback client selection follows frontend boundaries and keeps shared con
     "client/Cargo.toml",
     "client/app/src-tauri/src/lib.rs",
     "client/package-lock.json",
-    "client/scripts/new.mjs",
-    "tools/test.mjs",
+
     "unknown.ts",
     "client/packages/new/src/index.ts",
-    "client/app/vite.config.ts",
   ])
     assert.deepEqual(ids([file]), clientSuites, file);
+  assert.deepEqual(ids(["client/scripts/new.mjs"]), ["client-scripts-unit"]);
+  assert.deepEqual(ids(["tools/test.mjs"]), []);
+  assert.deepEqual(ids(["client/app/vite.config.ts"]), [
+    "client-core",
+    "client-format",
+    "client-scripts-unit",
+    "client-types",
+    "client-vue",
+  ]);
 });
 
 test("changed profiles share frontend boundaries while retaining their test categories", (t) => {
@@ -709,13 +758,7 @@ test("changed profiles share frontend boundaries while retaining their test cate
   const feedback = createPlan({ feedback: true, changed: true }, directory);
   assert.deepEqual(
     feedback.suites.map((s) => s.id),
-    [
-      "root-lint",
-      "root-format",
-      "client-scripts-unit",
-      "workshop-vue",
-      "workshop-types",
-    ],
+    ["root-lint", "root-format", "client-scripts-unit"],
   );
   assert.deepEqual(
     createPlan(
@@ -853,7 +896,8 @@ test("document selection is shared by unit, feedback and full changed profiles",
     put(file, "# Example\n");
     for (const profile of [{ unit: true }, { feedback: true }, {}]) {
       const expected = profile.unit ? [] : ["root-format"];
-      if (!profile.unit && !profile.feedback) expected.push("root-secrets");
+      if (!profile.unit && !profile.feedback)
+        expected.push("root-commits", "root-history-secrets", "root-secrets");
       if (file.startsWith("requirements/data/"))
         expected.push("requirements-unit", "requirements-catalog");
       expected.push("design-contracts");
@@ -990,7 +1034,7 @@ test("a fully deferred changed selection remains no-tests rather than passed", a
   git("add", ".");
   git("commit", "-m", "Register suites");
   put("tools/dev-tui/src/main.rs");
-  const options = { unit: true, changed: true, platform: "linux" };
+  const options = { unit: true, changed: true, platform: "win32" };
   const plan = createPlan(options, directory);
   assert.deepEqual(plan.suites, []);
   assert.deepEqual(plan.deferredSuiteIds, ["dev-tui-unit"]);
@@ -1003,7 +1047,7 @@ test("a fully deferred changed selection remains no-tests rather than passed", a
     createPlan({ ...options, extended: true }, directory).suites.map(
       (s) => s.id,
     ),
-    ["dev-tui-unit"],
+    [],
   );
 });
 
@@ -1121,6 +1165,156 @@ test("changed selection composes with both profiles before and after a commit", 
     createPlan({ changed: true, unit: true, base: "HEAD~1" }, directory).suites,
     unit.suites,
   );
+});
+
+test("CLI execution mode batches portable suites before host dependency setup", async (t) => {
+  const { directory, put } = repository(t);
+  for (const file of sourceFiles(root).filter((file) =>
+    /\.(test|spec)\.[cm]?[jt]sx?$/.test(file),
+  ))
+    put(file);
+  put(
+    "tools/pipeline-container.py",
+    `import json, sys
+request = json.load(open(sys.argv[2]))
+results = []
+for identifier in request["suiteIds"]:
+    print(json.dumps({"type": "suite", "id": identifier, "status": "running"}), flush=True)
+    result = {"id": identifier, "status": "passed", "exitCode": 0, "durationMs": 1}
+    print(json.dumps({"type": "result", "result": result}), flush=True)
+    results.append(result)
+json.dump({"status": "passed", "results": results}, open(sys.argv[3], "w"))
+`,
+  );
+  const plan = createPlan(
+    { suite: ["root-format", "runner-unit"], platform: "linux" },
+    directory,
+  );
+  const starts = [];
+  const report = await runPlan(plan, {
+    directory,
+    environment: { ...process.env, SITUATE_TOOL_CONTAINER: "0" },
+    toolContainers: true,
+    output: silent(),
+    onStart: (suite) => starts.push(suite.id),
+  });
+  assert.equal(report.status, "passed", report.error);
+  assert.deepEqual(
+    starts,
+    plan.suites.map((suite) => suite.id),
+  );
+  assert.equal(existsSync(join(directory, "node_modules")), false);
+});
+
+test("container requests preserve scoped formatting, generated coverage and explicit diagnostics", async (t) => {
+  const { directory, git, put } = repository(t);
+  for (const file of sourceFiles(root).filter((file) =>
+    /\.(test|spec)\.[cm]?[jt]sx?$/.test(file),
+  ))
+    put(file);
+  git("add", ".");
+  git("commit", "-m", "test: register fixture suites");
+  put("docs/scoped.md", "# Scoped\n");
+  const { runContainerPlan } = await import("./test-container.mjs");
+  for (const [plan, id] of [
+    [
+      createPlan(
+        { feedback: true, changed: true, base: "HEAD", platform: "linux" },
+        directory,
+      ),
+      "root-format",
+    ],
+    [
+      createPlan({ coverage: true, platform: "linux" }, directory),
+      "client-vue-coverage",
+    ],
+    [
+      createPlan({ suite: ["client-visual"], platform: "linux" }, directory),
+      "client-visual",
+    ],
+  ]) {
+    const selected = plan.suites.find((suite) => suite.id === id);
+    const report = await runContainerPlan(
+      { ...plan, suites: [selected] },
+      {
+        portable: [selected],
+        directory,
+        output: silent(),
+        execute: async (suite) => {
+          const request = JSON.parse(readFileSync(suite.args[2], "utf8"));
+          const flags = Object.fromEntries(
+            ["unit", "feedback", "checks", "coverage"].map((profile) => [
+              profile,
+              request.profile === profile,
+            ]),
+          );
+          const reconstructed = createPlan(
+            {
+              ...flags,
+              extended: request.scope === "extended",
+              changed: request.changed,
+              base: request.base,
+              platform: "linux",
+            },
+            directory,
+          ).suites.filter((entry) => request.suiteIds.includes(entry.id));
+          assert.equal(reconstructed.length, 1);
+          assert.deepEqual(reconstructed[0].args, selected.args);
+          assert.equal(Object.hasOwn(request, "args"), false);
+          if (id === "root-format") {
+            assert.equal(request.changed, true);
+            assert.equal(request.base, "HEAD");
+            assert.ok(reconstructed[0].args.includes("./docs/scoped.md"));
+            assert.ok(!reconstructed[0].args.includes("format:check"));
+          }
+          if (id === "client-visual") assert.equal(request.scope, "extended");
+          writeFileSync(
+            suite.args[3],
+            JSON.stringify({
+              profile: request.profile,
+              status: "passed",
+              results: [{ id, status: "passed", exitCode: 0, durationMs: 1 }],
+            }),
+          );
+          return { status: "passed", exitCode: 0, durationMs: 1 };
+        },
+        runHost: () => assert.fail("No host suites selected"),
+      },
+    );
+    assert.equal(report.status, "passed", report.error);
+  }
+});
+
+test("portable Pi checks never silently substitute an explicitly selected external installation", async () => {
+  const plan = createPlan({ suite: ["pi-unit"], platform: "linux" });
+  await assert.rejects(
+    runPlan(plan, {
+      externalPiRoot: "/fixture/external-pi",
+      toolContainers: true,
+      environment: { ...process.env, SITUATE_TOOL_CONTAINER: "0" },
+      output: silent(),
+    }),
+    /External Pi installations are unavailable/,
+  );
+});
+
+test("an injected dependency preparer remains a synthetic host execution boundary", async () => {
+  const plan = createPlan({ suite: ["root-format"], platform: "linux" });
+  const report = await runPlan(plan, {
+    output: silent(),
+    prepare: async () => ({
+      failure: {
+        status: "failed",
+        exitCode: 9,
+        durationMs: 0,
+        error: "fixture dependency failure",
+      },
+      release() {},
+    }),
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(report.results[0].exitCode, 9);
+  assert.match(report.results[0].error, /fixture dependency failure/);
 });
 
 test("CLI enforces required selections and lists changed-suite reasons", (t) => {
@@ -1584,6 +1778,14 @@ test("cancellation marks remaining suites not-run instead of passed", async () =
   );
 });
 
+test("dependency setup commands execute without suite identity", async () => {
+  const suite = command("dependency", "process.exit(0)");
+  delete suite.id;
+  const result = await executeSuite(suite, { output: silent() });
+  assert.equal(result.status, "passed");
+  assert.equal(result.exitCode, 0);
+});
+
 test("subprocess failures and missing executables return failure results", async () => {
   const result = await executeSuite(command("exit", "process.exit(7)"), {
     output: silent(),
@@ -1692,10 +1894,16 @@ function npmFixture(t) {
 const passed = { status: "passed", exitCode: 0, durationMs: 1 };
 
 test("only npm-dependent suites request workspace setup", () => {
-  const suites = createPlan({ extended: true }).suites;
+  const suites = createPlan({ extended: true, platform: "darwin" }).suites;
   assert.deepEqual(
     suites.filter((s) => s.npm === ".").map((s) => s.id),
-    ["root-lint", "root-format", "design-unit"],
+    [
+      "runner-unit",
+      "root-lint",
+      "root-format",
+      "runner-integration",
+      "design-unit",
+    ],
   );
   assert.deepEqual(
     suites.filter((s) => s.npm === "requirements").map((s) => s.id),
@@ -1711,7 +1919,8 @@ test("only npm-dependent suites request workspace setup", () => {
     "client-scripts-unit",
     "client-vue",
     "client-types",
-    "client-browser",
+    "client-browser-chromium",
+    "client-browser-webkit",
     "client-visual-fixture",
     "client-native",
     "client-scripts-integration",
@@ -1728,9 +1937,9 @@ test("only npm-dependent suites request workspace setup", () => {
       .suites.filter((s) => s.npm)
       .map((s) => s.id),
     [
+      "runner-unit",
       "client-scripts-unit",
       "client-vue",
-      "workshop-vue",
       "requirements-unit",
       "requirements-catalog",
       "design-unit",
@@ -1789,7 +1998,7 @@ test("root suites install missing tools once and repair partial installations", 
   const suites = createPlan({ feedback: true }).suites.filter(
     (s) => s.npm === ".",
   );
-  assert.equal(suites.length, 3);
+  assert.equal(suites.length, 4);
   let installs = 0;
   let checks = 0;
   const options = {
@@ -1836,7 +2045,7 @@ test("root suites install missing tools once and repair partial installations", 
     );
   }
   assert.equal(installs, 4);
-  assert.equal(checks, 15);
+  assert.equal(checks, 20);
   assert.equal(existsSync(dependencyLockPath(f.directory, ".")), false);
 });
 

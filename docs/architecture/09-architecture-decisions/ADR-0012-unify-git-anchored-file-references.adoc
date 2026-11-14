@@ -11,7 +11,8 @@ endif::[]
 
 Status:: accepted
 Date:: 2026-11-03
-Implementation:: unified file references, task-only identity preparation and general file publication implemented; native macOS/iOS qualification remains separate
+Current platform scope:: macOS only under link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]; iOS statements below retain earlier design context or evidence, not current delivery gates
+Implementation:: unified file references, task-only identity preparation and general file publication implemented; native macOS qualification remains separate; iOS is deferred
 Amends:: link:{architecture-docs-root}/09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc[ADR-0010], replacing its preservation of Markdown file UUIDs
 
 == Context
@@ -95,7 +96,7 @@ Historical inspection, selective reversal and draft recovery must remain usable 
 
 Import verification must cover a later ordinary chat, unchanged originals, task recognition and fresh task-copy IDs, links between copied items, metadata conversion, bounded batches, no-clobber destinations and partial/uncertain file publication.
 Reject obsolete selectors without converting or rewriting existing workspaces.
-Run the affected MVP checks and native macOS/iOS checks where applicable; browser and shared-core results alone do not qualify native behavior.
+Run the affected MVP checks and native macOS checks where applicable. iOS qualification is deferred; browser and shared-core results alone do not qualify native behavior.
 
 The detailed reference rules are in link:{architecture-docs-root}/index.adoc#git-derived-file-references[Git-derived file references].
 Acceptance of this decision does not establish implementation or platform qualification.

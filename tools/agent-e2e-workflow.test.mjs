@@ -10,7 +10,7 @@ import { createSuiteCacheExecutor } from "./suite-cache.mjs";
 const read = (path) => readFileSync(join(root, path), "utf8");
 
 test("paid workflow is manual, trusted default branch, protected environment and pinned actions", () => {
-  const workflow = read(".github/workflows/agent-live.yml");
+  const workflow = read(".github/workflows/diagnostics.yml");
   assert.match(workflow, /on:\n {2}workflow_dispatch:\n/);
   assert.doesNotMatch(
     workflow,
@@ -18,28 +18,28 @@ test("paid workflow is manual, trusted default branch, protected environment and
   );
   assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(workflow, /github\.repository == 'getsituate\/situate'/);
-  assert.match(
-    workflow,
-    /github\.ref == format\('refs\/heads\/\{0\}', github\.event\.repository\.default_branch\)/,
-  );
-  assert.match(workflow, /environment: agent-live/);
-  assert.match(workflow, /runs-on: macos-15/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow, /environment:.*'agent-live'/);
+  assert.match(workflow, /runs-on: macos-latest/);
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /permissions:\n {2}contents: read/);
   for (const match of workflow.matchAll(/uses: (\S+)/g))
     assert.match(match[1], /@[a-f0-9]{40}$/);
   assert.equal((workflow.match(/secrets\./g) ?? []).length, 1);
-  const [setup, run] = workflow.split("      - name: Run bounded live journey");
+  const [setup, run] = workflow.split(
+    "      - run: node tools/actions-adapter.mjs diagnostics --lane provider",
+  );
   assert.doesNotMatch(setup, /secrets\./);
   assert.match(
     run,
     /TEST_OPENAI_API_KEY: \$\{\{ secrets\.TEST_OPENAI_API_KEY \}\}/,
   );
-  assert.match(run, /--provider openai --build-timeout/);
-  assert.doesNotMatch(workflow, /--allow-paid/);
-  assert.match(workflow, /path: test-results\/agent-live\.json/);
-  assert.doesNotMatch(workflow, /path: test-results\/\s|\.log|\.png|cache@/);
+  assert.match(
+    run,
+    /PAID_DIAGNOSTICS_AUTHORIZED:.*vars\.PAID_DIAGNOSTICS_AUTHORIZED/,
+  );
+  assert.doesNotMatch(workflow, /--allow-paid|cache@/);
 });
 
 test("provider sockets and process teardown run in the integration profile", () => {
@@ -128,10 +128,10 @@ test("full macOS registry includes free fixture; Linux remains explicit unsuppor
         ),
       );
   }
-  const quality = read(".github/workflows/quality.yml");
+  const quality = read(".github/workflows/verify.yml");
   assert.match(
     quality,
-    /Native agent fixture journey\n {8}run: node client\/scripts\/test-agent-e2e\.mjs --build-timeout 1800/,
+    /actions-adapter\.mjs lane --workflow verify --lane macos-native/,
   );
   assert.doesNotMatch(
     quality,

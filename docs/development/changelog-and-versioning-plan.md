@@ -2,6 +2,8 @@
 
 ## Outcome and scope
 
+This plan describes the retained release-level preparation workflow. The selected successor design is [CalVer](../architecture/09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc) with [PR changelog fragments](../architecture/09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc). Current delivery is macOS-only; iOS tooling below is deferred reference material, not a release gate.
+
 Add an optional, localized release history to Situate and an agent-assisted release-preparation workflow to the development terminal. Maintainers choose the product version, review and approve the source text, and then generate translations. Distribution builds reuse the approved texts; building never invokes a model.
 
 The release history starts with the first release prepared through this workflow. The installed app includes all finalized, committed release notes at or below its installed version from that point onward. Opening the history requires a user action, including after updates. The Updates page links to this installed history, not to notes for an available update. About Situate provides the same history on every distribution channel. The app makes no requests for release notes and does not need a record of which intermediate versions the user installed.
@@ -11,7 +13,7 @@ This plan proposes implementation details. It does not establish implementation 
 ### Product and design basis
 
 - [REQ-0068](../../requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md): optional user-oriented history and distribution-specific update authority. Extend the entry to record the installed-version ceiling and release-preparation approval before implementation.
-- [Foundations](../../requirements/data/foundations.md#app-version-numbers-and-release-communication): numeric `major.minor.patch` product versioning; automatic feature announcements remain deferred.
+- [Foundations](../../requirements/data/foundations.md#app-version-numbers-and-release-communication): the selected `YYYY.M.N` CalVer policy supersedes this plan's scope-based product numbering; automatic feature announcements remain deferred.
 - [REQ-0047](../../requirements/data/requirements/REQ-0047-choose-interface-language.md) and [REQ-0053](../../requirements/data/requirements/REQ-0053-enforce-interface-translation-completeness.md): German and English, completeness checks and English runtime fallback.
 - [REQ-0069](../../requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md) and [REQ-0070](../../requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md): data and plugin compatibility remain independent of version-number increments.
 - [ADR-0011](../architecture/09-architecture-decisions/ADR-0011-build-time-distribution-variants.adoc): store-managed apps do not acquire an app-owned updater through the history feature.
@@ -45,7 +47,7 @@ For the first release prepared through this workflow, the maintainer explicitly 
 
 Use finalized release metadata and locale files under `releases/` and the localization catalogs as the release inventory. No publication index or public-availability evidence is required for changelog inclusion.
 
-For subsequent product versions, use the analysis revision of the highest earlier version with finalized, committed release notes as the comparison baseline. macOS and iOS may become available at different times without creating separate copies of the same product release text. A divergent hotfix/release branch requires explicit baseline review rather than silently comparing against the newest tag.
+For subsequent product versions, use the analysis revision of the highest earlier version with finalized, committed release notes as the comparison baseline. Retain existing platform metadata without scheduling iOS delivery; current releases are macOS-only. A divergent hotfix/release branch requires explicit baseline review rather than silently comparing against the newest tag.
 
 **Completion:** a maintainer can inspect the exact comparison baseline and distinguish finalized notes, drafts and another build of the same product version.
 
@@ -129,7 +131,7 @@ Use the existing editor configured by the maintainer for text changes rather tha
 
 Keep preparation and artifact builds in separate invocations so no build lock or signing environment remains held during human review or model work. Coordinate artifact-writing operations through the existing per-worktree queue and reject overlapping preparation/build operations. Do not kill unrelated development processes to make a release proceed.
 
-Existing macOS, iOS and combined build actions remain available but distribution builds require valid prepared content. The iOS build-number prompt and TestFlight-upload confirmation remain separate from the product version and editorial approval. Neither preparing nor approving notes starts a build, upload or deployment. Reusing approved content during a rerun must not regenerate it.
+Existing macOS build actions require valid prepared content. Retained iOS and combined actions are deferred. The iOS build-number prompt and TestFlight-upload confirmation remain separate from the product version and editorial approval. Neither preparing nor approving notes starts a build, upload or deployment. Reusing approved content during a rerun must not regenerate it.
 
 **Completion:** keyboard and mouse flows cover approval, editing, stale approval, cancellation, process failure, reopening and rebuilding without changing existing upload authorization.
 
@@ -137,17 +139,17 @@ Existing macOS, iOS and combined build actions remain available but distribution
 
 Add a shared release validator and catalog compiler. It selects all finalized, committed release entries at or below the installed product version, sorted numerically by version. It excludes drafts without finalization metadata and all higher versions even if their files exist in the checkout. Versions skipped by the user remain browsable.
 
-Embed the selected localized catalog in the frontend bundle using an explicit build input. Production must not import files from the workshop or scan arbitrary repository paths at runtime. About reads the installed product version independently of update-support state, including on iOS. Cross-check this identity with the native/build version and fail distribution builds on disagreement.
+Embed the selected localized catalog in the frontend bundle using an explicit build input. Production must not import files from the workshop or scan arbitrary repository paths at runtime. About reads the installed product version independently of update-support state, including retained external variants. Cross-check this identity with the native/build version and fail distribution builds on disagreement.
 
 Inventory and align `client/package.json`, its lockfile, `client/Cargo.toml`, relevant Cargo lock entries and `client/app/src-tauri/tauri.conf.json` before adding version-setting tooling. Preserve their existing consumers; do not replace version ownership through an unrelated toolchain refactor. Product versions stay strict numeric `major.minor.patch`, with no automatic bump from commit type. Apple build numbers remain independent.
 
-Wire validation before signing/packaging for both Apple targets. Extend build provenance with the selected release-content digest and locale inventory. Inventory manifest readers and verifiers before an additive change; update strict validators and fixtures together rather than weakening reviewed-revision checks or breaking retained build records. Existing published bundles do not require modification.
+Wire validation before macOS signing/packaging; retained iOS integration is deferred. Extend build provenance with the selected release-content digest and locale inventory. Inventory manifest readers and verifiers before an additive change; update strict validators and fixtures together rather than weakening reviewed-revision checks or breaking retained build records. Existing published bundles do not require modification.
 
 Have the publisher verify that the manifest describes the embedded catalog used by the signed payload, not merely the current checkout's files. Reuse existing immutable artifacts, hashes and remote-operation journals. Publication confirmation and interrupted-operation reconciliation stay unchanged. No note-generation agent runs in CI build, signing or publication paths.
 
 The catalog is app-owned, read-only bundle content. Do not add workspace files, migrations, synchronized preferences or a persistent "last seen release" field. Missing locale data in an exceptional runtime failure uses the existing English fallback; missing required translations fail distribution validation. An invalid catalog must not prevent normal workspace use or produce raw internal errors.
 
-**Completion:** the same finalized inputs yield the same release-content digest; signed macOS/iOS artifacts contain the expected current-and-past catalog without future notes or generation credentials.
+**Completion:** the same finalized inputs yield the same release-content digest; signed macOS artifacts contain the expected current-and-past catalog without future notes or generation credentials.
 
 ## 6. Adopt the history design in the product
 
@@ -157,11 +159,11 @@ First correct and verify the workshop's installed-version filtering, then copy/a
 - Keep About available on direct and store-managed builds; keep Updates limited to supported direct installations.
 - Show localized version entries, details and platform notes. Preserve search, scroll position, back/adjacent navigation and focus restoration from the selected design.
 - The installed-version ceiling applies before display, searching and adjacent navigation. An available downloaded update never changes that ceiling.
-- Keep navigation and close controls reachable at narrow iOS sizes, with keyboard navigation, focus containment and Escape behavior where applicable.
+- Keep navigation and close controls reachable in narrow macOS windows, with keyboard navigation, focus containment and Escape behavior where applicable.
 - Localize supplied controls/errors in central catalogs. Use the active interface language and regional date presentation, with no change to personal content or workspace settings.
 - Use synthetic release fixtures, including a short patch note, a longer minor release, skipped releases, an empty search and missing-locale fallback. Do not use synthetic feature claims as actual release history.
 
-**Completion:** history is usable offline on both Apple targets, leaves running work alone, and exposes no updater controls or update promotions on external builds.
+**Completion:** history is usable offline on macOS, leaves running work alone, and exposes no updater controls or update promotions on external builds.
 
 ## 7. Introduce repository-wide commit conventions
 
@@ -213,7 +215,7 @@ Use [repository test guidance](testing.md), Volta and coordinated artifact-writi
 - `node tools/test.mjs --quick --changed` and `node tools/test.mjs --feedback --changed`.
 - Focused Node tests for Git analysis, content validation, fake-agent operation, packaging and publisher contracts; DevTUI Rust tests from its own toolchain directory.
 - Focused workshop and product Chromium/WebKit flows. Add product visual checkpoints to existing flows; update and inspect intentional references in the locked visual container.
-- Product build and native macOS/iOS checks for bundled resources, installed-version identity, About access and responsive interaction. Browser profiles alone do not qualify native behavior.
+- Product build and native macOS checks for bundled resources, installed-version identity, About access and responsive interaction. Browser profiles alone do not qualify native behavior.
 - Before a PR, `node tools/test.mjs --changed --base origin/main` against an up-to-date base. Before an Apple release, the unfiltered MVP suite and applicable native release qualification.
 
 Update durable usage in `docs/development/README.md`, the client release guide and publication runbook when their commands actually change. Keep this plan distinct from executable command documentation. Integrate reviewed workshop changes deliberately; do not assume a separate design commit is present in the implementation branch.

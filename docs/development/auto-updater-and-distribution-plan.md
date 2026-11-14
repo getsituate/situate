@@ -8,7 +8,7 @@ The same repository must own the infrastructure definitions, production service 
 
 ### Product and architecture basis
 
-- [REQ-0012 — Platform availability](../../requirements/data/requirements/REQ-0012-platform-availability.md): macOS website DMG delivery; iOS remains store-managed.
+- [REQ-0012 — Platform availability](../../requirements/data/requirements/REQ-0012-platform-availability.md): macOS website DMG delivery and direct updates; iOS delivery is deferred.
 - [REQ-0068 — Direct desktop updates](../../requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md): scheduling, background download, quiet notification and user-controlled restart.
 - [REQ-0037 — Independent workspaces](../../requirements/data/requirements/REQ-0037-keep-workspaces-independent.md) and [REQ-0011 — Parallel work](../../requirements/data/requirements/REQ-0011-work-on-topics-in-parallel.md): closure choices, saved state and interrupted conversations.
 - [REQ-0069 — Workspace compatibility](../../requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md) and [REQ-0070 — Plugin compatibility](../../requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md): compatibility is separate from update promotion.

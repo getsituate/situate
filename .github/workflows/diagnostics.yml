@@ -1,0 +1,83 @@
+name: Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      selection:
+        description: Optional diagnostic family
+        required: true
+        type: choice
+        options: [coverage, design, visual, provider]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnostics-${{ inputs.selection }}
+  cancel-in-progress: false
+
+jobs:
+  portable:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (inputs.selection == 'coverage' || inputs.selection == 'design')
+    runs-on: ubuntu-24.04
+    environment: diagnostics
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-container.py actions diagnostics
+        env:
+          DIAGNOSTIC_SELECTION: ${{ inputs.selection }}
+          DIAGNOSTIC_TARGET: portable
+
+  native:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.selection != 'visual'
+    runs-on: macos-latest
+    environment: ${{ inputs.selection == 'provider' && 'agent-live' || 'diagnostics' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs prepare-diagnostics
+        env:
+          DIAGNOSTIC_SELECTION: ${{ inputs.selection }}
+          DIAGNOSTIC_TARGET: native
+      - run: node tools/actions-adapter.mjs diagnostics
+        if: inputs.selection != 'provider'
+        env:
+          DIAGNOSTIC_SELECTION: ${{ inputs.selection }}
+          DIAGNOSTIC_TARGET: native
+      - run: node tools/actions-adapter.mjs diagnostics --lane provider
+        if: inputs.selection == 'provider'
+        env:
+          DIAGNOSTIC_TARGET: native
+          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+          PAID_DIAGNOSTICS_AUTHORIZED: ${{ vars.PAID_DIAGNOSTICS_AUTHORIZED }}
+
+  docker:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (inputs.selection == 'design' || inputs.selection == 'visual')
+    runs-on: ubuntu-24.04
+    environment: diagnostics
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs prepare-diagnostics
+        env:
+          DIAGNOSTIC_SELECTION: ${{ inputs.selection }}
+          DIAGNOSTIC_TARGET: docker
+      - run: node tools/actions-adapter.mjs diagnostics
+        env:
+          DIAGNOSTIC_SELECTION: ${{ inputs.selection }}
+          DIAGNOSTIC_TARGET: docker

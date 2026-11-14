@@ -477,41 +477,113 @@ test("changed archives cannot reach the registry or Docker", async (t) => {
   assert.throws(() => readFileSync(f.log), { code: "ENOENT" });
 });
 
-test("image build and publication reclaim only unused SDKs on hosted Linux runners", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/ci-image.yml", import.meta.url),
-    "utf8",
-  );
-  const cleanup = [
-    ...workflow.matchAll(
-      / {6}- name: Free unused hosted runner SDKs\n([\s\S]*?)(?= {6}- name:)/gu,
+test("image script verifies a source-bound candidate without network or registry credentials", async (t) => {
+  const { main: actions } = await import("./actions-adapter.mjs");
+  const directory = temporary(t);
+  const calls = [];
+  const source = "b".repeat(40);
+  const stopped = new Error("stop before archive transfer");
+  await assert.rejects(
+    actions(
+      ["image-build"],
+      {
+        ...env,
+        GITHUB_SHA: source,
+        RUNNER_TEMP: directory,
+        ACTIONS_RUNTIME_TOKEN: "synthetic-runtime-token",
+        ACTIONS_RESULTS_URL: "https://results.actions.githubusercontent.com/",
+      },
+      (command, args) => {
+        calls.push([command, args]);
+        if (command === "git") return source;
+        if (command === "docker" && args[0] === "save") throw stopped;
+        return "";
+      },
     ),
-  ];
-  assert.equal(cleanup.length, 2);
-  for (const [, block] of cleanup) {
-    assert.match(
-      block,
-      /if: runner\.environment == 'github-hosted' && runner\.os == 'Linux'/u,
-    );
-    assert.deepEqual(
-      block
-        .trim()
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith("sudo ")),
-      [
-        "sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL",
-      ],
-    );
-    assert.doesNotMatch(block, /docker.*prune|\/home\/|\/usr\/local\/rustup/u);
-  }
-  assert.match(workflow, / {6}- \.github\/workflows\/ci-image\.yml/u);
-  assert.match(workflow, / {6}- tools\/ci-publish\.mjs/u);
+    (error) => error === stopped,
+  );
+  const build = calls.find(
+    ([command, args]) => command === "docker" && args[0] === "build",
+  )[1];
+  assert.deepEqual(build.slice(0, 6), [
+    "build",
+    "--provenance=false",
+    "--target",
+    "ci",
+    "--platform",
+    "linux/amd64",
+  ]);
+  assert.ok(build.includes(`org.opencontainers.image.revision=${source}`));
+  assert.ok(
+    build.includes(
+      "org.opencontainers.image.source=https://github.com/getsituate/situate",
+    ),
+  );
+  const verify = calls.find(
+    ([command, args]) => command === "docker" && args[0] === "run",
+  )[1];
+  for (const [flag, value] of [
+    ["--user", "1000:1000"],
+    ["--network", "none"],
+    ["--cap-drop", "ALL"],
+    ["--security-opt", "no-new-privileges"],
+    ["--entrypoint", "/opt/volta/bin/node"],
+  ])
+    assert.equal(verify[verify.indexOf(flag) + 1], value, flag);
+  assert.ok(verify.includes("--read-only"));
+  assert.match(
+    verify[verify.indexOf("--mount") + 1],
+    /client\/docker\/ci-verify\.mjs,dst=\/ci-verify\.mjs,readonly$/,
+  );
+  assert.deepEqual(verify.slice(-2), [expected.localTag, "/ci-verify.mjs"]);
+  assert.doesNotMatch(
+    JSON.stringify(calls),
+    /synthetic-runtime-token|docker.*(?:login|push)/,
+  );
+});
+
+test("image script rejects another source before building and delegates publication as data only", async (t) => {
+  const { main: actions } = await import("./actions-adapter.mjs");
+  const directory = temporary(t);
+  const calls = [];
+  await assert.rejects(
+    actions(
+      ["image-build"],
+      {
+        ...env,
+        GITHUB_SHA: "b".repeat(40),
+        RUNNER_TEMP: directory,
+        ACTIONS_RUNTIME_TOKEN: "synthetic-runtime-token",
+        ACTIONS_RESULTS_URL: "https://results.actions.githubusercontent.com/",
+      },
+      (command, args) => {
+        calls.push([command, args]);
+        return "c".repeat(40);
+      },
+    ),
+    /source differs/,
+  );
+  assert.deepEqual(calls, [["git", ["rev-parse", "HEAD"]]]);
+  calls.length = 0;
+  await actions(
+    ["image-publish"],
+    { ...env, RUNNER_TEMP: directory },
+    (command, args) => {
+      calls.push([command, args]);
+      return "";
+    },
+  );
+  assert.deepEqual(calls, [
+    [
+      process.execPath,
+      ["tools/ci-publish.mjs", "publish", join(directory, "ci-image")],
+    ],
+  ]);
 });
 
 test("workflow separates read-only candidate building from privileged data-only publication", () => {
   const workflow = readFileSync(
-    new URL("../.github/workflows/ci-image.yml", import.meta.url),
+    new URL("../.github/workflows/ci-tool-image.yml", import.meta.url),
     "utf8",
   );
   const [build, publish] = workflow.split("  publish:\n");
@@ -521,43 +593,36 @@ test("workflow separates read-only candidate building from privileged data-only 
       .length,
     2,
   );
+  assert.match(build, /github.ref == 'refs\/heads\/main'/);
+  assert.match(publish, /github.ref == 'refs\/heads\/main'/);
+  assert.match(build, /run: node tools\/actions-adapter\.mjs image-build/);
+  const [buildSteps, transferStep] = build.split(
+    "      - run: node tools/actions-adapter.mjs image-upload\n",
+  );
+  assert.doesNotMatch(buildSteps, /packages: write|GH_TOKEN:|secrets\./);
+  assert.match(transferStep, /CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY/);
+  assert.doesNotMatch(transferStep, /GH_TOKEN:|MACOS_(?:RELEASE|PUBLICATION)/);
+  assert.match(publish, /needs: build/);
+  assert.match(publish, /run: node tools\/actions-adapter\.mjs image-publish/);
+  assert.match(publish, /packages: write/);
+  assert.doesNotMatch(publish, /actions: read/);
+  assert.match(publish, /image-download/);
+  assert.match(publish, /CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY/);
+  assert.match(publish, /GH_TOKEN: \$\{\{ github.token \}\}/);
   assert.match(
     publish,
-    /github.event_name == 'workflow_dispatch' && inputs.bootstrap/,
+    /PROVENANCE: \$\{\{ needs.build.outputs.provenance \}\}/,
   );
-  assert.match(publish, /PUBLISH_COMMAND/);
-  assert.match(build, /docker save .*\| gzip -1 > .*image\.tar/u);
-  const live = readFileSync(
-    new URL("../.github/workflows/agent-live.yml", import.meta.url),
-    "utf8",
-  );
-  assert.match(live, /github.repository == 'getsituate\/situate'/);
-  assert.doesNotMatch(live, /pull_request_target/);
-  assert.doesNotMatch(build, /packages: write|GH_TOKEN:|node source\//);
-  assert.match(build, /--target ci --platform linux\/amd64/);
   assert.match(
-    build,
-    /--network none --cap-drop ALL --security-opt no-new-privileges/,
+    publish,
+    /DOCKER_CONFIG: \$\{\{ runner.temp \}\}\/ci-registry-auth/,
   );
-  assert.match(build, /--user 1000:1000/);
-  assert.match(build, /harness\/client\/docker\/ci-verify.mjs/);
-  assert.match(
-    build,
-    /harness\/tools\/ci-image.mjs --inputs --directory source/,
-  );
-  assert.match(publish, /packages: write/);
-  assert.doesNotMatch(publish, /docker run|docker build|path: source/);
+  assert.doesNotMatch(publish, /docker run|docker build|image-build/);
   assert.equal(
-    (workflow.match(/ref: \$\{\{ github.workflow_sha \}\}/g) ?? []).length,
+    (workflow.match(/ref: \$\{\{ github.sha \}\}/g) ?? []).length,
     2,
   );
-  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 3);
-  assert.match(
-    workflow,
-    /actions\/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9/,
-  );
-  assert.match(
-    workflow,
-    /actions\/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333/,
-  );
+  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 2);
+  for (const action of workflow.matchAll(/uses: (.+)/g))
+    assert.match(action[1], /^actions\/checkout@[a-f0-9]{40}$/);
 });

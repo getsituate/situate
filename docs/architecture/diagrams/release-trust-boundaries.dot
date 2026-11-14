@@ -1,0 +1,31 @@
+digraph ReleaseTrustBoundaries {
+  graph [rankdir=TB, newrank=true, bgcolor="white", pad=0.3, nodesep=0.65, ranksep=0.5, fontname="Helvetica", fontsize=13];
+  node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  subgraph cluster_pr {
+    label="Untrusted PR environment";
+    color="#536171";
+    style="rounded,dashed";
+    pr [label="PR runners\nNo production credentials"];
+  }
+  credentials [label="CI credentials\nOperation-scoped access", fillcolor="#fff4db"];
+
+  subgraph cluster_release {
+    label="Protected release environment";
+    color="#536171";
+    style="rounded";
+    jobs [label="Trusted release jobs\nmacOS packaging", fillcolor="#e5effa"];
+    native [label="Isolated native qualification\nSynthetic workspaces"];
+    artifacts [label="Release artifact storage\nPackages + evidence"];
+  }
+
+  host [label="Existing direct-release host\nDownload + update feed"];
+  { rank=same; pr; credentials; }
+
+  pr -> jobs:w [label="Reviewed source"];
+  credentials -> jobs:e [label="Only to authorized operations"];
+  jobs -> native [label="Final packages"];
+  native -> artifacts [label="Packages + results"];
+  artifacts -> host [label="Automatic macOS publication"];
+}

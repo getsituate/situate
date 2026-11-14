@@ -183,7 +183,7 @@ pub(super) fn ensure_child(parent: &Dir, name: &str) -> Result<Dir> {
 }
 
 fn sync(dir: &Dir) -> Result<()> {
-    dir.try_clone()?.into_std_file().sync_all()?;
+    crate::durable_storage::sync_directory(dir)?;
     Ok(())
 }
 

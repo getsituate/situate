@@ -47,7 +47,7 @@ pub(crate) fn prepare_local(root: &std::path::Path) -> Result<PreparedWorkspace,
 }
 
 fn prepare_root(root: &std::path::Path) -> Result<WorkspaceLease, String> {
-    situate_migrations::prepare(root, env!("CARGO_PKG_VERSION")).map_err(localized_error)
+    situate_migrations::prepare(root, situate_core::application_version()).map_err(localized_error)
 }
 
 fn error_key(kind: MigrationErrorKind) -> &'static str {
@@ -171,13 +171,38 @@ mod tests {
         std::fs::create_dir(&managed).unwrap();
         let directory =
             cap_std::fs::Dir::open_ambient_dir(&managed, cap_std::ambient_authority()).unwrap();
-        situate_migrations::initialize_fresh(&directory, env!("CARGO_PKG_VERSION")).unwrap();
+        situate_migrations::initialize_fresh(&directory, situate_core::application_version())
+            .unwrap();
         let initialized = std::fs::read(managed.join("migrations.json")).unwrap();
         let _prepared = prepare_local(root.path()).unwrap();
         assert_eq!(
             std::fs::read(managed.join("migrations.json")).unwrap(),
             initialized
         );
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    #[test]
+    fn workspace_minimum_uses_the_compiled_application_version() {
+        let root = tempfile::tempdir().unwrap();
+        let managed = root.path().join(".situate");
+        std::fs::create_dir(&managed).unwrap();
+        let metadata = serde_json::to_vec(&serde_json::json!({
+            "minimumAppVersion": situate_core::application_version(),
+            "lastAppliedMigration": 1,
+            "unknown": "retained",
+        }))
+        .unwrap();
+        std::fs::write(managed.join("migrations.json"), &metadata).unwrap();
+        let _prepared = prepare_local(root.path()).unwrap();
+        let retained: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(managed.join("migrations.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            retained["minimumAppVersion"],
+            situate_core::application_version()
+        );
+        assert_eq!(retained["unknown"], "retained");
     }
 
     #[cfg(not(target_os = "ios"))]

@@ -16,7 +16,7 @@ Follow the [client setup guide](../../client/README.md) for native prerequisites
 - Python 3 for coordinated test and dependency commands.
 - [sccache](https://github.com/mozilla/sccache) is recommended for reusing Rust compilation results across local builds.
 
-Develop the current MVP on macOS with Xcode for macOS and iOS. Windows, Linux desktop and Android are deferred and do not require compatibility work or SDK setup. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [MVP platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
+Develop the current product on macOS with Xcode for macOS. iOS, Windows, Linux desktop and Android are deferred and do not require compatibility work, SDK setup, simulators or store provisioning. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
 
 ## Install Volta
 
@@ -126,7 +126,7 @@ To opt into automatic copies for new worktrees on macOS or Linux, run from any c
 node tools/install-worktree-env-hook.mjs
 ```
 
-The checked-in `tools/hooks/post-checkout` is installed as a standalone copy in the shared Git hooks directory. It discovers the primary checkout through Git, copies all of its `.env` into a linked worktree only when the destination is absent, and creates the copy with mode `0600`. It does not export variables or contact a secret manager. The source must be an owner-only regular file, without symlinks or hardlinks, no larger than 64 KiB. Both `.env` and `.env.*` must remain ignored, including on the destination branch, so interrupted temporary copies cannot enter ordinary staging.
+The checked-in `tools/hooks/post-checkout` is installed as a standalone copy in the shared Git hooks directory. It discovers the primary checkout through Git, copies all of its `.env` into a linked worktree only when the destination is absent, and creates the copy with mode `0600`. It does not export variables or contact a secret manager. The source must be an owner-only regular file, without symlinks or hardlinks, no larger than 2 MiB. Both `.env` and `.env.*` must remain ignored, including on the destination branch, so interrupted temporary copies cannot enter ordinary staging.
 
 Installation is optional and local; cloning the repository does not activate hooks. Existing hooks and `core.hooksPath` configurations are not replaced. Integrate the checked-in hook with your existing setup manually if either is already configured. An identical installed hook is left unchanged; later hook changes require reviewing and replacing the installed copy.
 
@@ -177,7 +177,7 @@ node tools/test.mjs --changed --base origin/main
 node tools/test.mjs --quick --changed
 ```
 
-The default runs the active macOS/iOS MVP scope. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
+The default runs supported suites available on the current host. Portable suites use the same pinned Linux tool image locally and in CI; start a Linux Docker engine first. Only native macOS suites need host Apple/Rust tools. Quick checks and selection previews do not start Docker. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
 
 ## Development terminal
 
@@ -192,14 +192,14 @@ On macOS and Linux, run from the repository root:
 This launches `situate-dev`, the independent Rust workspace in `tools/dev-tui/`, with `cargo run --locked --manifest-path Cargo.toml` from that directory so its pinned **Rust 1.98.1** toolchain applies. Install rustup first. The launcher resolves the checkout from its own location, so `node /path/to/checkout/tools/dev.mjs` also works from subdirectories. The binary can locate the checkout from a working directory inside it.
 
 - `c`: desktop client; `d`: [design workshop](design-workshop.md).
-- `t`: tests menu (`1`: changed unit tests, `2`: quick checks, `3`: MVP suite with confirmation).
+- `t`: tests menu (`1`: changed unit tests, `2`: quick checks, `3`: selected suites with confirmation).
 - `a`: render and open architecture documentation.
 - `w`: build the website, serve the generated files locally and open the browser.
 - `r`: build the requirements viewer, serve the generated files locally and open the browser.
-- `R` (Shift+r): release menu (`1`: Universal macOS DMG, `2`: iOS with TestFlight upload, `3`: both Apple platforms, `4`: select an existing macOS release for publication or inspection, `5`: prepare release notes). Apple builds require an app version; iOS also prompts for a build number. Builds, publication and starting a release-notes agent retain separate confirmation.
+- `R` (Shift+r): workflow menu (`1`: create a macOS GitHub Release, `2`: publish an exact GitHub Release, `3`: verify source, `4`: read-only retained artifacts and drafts).
 - `Tab`: switch focus; arrows or `j`/`k`: select or scroll.
 - `s`: stop; `Ctrl+r`: rerun; `e`: open results or process logs; `End`: follow output.
-- `i`: exit the console and inspect the viewed run with Pi in the same terminal. Also available in the release-test results dialog.
+- `i`: exit the console and inspect the viewed run with Pi in the same terminal.
 - `o`: switch between process output and read-only application diagnostics. For desktop launches, `l` cycles the minimum level, `g` the category, `x` the trace, and `p` pauses file reading. Select a desktop run to view only its discovered session.
 - `q`: quit; confirm when tasks are still running.
 
@@ -213,23 +213,30 @@ The console uses the Situate brand colors. Run `NO_COLOR=1 ./dev.sh` for a monoc
 
 Client actions use the [client setup prerequisites](../../client/README.md). If npm dependencies or the Tauri/Vite commands are missing, the console asks before running `npm ci --include=dev`, shows installation output, and starts the selected client only after successful setup. Setup cannot overlap a test run; SDKs and native toolchains still need to be installed separately. Tests use the [test suite prerequisites](testing.md#prerequisites). Documentation rendering requires Asciidoctor, plus `open` on macOS or `xdg-open` on Linux to open the result. Missing tools are reported in the selected run's output. Test profiles may install missing npm dependencies through the existing test runner.
 
-Prepare the product version and reviewed localized notes through [release preparation](release-preparation.md) before a distribution build. The guide includes a manual command-line path without an agent. For the console's optional agent-assisted path, choose **Start Pi agent** to select the version and open a Herdr pane using your local Pi setup. Review the English draft yourself and ask the agent to translate when ready. After reviewing all languages, return to the console and choose **Changelog prepared** to validate the files and create one commit containing the version change and release notes. No editor opens automatically. The preparation agent never commits, publishes or signs an app. Follow the [commit conventions](commit-conventions.md) for new commits; local hook installation is optional.
+### Create, publish or verify
 
-Before an Apple build, the console shows the current app version and asks for the desired `major.minor.patch` version. A new version, or a current version without finalized notes, opens changelog preparation. If no preparation exists yet, the console asks for the comparison baseline and confirmation to start Pi. Review the draft and translations, then confirm **Changelog prepared**. The console commits the version and notes together and returns to the test prompt for the selected platform and iOS build number. Nothing is built until you confirm the build separately.
+The console calls the same `tools/pipeline.mjs` plan/run workflows as the CLI. Prepare a [reviewed versionless declaration](release-preparation.md) with the source change. Release creation assigns the version and Apple build identity after merge; the console does not prompt for a product version, write notes or create a source commit.
 
-Re-entering a version with finalized notes permits another build without another preparation or commit, for example a new iOS build number. Older versions, leading zeroes and prerelease suffixes are rejected. Publishing an existing macOS artifact uses its manifest version unchanged; it does not rewrite the artifact or source version.
+Before opening a release workflow, configure the private release settings through `SITUATE_RELEASE_CONFIG_FILE` or the default `.release-operations/config.json`. See [configuration and signing prerequisites](../../client/README.md#release-workflow-configuration). Unattended operation remains unqualified until repository protections, credentials, controlled-host coordination, isolated native qualification and recovery have been provisioned and exercised. The console does not provision those controls.
 
-Preparation requires a clean checkout and index on a named branch, without an active merge or rebase. Existing Git hooks and signing settings apply; interactive signing may need an already-unlocked signing agent. Unrelated changes are refused rather than staged or committed. After a failed or interrupted preparation, inspect the run and private recovery files before retrying. The selected version and finalized notes are checked again before the Apple release script starts, including after dependency setup.
+Open `R`, then select:
 
-Before an Apple build or macOS publication, the release dialog asks whether to run the complete regular MVP suite (`node tools/test.mjs --json`, without `--changed`). Choose **Run all MVP tests** or **Skip tests**. The test run appears in the run list with live output and can be stopped normally. When it finishes, the dialog shows the overall status and each suite's result, duration, exit code and available errors. Scroll with Page Up/Down or the mouse wheel. Tests never start a release automatically: choose **Continue** after a passing run, then review and confirm the build or publication separately. You can also retry or cancel. Failed, cancelled, empty or invalid test results are not treated as a pass; **Continue without passing tests** explicitly bypasses them before the separate release confirmation. Skips and overrides are shown in that confirmation and apply only to the selected release attempt. Test results remain available in the run's **Results** and **Logs** views after closing the dialog.
+| Key | Workflow                      | Explicit inputs                                                                                                |
+| --- | ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `1` | Create                        | Full source SHA, full comparison-base SHA, destination and operation ID. Source starts as the current `HEAD`.  |
+| `2` | Publish                       | Exact numeric GitHub Release ID in `getsituate/situate`, destination and operation ID.                         |
+| `3` | Verify                        | Full source and comparison-base SHAs.                                                                          |
+| `4` | Retained artifacts and drafts | Read-only descriptions of historical local artifacts, journals and drafts; not publication inputs or approval. |
 
-This runs the default macOS/iOS MVP scope, not the opt-in extended workshop, design-browser or screenshot sweeps. Tests check the current checkout; publishing an existing artifact still requires its separate exact-artifact native qualification. Release retries ask about tests again rather than reusing an earlier approval.
+Use Tab/Down to select the next field, Shift+Tab/Up for the previous field, and Backspace to edit. Enter requests a plan. Review its identities, selected lanes, stages and authorization digest; `y` authorizes that exact plan, while Esc closes it without starting execution. Changes require a new plan. Mandatory verification and final-artifact qualification cannot be skipped or overridden in the console.
 
-Apple releases require macOS and the [Apple signing setup](../../client/README.md#apple-distribution) in the client guide. The console runs `release:apple` and shows its output and artifact directory. Selecting iOS adds `--upload-testflight`: after all selected packages build successfully, the new IPA is validated and uploaded. The confirmation dialog includes the upload; no public App Store release is submitted. Apple processing, compliance and tester access may still need attention. Use a new iOS build number for each upload. Rerunning an iOS release lets you edit the number before confirming. After a failed or interrupted upload, inspect App Store Connect and the run's `upload.json` before retrying; the console does not automatically retry. Release operations cannot overlap client, test, or other release runs in this console.
+Creation requires the exact clean source checkout and complete required history. It can build and qualify a universal direct macOS app and complete a GitHub Release, but never activates the host pointer. Publication downloads and verifies the exact completed GitHub Release; it does not accept an arbitrary local build, rebuild packages or re-sign them. See [creation](../../client/README.md#build-and-verify) and [publication](../../infrastructure/releases/README.md#plan-and-run-publication) for the corresponding CLI commands and evidence requirements.
+
+The run list reports workflow events/results and retains logs for inspection. Failed, cancelled, missing or incomplete evidence does not count as a pass. Source-only verification is not signed-package or update qualification. Release runs cannot overlap client, test or other release work in the console.
 
 ### Inspect a run with Pi
 
-Press `i` or click **Inspect with Pi** in the output pane or release-test results dialog. The console stops its owned tasks, finishes collecting their output, restores the terminal and replaces itself with the checkout's pinned Pi CLI. Pi starts at the checkout root with a prompt to inspect the selected run, not to edit code, rerun tests or retry external operations. Other runs are not included in the evidence. Stopping a release process does not prove that an upload or publication was cancelled remotely.
+Press `i` or click **Inspect with Pi** in the output pane. The console stops its owned tasks, finishes collecting their output, restores the terminal and replaces itself with the checkout's pinned Pi CLI. Pi starts at the checkout root with a prompt to inspect the selected run, not to edit code, rerun tests or retry external operations. Other runs are not included in the evidence. Stopping a release process does not prove that an upload or publication was cancelled remotely.
 
 Pi receives the absolute path to a private temporary directory containing:
 
@@ -241,19 +248,15 @@ Test and release runs capture process output from launch, independently of the 3
 
 The directory has mode `0700`, its files have mode `0600`, and it remains available to Pi after the console exits. Its path is printed before Pi starts. Remove it when the investigation is complete; operating-system temporary-file cleanup can also remove it. Captures not handed to Pi are removed when their run expires or the console exits. Output from earlier console sessions cannot be recovered this way. If Pi is not installed locally, the console stays open and asks you to run `node tools/npm-ci.mjs`; it never downloads Pi automatically. If startup fails after handoff, the saved evidence remains at the printed path. Pi's normal account configuration and project-trust checks still apply.
 
-### Publish a macOS release
+### Inspect an interrupted workflow
 
-Open `R`, then `4`. Use **Previous build** / **Next build** and **Continue** to select an exact `client/artifacts/apple-*/` build. The console shows its version, full source revision, manifest status, distribution, platforms and publication journal when present. It skips unreadable or malformed manifests; appearing in the list does not establish that a build is publishable.
+Return to the workflow inputs for the original create or publish operation and enter its original operation ID. Press F3 to read its status, or F2 to inspect external state. Recovery uses that operation identity, not a newly chosen source, version or destination. Status and inspection do not resume a write.
 
-1. Choose **Check locally** to run the existing publisher's Apple and artifact verification. The displayed reviewed commit must exist locally and match the build manifest and signed app configuration. The current checkout can be on a different revision or branch and contain local changes. The build itself must have been created from a clean committed source.
-2. Choose **Prepare locally** to create a verified stage beside the build, named `publication-apple-<run>`. This does not contact the server. An existing stage is never overwritten; publication revalidates its exact bytes.
-3. After reviewing the source and native update qualification for the exact artifacts, choose **Publish download & update**. Review the destination and version loaded automatically from `WEBSITE_DEPLOY_HOST` and the selected build. Explicit environment values take precedence over the private repository-root `.env`, including empty values; CI uses environment variables only. No host or version needs to be typed. Choose whether to run the MVP tests, review their results or explicitly skip them, then review the selected build, revision and destination and confirm. Destination lookup is local and makes no SSH connection. The publisher independently checks the confirmed destination/version against its effective configuration before connecting, so changing the host after confirmation blocks publication. Publication switches both macOS download metadata and the update feed; it does not deploy the website.
+After inspection, review the exact operation, remote observation and reconciliation digest. Press `y` only to authorize reconciliation of that inspected state. Unsupported or unresolved creation-stage outcomes remain blocked and require stage-specific investigation. The console never retries uncertain external operations automatically. Stopping its local process does not prove that Apple, GitHub or the host cancelled the request.
 
-Every action requires confirmation and runs through the worktree command queue. Check, prepare and publish revalidate artifacts independently; a prior successful console run is not a substitute for qualification evidence. See the [publisher prerequisites](../../infrastructure/releases/README.md) for credentials, signing identity, host preparation and exact-artifact qualification. Native qualification must be completed outside the console.
+For workflow runs, Ctrl+r returns to the input/recovery view rather than replaying publication. Preserve journals, generated inputs, stages, transport archives and unresolved locks; follow the [recovery runbook](../../infrastructure/releases/README.md#interrupted-publication) before changing them. Historical artifacts and preparation drafts remain accessible through `R`, then `4`, without continuing the old workflow.
 
-After an interrupted publication, choose **Inspect remote status**. It reads remote state and saves the observation in the local journal; it does not stop or resume the host operation. Confirm the original SSH process and host operation have stopped. Review the retained transport archive before manually removing it, then use **Reconcile publication** with a fresh destination/version confirmation to finish the identical staged release. The original stage is taken from the journal. Follow the [interrupted publication procedure](../../infrastructure/releases/README.md#interrupted-publication); do not remove active locks or pending markers. There are no automatic retries or application rollbacks. **Rerun** reopens build selection instead of repeating publication, and an existing journal blocks a new publication attempt.
-
-The retired landing-page deployment is no longer offered. Use the [production deployment CLI](../../infrastructure/production/README.md#production-services-and-traffic-activation) for website updates; **Build & open website** remains a local preview.
+Website deployment is separate from app publication. Use the [production deployment CLI](../../infrastructure/production/README.md#production-services-and-traffic-activation) for website updates; **Build & open website** remains a local preview.
 
 ### Local previews
 
@@ -320,9 +323,9 @@ Tests use the repository-local pinned Pi package. To deliberately test another i
 
 ## Mobile prototype toolchains on macOS
 
-The retained prototype instructions below include optional Android tooling. Android is deferred during the macOS/iOS MVP; do not install its SDKs or emulators for routine development. Apple builds require Xcode and the relevant iOS runtime. Install requested host tools once rather than separately in every worktree; framework dependencies belong to the individual prototype.
+The retained instructions below are deferred mobile reference material, not current macOS setup. Do not install iOS runtimes, Android SDKs, simulators or emulators for routine macOS work. Install requested host tools once rather than separately in every worktree; framework dependencies belong to the individual prototype.
 
-Install Xcode from Apple, complete its first-launch setup, and install an iOS simulator runtime. Keep the separate Command Line Tools current through Software Update as well; Homebrew may reject source builds when they are older than the installed OS.
+Only for explicitly requested mobile work, install Xcode from Apple, complete its first-launch setup, and install an iOS simulator runtime. Keep the separate Command Line Tools current through Software Update as well; Homebrew may reject source builds when they are older than the installed OS.
 
 ```sh
 brew install --cask flutter android-commandlinetools

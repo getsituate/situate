@@ -115,8 +115,38 @@ test("measurement reuses the central plan and distinguishes absent support, fail
     assert.equal(workspace, "client");
     return { release() {} };
   };
+  const writeReports = () => {
+    mkdirSync(join(directory, "client/target/coverage/vue"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(directory, "client/target/coverage/vue/lcov.info"),
+      lcov,
+    );
+    writeFileSync(join(directory, "client/target/coverage/rust.lcov"), lcov);
+  };
+  let linuxExecutions = 0;
+  let linuxPreparations = 0;
   assert.deepEqual(
     await measure(directory, {
+      platform: "linux",
+      prepare: async () => {
+        linuxPreparations++;
+        return { release() {} };
+      },
+      execute: async () => {
+        linuxExecutions++;
+        writeReports();
+        return { status: "passed" };
+      },
+    }),
+    { status: "unavailable" },
+  );
+  assert.equal(linuxExecutions, 0);
+  assert.equal(linuxPreparations, 0);
+  assert.deepEqual(
+    await measure(directory, {
+      platform: "darwin",
       prepare,
       execute: async () => ({ status: "failed" }),
     }),
@@ -124,6 +154,7 @@ test("measurement reuses the central plan and distinguishes absent support, fail
   );
   assert.deepEqual(
     await measure(directory, {
+      platform: "darwin",
       prepare,
       execute: async () => ({ status: "passed" }),
     }),
@@ -131,18 +162,12 @@ test("measurement reuses the central plan and distinguishes absent support, fail
   );
   const calls = [];
   const result = await measure(directory, {
+    platform: "darwin",
     prepare,
     execute: async (suite, options) => {
       calls.push(suite);
       assert.equal(options.directory, directory);
-      mkdirSync(join(directory, "client/target/coverage/vue"), {
-        recursive: true,
-      });
-      writeFileSync(
-        join(directory, "client/target/coverage/vue/lcov.info"),
-        lcov,
-      );
-      writeFileSync(join(directory, "client/target/coverage/rust.lcov"), lcov);
+      writeReports();
       return { status: "passed" };
     },
   });
@@ -352,47 +377,91 @@ test("archives are bounded data, never extracted files or executable scripts", (
   assert.throws(() => readArchive(Buffer.alloc(16385)));
 });
 
-test("workflow trust boundaries and explicit revisions remain separate", () => {
-  const coverage = readFileSync(
-    new URL("../.github/workflows/coverage.yml", import.meta.url),
+test("coverage dispatch invokes the shared runner only for trusted explicit diagnostics", async () => {
+  const { main: actions } = await import("./actions-adapter.mjs");
+  const environment = {
+    GITHUB_REPOSITORY: "getsituate/situate",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    DIAGNOSTIC_SELECTION: "coverage",
+    DIAGNOSTIC_TARGET: "native",
+  };
+  const calls = [];
+  const execute = (command, args) => {
+    calls.push([command, args]);
+    return "";
+  };
+  await actions(["diagnostics"], environment, execute);
+  assert.deepEqual(calls, [
+    [
+      process.execPath,
+      [
+        "tools/run-coordinated.mjs",
+        "--",
+        process.execPath,
+        "tools/diagnostic-checks.mjs",
+        "coverage",
+        "native",
+      ],
+    ],
+  ]);
+  calls.length = 0;
+  for (const overrides of [
+    { GITHUB_REPOSITORY: "other/situate" },
+    { GITHUB_REF: "refs/heads/topic" },
+    { GITHUB_EVENT_NAME: "pull_request" },
+  ])
+    await assert.rejects(
+      actions(["diagnostics"], { ...environment, ...overrides }, execute),
+      /explicit trusted main dispatch/,
+    );
+  assert.deepEqual(calls, []);
+});
+
+test("coverage is a read-only explicit diagnostic, separate from required verification", () => {
+  const diagnostics = readFileSync(
+    new URL("../.github/workflows/diagnostics.yml", import.meta.url),
     "utf8",
   );
-  const comment = readFileSync(
-    new URL(
-      "../.github/disabled-workflows/coverage-comment.yml",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  assert.doesNotMatch(coverage, /^ {2}pull_request:/m);
-  assert.match(coverage, /workflow_call:/);
-  assert.match(coverage, /workflow_dispatch:/);
-  assert.doesNotMatch(coverage, /pull_request_target|write|secrets\./);
-  assert.match(coverage, /pull_request.head.sha/);
-  assert.match(coverage, /commits\/main/);
-  assert.match(
-    coverage,
-    /side: \$\{\{ fromJSON\(needs.revisions.outputs.sides\) \}\}/,
-  );
-  assert.match(coverage, /if test "\$HEAD_SHA" = "\$MAIN_SHA"/);
-  assert.match(coverage, /echo 'sides=\["head"\]'/);
-  assert.match(comment, /workflow_run:/);
-  assert.match(comment, /ref: \$\{\{ github.workflow_sha \}\}/);
+  assert.match(diagnostics, /workflow_dispatch:/);
+  assert.match(diagnostics, /options: \[coverage, design, visual, provider\]/);
+  assert.match(diagnostics, /github.repository == 'getsituate\/situate'/);
+  assert.match(diagnostics, /github.ref == 'refs\/heads\/main'/);
+  assert.match(diagnostics, /github.event_name == 'workflow_dispatch'/);
+  assert.match(diagnostics, /permissions:\n {2}contents: read/);
   assert.doesNotMatch(
-    comment,
-    /npm ci|pull_request_target|head_sha|download-artifact/,
+    diagnostics,
+    /pull_request|workflow_run|pull-requests: write/,
   );
-  for (const workflow of [coverage, comment]) {
-    for (const line of workflow
-      .split("\n")
-      .filter((line) => line.includes("uses:")))
-      if (line.includes("uses: ./harness/")) {
-        assert.match(
-          line,
-          /uses: \.\/harness\/\.github\/actions\/(?:ci-image|download-cache)$/,
-        );
-        assert.equal(workflow, coverage);
-      } else assert.match(line, /@[a-f0-9]{40}$/);
-    assert.match(workflow, /persist-credentials: false/);
+  const portable = diagnostics
+    .split("\n  portable:\n")[1]
+    ?.split("\n  native:\n")[0];
+  assert.match(portable, /runs-on: ubuntu-24.04/);
+  assert.match(portable, /pipeline-container\.py actions diagnostics/);
+  assert.doesNotMatch(portable, /secrets\.|pipeline-bootstrap|run: node /);
+  const steps = diagnostics
+    .split("\n  native:\n")[1]
+    ?.split("\n  docker:\n")[0];
+  assert.match(steps, /runs-on: macos-latest/);
+  assert.match(steps, /run: node tools\/actions-adapter\.mjs diagnostics\n/);
+  const coverageStep = steps
+    .split("      - run: node tools/actions-adapter.mjs diagnostics\n")[1]
+    ?.split("\n      - run:")[0];
+  assert.ok(coverageStep);
+  assert.match(coverageStep, /if: inputs.selection != 'provider'/);
+  assert.match(
+    coverageStep,
+    /DIAGNOSTIC_SELECTION: \$\{\{ inputs.selection \}\}/,
+  );
+  assert.doesNotMatch(coverageStep, /secrets\.|TEST_OPENAI_API_KEY/);
+  for (const name of ["verify", "release-macos"]) {
+    const required = readFileSync(
+      new URL(`../.github/workflows/${name}.yml`, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(required, /--coverage|coverage\.mjs|coverage-comment/);
   }
+  for (const action of diagnostics.matchAll(/uses: (.+)/g))
+    assert.match(action[1], /^actions\/checkout@[a-f0-9]{40}$/);
+  assert.match(diagnostics, /persist-credentials: false/);
 });

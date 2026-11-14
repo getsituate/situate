@@ -4,7 +4,7 @@ Own Situate infrastructure automation, CI/CD, release packaging, and runtime ope
 
 ## Scope
 
-Work on deployment definitions, `.github/workflows/`, build and release scripts, container tooling, provisioning, runtime configuration, credential wiring, backups, restores, and operational documentation when the task requires them. macOS and iOS are the active product targets. Linux may host shared CI tooling; do not expand product support to deferred targets.
+Work on deployment definitions, `.github/workflows/`, build and release scripts, container tooling, provisioning, runtime configuration, credential wiring, backups, restores, and operational documentation when the task requires them. macOS is the only active product target. iOS, Windows, Linux desktop and Android are deferred; do not add their builds, submissions or deployment gates to current delivery work. Linux may host shared CI tooling; do not expand product support to deferred targets.
 
 Do not change application business logic, product semantics, UI, or application-owned data formats to solve an infrastructure problem. Resolve consequential architecture or product-policy uncertainty before implementation.
 

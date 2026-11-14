@@ -24,12 +24,13 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
-import { acquireIosProject, assertLocalPath } from "./ios-project-lock.mjs";
-import { run, syncAppIcons } from "./ios-xcode.mjs";
+import { assertLocalPath } from "./ios-project-lock.mjs";
+import { run } from "./ios-xcode.mjs";
 import {
   notaryAuthentication,
   readAppleEnv,
   withAppleCredentials,
+  withSigningKeychain,
 } from "./apple-credentials.mjs";
 
 import {
@@ -42,15 +43,14 @@ import {
 } from "./direct-release-verification.mjs";
 
 import {
-  compileBuildReleaseHistory,
   releaseContent,
   releaseHistoryAsset,
-  releaseHistoryBytes,
   verifyReleaseHistoryResource,
 } from "./release-history.mjs";
 
+import { verifyReleaseInputs } from "../../tools/release-inputs.mjs";
 import { qualifyPublishedMigrations } from "../../tools/published-migrations.mjs";
-import { qualifyMigrationHistory } from "../../tools/migration-history.mjs";
+import { canonical } from "../../tools/release-catalog.mjs";
 import { assertNoDictationTtsResources } from "./dictation-resources.mjs";
 import {
   collectNativeLicenses,
@@ -73,57 +73,28 @@ export function applePlan({
   platform = "macos",
   macosArch = "universal",
   buildNumber,
-  distribution = "external",
+  distribution = "direct",
   host = process.platform,
 }) {
-  if (!["direct", "external"].includes(distribution))
-    throw new Error("Use --distribution direct or external.");
   if (host !== "darwin")
     throw new Error("Apple distribution builds require macOS.");
-  const platforms = platform === "all" ? ["macos", "ios"] : [platform];
-  if (!platforms.every((item) => ["macos", "ios"].includes(item)))
-    throw new Error("Use --platform macos, ios or all.");
+  if (
+    platform !== "macos" ||
+    macosArch !== "universal" ||
+    distribution !== "direct"
+  )
+    throw new Error("Release creation requires macOS/direct/universal.");
   if (!/^[A-Z0-9]{10}$/.test(settings.teamId ?? ""))
-    throw new Error(
-      "Configure APPLE_TEAM_ID in the repository-root .env or environment, or teamId in .apple-release.local.json.",
-    );
-  if (!macTargets[macosArch])
-    throw new Error("Use --macos-arch universal, arm64 or x64.");
-  if (platforms.includes("macos")) {
-    if (!settings.macosSigningIdentity || settings.macosSigningIdentity === "-")
-      throw new Error(
-        "Configure APPLE_MACOS_SIGNING_IDENTITY with a Developer ID Application identity in the repository-root .env or environment, or macosSigningIdentity in .apple-release.local.json.",
-      );
-  }
-  if (platforms.includes("ios")) {
-    if (
-      !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(
-        settings.iosBundleIdentifier ?? "",
-      )
-    )
-      throw new Error(
-        "Configure the registered iosBundleIdentifier before building for TestFlight.",
-      );
-    if (!/^[1-9][0-9]{0,3}$/.test(buildNumber ?? ""))
-      throw new Error(
-        "iOS requires --build-number (1–9999), higher than previous uploads of this version.",
-      );
-  }
-  const rustTargets = [];
-  if (platforms.includes("macos"))
-    rustTargets.push(
-      ...(macosArch === "universal"
-        ? [macTargets.arm64, macTargets.x64]
-        : [macTargets[macosArch]]),
-    );
-  if (platforms.includes("ios")) rustTargets.push("aarch64-apple-ios");
+    throw new Error("Configure APPLE_TEAM_ID for the Developer ID team.");
+  if (!settings.macosSigningIdentity || settings.macosSigningIdentity === "-")
+    throw new Error("Configure a Developer ID Application signing identity.");
   return {
-    platforms,
-    distribution: platforms.includes("macos") ? distribution : "external",
-    macosArch,
-    macosTarget: macTargets[macosArch],
+    platforms: ["macos"],
+    distribution: "direct",
+    macosArch: "universal",
+    macosTarget: macTargets.universal,
     buildNumber,
-    rustTargets,
+    rustTargets: [macTargets.arm64, macTargets.x64],
   };
 }
 
@@ -191,10 +162,6 @@ export function loadAppleSettings(
     throw new Error(
       "Configure APPLE_TEAM_ID in the repository-root .env or environment, or teamId in .apple-release.local.json. See Apple distribution in client/README.md.",
     );
-  if (!Object.hasOwn(settings, "iosBundleIdentifier"))
-    settings.iosBundleIdentifier = jsonFile(
-      join(root, "app/src-tauri/tauri.conf.json"),
-    ).identifier;
   return settings;
 }
 
@@ -250,6 +217,10 @@ export async function checkApplePrerequisites({
     throw new Error(
       "A notarization attempt remains unresolved in target/apple-release/notary-pending.json. Reconcile it with Apple before removing the journal and starting another build.",
     );
+  if (!settings.notaryJournal?.operationId)
+    throw new Error(
+      "Blocked: a controlled-host durable notarization journal is required.",
+    );
   const options = { cwd: root, env, signal, capture: true };
   const cli = join(root, "node_modules/@tauri-apps/cli/tauri.js");
   if (!existsSync(cli))
@@ -273,9 +244,11 @@ export async function checkApplePrerequisites({
     throw new Error(
       `Missing Rust targets. Run in client/: rustup target add ${missing.join(" ")}`,
     );
+  if (!settings.signingKeychain)
+    throw new Error("An isolated temporary Developer ID keychain is required.");
   const identities = await execute(
     "security",
-    ["find-identity", "-v", "-p", "codesigning"],
+    ["find-identity", "-v", "-p", "codesigning", settings.signingKeychain],
     options,
   );
   if (plan.platforms.includes("macos")) {
@@ -314,15 +287,6 @@ export async function checkApplePrerequisites({
         "Notarization credentials are unavailable or rejected. Check the configured Apple API credentials or selected Keychain profile.",
       );
     }
-  }
-  if (plan.platforms.includes("ios")) {
-    await execute("xcodegen", ["--version"], options);
-    await execute("pod", ["--version"], options);
-    await execute("python3", ["--version"], options);
-    if (!/Apple (Development|Distribution):/.test(identities))
-      throw new Error(
-        "Configure an Apple signing identity in Xcode Accounts first. Xcode must also have access to teamId.",
-      );
   }
   return { cli, env };
 }
@@ -368,22 +332,80 @@ async function verifyApp(
   );
 }
 
-async function notarize(path, settings, execute, options, report) {
+export async function inspectNotarization(
+  entry,
+  { settings, execute = run, env, signal } = {},
+) {
+  if (!entry?.operationId || !/^[a-f0-9]{64}$/.test(entry.sha256 ?? ""))
+    throw new Error("Invalid notarization operation identity.");
+  if (!entry.id)
+    return { ...entry, status: "unknown", inspectionRequired: true };
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(entry.id))
+    throw new Error("Invalid notarization submission ID.");
+  const result = JSON.parse(
+    await execute(
+      "xcrun",
+      [
+        "notarytool",
+        "info",
+        entry.id,
+        ...notaryAuthentication(settings),
+        "--output-format",
+        "json",
+      ],
+      { env, signal, capture: true },
+    ),
+  );
+  if (
+    result.id !== entry.id ||
+    !["Accepted", "Invalid", "In Progress", "Rejected"].includes(result.status)
+  )
+    throw new Error(
+      "Notarization inspection returned a different or unknown operation.",
+    );
+  return { ...entry, status: result.status, inspectionRequired: false };
+}
+
+export async function notarize(
+  path,
+  settings,
+  execute,
+  options,
+  report = () => {},
+) {
+  const durable = settings.notaryJournal;
+  if (
+    !durable?.operationId ||
+    typeof durable.persist !== "function" ||
+    typeof durable.complete !== "function"
+  )
+    throw new Error(
+      "Blocked: a controlled-host durable notarization journal is required.",
+    );
+  const acknowledge = async (method, value) => {
+    const ack = await durable[method](value);
+    if (ack?.durable !== true || ack.operationId !== durable.operationId)
+      throw new Error(
+        "Durable notarization journal did not acknowledge this operation.",
+      );
+  };
   // A journal exists before submission, including when Apple's response never arrives.
   const journal = pendingNotarization(options.cwd);
   const entry = {
+    operationId: durable.operationId,
     file: basename(path),
     sha256: sha256(path),
     status: "submitting",
   };
   const handle = openSync(journal, "wx", 0o600);
-  const save = () => {
+  const save = async () => {
     writeFileSync(journal, `${JSON.stringify(entry, null, 2)}\n`);
     fsyncSync(handle);
+    await acknowledge("persist", { ...entry });
     report({ ...entry });
   };
   try {
-    save();
+    await save();
     const submission = JSON.parse(
       await execute(
         "xcrun",
@@ -398,13 +420,17 @@ async function notarize(path, settings, execute, options, report) {
         { ...options, capture: true },
       ),
     );
-    if (!submission.id)
+    if (
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(
+        submission.id ?? "",
+      )
+    )
       throw new Error(
         "Notary service returned no submission ID; inspect submission history before retrying.",
       );
     entry.id = submission.id;
     entry.status = "submitted";
-    save();
+    await save();
     const result = JSON.parse(
       await execute(
         "xcrun",
@@ -421,17 +447,20 @@ async function notarize(path, settings, execute, options, report) {
         { ...options, capture: true },
       ),
     );
+    if (result.id !== submission.id)
+      throw new Error("Notarization wait returned a different submission ID.");
     entry.status = result.status ?? "unknown";
-    save();
+    await save();
     if (entry.status !== "Accepted")
       throw new Error(
         `Notarization is not accepted (${entry.status}). Inspect the recorded submission before retrying.`,
       );
+    await acknowledge("complete", { ...entry });
     rmSync(journal);
   } catch (error) {
     if (!entry.id) {
       entry.status = "unknown";
-      save();
+      await save();
     }
     throw error;
   } finally {
@@ -493,14 +522,17 @@ async function buildMac({
       "app",
       "--config",
       JSON.stringify({
+        version: config.version,
         bundle: {
           resources: {
             [identityFile]: "situate-distribution.json",
             [historyFile]: releaseHistoryAsset,
+            [join(output, "release-inputs.json")]: "release-inputs.json",
             ...licenseResources,
           },
           macOS: {
-            signingIdentity: settings.macosSigningIdentity,
+            bundleVersion: plan.buildNumber,
+            signingIdentity: "-",
             hardenedRuntime: true,
           },
         },
@@ -518,11 +550,30 @@ async function buildMac({
     recursive: true,
     verbatimSymlinks: true,
   });
+  await execute(
+    "codesign",
+    [
+      "--force",
+      "--deep",
+      "--options",
+      "runtime",
+      "--timestamp",
+      "--keychain",
+      settings.signingKeychain,
+      "--sign",
+      settings.macosSigningIdentity,
+      "--entitlements",
+      join(root, "app/src-tauri/Entitlements.macos.plist"),
+      app,
+    ],
+    options,
+  );
   await verifyApp(
     app,
     {
       identifier: config.identifier,
       version: config.version,
+      buildNumber: plan.buildNumber,
       teamId: settings.teamId,
       macos: true,
     },
@@ -568,7 +619,14 @@ async function buildMac({
   );
   await execute(
     "codesign",
-    ["--sign", settings.macosSigningIdentity, "--timestamp", dmg],
+    [
+      "--keychain",
+      settings.signingKeychain,
+      "--sign",
+      settings.macosSigningIdentity,
+      "--timestamp",
+      dmg,
+    ],
     options,
   );
   await notarize(dmg, settings, execute, options, report);
@@ -594,6 +652,7 @@ async function buildMac({
     sha256: sha256(dmg),
     size: statSync(dmg).size,
     architecture: plan.macosArch,
+    buildNumber: plan.buildNumber,
     notarized: true,
     buildConfiguration,
   };
@@ -736,257 +795,51 @@ export function prepareDistributionProjectSpec(
   );
 }
 
-async function buildIos({
-  provenance,
-  licenseResources,
-  historyFile,
-  historyBinding,
-  root,
-  output,
-  scratch,
-  plan,
-  settings,
-  config,
-  cli,
-  execute,
-  options,
-}) {
-  const apple = join(root, "app/src-tauri/gen/apple");
-  assertLocalPath(root, apple);
-  const privacySource = join(root, "app/src-tauri/PrivacyInfo.xcprivacy");
-  const generatedPrivacy = join(
-    apple,
-    "situate-client_iOS/PrivacyInfo.xcprivacy",
-  );
-  assertLocalPath(root, generatedPrivacy);
-  mkdirSync(dirname(generatedPrivacy), { recursive: true });
-  // The stock XcodeGen template discovers resources here during ios init.
-  cpSync(privacySource, generatedPrivacy);
-  const buildConfiguration = { distribution: "external", ...provenance };
-  const identityFile = join(scratch, "ios-distribution.json");
-  writeFileSync(identityFile, JSON.stringify(buildConfiguration));
-  const overlay = JSON.stringify({
-    identifier: settings.iosBundleIdentifier,
-    bundle: {
-      resources: {
-        [historyFile]: releaseHistoryAsset,
-        [identityFile]: "situate-distribution.json",
-        ...licenseResources,
-      },
-      iOS: {
-        developmentTeam: settings.teamId,
-        bundleVersion: plan.buildNumber,
-      },
-    },
-  });
-  const toolBin = join(scratch, "ios-tools");
-  mkdirSync(toolBin, { mode: 0o700 });
-  // Xcode's Apple rsync client must not start a Homebrew rsync server via PATH.
-  symlinkSync("/usr/bin/rsync", join(toolBin, "rsync"));
-  const iosOptions = {
-    ...options,
-    cwd: join(root, "app"),
-    env: {
-      ...options.env,
-      APPLE_DEVELOPMENT_TEAM: settings.teamId,
-      PATH: `${toolBin}${delimiter}${options.env.PATH}`,
-      CARGO_TARGET_DIR: join(options.env.CARGO_TARGET_DIR, "ios"),
-    },
-  };
-  assertLocalPath(root, iosOptions.env.CARGO_TARGET_DIR);
-  await execute(
-    process.execPath,
-    [cli, "ios", "init", "--ci", "--skip-targets-install", "--config", overlay],
-    iosOptions,
-  );
-  const spec = join(apple, "project.yml");
-  const project = join(apple, "situate-client.xcodeproj/project.pbxproj");
-  const build = join(apple, "build");
-  for (const path of [spec, project, build]) assertLocalPath(root, path);
-  const originalSpec = readFileSync(spec, "utf8");
-  const originalProject = readFileSync(project);
-  try {
-    writeFileSync(
-      spec,
-      prepareDistributionProjectSpec(originalSpec, { cli, toolBin }),
-    );
-    syncAppIcons({ root, apple, native: join(root, "app/src-tauri") });
-    await execute("xcodegen", ["generate", "--spec", spec], {
-      ...iosOptions,
-      cwd: apple,
-    });
-    rmSync(build, { recursive: true, force: true });
-    await execute(
-      process.execPath,
-      [
-        cli,
-        "ios",
-        "build",
-        "--ci",
-        "--target",
-        "aarch64",
-        "--export-method",
-        "app-store-connect",
-        "--config",
-        overlay,
-        "--",
-        "--locked",
-      ],
-      iosOptions,
-    );
-  } finally {
-    // Do not leave generated Xcode projects pointing at a temporary launcher.
-    for (const path of [spec, project]) assertLocalPath(root, path);
-    writeFileSync(spec, originalSpec);
-    writeFileSync(project, originalProject);
-  }
-  verifyFrontendLicenses(root, iosOptions.env);
-  const ipa = onlyArtifact(build, ".ipa");
-  const unpacked = join(scratch, "ipa");
-  await execute("ditto", ["-x", "-k", ipa, unpacked], options);
-  const app = onlyArtifact(join(unpacked, "Payload"), ".app");
-  await verifyApp(
-    app,
-    {
-      identifier: settings.iosBundleIdentifier,
-      version: config.version,
-      buildNumber: plan.buildNumber,
-      teamId: settings.teamId,
-      macos: false,
-    },
-    execute,
-    options,
-  );
-  verifyReleaseHistoryResource(app, historyBinding, config.version, {
-    macos: false,
-  });
-  if (
-    !isDeepStrictEqual(
-      jsonFile(join(app, "situate-distribution.json")),
-      buildConfiguration,
-    )
-  )
-    throw new Error(
-      "Signed iOS build configuration does not match the build input.",
-    );
-  verifyLicenseResources(app, licenseResources, { macos: false });
-  await assertNoDictationTtsResources(app);
-  if (
-    !existsSync(join(app, "PrivacyInfo.xcprivacy")) ||
-    !isDeepStrictEqual(
-      await readPlist(join(app, "PrivacyInfo.xcprivacy"), execute, options),
-      await readPlist(privacySource, execute, options),
-    )
-  )
-    throw new Error(
-      "The exported IPA is missing the expected privacy manifest.",
-    );
-  const profilePath = join(scratch, "profile.plist");
-  writeFileSync(
-    profilePath,
-    await execute(
-      "security",
-      ["cms", "-D", "-i", join(app, "embedded.mobileprovision")],
-      { ...options, capture: true },
-    ),
-    { mode: 0o600 },
-  );
-  const profile = await readProvisioningProfile(profilePath, execute, options);
-  const entitlementsPath = join(scratch, "entitlements.plist");
-  writeFileSync(
-    entitlementsPath,
-    await execute("codesign", ["--display", "--entitlements", ":-", app], {
-      ...options,
-      capture: true,
-    }),
-    { mode: 0o600 },
-  );
-  const entitlements = await readPlist(entitlementsPath, execute, options);
-  const certificatePrefix = join(scratch, "signing-certificate-");
-  await execute(
-    "codesign",
-    ["--display", `--extract-certificates=${certificatePrefix}`, app],
-    options,
-  );
-  const identifier = profile.Entitlements?.["application-identifier"];
-  if (
-    !profile.TeamIdentifier?.includes(settings.teamId) ||
-    !profile.ApplicationIdentifierPrefix?.some(
-      (prefix) => identifier === `${prefix}.${settings.iosBundleIdentifier}`,
-    ) ||
-    entitlements["application-identifier"] !== identifier ||
-    entitlements["com.apple.developer.team-identifier"] !== settings.teamId ||
-    (entitlements["get-task-allow"] !== undefined &&
-      entitlements["get-task-allow"] !== false) ||
-    !profile.CertificateSha256?.includes(sha256(`${certificatePrefix}0`)) ||
-    profile.Entitlements?.["get-task-allow"] !== false ||
-    profile.ProvisionedDevices ||
-    profile.ProvisionsAllDevices ||
-    !(Date.parse(profile.ExpirationDate) > Date.now())
-  )
-    throw new Error(
-      "Exported IPA does not have a valid App Store provisioning profile for the requested app.",
-    );
-  const destination = join(
-    output,
-    `Situate-${config.version}-${plan.buildNumber}-ios.ipa`,
-  );
-  cpSync(ipa, destination);
-  const archive = onlyArtifact(build, ".xcarchive");
-  cpSync(archive, join(output, "Situate.xcarchive"), {
-    recursive: true,
-    verbatimSymlinks: true,
-  });
-  return {
-    platform: "ios",
-    distribution: "external",
-    buildConfiguration,
-    path: basename(destination),
-    sha256: sha256(destination),
-    size: statSync(destination).size,
-    identifier: settings.iosBundleIdentifier,
-    buildNumber: plan.buildNumber,
-    archive: "Situate.xcarchive",
-    exportMethod: "app-store-connect",
-  };
-}
-
-function assertExpectedVersion({ root, expectedVersion }) {
+function assertExpectedVersion({ releaseInputs, expectedVersion }) {
+  if (!releaseInputs?.manifest)
+    throw new Error("Immutable generated release inputs are required.");
   if (
     expectedVersion !== undefined &&
-    jsonFile(join(root, "app/src-tauri/tauri.conf.json")).version !==
-      expectedVersion
+    releaseInputs.manifest.version !== expectedVersion
   )
     throw new Error(
-      "The configured app version differs from --expected-version. Start the release again.",
+      "Generated release version differs from --expected-version.",
     );
 }
 
 export async function runAppleRelease(options) {
   options.signal?.throwIfAborted();
-  assertExpectedVersion(options);
-  if (!options.uploadTestFlight) return buildAppleRelease(options);
-  if (!applePlan(options).platforms.includes("ios"))
-    throw new Error("--upload-testflight requires --platform ios or all.");
-  const { checkAppleUploadPrerequisites, uploadAppleRelease } =
-    await import("./apple-upload.mjs");
-  await checkAppleUploadPrerequisites(options);
-  options.signal?.throwIfAborted();
-  const directory = await buildAppleRelease(options);
-  options.signal?.throwIfAborted();
-  if (!options.check) await uploadAppleRelease({ ...options, directory });
-  return directory;
+  if (options.uploadTestFlight)
+    throw new Error(
+      "TestFlight uploads are outside macOS direct release creation.",
+    );
+  return buildAppleRelease(options);
 }
 
 export async function buildAppleRelease(options) {
   assertExpectedVersion(options);
-  const plan = applePlan(options);
-  if (plan.platforms.includes("macos") && plan.distribution === "direct")
-    updaterSigningConfiguration(options.root, options.environment);
-  if (!plan.platforms.includes("macos"))
-    return buildResolvedAppleRelease(options);
+  applePlan(options);
+  verifyReleaseInputs(
+    options.releaseInputs.manifest,
+    options.releaseInputs.catalogBytes,
+  );
+  updaterSigningConfiguration(options.root, options.environment);
+  const journal = options.notaryJournal;
+  if (
+    !journal?.operationId ||
+    typeof journal.persist !== "function" ||
+    typeof journal.complete !== "function"
+  )
+    throw new Error(
+      "Blocked: a controlled-host durable notarization journal is required.",
+    );
   return withAppleCredentials(options, (settings) =>
-    buildResolvedAppleRelease({ ...options, settings }),
+    withSigningKeychain(options, (signingKeychain) =>
+      buildResolvedAppleRelease({
+        ...options,
+        settings: { ...settings, signingKeychain, notaryJournal: journal },
+      }),
+    ),
   );
 }
 
@@ -995,16 +848,16 @@ async function buildResolvedAppleRelease({
   settings,
   platform,
   macosArch,
-  buildNumber,
-  distribution = "external",
+  distribution = "direct",
+  releaseInputs,
+  publicCompatibility,
+  sourceVerification,
   expectedVersion,
   check = false,
   host = process.platform,
   environment = process.env,
   execute = run,
-  compileHistory = compileBuildReleaseHistory,
   qualifyMigrations = qualifyPublishedMigrations,
-  qualifyExternalMigrations = qualifyMigrationHistory,
   collectLicenses = collectNativeLicenses,
   signal,
 }) {
@@ -1012,7 +865,7 @@ async function buildResolvedAppleRelease({
     settings,
     platform,
     macosArch,
-    buildNumber,
+    buildNumber: releaseInputs.manifest.build,
     distribution,
     host,
   });
@@ -1020,7 +873,18 @@ async function buildResolvedAppleRelease({
     plan.platforms.includes("macos") && distribution === "direct"
       ? updaterSigningConfiguration(root, environment)
       : undefined;
-  const config = jsonFile(join(root, "app/src-tauri/tauri.conf.json"));
+  const config = {
+    ...jsonFile(join(root, "app/src-tauri/tauri.conf.json")),
+    version: releaseInputs.manifest.version,
+  };
+  if (
+    !/^(?:[1-9][0-9]{0,3})(?:\.(?:0|[1-9][0-9]{0,1})){0,2}$/.test(
+      plan.buildNumber,
+    )
+  )
+    throw new Error(
+      "Apple build identity must use a 1–9999 first component and optional 0–99 components.",
+    );
   if (expectedVersion !== undefined && config.version !== expectedVersion)
     throw new Error(
       "The configured app version differs from --expected-version. Start the release again.",
@@ -1062,7 +926,6 @@ async function buildResolvedAppleRelease({
       { cause: error },
     );
   }
-  let unlockIos;
   let output;
   let scratch;
   const manifest = {
@@ -1083,8 +946,6 @@ async function buildResolvedAppleRelease({
         kind: "apple-distribution",
       }),
     );
-    if (plan.platforms.includes("ios"))
-      unlockIos = acquireIosProject(root, "apple-distribution");
     output = mkdtempSync(join(artifacts, "apple-"));
     scratch = mkdtempSync(join(cache, "staging-"));
     const sourceOptions = { cwd: root, env, signal, capture: true };
@@ -1098,29 +959,210 @@ async function buildResolvedAppleRelease({
       throw new Error(
         "Apple releases require a clean committed source revision.",
       );
-    const direct = Boolean(updater);
-    const catalog = await compileHistory(resolve(root, ".."), config.version, {
-      distribution: direct ? "direct" : "external",
-      environment,
-    });
-    manifest.migrationQualification = direct
-      ? await qualifyMigrations(resolve(root, ".."), {
-          environment,
-          revision: manifest.revision,
-        })
-      : await qualifyExternalMigrations(resolve(root, ".."), { environment });
+    if (releaseInputs.manifest.source !== manifest.revision)
+      throw new Error(
+        "Generated release source differs from the clean checkout.",
+      );
+    const catalog = verifyReleaseInputs(
+      releaseInputs.manifest,
+      releaseInputs.catalogBytes,
+    );
+    manifest.migrationQualification = await qualifyMigrations(
+      resolve(root, ".."),
+      {
+        environment,
+        revision: manifest.revision,
+      },
+    );
+    const image = {
+      os: environment.ImageOS,
+      version: environment.ImageVersion,
+    };
+    if (
+      Object.values(image).some((value) => value !== undefined) &&
+      !Object.values(image).every(
+        (value) =>
+          typeof value === "string" &&
+          /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value),
+      )
+    )
+      throw new Error(
+        "Runner image identity must contain safe ImageOS and ImageVersion values.",
+      );
+    const tools = [
+      [
+        "node",
+        process.execPath,
+        ["--version"],
+        /^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/,
+      ],
+      [
+        "npm",
+        "npm",
+        ["--version"],
+        /^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/,
+      ],
+      [
+        "rustc",
+        "rustc",
+        ["--version"],
+        /^rustc [0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9 .()+_-]*$/,
+      ],
+      [
+        "cargo",
+        "cargo",
+        ["--version"],
+        /^cargo [0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9 .()+_-]*$/,
+      ],
+      [
+        "xcodebuild",
+        "xcodebuild",
+        ["-version"],
+        /^Xcode [0-9]+(?:\.[0-9]+)*\nBuild version [A-Za-z0-9]+$/,
+      ],
+      [
+        "swift",
+        "swift",
+        ["--version"],
+        /^(?:swift-driver version: [0-9]+(?:\.[0-9]+)* )?(?:Apple )?Swift version [0-9]+(?:\.[0-9]+)*[A-Za-z0-9 .()+_-]*(?:\nTarget: [A-Za-z0-9._-]+)?$/,
+      ],
+    ];
+    manifest.verificationHost = {
+      platform: process.platform,
+      architecture: process.arch,
+      runnerImage: image.os ? image : { kind: "local" },
+      toolchains: Object.fromEntries(
+        await Promise.all(
+          tools.map(async ([name, command, args, pattern]) => {
+            const version = (
+              await execute(command, args, sourceOptions)
+            ).trim();
+            if (!pattern.test(version))
+              throw new Error(
+                `Cannot record a safe ${name} toolchain version.`,
+              );
+            return [name, version];
+          }),
+        ),
+      ),
+    };
     const historyBinding = releaseContent(catalog);
     if (historyBinding.version !== config.version)
       throw new Error(
-        "Release history version does not match the native app version.",
+        "Generated history version differs from the native app version.",
       );
-    const historyFile = join(scratch, releaseHistoryAsset);
-    writeFileSync(historyFile, releaseHistoryBytes(catalog));
+    const historyFile = join(output, releaseHistoryAsset);
+    writeFileSync(historyFile, releaseInputs.catalogBytes, { flag: "wx" });
+    const inputsFile = join(output, "release-inputs.json");
+    writeFileSync(inputsFile, `${canonical(releaseInputs.manifest)}\n`, {
+      flag: "wx",
+    });
+    manifest.releaseInputs = {
+      path: basename(inputsFile),
+      sha256: sha256(inputsFile),
+      catalogPath: basename(historyFile),
+      catalogSha256: sha256(historyFile),
+    };
+    if (publicCompatibility !== undefined) {
+      const proof = publicCompatibility?.qualification;
+      const releaseIdentity = (release) =>
+        release &&
+        isDeepStrictEqual(Object.keys(release).sort(), [
+          "manifestSha256",
+          "revision",
+          "version",
+        ]) &&
+        /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(
+          release.version,
+        ) &&
+        /^[a-f0-9]{40}$/.test(release.revision) &&
+        /^[a-f0-9]{64}$/.test(release.manifestSha256);
+      if (
+        !isDeepStrictEqual(Object.keys(publicCompatibility ?? {}).sort(), [
+          "qualification",
+          "schemaVersion",
+          "source",
+        ]) ||
+        publicCompatibility.schemaVersion !== 1 ||
+        publicCompatibility.source !== manifest.revision ||
+        proof?.schemaVersion !== 1 ||
+        proof.source !== "macos-direct-publication" ||
+        !isDeepStrictEqual(
+          Object.keys(proof).sort(),
+          [
+            "migrations",
+            "releases",
+            "schemaVersion",
+            "source",
+            ...(Object.hasOwn(proof, "checkpoint") ? ["checkpoint"] : []),
+          ].sort(),
+        ) ||
+        !Number.isSafeInteger(proof.migrations) ||
+        proof.migrations < 0 ||
+        !Array.isArray(proof.releases) ||
+        !proof.releases.every(releaseIdentity) ||
+        (Object.hasOwn(proof, "checkpoint") &&
+          !releaseIdentity(proof.checkpoint))
+      )
+        throw new Error(
+          "Public compatibility evidence must bind the clean release source and verified public release identities.",
+        );
+      manifest.publicCompatibility = structuredClone(publicCompatibility);
+    }
+    if (sourceVerification !== undefined) {
+      const verification = sourceVerification;
+      const lanes = verification?.lanes;
+      if (
+        !isDeepStrictEqual(Object.keys(verification ?? {}).sort(), [
+          "lanes",
+          "planDigest",
+          "results",
+          "schemaVersion",
+          "source",
+          "status",
+        ]) ||
+        verification.schemaVersion !== 1 ||
+        verification.status !== "passed" ||
+        verification.source !== manifest.revision ||
+        !/^[a-f0-9]{64}$/.test(verification.planDigest) ||
+        !Array.isArray(lanes) ||
+        !lanes.length ||
+        lanes.some(
+          (id) => typeof id !== "string" || !/^[a-z][a-z0-9-]{0,127}$/.test(id),
+        ) ||
+        new Set(lanes).size !== lanes.length ||
+        !Array.isArray(verification.results) ||
+        !isDeepStrictEqual(
+          verification.results.map((result) => result?.id).sort(),
+          [...lanes].sort(),
+        ) ||
+        verification.results.some(
+          (result) =>
+            !isDeepStrictEqual(Object.keys(result ?? {}).sort(), [
+              "exitCode",
+              "id",
+              "status",
+            ]) ||
+            result.status !== "passed" ||
+            result.exitCode !== 0,
+        )
+      )
+        throw new Error(
+          "Source verification must contain successful sanitized results for every selected lane at the clean release source.",
+        );
+      manifest.sourceVerification = {
+        ...structuredClone(verification),
+        releaseInputsSha256: manifest.releaseInputs.sha256,
+      };
+    }
+    manifest.qualification = { path: "release-qualification.json" };
     manifest.releaseContent = historyBinding;
+    manifest.buildNumber = plan.buildNumber;
     const options = {
       cwd: root,
       env: {
         ...env,
+        SITUATE_RELEASE_VERSION: config.version,
         SITUATE_RELEASE_HISTORY_FILE: historyFile,
         SITUATE_RELEASE_HISTORY_SHA256: historyBinding.sha256,
       },
@@ -1144,10 +1186,8 @@ async function buildResolvedAppleRelease({
       saveManifest(output, manifest);
     };
     for (const target of plan.platforms) {
-      const build = target === "macos" ? buildMac : buildIos;
-      const licenseTargets = plan.rustTargets.filter((triple) =>
-        target === "ios" ? triple.endsWith("-ios") : triple.endsWith("-darwin"),
-      );
+      const build = buildMac;
+      const licenseTargets = plan.rustTargets;
       const licenseDirectory = join(scratch, `licenses-${target}`);
       const licenseResources = await collectLicenses({
         root,
@@ -1179,22 +1219,22 @@ async function buildResolvedAppleRelease({
           config,
           cli,
           execute,
-          options:
-            target === "ios"
-              ? {
-                  ...options,
-                  env: {
-                    ...options.env,
-                    ...licenseEnvironment,
-                    SITUATE_DISTRIBUTION: "external",
-                  },
-                }
-              : { ...options, env: { ...options.env, ...licenseEnvironment } },
+          options: {
+            ...options,
+            env: { ...options.env, ...licenseEnvironment },
+          },
           report,
-          updater: target === "macos" ? updater : undefined,
+          updater,
           provenance: {
             sourceRevision: manifest.revision,
             sourceDirty: manifest.dirty,
+            releaseInputs: manifest.releaseInputs,
+            ...(manifest.publicCompatibility
+              ? { publicCompatibility: manifest.publicCompatibility }
+              : {}),
+            ...(manifest.sourceVerification
+              ? { sourceVerification: manifest.sourceVerification }
+              : {}),
             releaseContent: historyBinding,
             ...(manifest.migrationQualification
               ? { migrationQualification: manifest.migrationQualification }
@@ -1261,7 +1301,6 @@ async function buildResolvedAppleRelease({
       rmSync(scratch, { recursive: true, force: true });
     else if (scratch)
       console.error(`Build recovery files retained: ${scratch}`);
-    unlockIos?.();
     closeSync(handle);
     rmSync(lock);
   }
@@ -1280,7 +1319,8 @@ if (
       options: {
         platform: { type: "string", default: "macos" },
         "macos-arch": { type: "string", default: "universal" },
-        distribution: { type: "string", default: "external" },
+        distribution: { type: "string", default: "direct" },
+        "release-inputs": { type: "string" },
         "build-number": { type: "string" },
         "expected-version": { type: "string" },
         "upload-testflight": { type: "boolean" },
@@ -1289,19 +1329,25 @@ if (
       },
     });
     if (values.help)
-      console.log(`Usage: npm run release:apple -- [--platform macos|ios|all] [--macos-arch universal|arm64|x64] [--distribution direct|external] [--build-number N] [--expected-version X.Y.Z] [--upload-testflight] [--check]
-Reads Apple signing settings and credentials from the repository-root .env or environment. The legacy client/.apple-release.local.json is optional.
-macOS builds are signed, notarized and stapled. --distribution direct additionally requires updater signing inputs and produces the updater archive; the default external variant has no built-in updater.
-iOS uses Xcode automatic signing to export an App Store Connect IPA and archive.
---upload-testflight uploads the new iOS package after the entire build succeeds; no public App Store release is submitted.
---expected-version refuses a build if the configured app version differs from the selected version.
---check checks prerequisites without building, uploading or changing signing assets.
-See client/README.md for local credentials, provisioning and TestFlight setup.`);
+      console.log(
+        `Usage: npm run release:apple -- --release-inputs DIRECTORY [--expected-version X.Y.Z] [--check]\nBuilds only macOS/direct/universal from immutable generated inputs.\nSigning requires an isolated temporary Developer ID keychain and a controlled-host durable notarization journal supplied through buildAppleRelease.\nUse the shared pipeline for creation and recovery.`,
+      );
     else {
       const root = fileURLToPath(new URL("../", import.meta.url));
       const result = await runAppleRelease({
         root,
         settings: loadAppleSettings(root),
+        releaseInputs: values["release-inputs"]
+          ? {
+              manifest: jsonFile(
+                join(values["release-inputs"], "release-inputs.json"),
+              ),
+              catalogBytes: readFileSync(
+                join(values["release-inputs"], releaseHistoryAsset),
+                "utf8",
+              ),
+            }
+          : undefined,
         platform: values.platform,
         macosArch: values["macos-arch"],
         distribution: values.distribution,

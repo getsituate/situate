@@ -35,6 +35,12 @@
 |link:09-architecture-decisions/ADR-0016-append-conversation-history.adoc[ADR-0016]
 |Append-only per-conversation JSONL history, branch-local compaction and in-memory execution without a separate pending-state file.
 |Accepted; implementation, flush points and compatible rollout remain
+|link:09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[ADR-0017]
+|Calendar-versioned app releases with separate platform build identifiers; target delivery in <<release-workflow>>.
+|Accepted; automatic allocation, build integration and distribution qualification remain
+|link:09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018]
+|Mandatory versionless PR changelog declarations, explicit empty entries and localized release assembly.
+|Accepted; fragment validation, PR enforcement and release assembly remain
 |===
 
 :architecture-repository-root: ../..
@@ -61,6 +67,10 @@ include::09-architecture-decisions/ADR-0014-host-production-state-in-hcp-terrafo
 include::09-architecture-decisions/ADR-0015-client-encrypted-git-pack-transport.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0016-append-conversation-history.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

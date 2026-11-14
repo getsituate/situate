@@ -67,6 +67,23 @@ test("preparation preserves plans and does not create caches or install dependen
   );
 });
 
+test("Docker lease paths do not change quality namespaces but semantic environment does", (t) => {
+  const directory = fixture(t);
+  for (const suite of [lint, format]) {
+    const environment = {
+      SITUATE_DOCKER_LEASE: "/tmp/lease-one/container.json",
+      NODE_ENV: "test",
+    };
+    const original = key(suite, directory, environment);
+    environment.SITUATE_DOCKER_LEASE = "/tmp/lease-two/container.json";
+    assert.equal(key(suite, directory, environment), original);
+    delete environment.SITUATE_DOCKER_LEASE;
+    assert.equal(key(suite, directory, environment), original);
+    environment.NODE_ENV = "production";
+    assert.notEqual(key(suite, directory, environment), original);
+  }
+});
+
 test("cross-file TS, Vue and declaration changes invalidate lint but retain Prettier's namespace", (t) => {
   const directory = fixture(t);
   for (const name of [

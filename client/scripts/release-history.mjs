@@ -10,6 +10,8 @@ import {
   validatePreparedRelease,
 } from "../../tools/release-catalog.mjs";
 
+import { validateGeneratedCatalog } from "../../tools/release-inputs.mjs";
+
 export const releaseHistoryAsset = "situate-release-history.json";
 export const releaseHistoryBytes = (catalog) => `${canonical(catalog)}\n`;
 export const releaseHistoryDigest = catalogDigest;
@@ -113,10 +115,40 @@ export async function compileBuildReleaseHistory(
   version,
   { distribution, environment = process.env } = {},
 ) {
+  const generated = readBuildReleaseHistory(version, environment);
+  if (generated) return generated;
   const catalog =
     distribution === "direct"
       ? validatePreparedRelease(repoRoot, version)
       : validateReleaseForBuild(repoRoot, version, { environment });
+  releaseContent(catalog);
+  return catalog;
+}
+
+export function readBuildReleaseHistory(version, environment = process.env) {
+  if (
+    !Object.hasOwn(environment, "SITUATE_RELEASE_HISTORY_FILE") &&
+    !Object.hasOwn(environment, "SITUATE_RELEASE_HISTORY_SHA256")
+  )
+    return;
+  if (
+    !environment.SITUATE_RELEASE_HISTORY_FILE ||
+    !/^[a-f0-9]{64}$/.test(environment.SITUATE_RELEASE_HISTORY_SHA256 ?? "")
+  )
+    throw new Error(
+      "Apple builds require both the release-history file and its digest.",
+    );
+  const bytes = readFileSync(environment.SITUATE_RELEASE_HISTORY_FILE, "utf8");
+  const catalog = JSON.parse(bytes);
+  if (
+    catalog.installedVersion !== version ||
+    bytes !== releaseHistoryBytes(catalog) ||
+    releaseHistoryDigest(catalog) !== environment.SITUATE_RELEASE_HISTORY_SHA256
+  )
+    throw new Error(
+      "Frontend release history does not match the Apple build input.",
+    );
+  validateGeneratedCatalog(catalog, { version });
   releaseContent(catalog);
   return catalog;
 }
@@ -132,33 +164,18 @@ export function releaseHistoryPlugin({
     name: "situate-release-history",
     async config() {
       if (
+        Object.hasOwn(environment, "SITUATE_RELEASE_VERSION") &&
+        (environment.SITUATE_RELEASE_VERSION !== version ||
+          !environment.SITUATE_RELEASE_HISTORY_FILE)
+      )
+        throw new Error(
+          "Generated release version requires its bound history input.",
+        );
+      if (
         Object.hasOwn(environment, "SITUATE_RELEASE_HISTORY_FILE") ||
         Object.hasOwn(environment, "SITUATE_RELEASE_HISTORY_SHA256")
       ) {
-        if (
-          !environment.SITUATE_RELEASE_HISTORY_FILE ||
-          !/^[a-f0-9]{64}$/.test(
-            environment.SITUATE_RELEASE_HISTORY_SHA256 ?? "",
-          )
-        )
-          throw new Error(
-            "Apple builds require both the release-history file and its digest.",
-          );
-        const bytes = readFileSync(
-          environment.SITUATE_RELEASE_HISTORY_FILE,
-          "utf8",
-        );
-        catalog = JSON.parse(bytes);
-        if (
-          catalog.installedVersion !== version ||
-          bytes !== releaseHistoryBytes(catalog) ||
-          releaseHistoryDigest(catalog) !==
-            environment.SITUATE_RELEASE_HISTORY_SHA256
-        )
-          throw new Error(
-            "Frontend release history does not match the Apple build input.",
-          );
-        releaseContent(catalog);
+        catalog = readBuildReleaseHistory(version, environment);
       } else {
         catalog = emptyReleaseHistory(version);
         try {

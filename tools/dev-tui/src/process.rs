@@ -79,6 +79,7 @@ async fn read_output(
     id: usize,
     tx: mpsc::Sender<Event>,
     report: bool,
+    events: bool,
 ) -> io::Result<Capture> {
     let mut buffer = [0; 4096];
     let mut capture = Capture {
@@ -95,7 +96,8 @@ async fn read_output(
             let available = REPORT_LIMIT.saturating_sub(capture.bytes.len());
             capture.bytes.extend_from_slice(&buffer[..n.min(available)]);
             capture.overflow |= n > available;
-        } else {
+        }
+        if !report || events {
             for byte in &buffer[..n] {
                 if *byte == b'\n' || *byte == b'\r' || line.len() >= LINE_LIMIT {
                     if !line.is_empty() {
@@ -209,8 +211,14 @@ pub async fn execute(
         || Box::new(tokio::io::empty()) as _,
         |pipe| Box::new(pipe) as _,
     );
-    let mut stdout = tokio::spawn(read_output(stdout, id, tx.clone(), spec.report));
-    let mut stderr = tokio::spawn(read_output(stderr, id, tx, false));
+    let mut stdout = tokio::spawn(read_output(
+        stdout,
+        id,
+        tx.clone(),
+        spec.report,
+        spec.events,
+    ));
+    let mut stderr = tokio::spawn(read_output(stderr, id, tx, false, false));
     let mut outcome = Outcome::default();
     let mut stop_deadline = None;
     let mut refresh = tokio::time::interval(Duration::from_millis(200));
@@ -393,23 +401,6 @@ pub fn start(
     stop: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        if let Some(root) = &spec.release_validation {
-            let mut validation = crate::release::command(root, "validate", "");
-            if spec
-                .args
-                .windows(2)
-                .any(|args| args == ["--distribution", "direct"])
-            {
-                validation
-                    .args
-                    .extend(["--distribution".into(), "direct".into()]);
-            }
-            let outcome = execute(validation, id, tx.clone(), stop.clone()).await;
-            if !outcome.success() {
-                let _ = tx.send(Event::Finished(id, outcome)).await;
-                return;
-            }
-        }
         let mut outcome = if spec.open_browser {
             let opener = browser_target(&spec.cwd, "");
             execute_with_browser(spec, opener, id, tx.clone(), stop.clone()).await
@@ -526,16 +517,64 @@ mod tests {
     }
     #[tokio::test]
     async fn missing_tool_is_a_visible_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("situate-tool");
         let (tx, _rx) = mpsc::channel(1);
         let (_stop, stop) = watch::channel(false);
         let out = execute(
-            CommandSpec::new("/nonexistent/situate-tool", &[], Path::new("/")),
+            CommandSpec::new(missing.to_str().unwrap(), &[], dir.path()),
             0,
             tx,
             stop,
         )
         .await;
-        assert!(out.error.unwrap().contains(text::START_FAILED));
+        assert!(!out.success());
+        assert!(!out.cancelled);
+        assert!(out.report.is_empty());
+        match (&out.error, out.code) {
+            (Some(error), None) => assert!(error.contains(text::START_FAILED)),
+            // User-mode emulators can report loader failure as a child exit.
+            (None, Some(127)) => {}
+            _ => panic!("Unexpected missing-tool outcome: {out:?}"),
+        }
+        let code = out.code;
+        let mut run = crate::app::tests::fake_run(crate::actions::Task::Desktop);
+        run.finish(out);
+        assert_eq!(run.status, crate::app::Status::Failed);
+        assert_eq!(run.code, code);
+    }
+    #[tokio::test]
+    async fn rejected_command_is_a_visible_startup_failure() {
+        let (tx, _rx) = mpsc::channel(1);
+        let (_stop, stop) = watch::channel(false);
+        let out = execute(CommandSpec::new("sh", &["\0"], Path::new("/")), 0, tx, stop).await;
+        assert!(!out.success());
+        assert!(!out.cancelled);
+        assert!(out.code.is_none());
+        assert!(out.report.is_empty());
+        assert!(out.error.as_deref().unwrap().contains(text::START_FAILED));
+        let mut run = crate::app::tests::fake_run(crate::actions::Task::Desktop);
+        run.finish(out);
+        assert_eq!(run.status, crate::app::Status::Failed);
+        assert!(
+            run.logs
+                .iter()
+                .any(|line| line.contains(text::START_FAILED))
+        );
+    }
+    #[tokio::test]
+    async fn exit_127_remains_a_failed_exit_rather_than_a_startup_rejection() {
+        let (out, lines) = run("printf 'executed\\n'; exit 127", false).await;
+        assert_eq!(lines, ["executed"]);
+        assert_eq!(out.code, Some(127));
+        assert!(!out.cancelled);
+        assert!(!out.success());
+        assert!(out.error.is_none());
+        let mut run = crate::app::tests::fake_run(crate::actions::Task::Desktop);
+        run.finish(out);
+        assert_eq!(run.status, crate::app::Status::Failed);
+        assert_eq!(run.code, Some(127));
+        assert!(run.logs.is_empty());
     }
     #[tokio::test]
     async fn bounds_reports_and_splits_oversized_log_lines() {
@@ -545,13 +584,16 @@ mod tests {
             0,
             tx.clone(),
             true,
+            false,
         )
         .await
         .unwrap();
         assert!(capture.overflow);
         assert_eq!(capture.bytes.len(), REPORT_LIMIT);
         let bytes = vec![b'x'; LINE_LIMIT * 3 + 1];
-        read_output(bytes.as_slice(), 0, tx, false).await.unwrap();
+        read_output(bytes.as_slice(), 0, tx, false, false)
+            .await
+            .unwrap();
         let mut lengths = vec![];
         while let Ok(Event::Output(_, line)) = rx.try_recv() {
             lengths.push(line.len());

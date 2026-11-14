@@ -109,12 +109,14 @@ export default defineConfig(({ mode }) => ({
     uiBoundary(sourceRoots),
     releaseHistoryPlugin({
       repoRoot: fileURLToPath(new URL("../../", import.meta.url)),
-      version: JSON.parse(
-        readFileSync(
-          new URL("../app/src-tauri/tauri.conf.json", import.meta.url),
-          "utf8",
-        ),
-      ).version,
+      version:
+        process.env.SITUATE_RELEASE_VERSION ??
+        JSON.parse(
+          readFileSync(
+            new URL("../app/src-tauri/tauri.conf.json", import.meta.url),
+            "utf8",
+          ),
+        ).version,
     }),
     vue(),
     {

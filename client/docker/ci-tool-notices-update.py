@@ -31,6 +31,7 @@ assets = json.loads((ROOT / "client/docker/ci-assets.json").read_text())
 RELEASES = [
     ("cargo-deny", "EmbarkStudios/cargo-deny", "bca0dde53651ee946720e4540b5ce2610bec8f06", "0.20.2"),
     ("cargo-llvm-cov", "taiki-e/cargo-llvm-cov", "0dc905679ae6b4740b186f6e2c2ef1ab78fb76d7", "0.9.1"),
+    ("gh", "cli/cli", "3d5a9e355a837f2f5ee78d7484c118cc1342ad1a", "2.104.0"),
     ("gitleaks", "gitleaks/gitleaks", "107a41827bb6698dbbff756b2300537774a1d84c", "8.24.3"),
     ("ktlint", "pinterest/ktlint", "21c3b05300bee577aca40e6c9b6f8e8812a86034", "1.7.1"),
 ]
@@ -85,7 +86,7 @@ for name, repository, commit, version in RELEASES:
             request = (f"https://static.crates.io/crates/{package}/{package}-{package_version}.crate", checksum)
             notices.require(id not in pending or pending[id] == request, "Conflicting Cargo archive pins")
             pending[id] = request
-    elif name == "gitleaks":
+    elif name in {"gitleaks", "gh"}:
         path = source_file(files, "go.mod")
         tool["manifest"] = {"path": path, "sha256": notices.digest(files[path]), "kind": "go-mod"}
         for id, _ in notices.dependency_ids(files, tool["manifest"]):
@@ -246,7 +247,7 @@ for name, tool in tools.items():
             notices.require(notices.digest(data) == pin["sha256"], f"Binary archive checksum: {name}/{arch}")
             binary = next(data for path, data in notices.archive_files(data).items() if path.split("/")[-1] == name)
         tool["binaries"][arch] = {"path": f"{name}/{name}", "sha256": notices.digest(binary)}
-        if name == "gitleaks":
+        if name in {"gitleaks", "gh"}:
             version, modules = notices.go_build_info(binary)
             notices.require(set(modules) <= set(tool["dependencies"]), "Go binary modules differ from go.mod")
             for id, checksum in modules.items():

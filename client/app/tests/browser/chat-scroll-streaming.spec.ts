@@ -75,7 +75,13 @@ test("streamed Markdown follows growth, stops on upward scrolling and stays put 
     bounds.x + bounds.width / 2,
     bounds.y + bounds.height / 2,
   );
+  const readingTop = await region.evaluate(
+    (element) => element.scrollTop - 400,
+  );
   await page.mouse.wheel(0, -400);
+  await expect
+    .poll(() => region.evaluate((element) => element.scrollTop))
+    .toBeCloseTo(readingTop, 0);
   await expect.poll(distance).toBeGreaterThan(48);
   const readingAnchor = await page
     .locator(".message.assistant")

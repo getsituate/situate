@@ -131,6 +131,6 @@ Private dictation interaction and lifecycle clarification; date not recorded, tr
 
 ## Open questions
 
-- Which exact Parakeet v3 package and runtime meet the recognition-quality, memory, latency and energy needs on the supported macOS and iOS devices, including weaker hardware?
+- Which exact Parakeet v3 package and runtime meet the recognition-quality, memory, latency and energy needs on supported macOS hardware? iOS device selection remains deferred.
 - When should iOS and Intel Macs be included in dictation delivery?
 - Which input areas beyond chat should offer dictation later?

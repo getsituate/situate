@@ -30,7 +30,7 @@ A failed marker flush fails the open rather than acknowledging completed initial
 See link:{architecture-repository-root}/client/crates/situate-core/src/durable_storage.rs[directory flushing], link:{architecture-repository-root}/client/crates/situate-core/src/content/git_storage.rs[Git object and reference publication] and link:{architecture-repository-root}/client/crates/situate-core/src/content/mod.rs[history file flushing].
 
 These are implementation mechanisms, not formal power-loss qualification or a guarantee against physical storage damage.
-Native macOS/iOS verification must cover the active storage paths; read-only provider access does not gain write support from these mechanisms.
+Native macOS verification must cover the active storage paths. iOS qualification is deferred. Read-only provider access does not gain write support from these mechanisms.
 
 ==== Deferred-platform constraints
 

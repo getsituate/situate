@@ -1,5 +1,7 @@
 pub mod ai_storage;
+mod application_version;
 pub mod attachment;
+pub use application_version::application_version;
 pub mod content;
 pub mod conversation;
 pub mod conversation_history;

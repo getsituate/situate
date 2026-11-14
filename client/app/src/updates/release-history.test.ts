@@ -42,6 +42,45 @@ describe("bundled release history", () => {
       ).releases.map((r) => r.version),
     ).toEqual(["0.7.0"]);
   });
+  it("retains skipped calendar versions and an empty installed release in both languages", () => {
+    const german: ReleaseText = {
+      title: "Suche",
+      entries: [
+        {
+          ...english.entries[0]!,
+          title: "Notizen finden",
+          paragraphs: ["Die Suchfilter bleiben erhalten."],
+        },
+      ],
+    };
+    const result = readReleaseCatalog({
+      schemaVersion: 1,
+      installedVersion: "2027.1.2",
+      releases: [
+        { version: "2027.2.1", locales: { en: english, de: german } },
+        { version: "2026.12.9", locales: { en: english, de: german } },
+        {
+          version: "2027.1.2",
+          locales: {
+            en: { title: "Changes", entries: [] },
+            de: { title: "Änderungen", entries: [] },
+          },
+        },
+        release("0.1.6"),
+        { version: "2026.11.10", locales: { en: english, de: german } },
+      ],
+    });
+    expect(result.releases.map((entry) => entry.version)).toEqual([
+      "2027.1.2",
+      "2026.12.9",
+      "2026.11.10",
+      "0.1.6",
+    ]);
+    expect(result.releases[0]?.date).toBeUndefined();
+    expect(result.releases[0]?.locales.en.entries).toEqual([]);
+    expect(result.releases[0]?.locales.de?.entries).toEqual([]);
+    expect(result.releases[1]?.locales.de).toEqual(german);
+  });
   it("keeps English when the German translation is unavailable or malformed", () => {
     for (const de of [undefined, { title: "Incomplete" }]) {
       const value = readReleaseCatalog(

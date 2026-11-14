@@ -1,6 +1,6 @@
 # Conversation storage implementation plan
 
-Status: implementation and MVP development verification complete.
+Status: implementation and recorded MVP development verification complete. The current product scope is macOS-only; iOS results below are retained historical evidence, not current support or release gates.
 
 The integrated source passes all 44 MVP suites, including the four native macOS suites, plus quick checks (2 suites) and feedback checks (19 suites). The explicit iOS Simulator debug journey passes two launches with migration, retained drafts/queued inputs, attachment/reference presentation, Worker cancellation, workspace closure and reopening without replay. Physical-device behavior, minimum supported OS versions, protected storage and production signing/distribution require separate Apple-release verification.
 

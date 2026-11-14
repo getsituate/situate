@@ -21,7 +21,7 @@ Device-local AI settings and provider credentials are excluded from transfer.
 
 An ordinary Git smart server needs access to repository objects to construct fetch packs. A service unable to inspect plaintext cannot perform that negotiation and pack construction in the ordinary way.
 Repeated complete snapshots can retransmit unchanged content and history, while copying live mutable internals does not itself produce a consistent snapshot.
-Implementation and operational complexity must fit one developer and operator, with macOS and iOS as the active product targets.
+Implementation and operational complexity must fit one developer and operator, with macOS as the only active product target and iOS deferred.
 
 == Proposed decision
 
@@ -56,7 +56,7 @@ The trade-off is ownership of encrypted indexes, dependency handling and a secur
 
 * Returning devices could retrieve missing packs rather than complete workspace snapshots. A new device still needs the required content and retained history; incremental does not mean byte-minimal for every device.
 * Clients must validate dependency closure and imported history. The server cannot independently verify encrypted Git completeness or a client's claimed uncompressed content size.
-* Pack, index and dependency growth require measurements on macOS/iOS. Thin packs and later pack compaction are optional optimizations, not prerequisites for this direction.
+* Pack, index and dependency growth require measurements on macOS; iOS measurements are deferred. Thin packs and later pack compaction are optional optimizations, not prerequisites for this direction.
 * The current core's merge and file-reference limitations remain unresolved. This proposal does not select merge semantics or permit guessed continuity or automatic replay of interrupted file mutations under ADR-0010 and ADR-0012.
 * Published data formats remain subject to REQ-0069 and REQ-0070, including supported compatibility, tested migrations and any explicitly approved format-specific exception. Choosing a transport does not waive those policies.
 

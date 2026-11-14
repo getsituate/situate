@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Task {
     Desktop,
-    Preparation(crate::release::Operation),
+    Workflow(crate::release::Action),
     Unit,
     Quick,
     Full,
@@ -12,10 +12,6 @@ pub enum Task {
     Design,
     Website,
     Requirements,
-    Publication(crate::publication::Action),
-    ReleaseMacos,
-    ReleaseIos(u16),
-    ReleaseAll(u16),
 }
 
 #[derive(Clone, Debug)]
@@ -27,7 +23,7 @@ pub struct CommandSpec {
     pub handoff: bool,
     pub diagnostics_manifest: Option<PathBuf>,
     pub open_browser: bool,
-    pub release_validation: Option<PathBuf>,
+    pub events: bool,
     pub interactive: bool,
 }
 
@@ -41,7 +37,7 @@ impl CommandSpec {
             handoff: false,
             diagnostics_manifest: None,
             open_browser: false,
-            release_validation: None,
+            events: false,
             interactive: false,
         }
     }
@@ -56,7 +52,7 @@ impl CommandSpec {
 impl Task {
     pub fn name(self) -> &'static str {
         match self {
-            Self::Preparation(op) => op.name(),
+            Self::Workflow(action) => action.name(),
             Self::Desktop => text::TASK_NAMES[0],
             Self::Unit => text::TASK_NAMES[1],
             Self::Quick => text::TASK_NAMES[2],
@@ -65,10 +61,6 @@ impl Task {
             Self::Design => text::TASK_NAMES[5],
             Self::Website => text::TASK_NAMES[6],
             Self::Requirements => text::REQUIREMENTS,
-            Self::Publication(action) => action.name(),
-            Self::ReleaseMacos => text::RELEASE_MACOS,
-            Self::ReleaseIos(_) => text::RELEASE_IOS,
-            Self::ReleaseAll(_) => text::RELEASE_ALL,
         }
     }
     pub fn is_test(self) -> bool {
@@ -78,17 +70,11 @@ impl Task {
         matches!(self, Self::Desktop | Self::Design)
     }
     pub fn is_release(self) -> bool {
-        self.is_apple_release() || matches!(self, Self::Publication(_) | Self::Preparation(_))
-    }
-    pub fn is_apple_release(self) -> bool {
-        matches!(
-            self,
-            Self::ReleaseMacos | Self::ReleaseIos(_) | Self::ReleaseAll(_)
-        )
+        matches!(self, Self::Workflow(_))
     }
     pub fn command(self, root: &Path) -> CommandSpec {
         match self {
-            Self::Preparation(op) => crate::release::command(root, op.name(), ""),
+            Self::Workflow(action) => crate::release::command(root, action, &[]),
             Self::Desktop => CommandSpec::new("npm", &["run", "dev:client"], &root.join("client")),
             Self::Design => CommandSpec::new("npm", &["run", "design"], &root.join("client")),
             Self::Website => {
@@ -100,46 +86,6 @@ impl Task {
             Self::Requirements => {
                 let mut spec = CommandSpec::new("node", &["requirements/scripts/preview.js"], root);
                 spec.open_browser = true;
-                spec
-            }
-            Self::Publication(action) => CommandSpec::new(
-                "node",
-                &[
-                    "tools/run-coordinated.mjs",
-                    "--",
-                    "node",
-                    "infrastructure/releases/publish.mjs",
-                    action.argument(),
-                ],
-                root,
-            ),
-            Self::ReleaseMacos | Self::ReleaseIos(_) | Self::ReleaseAll(_) => {
-                let platform = match self {
-                    Self::ReleaseMacos => "macos",
-                    Self::ReleaseIos(_) => "ios",
-                    _ => "all",
-                };
-                let mut spec = CommandSpec::new(
-                    "npm",
-                    &["run", "release:apple", "--", "--platform", platform],
-                    &root.join("client"),
-                );
-                spec.args.extend([
-                    "--distribution".into(),
-                    if matches!(self, Self::ReleaseIos(_)) {
-                        "external"
-                    } else {
-                        "direct"
-                    }
-                    .into(),
-                ]);
-                if let Self::ReleaseIos(number) | Self::ReleaseAll(number) = self {
-                    spec.args.extend([
-                        "--build-number".into(),
-                        number.to_string(),
-                        "--upload-testflight".into(),
-                    ]);
-                }
                 spec
             }
             Self::Docs => CommandSpec::new(
@@ -241,87 +187,6 @@ mod tests {
         assert!(!Task::Requirements.is_test());
         assert!(Task::Full.command(root).report);
         assert_eq!(Task::Docs.command(root).args[0], "--failure-level");
-    }
-    #[test]
-    fn publication_reuses_the_existing_entry_point_without_client_setup() {
-        let root = Path::new("/checkout with spaces");
-        let task = Task::Publication(crate::publication::Action::Check);
-        let command = task.command(root);
-        assert_eq!(command.program, "node");
-        assert_eq!(
-            command.args,
-            [
-                "tools/run-coordinated.mjs",
-                "--",
-                "node",
-                "infrastructure/releases/publish.mjs",
-                "check"
-            ]
-        );
-        assert_eq!(command.cwd, root);
-        assert!(!command.report);
-        assert!(!command.handoff);
-        assert!(!command.open_browser);
-        assert!(task.is_release());
-        assert!(!task.is_apple_release());
-        assert!(!task.is_client());
-    }
-    #[test]
-    fn apple_releases_upload_only_when_ios_is_selected() {
-        let root = Path::new("/checkout with spaces");
-        for (task, expected) in [
-            (
-                Task::ReleaseMacos,
-                vec![
-                    "run",
-                    "release:apple",
-                    "--",
-                    "--platform",
-                    "macos",
-                    "--distribution",
-                    "direct",
-                ],
-            ),
-            (
-                Task::ReleaseIos(42),
-                vec![
-                    "run",
-                    "release:apple",
-                    "--",
-                    "--platform",
-                    "ios",
-                    "--distribution",
-                    "external",
-                    "--build-number",
-                    "42",
-                    "--upload-testflight",
-                ],
-            ),
-            (
-                Task::ReleaseAll(9999),
-                vec![
-                    "run",
-                    "release:apple",
-                    "--",
-                    "--platform",
-                    "all",
-                    "--distribution",
-                    "direct",
-                    "--build-number",
-                    "9999",
-                    "--upload-testflight",
-                ],
-            ),
-        ] {
-            let command = task.command(root);
-            assert_eq!(command.program, "npm");
-            assert_eq!(command.args, expected);
-            assert_eq!(command.cwd, root.join("client"));
-            assert!(!command.report);
-            assert!(!command.handoff);
-            assert!(task.is_release());
-            assert!(!task.is_test());
-        }
     }
     #[test]
     fn dependency_check_requires_all_client_entrypoints() {

@@ -2,9 +2,9 @@
 
 Situate is a personal organizational system project for organizing information and coordinating work with AI assistance.
 
-This repository contains a desktop/mobile client, product documentation, a requirements catalog, and development tooling. See [Situate — Product Capability Catalog](docs/product-capability-catalog/README.md) for capability-level support, prerequisites, evidence and known gaps at a recorded product revision.
+This repository contains the macOS client, retained code for deferred platforms, product documentation, a requirements catalog, and development tooling. See [Situate — Product Capability Catalog](docs/product-capability-catalog/README.md) for capability-level support, prerequisites, evidence and known gaps at a recorded product revision.
 
-The current MVP targets **macOS and iOS**. Windows, Linux desktop and Android are deferred; retained code for those platforms is not a support commitment. See the [platform scope](requirements/data/foundations.md#mvp-platform-scope).
+The current MVP targets **macOS only**. iOS, Windows, Linux desktop and Android are deferred and are not currently supported; retained code or historical test results do not establish product support. See the [platform scope](requirements/data/foundations.md#mvp-platform-scope).
 
 ## Repository layout
 
@@ -21,7 +21,7 @@ Install Pi and Herdr for agent-assisted development and parallel work. See [Deve
 
 ## Tests
 
-Run `node tools/test.mjs` for the active Apple MVP scope, or `node tools/test.mjs --unit --changed` for fast tests in affected projects. Expensive workshop, design-browser and visual sweeps are opt-in with `node tools/test.mjs --extended` or their dedicated commands. See the [test suite guide](docs/development/testing.md) for profiles, Git comparison bases, prerequisites, and JSON output.
+Run `node tools/test.mjs` for the active macOS MVP scope, or `node tools/test.mjs --unit --changed` for fast tests in affected projects. Expensive workshop, design-browser and visual sweeps are opt-in with `node tools/test.mjs --extended` or their dedicated commands. See the [test suite guide](docs/development/testing.md) for profiles, Git comparison bases, prerequisites, and JSON output.
 
 ## Requirements viewer
 

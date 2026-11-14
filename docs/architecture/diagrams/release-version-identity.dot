@@ -1,0 +1,20 @@
+digraph ReleaseVersionIdentity {
+  graph [rankdir=TB, bgcolor="white", pad=0.3, nodesep=0.45, ranksep=0.55, fontname="Helvetica", fontsize=13];
+  node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
+
+  source [label="Merged source\nCommit SHA"];
+  notes [label="Approved changelog\nFragment set"];
+  config [label="Reviewed configuration\nVariant + toolchain"];
+  reserve [label="Durable release reservation\nYYYY.M.N", fillcolor="#e5effa"];
+  mac [label="macOS direct\nPublic version + build ID"];
+  evidence [label="Release evidence\nArtifact hashes + publication state"];
+
+  { rank=same; source; notes; config; }
+
+  source -> reserve;
+  notes -> reserve;
+  config -> reserve;
+  reserve -> mac;
+  mac -> evidence;
+}

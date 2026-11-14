@@ -11,6 +11,7 @@ endif::[]
 
 Status:: accepted; native conversation ownership and complete product replacement of Pi with Rig selected
 Date:: 2026-11-03
+Current platform scope:: macOS only under link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]; iOS statements below retain earlier design context or evidence, not current delivery gates
 Implementation:: native owner, provider/tool adapters and frontend projections integrated; native application fixtures cover macOS and iOS Simulator paths; aggregate and release qualification remain open
 Implementation plan:: link:{architecture-repository-root}/docs/development/rig-implementation-plan.md[Rig replacement implementation plan]
 Storage refinement:: <<adr-0016,ADR-0016>> replaces the full-record v2 persistence representation with append-only conversation history; native execution ownership remains unchanged.
@@ -36,7 +37,7 @@ Moving the same mutable snapshot between processes, or adding a turn-status read
 The governing boundaries are:
 
 * link:{architecture-repository-root}/requirements/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011]: execution belongs to the open workspace and running application, not a visible pane; reopening after application exit waits for user interaction rather than replaying interrupted work.
-* link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]: macOS and iOS are the active MVP targets. Windows, Linux desktop and Android remain deferred goals, not additional implementation gates.
+* link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]: at acceptance, macOS and iOS were the active MVP targets. The current scope is macOS-only; iOS, Windows, Linux desktop and Android are deferred goals, not additional implementation gates.
 * link:{architecture-repository-root}/requirements/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015]: keep device-local credential custody, supported access methods and explicit model selection. A replacement agent must not import its own global credentials or silently retry or switch providers.
 * link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005] and link:{architecture-repository-root}/requirements/data/goals/GOAL-0004-decision-authority.md[GOAL-0004]: retain action outcomes and task scope; interruption does not establish that an external effect did not happen.
 * link:{architecture-repository-root}/requirements/data/foundations.md[Foundations]: plain JavaScript/Vue plugins, core-managed versioned writes, portable conversation content and separate device-local AI settings remain in force. Delivery complexity must fit a single developer.
@@ -117,8 +118,8 @@ Persistence, restart and interruption guarantees apply to records created by the
 
 === Platform qualification
 
-Qualify macOS and iOS for the product replacement.
-Also probe Windows, Linux and Android compatibility to expose later adoption barriers; this additional verification scope does not reintroduce those platforms as supported MVP products.
+The original replacement qualification included macOS and iOS plus additional Windows, Linux and Android probes.
+Under the current macOS-only scope, qualify macOS; the other platform probes and recorded results are deferred references, not product or release gates.
 
 == Maintenance and project continuity
 
@@ -205,7 +206,7 @@ That is an architectural assessment, not platform qualification of any engine or
 |macOS, active MVP
 |An in-process native owner can outlive a UI reload without a server or separate agent executable. System JavaScriptCore and native Rust are credible candidates.
 |Qualify signed/release builds, workspace access, cancellation and independent concurrent conversations. No private API, extra executable-memory entitlement or new JIT requirement should be assumed necessary for the design.
-|iOS, active MVP
+|iOS, active at acceptance; now deferred
 |Use a library inside the signed app, not a desktop CLI/subprocess deployment. JavaScriptCore is a documented system framework; Rust avoids an additional engine for the agent itself.
 |Neither choice grants indefinite background execution. Handle expiration, suspension, termination, protected storage and foreground return. Simulator success does not qualify a physical device. App Store compatibility of generated/downloaded plugin behavior remains a separate unresolved release concern.
 |Windows, deferred

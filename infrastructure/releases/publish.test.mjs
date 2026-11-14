@@ -28,11 +28,60 @@ import {
   metadata,
   sshArguments,
   verifyStagedRelease,
+  verifyImmutableInputs,
+  verifyDownloadReceipt,
+  verifyPublicationInputs,
+  verifyPublicAvailability,
+  qualifyPublicationCompatibility,
 } from "./publish.mjs";
+import { readPublicationHistory } from "./transport.mjs";
 import { updaterSignatureFixture } from "../../client/scripts/updater-signing-fixture.mjs";
 import { updaterEndpoint } from "../../client/scripts/updater-signing.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+test("publication rechecks public compatibility and rejects a newer completed candidate", async () => {
+  const manifest = { revision: "a".repeat(40), version: "2026.9.1" };
+  const history = { schemaVersion: 1, releases: [] };
+  const proof = {
+    schemaVersion: 1,
+    source: "macos-direct-publication",
+    migrations: 2,
+    releases: [{ version: "2026.8.1" }, { version: manifest.version }],
+  };
+  const result = await qualifyPublicationCompatibility("/synthetic", manifest, {
+    history,
+    qualify: async (root, options) => {
+      assert.equal(root, "/synthetic");
+      assert.deepEqual(options, { revision: manifest.revision, history });
+      return proof;
+    },
+  });
+  assert.deepEqual(result, {
+    schemaVersion: 1,
+    source: manifest.revision,
+    qualification: proof,
+  });
+  await assert.rejects(
+    qualifyPublicationCompatibility("/synthetic", manifest, {
+      history,
+      qualify: async () => ({
+        ...proof,
+        releases: [...proof.releases, { version: "2026.10.1" }],
+      }),
+    }),
+    /newer release/,
+  );
+  await assert.rejects(
+    qualifyPublicationCompatibility("/synthetic", manifest, {
+      history,
+      qualify: async () => {
+        throw new Error("Public history unavailable");
+      },
+    }),
+    /history unavailable/,
+  );
+});
+
 function temporary(t) {
   const directory = realpathSync(
     mkdtempSync(join(tmpdir(), "situate-publish-test-")),
@@ -190,6 +239,40 @@ test("destination CLI returns only the host without release inputs or signing cr
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), { host: "release@cli-host" });
   assert.equal(result.stderr, "");
+});
+
+test("publisher accepts absent or legacy recovery evidence without allowing a duplicate attempt", (t) => {
+  const directory = temporary(t);
+  writeFileSync(join(directory, "publication-journal.json"), "{}");
+  for (const legacyArguments of [
+    [],
+    ["--recovery-evidence", join(directory, "missing-legacy-evidence.json")],
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL("./publish.mjs", import.meta.url)),
+        "publish",
+        "--release",
+        directory,
+        "--destination",
+        "release@fixture.invalid",
+        "--updater-public-key",
+        "synthetic-public-key",
+        ...legacyArguments,
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH, CI: "true" } },
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /Publication journal exists; inspect and reconcile instead of retrying/,
+    );
+    assert.equal(
+      readFileSync(join(directory, "publication-journal.json"), "utf8"),
+      "{}",
+    );
+  }
 });
 
 test("publication destination reads only the effective host from private dotenv data", (t) => {
@@ -395,11 +478,48 @@ test("staged bytes and metadata remain bound to the original approved manifest",
   );
 });
 
+test("explicit history destination needs neither Actions nor ambient publication configuration", () => {
+  let invocation;
+  const result = readPublicationHistory("/synthetic/root", {
+    destination: {
+      host: "release@explicit.invalid",
+      sshIdentity: "/synthetic/key",
+    },
+    environment: {
+      PATH: "/synthetic/bin",
+      WEBSITE_DEPLOY_HOST: "wrong.invalid",
+      PRIVATE_KEY: "synthetic-private-value",
+    },
+    execute: (...args) => {
+      invocation = args;
+      return JSON.stringify({ schemaVersion: 1, releases: [] });
+    },
+  });
+  assert.deepEqual(result, { schemaVersion: 1, releases: [] });
+  assert.equal(invocation[0], "ssh");
+  assert.ok(invocation[1].includes("release@explicit.invalid"));
+  assert.ok(invocation[1].includes("/synthetic/key"));
+  assert.equal(invocation[1].includes("wrong.invalid"), false);
+  assert.deepEqual(invocation[2].env, { PATH: "/synthetic/bin" });
+});
+
 test("SSH has verified host keys, bounded connection attempts and no shell-injected destination", () => {
   const args = sshArguments({
     WEBSITE_DEPLOY_HOST: "release@release-host",
     WEBSITE_SSH_IDENTITY: "/private/key",
+    WEBSITE_SSH_KNOWN_HOSTS: "/private/known_hosts",
   });
+  assert.ok(args.includes("UserKnownHostsFile=/private/known_hosts"));
+  for (const invalid of [
+    "relative/known_hosts",
+    "/private/known_hosts\ncommand",
+  ])
+    assert.throws(() =>
+      sshArguments({
+        WEBSITE_DEPLOY_HOST: "release@release-host",
+        WEBSITE_SSH_KNOWN_HOSTS: invalid,
+      }),
+    );
   for (const setting of [
     "StrictHostKeyChecking=yes",
     "BatchMode=yes",
@@ -970,6 +1090,271 @@ test("a lost completion after pointer activation reconciles only the identical a
   const recovered = invoke("reconcile");
   assert.equal(recovered.status, 0, recovered.stderr);
   assert.equal(existsSync(join(host, "release-pending.json")), false);
+});
+
+test("public verification checkpoint blocks new publications until exact completion", (t) => {
+  const { host, request, invoke } = remoteHarness(t);
+  request.publicVerificationRequired = true;
+  request.releaseIdentity = { releaseId: 123 };
+  assert.equal(invoke("publish").status, 0);
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(host, "release-pending.json"))),
+    request,
+  );
+  assert.equal(invoke("publish").status, 1);
+  assert.equal(
+    invoke("complete", { ...request, releaseIdentity: { releaseId: 124 } })
+      .status,
+    1,
+  );
+  assert.equal(existsSync(join(host, "release-pending.json")), true);
+  const inspection = invoke("inspect");
+  assert.equal(JSON.parse(inspection.stdout).identical, true);
+  const completed = invoke("complete");
+  assert.equal(completed.status, 0, completed.stderr);
+  assert.equal(JSON.parse(completed.stdout).publicVerified, true);
+  assert.equal(existsSync(join(host, "release-pending.json")), false);
+  assert.equal(invoke("complete").status, 1);
+});
+
+test("publication without operational recovery evidence still requires immutable GitHub Release inputs", (t) => {
+  const { directory, manifest } = fixture(t);
+  assert.throws(
+    () => verifyPublicationInputs(directory, manifest, { action: "publish" }),
+    /exact GitHub Release, immutable inputs and qualification/,
+  );
+  assert.deepEqual(
+    verifyPublicationInputs(directory, manifest, { action: "reconcile" }),
+    {},
+  );
+  manifest.releaseInputs = { sha256: "a".repeat(64) };
+  for (const action of ["publish", "reconcile"])
+    assert.throws(
+      () => verifyPublicationInputs(directory, manifest, { action }),
+      /exact GitHub Release, immutable inputs and qualification/,
+    );
+});
+
+test("immutable input and download receipts bind public files without operational recovery evidence or copying private journals", (t) => {
+  const { directory, manifest, artifact } = fixture(t);
+  const inputs = Buffer.from(
+    JSON.stringify({
+      source: manifest.revision,
+      version: manifest.version,
+      tag: "v1.2.3",
+    }),
+  );
+  const catalog = Buffer.from("synthetic public catalog");
+  manifest.qualification = { path: "release-qualification.json" };
+  manifest.releaseInputs = {
+    path: "release-inputs.json",
+    sha256: sha256(inputs),
+    catalogPath: "situate-release-history.json",
+    catalogSha256: sha256(catalog),
+  };
+  const files = {
+    "manifest.json": Buffer.from(JSON.stringify(manifest)),
+    "release-inputs.json": inputs,
+    "situate-release-history.json": catalog,
+    "release-qualification.json": Buffer.from("synthetic qualification"),
+    "github-release.json": Buffer.from("synthetic public evidence"),
+  };
+  for (const [name, bytes] of Object.entries(files))
+    writeFileSync(join(directory, name), bytes);
+  const names = [
+    ...Object.keys(files),
+    artifact.path,
+    artifact.updater.path,
+    artifact.updater.signaturePath,
+  ];
+  const receipt = {
+    schemaVersion: 1,
+    kind: "github-release-download",
+    identity: {
+      repository: "getsituate/situate",
+      tag: "v1.2.3",
+      sourceRevision: manifest.revision,
+      version: manifest.version,
+      operationId: "synthetic-operation",
+      inputSha256: sha256(inputs),
+      releaseId: 42,
+    },
+    evidenceSha256: sha256(files["github-release.json"]),
+    assets: names.map((name, index) => ({
+      id: index + 1,
+      name,
+      size: statSync(join(directory, name)).size,
+      sha256: sha256(readFileSync(join(directory, name))),
+    })),
+  };
+  assert.deepEqual(verifyImmutableInputs(directory, manifest), {
+    "release-inputs.json": sha256(inputs),
+    "situate-release-history.json": sha256(catalog),
+  });
+  assert.equal(
+    verifyDownloadReceipt(directory, manifest, receipt),
+    receipt.identity,
+  );
+  const releaseReceipt = join(directory, "github-release-receipt.json");
+  const receiptBytes = JSON.stringify(receipt);
+  writeFileSync(releaseReceipt, receiptBytes);
+  for (const action of ["publish", "reconcile"])
+    assert.deepEqual(
+      verifyPublicationInputs(directory, manifest, { action, releaseReceipt }),
+      {
+        releaseIdentity: receipt.identity,
+        releaseReceiptSha256: sha256(receiptBytes),
+      },
+    );
+  for (const patch of [
+    { identity: { ...receipt.identity, sourceRevision: "c".repeat(40) } },
+    { identity: { ...receipt.identity, version: "1.2.4" } },
+    { identity: { ...receipt.identity, tag: "v1.2.4" } },
+    { identity: { ...receipt.identity, repository: "example/situate" } },
+    { identity: { ...receipt.identity, inputSha256: "0".repeat(64) } },
+    { assets: receipt.assets.slice(1) },
+    {
+      assets: [
+        ...receipt.assets,
+        {
+          id: 100,
+          name: "private-journal.json",
+          size: 1,
+          sha256: "a".repeat(64),
+        },
+      ],
+    },
+    { assets: receipt.assets.map((item) => ({ ...item, id: 1 })) },
+    { evidenceSha256: "c".repeat(64) },
+  ])
+    assert.throws(() =>
+      verifyDownloadReceipt(directory, manifest, { ...receipt, ...patch }),
+    );
+  writeFileSync(
+    join(directory, "situate-release-history.json"),
+    "modified catalog",
+  );
+  assert.throws(
+    () => verifyImmutableInputs(directory, manifest),
+    /bytes or size/,
+  );
+  assert.throws(
+    () => verifyDownloadReceipt(directory, manifest, receipt),
+    /bytes or size/,
+  );
+  assert.throws(
+    () =>
+      verifyPublicationInputs(directory, manifest, {
+        action: "publish",
+        releaseReceipt,
+      }),
+    /bytes or size/,
+  );
+});
+
+test("staged generated releases reject changed receipts and private extra files", (t) => {
+  const { directory, manifest, artifact } = fixture(t);
+  const inputs = Buffer.from("immutable generated inputs");
+  const catalog = Buffer.from("immutable catalog");
+  manifest.releaseInputs = {
+    path: "release-inputs.json",
+    sha256: sha256(inputs),
+    catalogPath: "situate-release-history.json",
+    catalogSha256: sha256(catalog),
+  };
+  manifest.qualification = { path: "release-qualification.json" };
+  const manifestBytes = Buffer.from(JSON.stringify(manifest));
+  const receipt = {
+    sourceRevision: manifest.revision,
+    version: manifest.version,
+    manifestSha256: sha256(manifestBytes),
+    releaseInputsSha256: sha256(inputs),
+    checks: { installation: true },
+  };
+  const receiptBytes = Buffer.from(JSON.stringify(receipt));
+  for (const [name, bytes] of Object.entries({
+    "manifest.json": manifestBytes,
+    "release-inputs.json": inputs,
+    "situate-release-history.json": catalog,
+    "release-qualification.json": receiptBytes,
+  }))
+    writeFileSync(join(directory, name), bytes);
+  mkdirSync(join(directory, "metadata"));
+  for (const [name, value] of Object.entries(metadata(manifest, artifact)))
+    writeFileSync(
+      join(directory, "metadata", name),
+      `${JSON.stringify(value, null, 2)}\n`,
+    );
+  const verify = () =>
+    verifyStagedRelease(
+      directory,
+      manifest,
+      artifact,
+      sha256(manifestBytes),
+      sha256(receiptBytes),
+    );
+  assert.doesNotThrow(verify);
+  writeFileSync(
+    join(directory, "release-qualification.json"),
+    JSON.stringify({ ...receipt, checks: { installation: false } }),
+  );
+  assert.throws(verify, /Qualification receipt differs/);
+  writeFileSync(join(directory, "release-qualification.json"), receiptBytes);
+  writeFileSync(join(directory, "private-journal.json"), "private state");
+  assert.throws(verify, /inventory differs/);
+});
+
+test("public availability verifies both feeds and every package after activation", async (t) => {
+  const { directory, manifest, artifact } = fixture(t);
+  const feeds = metadata(manifest, artifact);
+  const requests = [];
+  const fetchImpl = async (url, options) => {
+    assert.equal(options.redirect, "error");
+    assert.equal(options.credentials, "omit");
+    requests.push(url);
+    const name = url.split("/").at(-1);
+    return new Response(
+      Object.hasOwn(feeds, name)
+        ? JSON.stringify(feeds[name])
+        : readFileSync(join(directory, name)),
+    );
+  };
+  assert.deepEqual(
+    await verifyPublicAvailability(manifest, artifact, { fetchImpl }),
+    { version: "1.2.3", verified: true },
+  );
+  assert.equal(requests.length, 7);
+  for (const badResponse of [
+    new Response("unavailable", { status: 503 }),
+    new Response("{}"),
+    new Response("wrong package"),
+  ])
+    await assert.rejects(
+      verifyPublicAvailability(manifest, artifact, {
+        fetchImpl: async () => badResponse.clone(),
+      }),
+    );
+  await assert.rejects(
+    verifyPublicAvailability(manifest, artifact, {
+      fetchImpl: async (url, options) =>
+        url.endsWith(artifact.path)
+          ? new Response("tampered")
+          : fetchImpl(url, options),
+    }),
+    /package/,
+  );
+  let count = 0;
+  await assert.rejects(
+    verifyPublicAvailability(manifest, artifact, {
+      fetchImpl: async (url, options) =>
+        ++count === 6
+          ? new Response(
+              JSON.stringify({ ...feeds["download.json"], version: "1.2.4" }),
+            )
+          : fetchImpl(url, options),
+    }),
+    /metadata differs/,
+  );
 });
 
 test("archive inventory attacks cannot escape incoming storage or activate metadata", (t) => {

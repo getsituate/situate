@@ -1,5 +1,4 @@
 import {
-  getPackageDir,
   type AgentBeforeSettleEvent,
   type BoundaryResult,
   type ExecResult,
@@ -279,7 +278,6 @@ export default function testSuite(pi: ExtensionAPI) {
     let output = "";
     try {
       if (current.error) throw new Error(current.error);
-      const packageRoot = process.env.PI_PACKAGE_ROOT ?? getPackageDir();
       if (ctx.hasUI)
         ctx.ui.setStatus("unit-tests", "Running affected quality checks…");
       const [node, npm, npx] = await voltaTools(
@@ -308,8 +306,6 @@ export default function testSuite(pi: ExtensionAPI) {
           current.base!,
           "--json",
           ...(process.env.CI ? [] : ["--success-cache", cacheDirectory]),
-          "--pi-package-root",
-          packageRoot,
         ],
         {
           cwd: current.root,

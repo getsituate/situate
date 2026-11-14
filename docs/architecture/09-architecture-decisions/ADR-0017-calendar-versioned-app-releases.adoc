@@ -1,0 +1,103 @@
+[[adr-0017]]
+= ADR-0017: Use calendar versions for app releases
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-docs-root[]
+:architecture-docs-root: ..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-13
+Implementation:: Planned; existing product-version semantics and manual version preparation remain in the tools; automatic allocation and distribution qualification are outstanding
+
+== Context
+
+The link:{architecture-repository-root}/requirements/data/foundations.md#app-version-numbers-and-release-communication[release policy] selects continuous macOS delivery as the only current product delivery path.
+Classifying each small app delivery as a product major, minor or patch is unnecessary when its purpose is to identify an installed software state.
+Product communication can explain a substantial capability without reserving a special technical version number.
+
+Apple requires a three-integer public version.
+Tauri accepts SemVer-shaped strings, but that syntax does not require the app to use API-change semantics.
+Workspace and public plugin-interface compatibility remain governed by link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md[REQ-0070], independently of app numbering.
+
+== Decision
+
+Use `YYYY.M.N` for future public app versions.
+
+.Target macOS identity flow. Public version, build ID and source revision remain distinct.
+image::{architecture-diagrams-root}/release-version-identity.svg["Source, approved fragments and reviewed configuration bind a durable CalVer reservation for the macOS direct package and its release evidence.",width=760]
+
+[cols="1,4",options="header"]
+|===
+|Field |Meaning
+|`YYYY` |Full UTC year when the version is reserved.
+|`M` |UTC month, 1–12, without zero-padding.
+|`N` |Positive sequence within the month, starting at 1; neither a day nor a severity indicator.
+|===
+
+Calendar ordering: `2026.11.17` < `2026.12.1` < `2027.1.1`.
+Allocation month does not promise availability on every channel.
+
+* Allocate centrally after merge through serialized, durable reservations. Retain source/content bindings across retries and UTC date changes; gaps are allowed, reassignment is not.
+* Clock regression must not allocate a version older than an existing successor.
+* Preserve platform, architecture and distribution identities. Build numbers, submission attempts and source commits remain separate; test reruns do not require a new public version.
+* Published package bytes are immutable. A changed public package requires a higher version.
+* Explicitly set Apple's `CFBundleVersion` separately from `CFBundleShortVersionString`; Tauri otherwise copies the public version. Build-number mapping remains open and must respect existing published values and platform limits.
+
+This decision does not add iOS, Windows, Android, Linux or package-manager releases to the macOS-only MVP.
+If those channels return, preserve CalVer as the public product identity and qualify any required package-version mapping.
+Windows MSI cannot use a four-digit year directly because its first field is limited to 255; Android's visible version name and bounded, increasing version code are separate identifiers.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Trade-off
+|Product major/minor/patch
+|Communicates change scope and supports numbered marketing milestones.
+|Requires per-release classification; a mechanical patch bump misrepresents new capabilities under the former policy.
+|Calendar version (selected)
+|Communicates the release period and supports automatic allocation without feature-size decisions.
+|Does not express compatibility or feature scope; needs separate build identifiers and some future installer mappings.
+|Unbounded release counter
+|Simple ordering without calendar dependence.
+|Provides no date or scope context; Apple's public version still needs a three-part representation.
+|===
+
+CalVer preserves the three-number shape already consumed by app tooling while removing product-scope classification from routine delivery.
+It is not a declaration that every release is compatible, nor a substitute for user-oriented release notes.
+
+== Consequences and transition
+
+The app can deliver frequent improvements without manufacturing a major/minor marketing event.
+Returning from a year-based version to a lower technical `1.0.0` would be a downgrade; any future scheme change must preserve ordering.
+A calendar year does not grant new feature-promotion behavior or alter the optional, offline history under link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068].
+
+Keep historical numeric versions, release catalogs, signatures, immutable URLs and migration checkpoints readable.
+Do not rename published releases, rewrite their bytes or require retroactive release notes.
+Compatibility windows use actual publication evidence, not a date inferred from the version string.
+Test CalVer against supported earlier versions in update comparisons and minimum-app-version checks.
+
+The current builders require consistent committed version pins and a clean source revision.
+Automatic allocation needs a qualified way to materialize those inputs; dirty-checkout version edits are not an accepted shortcut.
+The link:{architecture-docs-root}/index.adoc#release-workflow[release workflow] records the remaining input-materialization and operational decisions.
+
+Verify simultaneous reservations, failed builds, retries after midnight, month/year boundaries, skipped releases and monotonic macOS build identifiers.
+Qualify signed macOS upgrades from supported existing versions and validate the actual Apple exports before enabling unattended delivery.
+Documented format compatibility is not an Apple acceptance result for a Situate build.
+
+== References
+
+* https://calver.org/[Calendar Versioning]
+* https://semver.org/[Semantic Versioning: API semantics, numeric syntax and build-metadata precedence]
+* https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring[Apple public bundle version]
+* https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion[Apple build version]
+* https://v2.tauri.app/reference/config/[Tauri app and platform-specific bundle versions]
+* https://learn.microsoft.com/en-us/windows/win32/msi/productversion[Windows MSI field limits]
+* https://developer.android.com/studio/publish/versioning[Android version name and version code]

@@ -1,5 +1,6 @@
 use super::{child, optional_child, valid_id};
 use crate::content::{self, ContentStore, SaveOutcome, TextVersion};
+use crate::durable_storage::sync_directory;
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::{ambient_authority, fs::Dir};
 use std::io::Read;
@@ -40,12 +41,7 @@ fn workspace(path: &Path) -> Result<Dir, String> {
 }
 fn ensure(parent: &Dir, name: &str) -> Result<Dir, String> {
     match parent.create_dir(name) {
-        Ok(()) => parent
-            .try_clone()
-            .map_err(|_| ERROR)?
-            .into_std_file()
-            .sync_all()
-            .map_err(|_| ERROR)?,
+        Ok(()) => sync_directory(parent).map_err(|_| ERROR)?,
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => (),
         Err(_) => return Err(ERROR.into()),
     }
@@ -76,12 +72,7 @@ fn open(root: &Path, plugin: &str, area: Area, create: bool) -> Result<Dir, Stri
     let dir = child(&plugin_dir, area.directory()).map_err(|_| ERROR)?;
     ensure(&dir, ".situate")?;
     drop(ContentStore::open(&location(root, plugin, area)).map_err(|_| ERROR)?);
-    plugin_dir
-        .try_clone()
-        .map_err(|_| ERROR)?
-        .into_std_file()
-        .sync_all()
-        .map_err(|_| ERROR)?;
+    sync_directory(&plugin_dir).map_err(|_| ERROR)?;
     Ok(dir)
 }
 pub fn read(root: &Path, plugin: &str, area: Area, path: &str) -> Result<TextVersion, String> {

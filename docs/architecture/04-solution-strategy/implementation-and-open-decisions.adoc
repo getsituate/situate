@@ -57,4 +57,4 @@ The following gaps do not imply that all mechanisms are absent or that every ite
 * Import preservation of content, metadata, links, attachments and task field meanings, including unsupported states and malformed metadata.
 * Presentation of retained binary variants, uncertain external continuity, missing restoration parents, whole-version conflicts and failed-save recovery.
 
-Evidence invalidating a central assumption can require revisiting the strategy. Windows, Linux desktop and Android qualification remain deferred rather than prerequisites for the macOS/iOS MVP.
+Evidence invalidating a central assumption can require revisiting the strategy. iOS, Windows, Linux desktop and Android qualification remain deferred rather than prerequisites for the macOS MVP.

@@ -26,6 +26,7 @@ blob-report/
 /tools/dev-tui/target/
 /client/.desktop-dev-data/
 /.release-preparation/
+/.release-operations/
 
 # Rendered architecture documentation
 /docs/architecture/**/*.html

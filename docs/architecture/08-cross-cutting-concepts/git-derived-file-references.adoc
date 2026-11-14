@@ -21,7 +21,7 @@ C3: content update at Archive/report.pdf
 Result: current content at Archive/report.pdf, not the C1 bytes
 ----
 
-*Status: implemented in the core and host; native macOS/iOS qualification remains separate.*
+*Status: implemented in the core and host; native macOS qualification remains separate; iOS is deferred.*
 link:{architecture-docs-root}/09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc[ADR-0010] establishes Git-owned history and cache-free reference reconstruction.
 link:{architecture-docs-root}/09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc[ADR-0012] extends the model to Markdown and removes embedded file UUIDs.
 Stored selectors and runtime authorization have separate boundaries, described below.
@@ -210,5 +210,5 @@ The link:{architecture-repository-root}/docs/development/git-derived-file-refere
 The PDF example concerns path continuity and history, not a new PDF text-extraction or chat-attachment capability; test binary identity without assuming the current UTF-8 document API can read it.
 
 Removing witness-based reconciliation does not remove every use of hardlinks, prove Android no-replace compatibility or authorize weaker file publication.
-Native macOS and iOS checks must establish the operations used on active product storage paths. Windows, Linux desktop and Android remain deferred; shared or browser tests do not qualify them.
+Native macOS checks must establish the operations used on active product storage paths. iOS, Windows, Linux desktop and Android remain deferred; shared or browser tests do not qualify them.
 Provider-backed read-only access, ordinary editor draft restoration, Git durability fences, diagnostics privacy and the separate device-local log store are unchanged.

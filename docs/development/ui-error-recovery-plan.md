@@ -2,7 +2,7 @@
 
 ## Scope and design reference
 
-Implement local failure containment, a shared unexpected-error dialog, user-initiated problem reports and explicit recovery actions for macOS and iOS. This is a proposed production implementation sequence. The workshop models interactions in memory; it does not establish working persistence, email delivery, workspace reload or application restart.
+Implement local failure containment, a shared unexpected-error dialog, user-initiated problem reports and explicit recovery actions for macOS. iOS recovery is deferred and is not a current implementation or verification gate. This is a proposed production implementation sequence. The workshop models interactions in memory; it does not establish working persistence, email delivery, workspace reload or application restart.
 
 The reference is **Error recovery** in the [Design Workshop](design-workshop.md), implemented under [`client/workshop/src/error-recovery/`](../../client/workshop/src/error-recovery/). Its starting states are:
 
@@ -76,7 +76,7 @@ The workshop reducer is not a production shutdown protocol. Reuse the ownership 
 
 **Restart Situate on macOS:** selecting restart authorizes the coordinated stop-and-restart attempt, without a second normal confirmation. Collect acknowledgements from every participating window and workspace, preserve pending input and attachments, stop running work, and relaunch only after required persistence and shutdown have succeeded. A missing acknowledgement, failed save or uncertain preparation blocks relaunch and preserves a visible recovery path. Do not add an implicit force-exit fallback. Resolve preparation ordering with existing conversation/file owners so work cannot write after its final checkpoint.
 
-**iOS and startup:** offer workspace reload where available and manual reopening guidance, not programmatic process restart. Startup retry reruns only the failed initialization through a controlled, idempotent path; it must not bypass plugin-suppression or compatibility checks. A startup incident has no invented workspace or plugin culprit.
+**Startup and deferred iOS reference:** offer workspace reload where available and manual reopening guidance, not programmatic process restart. Startup retry reruns only the failed initialization through a controlled, idempotent path; it must not bypass plugin-suppression or compatibility checks. A startup incident has no invented workspace or plugin culprit.
 
 Reopening waits for user interaction before continuing interrupted work. Never infer that an uncertain external effect did not occur. Ordinary Quit, workspace closure and update installation retain their existing contracts.
 
@@ -109,15 +109,15 @@ Implement steps 1–3 first, then lifecycle recovery, reports and repair. Do not
 | Lost work during reload/restart     | Frontend and native lifecycle tests for multiple windows, queued input, failed saves, missing acknowledgements, cancellation and reopen without replay. |
 | Private data in a report            | Synthetic hostile errors and sentinel notes, paths and credentials; bounded report and preview/handoff equality tests.                                  |
 | Misleading repair                   | Missing model/storage, unknown culprit, duplicate activation and compatibility-block tests; preserved assignment and original work.                     |
-| Inaccessible or oversized dialog    | Product browser flows on Chromium/WebKit, keyboard focus and Escape, narrow iOS geometry, long translations, reduced motion and reopened incidents.     |
+| Inaccessible or oversized dialog    | Product browser flows on Chromium/WebKit, keyboard focus and Escape, narrow macOS windows, long translations, reduced motion and reopened incidents.    |
 
-For workshop integration, run quick/feedback checks, the workshop build, and the error-recovery and update browser suites. For production adoption, run affected product unit, localization, type and build checks; reuse product browser flows and update affected visual references through the locked Docker workflow. Add native synthetic journeys for actual email-composer handoff, safe macOS relaunch and startup recovery. Qualify iOS recovery and composition on a simulator/device; browser geometry alone is insufficient.
+For workshop integration, run quick/feedback checks, the workshop build, and the error-recovery and update browser suites. For production adoption, run affected product unit, localization, type and build checks; reuse product browser flows and update affected visual references through the locked Docker workflow. Add native synthetic journeys for actual email-composer handoff, safe macOS relaunch and startup recovery. iOS recovery and composition remain deferred; any later qualification needs a simulator/device rather than browser geometry alone.
 
 Before a PR, run `node tools/test.mjs --changed --base origin/main` against an up-to-date base, following the [testing guide](testing.md). Report unavailable native prerequisites and unrun qualification separately from passing shared checks.
 
 ## Limits and decisions to resolve during implementation
 
 - A frozen UI thread or native crash cannot reliably display this dialog. Preserve the independent plugin-free startup path; do not promise runtime isolation or automatic rollback.
-- Specify finite report-size/event-count budgets and verify actual macOS/iOS composer behavior before choosing the handoff implementation.
+- Specify finite report-size/event-count budgets and verify actual macOS composer behavior before choosing the handoff implementation.
 - Define the startup/blocked-workspace repair host and the minimum independently mountable recovery surface before wiring those actions.
 - The exact native source of a generic plugin-unavailable incident needs its own reproduction and diagnostics. Correcting the UI's error scope does not establish that native cause.

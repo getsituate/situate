@@ -35,16 +35,35 @@ USER builder
 
 FROM eclipse-temurin:21-jdk-jammy@sha256:e0c60c487345d1dc9d0fc7b6f0496f3cc941e5132e09296cc17a6decc71b902b AS ci-java
 
+FROM swift:6.2.4-bookworm@sha256:87947bfd51a61c86f487986ccf6390fc9cd4035cf98d74f7b8c9a7cb92d9282a AS ci-swift
+RUN apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates unzip \
+    && rm -rf /var/lib/apt/lists/*
+COPY client/docker/ci-swift-tools.py client/docker/ci-swift-tools.json client/docker/ci-swift-format.resolved.json client/docker/ci-swiftlint.resolved.json /swift-input/
+COPY tools/toolchain.quality.json /swift-input/
+RUN --mount=type=cache,id=situate-ci-swift-sources,target=/var/cache/ci-swift-sources,sharing=locked \
+    python3 /swift-input/ci-swift-tools.py build
+
 FROM scratch AS ci-inputs
 COPY LICENSE /LICENSE
 COPY client/docker/ci-install.mjs client/docker/ci-assets.json client/docker/ci-npm.json client/docker/ci-browsers.json client/docker/ci-NOTICES.md /client/docker/
 COPY client/docker/ci-sources.mjs client/docker/ci-sources.json client/docker/ci-user.sh /client/docker/
 COPY client/docker/ci-tool-notices.py client/docker/ci-tool-notices-update.py client/docker/ci-tool-notices.json /client/docker/
+COPY client/docker/ci-swift-tools.py client/docker/ci-swift-tools.json client/docker/ci-swift-format.resolved.json client/docker/ci-swiftlint.resolved.json /client/docker/
 COPY tools/toolchain.quality.json /tools/
 
 FROM toolchain AS ci
 USER root
 COPY --from=ci-java /opt/java/openjdk /opt/java/openjdk
+COPY --from=ci-swift /export/opt/ci-tools/ /opt/ci-tools/
+RUN printf '%s\n' \
+      /opt/ci-tools/swift-runtime/usr/lib/swift/linux \
+      /opt/ci-tools/swift-runtime/usr/lib/swift/host/compiler \
+      /opt/ci-tools/swift-runtime/usr/lib \
+      > /etc/ld.so.conf.d/situate-ci-swift.conf \
+    && ldconfig \
+    && ln -s /opt/ci-tools/swift-runtime/usr/lib/libsourcekitdInProc.so /usr/lib/libsourcekitdInProc.so \
+    && ln -s /opt/ci-tools/swiftlint/swiftlint /usr/local/bin/swiftlint \
+    && ln -s /opt/ci-tools/swift-format/swift-format /usr/local/bin/swift-format
 ENV JAVA_HOME=/opt/java/openjdk \
     PATH=/opt/volta/bin:/opt/java/openjdk/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PLAYWRIGHT_BROWSERS_PATH=/ci-cache/browsers
@@ -56,6 +75,7 @@ RUN --mount=type=bind,from=ci-inputs,target=/ci-input,readonly \
     && ln -s "/usr/lib/$(gcc -dumpmachine)/libnss_wrapper.so" /opt/ci-tools/libnss_wrapper.so \
     && test -r /opt/ci-tools/libnss_wrapper.so \
     && cp /ci-input/client/docker/ci-user.sh /opt/ci-tools/ci-user.sh \
+    && cp /ci-input/client/docker/ci-swift-tools.py /opt/ci-tools/ci-swift-tools.py \
     && cp /ci-input/client/docker/ci-NOTICES.md /opt/ci-tools/NOTICES.md \
     && cp /ci-input/LICENSE /opt/ci-tools/LICENSE-Situate.txt \
     && chmod -R a+rX /usr/local/rustup /usr/local/cargo /opt/ci-tools /opt/java/openjdk \

@@ -130,7 +130,86 @@ export function fixtureTurn(body, kind = "main", pluginEffectsUrl) {
   };
   const step = outputs.length;
   let item;
-  if (scenario === "plugins") {
+  if (kind === "main" && prompt.includes("[e2e:final-artifact-plugin]")) {
+    const id = "final-artifact";
+    const path = `.situate/plugins/${id}/code/`;
+    const service = `export default () => ({tools:[{name:"preserved",description:"Read the saved synthetic plugin version.",parameters:{type:"object",properties:{},additionalProperties:false},execute:async()=>({content:[{type:"text",text:JSON.stringify({version:"v1"})}]})}]});`;
+    const steps = [
+      ["inspect_plugin", { operation: "create", pluginId: id }],
+      [
+        "write",
+        {
+          path: path + "plugin.json",
+          text: JSON.stringify({
+            schemaVersion: 2,
+            id,
+            name: "Final artifact plugin",
+            description: "Synthetic retained capability.",
+            serviceEntry: "service.js",
+          }),
+          expectedRevision: null,
+        },
+      ],
+      [
+        "write",
+        { path: path + "service.js", text: service, expectedRevision: null },
+      ],
+      [
+        "check_plugin_changes",
+        {
+          changes: [{ pluginId: id }],
+          checks: [
+            {
+              pluginId: id,
+              timeoutMs: 10000,
+              script:
+                'assert.ok(plugin.tools.some(tool => tool.name === "preserved")); const result = await plugin.invokeTool("preserved", {}); assert.equal(result.content[0].text, JSON.stringify({version:"v1"}));',
+            },
+          ],
+        },
+      ],
+    ];
+    if (step) latest();
+    if (step < steps.length) item = call(...steps[step]);
+    else if (step === 4) {
+      const check = latest();
+      if (
+        check.passed !== true ||
+        typeof check.checkId !== "string" ||
+        !check.results?.some(
+          (result) =>
+            result.pluginId === id &&
+            result.passed === true &&
+            result.assertions > 0,
+        )
+      )
+        throw new Error("fixture_final_artifact_check_failed");
+      item = call("activate_plugin_changes", { checkId: check.checkId });
+    } else {
+      const activation = latest();
+      if (
+        activation.activated !== true ||
+        activation.publication?.status !== "published"
+      )
+        throw new Error("fixture_final_artifact_activation_failed");
+      item = final("Final artifact plugin activated.");
+    }
+  } else if (
+    kind === "main" &&
+    prompt.includes("[e2e:final-artifact-plugin-read]")
+  ) {
+    if (step === 0) {
+      const name = `plugin_${createHash("sha256").update("final-artifact").digest("hex").slice(0, 16)}_preserved`;
+      if (!body.tools?.some((tool) => tool.name === name))
+        throw new Error("fixture_final_artifact_tool_missing");
+      item = call(name, {});
+    } else {
+      const result = latest();
+      if (result.version !== "v1")
+        throw new Error("fixture_final_artifact_tool_changed");
+      item = final("Final artifact plugin v1 verified.");
+    }
+  } else if (scenario === "plugins") {
     if (kind !== "main") throw new Error("fixture_plugins_auxiliary_request");
     const names = (body.tools ?? []).map((tool) => tool.name);
     const expected = step < 3 ? PLUGIN_FIRST_TOOL : PLUGIN_SECOND_TOOL;
@@ -258,7 +337,11 @@ export function fixtureTurn(body, kind = "main", pluginEffectsUrl) {
       } else throw new Error("fixture_source_chat_unexpected_turn");
     }
   } else if (kind === "title") {
-    item = final("Workspace note preparation");
+    item = final(
+      prompt.includes("[e2e:final-artifact-plugin-read]")
+        ? "[e2e:final-artifact-plugin-read]"
+        : "Workspace note preparation",
+    );
   } else if (kind === "comment" || kind === "compaction") {
     item = final(
       kind === "compaction"

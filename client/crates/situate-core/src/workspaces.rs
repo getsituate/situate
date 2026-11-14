@@ -207,7 +207,7 @@ fn prepare_initial_metadata(child: &Dir, onboarding: bool) -> std::io::Result<(S
     if onboarding {
         crate::onboarding::initialize_marker(&marker)?;
     }
-    situate_migrations::initialize_fresh(&marker, env!("CARGO_PKG_VERSION"))
+    situate_migrations::initialize_fresh(&marker, crate::application_version())
         .map_err(std::io::Error::other)?;
     #[cfg(test)]
     onboarding_tests::checkpoint(onboarding_tests::Checkpoint::Progress, child)?;

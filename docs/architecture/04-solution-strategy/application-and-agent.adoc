@@ -11,7 +11,7 @@ Tauri provides the application shell; Rust implements the application core that 
 Application and plugin views use Vue and the same responsive Situate components.
 This avoids maintaining separate native widgets alongside plugin rendering, but shared components still require cross-engine, accessibility and input testing in Tauri's link:https://v2.tauri.app/reference/webview-versions/[system WebViews].
 Rust supplies a common native boundary, not a measured performance guarantee.
-The active MVP targets are macOS and iOS; other platforms remain deferred under link:{strategy-requirements-root}/data/requirements/REQ-0012-platform-availability.md[REQ-0012].
+The active MVP target is macOS only; iOS and other platforms remain deferred under link:{strategy-requirements-root}/data/requirements/REQ-0012-platform-availability.md[REQ-0012].
 
 Native capabilities ship with the host. Plugins add plain JavaScript and Vue templates compiled locally by the shipped runtime/compiler, without rebuilding the host.
 Plugin editing and activation require neither TypeScript nor JSX nor an external build or mobile Node process; host development tooling is separate.

@@ -4,8 +4,8 @@ endif::[]
 
 === Product environments
 
-The active product targets are macOS and iOS, with macOS direct delivery first and iOS App Store delivery next.
-Windows, Linux desktop and Android remain deferred.
+The only active product target is macOS, delivered through the website DMG and direct updater.
+iOS, Windows, Linux desktop and Android remain deferred and are not currently supported.
 See link:{architecture-repository-root}/requirements/data/foundations.md#mvp-platform-scope[platform scope] and link:{architecture-repository-root}/requirements/data/foundations.md#distribution[distribution constraints].
 
 ==== Software placement and control
@@ -18,12 +18,12 @@ Optional service rows describe required boundaries, not an operational service i
 |Software or dependency |Execution location |Control and communication boundary
 
 |Situate Application: UI, Application Core and Agent Integration
-|The user's macOS or iOS device. Vue views run in the application webview; the native host owns conversation execution, storage access and platform integration.
-|The application uses operating-system permissions for local access. Manual local work requires neither an AI endpoint nor a synchronization service. Platform scope does not imply qualification of every feature on both targets.
+|The user's macOS device. Vue views run in the application webview; the native host owns conversation execution, storage access and platform integration.
+|The application uses operating-system permissions for local access. Manual local work requires neither an AI endpoint nor a synchronization service. Platform scope does not imply qualification of every feature.
 
 |Installed plugins
 |Execution contexts on the user's device, within the owning open workspace's lifecycle.
-|Plugins are trusted code, not sandboxed adversaries. They can call external email, calendar and document APIs through configured access. Mobile suspension can interrupt execution; a closed workspace has no always-running service.
+|Plugins are trusted code, not sandboxed adversaries. They can call external email, calendar and document APIs through configured access. A closed workspace has no always-running service. Mobile suspension remains a deferred-platform consideration.
 
 |User-configured model endpoints
 |A local process, self-hosted system or remote provider selected for that workspace on that device.
@@ -54,7 +54,7 @@ Synchronization placement follows link:{architecture-repository-root}/requiremen
 |Data or configuration |Location |Portability and recovery boundary
 
 |Workspace content, conversations, plugins and histories
-|The workspace directory on the user's device. MVP versioned writes target macOS filesystem workspaces and iOS application-owned document folders.
+|The workspace directory on the user's device. MVP versioned writes target macOS filesystem workspaces; retained mobile adapters are outside current product support.
 |Copying a closed workspace can produce a consistent backup; safe live snapshots remain open. External document-provider workspaces remain read-only until versioned writes are implemented and verified. A directory copy does not prove successful restoration.
 
 |Conversation history and metadata

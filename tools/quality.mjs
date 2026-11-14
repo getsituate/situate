@@ -103,7 +103,7 @@ const checks = {
     requireTool("cargo-deny");
     run(
       "cargo-deny",
-      ["--offline", "--locked", "check", "licenses", "bans", "sources"],
+      ["--locked", "check", "licenses", "bans", "sources"],
       resolve(root, "client"),
     );
   },

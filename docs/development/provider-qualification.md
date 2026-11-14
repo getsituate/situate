@@ -2,7 +2,7 @@
 
 OS component evidence recorded on 2026-10-08 predates the native Rig execution path. Historical platform and live-service observations do not automatically qualify the replacement.
 
-This is the qualification record for the bounded MVP in [REQ-0015](../../requirements/data/requirements/REQ-0015-connect-user-provided-models.md). The requirement defines acceptance; the [agent architecture](../architecture/04-solution-strategy/application-and-agent.adoc) defines the runtime boundary. Implemented source, deterministic fixtures, OS execution and live provider access are different evidence. These results do not establish an Apple release. Windows, Linux desktop and Android columns retain historical component evidence for deferred targets, not active product qualification.
+This is the qualification record for the bounded MVP in [REQ-0015](../../requirements/data/requirements/REQ-0015-connect-user-provided-models.md). The requirement defines acceptance; the [agent architecture](../architecture/04-solution-strategy/application-and-agent.adoc) defines the runtime boundary. Implemented source, deterministic fixtures, OS execution and live provider access are different evidence. These results do not establish a macOS release. macOS is the only active product target. iOS, Windows, Linux desktop and Android columns retain historical or deferred component evidence, not current product support or release gates.
 
 ## Native application evidence
 
@@ -158,7 +158,7 @@ The macOS native smoke and native-agent flows require an unlocked desktop throug
 Further gates are:
 
 1. Packaged setup → durable save → suitable model → synthetic request → reopen → renew/re-authenticate → remove on each claimed platform, including duplicate-account isolation and failures.
-2. Apple physical-device/production-signing checks, mobile suspension, background expiration and lock behavior beyond the observed Simulator conditions. Deferred targets require a separate scope decision and their own native verification before support resumes.
+2. macOS production-signing, installation and restart checks. iOS physical-device, mobile suspension, background-expiration and protected-storage qualification remain deferred until a separate platform scope decision.
 3. Destination-specific LAN permission/HTTP-consent journeys and writable external-document workspaces where required by the release scope.
 4. Live qualification of implemented model discovery and separately authorized evidence of accepted registrations, grants and model entitlement. Static catalog support must never be presented as verified account access.
 5. A passing aggregate repository gate, retaining passing product and visual coverage, before any complete MVP release claim.

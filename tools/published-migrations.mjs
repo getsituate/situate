@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readPublicationHistory } from "../infrastructure/releases/transport.mjs";
+import { readGitHubMigrationHistory } from "./github-release.mjs";
 import {
   verifyMigrationHistory,
   migrationInventory,
@@ -22,6 +23,42 @@ function validateRelease(release) {
       /^[a-f0-9]{64}$/.test(release.manifestSha256 ?? ""),
     "Invalid published macOS release",
   );
+}
+
+export function mergeCompatibilityHistories(host, github) {
+  const releases = new Map();
+  for (const history of [host, github]) {
+    assert(
+      history?.schemaVersion === 1 && Array.isArray(history.releases),
+      "Invalid compatibility release history",
+    );
+    const seen = new Set();
+    for (const release of history.releases) {
+      validateRelease(release);
+      assert(!seen.has(release.version), "Duplicate compatibility release");
+      seen.add(release.version);
+      const existing = releases.get(release.version);
+      assert(
+        !existing || sameRelease(existing, release),
+        "Conflicting compatibility release identity",
+      );
+      releases.set(release.version, release);
+    }
+  }
+  return { ...host, releases: [...releases.values()] };
+}
+
+export async function qualifyPublicCompatibilityMigrations(
+  root,
+  {
+    readGitHubHistory = readGitHubMigrationHistory,
+    github,
+    repository,
+    ...options
+  } = {},
+) {
+  const githubHistory = await readGitHubHistory(root, { github, repository });
+  return qualifyPublishedMigrations(root, { ...options, githubHistory });
 }
 
 function sameRelease(left, right) {
@@ -70,10 +107,15 @@ export function qualifyPublishedMigrations(
     history,
     environment = process.env,
     readHistory = readPublicationHistory,
+    githubHistory,
   } = {},
 ) {
   const candidate = migrationRevision(root, revision);
-  const published = history ?? readHistory(root, { environment });
+  const hostHistory = history ?? readHistory(root, { environment });
+  const published =
+    githubHistory === undefined
+      ? hostHistory
+      : mergeCompatibilityHistories(hostHistory, githubHistory);
   assert(
     published?.schemaVersion === 1 && Array.isArray(published.releases),
     "Invalid published macOS migration history",
@@ -91,7 +133,7 @@ export function qualifyPublishedMigrations(
   const covered = new Set();
   if (checkpoint) {
     assert(
-      published.releases.some((release) => sameRelease(release, checkpoint)),
+      hostHistory.releases.some((release) => sameRelease(release, checkpoint)),
       "Publication history is missing the pinned migration checkpoint",
     );
     assert(
@@ -135,7 +177,9 @@ export function qualifyPublishedMigrations(
         "Forward or cyclic checkpoint coverage",
       );
       assert(
-        published.releases.some((release) => sameRelease(release, predecessor)),
+        hostHistory.releases.some((release) =>
+          sameRelease(release, predecessor),
+        ),
         "Publication history is missing an unchanged checkpoint predecessor",
       );
       covered.add(predecessor.version);

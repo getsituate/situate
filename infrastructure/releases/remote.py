@@ -234,7 +234,7 @@ def main():
     current = ROOT / 'current-release'
     destination = releases / version
     validate_storage(token)
-    if action not in ('inspect', 'publish', 'reconcile'):
+    if action not in ('inspect', 'publish', 'reconcile', 'complete'):
         raise ValueError('Unknown publication action')
     with os.fdopen(open_regular(ROOT / 'release.lock', os.O_WRONLY | os.O_CREAT), 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -244,6 +244,18 @@ def main():
                               'current': os.readlink(current) if current.is_symlink() else None,
                               'versionExists': destination.exists(),
                               'identical': identical(destination, files)}))
+            return
+        if action == 'complete':
+            if request.get('publicVerificationRequired') is not True:
+                raise ValueError('Public verification checkpoint is required')
+            if entry(pending) is None or read_pending(pending) != request:
+                raise ValueError('Publication checkpoint differs; inspect before recovery')
+            if not current.is_symlink() or os.readlink(current) != 'releases/' + version + '/metadata':
+                raise ValueError('Active release changed before public verification completed')
+            verify(destination, files)
+            pending.unlink()
+            sync_directory(ROOT)
+            print(json.dumps({'version': version, 'active': True, 'publicVerified': True}))
             return
         validate_baseline(request.get('migrationBaseline'))
         if current.is_symlink():
@@ -314,8 +326,9 @@ def main():
         temporary.symlink_to('releases/' + version + '/metadata')
         os.replace(temporary, current)
         sync_directory(ROOT)
-        pending.unlink()
-        sync_directory(ROOT)
+        if request.get('publicVerificationRequired') is not True:
+            pending.unlink()
+            sync_directory(ROOT)
         print(json.dumps({'version': version, 'active': True}))
 
 

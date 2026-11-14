@@ -35,25 +35,43 @@ export function sshArguments(config) {
       throw new Error("WEBSITE_SSH_IDENTITY must be an absolute path.");
     args.push("-i", config.WEBSITE_SSH_IDENTITY, "-o", "IdentitiesOnly=yes");
   }
+  if (config.WEBSITE_SSH_KNOWN_HOSTS) {
+    if (
+      !config.WEBSITE_SSH_KNOWN_HOSTS.startsWith("/") ||
+      /[\r\n\0]/.test(config.WEBSITE_SSH_KNOWN_HOSTS)
+    )
+      throw new Error("WEBSITE_SSH_KNOWN_HOSTS must be an absolute path.");
+    args.push("-o", `UserKnownHostsFile=${config.WEBSITE_SSH_KNOWN_HOSTS}`);
+  }
   return [...args, config.WEBSITE_DEPLOY_HOST];
 }
 
 export function readPublicationHistory(
   root,
-  { environment = process.env, execute = execFileSync } = {},
+  { destination, environment = process.env, execute = execFileSync } = {},
 ) {
-  const names = ["WEBSITE_DEPLOY_HOST", "WEBSITE_SSH_IDENTITY"];
+  const names = [
+    "WEBSITE_DEPLOY_HOST",
+    "WEBSITE_SSH_IDENTITY",
+    "WEBSITE_SSH_KNOWN_HOSTS",
+  ];
   const needed = names.filter((name) => !Object.hasOwn(environment, name));
   const local =
-    environment.CI || needed.length === 0
+    destination || environment.CI || needed.length === 0
       ? {}
       : readAppleEnv(join(root, "client"), needed);
-  const config = Object.fromEntries(
-    names.map((name) => [
-      name,
-      Object.hasOwn(environment, name) ? environment[name] : local[name],
-    ]),
-  );
+  const config = destination
+    ? {
+        WEBSITE_DEPLOY_HOST: destination.host,
+        WEBSITE_SSH_IDENTITY: destination.sshIdentity,
+        WEBSITE_SSH_KNOWN_HOSTS: destination.sshKnownHosts,
+      }
+    : Object.fromEntries(
+        names.map((name) => [
+          name,
+          Object.hasOwn(environment, name) ? environment[name] : local[name],
+        ]),
+      );
   const args = sshArguments(config);
   const code = readFileSync(new URL("./remote.py", import.meta.url)).toString(
     "base64",

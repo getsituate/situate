@@ -26,7 +26,11 @@ test("quick checks have a fixed total deadline and a dependency-free allowlist",
       assert.equal(isQuickSuite(suite), false);
     assert.equal(
       feedback.suites.some(({ id }) => id === "client-core"),
-      platform === "darwin",
+      true,
+    );
+    assert.equal(
+      feedback.suites.some(({ id }) => id === "client-host"),
+      false,
     );
   }
 });

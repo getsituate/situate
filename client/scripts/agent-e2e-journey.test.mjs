@@ -52,6 +52,46 @@ test("sending waits for an enabled editable composer and uses the observed eleme
   assert.equal(sent, true);
 });
 
+test("stopping waits for activity presentation to clear after draft recall", async () => {
+  const start = source.indexOf(
+    '      const recall = await wait("stopped-followup-recall"',
+  );
+  const program = source.slice(
+    start,
+    source.indexOf('      fill(field(), "");', start),
+  );
+  const draft = "Recover this follow-up\n\nKeep this draft";
+  async function exercise(clearActivity) {
+    let activity = true;
+    const input = { value: "Keep this draft" };
+    const polls = [];
+    await runInNewContext(`(async () => {${program}})()`, {
+      field: () => input,
+      query: (selector) => {
+        if (selector === ".chat-pane .edit-pending")
+          return {
+            click: () => {
+              input.value = draft;
+            },
+          };
+        assert.equal(selector, ".chat-activity");
+        return activity ? {} : undefined;
+      },
+      wait: async (name, check) => {
+        if (name !== "stopped-activity-cleared") return check();
+        polls.push(check());
+        if (clearActivity) activity = false;
+        polls.push(check());
+        if (!polls.at(-1)) throw new Error(name);
+      },
+      assert: (condition, code) => assert.ok(condition, code),
+    });
+    return polls;
+  }
+  assert.deepEqual(await exercise(true), [false, true]);
+  await assert.rejects(exercise(false), /stopped-activity-cleared/);
+});
+
 const historyFlow = source.slice(
   source.indexOf("  async function historyEntry("),
   source.indexOf("  async function concurrentConversationReads("),

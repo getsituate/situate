@@ -187,7 +187,8 @@ for (const kind of [
         await symlink(outside, r.source);
       }
       if (kind === "hardlink") await link(r.source, join(r.root, "alias"));
-      if (kind === "oversized") await writeFile(r.source, "x".repeat(65537));
+      if (kind === "oversized")
+        await writeFile(r.source, "x".repeat(2 * 1024 * 1024 + 1));
       if (kind === "not-ignored")
         await writeFile(join(linked, ".gitignore"), "");
       if (kind === "temporary-not-ignored")

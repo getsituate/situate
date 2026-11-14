@@ -1,6 +1,9 @@
 use situate_core::{
     content::SaveOutcome,
-    plugins::{publication, runtime, sources},
+    plugins::{
+        publication, runtime, sources,
+        storage::{self, Area},
+    },
 };
 use std::fs;
 
@@ -8,11 +11,20 @@ pub(crate) fn service_source() -> &'static str {
     r#"export default () => {
       let count = 0, release;
       const read = async () => ({content:[{type:'text',text:String(count)}],details:{}});
-      const hold = async () => new Promise(resolve => { release=resolve; });
+      const entered = async (args, host) => {
+        const before = await host.config.read('invocation.json');
+        const saved = await host.config.write('invocation.json', args.invocation, before.revision);
+        if (!saved.Saved) throw new Error('plugins.checkFailed');
+      };
+      const hold = async (args, host) => {
+        const pending = new Promise(resolve => { release=resolve; });
+        await entered(args, host);
+        return pending;
+      };
       return {
         tools:[{name:'count',description:'Read the synthetic counter.',parameters:{type:'object',properties:{},additionalProperties:false},execute:read}],
         exports:{count:read,readCount:async()=>count,increment:async()=>++count,
-          hold,release:async()=>{release?.();return true;},hang:async()=>{for(;;){}}}
+          hold,release:async()=>{release?.();return true;},hang:async(args,host)=>{await entered(args,host);for(;;){}}}
       };
     };"#
 }
@@ -88,7 +100,7 @@ pub fn smoke_plugin_runtime_source(
     window: tauri::WebviewWindow,
     scope: String,
     operation: Option<String>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     crate::ai::plugin_checks_smoke::owned(&app)?;
     let authorization = crate::workspaces::authorization_session(&app, window.label(), &scope)?;
     crate::workspaces::with_authorization_session(
@@ -100,8 +112,18 @@ pub fn smoke_plugin_runtime_source(
             let root = crate::ai::plugin_checks_smoke::owned_workspace(&app, location)?;
             let plugin = root.join(".situate/plugins/native-counter");
             match operation.as_deref().unwrap_or("prepare") {
-                "prepareFailedInitializer" => return prepare_unavailable_service(&root, false),
-                "prepareHungInitializer" => return prepare_unavailable_service(&root, true),
+                "invocationEntered" => {
+                    return Ok(Some(
+                        storage::read(&root, "native-counter", Area::Config, "invocation.json")?
+                            .text,
+                    ));
+                }
+                "prepareFailedInitializer" => {
+                    return prepare_unavailable_service(&root, false).map(|()| None);
+                }
+                "prepareHungInitializer" => {
+                    return prepare_unavailable_service(&root, true).map(|()| None);
+                }
                 "clearFailedInitializers" => {
                     for id in ["native-failing-init", "native-hung-init"] {
                         let before = runtime::list(&root)?;
@@ -122,7 +144,7 @@ pub fn smoke_plugin_runtime_source(
                             _ => return Err("Initialization fixture boundary is invalid".into()),
                         }
                     }
-                    return Ok(());
+                    return Ok(None);
                 }
                 "remove" => {
                     let meta =
@@ -131,7 +153,7 @@ pub fn smoke_plugin_runtime_source(
                         return Err("Counter plugin boundary is invalid".into());
                     }
                     fs::remove_dir_all(&plugin).map_err(|_| "Could not remove counter plugin")?;
-                    return Ok(());
+                    return Ok(None);
                 }
                 "assertAbsent" => {
                     if !matches!(fs::symlink_metadata(&plugin),Err(error) if error.kind()==std::io::ErrorKind::NotFound)
@@ -142,7 +164,7 @@ pub fn smoke_plugin_runtime_source(
                     {
                         return Err("Counter plugin was not removed".into());
                     }
-                    return Ok(());
+                    return Ok(None);
                 }
                 "reinstall" if fs::symlink_metadata(&plugin).is_ok() => {
                     return Err("Counter plugin still exists".into());
@@ -192,9 +214,24 @@ pub fn smoke_plugin_runtime_source(
             {
                 return Err("Counter fixture was not published".into());
             }
+            let previous =
+                storage::read(&root, "native-counter", Area::Config, "invocation.json").ok();
+            if !matches!(
+                storage::write(
+                    &root,
+                    "native-counter",
+                    Area::Config,
+                    "invocation.json",
+                    "",
+                    previous.as_ref().map(|version| version.revision.as_str())
+                )?,
+                SaveOutcome::Saved { .. }
+            ) {
+                return Err("Invocation fixture was not initialized".into());
+            }
             let before = runtime::list(&root)?;
             runtime::set_enabled(&root, "native-counter", true, before.revision.as_deref())?;
-            Ok(())
+            Ok(None)
         },
     )
 }
