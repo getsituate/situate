@@ -167,7 +167,8 @@ export function finalArtifactJourneys({ actions, seed, writable, verifyFiles, ph
     await expect(button("Disable", window));
     await click(button("Files", window));
     await click(button("e2e-note.md", window));
-    await click(button("Edit source", window));
+    await click(button("File actions", window));
+    await click({ role: "AXMenuItem", name: "Edit source", window });
     await expect({ ...area("Markdown source", window), value: finalNote });
     await verifyFiles(name, [
       ["e2e-note.md", finalNote],
@@ -179,7 +180,7 @@ export function finalArtifactJourneys({ actions, seed, writable, verifyFiles, ph
     async exercise() {
       await create(name);
       await click(button("Connect my provider Bring your own key or other supported access."));
-      await click(button("OpenAI-compatible server Hosted or local server"));
+      await click(button("OpenAI-compatible server"));
       await fill({ role: "AXTextField", name: "OpenAI-compatible endpoint" }, "{{fixture.baseUrl}}");
       await fill({ role: "AXTextField", name: "API key or token (optional)" }, "{{fixture.token}}");
       await click({ role: "AXCheckBox", name: "I understand and want to use this HTTP destination." });
@@ -226,6 +227,8 @@ export function finalArtifactJourneys({ actions, seed, writable, verifyFiles, ph
         await confirmUpdate();
         await expect(text("Keep your unsaved changes", window));
         await click(button("Cancel", window));
+        await click(button("Files", window));
+        await expect({ ...area("Markdown source", window), value: "# E2E note\n\nUnsaved cancellation marker\n" });
         await actions([{ windows: 2 }]);
         await verifyFiles(name, [["e2e-note.md", finalNote]]);
       } finally {

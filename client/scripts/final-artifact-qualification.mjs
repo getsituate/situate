@@ -631,9 +631,7 @@ export function createFinalArtifactQualificationHost(
       );
       stateRoot = join(owned, "candidate-state");
       seedWorkspace();
-      provider = defaultProfile
-        ? await startFinalArtifactProvider({ signal })
-        : await startAgentProvider({ mode: "fixture", signal });
+      await startProviderPhase();
       session = {
         productionEndpoint: route.endpoint,
         normalTls: true,
@@ -684,6 +682,7 @@ export function createFinalArtifactQualificationHost(
           deviceStateIsolationPending = true;
           archiveCandidateDeviceState(owned);
           deviceStateIsolationPending = false;
+          await startProviderPhase();
           rmSync(app, { recursive: true });
           const previous = configuration.predecessor;
           await installDmg(previous.directory, previous.manifest.artifacts[0]);
@@ -742,6 +741,12 @@ export function createFinalArtifactQualificationHost(
       if (owned) rmSync(owned, { recursive: true });
     },
   };
+  async function startProviderPhase() {
+    await provider?.close();
+    provider = defaultProfile
+      ? await startFinalArtifactProvider({ signal })
+      : await startAgentProvider({ mode: "fixture", signal });
+  }
   function seedWorkspace() {
       mkdirSync(join(stateRoot, "workspace"), { recursive: true });
       for (const fixture of configuration.fixtureFiles ?? []) {
