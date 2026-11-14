@@ -26,34 +26,56 @@ function jxa(input, changes = {}) {
   let launched = false;
   let waits = 0;
   let permissionBound = false;
+  const bound = new Set();
+  const nativeCalls = [];
   const phases = [];
   const address = Object.freeze({ opaqueDescriptor: true });
+  const nullAddress = Object.freeze({ nullPointer: true });
   const values = {
     trusted: true,
     systemEvents: true,
     launchReady: true,
     readyAfter: 1,
     permission: 0,
+    createStatus: 0,
+    disposeStatus: 0,
     finder: true,
     role: "AXMenuBar",
     count: 7,
     ...changes,
   };
   const output = new Script(`${input}\nrun()`).runInNewContext({
+    Ref: {
+      equals: (left, right) =>
+        left === right || (left === nullAddress && right === null),
+    },
     ObjC: {
       import(framework) {
         if (framework === values.throwImport)
           throw new Error("synthetic-private-import-error");
       },
       bindFunction(name, signature) {
-        assert.equal(name, "AEDeterminePermissionToAutomateTarget");
-        assert.deepEqual(JSON.parse(JSON.stringify(signature)), [
-          "int",
-          ["void *", "unsigned int", "unsigned int", "bool"],
-        ]);
-        if (values.throwBinding)
-          throw new Error("synthetic-private-binding-error");
-        permissionBound = !values.ignoreBinding;
+        const signatures = {
+          calloc: ["void *", ["unsigned long", "unsigned long"]],
+          free: ["void", ["void *"]],
+          AECreateDesc: ["short", ["unsigned int", "char *", "long", "void *"]],
+          AEDisposeDesc: ["short", ["void *"]],
+          AEDeterminePermissionToAutomateTarget: [
+            "int",
+            ["void *", "unsigned int", "unsigned int", "bool"],
+          ],
+        };
+        assert.ok(Object.hasOwn(signatures, name));
+        assert.deepEqual(
+          JSON.parse(JSON.stringify(signature)),
+          signatures[name],
+        );
+        if (name === "AEDeterminePermissionToAutomateTarget") {
+          if (values.throwBinding)
+            throw new Error("synthetic-private-binding-error");
+          permissionBound = !values.ignoreBinding;
+        }
+        bound.add(name);
       },
     },
     $: {
@@ -140,22 +162,47 @@ function jxa(input, changes = {}) {
           waits++;
         },
       },
-      NSAppleEventDescriptor: {
-        descriptorWithBundleIdentifier(bundle) {
-          assert.equal(bundle, "com.apple.systemevents");
-          if (values.throwFactory)
-            throw new Error("synthetic-private-factory-error");
-          return {
-            get aeDesc() {
-              if (values.throwDescriptor)
-                throw new Error("synthetic-private-descriptor-error");
-              return address;
-            },
-          };
-        },
+      get NSAppleEventDescriptor() {
+        throw new Error("Unexpected descriptor bridge");
+      },
+      calloc(count, size) {
+        assert.ok(bound.has("calloc"));
+        assert.equal(count, 1);
+        assert.equal(size, 12);
+        nativeCalls.push("allocate");
+        return values.allocationFails ? nullAddress : address;
+      },
+      AECreateDesc(type, bundle, length, target) {
+        assert.ok(bound.has("AECreateDesc"));
+        assert.equal(type, 0x62756e64);
+        assert.equal(bundle, "com.apple.systemevents");
+        assert.equal(
+          length,
+          Buffer.byteLength("com.apple.systemevents", "utf8"),
+        );
+        assert.equal(target, address);
+        nativeCalls.push("create");
+        if (values.throwCreate)
+          throw new Error("synthetic-private-create-error");
+        return values.createStatus;
+      },
+      AEDisposeDesc(target) {
+        assert.ok(bound.has("AEDisposeDesc"));
+        assert.equal(target, address);
+        assert.equal(values.createStatus, 0);
+        nativeCalls.push("dispose");
+        if (values.throwDispose)
+          throw new Error("synthetic-private-dispose-error");
+        return values.disposeStatus;
+      },
+      free(target) {
+        assert.ok(bound.has("free"));
+        assert.equal(target, address);
+        nativeCalls.push("free");
       },
       AEDeterminePermissionToAutomateTarget(target, eventClass, eventId, ask) {
         calls.push("permission");
+        nativeCalls.push("permission");
         if (!permissionBound) throw new Error("Ref has incompatible type");
         assert.equal(target, address);
         assert.equal(eventClass, 0x2a2a2a2a);
@@ -201,7 +248,7 @@ function jxa(input, changes = {}) {
       };
     },
   });
-  return { output, calls, phases: phases.join("") };
+  return { output, calls, phases: phases.join(""), nativeCalls };
 }
 
 function worker(changes = {}) {
@@ -328,6 +375,21 @@ test("worker rejects unsupported platforms without starting a process", () => {
       () =>
         probeReleaseDesktopWorker({
           platform,
+          probe() {
+            assert.fail("unexpected process");
+          },
+        }),
+      atStage("platform"),
+    );
+});
+
+test("unreviewed descriptor architectures fail before native allocation", () => {
+  for (const architecture of ["ia32", "ppc64"])
+    assert.throws(
+      () =>
+        probeReleaseDesktopWorker({
+          platform: "darwin",
+          architecture,
           probe() {
             assert.fail("unexpected process");
           },
@@ -544,6 +606,9 @@ test("phase sidechannel emits static markers without capabilities or UI contents
       "system-events-query",
       "appleevents-target",
       "appleevents-address",
+      "appleevents-create",
+      "appleevents-query",
+      "appleevents-dispose",
       "appleevents-query",
       "finder-query",
       "menu-role-query",
@@ -561,20 +626,105 @@ test("phase sidechannel emits static markers without capabilities or UI contents
   assert.ok(Buffer.byteLength(cold.phases) < 4096);
 });
 
-test("descriptor factory and opaque getter failures identify distinct phases before permission or UI reads", () => {
+test("C descriptors are disposed and freed after permission queries without using the Objective-C descriptor bridge", () => {
   const { script } = worker();
-  for (const [changes, stage] of [
-    [{ throwFactory: true }, "appleevents-target"],
-    [{ throwDescriptor: true }, "appleevents-address"],
+  assert.deepEqual(jxa(script).nativeCalls, [
+    "allocate",
+    "create",
+    "permission",
+    "dispose",
+    "free",
+  ]);
+  for (const [changes, stage, nativeCalls] of [
+    [{ allocationFails: true }, "appleevents-address", ["allocate"]],
+    [
+      { createStatus: -50 },
+      "appleevents-create",
+      ["allocate", "create", "free"],
+    ],
+    [
+      { throwCreate: true },
+      "appleevents-create",
+      ["allocate", "create", "free"],
+    ],
+    [
+      { throwPermission: true },
+      "appleevents-query",
+      ["allocate", "create", "permission", "dispose", "free"],
+    ],
+    [
+      { permission: -1744 },
+      "appleevents-consent-required",
+      ["allocate", "create", "permission", "dispose", "free"],
+    ],
+    [
+      { disposeStatus: -50 },
+      "appleevents-dispose",
+      ["allocate", "create", "permission", "dispose", "free"],
+    ],
+    [
+      { throwDispose: true },
+      "appleevents-dispose",
+      ["allocate", "create", "permission", "dispose", "free"],
+    ],
   ]) {
     const result = jxa(script, changes);
     assert.equal(JSON.parse(result.output).stage, stage);
     assert.equal(result.phases.trimEnd().split("\n").at(-1), stage);
-    assert.ok(!result.calls.includes("permission"));
+    assert.deepEqual(result.nativeCalls, nativeCalls);
     assert.ok(!result.calls.includes("read"));
+    assert.throws(() => worker(changes), atStage(stage));
     assert.doesNotMatch(result.output + result.phases, /synthetic-private/);
   }
 });
+
+test(
+  "AEDesc storage matches the SDK's packed arm64 and x86_64 ABI",
+  { skip: process.platform !== "darwin" },
+  () => {
+    const source = `
+#include <ApplicationServices/ApplicationServices.h>
+#include <stddef.h>
+_Static_assert(sizeof(void *) == 8, "64-bit pointer");
+_Static_assert(sizeof(size_t) == 8 && sizeof(unsigned long) == 8, "64-bit allocation sizes");
+_Static_assert(sizeof(DescType) == 4 && ((DescType)-1 > 0), "unsigned 32-bit descriptor type");
+_Static_assert(sizeof(AEDesc) == 12, "AEDesc size");
+_Static_assert(_Alignof(AEDesc) == 2, "AEDesc alignment");
+_Static_assert(offsetof(AEDesc, dataHandle) == 4, "AEDesc handle offset");
+_Static_assert(sizeof(Size) == 8 && ((Size)-1 < 0), "signed 64-bit Size");
+_Static_assert(sizeof(OSErr) == 2 && ((OSErr)-1 < 0), "signed 16-bit OSErr");
+_Static_assert(sizeof(OSStatus) == 4 && ((OSStatus)-1 < 0), "signed 32-bit OSStatus");
+_Static_assert(typeApplicationBundleID == 0x62756e64, "bund descriptor type");
+_Static_assert(typeWildCard == 0x2a2a2a2a, "wildcard event type");
+`;
+    for (const architecture of ["arm64", "x86_64"]) {
+      const result = spawnSync(
+        "/usr/bin/clang",
+        [
+          "-target",
+          `${architecture}-apple-macos13`,
+          "-fsyntax-only",
+          "-x",
+          "c",
+          "-",
+        ],
+        {
+          env: {},
+          input: source,
+          encoding: "utf8",
+          timeout: 10000,
+          killSignal: "SIGKILL",
+          maxBuffer: 4096,
+        },
+      );
+      assert.equal(
+        result.status,
+        0,
+        `SDK ABI check failed for ${architecture}`,
+      );
+    }
+  },
+);
 
 function processFixture() {
   const child = new EventEmitter();
@@ -785,8 +935,8 @@ test("JXA distinguishes framework and bridge exceptions from denied capabilities
     ],
     [{ throwTrust: true }, "accessibility-query"],
     [{ throwProcessQuery: "com.apple.systemevents" }, "system-events-query"],
-    [{ throwFactory: true }, "appleevents-target"],
-    [{ throwDescriptor: true }, "appleevents-address"],
+    [{ throwCreate: true }, "appleevents-create"],
+    [{ throwDispose: true }, "appleevents-dispose"],
     [{ throwBinding: true }, "appleevents-query"],
     [{ throwPermission: true }, "appleevents-query"],
     [{ throwProcessQuery: "com.apple.finder" }, "finder-query"],

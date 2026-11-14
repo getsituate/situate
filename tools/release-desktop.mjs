@@ -54,18 +54,42 @@ function run() {
       if (!evidence.systemEventsRunning) return JSON.stringify(evidence);
     }
     phase("appleevents-target");
-    var target = $.NSAppleEventDescriptor.descriptorWithBundleIdentifier("com.apple.systemevents");
+    ObjC.bindFunction("calloc", ["void *", ["unsigned long", "unsigned long"]]);
+    ObjC.bindFunction("free", ["void", ["void *"]]);
+    ObjC.bindFunction("AECreateDesc", ["short", ["unsigned int", "char *", "long", "void *"]]);
+    ObjC.bindFunction("AEDisposeDesc", ["short", ["void *"]]);
     phase("appleevents-address");
-    var address = target.aeDesc;
-    phase("appleevents-query");
-    // aeDesc's Ref type differs from AE's BridgeSupport struct type; keep the address opaque.
-    ObjC.bindFunction("AEDeterminePermissionToAutomateTarget", [
-      "int", ["void *", "unsigned int", "unsigned int", "bool"]
-    ]);
-    // typeWildCard ('****') covers the reads below; false forbids consent prompts.
-    var permission = $.AEDeterminePermissionToAutomateTarget(
-      address, 0x2a2a2a2a, 0x2a2a2a2a, false
-    );
+    // AEDataModel.h packs AEDesc to two-byte alignment: 12 bytes on macOS arm64/x86_64.
+    var address = $.calloc(1, 12);
+    if (Ref.equals(address, null)) return JSON.stringify(evidence);
+    var created = false;
+    var permission;
+    try {
+      phase("appleevents-create");
+      var bundle = "com.apple.systemevents";
+      if ($.AECreateDesc(0x62756e64, bundle, bundle.length, address) !== 0)
+        return JSON.stringify(evidence);
+      created = true;
+      phase("appleevents-query");
+      ObjC.bindFunction("AEDeterminePermissionToAutomateTarget", [
+        "int", ["void *", "unsigned int", "unsigned int", "bool"]
+      ]);
+      // typeWildCard ('****') covers the reads below; false forbids consent prompts.
+      permission = $.AEDeterminePermissionToAutomateTarget(
+        address, 0x2a2a2a2a, 0x2a2a2a2a, false
+      );
+    } finally {
+      var previousPhase = evidence.stage;
+      try {
+        if (created) {
+          phase("appleevents-dispose");
+          if ($.AEDisposeDesc(address) !== 0) throw new Error();
+        }
+      } finally {
+        $.free(address);
+      }
+      phase(previousPhase);
+    }
     evidence.appleEventsAllowed = permission === 0;
     if (!evidence.appleEventsAllowed) {
       phase(permission === -1744 ? "appleevents-consent-required" : "appleEventsAllowed");
@@ -114,6 +138,8 @@ const jxaPhases = new Set([
   "system-events-launch",
   "appleevents-target",
   "appleevents-address",
+  "appleevents-create",
+  "appleevents-dispose",
   "appleevents-query",
   "appleevents-consent-required",
   "appleEventsAllowed",
@@ -159,6 +185,8 @@ const stages = new Set([
   "menu-count-query",
   "appleevents-target",
   "appleevents-address",
+  "appleevents-create",
+  "appleevents-dispose",
   "appleevents-query",
   "appleevents-consent-required",
   "jxa-process",
@@ -219,9 +247,11 @@ function verifiedEvidence(value) {
 
 export function probeReleaseDesktopWorker({
   platform = process.platform,
+  architecture = process.arch,
   probe = spawnSync,
 } = {}) {
-  if (platform !== "darwin") throw failure("platform");
+  if (platform !== "darwin" || !["arm64", "x64"].includes(architecture))
+    throw failure("platform");
   let desktopIssue;
   try {
     desktopIssue = nativeDesktopIssue({ platform, probe });
