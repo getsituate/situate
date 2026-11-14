@@ -5,38 +5,59 @@ import { resolve } from "node:path";
 import { nativeDesktopIssue } from "../client/scripts/native-desktop-session.mjs";
 
 const script = `
-ObjC.import("AppKit");
-// The C function signatures live in the subframeworks' BridgeSupport metadata.
-ObjC.import("/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework");
-ObjC.import("/System/Library/Frameworks/CoreServices.framework/Frameworks/AE.framework");
 function run() {
-  var evidence = {
-    accessibilityTrusted: false,
-    systemEventsRunning: false,
-    appleEventsAllowed: false,
-    finderRunning: false,
-    menuBar: false,
-    menuBarElementCount: 0
-  };
+  var evidence = { stage: "framework-appkit" };
   try {
+    ObjC.import("AppKit");
+    evidence.stage = "framework-accessibility";
+    // The C function signatures live in the subframeworks' BridgeSupport metadata.
+    ObjC.import("/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework");
+    evidence.stage = "framework-appleevents";
+    ObjC.import("/System/Library/Frameworks/CoreServices.framework/Frameworks/AE.framework");
+    evidence.stage = "accessibility-query";
     evidence.accessibilityTrusted = Boolean($.AXIsProcessTrusted());
-    if (!evidence.accessibilityTrusted) return JSON.stringify(evidence);
+    if (!evidence.accessibilityTrusted) {
+      evidence.stage = "accessibilityTrusted";
+      return JSON.stringify(evidence);
+    }
+    evidence.stage = "system-events-query";
     evidence.systemEventsRunning =
       $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
-    if (!evidence.systemEventsRunning) return JSON.stringify(evidence);
+    if (!evidence.systemEventsRunning) {
+      evidence.stage = "systemEventsRunning";
+      return JSON.stringify(evidence);
+    }
+    evidence.stage = "appleevents-target";
     var target = $.NSAppleEventDescriptor.descriptorWithBundleIdentifier("com.apple.systemevents");
+    var address = target.aeDesc;
+    evidence.stage = "appleevents-query";
     // typeWildCard ('****') covers the reads below; false forbids consent prompts.
-    evidence.appleEventsAllowed = $.AEDeterminePermissionToAutomateTarget(
-      target.aeDesc, 0x2a2a2a2a, 0x2a2a2a2a, false
-    ) === 0;
-    if (!evidence.appleEventsAllowed) return JSON.stringify(evidence);
+    var permission = $.AEDeterminePermissionToAutomateTarget(
+      address, 0x2a2a2a2a, 0x2a2a2a2a, false
+    );
+    evidence.appleEventsAllowed = permission === 0;
+    if (!evidence.appleEventsAllowed) {
+      evidence.stage = permission === -1744 ? "appleevents-consent-required" : "appleEventsAllowed";
+      return JSON.stringify(evidence);
+    }
+    evidence.stage = "finder-query";
     evidence.finderRunning =
       $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.finder").count > 0;
-    if (!evidence.finderRunning) return JSON.stringify(evidence);
+    if (!evidence.finderRunning) {
+      evidence.stage = "finderRunning";
+      return JSON.stringify(evidence);
+    }
+    evidence.stage = "menu-role-query";
     var finder = Application("com.apple.systemevents").applicationProcesses.byName("Finder");
     var menu = finder.menuBars.at(0);
     evidence.menuBar = menu.role() === "AXMenuBar";
-    if (evidence.menuBar) evidence.menuBarElementCount = menu.uiElements.length;
+    if (!evidence.menuBar) {
+      evidence.stage = "menuBar";
+      return JSON.stringify(evidence);
+    }
+    evidence.stage = "menu-count-query";
+    evidence.menuBarElementCount = menu.uiElements.length;
+    evidence.stage = "complete";
   } catch (_) {
     // Never return AppleEvents errors, which can contain UI object descriptions.
   }
@@ -44,25 +65,73 @@ function run() {
 }
 `;
 
+const capabilities = [
+  "desktopUnlocked",
+  "accessibilityTrusted",
+  "systemEventsRunning",
+  "appleEventsAllowed",
+  "finderRunning",
+  "menuBar",
+];
+const stages = new Set([
+  ...capabilities,
+  "menuBarElementCount",
+  "platform",
+  "desktop-session-locked",
+  "desktop-session-unavailable",
+  "framework-appkit",
+  "framework-accessibility",
+  "framework-appleevents",
+  "accessibility-query",
+  "system-events-query",
+  "finder-query",
+  "menu-role-query",
+  "menu-count-query",
+  "appleevents-target",
+  "appleevents-query",
+  "appleevents-consent-required",
+  "jxa-process",
+  "jxa-timeout",
+  "jxa-output",
+  "worker-start",
+  "worker-stream",
+  "worker-timeout",
+  "worker-output",
+  "worker-exit",
+  "arguments",
+]);
+
+function diagnostic(value, fallback = "worker-exit") {
+  const result = { stage: stages.has(value?.stage) ? value.stage : fallback };
+  for (const key of capabilities)
+    if (typeof value?.[key] === "boolean") result[key] = value[key];
+  if (
+    Number.isSafeInteger(value?.menuBarElementCount) &&
+    value.menuBarElementCount >= 0
+  )
+    result.menuBarElementCount = value.menuBarElementCount;
+  return result;
+}
+
+function failure(stage, evidence) {
+  const safe = diagnostic(evidence, stage);
+  return Object.assign(
+    new Error(`Release desktop preflight failed: ${JSON.stringify(safe)}`),
+    { diagnostic: safe },
+  );
+}
+
 function verifiedEvidence(value) {
   const evidence = {};
-  for (const key of [
-    "desktopUnlocked",
-    "accessibilityTrusted",
-    "systemEventsRunning",
-    "appleEventsAllowed",
-    "finderRunning",
-    "menuBar",
-  ]) {
-    if (value?.[key] !== true)
-      throw new Error("Release desktop capability is unavailable.");
+  for (const key of capabilities) {
+    if (value?.[key] !== true) throw failure(key, value);
     evidence[key] = true;
   }
   if (
     !Number.isSafeInteger(value.menuBarElementCount) ||
     value.menuBarElementCount <= 0
   )
-    throw new Error("Release desktop menu bar is unavailable.");
+    throw failure("menuBarElementCount", value);
   evidence.menuBarElementCount = value.menuBarElementCount;
   return evidence;
 }
@@ -71,8 +140,7 @@ export function probeReleaseDesktopWorker({
   platform = process.platform,
   probe = spawnSync,
 } = {}) {
-  if (platform !== "darwin")
-    throw new Error("Release desktop preflight requires macOS.");
+  if (platform !== "darwin") throw failure("platform");
   let desktopIssue;
   try {
     desktopIssue = nativeDesktopIssue({ platform, probe });
@@ -80,7 +148,10 @@ export function probeReleaseDesktopWorker({
     desktopIssue = "desktop-session-unavailable";
   }
   if (desktopIssue)
-    throw new Error("Release desktop preflight requires an unlocked desktop.");
+    throw failure(
+      stages.has(desktopIssue) ? desktopIssue : "desktop-session-unavailable",
+      { desktopUnlocked: false },
+    );
   let result;
   try {
     result = probe("/usr/bin/osascript", ["-l", "JavaScript", "-"], {
@@ -92,14 +163,21 @@ export function probeReleaseDesktopWorker({
       maxBuffer: 4096,
       stdio: ["pipe", "pipe", "ignore"],
     });
-    if (result.error || result.status !== 0) throw new Error();
-    return verifiedEvidence({
-      ...JSON.parse(result.stdout),
-      desktopUnlocked: true,
-    });
   } catch {
-    throw new Error("Release desktop capability is unavailable.");
+    throw failure("jxa-process", { desktopUnlocked: true });
   }
+  if (result.error || result.status !== 0)
+    throw failure(
+      result.error?.code === "ETIMEDOUT" ? "jxa-timeout" : "jxa-process",
+      { desktopUnlocked: true },
+    );
+  let value;
+  try {
+    value = JSON.parse(result.stdout);
+  } catch {
+    throw failure("jxa-output", { desktopUnlocked: true });
+  }
+  return verifiedEvidence({ ...value, desktopUnlocked: true });
 }
 
 export async function probeReleaseDesktop({
@@ -110,8 +188,7 @@ export async function probeReleaseDesktop({
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 } = {}) {
-  if (platform !== "darwin")
-    throw new Error("Release desktop preflight requires macOS.");
+  if (platform !== "darwin") throw failure("platform");
   const evidence = await new Promise((accept, reject) => {
     let child;
     let timer;
@@ -129,7 +206,7 @@ export async function probeReleaseDesktop({
           // The process group may already have exited.
         }
       }
-      if (error) reject(new Error("Release desktop preflight failed."));
+      if (error) reject(error);
       else accept(value);
     };
     try {
@@ -138,25 +215,35 @@ export async function probeReleaseDesktop({
         [fileURLToPath(import.meta.url), "--worker"],
         { env: {}, detached: true, stdio: ["ignore", "pipe", "ignore"] },
       );
-      timer = setTimer(() => finish(true), 28000);
-      child.on("error", () => finish(true));
-      child.stdout.on("error", () => finish(true));
+      timer = setTimer(() => finish(failure("worker-timeout")), 28000);
+      child.on("error", () => finish(failure("worker-start")));
+      child.stdout.on("error", () => finish(failure("worker-stream")));
       child.stdout.on("data", (chunk) => {
         if (settled) return;
         output += chunk.toString();
-        if (Buffer.byteLength(output) > 4096) finish(true);
+        if (Buffer.byteLength(output) > 4096) finish(failure("worker-output"));
       });
       child.on("close", (code) => {
         if (settled) return;
+        let value;
         try {
-          if (code !== 0) throw new Error();
-          finish(false, verifiedEvidence(JSON.parse(output)));
+          value = JSON.parse(output);
         } catch {
-          finish(true);
+          finish(failure(code === 0 ? "worker-output" : "worker-exit"));
+          return;
+        }
+        if (code !== 0) {
+          finish(failure("worker-exit", value));
+          return;
+        }
+        try {
+          finish(null, verifiedEvidence(value));
+        } catch (error) {
+          finish(error);
         }
       });
     } catch {
-      finish(true);
+      finish(failure("worker-start"));
     }
   });
   const imageValue = (name) =>
@@ -180,15 +267,25 @@ export async function main(
   } = {},
 ) {
   if (args.length && (args.length !== 1 || args[0] !== "--worker"))
-    throw new Error("Release desktop preflight accepts no options.");
-  output(JSON.stringify(await (args[0] === "--worker" ? worker() : probe())));
+    throw failure("arguments");
+  if (args[0] === "--worker") {
+    try {
+      output(JSON.stringify(await worker()));
+    } catch (error) {
+      const safe = failure("worker-exit", error?.diagnostic);
+      output(JSON.stringify(safe.diagnostic));
+      throw safe;
+    }
+  } else {
+    output(JSON.stringify(await probe()));
+  }
 }
 
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 )
-  main().catch(() => {
-    console.error("Release desktop preflight failed.");
+  main().catch((error) => {
+    console.error(failure("worker-exit", error?.diagnostic).message);
     process.exitCode = 1;
   });

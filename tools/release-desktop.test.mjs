@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { release } from "node:os";
 import test from "node:test";
 import { Script } from "node:vm";
@@ -32,16 +34,23 @@ function jxa(input, changes = {}) {
   };
   const output = new Script(`${input}\nrun()`).runInNewContext({
     ObjC: {
-      import() {},
+      import(framework) {
+        if (framework === values.throwImport)
+          throw new Error("synthetic-private-import-error");
+      },
     },
     $: {
       AXIsProcessTrusted() {
         calls.push("trust");
+        if (values.throwTrust)
+          throw new Error("synthetic-private-bridge-error");
         return values.trusted;
       },
       NSRunningApplication: {
         runningApplicationsWithBundleIdentifier(bundle) {
           calls.push(bundle);
+          if (values.throwProcessQuery === bundle)
+            throw new Error("synthetic-private-process-error");
           return {
             count: (
               bundle === "com.apple.systemevents"
@@ -56,7 +65,13 @@ function jxa(input, changes = {}) {
       NSAppleEventDescriptor: {
         descriptorWithBundleIdentifier(bundle) {
           assert.equal(bundle, "com.apple.systemevents");
-          return { aeDesc: "synthetic-descriptor" };
+          return {
+            get aeDesc() {
+              if (values.throwDescriptor)
+                throw new Error("synthetic-private-descriptor-error");
+              return "synthetic-descriptor";
+            },
+          };
         },
       },
       AEDeterminePermissionToAutomateTarget(target, eventClass, eventId, ask) {
@@ -65,6 +80,8 @@ function jxa(input, changes = {}) {
         assert.equal(eventClass, 0x2a2a2a2a);
         assert.equal(eventId, 0x2a2a2a2a);
         assert.equal(ask, false);
+        if (values.throwPermission)
+          throw new Error("synthetic-private-permission-error");
         return values.permission;
       },
     },
@@ -89,6 +106,8 @@ function jxa(input, changes = {}) {
                     uiElements: {
                       get length() {
                         calls.push("count");
+                        if (values.throwCount)
+                          throw new Error("synthetic-private-count-error");
                         return values.count;
                       },
                     },
@@ -135,6 +154,20 @@ function worker(changes = {}) {
   return { result, calls, scriptCalls };
 }
 
+function atStage(stage, evidence = {}) {
+  return (error) => {
+    assert.equal(error.diagnostic.stage, stage);
+    for (const [key, value] of Object.entries(evidence))
+      assert.equal(error.diagnostic[key], value);
+    assert.equal(
+      error.message,
+      `Release desktop preflight failed: ${JSON.stringify(error.diagnostic)}`,
+    );
+    assert.doesNotMatch(error.message, /synthetic-private/);
+    return true;
+  };
+}
+
 test("worker checks the unlocked desktop before non-prompting trust and a count-only Finder read", () => {
   const { result, calls, scriptCalls } = worker();
   assert.deepEqual(result, capabilities);
@@ -159,7 +192,7 @@ test("worker rejects unsupported platforms without starting a process", () => {
             assert.fail("unexpected process");
           },
         }),
-      /requires macOS/,
+      atStage("platform"),
     );
 });
 
@@ -181,7 +214,12 @@ test("missing, locked and timed-out desktops never reach osascript", () => {
             return desktop;
           },
         }),
-      /unlocked desktop/,
+      atStage(
+        desktop.stdout?.includes("Yes")
+          ? "desktop-session-locked"
+          : "desktop-session-unavailable",
+        { desktopUnlocked: false },
+      ),
     );
     assert.equal(calls, 1);
   }
@@ -199,28 +237,29 @@ test("desktop process exceptions never leak diagnostics or reach JXA", () => {
           throw new Error("synthetic-private-value");
         },
       }),
-    { message: "Release desktop preflight requires an unlocked desktop." },
+    atStage("desktop-session-unavailable", { desktopUnlocked: false }),
   );
   assert.equal(calls, 1);
 });
 
 test("denied trust, AppleEvents consent, missing processes and unreadable menus fail closed", () => {
-  for (const changes of [
-    { trusted: false },
-    { systemEvents: false },
-    { permission: -1744 },
-    { permission: -1743 },
-    { permission: -600 },
-    { finder: false },
-    { role: "AXWindow" },
-    { count: 0 },
-    { count: -1 },
-    { count: 1.5 },
-    { throwRead: true },
+  for (const [changes, stage] of [
+    [{ trusted: false }, "accessibilityTrusted"],
+    [{ systemEvents: false }, "systemEventsRunning"],
+    [{ permission: -1744 }, "appleevents-consent-required"],
+    [{ permission: -1743 }, "appleEventsAllowed"],
+    [{ permission: -600 }, "appleEventsAllowed"],
+    [{ finder: false }, "finderRunning"],
+    [{ role: "AXWindow" }, "menuBar"],
+    [{ count: 0 }, "menuBarElementCount"],
+    [{ count: -1 }, "menuBarElementCount"],
+    [{ count: 1.5 }, "menuBarElementCount"],
+    [{ throwRead: true }, "menu-role-query"],
   ])
-    assert.throws(() => worker(changes), {
-      message: "Release desktop capability is unavailable.",
-    });
+    assert.throws(
+      () => worker(changes),
+      atStage(stage, { desktopUnlocked: true }),
+    );
 });
 
 test("JXA performs no scripting reads until trust and existing AppleEvents authorization pass", () => {
@@ -253,16 +292,27 @@ test("JXA performs no scripting reads until trust and existing AppleEvents autho
 });
 
 test("failed, timed-out and malformed JXA output cannot expose subprocess diagnostics", () => {
-  for (const processResult of [
-    { status: 1, stderr: "synthetic-private-menu-label" },
-    { status: null, error: new Error("synthetic-private-menu-label") },
-    { status: 0, stdout: "synthetic-private-menu-label" },
-    { status: 0, stdout: "null" },
-    { status: 0, stdout: "{}" },
+  for (const [processResult, stage] of [
+    [{ status: 1, stderr: "synthetic-private-menu-label" }, "jxa-process"],
+    [
+      { status: null, error: new Error("synthetic-private-menu-label") },
+      "jxa-process",
+    ],
+    [
+      {
+        status: null,
+        error: { code: "ETIMEDOUT", message: "synthetic-private-menu-label" },
+      },
+      "jxa-timeout",
+    ],
+    [{ status: 0, stdout: "synthetic-private-menu-label" }, "jxa-output"],
+    [{ status: 0, stdout: "null" }, "accessibilityTrusted"],
+    [{ status: 0, stdout: "{}" }, "accessibilityTrusted"],
   ])
-    assert.throws(() => worker({ processResult }), {
-      message: "Release desktop capability is unavailable.",
-    });
+    assert.throws(
+      () => worker({ processResult }),
+      atStage(stage, { desktopUnlocked: true }),
+    );
 });
 
 function processFixture() {
@@ -365,7 +415,7 @@ test("entrypoint rejects unsupported hosts before launching a worker, including 
       platform: "linux",
       environment: { CI: "true" },
     }),
-    /requires macOS/,
+    atStage("platform"),
   );
   assert.equal(fixture.spawned(), false);
 });
@@ -376,29 +426,29 @@ test("worker deadline kills the entire process group and discards late output", 
   fixture.timeout();
   fixture.child.stdout.emit("data", Buffer.from(JSON.stringify(capabilities)));
   fixture.child.emit("close", 0);
-  await assert.rejects(result, {
-    message: "Release desktop preflight failed.",
-  });
+  await assert.rejects(result, atStage("worker-timeout"));
   assert.deepEqual(fixture.killed, [[-12345, "SIGKILL"]]);
   assert.equal(fixture.cleared(), true);
 });
 
 test("failed workers, invalid evidence and oversized output never become readiness", async () => {
-  for (const [output, code] of [
-    [JSON.stringify(capabilities), 1],
-    [JSON.stringify(capabilities), null],
-    ["synthetic-private-menu-label", 0],
-    ["{}", 0],
-    [JSON.stringify({ ...capabilities, accessibilityTrusted: false }), 0],
-    ["x".repeat(4097), 0],
+  for (const [output, code, stage] of [
+    [JSON.stringify(capabilities), 1, "worker-exit"],
+    [JSON.stringify(capabilities), null, "worker-exit"],
+    ["synthetic-private-menu-label", 0, "worker-output"],
+    ["{}", 0, "desktopUnlocked"],
+    [
+      JSON.stringify({ ...capabilities, accessibilityTrusted: false }),
+      0,
+      "accessibilityTrusted",
+    ],
+    ["x".repeat(4097), 0, "worker-output"],
   ]) {
     const fixture = processFixture();
     const result = probeReleaseDesktop(fixture.options);
     fixture.child.stdout.emit("data", Buffer.from(output));
     fixture.child.emit("close", code);
-    await assert.rejects(result, {
-      message: "Release desktop preflight failed.",
-    });
+    await assert.rejects(result, atStage(stage));
     assert.deepEqual(fixture.killed, [[-12345, "SIGKILL"]]);
   }
 });
@@ -411,9 +461,10 @@ test("spawn and stream errors remain sanitized and terminate the worker", async 
       "error",
       new Error("synthetic-private-value"),
     );
-    await assert.rejects(result, {
-      message: "Release desktop preflight failed.",
-    });
+    await assert.rejects(
+      result,
+      atStage(stream === "process" ? "worker-start" : "worker-stream"),
+    );
     assert.deepEqual(fixture.killed, [[-12345, "SIGKILL"]]);
   }
   await assert.rejects(
@@ -423,7 +474,7 @@ test("spawn and stream errors remain sanitized and terminate the worker", async 
         throw new Error("synthetic-private-value");
       },
     }),
-    { message: "Release desktop preflight failed." },
+    atStage("worker-start"),
   );
 });
 
@@ -450,6 +501,148 @@ test("CLI selects the parent probe or worker without accepting bypass arguments"
   assert.equal(workers, 1);
   assert.equal(output.length, 2);
   for (const args of [["--skip"], ["--worker", "--skip"], ["--ci"]])
-    await assert.rejects(main(args, collaborators), /accepts no options/);
+    await assert.rejects(main(args, collaborators), atStage("arguments"));
   assert.equal(output.length, 2);
+});
+
+test("JXA distinguishes framework and bridge exceptions from denied capabilities", () => {
+  for (const [changes, stage] of [
+    [{ throwImport: "AppKit" }, "framework-appkit"],
+    [
+      {
+        throwImport:
+          "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework",
+      },
+      "framework-accessibility",
+    ],
+    [
+      {
+        throwImport:
+          "/System/Library/Frameworks/CoreServices.framework/Frameworks/AE.framework",
+      },
+      "framework-appleevents",
+    ],
+    [{ throwTrust: true }, "accessibility-query"],
+    [{ throwProcessQuery: "com.apple.systemevents" }, "system-events-query"],
+    [{ throwDescriptor: true }, "appleevents-target"],
+    [{ throwPermission: true }, "appleevents-query"],
+    [{ throwProcessQuery: "com.apple.finder" }, "finder-query"],
+    [{ throwCount: true }, "menu-count-query"],
+  ])
+    assert.throws(
+      () => worker(changes),
+      atStage(stage, { desktopUnlocked: true }),
+    );
+});
+
+test("worker failure diagnostics survive the CLI protocol without marking denied AX ready", async () => {
+  const fixture = processFixture();
+  const result = probeReleaseDesktop(fixture.options);
+  let report;
+  await assert.rejects(
+    main(["--worker"], {
+      worker() {
+        return worker({ trusted: false });
+      },
+      output(value) {
+        report = value;
+      },
+    }),
+    atStage("accessibilityTrusted", { accessibilityTrusted: false }),
+  );
+  fixture.child.stdout.emit("data", Buffer.from(report));
+  fixture.child.emit("close", 1);
+  await assert.rejects(
+    result,
+    atStage("accessibilityTrusted", {
+      desktopUnlocked: true,
+      accessibilityTrusted: false,
+    }),
+  );
+  assert.deepEqual(JSON.parse(report), {
+    stage: "accessibilityTrusted",
+    desktopUnlocked: true,
+    accessibilityTrusted: false,
+  });
+});
+
+test("missing capability evidence never becomes readiness", async () => {
+  for (const key of Object.keys(capabilities)) {
+    const incomplete = { ...capabilities };
+    delete incomplete[key];
+    const fixture = processFixture();
+    const result = probeReleaseDesktop(fixture.options);
+    fixture.child.stdout.emit("data", Buffer.from(JSON.stringify(incomplete)));
+    fixture.child.emit("close", 0);
+    await assert.rejects(result, atStage(key));
+  }
+});
+
+test("untrusted error fields and protocol stages never escape into diagnostics", async () => {
+  for (const stage of ["synthetic-private-stage", "appleevents-query"]) {
+    let report;
+    await assert.rejects(
+      main(["--worker"], {
+        worker() {
+          throw Object.assign(new Error("synthetic-private-menu-label"), {
+            diagnostic: {
+              stage,
+              accessibilityTrusted: false,
+              menuBarElementCount: -1,
+              finderRunning: "synthetic-private-value",
+              menuLabels: ["synthetic-private-menu-label"],
+            },
+          });
+        },
+        output(value) {
+          report = value;
+        },
+      }),
+      atStage(stage === "appleevents-query" ? stage : "worker-exit"),
+    );
+    const expected = {
+      stage: stage === "appleevents-query" ? stage : "worker-exit",
+      accessibilityTrusted: false,
+    };
+    assert.deepEqual(JSON.parse(report), expected);
+    const fixture = processFixture();
+    const result = probeReleaseDesktop(fixture.options);
+    fixture.child.stdout.emit(
+      "data",
+      Buffer.from(
+        JSON.stringify({
+          ...expected,
+          stage,
+          rawError: "synthetic-private-menu-label",
+          menuBarElementCount: 0,
+        }),
+      ),
+    );
+    fixture.child.emit("close", 1);
+    await assert.rejects(result, (error) => {
+      atStage(expected.stage)(error);
+      assert.deepEqual(error.diagnostic, {
+        ...expected,
+        menuBarElementCount: 0,
+      });
+      return true;
+    });
+  }
+});
+
+test("real CLI prints only a static diagnostic on failure", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("./release-desktop.mjs", import.meta.url)),
+      "--skip",
+    ],
+    { env: {}, encoding: "utf8", timeout: 5000 },
+  );
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(
+    result.stderr,
+    'Release desktop preflight failed: {"stage":"arguments"}\n',
+  );
 });
