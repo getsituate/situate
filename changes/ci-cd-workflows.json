@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "ci-cd-workflows",
-  "behaviorDigest": "7368dc35a03b60b161e7dd9519477a8ea44cfab37bd675fb57f887b4c58b8506",
+  "behaviorDigest": "afb265a40c1d37f6f3df0c2efd6dcab88faa7c104422398ffd774b754ed14c04",
   "locales": {
     "en": {
       "title": "Changes",
@@ -52,12 +52,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "d9d81c3ee5868fc095c0a27b5a0a1ca35622d1a0d30664a3ee9d4f097c1bae3a",
-      "translationHash": "397e9b4b56d18551b4eae4aa1de92dd4a22bb1e223ecdfa5508cb7928d4f62d4"
+      "sourceHash": "cde87d8100045b5b7e2a85c9586668d2aa929136334b97f497a22c4619bedec6",
+      "translationHash": "bc6834e5b3047cfca1460d8fb39ceee8e9b16ee95b5f61a407e11934905c015b"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "d9d81c3ee5868fc095c0a27b5a0a1ca35622d1a0d30664a3ee9d4f097c1bae3a"
+    "sourceHash": "cde87d8100045b5b7e2a85c9586668d2aa929136334b97f497a22c4619bedec6"
   }
 }

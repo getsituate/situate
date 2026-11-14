@@ -126,31 +126,47 @@ with open(sys.argv[5], "w") as output:
   }
 });
 
-test(
-  "qualification worker tolerates repeated termination while draining cleanup",
-  { timeout: 20000 },
-  async (t) => {
-    const root = realpathSync(
-      mkdtempSync(join(tmpdir(), "situate-qualification-signals-")),
-    );
-    t.after(() => rmSync(root, { recursive: true, force: true }));
-    mkdirSync(join(root, "tools"));
-    mkdirSync(join(root, "client/scripts"), { recursive: true });
-    copyFileSync(
-      new URL("./release-qualification-worker.mjs", import.meta.url),
-      join(root, "tools/release-qualification-worker.mjs"),
-    );
-    writeFileSync(
-      join(root, "tools/release-runtime.mjs"),
-      "export const qualificationEnvironment = () => ({});",
-    );
-    writeFileSync(
-      join(root, "client/scripts/final-artifact-qualification.mjs"),
-      "export const createFinalArtifactQualificationHost = () => ({});",
-    );
-    writeFileSync(
-      join(root, "tools/release-qualification.mjs"),
-      `
+for (const inheritedDesktop of [true, false])
+  test(
+    `qualification worker drains repeated termination (${inheritedDesktop ? "held desktop" : "desktop launcher"})`,
+    { timeout: 25000 },
+    async (t) => {
+      const root = realpathSync(
+        mkdtempSync(join(tmpdir(), "situate-qualification-signals-")),
+      );
+      t.after(() => rmSync(root, { recursive: true, force: true }));
+      mkdirSync(join(root, "tools"));
+      mkdirSync(join(root, "client/scripts"), { recursive: true });
+      for (const name of [
+        "release-qualification-worker.mjs",
+        "run-coordinated.mjs",
+      ])
+        copyFileSync(
+          new URL(`./${name}`, import.meta.url),
+          join(root, "tools", name),
+        );
+      const coordination = join(root, "coordination");
+      writeFileSync(
+        join(root, "tools/worktree-supervisor.py"),
+        readFileSync(
+          new URL("./worktree-supervisor.py", import.meta.url),
+          "utf8",
+        ).replace(
+          "sys.exit(main())",
+          `sys.exit(main(Path(${JSON.stringify(coordination)})))`,
+        ),
+      );
+      writeFileSync(
+        join(root, "tools/release-runtime.mjs"),
+        "export const qualificationEnvironment = () => ({});",
+      );
+      writeFileSync(
+        join(root, "client/scripts/final-artifact-qualification.mjs"),
+        "export const createFinalArtifactQualificationHost = () => ({});",
+      );
+      writeFileSync(
+        join(root, "tools/release-qualification.mjs"),
+        `
 import {writeFileSync} from 'node:fs';
 import {setTimeout} from 'node:timers/promises';
 export async function writeQualificationReceipt({directory,signal}) {
@@ -163,48 +179,62 @@ export async function writeQualificationReceipt({directory,signal}) {
   writeFileSync(directory+'/cleaned','');
   throw signal.reason;
 }`,
-    );
-    const configuration = join(root, "configuration.json"),
-      bytes = JSON.stringify({ qualification: {} });
-    writeFileSync(configuration, bytes, { mode: 0o600 });
-    const child = spawn(
-      process.execPath,
-      [
-        join(root, "tools/release-qualification-worker.mjs"),
-        "--directory",
-        root,
-        "--configuration",
-        configuration,
-        "--configuration-sha256",
-        createHash("sha256").update(bytes).digest("hex"),
-      ],
-      { env: {}, stdio: "ignore" },
-    );
-    t.after(() => {
-      if (child.exitCode === null && child.signalCode === null)
-        child.kill("SIGKILL");
-    });
-    const closed = once(child, "close");
-    const waitFor = async (name) => {
-      const deadline = Date.now() + 12000;
-      while (Date.now() < deadline) {
-        try {
-          readFileSync(join(root, name));
-          return;
-        } catch (error) {
-          if (error.code !== "ENOENT") throw error;
+      );
+      const configuration = join(root, "configuration.json"),
+        bytes = JSON.stringify({ qualification: {} });
+      writeFileSync(configuration, bytes, { mode: 0o600 });
+      const child = spawn(
+        process.execPath,
+        [
+          join(root, "tools/release-qualification-worker.mjs"),
+          "--directory",
+          root,
+          "--configuration",
+          configuration,
+          "--configuration-sha256",
+          createHash("sha256").update(bytes).digest("hex"),
+        ],
+        {
+          env: inheritedDesktop ? { SITUATE_COORDINATED_DESKTOP: "1" } : {},
+          stdio: "ignore",
+        },
+      );
+      t.after(() => {
+        if (child.exitCode === null && child.signalCode === null)
+          child.kill("SIGKILL");
+      });
+      const closed = once(child, "close");
+      const waitFor = async (name) => {
+        const deadline = Date.now() + 12000;
+        while (Date.now() < deadline) {
+          try {
+            readFileSync(join(root, name));
+            return;
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
+          assert.equal(child.exitCode, null);
+          assert.equal(child.signalCode, null);
+          await delay(20);
         }
-        assert.equal(child.exitCode, null);
-        assert.equal(child.signalCode, null);
-        await delay(20);
-      }
-      assert.fail(`Missing synthetic worker marker: ${name}`);
-    };
-    await waitFor("ready");
-    child.kill("SIGTERM");
-    await waitFor("cleaning");
-    child.kill("SIGTERM");
-    assert.deepEqual(await closed, [1, null]);
-    assert.equal(readFileSync(join(root, "cleaned"), "utf8"), "");
-  },
-);
+        assert.fail(`Missing synthetic worker marker: ${name}`);
+      };
+      await waitFor("ready");
+      child.kill("SIGTERM");
+      await waitFor("cleaning");
+      child.kill("SIGTERM");
+      const desktopLockStatus = () =>
+        spawnSync("python3", [
+          "-c",
+          "import fcntl,sys\nf=open(sys.argv[1],'r+')\ntry: fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\nexcept BlockingIOError: sys.exit(42)",
+          join(
+            coordination,
+            createHash("sha256").update("desktop").digest("hex") + ".lock",
+          ),
+        ]).status;
+      if (!inheritedDesktop) assert.equal(desktopLockStatus(), 42);
+      assert.deepEqual(await closed, [inheritedDesktop ? 1 : 143, null]);
+      assert.equal(readFileSync(join(root, "cleaned"), "utf8"), "");
+      if (!inheritedDesktop) assert.equal(desktopLockStatus(), 0);
+    },
+  );
