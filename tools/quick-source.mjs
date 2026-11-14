@@ -35,8 +35,12 @@ export async function checkSources(
   const executionSignal = signal
     ? AbortSignal.any([signal, controller.signal])
     : controller.signal;
+  let deadlineExpired = false;
   const timer = setTimeout(
-    () => controller.abort(),
+    () => {
+      deadlineExpired = true;
+      controller.abort();
+    },
     Math.max(1, Math.ceil(deadline - performance.now())),
   );
   const remaining = files.values();
@@ -123,7 +127,7 @@ export async function checkSources(
   } catch (error) {
     controller.abort();
     await Promise.allSettled(workers);
-    if (performance.now() >= deadline)
+    if (deadlineExpired || performance.now() >= deadline)
       throw new Error(
         "Source checks exceeded their execution budget; run --feedback --changed.",
         { cause: error },

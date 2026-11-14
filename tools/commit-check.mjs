@@ -86,6 +86,34 @@ export function checkCommitRange({
   return { checked, grandfathered: commits.length - checked, failures };
 }
 
+export function checkCommitHeads({ cwd = process.cwd(), base, heads } = {}) {
+  if (
+    !Array.isArray(heads) ||
+    !heads.length ||
+    heads.length > 1000 ||
+    heads.some(
+      (head) =>
+        typeof head !== "string" ||
+        !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head),
+    ) ||
+    new Set(heads).size !== heads.length
+  )
+    throw new Error("Select a nonempty unique list of exact commit SHAs.");
+  const results = heads.map((head) => {
+    if (revision(cwd, head) !== head)
+      throw new Error("Each selected head must identify a commit object.");
+    return checkCommitRange({ cwd, base, head });
+  });
+  return {
+    checked: results.reduce((total, result) => total + result.checked, 0),
+    grandfathered: results.reduce(
+      (total, result) => total + result.grandfathered,
+      0,
+    ),
+    failures: results.flatMap(({ failures }) => failures),
+  };
+}
+
 export function checkMessageFile(file, cwd = process.cwd()) {
   const mergeHead = git(cwd, ["rev-parse", "--git-path", "MERGE_HEAD"]);
   return validateCommitMessage(readFileSync(file, "utf8"), {
@@ -99,11 +127,11 @@ export function main(args) {
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
     if (
-      !["--base", "--head", "--message-file"].includes(flag) ||
+      !["--base", "--head", "--heads", "--message-file"].includes(flag) ||
       !args[index + 1]
     )
       throw new Error(
-        "Usage: node tools/commit-check.mjs [--base REF] [--head REF] | --message-file PATH",
+        "Usage: node tools/commit-check.mjs [--base REF] [--head REF | --heads JSON] | --message-file PATH",
       );
     const value = args[++index];
     if (flag === "--message-file") messageFile = value;
@@ -116,7 +144,17 @@ export function main(args) {
     if (error) throw new CommitCheckError(error);
     return;
   }
-  const result = checkCommitRange(options);
+  if (options.head !== undefined && options.heads !== undefined)
+    throw new Error("Select one head or a list of heads, not both.");
+  if (options.heads !== undefined && Buffer.byteLength(options.heads) > 65536)
+    throw new Error("Commit head list exceeds the supported limit.");
+  const result =
+    options.heads === undefined
+      ? checkCommitRange(options)
+      : checkCommitHeads({
+          base: options.base,
+          heads: JSON.parse(options.heads),
+        });
   for (const { commit, error } of result.failures)
     console.error(`${commit}: ${error}`);
   console.log(

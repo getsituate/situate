@@ -14,7 +14,7 @@ pub const TASK_NAMES: [&str; 7] = [
     "Desktop client",
     "Tests · Changed unit",
     "Tests · Quick",
-    "Tests · MVP suite",
+    "Tests · Selected suites",
     "Architecture docs",
     "Design workshop",
     "Website preview",
@@ -49,87 +49,23 @@ pub const BUTTON_STOP_QUIT: &str = "[y Stop & quit]";
 pub const TEST_OPTIONS: [&str; 3] = [
     "[1] Changed unit tests",
     "[2] Quick checks",
-    "[3] MVP suite",
+    "[3] Selected suites",
 ];
 pub const EMPTY: &str = "Choose an action to start. Output and results appear here.";
 pub const TEST_MENU: &str =
     "Choose a test profile.\nTests may install missing npm dependencies using npm ci.";
-pub const FULL_CONFIRM: &str = "Run the MVP suite?\nIncludes shared checks and macOS product verification.\nRequired tools and services must already be available.";
+pub const FULL_CONFIRM: &str = "Run the selected suites?\nIncludes shared checks and macOS product verification.\nRequired tools and services must already be available.";
 pub const QUIT_CONFIRM: &str = "Stop all tasks started here and quit?";
 pub const HELP: &str = "c  Start desktop client     d  Open design workshop\nw  Build & open website     a  Build & open architecture docs\nt  Choose test profile      r  Build & open requirements\nR (Shift+r)  Build / publish release\nTab  Switch list/output     Enter  Run action / view run\n↑↓ / jk  Select or scroll   PgUp/PgDn  Scroll page\nHome / End  First / follow latest output\ne  Toggle results/logs     ←→  Scroll horizontally\no  Application/process output (desktop launches only)\np  Pause application view  l/g/x  Level/category/trace\nSelect a desktop run to filter by its discovered session.\ns  Stop selected run        Ctrl+r  Rerun selected task\ni  Exit console & inspect selected run with Pi\nq / Ctrl-C  Quit            Esc  Close this dialog\n\nClick actions, runs and buttons to operate the console.\nWheel over a pane to scroll; wheel over dialogs to read more.\nDrag within logs to select text; click Copy to copy the selection.\nEsc or a click clears the selection; scrolling resumes the view.\nCmd-C also copies if forwarded by the terminal.\nHold Shift to use the terminal selection instead.\nNO_COLOR=1 disables colors.\n\nOnly tasks started by this console are stopped.\nView buffers are bounded; the oldest lines and runs expire.\nTest/release output is also captured in private temporary files.\nInspect with Pi stops owned tasks, saves the selected run's evidence,\nand starts Pi in this terminal. Other temporary captures are removed.";
 pub const RELEASES: &str = "Release";
-pub const VERSION_CURRENT: &str = "Current app version";
-pub const VERSION_NEXT: &str = "Release app version";
-pub const VERSION_BUILD_CURRENT: &str = "c Build current version";
-pub const VERSION_PROMPT: &str = "Enter major.minor.patch, without leading zeroes or suffixes. New or incomplete releases continue with changelog preparation. Prepared versions continue to tests. Choose Build current version to use the checkout without changelog preparation. Build validation still applies. Enter continues; Esc cancels.";
-pub const VERSION_INVALID: &str =
-    "Enter a valid major.minor.patch version not older than the current version.";
-pub const VERSION_INVALID_SOURCE: &str =
-    "Version files are missing, inconsistent or use an unsupported format.";
-pub const VERSION_CHANGED: &str =
-    "The source revision or app version changed. Start the release again.";
-pub const RELEASE_TESTS_PROMPT: &str = "Run the complete MVP test suite before this release?\nRuns node tools/test.mjs --json without a changed-file filter. Includes regular shared checks and macOS/iOS verification; extended workshop and visual sweeps are separate.\nYou can skip tests. Nothing is built or published until you review the result and confirm the release separately.\nRequired tools and services must already be available.";
-pub const RELEASE_TESTS_RUN: &str = "[y Run all MVP tests]";
-pub const RELEASE_TESTS_SKIP: &str = "[s Skip tests]";
-pub const RELEASE_TESTS_RETRY: &str = "[r Run tests again]";
-pub const RELEASE_TESTS_OVERRIDE_BUTTON: &str = "[s Continue without passing tests]";
-pub const RELEASE_TESTS_RESULT: &str = "Release tests";
-pub const RELEASE_TESTS_UNAVAILABLE: &str =
-    "Test results are unavailable. This is not a passing test run.";
-pub const RELEASE_TESTS_SKIPPED: &str = "Tests skipped for this release.";
-pub const RELEASE_TESTS_OVERRIDE: &str = "Continuing without passing tests.";
-pub const RELEASE_TESTS_REVIEW: &str = "Review the suite results below. Continue to the separate release confirmation, run tests again, or cancel. Page Up/Down scrolls the results.\nThis run checks the current checkout; it does not replace exact-artifact native update qualification. Inspect with Pi exits the console and stops its active tasks.";
-pub const PUBLICATION_CHECK: &str = "Release · Check";
-pub const PUBLICATION_STAGE: &str = "Release · Prepare";
-pub const PUBLICATION_PUBLISH: &str = "Release · Publish";
-pub const PUBLICATION_INSPECT: &str = "Release · Inspect";
-pub const PUBLICATION_RECONCILE: &str = "Release · Reconcile";
+pub const VERSION_INVALID_SOURCE: &str = "The checkout version is unavailable.";
 pub const PUBLICATION_REVISION: &str = "Source revision";
 pub const PUBLICATION_BUILD: &str = "Build";
 pub const PUBLICATION_JOURNAL: &str = "Publication journal present";
 pub const PUBLICATION_METADATA_ERROR: &str = "Release metadata is missing, unsafe or invalid.";
-pub const PUBLICATION_EXISTING_JOURNAL: &str =
-    "A publication journal exists. Inspect the remote state; do not publish again.";
-pub const PUBLICATION_TARGET_INVALID: &str = "The publication destination or version is invalid. Reload the destination from the release menu.";
-pub const PUBLICATION_EMPTY: &str =
-    "No readable Apple release manifests found in client/artifacts/apple-*/.";
-pub const PUBLICATION_SELECT: &str = "Select a build with Previous / Next, then Continue.\nIncomplete builds can be inspected but cannot be published.";
-pub const PUBLICATION_OPTIONS: [&str; 5] = [
-    "[1] Check locally",
-    "[2] Prepare locally",
-    "[3] Publish download & update",
-    "[4] Inspect remote status",
-    "[5] Reconcile publication",
-];
-pub const PUBLICATION_PREVIOUS: &str = "[↑ Previous build]";
-pub const PUBLICATION_NEXT: &str = "[↓ Next build]";
-pub const PUBLICATION_TARGET: &str = "Confirm destination and version below. The SSH host comes from WEBSITE_DEPLOY_HOST in the environment or repository-root .env.\nThis changes the macOS download and app-update feed, not the website deployment.";
-pub const PUBLICATION_DESTINATION_FAILED: &str = "Could not load WEBSITE_DEPLOY_HOST. Set a valid SSH alias or user@hostname in the environment or private repository-root .env (mode 0600). CI uses environment variables only.";
-pub const PUBLICATION_APPROVAL: &str = "This changes the macOS download and app-update feed.\nReview the test status above. Confirm the source revision has been reviewed and publication to this destination is approved. The test-suite run does not replace exact-artifact native update qualification.\nNo automatic retry or rollback.";
-pub const PUBLICATION_RECOVERY: &str = "Inspect first. Confirm the original SSH/host operation has stopped. Review the retained transport archive before manually removing it, then explicitly reconcile the identical stage. Never remove active locks or pending markers.";
-pub const PUBLICATION_UNCERTAIN: &str = "Remote publication state may be uncertain.\nStopping SSH does not prove failure or rollback.\nUse Inspect remote status before any explicit reconciliation. Do not retry publication.";
-pub const PUBLICATION_LOCAL: &str = "Check and prepare verify the existing packages locally without building or publishing. The reviewed commit must be available locally and match the build manifest. The current checkout may differ and contain local edits.";
-pub const PUBLICATION_INSPECT_CONFIRM: &str = "Read remote publication status over SSH and save the observation in the local journal? This does not resume or cancel a remote operation.";
-pub const RELEASE_MACOS: &str = "Release · macOS";
-pub const RELEASE_IOS: &str = "Release · iOS";
-pub const RELEASE_ALL: &str = "Release · macOS + iOS";
-pub const RELEASE_OPTIONS: [&str; 4] = [
-    "[1] macOS (Universal DMG)",
-    "[2] iOS + TestFlight",
-    "[3] macOS + iOS + TestFlight",
-    "[4] Publish / inspect macOS release…",
-];
-pub const RELEASE_MENU: &str = "Choose a build or an existing macOS release.\nmacOS builds direct packages locally; iOS uploads to TestFlight.\nBuilding does not publish macOS downloads or activate an app release.\nPublish / inspect selects exact artifacts for a separate operation.";
-pub const RELEASE_NUMBER: &str = "iOS build number (1–9999)";
-pub const RELEASE_NUMBER_HELP: &str = "Enter a new build number for TestFlight.\nAfter an interrupted upload, check App Store Connect before retrying.\nBackspace edits; Enter continues.";
-pub const RELEASE_NUMBER_INVALID: &str =
-    "Enter a build number from 1 to 9999, without leading zeroes.";
-pub const RELEASE_CONFIRM: &str = "Create signed distribution packages?\nmacOS: direct packages, Apple notarization; no publication.\niOS: externally managed; may create Apple signing assets.\nSaved under client/artifacts/apple-*/. No website deployment.";
-pub const RELEASE_UPLOAD_CONFIRM: &str = "The new iOS build will be uploaded to TestFlight.\nNo public App Store release will be submitted.\nApple processing and compliance may still be required.";
-pub const RELEASE_HOST: &str = "Apple releases require macOS with Xcode.";
+pub const RELEASE_MENU: &str = "Create a macOS GitHub Release, publish an exact existing GitHub Release, or verify source.\nEach workflow uses the shared script plan and mandatory gates. Publication never builds.\nRetained artifacts, journals and drafts remain read-only.";
+pub const PUBLICATION_UNCERTAIN: &str = "The remote outcome may be uncertain. Inspect the original operation before reconciliation. Do not retry the write.";
 pub const RELEASE_CONFLICT: &str = "Release operations cannot overlap client, test, or other release runs. Stop the active run first.";
-pub const BUTTON_CONTINUE: &str = "[Enter Continue]";
-pub const INSTALL_RELEASE_CONFIRM: &str = "Client dependencies are missing.\nInstall them with npm ci --include=dev and continue the release?\nThis downloads packages and may run package install scripts.";
 pub const TESTS: &str = "Tests";
 pub const CONFIRM: &str = "Confirm";
 pub const INSTALL_CONFIRM: &str = "Client dependencies are missing.\nInstall them with npm ci --include=dev and start the selected app?\nThis downloads packages and may run package install scripts.";
@@ -154,9 +90,9 @@ pub const NO_REPORT: &str = "No test report available; see logs.";
 pub const DUPLICATE: &str = "This task is already running.";
 pub const TEST_CONFLICT: &str = "A test run is already active.";
 pub const FULL_CLIENT_CONFLICT: &str =
-    "Stop the client before running the MVP suite; native tests share application resources.";
+    "Stop the client before running the selected suites; native tests share application resources.";
 pub const TEST_CLIENT_CONFLICT: &str =
-    "Wait for the MVP suite to finish before starting the client.";
+    "Wait for the selected suites to finish before starting the client.";
 pub const REPORT_INVALID: &str = "Invalid or missing test report";
 pub const REPORT_TOO_LARGE: &str = "Test report exceeded the 8 MiB limit";
 pub const PIPE_TIMEOUT: &str = "Output streams did not close; output may be incomplete.";

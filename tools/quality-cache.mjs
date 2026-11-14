@@ -97,7 +97,11 @@ function fingerprint(directory, id, environment) {
   let entries = 0;
   const add = (value) => hash.update(JSON.stringify(value)).update("\0");
   add(["quality-cache-v2", directory, id, process.version, process.platform]);
-  add(Object.entries(environment).sort(([a], [b]) => a.localeCompare(b)));
+  add(
+    Object.entries(environment)
+      .filter(([name]) => name !== "SITUATE_DOCKER_LEASE")
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
 
   const file = (path, dependencies) => {
     if (

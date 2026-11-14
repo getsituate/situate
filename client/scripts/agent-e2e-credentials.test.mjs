@@ -118,9 +118,12 @@ test("credential files require ordinary single-link private owned files and boun
     );
     await rm(path);
     const prefix = "TEST_OPENAI_API_KEY=synthetic-boundary\n#";
-    await create(directory, prefix + "x".repeat(65536 - prefix.length));
+    await create(
+      directory,
+      prefix + "x".repeat(2 * 1024 * 1024 - prefix.length),
+    );
     assert.equal(await readAgentKeyFile(directory), "synthetic-boundary");
-    await create(directory, "x".repeat(65537));
+    await create(directory, "x".repeat(2 * 1024 * 1024 + 1));
     await assert.rejects(
       readAgentKeyFile(directory),
       /unsafe-agent-test-key-file/,
@@ -149,7 +152,7 @@ test("file safety failures expose neither supplied content nor file paths", asyn
   await withDirectory(async (directory) => {
     await create(
       directory,
-      `TEST_OPENAI_API_KEY=synthetic-private-value\n${"x".repeat(65536)}`,
+      `TEST_OPENAI_API_KEY=synthetic-private-value\n${"x".repeat(2 * 1024 * 1024)}`,
     );
     await assert.rejects(readAgentKeyFile(directory), (error) => {
       assert.equal(error.outcome, "blocked");

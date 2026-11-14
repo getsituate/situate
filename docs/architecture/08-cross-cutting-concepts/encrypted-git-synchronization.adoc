@@ -5,7 +5,7 @@ endif::[]
 [[encrypted-git-synchronization]]
 === Encrypted Git synchronization proposal
 
-Status: proposed mechanisms supporting <<adr-0015,ADR-0015>>, which proposes client-encrypted incremental Git packs. Neither the transport nor this concept is an implemented service or finalized protocol. Cryptographic construction, data reconciliation and native macOS/iOS feasibility remain unverified.
+Status: proposed mechanisms supporting <<adr-0015,ADR-0015>>, which proposes client-encrypted incremental Git packs. Neither the transport nor this concept is an implemented service or finalized protocol. Cryptographic construction, data reconciliation and native macOS feasibility remain unverified; iOS investigation is deferred.
 
 The governing requirements are link:{architecture-repository-root}/requirements/data/requirements/REQ-0013-synchronization-service.md[REQ-0013] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0008-local-content-availability.md[REQ-0008].
 They require operator-independent content encryption, local availability and initial replication of workspace content and retained history. Connected external document originals need not be copied into the workspace.
@@ -67,7 +67,7 @@ The main uncertainty is local integration and recovery, not ciphertext storage a
 |A reviewed enrollment/recovery/revocation state model, completeness checks against a defined account state, replay and race tests, and independent cryptographic review. New-device freshness without a trusted checkpoint needs an explicit threat-model limit.
 |Mobile pack and index growth
 |Small edits can accumulate many packs, large indexes and external delta dependencies. Full initial replication includes earlier attachments.
-|Compare bounded self-contained incremental packs with thin packs using synthetic histories on macOS/iOS. Measure memory, temporary disk use, transferred bytes, index growth and interruption recovery before fixing limits. Thin packs and later pack compaction are optimizations, not prerequisites.
+|Compare bounded self-contained incremental packs with thin packs using synthetic histories on macOS; mobile measurements are deferred. Measure memory, temporary disk use, transferred bytes, index growth and interruption recovery before fixing limits. Thin packs and later pack compaction are optimizations, not prerequisites.
 |Resource abuse and service economics
 |Encrypted logical-size declarations cannot bound physical storage, abandoned uploads or transfer costs, including with modified clients.
 |An abuse model, bounded reservations and server-observable safeguards, with cost estimates including staging, backups and mediated transfers. Any customer-visible limits or service commitments require a product decision rather than silently redefining an allowance.

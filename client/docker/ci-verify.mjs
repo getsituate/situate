@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -14,8 +14,8 @@ import { createHash } from "node:crypto";
 
 const toolNoticePins = {
   situate: "39f4fd9c29f32e6190133a824c0ae273d9a1a867c13afefd8c486741f0ba181a",
-  manifest: "143fc1a59b61d921d371096b7e37419cd40ff456a3b2d852404a8b014543e21f",
-  verifier: "7a03d9032c17ab7d3e043bf59fc3064ecd31ded09618b00190ca5e042a1f747c",
+  manifest: "b6541bece874b908ea88a6124b58e4033f4e409375555750015ec7c5c5235470",
+  verifier: "c2e0240106229e078b022d288e27096d4c686718f9245cdf230fb2e0d0746b8c",
 };
 for (const [path, expected] of [
   ["/opt/ci-tools/LICENSE-Situate.txt", toolNoticePins.situate],
@@ -116,6 +116,9 @@ try {
 }
 for (const [name, args] of [
   ["npm", ["--version"]],
+  ["gh", ["--version"]],
+  ["swift-format", ["--version"]],
+  ["swiftlint", ["version"]],
   ["cargo-deny", ["--version"]],
   ["cargo-llvm-cov", ["llvm-cov", "--version"]],
   ["gitleaks", ["version"]],
@@ -125,6 +128,78 @@ for (const [name, args] of [
     output(name, args).includes(quality[name].version),
     `${name} version`,
   );
+}
+assert.match(output("gh", ["api", "--help"]), /--slurp/);
+const swiftSourcePins = {
+  swiftManifest:
+    "b0a38547657871ff600cd80f7cc8503e20f0444f57806e9958ba2f152d33f735",
+  swiftVerifier:
+    "68f150ec1f737216d39fcb314d7c72b41cbbd8e96690f6c8d9abe9907ada4ee7",
+};
+for (const [path, expected] of [
+  ["/opt/ci-tools/ci-swift-tools.json", swiftSourcePins.swiftManifest],
+  ["/opt/ci-tools/ci-swift-tools.py", swiftSourcePins.swiftVerifier],
+])
+  assert.equal(
+    createHash("sha256").update(readFileSync(path)).digest("hex"),
+    expected,
+    `Swift verification input: ${path}`,
+  );
+execFileSync(
+  "python3",
+  [
+    "-B",
+    "/opt/ci-tools/ci-swift-tools.py",
+    "verify",
+    "--input",
+    "/opt/ci-tools",
+  ],
+  { stdio: "inherit" },
+);
+for (const path of [
+  "/opt/ci-tools/swiftlint/swiftlint",
+  "/opt/ci-tools/swift-format/swift-format",
+  "/opt/ci-tools/swift-runtime/usr/lib/libsourcekitdInProc.so",
+]) {
+  const dependencies = output("ldd", [path]);
+  assert.doesNotMatch(dependencies, /not found/);
+  for (const [, library, resolved] of dependencies.matchAll(
+    /(lib(?:swift|Foundation|_Foundation|dispatch|BlocksRuntime|_CompilerSwift)[^\s]*) => ([^\s]+)/g,
+  ))
+    assert.ok(
+      resolved.startsWith("/opt/ci-tools/swift-runtime/"),
+      `${library} must use the copied runtime`,
+    );
+}
+const swiftSmoke = mkdtempSync(`${process.env.HOME}/swift-source-smoke-`);
+try {
+  const source = `${swiftSmoke}/example.swift`;
+  writeFileSync(source, "let value:Int=1\n");
+  execFileSync("swift-format", ["format", "--in-place", source]);
+  execFileSync("swift-format", ["lint", "--strict", source]);
+  const configuration = `${swiftSmoke}/swiftlint.yml`;
+  writeFileSync(configuration, "only_rules:\n  - statement_position\n");
+  writeFileSync(
+    source,
+    'if true {\n  print("first")\n}\nelse {\n  print("second")\n}\n',
+  );
+  const result = spawnSync(
+    "swiftlint",
+    ["lint", "--strict", "--no-cache", "--config", configuration, source],
+    { encoding: "utf8" },
+  );
+  assert.equal(
+    result.status,
+    2,
+    "SourceKit-dependent lint must detect the synthetic violation",
+  );
+  assert.match(result.stdout + result.stderr, /statement_position/);
+  assert.doesNotMatch(
+    result.stdout + result.stderr,
+    /skipping|prohibited|could not load|sourcekitd.*not found/i,
+  );
+} finally {
+  rmSync(swiftSmoke, { recursive: true, force: true });
 }
 for (const [command, args] of [
   ["node", ["--version"]],
@@ -170,6 +245,11 @@ for (const path of [
   "/var/run/docker.sock",
   "/root/.npm",
   "/root/.ssh",
+  "/tmp/ci-swift-build",
+  "/swift-input",
+  "/usr/bin/swift",
+  "/usr/bin/swiftc",
+  "/usr/lib/swift",
 ]) {
   assert.equal(existsSync(path), false, `Unexpected image content: ${path}`);
 }

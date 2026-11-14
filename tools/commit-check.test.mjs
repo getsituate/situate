@@ -181,7 +181,7 @@ test("checks every introduced commit, excluding a synthetic merge when actual he
   );
 });
 
-test("Quality checks the actual PR head rather than its synthetic checkout", async (t) => {
+test("commit checks use the explicit branch head independently of a synthetic checkout", async (t) => {
   const r = await repository(t);
   const adoption = await r.adopt();
   r.git(["checkout", "-b", "topic"]);
@@ -189,37 +189,12 @@ test("Quality checks the actual PR head rather than its synthetic checkout", asy
   r.git(["checkout", "main"]);
   r.commit("chore: Change main");
   r.git(["merge", "--no-ff", "topic", "-m", "Synthetic CI merge"]);
-  const workflow = await readFile(
-    join(tools, "../.github/workflows/quality.yml"),
-    "utf8",
-  );
-  const step = workflow.match(
-    /- name: Check branch commit messages\n([\s\S]*?)(?= {6}- id: select)/,
-  )?.[1];
-  assert.ok(step);
-  assert.match(
-    step,
-    /HEAD_SHA: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/,
-  );
-  assert.match(
-    step,
-    /BASE_SHA: \$\{\{ github.event.pull_request.base.sha \|\| github.event.before \}\}/,
-  );
-  const script = step.split("        run: |\n")[1];
-  const result = r.run("bash", ["-euo", "pipefail", "-c", script], r.cwd, {
-    BASE_SHA: adoption,
-    HEAD_SHA: head,
-  });
+  const result = r.check(adoption, head);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /1 checked, 0 grandfathered, 0 invalid/);
-  for (const base of ["", "0".repeat(40)]) {
-    const full = r.run("bash", ["-euo", "pipefail", "-c", script], r.cwd, {
-      BASE_SHA: base,
-      HEAD_SHA: head,
-    });
-    assert.equal(full.status, 0, full.stderr);
-    assert.match(full.stdout, /2 checked, 1 grandfathered, 0 invalid/);
-  }
+  const full = r.check(undefined, head);
+  assert.equal(full.status, 0, full.stderr);
+  assert.match(full.stdout, /2 checked, 1 grandfathered, 0 invalid/);
 });
 
 test("a real squash adoption establishes the boundary and validates its own subject", async (t) => {
@@ -349,4 +324,73 @@ test("installer preserves existing hooks, configured hooksPath and symlinks", as
   await copyFile(join(tools, "hooks", "commit-msg"), hook);
   await chmod(hook, 0o600);
   assert.equal(r.run(process.execPath, [installer]).status, 1);
+});
+
+test("explicit merge-group heads check actual PR ranges without synthetic merge subjects", async (t) => {
+  const r = await repository(t);
+  const base = await r.adopt();
+  r.git(["checkout", "-b", "first-pr"]);
+  const first = r.commit("fix: Preserve first draft");
+  r.git(["checkout", "main"]);
+  r.git(["checkout", "-b", "second-pr"]);
+  const second = r.commit("fix: Preserve second draft");
+  r.git(["checkout", "main"]);
+  r.git(["merge", "--no-ff", "first-pr", "-m", "Synthetic queue merge one"]);
+  r.git(["merge", "--no-ff", "second-pr", "-m", "Synthetic queue merge two"]);
+  const checked = (heads) =>
+    r.run(process.execPath, [
+      checker,
+      "--base",
+      base,
+      "--heads",
+      JSON.stringify(heads),
+    ]);
+  let result = checked([first, second]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /2 checked, 0 grandfathered, 0 invalid/);
+  assert.equal(r.check(base).status, 1);
+  r.git(["checkout", "second-pr"]);
+  const invalid = r.commit("Invalid actual PR message");
+  result = checked([first, invalid]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, new RegExp(invalid));
+  assert.doesNotMatch(
+    result.stderr,
+    /Invalid actual PR message|Synthetic queue merge/,
+  );
+});
+
+test("explicit head lists reject malformed, duplicate, ambiguous and non-commit selections", async (t) => {
+  const r = await repository(t);
+  const base = await r.adopt();
+  const head = r.commit("fix: Preserve draft");
+  r.git(["tag", "-a", "reviewed", "-m", "Synthetic tag"]);
+  const tag = r.git(["rev-parse", "refs/tags/reviewed"]);
+  for (const raw of [
+    "not JSON",
+    "{}",
+    "[]",
+    JSON.stringify(["HEAD"]),
+    JSON.stringify([head, head]),
+    JSON.stringify([17]),
+    JSON.stringify([tag]),
+    JSON.stringify(["f".repeat(40)]),
+  ]) {
+    const result = r.run(process.execPath, [
+      checker,
+      "--base",
+      base,
+      "--heads",
+      raw,
+    ]);
+    assert.equal(result.status, 1, raw);
+  }
+  const ambiguous = r.run(process.execPath, [
+    checker,
+    "--head",
+    head,
+    "--heads",
+    JSON.stringify([head]),
+  ]);
+  assert.equal(ambiguous.status, 1);
 });

@@ -76,10 +76,14 @@ async function sessionFixture(
         '"tools/test-inputs.test.mjs"',
         '"client/scripts/example.test.mjs"',
       )
-      // Fixture executables do not compile artifacts or need host build slots.
+      // Synthetic fixture commands need neither Docker nor shared build slots.
       .replace(
         "const report = await runPlan(plan, {",
         "const report = await runPlan(plan, { buildLease: false,",
+      )
+      .replace(
+        "toolContainers: !options.quick && plan.suites.length > 0,",
+        "toolContainers: false,",
       ),
   );
   for (const name of [
@@ -461,6 +465,38 @@ test(
     assert.deepEqual(f.errors, []);
   },
 );
+
+test("the actual CLI rejects external Pi packages for portable Pi checks", () => {
+  const runner = fileURLToPath(
+    new URL("../../../tools/test.mjs", import.meta.url),
+  );
+  const root = dirname(dirname(runner));
+  const result = spawnSync(
+    process.execPath,
+    [
+      runner,
+      "--suite",
+      "pi-unit",
+      "--pi-package-root",
+      join(root, "test-results/external-pi-fixture"),
+      "--json",
+    ],
+    {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 10000,
+      env: {
+        ...process.env,
+        NODE_TEST_CONTEXT: "",
+        SITUATE_TOOL_CONTAINER: "0",
+      },
+    },
+  );
+  assert.equal(result.status, 2, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, "error");
+  assert.match(report.error, /External Pi installations are unavailable/);
+});
 
 test(
   "explicit feedback reports cache decisions in CLI and JSON",

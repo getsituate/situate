@@ -5,6 +5,8 @@ export default defineConfig({
   outputDir: "../test-results/browser",
   forbidOnly: !!process.env.CI,
   retries: 0,
+  // Retain failure details even if a suite deadline interrupts the final summary.
+  reporter: process.env.CI ? "line" : "list",
   use: { trace: "retain-on-failure", locale: "en-US" },
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },

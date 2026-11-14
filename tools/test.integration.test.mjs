@@ -1,4 +1,5 @@
 import test from "node:test";
+import { suiteAvailable } from "./test-scope.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -21,7 +22,7 @@ import {
   prepareDependencies,
 } from "./test.mjs";
 
-test("CLI plans identify MVP scope and deferred suites in JSON and text", () => {
+test("CLI plans identify supported suites and optional diagnostics in JSON and text", () => {
   const run = (...args) => {
     const result = spawnSync(
       process.execPath,
@@ -36,23 +37,23 @@ test("CLI plans identify MVP scope and deferred suites in JSON and text", () => 
   };
   const plan = JSON.parse(run("--json"));
   assert.equal(plan.status, "planned");
-  assert.equal(plan.scope, "mvp");
-  assert.equal(plan.profile, "mvp");
+  assert.equal(plan.scope, "supported");
+  assert.equal(plan.profile, "supported");
   assert.ok(plan.deferredSuiteIds.includes("client-visual"));
   assert.ok(!plan.suites.some((suite) => suite.id === "client-visual"));
   const text = run();
-  assert.match(text, /mvp scope, mvp profile/);
-  assert.match(text, /Deferred by MVP scope: .*client-visual/);
+  assert.match(text, /supported scope, supported profile/);
+  assert.match(text, /Not selected: .*client-visual/);
   const extended = JSON.parse(run("--extended", "--json"));
   assert.equal(extended.scope, "extended");
   assert.equal(extended.profile, "all");
-  assert.deepEqual(extended.deferredSuiteIds, []);
+  assert.ok(extended.deferredSuiteIds.every((id) => !suiteAvailable({ id })));
   assert.ok(extended.suites.some((suite) => suite.id === "client-visual"));
   assert.match(
     run("--extended", "--feedback"),
     /extended scope, feedback profile/,
   );
-  assert.doesNotMatch(run("--extended"), /Deferred by MVP scope/);
+  assert.doesNotMatch(run("--extended"), /MVP/);
 });
 
 test(

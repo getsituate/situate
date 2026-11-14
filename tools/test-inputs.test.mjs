@@ -40,6 +40,8 @@ test("security policy selects document checks without runtime or build suites", 
     "quick-source",
     "root-format",
     "root-secrets",
+    "root-commits",
+    "root-history-secrets",
     "design-contracts",
   ]);
   assert.equal(requiresFullSelection(file), false);
@@ -69,7 +71,8 @@ test("release content retains compiler, packaging, app and terminal consumers", 
     "client-scripts-integration",
     "client-vue",
     "client-types",
-    "client-browser",
+    "client-browser-chromium",
+    "client-browser-webkit",
     "client-native",
     "dev-tui-unit",
   ])
@@ -169,7 +172,8 @@ test("plain documents and catalog records do not select builds or runtime journe
     "runner-integration",
     "client-host",
     "client-native",
-    "client-browser",
+    "client-browser-chromium",
+    "client-browser-webkit",
     "client-docker-context",
     "design-website-hosting",
     "requirements-integration",
@@ -354,6 +358,8 @@ test("native updater modules and fixtures select the existing complete Rust host
     "situate-core",
     "--exclude",
     "situate-migrations",
+    "--exclude",
+    "situate-agent",
     "--locked",
   ]);
 });
@@ -372,9 +378,6 @@ test("runtime sources affect fingerprints and unknown suites and inputs are cons
     "new-area/input.md",
     "client/packages/new/input.md",
     "package-lock.json",
-    "client/package-lock.json",
-    "client/Cargo.lock",
-    "client/app/vite.config.ts",
   ])
     for (const id of [
       "client-core",

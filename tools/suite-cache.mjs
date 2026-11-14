@@ -268,7 +268,11 @@ async function snapshot(root, suite, options, affectedFiles) {
     process.arch,
     options.timeout,
   ]);
-  add(Object.entries(environment).sort(([a], [b]) => a.localeCompare(b)));
+  add(
+    Object.entries(environment)
+      .filter(([name]) => name !== "SITUATE_DOCKER_LEASE")
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
   if (options.directory && resolve(options.directory) !== root)
     throw new Error("Different execution root");
   if (!inside(root, cwd)) throw new Error("External working directory");

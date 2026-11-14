@@ -40,7 +40,11 @@ function resize() {
   for (const observer of observers) observer.notify();
   paint();
 }
-async function view(initialTop?: number, initialHeight = 1000) {
+async function view(
+  initialTop?: number,
+  initialHeight = 1000,
+  wholePixelScroll = false,
+) {
   const viewport = shallowRef<HTMLElement | null>(null);
   const content = shallowRef<HTMLElement | null>(null);
   const visible = ref(true);
@@ -73,7 +77,10 @@ async function view(initialTop?: number, initialHeight = 1000) {
       set: (value: number) => {
         top = Math.max(
           0,
-          Math.min(value, dimensions.contentHeight - dimensions.height),
+          Math.min(
+            wholePixelScroll ? Math.trunc(value) : value,
+            dimensions.contentHeight - dimensions.height,
+          ),
         );
       },
     },
@@ -203,6 +210,24 @@ test("reflow preserves a reading anchor rather than an obsolete pixel offset", a
   resize();
   expect(chat.element.scrollTop).toBe(240);
 });
+
+test.each([
+  [240.125, 240, 0.125],
+  [240.875, 241, -0.125],
+])(
+  "reflow selects the nearest pixel when scroll positions truncate (anchor=%s)",
+  async (anchorTop, scrollTop, offset) => {
+    const chat = await view(100, 1000, true);
+    chat.dimensions.width = 320;
+    chat.dimensions.anchorTop = anchorTop;
+    chat.dimensions.contentHeight = 1800;
+    resize();
+    expect(chat.element.scrollTop).toBe(scrollTop);
+    expect(
+      chat.body.querySelector("article")!.getBoundingClientRect().top,
+    ).toBe(offset);
+  },
+);
 
 test("anchors to visible messages inside work history rather than the whole work block", async () => {
   const chat = await view(100);

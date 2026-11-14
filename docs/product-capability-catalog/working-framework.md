@@ -8,7 +8,7 @@ Documentation date: **9 November 2026**. [Repository guidelines](../../AGENTS.md
 
 The catalog supplements [product direction](../product-concept.md) and [positioning](../positioning.md), without replacing the [requirements catalog](../../requirements/README.md) or [foundations](../../requirements/data/foundations.md). Requirement approval is not delivery evidence. Use the recorded product revision and area evidence for support assessments, rather than introductory or historical descriptions.
 
-Target: the **main application**, `client/app/` and `client/crates/`, with macOS and iOS assessed separately. Source baseline: branch `use-case-validation`, commit `27b6831c3e55b2de4a59d6cd32cf1935d373338d` (5 November 2026). Historical prototype and synthetic workshop findings cannot establish main-application support. Shared/browser tests cannot qualify native platforms. No released version is claimed.
+Target: the **main application**, `client/app/` and `client/crates/`. Current product scope is macOS-only; the recorded baseline assessed macOS and iOS separately, with iOS evidence now retained for deferred work rather than current support. Source baseline: branch `use-case-validation`, commit `27b6831c3e55b2de4a59d6cd32cf1935d373338d` (5 November 2026). Historical prototype and synthetic workshop findings cannot establish main-application support. Shared/browser tests cannot qualify native platforms. No released version is claimed.
 
 ## Canonical documentation and ownership
 

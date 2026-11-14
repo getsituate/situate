@@ -60,7 +60,7 @@ pub struct Storage {
 }
 
 #[derive(Debug)]
-pub struct StorageLock(std::fs::File);
+pub struct StorageLock(pub(crate) std::fs::File);
 impl Drop for StorageLock {
     fn drop(&mut self) {
         // Closing alone leaves flock held by unrelated forked children until exec.

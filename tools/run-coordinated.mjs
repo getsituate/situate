@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { realpathSync, writeSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmdirSync, writeSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export function worktreeRoot(directory) {
@@ -30,16 +31,35 @@ export async function runCoordinated({
   environment = process.env,
   signal,
   output,
+  cleanupGraceMs = 2000,
   onTiming = () => {},
 }) {
   signal?.throwIfAborted();
+  if (
+    !Number.isInteger(cleanupGraceMs) ||
+    cleanupGraceMs < 1 ||
+    cleanupGraceMs > 120000
+  )
+    throw new Error(
+      "Coordinated cleanup grace must be an integer from 1 to 120000 ms.",
+    );
   if (!["worktree", "desktop", "build"].includes(resource))
     throw new Error("Unknown coordinated resource.");
+  const dockerLeaseDirectory =
+    resource === "worktree" && !coordinated(directory, environment)
+      ? mkdtempSync(join(tmpdir(), "situate-docker-lease-"))
+      : undefined;
+  const dockerLease = dockerLeaseDirectory
+    ? join(dockerLeaseDirectory, "container.json")
+    : undefined;
   const child = spawn(
     "python3",
     [
       "-u",
       fileURLToPath(new URL("./worktree-supervisor.py", import.meta.url)),
+      "--cleanup-grace-ms",
+      String(cleanupGraceMs),
+      ...(dockerLease ? ["--docker-lease", dockerLease] : []),
       resource,
       realpathSync(directory),
       command,
@@ -47,7 +67,9 @@ export async function runCoordinated({
     ],
     {
       cwd: directory,
-      env: environment,
+      env: dockerLease
+        ? { ...environment, SITUATE_DOCKER_LEASE: dockerLease }
+        : environment,
       detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe", "pipe"],
     },
@@ -84,7 +106,16 @@ export async function runCoordinated({
   child.stdin.on("error", () => {});
   try {
     return await new Promise((done, reject) => {
-      child.once("error", reject);
+      child.once("error", (error) => {
+        if (dockerLeaseDirectory) {
+          try {
+            rmdirSync(dockerLeaseDirectory);
+          } catch {
+            /* A nonempty lease directory belongs to the supervisor. */
+          }
+        }
+        reject(error);
+      });
       child.once("close", (code) => done(signalExit ?? code ?? 1));
     });
   } finally {

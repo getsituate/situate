@@ -307,7 +307,7 @@ impl Ui {
             (
                 text::BUTTON_RESULTS,
                 Action::Results(true),
-                run.task.is_test(),
+                run.task.is_test() || run.task.is_release(),
                 app.show_results,
             ),
             (
@@ -336,9 +336,21 @@ impl Ui {
         };
         frame.render_widget(Paragraph::new(heading).style(self.theme.muted), parts[1]);
         let results = app.show_results.then(|| {
-            run.report
-                .as_ref()
-                .map_or_else(|| vec![text::NO_REPORT.into()], |report| report.lines())
+            run.report.as_ref().map_or_else(
+                || {
+                    if run.task.is_release() && !run.raw_report.is_empty() {
+                        let formatted =
+                            serde_json::from_slice::<serde_json::Value>(&run.raw_report)
+                                .ok()
+                                .and_then(|value| serde_json::to_string_pretty(&value).ok())
+                                .unwrap_or_else(|| clean(&run.raw_report));
+                        formatted.lines().map(String::from).collect()
+                    } else {
+                        vec![text::NO_REPORT.into()]
+                    }
+                },
+                |report| report.lines(),
+            )
         });
         let count = results.as_ref().map_or(run.logs.len(), Vec::len);
         let max_scroll = count.saturating_sub(parts[2].height as usize);
@@ -489,189 +501,34 @@ impl Ui {
     }
     fn modal(&mut self, frame: &mut Frame, dialog: Dialog, app: &App) {
         self.hits.clear();
-        let release_message = match dialog {
-            Dialog::Preparation => format!("{}\n{}", app.release_text(), app.notice),
-            Dialog::PreparationInput(baseline) => format!(
-                "{}\n\n{}_\n{}",
-                if baseline {
-                    "Comparison Git SHA. Leave empty for the highest earlier version with committed release notes. The first preparation needs an explicit SHA. The analysis uses HEAD."
-                } else {
-                    "Product version (major.minor.patch). Version files are updated only when you confirm the reviewed changelog."
-                },
-                app.release.input,
-                app.notice
-            ),
-            Dialog::PreparationConfirm(op) => format!(
-                "{}\n\n{}\n\nVersion: {}\nBaseline: {}",
-                match op {
-                    crate::release::Operation::StartLocal => "Start Pi agent",
-                    crate::release::Operation::CompleteLocal => "Changelog prepared",
-                    crate::release::Operation::Status => "Refresh status",
-                },
-                match op {
-                    crate::release::Operation::StartLocal =>
-                        "Open a Herdr pane with your local Pi setup to write the draft? Review it there, then ask the agent to translate. No editor, commit or build starts.",
-                    crate::release::Operation::CompleteLocal =>
-                        "Have you reviewed the changelog and all translations? Validate the files and commit the new version and changelog together? No build or publication starts.",
-                    _ => "Refresh saved preparation status?",
-                },
-                app.release.version,
-                if app.release.baseline.is_empty() {
-                    "automatic (committed release notes)"
-                } else {
-                    &app.release.baseline
-                }
-            ),
-            Dialog::ReleaseVersion(task) => format!(
-                "{}\n\n{}: {}\n{}: {}_\n\n{}\n{}",
-                task.name(),
-                text::VERSION_CURRENT,
-                app.current_version,
-                text::VERSION_NEXT,
-                app.version_input,
-                text::VERSION_PROMPT,
-                app.notice
-            ),
-            Dialog::ReleaseTestPrompt(task) => format!(
-                "{}\n\n{}\n{}",
-                task.name(),
-                text::RELEASE_TESTS_PROMPT,
-                app.notice
-            ),
-            Dialog::ReleaseTestResults(task) => format!(
-                "{}\n\n{}\n\n{}\n{}",
-                task.name(),
-                text::RELEASE_TESTS_REVIEW,
-                app.release_test_results(),
-                app.notice
-            ),
-            Dialog::ReleaseNumber { .. } => format!(
-                "{}: {}_\n\n{}\n{}",
-                text::RELEASE_NUMBER,
-                app.release_number,
-                text::RELEASE_NUMBER_HELP,
-                app.notice
-            ),
-            Dialog::PublicationCandidates => format!(
-                "{}\n\n{}",
-                text::PUBLICATION_SELECT,
-                app.publication_description()
-            ),
-            Dialog::PublicationActions => format!(
-                "{}\n\n{}\n{}",
-                app.publication_description(),
-                text::PUBLICATION_LOCAL,
-                app.notice
-            ),
-            Dialog::PublicationTarget(action) => format!(
-                "{}\n\n{}\n\n{}\n{}\n{}",
-                action.name(),
-                app.publication_description(),
-                text::PUBLICATION_TARGET,
-                app.publication_target,
-                app.notice
-            ),
-            Dialog::PublicationConfirm(action) => format!(
-                "{}\n\n{}\n\n{}\n{}\n{}",
-                action.name(),
-                app.publication_description(),
-                app.publication_target,
-                if action.writes_remote() {
-                    text::PUBLICATION_APPROVAL
-                } else if action == crate::publication::Action::Inspect {
-                    text::PUBLICATION_INSPECT_CONFIRM
-                } else {
-                    text::PUBLICATION_LOCAL
-                },
-                if action == crate::publication::Action::Reconcile {
-                    text::PUBLICATION_RECOVERY
-                } else {
-                    ""
-                }
-            ),
-            Dialog::ReleaseConfirm(task) => {
-                let number = match task {
-                    crate::actions::Task::ReleaseIos(n) | crate::actions::Task::ReleaseAll(n) => {
-                        format!("\n{}: {}", text::RELEASE_NUMBER, n)
-                    }
-                    _ => String::new(),
-                };
-                let upload = if matches!(
-                    task,
-                    crate::actions::Task::ReleaseIos(_) | crate::actions::Task::ReleaseAll(_)
-                ) {
-                    format!("\n{}", text::RELEASE_UPLOAD_CONFIRM)
-                } else {
-                    String::new()
-                };
-                format!(
-                    "{}{}\n{}: {}\n\n{}{}\n{}",
-                    task.name(),
-                    number,
-                    text::VERSION_NEXT,
-                    app.release_app_version,
-                    text::RELEASE_CONFIRM,
-                    upload,
-                    app.release_test_summary
-                )
-            }
-            _ => String::new(),
-        };
+        let workflow_message = format!("{}\n\n{}", app.workflow.description(), app.notice);
         let (title, message) = match dialog {
-            Dialog::Install(task) => (
-                text::INSTALL_TITLE,
-                if task.is_apple_release() {
-                    text::INSTALL_RELEASE_CONFIRM
-                } else {
-                    text::INSTALL_CONFIRM
-                },
-            ),
-            Dialog::Preparation | Dialog::PreparationInput(_) | Dialog::PreparationConfirm(_) => {
-                ("Release preparation", release_message.as_str())
-            }
+            Dialog::Install(_) => (text::INSTALL_TITLE, text::INSTALL_CONFIRM),
             Dialog::Releases => (text::RELEASES, text::RELEASE_MENU),
-            Dialog::ReleaseNumber { .. }
-            | Dialog::ReleaseConfirm(_)
-            | Dialog::ReleaseVersion(_)
-            | Dialog::ReleaseTestPrompt(_)
-            | Dialog::ReleaseTestResults(_)
-            | Dialog::PublicationCandidates
-            | Dialog::PublicationActions
-            | Dialog::PublicationTarget(_)
-            | Dialog::PublicationConfirm(_) => (text::RELEASES, release_message.as_str()),
+            Dialog::WorkflowInput | Dialog::WorkflowConfirm => {
+                (text::RELEASES, workflow_message.as_str())
+            }
+            Dialog::HistoricalArtifacts => (
+                "Retained artifacts and drafts",
+                app.historical_artifacts.as_str(),
+            ),
             Dialog::Tests => (text::TESTS, text::TEST_MENU),
             Dialog::Full => (text::CONFIRM, text::FULL_CONFIRM),
             Dialog::Quit => (text::CONFIRM, text::QUIT_CONFIRM),
             Dialog::Help => (text::HELP_TITLE, text::HELP),
         };
         let area = frame.area();
-        let width = area.width.min(74);
+        let width = area.width.min(90);
         let height = area.height.min(
             if matches!(
                 dialog,
-                Dialog::Preparation | Dialog::PreparationInput(_) | Dialog::PreparationConfirm(_)
-            ) {
-                34
-            } else if matches!(
-                dialog,
-                Dialog::ReleaseVersion(_)
-                    | Dialog::ReleaseTestPrompt(_)
-                    | Dialog::ReleaseTestResults(_)
-                    | Dialog::PublicationCandidates
-                    | Dialog::PublicationActions
-                    | Dialog::PublicationTarget(_)
-                    | Dialog::PublicationConfirm(_)
+                Dialog::WorkflowInput | Dialog::WorkflowConfirm | Dialog::HistoricalArtifacts
             ) {
                 30
             } else if dialog == Dialog::Help {
                 24
-            } else if matches!(
-                dialog,
-                Dialog::Releases | Dialog::ReleaseConfirm(_) | Dialog::ReleaseNumber { .. }
-            ) {
-                16
             } else {
-                12
+                16
             },
         );
         let rect = Rect::new(
@@ -686,50 +543,18 @@ impl Ui {
         frame.render_widget(Clear, rect);
         frame.render_widget(block, rect);
         let choices: Vec<(&str, KeyCode)> = match dialog {
-            Dialog::Preparation if app.release_blocked() => vec![
-                (text::VERSION_BUILD_CURRENT, KeyCode::Char('c')),
-                ("9 Refresh", KeyCode::Char('9')),
-                (text::BUTTON_CLOSE, KeyCode::Esc),
-            ],
-            Dialog::Preparation => vec![
-                ("1 Start Pi agent", KeyCode::Char('1')),
-                ("2 Changelog prepared", KeyCode::Char('2')),
-                (text::VERSION_BUILD_CURRENT, KeyCode::Char('c')),
-                ("9 Refresh", KeyCode::Char('9')),
-                (text::BUTTON_CLOSE, KeyCode::Esc),
-            ],
-            Dialog::PreparationConfirm(crate::release::Operation::CompleteLocal) => vec![
-                ("y Confirm and commit", KeyCode::Char('y')),
+            Dialog::WorkflowInput => vec![
+                ("Enter Plan", KeyCode::Enter),
+                ("Tab Next field", KeyCode::Tab),
+                ("F2 Inspect operation", KeyCode::F(2)),
+                ("F3 Operation status", KeyCode::F(3)),
                 (text::BUTTON_CANCEL, KeyCode::Esc),
             ],
-            Dialog::PreparationInput(_) => vec![
-                (text::BUTTON_CONTINUE, KeyCode::Enter),
+            Dialog::WorkflowConfirm => vec![
+                (app.workflow.confirmation_label(), KeyCode::Char('y')),
                 (text::BUTTON_CANCEL, KeyCode::Esc),
             ],
-            Dialog::PreparationConfirm(crate::release::Operation::StartLocal) => vec![
-                (text::BUTTON_RUN, KeyCode::Char('y')),
-                (text::BUTTON_CANCEL, KeyCode::Esc),
-            ],
-            Dialog::ReleaseVersion(_) => vec![
-                (text::VERSION_BUILD_CURRENT, KeyCode::Char('c')),
-                (text::BUTTON_CONTINUE, KeyCode::Enter),
-                (text::BUTTON_CANCEL, KeyCode::Esc),
-            ],
-            Dialog::ReleaseTestPrompt(_) => vec![
-                (text::RELEASE_TESTS_RUN, KeyCode::Char('y')),
-                (text::RELEASE_TESTS_SKIP, KeyCode::Char('s')),
-                (text::BUTTON_CANCEL, KeyCode::Esc),
-            ],
-            Dialog::ReleaseTestResults(_) => vec![
-                (text::BUTTON_INSPECT_PI, KeyCode::Char('i')),
-                if app.release_tests_passed() {
-                    (text::BUTTON_CONTINUE, KeyCode::Enter)
-                } else {
-                    (text::RELEASE_TESTS_OVERRIDE_BUTTON, KeyCode::Char('s'))
-                },
-                (text::RELEASE_TESTS_RETRY, KeyCode::Char('r')),
-                (text::BUTTON_CANCEL, KeyCode::Esc),
-            ],
+            Dialog::HistoricalArtifacts => vec![(text::BUTTON_CLOSE, KeyCode::Esc)],
             Dialog::Tests => vec![
                 (text::TEST_OPTIONS[0], KeyCode::Char('1')),
                 (text::TEST_OPTIONS[1], KeyCode::Char('2')),
@@ -737,29 +562,10 @@ impl Ui {
                 (text::BUTTON_CANCEL, KeyCode::Esc),
             ],
             Dialog::Releases => vec![
-                (text::RELEASE_OPTIONS[0], KeyCode::Char('1')),
-                (text::RELEASE_OPTIONS[1], KeyCode::Char('2')),
-                (text::RELEASE_OPTIONS[2], KeyCode::Char('3')),
-                (text::RELEASE_OPTIONS[3], KeyCode::Char('4')),
-                ("5 Prepare release notes", KeyCode::Char('5')),
-                (text::BUTTON_CANCEL, KeyCode::Esc),
-            ],
-            Dialog::PublicationCandidates => vec![
-                (text::PUBLICATION_PREVIOUS, KeyCode::Up),
-                (text::PUBLICATION_NEXT, KeyCode::Down),
-                (text::BUTTON_CONTINUE, KeyCode::Enter),
-                (text::BUTTON_CANCEL, KeyCode::Esc),
-            ],
-            Dialog::PublicationActions => vec![
-                (text::PUBLICATION_OPTIONS[0], KeyCode::Char('1')),
-                (text::PUBLICATION_OPTIONS[1], KeyCode::Char('2')),
-                (text::PUBLICATION_OPTIONS[2], KeyCode::Char('3')),
-                (text::PUBLICATION_OPTIONS[3], KeyCode::Char('4')),
-                (text::PUBLICATION_OPTIONS[4], KeyCode::Char('5')),
-                (text::BUTTON_CANCEL, KeyCode::Esc),
-            ],
-            Dialog::PublicationTarget(_) | Dialog::ReleaseNumber { .. } => vec![
-                (text::BUTTON_CONTINUE, KeyCode::Enter),
+                ("1 Create macOS GitHub Release", KeyCode::Char('1')),
+                ("2 Publish existing GitHub Release", KeyCode::Char('2')),
+                ("3 Verify source", KeyCode::Char('3')),
+                ("4 Retained artifacts and drafts", KeyCode::Char('4')),
                 (text::BUTTON_CANCEL, KeyCode::Esc),
             ],
             Dialog::Help => vec![(text::BUTTON_CLOSE, KeyCode::Esc)],
@@ -1049,73 +855,12 @@ mod tests {
         assert!(app.runs.is_empty());
     }
     #[test]
-    fn release_controls_show_platforms_number_errors_and_confirmation() {
-        let mut app = app();
-        let mut ui = Ui::new(true);
-        paint(&mut ui, &mut app, 100, 30);
-        click(&mut ui, &mut app, Action::Select(text::ACTIONS.len() - 1));
-        assert!(app.dialog == Some(Dialog::Releases));
-        paint(&mut ui, &mut app, 100, 30);
-        click(&mut ui, &mut app, Action::Key(KeyCode::Char('3')));
-        paint(&mut ui, &mut app, 100, 30);
-        click(&mut ui, &mut app, Action::Key(KeyCode::Enter));
-        let buffer = paint(&mut ui, &mut app, 100, 30);
-        let screen = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect::<String>();
-        assert!(screen.contains("Enter a build number from 1 to 9999"));
-        app.key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
-        click(&mut ui, &mut app, Action::Key(KeyCode::Enter));
-        paint(&mut ui, &mut app, 100, 30);
-        app.version_input = "0.1.1".into();
-        click(&mut ui, &mut app, Action::Key(KeyCode::Enter));
-        paint(&mut ui, &mut app, 100, 30);
-        click(&mut ui, &mut app, Action::Key(KeyCode::Char('s')));
-        let buffer = paint(&mut ui, &mut app, 100, 30);
-        let screen = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect::<String>();
-        assert!(screen.contains("Release · macOS + iOS"));
-        assert!(screen.contains("iOS build number (1–9999): 2"));
-        assert!(screen.contains("The new iOS build will be uploaded to TestFlight."));
-        assert!(screen.contains("No public App Store release will be submitted."));
-        click(&mut ui, &mut app, Action::Key(KeyCode::Esc));
-        assert!(app.runs.is_empty());
-    }
-    #[test]
-    fn publication_menu_and_confirmation_show_artifacts_and_effects() {
-        let mut app = app();
-        let mut ui = Ui::new(true);
-        app.dialog = Some(Dialog::Releases);
-        paint(&mut ui, &mut app, 100, 30);
-        click(&mut ui, &mut app, Action::Key(KeyCode::Char('4')));
-        assert_eq!(app.dialog, Some(Dialog::PublicationCandidates));
-        let buffer = paint(&mut ui, &mut app, 100, 30);
-        let screen = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect::<String>();
-        assert!(screen.contains("No readable Apple release manifests"));
-        assert!(!screen.contains("Deploy landing page"));
-        app.publication_target = "operator@host:1.2.3".into();
-        app.dialog = Some(Dialog::PublicationConfirm(
-            crate::publication::Action::Publish,
-        ));
-        let buffer = paint(&mut ui, &mut app, 100, 30);
-        let screen = buffer
-            .content
-            .iter()
-            .map(|c| c.symbol())
-            .collect::<String>();
-        assert!(screen.contains("operator@host:1.2.3"));
-        assert!(screen.contains("exact-artifact native update"));
-        assert!(screen.contains("No automatic retry or rollback."));
-        assert!(app.runs.is_empty());
+    fn release_menu_has_only_shared_workflows_and_retained_readers() {
+        let screen = draw(110, 30, false, Some(Dialog::Releases));
+        assert!(screen.contains("Create macOS GitHub Release"));
+        assert!(screen.contains("Publish existing GitHub Release"));
+        assert!(screen.contains("Retained artifacts and drafts"));
+        assert!(!screen.contains("TestFlight"));
     }
     #[test]
     fn dialogs_block_underlying_controls_and_stale_hit_regions() {
@@ -1432,23 +1177,9 @@ mod tests {
                 Some(Dialog::Help),
                 Some(Dialog::Full),
                 Some(Dialog::Releases),
-                Some(Dialog::ReleaseTestPrompt(
-                    crate::actions::Task::ReleaseMacos,
-                )),
-                Some(Dialog::ReleaseTestResults(
-                    crate::actions::Task::ReleaseMacos,
-                )),
-                Some(Dialog::ReleaseVersion(crate::actions::Task::ReleaseMacos)),
-                Some(Dialog::ReleaseNumber { all: true }),
-                Some(Dialog::ReleaseConfirm(crate::actions::Task::ReleaseAll(2))),
-                Some(Dialog::PublicationCandidates),
-                Some(Dialog::PublicationActions),
-                Some(Dialog::PublicationTarget(
-                    crate::publication::Action::Publish,
-                )),
-                Some(Dialog::PublicationConfirm(
-                    crate::publication::Action::Reconcile,
-                )),
+                Some(Dialog::WorkflowInput),
+                Some(Dialog::WorkflowConfirm),
+                Some(Dialog::HistoricalArtifacts),
             ] {
                 draw(size.0, size.1, true, dialog);
             }

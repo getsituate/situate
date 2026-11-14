@@ -107,7 +107,7 @@ def dependency_ids(files, manifest):
 
 def check_manifest(manifest, quality):
     require(manifest["version"] == 1, "Unsupported tool notice inventory")
-    require(set(manifest["tools"]) == {"cargo-deny", "cargo-llvm-cov", "gitleaks", "ktlint"}, "Incomplete tool set")
+    require(set(manifest["tools"]) == {"cargo-deny", "cargo-llvm-cov", "gitleaks", "ktlint", "gh"}, "Incomplete tool set")
     used = set()
     for name, tool in manifest["tools"].items():
         require(tool["version"] == quality[name]["version"], f"Stale tool notice version: {name}")
@@ -209,7 +209,7 @@ def retained_notices(root):
         root.parent / "java/openjdk/legal",
         pathlib.Path("/usr/share/doc"),
         *sorted(root.glob("playwright-*")),
-        *(root / name for name in ["cargo-deny", "cargo-llvm-cov", "gitleaks", "ktlint"]),
+        *(root / name for name in ["cargo-deny", "cargo-llvm-cov", "gitleaks", "ktlint", "gh"]),
     ]
     for directory in directories:
         require(directory.is_dir(), f"Missing distribution notices: {directory}")
@@ -360,7 +360,7 @@ def verify_binaries(manifest, root, arch):
         binary = tool["binaries"][arch]
         data = (root / binary["path"]).read_bytes()
         require(digest(data) == binary["sha256"], f"Notice/binary binding mismatch: {name}")
-        if name == "gitleaks":
+        if name in {"gitleaks", "gh"}:
             version, dependencies = go_build_info(data)
             expected = set(tool["dependencies"])
             require("go:stdlib@" + version in expected, "Missing Go runtime notices")

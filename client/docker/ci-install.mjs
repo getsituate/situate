@@ -48,9 +48,10 @@ for (const [name, tool] of Object.entries(assets)) {
       "/tmp/ci-archive.tar.gz",
       "-C",
       directory,
-      ...(name === "cargo-deny" ? ["--strip-components=1"] : []),
+      ...(["cargo-deny", "gh"].includes(name) ? ["--strip-components=1"] : []),
     ]);
   }
+  if (name === "gh") symlinkSync("bin/gh", `${directory}/gh`);
   symlinkSync(`${directory}/${name}`, `/usr/local/bin/${name}`);
   for (const notice of tool.notices ?? [])
     download(notice.url, `${directory}/${notice.name}`, notice.sha256);

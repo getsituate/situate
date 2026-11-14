@@ -52,7 +52,7 @@ Follow the existing [conversation ownership strategy](../architecture/04-solutio
 
 **Dependencies:** none. Workshop work can proceed in parallel using synthetic outcomes.
 
-- Select the exact Parakeet v3 artifact and runtime through a bounded macOS/iOS prototype. Do not substitute another recognition model if qualification fails.
+- Select the exact Parakeet v3 artifact and runtime through a bounded macOS prototype; iOS investigation is deferred. Do not substitute another recognition model if qualification fails.
 - Review model weights, conversions, runtime dependencies, hosting and redistribution terms. Pin artifact identity, source, integrity metadata and runtime version; ship runtime code with the host, not executable code downloaded as model data.
 - Resolve supported OS versions and hardware classes, explicitly including the open questions about older iPhones and Intel Macs. Measure recognition quality, multi-minute recording/transcription, peak memory, storage, latency and energy on the intended devices. The catalog supplies no fixed duration cap or latency threshold; agree qualification criteria rather than inventing them.
 - Prove offline German speech with an English system/interface and English speech with a German system/interface. Inspect SDK behavior for implicit network calls, telemetry and audio retention.
@@ -69,7 +69,7 @@ The workshop provides two scenarios, **Dictate in chat** and **Dictation downloa
 
 Use manual completion/failure controls for transcription and provisioning, plus synthetic permission, network, storage and interruption outcomes. Reset must clear pending operations; late completions from a previous scenario must have no effect. Never request a real microphone, download a model or call an AI provider in the workshop.
 
-Carry the approved compact composer and dialog behavior into the product only after catalog reconciliation and an explicit implementation request. Retain checks for macOS/iOS profiles, narrow widths, mobile keyboard occlusion, long German text, keyboard/focus behavior, accessible status and reduced motion. Use canonical [brand guidance](../../design/brand/README.md). Assistive-technology testing, user evaluation and native qualification remain separate from browser assertions.
+Carry the approved compact composer and dialog behavior into the product only after catalog reconciliation and an explicit implementation request. Check macOS profiles, narrow windows, long German text, keyboard/focus behavior, accessible status and reduced motion. Retain mobile profiles and keyboard-occlusion studies as optional deferred references. Use canonical [brand guidance](../../design/brand/README.md). Assistive-technology testing, user evaluation and native qualification remain separate from browser assertions.
 
 **Exit:** the catalog and selected interaction agree; full tab/editor-chat integration has defined coverage; remaining workshop paths are reachable and reviewed, including intermediate states and both branches of discard confirmations. Production adoption and independent product tests belong to step 5.
 
@@ -163,7 +163,7 @@ Workshop simulation cannot establish recognition quality, multi-minute resource 
 | Provisioning integration with controlled transport/storage | Startup without a workspace; offline/cellular-only wait; metered Wi-Fi/Ethernet download; route change mid-transfer; resume after restart; corrupt/incomplete payload; insufficient disk; retry; ready event; no duplicate download across workspaces/launches. Inspect bundle and storage/export boundaries. | REQ-0041 AC-01–AC-03, AC-05–AC-15                                                           |
 | Product browser journeys and visual checkpoints            | W1–W12 through real product components with deterministic IPC; desktop/mobile layouts, DE/EN, keyboard/touch selection, focus, announcements and busy/error states. Keep workshop tests separate.                                                                                                             | Visible portions of REQ-0024 AC-01–AC-09, AC-16–AC-22 and REQ-0041 AC-07–AC-11, AC-13–AC-14 |
 | Native close/interruption journeys                         | Cancel/confirm navigation and close/quit; race with transcription completion; existing file/AI guards; background and lock while recording/transcribing; return after detected interruption.                                                                                                                  | REQ-0024 AC-15–AC-19                                                                        |
-| Real macOS/iOS model qualification                         | Several-minute speech on supported devices; opposite system/interface language; fully offline transcription; no outbound audio on success or failure; no retained recording; permission denial/re-enable; measured resource behavior and verified fixed artifact.                                             | REQ-0024 AC-10–AC-15, AC-19–AC-22                                                           |
+| Real macOS model qualification                             | Several-minute speech on supported devices; opposite system/interface language; fully offline transcription; no outbound audio on success or failure; no retained recording; permission denial/re-enable; measured resource behavior and verified fixed artifact.                                             | REQ-0024 AC-10–AC-15, AC-19–AC-22                                                           |
 
 Use synthetic text and purpose-made, authorized/licensed speech fixtures. Mocked runtime tests do not prove local-only processing or resource suitability; a successful browser or macOS run does not qualify iOS.
 
@@ -190,7 +190,7 @@ cd ..
 node tools/test.mjs --changed --base origin/main
 ```
 
-Add focused native model/provisioning tests to the relevant host suite; they do not exist yet. Run actual macOS and iOS builds and device journeys after native integration. The default runner does not qualify physical iOS devices. For intentional visual changes, extend existing product flows with intermediate checkpoints, then update and inspect references using the locked Docker workflow in [Visual regression tests](testing.md#visual-regression-tests).
+Add focused native model/provisioning tests to the relevant host suite; they do not exist yet. Run actual macOS builds and native journeys after integration. iOS builds and device journeys are deferred, not current delivery gates. For intentional visual changes, extend existing product flows with intermediate checkpoints, then update and inspect references using the locked Docker workflow in [Visual regression tests](testing.md#visual-regression-tests).
 
 ## Decisions that can block delivery
 

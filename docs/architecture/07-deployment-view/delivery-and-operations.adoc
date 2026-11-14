@@ -5,6 +5,9 @@ ifndef::architecture-repository-root[]
 :architecture-repository-root: ../../..
 endif::[]
 
+The link:{architecture-repository-root}/docs/architecture/index.adoc#release-workflow[continuous release workflow] describes the selected target automation.
+The tools and operator gates below remain current until that automation and its native qualification are enabled.
+
 ==== Infrastructure state and execution
 
 link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0014-host-production-state-in-hcp-terraform.adoc[ADR-0014] selects HCP Terraform for authoritative infrastructure state, separate from the Hetzner application host and developer disk.
@@ -22,7 +25,7 @@ The link:{architecture-repository-root}/infrastructure/production/README.md[prod
 
 link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0011-build-time-distribution-variants.adoc[ADR-0011] selects build-time distribution variants instead of runtime installation-origin detection.
 The Apple release builder embeds `SITUATE_DISTRIBUTION=direct|external` before signing; only an explicit macOS direct build enables the native updater.
-The current MVP covers macOS direct distribution and iOS App Store distribution.
+The current MVP covers macOS direct distribution only. iOS App Store delivery is deferred and is not a current build, submission or release gate.
 Homebrew and other package-manager channels remain deferred, not prerequisites for either release.
 The authoritative behavior is recorded in link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0071-support-desktop-package-managers.md[REQ-0071].
 
@@ -54,8 +57,8 @@ The concrete replacement workflow remains open.
 |Build a separate Homebrew variant from the same source and pipeline; sign and notarize its own payload. The cask references that artifact, not the website DMG. No Homebrew build is introduced until the channel is selected for delivery.
 |Homebrew; no built-in checks, downloads or update promotion.
 
-|iOS App Store and TestFlight
-|Use the iOS App Store Connect build/export pipeline. TestFlight and public delivery both use external update authority; separate updater-specific variants are unnecessary for these two routes.
+|iOS App Store and TestFlight (deferred)
+|Retained build/export tooling is reference material only; no iOS delivery pipeline is selected for the current scope.
 |Apple's distribution services; no built-in updater.
 
 |Mac App Store (optional, not selected)

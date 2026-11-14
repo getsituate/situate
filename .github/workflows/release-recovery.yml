@@ -1,0 +1,44 @@
+name: Release recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow:
+        description: Existing operation workflow
+        required: true
+        type: choice
+        options: [create, publish]
+      operation:
+        description: Exact existing operation identity
+        required: true
+        type: string
+      action:
+        description: Inspect before separately authorizing reconciliation
+        required: true
+        type: choice
+        options: [inspect, reconcile]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-recovery
+  cancel-in-progress: false
+
+jobs:
+  prerequisites:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
+    environment: release-recovery
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs recovery
+        env:
+          RECOVERY_WORKFLOW: ${{ inputs.workflow }}
+          RECOVERY_OPERATION: ${{ inputs.operation }}
+          RECOVERY_ACTION: ${{ inputs.action }}

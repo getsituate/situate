@@ -11,13 +11,21 @@ Use `linux/amd64` and a distinct tag for GitHub runners. The `linux` and `window
 targets do not inherit the CI stage.
 
 The image contains Volta with pinned Node/npm, Rust/native build dependencies, JDK 21, Python, Bash, Git,
-quality tools, and Playwright installers and system dependencies. It contains neither
+GitHub CLI, Swift source lint/format tools with SourceKit, other quality tools, and Playwright installers and system dependencies. It contains neither
 browser archives, project `node_modules`, application sources, credentials, a Windows SDK,
 nor Docker tooling.
 
+## Shared test launcher
+
+Run `node tools/test.mjs` from the repository root for portable checks in this image and native checks on macOS. Quick checks and selection previews stay on the host. Linux Actions jobs use `python3 tools/pipeline-container.py actions ...`; they do not install a separate host Node toolchain.
+
+The launcher mounts source at its original absolute path, including read-only common Git metadata for linked worktrees. Only a canonical anonymous GitHub `origin` URL is retained from Git configuration; host credentials, worktree configuration and hooks are hidden. Dependencies and selected browsers download at runtime into disposable Linux directories, without replacing host `node_modules` or Cargo output. Docker-steering integration tests run separately on the host.
+
+The host supervisor owns the worktree and build admission until Docker absence is verified. Private lease and acknowledgement files remain outside mounted directories; use an external `TMPDIR`. Docker connection settings stay with host client and cleanup processes, never the test workload. Interrupt the caller rather than killing its supervisor or deleting lock files. An unacknowledged creation or uncertain cleanup retains ownership; an exited Docker client alone does not prove that no container was created.
+
 ## Runtime contract
 
-Mount a checkout at `/workspace` and a writable cache at `/ci-cache`. Run with the desired
+For a direct image invocation, mount a checkout at `/workspace` and a writable cache at `/ci-cache`. Run with the desired
 numeric UID/GID. Set `CARGO_HOME=/ci-cache/cargo`, `npm_config_cache=/ci-cache/npm`, and
 `HOME` to a writable temporary directory. Set `RUSTUP_TOOLCHAIN` to the repository's
 pinned Rust version to prevent directory override discovery from initiating toolchain
@@ -78,6 +86,7 @@ Image content depends on:
 - `client/docker/ci-install.mjs`, `ci-volta-install.mjs`, `ci-sources.mjs`, and `ci-user.sh`
 - `client/docker/ci-assets.json`, `ci-volta.json`, `ci-npm.json`, `ci-browsers.json`, and `ci-sources.json`
 - `client/docker/ci-NOTICES.md`, `ci-tool-notices.json`, `ci-tool-notices.py`, and `ci-tool-notices-update.py`
+- `client/docker/ci-swift-tools.json`, `ci-swift-tools.py`, `ci-swift-tools-update.py`, `ci-swift-format.resolved.json`, and `ci-swiftlint.resolved.json`
 
 The installer reads an isolated read-only input stage; project lockfiles and scripts are
 not copied into the final image. The browser manifest records each project's Playwright
@@ -106,6 +115,28 @@ binary hash, command, compiler identity, architecture and input hashes are retai
 source-free verification. Temporary build sources, registry downloads and build outputs
 are removed; only the installed binary, receipt and retained source/notice material remain.
 
+SwiftLint and swift-format are compiled from reviewed source revisions in a digest-pinned
+Debian 12 Swift build stage. Frozen SwiftPM locks, source archive hashes and before/after
+source-tree checks prevent dependency resolution from changing their inputs. Only the
+tools and their Swift/SourceKit shared-library closure enter the final image, together
+with source archives, notices and `/opt/ci-tools/swift-source-build.json`. The Swift
+compiler executable and temporary build directories do not. The source-free verifier
+checks the receipt and exercises a SourceKit-dependent rule; a static binary that skips
+such rules is not a substitute. macOS product and AppKit tests still require macOS.
+
+To refresh Swift source and runtime pins, review the compiler image and release commits
+in `ci-swift-tools-update.py` and both frozen `.resolved.json` inputs, then run with the
+same local prerequisites as the notice updater:
+
+```sh
+node tools/run-coordinated.mjs -- python3 -B client/docker/ci-swift-tools-update.py \
+  --cache /tmp/situate-ci-swift-downloads
+```
+
+This updates archive/notice hashes and the source-free verifier pins. Image construction
+creates the build receipt; the updater does not attest a prebuilt binary. See
+[Swift source tools](ci-NOTICES.md#swift-source-tools) for retained runtime sources and terms.
+
 To regenerate the tool notice manifest, review release commits and supplemental source
 repositories in `ci-tool-notices-update.py`, then run from the repository root with
 Python 3.11 or newer, Volta, installed root development dependencies and an external
@@ -125,6 +156,10 @@ is created during image construction, not precomputed by the updater. See
 [tool dependency notices](ci-NOTICES.md#tool-dependency-notices).
 
 After changing image inputs, build and verify a new Linux/amd64 image before updating `tools/ci-image.lock.json` with its published digest and the input hash from `node tools/ci-image.mjs --inputs`. The existing lock intentionally rejects changed inputs; never replace only its input hash while retaining an older image digest. The image workflow separates building, verification, and publication. Its `image.tar` artifact is gzip-compressed; Docker and tar detect compression independently of the filename. Publication limits transport archives to 8 GiB and their expanded tar streams to 12 GiB, including retained corresponding sources and notices. The workflow exports one platform with `--provenance=false` and seals its own same-run build receipt rather than a BuildKit attestation index. The receipt binds both the image ID and configuration digest, including when Docker's containerd store reports distinct values.
+
+The build and publisher exchange sealed image data through `/opt/situate/ci-image-transfers` on an existing controlled host. Provision that directory separately with an isolated upload account, a separate read account and a shared read group; use group inheritance so uploaded `0750` directories and `0640` files remain readable by the reader. Neither account should own app publication storage. SSH host keys must be independently pinned. The scripts neither provision storage nor acquire host keys, and never execute transferred image bytes.
+
+CI supplies upload/read destinations through `CI_IMAGE_TRANSFER_UPLOAD_HOST` and `CI_IMAGE_TRANSFER_READ_HOST`, separate `CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY` and `CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY` secrets, and pinned host data in `CI_IMAGE_TRANSFER_KNOWN_HOSTS`. Credentials appear only in their transfer step and are removed afterward; the registry token appears only in the final publisher step. Local `tools/ci-image-transport.mjs upload|download DIR` accepts explicit `--provenance FILE --repository-id ID --run-id ID --attempt N --workflow-sha SHA --source SHA --host USER@HOST --identity FILE --known-hosts FILE`, without Actions event variables. The immutable transfer identity binds that exact provenance and image hash; a missing or modified transfer cannot substitute another run.
 
 The distribution target is `ghcr.io/getsituate/situate-ci-linux`, intentionally public so contributors and permitted fork workflows can pull without a GitHub account or registry credentials. Normal publication requires public visibility and linkage to exactly `getsituate/situate`, including its numeric repository ID. Review [third-party notices and source obligations](ci-NOTICES.md) before authorizing distribution.
 

@@ -12,6 +12,12 @@ import {
 import { initializeRecovery, retryRecoveryInitialization } from "./recovery";
 import { installInputModality } from "./input-modality";
 
+const viewport = document.querySelector<HTMLMetaElement>(
+  'meta[name="viewport"]',
+);
+if (viewport && "virtualKeyboard" in navigator)
+  viewport.content += ", interactive-widget=resizes-content";
+
 const removeInputModality = installInputModality(document);
 window.addEventListener("pagehide", removeInputModality, { once: true });
 if (import.meta.hot) import.meta.hot.dispose(removeInputModality);

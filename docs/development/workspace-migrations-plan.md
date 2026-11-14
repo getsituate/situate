@@ -1,6 +1,6 @@
 # Workspace migrations implementation plan
 
-Status: implementation design. Released-format and native qualification are required before enabling incompatible writers.
+Status: implementation design for macOS. Released-format and native macOS qualification are required before enabling incompatible writers; iOS work is deferred.
 
 Implement the accepted [workspace migration concept](../architecture/08-cross-cutting-concepts/workspace-migrations.adoc). [REQ-0069](../../requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md) governs released workspace data; [REQ-0070](../../requirements/data/requirements/REQ-0070-preserve-plugin-api-compatibility.md) retains separate public plugin-interface obligations.
 
@@ -69,7 +69,7 @@ Relevant starting points:
 - [Native workspace lifecycle](../../client/app/src-tauri/src/workspaces.rs): `open` currently reads onboarding state before publishing a session; identity admission and localization can also touch managed state.
 - [Workspace storage and locks](../../client/crates/situate-core/src/ai_storage.rs): existing locks are per operation/store, not a complete migration barrier.
 - [Filesystem durability](../architecture/08-cross-cutting-concepts/native-filesystem-synchronization.adoc): reuse the established distinction between visible writes and acknowledged durable results.
-- [Native workspace access](../../client/crates/tauri-plugin-workspace-access/src/lib.rs): confirm how macOS/iOS retain authorized access throughout migration and recovery.
+- [Native workspace access](../../client/crates/tauri-plugin-workspace-access/src/lib.rs): confirm how macOS retains authorized access throughout migration and recovery. Retained iOS adapters are deferred reference material.
 
 Resolve these implementation prerequisites before enabling writes:
 
@@ -162,7 +162,7 @@ In the native workspace lifecycle, place preparation after access authorization 
 - Keep runtime execution and any synchronization startup behind successful admission. This feature does not implement synchronization; its future inbound path must preserve the compatibility barrier.
 - Preserve or deliberately replace existing local migrations only after inventorying their readers/writers. Moving code into the package must not silently change when released data is converted.
 
-**Exit:** host tests prove the gate precedes all managed-state use; native macOS/iOS journeys verify actual access lifetimes, restart and independent workspace use.
+**Exit:** host tests prove the gate precedes all managed-state use; native macOS journeys verify actual access lifetimes, restart and independent workspace use.
 
 ### 7. Register checks and qualify rollout
 
@@ -177,7 +177,7 @@ Use the smallest test level that observes each failure:
 | Real-filesystem package tests   | Whole-chain rollback, created-file removal, access confinement, concurrent opens, disk-full/write/flush/rename/delete failures.                                                                                    |
 | Subprocess restart tests        | Terminate at backup publication, every conversion boundary, metadata publication, retirement, deletion and restoration; reopen in a new process. Returned-error injection alone does not establish crash recovery. |
 | Host integration                | All entry paths use the gate, no normal writers run early, errors reach localized UI and other workspaces remain usable.                                                                                           |
-| Native macOS/iOS                | Authorized folder access, filesystem durability paths and reopen behavior in each active product runtime.                                                                                                          |
+| Native macOS                    | Authorized folder access, filesystem durability paths and reopen behavior in each active product runtime.                                                                                                          |
 | Mixed-release qualification     | Supported older/newer readers and writers preserve data, compatible later IDs remain usable, and incompatible readers refuse safely.                                                                               |
 
 Run focused package tests through the coordinated runner, then quick/feedback checks and affected MVP verification as described in [testing](testing.md). The planned standalone command is:

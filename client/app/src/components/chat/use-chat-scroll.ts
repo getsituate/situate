@@ -60,11 +60,13 @@ export function useChatScroll(
     else if (anchor && content.value?.contains(anchor.element)) {
       // A resize can arrive before the scroll event for the reader's movement.
       const pendingScrollDelta = element.scrollTop - top;
-      element.scrollTop +=
-        anchor.element.getBoundingClientRect().top -
-        element.getBoundingClientRect().top -
-        anchor.offset +
-        pendingScrollDelta;
+      element.scrollTop = Math.round(
+        element.scrollTop +
+          anchor.element.getBoundingClientRect().top -
+          element.getBoundingClientRect().top -
+          anchor.offset +
+          pendingScrollDelta,
+      );
     }
     remember();
   }

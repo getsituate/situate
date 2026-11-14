@@ -70,13 +70,24 @@ export async function measure(directory, options = {}) {
     !readFileSync(runner, "utf8").includes("--coverage")
   )
     return { status: "unavailable" };
-  rmSync(resolve(directory, "client/target/coverage"), {
-    recursive: true,
-    force: true,
-  });
   try {
-    const plan = createPlan({ coverage: true, extended: true }, directory);
+    const plan = createPlan(
+      {
+        coverage: true,
+        extended: true,
+        platform: options.platform ?? process.platform,
+      },
+      directory,
+    );
     const vue = plan.suites.find((suite) => suite.id === "client-vue-coverage");
+    const rust = plan.suites.find(
+      (suite) => suite.id === "client-rust-coverage",
+    );
+    if (!vue || !rust) return { status: "unavailable" };
+    rmSync(resolve(directory, "client/target/coverage"), {
+      recursive: true,
+      force: true,
+    });
     // Source inclusion and report formats must match across both revisions.
     vue.args.push(
       "--coverage.provider=v8",

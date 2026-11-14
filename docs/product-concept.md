@@ -24,7 +24,7 @@ Users retain decision authority. Internal and external actions execute within th
 
 The application should remain meaningfully usable for free on one device with user-provided AI access. Users may still incur costs from their chosen model provider. Purchasing a Situate service is not required for this local use.
 
-macOS and iOS are the active MVP targets: macOS direct delivery through the website comes first, followed by iOS App Store delivery. Windows, Linux desktop and Android are deferred; supported OS versions and additional delivery channels remain open. Plugin availability may differ by platform; those differences must be visible. See [platform availability](../requirements/data/requirements/REQ-0012-platform-availability.md) and [plugin compatibility](../requirements/data/requirements/REQ-0014-plugin-platform-compatibility.md).
+macOS is the only active MVP target, delivered through the website DMG and direct updater. iOS, Windows, Linux desktop and Android are deferred and are not currently supported; no activation date or platform delivery sequence is committed. Supported macOS versions and additional delivery channels remain open. Plugin availability may differ by platform; those differences must be visible. See [platform availability](../requirements/data/requirements/REQ-0012-platform-availability.md) and [plugin compatibility](../requirements/data/requirements/REQ-0014-plugin-platform-compatibility.md).
 
 Two optional subscription services form the intended business model:
 

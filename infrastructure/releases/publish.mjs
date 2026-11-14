@@ -30,7 +30,11 @@ import {
 import { verifyDirectPayloads } from "../../client/scripts/direct-release-verification.mjs";
 
 import { sshArguments, readPublicationHistory } from "./transport.mjs";
-import { qualifyPublishedMigrations } from "../../tools/published-migrations.mjs";
+import {
+  qualifyPublishedMigrations,
+  qualifyPublicCompatibilityMigrations,
+} from "../../tools/published-migrations.mjs";
+import { compareVersions } from "../../tools/release-catalog.mjs";
 export { sshArguments } from "./transport.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -159,7 +163,191 @@ export function validateManifest(
     publicKey,
     manifest.version,
   );
+  if (Object.hasOwn(manifest, "releaseInputs"))
+    verifyImmutableInputs(directory, manifest);
   return artifact;
+}
+
+export function verifyImmutableInputs(directory, manifest) {
+  const inputs = manifest.releaseInputs;
+  if (
+    manifest.qualification?.path !== "release-qualification.json" ||
+    inputs?.path !== "release-inputs.json" ||
+    inputs.catalogPath !== "situate-release-history.json" ||
+    !/^[a-f0-9]{64}$/.test(inputs.sha256 ?? "") ||
+    !/^[a-f0-9]{64}$/.test(inputs.catalogSha256 ?? "")
+  )
+    throw new Error("Invalid immutable release input bindings.");
+  const files = {
+    [inputs.path]: inputs.sha256,
+    [inputs.catalogPath]: inputs.catalogSha256,
+  };
+  for (const [name, sha256] of Object.entries(files)) {
+    const size = lstatSync(join(directory, name)).size;
+    file(directory, name, { size, sha256 });
+  }
+  return files;
+}
+
+export function verifyDownloadReceipt(directory, manifest, receipt) {
+  const identity = receipt?.identity;
+  const expected = [
+    "manifest.json",
+    ...publicInputFiles(manifest),
+    ...manifest.artifacts
+      .filter((item) => item.platform === "macos")
+      .flatMap((item) => [
+        item.path,
+        item.updater.path,
+        item.updater.signaturePath,
+      ]),
+    "github-release.json",
+  ].sort();
+  if (
+    receipt?.schemaVersion !== 1 ||
+    receipt.kind !== "github-release-download" ||
+    identity?.repository !== "getsituate/situate" ||
+    identity.tag !== `v${manifest.version}` ||
+    typeof identity.operationId !== "string" ||
+    !identity.operationId ||
+    !Number.isSafeInteger(identity.releaseId) ||
+    identity.releaseId <= 0 ||
+    identity.sourceRevision !== manifest.revision ||
+    identity.version !== manifest.version ||
+    identity.inputSha256 !== manifest.releaseInputs?.sha256 ||
+    !/^[a-f0-9]{64}$/.test(receipt.evidenceSha256 ?? "") ||
+    !Array.isArray(receipt.assets) ||
+    !isDeepStrictEqual(receipt.assets.map((item) => item.name).sort(), expected)
+  )
+    throw new Error(
+      "Downloaded GitHub Release identity or public asset inventory differs.",
+    );
+  const ids = new Set();
+  for (const asset of receipt.assets) {
+    if (!Number.isSafeInteger(asset.id) || asset.id <= 0 || ids.has(asset.id))
+      throw new Error(
+        "Downloaded GitHub asset IDs must be unique positive integers.",
+      );
+    ids.add(asset.id);
+    file(directory, asset.name, asset);
+  }
+  if (
+    receipt.assets.find((asset) => asset.name === "github-release.json")
+      .sha256 !== receipt.evidenceSha256
+  )
+    throw new Error("GitHub release evidence digest differs.");
+  const inputs = json(join(directory, "release-inputs.json"));
+  if (
+    inputs.source !== identity.sourceRevision ||
+    inputs.version !== identity.version ||
+    inputs.tag !== identity.tag
+  )
+    throw new Error(
+      "Generated inputs differ from the GitHub Release identity.",
+    );
+  return identity;
+}
+
+export function verifyPublicationInputs(
+  directory,
+  manifest,
+  { action, releaseReceipt },
+) {
+  if (
+    (action === "publish" && !manifest.releaseInputs) ||
+    (manifest.releaseInputs && !releaseReceipt)
+  )
+    throw new Error(
+      "Publication requires exact GitHub Release, immutable inputs and qualification.",
+    );
+  if (!manifest.releaseInputs) return {};
+  return {
+    releaseIdentity: verifyDownloadReceipt(
+      directory,
+      manifest,
+      json(resolve(releaseReceipt)),
+    ),
+    releaseReceiptSha256: hash(readFileSync(resolve(releaseReceipt))),
+  };
+}
+
+function publicInputFiles(manifest) {
+  return manifest.releaseInputs
+    ? [
+        "release-inputs.json",
+        "situate-release-history.json",
+        "release-qualification.json",
+      ]
+    : [];
+}
+
+export async function verifyPublicAvailability(
+  manifest,
+  artifact,
+  { fetchImpl = fetch } = {},
+) {
+  const expectedMetadata = metadata(manifest, artifact);
+  const fetchPublic = async (url) => {
+    const response = await fetchImpl(url, {
+      redirect: "error",
+      cache: "no-store",
+      credentials: "omit",
+      signal: AbortSignal.timeout(120000),
+    });
+    if (!response.ok)
+      throw new Error("Public release endpoint is unavailable.");
+    return response;
+  };
+  const verifyFeeds = async () => {
+    for (const name of ["download.json", "update.json"]) {
+      const response = await fetchPublic(
+        `https://getsituate.com/releases/current/${name}`,
+      );
+      let bytes = 0;
+      const chunks = [];
+      for await (const chunk of response.body) {
+        bytes += chunk.length;
+        if (bytes > 1024 * 1024)
+          throw new Error("Public release metadata exceeds 1 MiB.");
+        chunks.push(chunk);
+      }
+      if (
+        !isDeepStrictEqual(
+          JSON.parse(Buffer.concat(chunks)),
+          expectedMetadata[name],
+        )
+      )
+        throw new Error(
+          "Public release metadata differs from the activated candidate.",
+        );
+    }
+  };
+  await verifyFeeds();
+  for (const item of [
+    artifact,
+    artifact.updater,
+    {
+      path: artifact.updater.signaturePath,
+      size: artifact.updater.signatureSize,
+      sha256: artifact.updater.signatureSha256,
+    },
+  ]) {
+    const response = await fetchPublic(
+      `https://getsituate.com/releases/${manifest.version}/${item.path}`,
+    );
+    const digest = createHash("sha256");
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.length;
+      if (size > item.size)
+        throw new Error("Public package size differs from the candidate.");
+      digest.update(chunk);
+    }
+    if (size !== item.size || digest.digest("hex") !== item.sha256)
+      throw new Error("Public package bytes differ from the candidate.");
+  }
+  await verifyFeeds();
+  return { version: manifest.version, verified: true };
 }
 
 export function metadata(manifest, artifact) {
@@ -198,6 +386,7 @@ function configuration(
   names = [
     "WEBSITE_DEPLOY_HOST",
     "WEBSITE_SSH_IDENTITY",
+    "WEBSITE_SSH_KNOWN_HOSTS",
     "SITUATE_UPDATER_PUBLIC_KEY",
   ],
   { environment = process.env, clientRoot = client } = {},
@@ -270,8 +459,38 @@ async function preflight(directory, revision, config) {
     teamId: settings.teamId,
     publicKey: config.SITUATE_UPDATER_PUBLIC_KEY,
   });
+  if (manifest.releaseInputs) {
+    const { verifyReleaseInputs } =
+      await import("../../tools/release-inputs.mjs");
+    const inputs = json(join(directory, manifest.releaseInputs.path));
+    verifyReleaseInputs(
+      inputs,
+      readFileSync(join(directory, manifest.releaseInputs.catalogPath), "utf8"),
+    );
+    if (
+      inputs.source !== manifest.revision ||
+      inputs.version !== manifest.version
+    )
+      throw new Error(
+        "Generated inputs differ from the release source or version.",
+      );
+    const { verifyQualificationReceipt } =
+      await import("../../tools/release-qualification.mjs");
+    verifyQualificationReceipt(
+      directory,
+      manifest,
+      json(join(directory, "release-qualification.json")),
+    );
+  }
   await verifyDirectPayloads(directory, artifact, { env });
-  return { manifest, artifact, manifestSha256: hash(manifestBytes) };
+  return {
+    manifest,
+    artifact,
+    manifestSha256: hash(manifestBytes),
+    qualificationSha256: manifest.releaseInputs
+      ? hash(readFileSync(join(directory, "release-qualification.json")))
+      : undefined,
+  };
 }
 
 function stage(directory, destination, manifest, artifact) {
@@ -282,6 +501,7 @@ function stage(directory, destination, manifest, artifact) {
     artifact.updater.path,
     artifact.updater.signaturePath,
     "manifest.json",
+    ...publicInputFiles(manifest),
   ])
     cpSync(join(directory, name), join(destination, name), {
       errorOnExist: true,
@@ -368,6 +588,26 @@ function remote(action, request, config, tar) {
   }
 }
 
+export async function qualifyPublicationCompatibility(
+  repositoryRoot,
+  manifest,
+  { history, qualify = qualifyPublicCompatibilityMigrations },
+) {
+  const qualification = await qualify(repositoryRoot, {
+    revision: manifest.revision,
+    history,
+  });
+  if (
+    qualification.releases.some(
+      (release) => compareVersions(release.version, manifest.version) > 0,
+    )
+  )
+    throw new Error(
+      "A newer release is already recorded; inspect its publication state before promoting this candidate.",
+    );
+  return { schemaVersion: 1, source: manifest.revision, qualification };
+}
+
 export async function main(args = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({
     args,
@@ -377,13 +617,19 @@ export async function main(args = process.argv.slice(2)) {
       stage: { type: "string" },
       "reviewed-revision": { type: "string" },
       confirm: { type: "string" },
+      destination: { type: "string" },
+      "ssh-identity": { type: "string" },
+      "ssh-known-hosts": { type: "string" },
+      "updater-public-key": { type: "string" },
+      "release-receipt": { type: "string" },
+      "recovery-evidence": { type: "string" },
       help: { type: "boolean" },
     },
   });
   const [action] = positionals;
   if (values.help) {
     console.log(
-      "Usage: node infrastructure/releases/publish.mjs destination | check|stage|publish|inspect|reconcile --release DIR --reviewed-revision SHA [--stage DIR] [--confirm SSH_HOST:VERSION]",
+      "Usage: node infrastructure/releases/publish.mjs destination | check|stage|publish|inspect|reconcile --release DIR --reviewed-revision SHA [--stage DIR] [--destination SSH_HOST] [--ssh-identity ABS_PATH] [--ssh-known-hosts ABS_PATH] [--updater-public-key KEY] [--confirm SSH_HOST:VERSION] [--release-receipt FILE] [--recovery-evidence LEGACY_FILE]",
     );
     return;
   }
@@ -400,7 +646,18 @@ export async function main(args = process.argv.slice(2)) {
       "Choose destination, or check, stage, publish, inspect or reconcile with --release DIR.",
     );
   const directory = realpathSync(resolve(values.release));
-  const config = configuration();
+  const config = values.destination
+    ? {
+        WEBSITE_DEPLOY_HOST: values.destination,
+        WEBSITE_SSH_IDENTITY: values["ssh-identity"],
+        WEBSITE_SSH_KNOWN_HOSTS: values["ssh-known-hosts"],
+        ...(action === "inspect"
+          ? {}
+          : Object.hasOwn(values, "updater-public-key")
+            ? { SITUATE_UPDATER_PUBLIC_KEY: values["updater-public-key"] }
+            : configuration(["SITUATE_UPDATER_PUBLIC_KEY"])),
+      }
+    : configuration();
   const journalPath = join(directory, "publication-journal.json");
   if (action === "inspect") {
     const journal = json(journalPath);
@@ -415,11 +672,17 @@ export async function main(args = process.argv.slice(2)) {
     throw new Error(
       "Publication journal exists; inspect and reconcile instead of retrying.",
     );
-  const { manifest, artifact, manifestSha256 } = await preflight(
-    directory,
-    values["reviewed-revision"],
-    config,
-  );
+  const { manifest, artifact, manifestSha256, qualificationSha256 } =
+    await preflight(directory, values["reviewed-revision"], config);
+  let releaseIdentity;
+  let releaseReceiptSha256;
+  if (action === "publish" || action === "reconcile") {
+    ({ releaseIdentity, releaseReceiptSha256 } = verifyPublicationInputs(
+      directory,
+      manifest,
+      { action, releaseReceipt: values["release-receipt"] },
+    ));
+  }
   if (action === "check") {
     console.log(`Verified direct release ${manifest.version}.`);
     return;
@@ -431,7 +694,13 @@ export async function main(args = process.argv.slice(2)) {
   const destination = resolve(values.stage);
   if (action === "stage") {
     stage(directory, destination, manifest, artifact);
-    verifyStagedRelease(destination, manifest, artifact, manifestSha256);
+    verifyStagedRelease(
+      destination,
+      manifest,
+      artifact,
+      manifestSha256,
+      qualificationSha256,
+    );
     console.log(`Staged ${manifest.version}: ${destination}`);
     return;
   }
@@ -445,7 +714,11 @@ export async function main(args = process.argv.slice(2)) {
       !journal.inspected ||
       journal.host !== config.WEBSITE_DEPLOY_HOST ||
       journal.stage !== destination ||
-      journal.request.version !== manifest.version
+      journal.request.version !== manifest.version ||
+      (journal.request.releaseIdentity &&
+        !isDeepStrictEqual(journal.request.releaseIdentity, releaseIdentity)) ||
+      (journal.releaseReceiptSha256 &&
+        journal.releaseReceiptSha256 !== releaseReceiptSha256)
     )
       throw new Error(
         "Inspect the same journal, destination and release before reconciliation.",
@@ -457,10 +730,13 @@ export async function main(args = process.argv.slice(2)) {
       host: config.WEBSITE_DEPLOY_HOST,
       stage: destination,
       state: "pending",
+      releaseReceiptSha256,
       request: {
+        releaseIdentity,
         version: manifest.version,
         token: randomUUID(),
         files: inventory(destination),
+        publicVerificationRequired: true,
       },
     };
   }
@@ -469,14 +745,21 @@ export async function main(args = process.argv.slice(2)) {
     manifest,
     artifact,
     manifestSha256,
+    qualificationSha256,
   );
   if (JSON.stringify(staged) !== JSON.stringify(journal.request.files))
     throw new Error("Staged inventory differs from the publication journal.");
+  const history = readPublicationHistory(root, {
+    environment: { ...process.env, ...config },
+  });
+  journal.publicCompatibility = await qualifyPublicationCompatibility(
+    root,
+    manifest,
+    { history },
+  );
   const qualification = qualifyPublishedMigrations(root, {
     revision: manifest.revision,
-    history: readPublicationHistory(root, {
-      environment: { ...process.env, ...config },
-    }),
+    history,
   });
   // An identical stored candidate can be the result of an interrupted activation.
   journal.request.migrationBaseline = qualification.releases.filter(
@@ -488,20 +771,34 @@ export async function main(args = process.argv.slice(2)) {
       ),
   );
   const tar = `${destination}.tar`;
-  if (existsSync(tar))
-    throw new Error(
-      "A transport archive exists. Inspect it before removing it for explicit reconciliation.",
+  if (existsSync(tar)) {
+    if (
+      action !== "reconcile" ||
+      journal.transportSha256 !== hash(readFileSync(tar))
+    )
+      throw new Error(
+        "A differing transport archive exists; inspect it before reconciliation.",
+      );
+  } else {
+    execFileSync(
+      "tar",
+      ["-cf", tar, "-C", destination, ...Object.keys(staged)],
+      {
+        env: { ...environment(), COPYFILE_DISABLE: "1" },
+      },
     );
-  execFileSync("tar", ["-cf", tar, "-C", destination, ...Object.keys(staged)], {
-    env: { ...environment(), COPYFILE_DISABLE: "1" },
-  });
+  }
+  journal.transportSha256 = hash(readFileSync(tar));
   assertReviewedRevision(values["reviewed-revision"]);
   saveJournal(
     journalPath,
     { ...journal, state: "pending", inspected: false },
     action === "publish",
   );
-  const result = remote(action, journal.request, config, tar);
+  let result = remote(action, journal.request, config, tar);
+  await verifyPublicAvailability(manifest, artifact);
+  if (journal.request.publicVerificationRequired)
+    result = remote("complete", journal.request, config);
   saveJournal(journalPath, { ...journal, state: "complete", result });
   console.log(JSON.stringify(result));
 }
@@ -511,6 +808,7 @@ export function verifyStagedRelease(
   manifest,
   artifact,
   manifestSha256,
+  qualificationSha256,
 ) {
   const expectedMetadata = metadata(manifest, artifact);
   const staged = inventory(destination);
@@ -519,6 +817,7 @@ export function verifyStagedRelease(
     artifact.updater.path,
     artifact.updater.signaturePath,
     "manifest.json",
+    ...publicInputFiles(manifest),
     ...Object.keys(expectedMetadata).map((name) => `metadata/${name}`),
   ].sort();
   if (
@@ -536,7 +835,24 @@ export function verifyStagedRelease(
     [artifact.updater.path]: artifact.updater.sha256,
     [artifact.updater.signaturePath]: artifact.updater.signatureSha256,
     "manifest.json": manifestSha256,
+    ...(manifest.releaseInputs
+      ? verifyImmutableInputs(destination, manifest)
+      : {}),
   };
+  if (manifest.releaseInputs) {
+    const receipt = json(join(destination, "release-qualification.json"));
+    if (
+      !/^[a-f0-9]{64}$/.test(qualificationSha256 ?? "") ||
+      staged["release-qualification.json"]?.sha256 !== qualificationSha256 ||
+      receipt.manifestSha256 !== manifestSha256 ||
+      receipt.releaseInputsSha256 !== manifest.releaseInputs.sha256 ||
+      receipt.sourceRevision !== manifest.revision ||
+      receipt.version !== manifest.version
+    )
+      throw new Error(
+        "Qualification receipt differs from the immutable release.",
+      );
+  }
   for (const [name, approvedHash] of Object.entries(approvedHashes))
     if (approvedHash !== staged[name]?.sha256)
       throw new Error("Staged payload changed after approval.");

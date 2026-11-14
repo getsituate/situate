@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "ci-cd-workflows",
+  "behaviorDigest": "0b4fbff39dce8192cea56057cc90118f2d09c8a94ee81c39ad3a4c5093dc7fef",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "chat-layout",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Chat display",
+          "paragraphs": [
+            "Chat text wraps consistently. Resizing the chat pane preserves the reading position more accurately."
+          ]
+        },
+        {
+          "id": "appearance-locks",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Appearance settings",
+          "paragraphs": [
+            "Fixed a case where an unrelated background process temporarily blocked changes to appearance settings."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "chat-layout",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Chatdarstellung",
+          "paragraphs": [
+            "Chattexte werden einheitlich umgebrochen. Beim Vergrößern oder Verkleinern des Chatbereichs bleibt die Leseposition genauer erhalten."
+          ]
+        },
+        {
+          "id": "appearance-locks",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Erscheinungsbild",
+          "paragraphs": [
+            "Ein Fehler wurde behoben, durch den ein unbeteiligter Hintergrundprozess Änderungen am Erscheinungsbild vorübergehend blockieren konnte."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "dc31bedefffbcada208ef5a624d73bcd22e9c982187c98f19646ff10e7e49ff5",
+      "translationHash": "823191f3c4807fd821dc9d5fb064a965f98cce6fc1474f2a4404c348efb5bc27"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "dc31bedefffbcada208ef5a624d73bcd22e9c982187c98f19646ff10e7e49ff5"
+  }
+}

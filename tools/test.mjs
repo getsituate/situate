@@ -19,7 +19,7 @@ import { parseArgs } from "node:util";
 import { cachedQualitySuite } from "./quality-cache.mjs";
 import { cargoEnvironment } from "./cargo-environment.mjs";
 import { compilerCacheEnvironment } from "./compiler-cache.mjs";
-import { mvpSuiteEnabled } from "./test-scope.mjs";
+import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
 import {
   QUICK_BUDGET_MS,
   QUICK_EXECUTION_MS,
@@ -187,17 +187,71 @@ export function suiteInventory(files, host = process.platform) {
   };
   const matching = (pattern) => files.filter((file) => pattern.test(file));
   const executorBoundary = "client/app/src/plugins/executor-boundary.test.ts";
+  const platformOnly = (file) =>
+    /^tools\/bootstrap-mobile\.test\.mjs$/.test(file) ||
+    /^client\/scripts\/(?:ios-xcode(?:\.integration)?|test-native-ios|native-ios-ipc-trace|generate-mobile-permissions)\.test\.mjs$/.test(
+      file,
+    );
+  for (const [id, project, pattern] of [
+    ["runner-platform", "runner", /^tools\/.*\.test\.mjs$/],
+    [
+      "client-scripts-platform",
+      "client",
+      /^client\/scripts\/[^/]+(?<!\.integration)\.test\.mjs$/,
+    ],
+    [
+      "client-scripts-platform-integration",
+      "client",
+      /^client\/scripts\/[^/]+\.integration\.test\.mjs$/,
+    ],
+  ]) {
+    const tests = matching(pattern).filter(platformOnly);
+    if (tests.length)
+      nodeTests(
+        id,
+        project,
+        id.endsWith("integration") ? "integration" : "unit",
+        tests,
+      );
+  }
 
+  const migrationTests = matching(
+    /^tools\/(?:migration-history|published-migrations)\.test\.mjs$/,
+  );
+  if (migrationTests.length)
+    nodeTests("delivery-migrations", "runner", "unit", migrationTests);
+  const deliveryTests = matching(
+    /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery|qualification-(?:host|route-guardian)))\.test\.mjs$/,
+  );
+  if (deliveryTests.length)
+    nodeTests("delivery-unit", "runner", "unit", deliveryTests);
   nodeTests(
     "runner-unit",
     "runner",
     "unit",
-    matching(/^tools\/.*(?<!\.integration)\.test\.mjs$/),
+    matching(/^tools\/.*(?<!\.integration)\.test\.mjs$/).filter(
+      (file) =>
+        !platformOnly(file) &&
+        !deliveryTests.includes(file) &&
+        !migrationTests.includes(file),
+    ),
   );
   if (host === "darwin" || host === "linux") {
     add("dev-tui-unit", "dev-tui", "unit", "tools/dev-tui", "cargo", [
       "test",
       "--locked",
+      "--",
+      "--skip",
+      "dragging_logs_exposes_copy_without_disabling_mouse_controls",
+    ]);
+    add("dev-tui-macos", "dev-tui", "integration", "tools/dev-tui", "cargo", [
+      "test",
+      "--locked",
+      "--test",
+      "terminal",
+      "dragging_logs_exposes_copy_without_disabling_mouse_controls",
+      "--",
+      "--exact",
     ]);
     add("dev-tui-format", "dev-tui", "check", "tools/dev-tui", "cargo", [
       "fmt",
@@ -220,13 +274,16 @@ export function suiteInventory(files, host = process.platform) {
       : ["npm", ["run", script]];
   add("root-lint", "runner", "check", ".", ...npm("lint"));
   add("root-format", "runner", "check", ".", ...npm("format:check"));
-  for (const name of [
-    "kotlin",
-    "rust",
-    "secrets",
-    "audit",
-    ...(host === "darwin" ? ["swift"] : []),
-  ]) {
+  node("root-commits", "runner", "check", ["tools/commit-check.mjs"]);
+  add("root-history-secrets", "runner", "check", ".", "gitleaks", [
+    "git",
+    ".",
+    "--redact",
+    "--no-banner",
+    "--config",
+    ".gitleaks.toml",
+  ]);
+  for (const name of ["kotlin", "rust", "secrets", "audit", "swift"]) {
     add(`root-${name}`, "runner", "check", ".", ...npm(`quality:${name}`));
   }
   nodeTests(
@@ -239,13 +296,17 @@ export function suiteInventory(files, host = process.platform) {
     "client-scripts-unit",
     "client",
     "unit",
-    matching(/^client\/scripts\/[^/]+(?<!\.integration)\.test\.mjs$/),
+    matching(/^client\/scripts\/[^/]+(?<!\.integration)\.test\.mjs$/).filter(
+      (file) => !platformOnly(file),
+    ),
   );
   nodeTests(
     "client-scripts-integration",
     "client",
     "integration",
-    matching(/^client\/scripts\/[^/]+\.integration\.test\.mjs$/),
+    matching(/^client\/scripts\/[^/]+\.integration\.test\.mjs$/).filter(
+      (file) => !platformOnly(file),
+    ),
   );
   add(
     "client-vue",
@@ -308,6 +369,17 @@ export function suiteInventory(files, host = process.platform) {
     "situate-core",
     "--locked",
   ]);
+  add("client-core-macos", "client", "integration", "client", "cargo", [
+    "test",
+    "-p",
+    "situate-core",
+    "--lib",
+    "--locked",
+    "--",
+    "durable_storage::",
+    "content::git_storage::sync_tests::",
+    "content::observation::scan_tests::",
+  ]);
   add("client-host", "client", "integration", "client", "cargo", [
     "test",
     "--workspace",
@@ -315,6 +387,8 @@ export function suiteInventory(files, host = process.platform) {
     "situate-core",
     "--exclude",
     "situate-migrations",
+    "--exclude",
+    "situate-agent",
     "--locked",
   ]);
   add("client-workshop-host", "client", "integration", "client", "cargo", [
@@ -348,7 +422,27 @@ export function suiteInventory(files, host = process.platform) {
   ]);
   add("client-clippy", "client", "check", "client", "cargo", [
     "clippy",
+    "-p",
+    "situate-core",
+    "-p",
+    "situate-agent",
+    "-p",
+    "situate-migrations",
+    "--all-targets",
+    "--locked",
+    "--",
+    "-D",
+    "warnings",
+  ]);
+  add("client-host-clippy", "client", "check", "client", "cargo", [
+    "clippy",
     "--workspace",
+    "--exclude",
+    "situate-core",
+    "--exclude",
+    "situate-agent",
+    "--exclude",
+    "situate-migrations",
     "--all-targets",
     "--locked",
     "--",
@@ -367,21 +461,26 @@ export function suiteInventory(files, host = process.platform) {
     "-D",
     "warnings",
   ]);
-  add(
-    "client-browser",
-    "client",
-    "browser",
-    "client",
-    process.execPath,
-    [
-      "node_modules/@playwright/test/cli.js",
-      "test",
-      "--forbid-only",
-      "--config",
-      "app/playwright.config.ts",
-    ],
-    matching(/^client\/app\/tests\/browser\/.*\.(test|spec)\.[cm]?[jt]s$/),
-  );
+  for (const engine of ["chromium", "webkit"])
+    add(
+      `client-browser-${engine}`,
+      "client",
+      "browser",
+      "client",
+      process.execPath,
+      [
+        "node_modules/@playwright/test/cli.js",
+        "test",
+        "--forbid-only",
+        "--config",
+        "app/playwright.config.ts",
+        "--project",
+        engine,
+        "--output",
+        `test-results/browser/${engine}`,
+      ],
+      matching(/^client\/app\/tests\/browser\/.*\.(test|spec)\.[cm]?[jt]s$/),
+    );
   add(
     "client-visual",
     "client",
@@ -584,16 +683,28 @@ export function suiteInventory(files, host = process.platform) {
   );
 
   for (const suite of suites) {
-    if (["root-lint", "root-format", "design-unit"].includes(suite.id))
+    if (
+      [
+        "root-lint",
+        "root-format",
+        "design-unit",
+        "runner-unit",
+        "runner-integration",
+      ].includes(suite.id)
+    )
       suite.npm = ".";
     if (
       [
         "client-scripts-unit",
         "client-scripts-integration",
+        "client-scripts-platform",
+        "client-scripts-platform-integration",
         "client-vue",
         "client-executor-integration",
         "client-types",
-        "client-browser",
+        "client-browser-chromium",
+        "client-browser-webkit",
+        "client-visual",
         "client-visual-fixture",
         "client-native",
         "client-agent-e2e",
@@ -608,6 +719,16 @@ export function suiteInventory(files, host = process.platform) {
     )
       suite.npm = "client";
     if (suite.project === "requirements") suite.npm = "requirements";
+    if (suite.id.startsWith("client-browser-"))
+      suite.browsers = [suite.id.slice("client-browser-".length)];
+    if (
+      [
+        "client-executor-integration",
+        "client-visual",
+        "requirements-browser",
+      ].includes(suite.id)
+    )
+      suite.browsers = ["chromium"];
   }
 
   const covered = new Set(suites.flatMap((suite) => suite.covers));
@@ -633,6 +754,7 @@ export function createPlan(
     checks = false,
     coverage = false,
     extended = false,
+    suite: requestedSuites = [],
     platform = process.platform,
     changed = false,
     base,
@@ -644,9 +766,23 @@ export function createPlan(
       "Choose only one of --unit, --quick, --feedback, --checks or --coverage.",
     );
   if (base && !changed) throw new Error("--base requires --changed.");
+  const explicit =
+    typeof requestedSuites === "string" ? [requestedSuites] : requestedSuites;
+  if (
+    explicit.length &&
+    (unit || quick || feedback || checks || coverage || changed)
+  )
+    throw new Error("--suite cannot be combined with profiles or --changed.");
+  const inventory = suiteInventory(sourceFiles(directory), "darwin");
+  for (const id of explicit) {
+    const suite = inventory.find((entry) => entry.id === id);
+    if (!suite) throw new Error(`Unknown suite: ${id}`);
+    if (!suiteAvailable(suite, platform))
+      throw new Error(`Suite ${id} requires a macOS host.`);
+  }
   const files = changed ? changedFiles(directory, base) : [];
   const selected = changed ? affectedProjects(files) : [...projects];
-  let suites = suiteInventory(sourceFiles(directory), platform).filter(
+  let suites = inventory.filter(
     (suite) =>
       (!unit || suite.kind === "unit") &&
       (!feedback || isFeedbackSuite(suite)) &&
@@ -744,15 +880,17 @@ export function createPlan(
         ...suite,
         reasons: suiteSelectionReasons(suite, files),
       }));
-  const deferredSuiteIds = extended
-    ? []
-    : suites
-        .filter((suite) => !mvpSuiteEnabled(suite, platform))
-        .map((suite) => suite.id);
-  if (!extended)
-    suites = suites.filter((suite) => mvpSuiteEnabled(suite, platform));
+  const enabled = (suite) =>
+    suiteAvailable(suite, platform) &&
+    (explicit.length
+      ? explicit.includes(suite.id)
+      : extended || coverage || supportedSuiteEnabled(suite));
+  const deferredSuiteIds = suites
+    .filter((suite) => !enabled(suite))
+    .map((suite) => suite.id);
+  suites = suites.filter(enabled);
   return {
-    scope: extended ? "extended" : "mvp",
+    scope: extended ? "extended" : "supported",
     deferredSuiteIds,
     profile: unit
       ? "unit"
@@ -766,7 +904,7 @@ export function createPlan(
               ? "coverage"
               : extended
                 ? "all"
-                : "mvp",
+                : "supported",
     changed,
     base: base ?? null,
     changedFiles: files,
@@ -857,6 +995,7 @@ export function executeSuite(
     timeout = 600,
     environment = process.env,
     output = process.stderr,
+    stdout = output,
     terminationGraceMs = 2000,
     buildLease = true,
     detached = true,
@@ -888,7 +1027,7 @@ export function executeSuite(
     const leased =
       buildLease && needsBuildLease(suite) && process.platform !== "win32";
     const suiteArgs =
-      suite.id === "client-browser" &&
+      suite.id?.startsWith("client-browser-") &&
       suite.args.some((arg) => arg.includes("@playwright/test/cli.js")) &&
       !suite.args.includes("--workers")
         ? [
@@ -935,7 +1074,7 @@ export function executeSuite(
           }
         }
       });
-    child.stdout.pipe(output, { end: false });
+    child.stdout.pipe(stdout, { end: false });
     child.stderr.pipe(output, { end: false });
     let stopped,
       escalation,
@@ -1276,7 +1415,47 @@ const parallelSafeSuites = new Set([
   "pi-unit",
 ]);
 
-export async function runPlan(
+export async function runPlan(plan, configuration = {}) {
+  const jobs =
+    configuration.jobs ??
+    (["quick", "feedback"].includes(plan.profile) ? 2 : 1);
+  if (!Number.isInteger(jobs) || jobs < 1 || jobs > 8)
+    throw new Error("jobs must be an integer from 1 to 8.");
+  if (
+    configuration.toolContainers === true &&
+    plan.profile !== "quick" &&
+    plan.suites.length &&
+    (configuration.environment ?? process.env).SITUATE_TOOL_CONTAINER !== "1"
+  ) {
+    const { selectContainerSuites, runContainerPlan } =
+      await import("./test-container.mjs");
+    const portable = selectContainerSuites(plan);
+    if (
+      configuration.externalPiRoot &&
+      portable.some((suite) => suite.environment === "pi")
+    )
+      throw new Error(
+        "External Pi installations are unavailable in tool-container checks. Remove --pi-package-root to use repository dependencies.",
+      );
+    if (portable.length) {
+      const { execute, prepare, ...containerOptions } = configuration;
+      return runContainerPlan(plan, {
+        ...containerOptions,
+        execute: executeSuite,
+        portable,
+        runHost: (hostPlan, hostOptions) =>
+          runHostPlan(hostPlan, {
+            ...hostOptions,
+            ...(execute ? { execute } : {}),
+            ...(prepare ? { prepare } : {}),
+          }),
+      });
+    }
+  }
+  return runHostPlan(plan, configuration);
+}
+
+async function runHostPlan(
   plan,
   {
     execute = executeSuite,
@@ -1291,6 +1470,7 @@ export async function runPlan(
 ) {
   if (!Number.isInteger(jobs) || jobs < 1 || jobs > 8)
     throw new Error("jobs must be an integer from 1 to 8.");
+
   if (
     plan.profile === "quick" &&
     plan.suites.some((suite) => !isQuickSuite(suite) || suite.npm)
@@ -1489,6 +1669,7 @@ export function parseOptions(args, environment = process.env) {
       checks: { type: "boolean" },
       coverage: { type: "boolean" },
       extended: { type: "boolean" },
+      suite: { type: "string", multiple: true },
       "require-tests": { type: "boolean" },
       changed: { type: "boolean" },
       base: { type: "string" },
@@ -1553,7 +1734,8 @@ export function parseOptions(args, environment = process.env) {
 
 const help = `Usage: node tools/test.mjs [options]
 
-No options runs the macOS+iOS MVP scope for this host, not exhaustive coverage.
+No options runs supported suites available on this host, not optional diagnostics.
+  --suite <id>     Run an explicit suite (repeatable); requires its execution host
   --extended       Restore the comprehensive current-host inventory, including deferred suites
   --unit           Unit and contract tests; no browsers, servers or native app builds
   --quick          Dependency-free source checks and fast contracts; five-second total budget
@@ -1568,7 +1750,7 @@ No options runs the macOS+iOS MVP scope for this host, not exhaustive coverage.
   --jobs <1-8>     Concurrent safe suites for --unit/--quick/--feedback (feedback: 2; unit: 1)
   --timeout <sec>  Timeout per suite (default 600); failures do not stop later suites
   --pi-package-root <path>  Pi installation for extension tests (overrides PI_PACKAGE_ROOT)
-  --success-cache <path>  Private successful-suite cache for local --quick/--feedback --changed
+  --success-cache <path>  Private host-check cache for local --quick/--feedback --changed
   --help           Show this help
 
 Examples:
@@ -1576,9 +1758,10 @@ Examples:
   node tools/test.mjs --changed --base origin/main
   node tools/test.mjs --unit --changed --base HEAD~1 --list --json
 
-Outside --quick, missing npm dependencies are installed with npm ci --include=dev.
-Install browsers, Pi and native prerequisites first. Does not install browsers or hooks,
-accept SDK licenses, or commit/push this checkout.
+Outside --quick, portable checks require Docker and the pinned tool image.
+Project dependencies and selected browsers are prepared inside the container.
+Native and Docker-integration checks run on the host; install their prerequisites first.
+Does not accept SDK licenses, install hooks, or commit/push this checkout.
 See docs/development/testing.md for projects, categories and prerequisites.`;
 
 export async function main(args = process.argv.slice(2)) {
@@ -1616,18 +1799,14 @@ export async function main(args = process.argv.slice(2)) {
           `${plan.suites.length} suites selected (${plan.scope} scope, ${plan.profile} profile).`,
         );
         if (plan.deferredSuiteIds.length)
-          console.log(
-            `Deferred by MVP scope: ${plan.deferredSuiteIds.join(", ")}`,
-          );
+          console.log(`Not selected: ${plan.deferredSuiteIds.join(", ")}`);
       }
       return 0;
     }
     if (!json) {
       console.error(`Test scope: ${plan.scope}; profile: ${plan.profile}.`);
       if (plan.deferredSuiteIds.length)
-        console.error(
-          `Deferred by MVP scope: ${plan.deferredSuiteIds.join(", ")}`,
-        );
+        console.error(`Not selected: ${plan.deferredSuiteIds.join(", ")}`);
     }
     let execute = options.feedback
       ? (suite, executionOptions) =>
@@ -1656,6 +1835,13 @@ export async function main(args = process.argv.slice(2)) {
       : undefined;
     const report = await runPlan(plan, {
       execute,
+      toolContainers: !options.quick && plan.suites.length > 0,
+      ...(options["pi-package-root"]
+        ? { externalPiRoot: resolve(options["pi-package-root"]) }
+        : {}),
+      ...(options["success-cache"]
+        ? { successCacheDirectory: resolve(options["success-cache"]) }
+        : {}),
       signal: quickDeadline
         ? AbortSignal.any([controller.signal, quickDeadline])
         : controller.signal,

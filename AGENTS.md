@@ -4,9 +4,9 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 
 ## MVP platform scope
 
-- macOS and iOS are the only active product targets. Windows, Linux desktop and Android are deferred; ordinary development does not need to implement, preserve or verify their platform-specific behavior. Do not spend MVP work on their SDKs, packaging, compatibility fixes or CI gates unless explicitly requested.
+- macOS is the only active product target. iOS, Windows, Linux desktop and Android are deferred and are not currently supported. Ordinary development does not need their SDKs, packaging, platform-specific compatibility fixes or CI gates unless explicitly requested.
 - Preserve useful existing platform code and tests unless removal has a concrete benefit. Deferred targets are not supported or qualified by passing shared tests. Reintroducing a target requires an explicit scope decision and native verification.
-- Linux may still host shared CI tooling, security scans and other platform-independent checks. A CI host is not a product support commitment. Browser tests do not replace native macOS/iOS qualification.
+- Linux may still host shared CI tooling, security scans and other platform-independent checks. A CI host is not a product support commitment. Browser tests do not replace native macOS qualification; shared or historical mobile checks do not establish current iOS support.
 - Use the default MVP test scope for development and PR verification. Expensive workshop, design-browser and screenshot sweeps are opt-in through `node tools/test.mjs --extended` or their dedicated commands. Run focused deferred checks when changing the behavior they cover; do not present an MVP pass as exhaustive coverage.
 
 ## Released data and compatibility
@@ -78,7 +78,7 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 
 - Keep changes scoped and preserve unrelated work.
 - Run the relevant validation, tests, and build after changes. Report any checks that could not run. Use `node tools/test.mjs --quick --changed` for dependency-free feedback with a five-second total budget. Keep checks that exceed that budget in `--feedback` or another longer-running suite; do not raise the quick deadline or treat a timed-out check as passed. Run `node tools/test.mjs --feedback --changed` for affected unit, lint/format, and type checks; quick feedback does not replace them. See `docs/development/testing.md` for selection and prerequisites. Ordinary documentation and concepts require formatting and document checks, not application tests or builds. Requirements records retain catalog validation; prompts, fixtures, and Pi instructions retain their consuming tests.
-- Before creating a pull request, run `node tools/test.mjs --changed --base origin/main` from the repository root using an up-to-date base reference. This includes committed branch changes and local edits and selects affected MVP suites. Unknown inputs and shared configuration retain conservative coverage. Report failures, unavailable prerequisites and relevant checks not run in the PR summary. Run the unfiltered `node tools/test.mjs` for full MVP verification before an Apple release or when broad verification is explicitly needed; neither command qualifies deferred platforms.
+- Before creating a pull request, run `node tools/test.mjs --changed --base origin/main` from the repository root using an up-to-date base reference. This includes committed branch changes and local edits and selects affected MVP suites. Unknown inputs and shared configuration retain conservative coverage. Report failures, unavailable prerequisites and relevant checks not run in the PR summary. Run the unfiltered `node tools/test.mjs` for full MVP verification before a macOS release or when broad verification is explicitly needed; neither command qualifies deferred platforms.
 - Review diffs for personal data, secrets, non-English content, broken links, and third-party notices before committing.
 - Do not select or change the project's license, remove required attribution, or publish remotely without explicit authorization.
 

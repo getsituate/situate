@@ -12,9 +12,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { base, fixture, report, tui, sdkPath } from "./test-support.mjs";
+import { base, fixture, report, tui } from "./test-support.mjs";
 
 function blocked(f) {
   const started = Promise.withResolvers();
@@ -85,9 +85,6 @@ test("one final check delegates selection and committed changes to the central r
     "--json",
     "--success-cache",
     cachePath(run),
-    "--pi-package-root",
-    process.env.PI_PACKAGE_ROOT ??
-      (await import(pathToFileURL(sdkPath))).getPackageDir(),
   ]);
   assert.equal(run.options.cwd, f.cwd);
   assert.equal(
@@ -174,7 +171,7 @@ test("failed Volta selection cannot expose resolver diagnostics or start a host 
   assert.equal(f.runs().length, 0);
 });
 
-test("an explicit Pi package override is forwarded without changing process state", async (t) => {
+test("automatic feedback does not forward a host Pi package override or change process state", async (t) => {
   const previous = process.env.PI_PACKAGE_ROOT;
   t.after(() => {
     if (previous === undefined) delete process.env.PI_PACKAGE_ROOT;
@@ -185,11 +182,14 @@ test("an explicit Pi package override is forwarded without changing process stat
   process.env.PI_PACKAGE_ROOT = override;
   await f.start();
   await f.settle();
-  assert.deepEqual(f.runs()[0].args.slice(-2), ["--pi-package-root", override]);
+  assert.ok(!f.runs()[0].args.includes("--pi-package-root"));
+  assert.ok(!f.runs()[0].args.includes(override));
+  assert.ok(f.runs()[0].args.includes("--quick"));
+  assert.ok(f.runs()[0].args.includes("--success-cache"));
   assert.equal(process.env.PI_PACKAGE_ROOT, override);
 });
 
-test("the hook forwards the active Pi package when no explicit override is set", async (t) => {
+test("automatic feedback leaves Pi dependency selection to the repository runner", async (t) => {
   const previous = process.env.PI_PACKAGE_ROOT;
   t.after(() => {
     if (previous === undefined) delete process.env.PI_PACKAGE_ROOT;
@@ -199,11 +199,8 @@ test("the hook forwards the active Pi package when no explicit override is set",
   const f = fixture(t);
   await f.start();
   await f.settle();
-  const { getPackageDir } = await import(pathToFileURL(sdkPath));
-  assert.deepEqual(f.runs()[0].args.slice(-2), [
-    "--pi-package-root",
-    getPackageDir(),
-  ]);
+  assert.ok(!f.runs()[0].args.includes("--pi-package-root"));
+  assert.equal(process.env.PI_PACKAGE_ROOT, undefined);
 });
 
 test("failure appends runnable feedback even when the incoming context cannot continue", async (t) => {

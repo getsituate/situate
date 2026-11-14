@@ -457,80 +457,104 @@ test("container cleanup is bounded and only removes the verified owner", () => {
   );
 });
 
-test("workflow partition, immutable image use, and shared-cache write policy remain explicit", () => {
-  const read = (path) =>
-    readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-  const quality = read(".github/workflows/quality.yml");
-  assert.match(
-    quality,
-    /shard: \$\{\{ fromJSON\(needs.plan.outputs.linux\) \}\}/,
-  );
-  assert.match(
-    quality,
-    /needs: \[plan, quick, linux, docker, host, security\]/,
-  );
-  assert.match(quality, /--shard docker/);
-  assert.equal(
-    quality.match(/revision: \$\{\{ steps\.cache\.outputs\.revision \}\}/g)
-      ?.length,
-    3,
-  );
-  assert.doesNotMatch(quality, /\*\*\/package-lock\.json/);
-  assert.doesNotMatch(quality, /apt-get|cargo install/);
-  assert.match(quality, /client\/test-results\/browser\//);
-  assert.doesNotMatch(quality, /visual-report|visual-comparisons/);
-  const coverage = read(".github/workflows/coverage.yml");
-  assert.match(coverage, /ci-container\.mjs --coverage source/);
-  assert.match(coverage, /if test ! -s report\.json/);
-  assert.match(coverage, /available == 'true' && 'failure' \|\| job.status/);
-  assert.doesNotMatch(coverage, /apt-get|cargo install/);
-  const cache = read(".github/actions/download-cache/action.yml");
-  assert.match(
-    cache,
-    /contains\(fromJSON\('\["push","schedule","workflow_dispatch"\]'\), github.event_name\) && github.ref == 'refs\/heads\/main'/,
-  );
-  assert.doesNotMatch(cache, /\/target|node_modules|\.docker|rustup/);
-  assert.match(cache, /cargo\/registry\/cache/);
-  const image = read(".github/actions/ci-image/action.yml");
-  assert.match(image, /readImageLock/);
-  assert.doesNotMatch(image, /packages: write|docker push/);
+test("verification delegates selected lanes directly from planning without optional diagnostics", () => {
+  for (const [name, workflow] of [
+    ["verify", "verify"],
+    ["release-macos", "create"],
+  ]) {
+    const source = readFileSync(
+      new URL(`../.github/workflows/${name}.yml`, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      source,
+      /ci-shard|ci-required|apt-get|cargo install|--coverage|--extended|--visual|packages: write/,
+    );
+    for (const lane of [
+      "policy",
+      "tooling",
+      "tooling-macos",
+      "docker-integration",
+      "frontend",
+      "rust",
+      "macos-code",
+      "browser",
+      "macos-native",
+    ]) {
+      const block = source
+        .split(`  ${lane}:\n`)[1]
+        ?.split(/\n {2}[a-z][a-z-]*:\n/)[0];
+      assert.ok(block, `${name}: ${lane}`);
+      assert.match(block, /needs: plan\n/);
+      assert.ok(
+        block.includes(
+          `contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, '${lane}')`,
+        ),
+      );
+      const native = lane.startsWith("macos-") || lane === "tooling-macos";
+      const command =
+        native || lane === "docker-integration"
+          ? "node tools/actions-adapter.mjs"
+          : "python3 tools/pipeline-container.py actions";
+      assert.ok(
+        block.includes(
+          `run: ${command} lane --workflow ${workflow} --lane ${lane}`,
+        ),
+      );
+      assert.match(
+        block,
+        /PIPELINE_PLAN_DIGEST: \$\{\{ needs.plan.outputs.digest \}\}/,
+      );
+      if (lane.startsWith("macos-") || lane === "tooling-macos")
+        assert.match(block, /runs-on: macos-latest/);
+      assert.doesNotMatch(block, /continue-on-error/);
+    }
+    const required = source
+      .split("  required:\n")[1]
+      ?.split(/\n {2}[a-z][a-z-]*:\n/)[0];
+    const dependencies = required?.match(/needs:\s*\[([^\]]*)\]/)?.[1];
+    assert.ok(dependencies, `${name}: required dependencies`);
+    assert.deepEqual(
+      dependencies
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .sort(),
+      [
+        "plan",
+        "policy",
+        "tooling",
+        "tooling-macos",
+        "docker-integration",
+        "frontend",
+        "rust",
+        "macos-code",
+        "browser",
+        "macos-native",
+      ].sort(),
+    );
+    assert.match(required, /if: always\(\)/);
+    assert.ok(
+      source.includes(
+        `run: python3 tools/pipeline-container.py actions aggregate --workflow ${workflow}`,
+      ),
+    );
+  }
 });
 
-test("image preparation reclaims only unused SDKs on GitHub-hosted Linux", () => {
-  const image = readFileSync(
-    new URL("../.github/actions/ci-image/action.yml", import.meta.url),
+test("coverage and visual diagnostics use a separate explicitly selected workflow", () => {
+  const source = readFileSync(
+    new URL("../.github/workflows/diagnostics.yml", import.meta.url),
     "utf8",
   );
-  const cleanup = image.match(
-    / {4}- name: Free unused hosted runner SDKs\r?\n([\s\S]*?)(?= {4}- )/,
-  )?.[1];
-  assert.ok(cleanup);
-  assert.match(
-    cleanup,
-    / {6}if: runner\.environment == 'github-hosted' && runner\.os == 'Linux'/,
+  assert.match(source, /workflow_dispatch:/);
+  assert.match(source, /options: \[coverage, design, visual, provider\]/);
+  assert.match(source, /run: node tools\/actions-adapter\.mjs diagnostics\n/);
+  assert.match(source, /DIAGNOSTIC_SELECTION: \$\{\{ inputs.selection \}\}/);
+  assert.doesNotMatch(
+    source,
+    /pull_request|ci-shard|apt-get|cargo install|packages: write/,
   );
-  const paths = cleanup.match(/ {8}sudo rm -rf -- ([^\r\n]+)/)?.[1].split(" ");
-  assert.deepEqual(paths, [
-    "/usr/local/lib/android",
-    "/usr/share/dotnet",
-    "/opt/ghc",
-    "/opt/hostedtoolcache/CodeQL",
-  ]);
-  assert.ok(image.indexOf(cleanup) < image.indexOf('docker pull "$CI_IMAGE"'));
-});
-
-test("Apple quality remains required without Windows jobs", () => {
-  const quality = readFileSync(
-    new URL("../.github/workflows/quality.yml", import.meta.url),
-    "utf8",
-  );
-  assert.doesNotMatch(quality, /continue-on-error|windows-2025|^ {2}windows:/m);
-  assert.match(quality, /os: \[macos-15\]/);
-  assert.match(
-    quality,
-    /needs: \[plan, quick, linux, docker, host, security\]/,
-  );
-  assert.match(quality, /node tools\/ci-required\.mjs/);
 });
 
 test(

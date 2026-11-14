@@ -190,7 +190,7 @@ The central idea is not that Situate takes over your life. It reduces the work o
 
 ### 8.1 Main product
 
-The final Situate application is in development for macOS and iOS, with foundations for local workspaces, file editing, AI conversations and custom extensions.
+The final Situate application currently targets macOS only, with foundations for local workspaces, file editing, AI conversations and custom extensions. iOS is deferred.
 
 The complete experience is not yet established as available end to end or equally ready on both platforms. Detailed status changes quickly.
 

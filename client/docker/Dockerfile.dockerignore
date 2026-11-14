@@ -5,6 +5,10 @@
 !client/docker/ci-volta.json
 !client/docker/ci-install.mjs
 !client/docker/ci-user.sh
+!client/docker/ci-swift-tools.py
+!client/docker/ci-swift-tools.json
+!client/docker/ci-swift-format.resolved.json
+!client/docker/ci-swiftlint.resolved.json
 !client/docker/ci-sources.mjs
 !client/docker/ci-sources.json
 !client/docker/ci-tool-notices.py
