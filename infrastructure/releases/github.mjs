@@ -26,19 +26,13 @@ export function githubAdapter({
   const api = (
     repository,
     path,
-    {
-      method = "GET",
-      body,
-      binary = false,
-      paginate = false,
-      hostname = "api.github.com",
-    } = {},
+    { method = "GET", body, binary = false, paginate = false } = {},
   ) => {
     assertReleaseRepository(repository);
     const args = [
       "api",
       "--hostname",
-      hostname,
+      "github.com",
       ...(paginate ? ["--paginate", "--slurp"] : []),
       "--method",
       method,
@@ -113,12 +107,12 @@ export function githubAdapter({
           [
             "api",
             "--hostname",
-            "uploads.github.com",
+            "github.com",
             "--method",
             "POST",
             "-H",
             "Content-Type: application/octet-stream",
-            `repos/${repo}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`,
+            `https://uploads.github.com/repos/${repo}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`,
             "--input",
             "-",
           ],

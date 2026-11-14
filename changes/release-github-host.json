@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "release-github-host",
+  "behaviorDigest": "d408d5ee5d5274c4dbf4552d2ecc3ed5cac5b60e24eb8007b56658e013629f72",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Corrects GitHub API routing in release tooling; application behavior is unchanged.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "707132325230bd1787052e1ca99590ba6f2991e6cbb5048af6edc3ca6b15e7fb",
+      "translationHash": "6c7b651592ba76ed67b03529e66a38aab508937c4bf69aeda12608a476e29010"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "707132325230bd1787052e1ca99590ba6f2991e6cbb5048af6edc3ca6b15e7fb"
+  }
+}
