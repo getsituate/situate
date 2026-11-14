@@ -368,7 +368,7 @@ window.runPluginRuntimeSmoke = async () => {
     () => document.querySelector('[data-plugin-id="native-review"]'),
     "Plugin management did not open",
   );
-  if (card()) throw new Error("External removal left an installed plugin card");
+  await wait(() => !card(), "External removal left an installed plugin card");
   await fixture("reinstall");
   await wait(card, "The fresh installation did not appear");
   await wait(async () => {

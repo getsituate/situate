@@ -140,6 +140,53 @@ test("workspace activity reproduces the pre-admission disable race", async () =>
   await assert.rejects(journey(true), /disable raced export admission/);
 });
 
+async function removalCardJourney(persistent = false) {
+  const program = smoke.slice(
+    smoke.indexOf('  await fixture("remove");'),
+    smoke.indexOf(
+      '  await wait(card, "The fresh installation did not appear");',
+    ),
+  );
+  let polls = 0;
+  const operations = [];
+  await vm.runInNewContext(`(async () => { ${program} })()`, {
+    fixture: async (operation) => {
+      operations.push(operation);
+    },
+    request: async () => ({ plugins: [] }),
+    counter: () => null,
+    document: {
+      querySelector(selector) {
+        if (selector === ".plugins-action") return { click() {} };
+        if (selector === '[data-plugin-id="native-review"]') return {};
+        assert.equal(selector, '[data-plugin-id="native-counter"]');
+        polls++;
+        return persistent || polls < 3 ? {} : null;
+      },
+    },
+    wait: async (condition, message) => {
+      for (let attempt = 0; attempt < 4; attempt++)
+        if (await condition()) return;
+      throw new Error(message);
+    },
+  });
+  return { polls, operations };
+}
+
+test("external removal waits for the management card to reconcile before reinstalling", async () => {
+  assert.deepEqual(await removalCardJourney(), {
+    polls: 3,
+    operations: ["remove", "reinstall"],
+  });
+});
+
+test("a persistently stale management card still blocks reinstallation", async () => {
+  await assert.rejects(
+    removalCardJourney(true),
+    /External removal left an installed plugin card/,
+  );
+});
+
 test("held fixture writes its invocation marker and remains running until release", async () => {
   const factory = vm.runInNewContext(
     `(${serviceSource.replace("export default", "").trim().replace(/;$/, "")})`,
