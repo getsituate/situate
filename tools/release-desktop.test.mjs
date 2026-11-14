@@ -128,37 +128,13 @@ function jxaStep(input, changes, operation, state) {
           };
         },
       },
-      NSWorkspaceOpenConfiguration: { configuration: {} },
-      NSURL: {
-        fileURLWithPath(path) {
-          assert.equal(path, "/System/Library/CoreServices/System Events.app");
-          return "synthetic-system-events-url";
-        },
+      get NSWorkspace() {
+        violations.push("workspace-access");
+        throw new Error("Unexpected asynchronous launcher");
       },
-      NSWorkspace: {
-        sharedWorkspace: {
-          openApplicationAtURLConfigurationCompletionHandler(
-            url,
-            configuration,
-            completion,
-          ) {
-            calls.push("launch");
-            if (operation !== "bootstrap")
-              violations.push("launch-in-inspection");
-            assert.equal(url, "synthetic-system-events-url");
-            assert.deepEqual(configuration, {
-              activates: false,
-              hides: true,
-              promptsUserIfNeeded: false,
-              addsToRecentItems: false,
-              allowsRunningApplicationSubstitution: false,
-            });
-            assert.equal(completion, null);
-            if (values.throwLaunch)
-              throw new Error("synthetic-private-launch-error");
-            state.launched = true;
-          },
-        },
+      get NSWorkspaceOpenConfiguration() {
+        violations.push("workspace-configuration");
+        throw new Error("Unexpected asynchronous launcher");
       },
       NSThread: {
         sleepForTimeInterval(seconds) {
@@ -282,6 +258,22 @@ function worker(changes = {}) {
             changes.desktop ?? { status: 0, stdout: '"IOConsoleLocked" = No\n' }
           );
         }
+        if (command === "/usr/bin/open") {
+          assert.deepEqual(args, [
+            "-g",
+            "-j",
+            "/System/Library/CoreServices/System Events.app",
+          ]);
+          assert.equal(options.timeout, 20000);
+          assert.equal(options.killSignal, "SIGKILL");
+          assert.deepEqual(options.stdio, ["ignore", "ignore", "ignore"]);
+          scriptCalls.push("launch");
+          if (changes.throwLaunch)
+            throw new Error("synthetic-private-launch-error");
+          const result = changes.launchResult ?? { status: 0 };
+          if (!result.error && result.status === 0) state.launched = true;
+          return result;
+        }
         assert.equal(command, "/usr/bin/osascript");
         assert.deepEqual(args.slice(0, 3), ["-l", "JavaScript", "-"]);
         assert.ok(["bootstrap", "inspect"].includes(args[3]));
@@ -372,20 +364,26 @@ test("permission queries bind the opaque descriptor address before using the C b
 });
 
 test("cold System Events starts in the background and must become observable before permission and Finder reads", () => {
-  const { result, scriptCalls } = worker({
+  const { result, calls, scriptCalls } = worker({
     systemEvents: false,
     readyAfter: 2,
   });
   assert.deepEqual(result, capabilities);
+  assert.deepEqual(calls, [
+    "/usr/sbin/ioreg",
+    "/usr/bin/osascript",
+    "/usr/bin/open",
+    "/usr/bin/osascript",
+  ]);
   assert.deepEqual(scriptCalls, [
     "trust",
     "com.apple.systemevents",
     "launch",
-    "wait",
-    "com.apple.systemevents",
-    "wait",
-    "com.apple.systemevents",
     "trust",
+    "com.apple.systemevents",
+    "wait",
+    "com.apple.systemevents",
+    "wait",
     "com.apple.systemevents",
     "permission",
     "com.apple.finder",
@@ -394,13 +392,15 @@ test("cold System Events starts in the background and must become observable bef
   ]);
 });
 
-test("bootstrap may launch System Events but inspection never opens NSWorkspace or queries a missing service", () => {
+test("JXA never launches applications and inspection never queries permission for a missing service", () => {
   const { script } = worker();
   const bootstrap = jxaStep(script, { systemEvents: false }, "bootstrap", {
     launched: false,
     waits: 0,
   });
-  assert.ok(bootstrap.calls.includes("launch"));
+  assert.doesNotMatch(script, /NSWorkspace/);
+  assert.equal(JSON.parse(bootstrap.output).systemEventsRunning, false);
+  assert.ok(!bootstrap.calls.includes("launch"));
   assert.ok(!bootstrap.calls.includes("permission"));
   assert.ok(!bootstrap.calls.includes("read"));
   assert.deepEqual(bootstrap.nativeCalls, []);
@@ -409,7 +409,13 @@ test("bootstrap may launch System Events but inspection never opens NSWorkspace 
     waits: 0,
   });
   assert.equal(JSON.parse(missing.output).stage, "systemEventsRunning");
-  assert.deepEqual(missing.calls, ["trust", "com.apple.systemevents"]);
+  assert.deepEqual(missing.calls.slice(0, 2), [
+    "trust",
+    "com.apple.systemevents",
+  ]);
+  assert.equal(missing.calls.filter((call) => call === "wait").length, 50);
+  assert.ok(!missing.calls.includes("permission"));
+  assert.ok(!missing.calls.includes("read"));
   assert.deepEqual(missing.nativeCalls, []);
   const ready = jxaStep(script, {}, "inspect", { launched: false, waits: 0 });
   assert.ok(!ready.calls.includes("launch"));
@@ -464,6 +470,129 @@ test("bootstrap and inspection share the twenty-second JXA budget", () => {
   }
 });
 
+test("native launcher shares the deadline and never fabricates service readiness", () => {
+  let clock = 0;
+  const operations = [];
+  const result = probeReleaseDesktopWorker({
+    platform: "darwin",
+    now: () => clock,
+    probe(command, args, options) {
+      if (command === "/usr/sbin/ioreg")
+        return { status: 0, stdout: '"IOConsoleLocked" = No' };
+      assert.deepEqual(options.env, {});
+      if (command === "/usr/bin/open") {
+        operations.push("open");
+        assert.deepEqual(args, [
+          "-g",
+          "-j",
+          "/System/Library/CoreServices/System Events.app",
+        ]);
+        assert.equal(options.timeout, 19000);
+        clock = 4000;
+        return { status: 0 };
+      }
+      operations.push(args[3]);
+      if (args[3] === "bootstrap") {
+        clock = 1000;
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            accessibilityTrusted: true,
+            systemEventsRunning: false,
+          }),
+        };
+      }
+      assert.equal(args[3], "inspect");
+      assert.equal(options.timeout, 16000);
+      return { status: 0, stdout: JSON.stringify(capabilities) };
+    },
+  });
+  assert.deepEqual(result, capabilities);
+  assert.deepEqual(operations, ["bootstrap", "open", "inspect"]);
+  const notReady = worker({
+    systemEvents: false,
+    launchReady: false,
+    captureFailure: true,
+  });
+  assert.equal(notReady.result.stage, "systemEventsRunning");
+  assert.ok(!notReady.scriptCalls.includes("permission"));
+  assert.ok(!notReady.scriptCalls.includes("read"));
+});
+
+test("untrusted AX or nonzero bootstrap completion never launches the service", () => {
+  const untrusted = worker({
+    trusted: false,
+    systemEvents: false,
+    captureFailure: true,
+  });
+  assert.equal(untrusted.result.stage, "accessibilityTrusted");
+  const completedButFailed = worker({
+    captureFailure: true,
+    processOperation: "bootstrap",
+    processResult: {
+      status: 1,
+      stdout: JSON.stringify({
+        accessibilityTrusted: true,
+        systemEventsRunning: false,
+        stage: "complete",
+      }),
+      output: [null, null, null, "complete\n"],
+      stderr: "synthetic-private-error",
+    },
+  });
+  assert.deepEqual(completedButFailed.result, {
+    stage: "jxa-process",
+    desktopUnlocked: true,
+    jxaStatus: 1,
+    jxaPhase: "complete",
+  });
+  for (const simulation of [untrusted, completedButFailed]) {
+    assert.deepEqual(simulation.calls, [
+      "/usr/sbin/ioreg",
+      "/usr/bin/osascript",
+    ]);
+    assert.deepEqual(simulation.nativeCalls, []);
+  }
+});
+
+test("native launcher failures retain only approved exit metadata and never reach inspection", () => {
+  for (const [launchResult, metadata] of [
+    [{ status: 1 }, { launchStatus: 1 }],
+    [{ status: null, signal: "SIGTERM" }, { launchSignal: "SIGTERM" }],
+    [
+      {
+        status: "synthetic-private-status",
+        signal: "synthetic-private-signal",
+      },
+      {},
+    ],
+  ]) {
+    const simulation = worker({
+      systemEvents: false,
+      captureFailure: true,
+      launchResult: {
+        ...launchResult,
+        stdout: "synthetic-private-stdout",
+        stderr: "synthetic-private-stderr",
+        extra: "synthetic-private-value",
+      },
+    });
+    assert.deepEqual(simulation.result, {
+      stage: "system-events-launch",
+      desktopUnlocked: true,
+      accessibilityTrusted: true,
+      systemEventsRunning: false,
+      ...metadata,
+    });
+    assert.deepEqual(simulation.calls, [
+      "/usr/sbin/ioreg",
+      "/usr/bin/osascript",
+      "/usr/bin/open",
+    ]);
+    assert.doesNotMatch(JSON.stringify(simulation.result), /synthetic-private/);
+  }
+});
+
 test("an inspection crash preserves only bootstrap observations and filtered exit metadata", () => {
   assert.throws(
     () =>
@@ -492,14 +621,14 @@ test("an inspection crash preserves only bootstrap observations and filtered exi
 });
 
 test("failed or unready System Events launches fail closed without exposing launch errors", () => {
-  for (const changes of [
-    { throwLaunch: true },
-    { launchReady: false },
-    { readyAfter: 51 },
+  for (const [changes, stage] of [
+    [{ throwLaunch: true }, "system-events-launch"],
+    [{ launchReady: false }, "systemEventsRunning"],
+    [{ readyAfter: 51 }, "systemEventsRunning"],
   ])
     assert.throws(
       () => worker({ systemEvents: false, ...changes }),
-      atStage("system-events-launch", {
+      atStage(stage, {
         desktopUnlocked: true,
         accessibilityTrusted: true,
         systemEventsRunning: false,
@@ -592,7 +721,7 @@ test("desktop process exceptions never leak diagnostics or reach JXA", () => {
 test("denied trust, AppleEvents consent, missing processes and unreadable menus fail closed", () => {
   for (const [changes, stage] of [
     [{ trusted: false }, "accessibilityTrusted"],
-    [{ systemEvents: false, launchReady: false }, "system-events-launch"],
+    [{ systemEvents: false, launchReady: false }, "systemEventsRunning"],
     [{ permission: -1744 }, "appleevents-consent-required"],
     [{ permission: -1743 }, "appleEventsAllowed"],
     [{ permission: -600 }, "appleEventsAllowed"],
@@ -673,9 +802,9 @@ test("JXA process failures expose only bounded exit metadata and the last fixed 
       {
         status: null,
         signal: "SIGABRT",
-        output: [null, null, null, "framework-appkit\nsystem-events-launch\n"],
+        output: [null, null, null, "framework-appkit\nsystem-events-query\n"],
       },
-      { jxaSignal: "SIGABRT", jxaPhase: "system-events-launch" },
+      { jxaSignal: "SIGABRT", jxaPhase: "system-events-query" },
     ],
     [
       {
@@ -774,10 +903,8 @@ test("phase sidechannel emits static markers without capabilities or UI contents
     ].join("\n"),
   );
   const cold = jxa(script, { systemEvents: false, throwLaunch: true });
-  assert.equal(
-    cold.phases.trimEnd().split("\n").at(-1),
-    "system-events-launch",
-  );
+  assert.equal(cold.phases.trimEnd().split("\n").at(-1), "complete");
+  assert.equal(JSON.parse(cold.output).stage, "system-events-launch");
   assert.ok(Buffer.byteLength(warm.phases) < 4096);
   assert.ok(Buffer.byteLength(cold.phases) < 4096);
 });

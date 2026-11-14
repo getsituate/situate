@@ -35,31 +35,17 @@ function run(args) {
     phase("system-events-query");
     evidence.systemEventsRunning =
       $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
-    if (!evidence.systemEventsRunning) {
-      if (operation !== "bootstrap") {
-        phase("systemEventsRunning");
-        return JSON.stringify(evidence);
-      }
-      phase("system-events-launch");
-      var configuration = $.NSWorkspaceOpenConfiguration.configuration;
-      configuration.activates = false;
-      configuration.hides = true;
-      configuration.promptsUserIfNeeded = false;
-      configuration.addsToRecentItems = false;
-      configuration.allowsRunningApplicationSubstitution = false;
-      $.NSWorkspace.sharedWorkspace.openApplicationAtURLConfigurationCompletionHandler(
-        $.NSURL.fileURLWithPath("/System/Library/CoreServices/System Events.app"),
-        configuration, null
-      );
-      for (var attempt = 0; attempt < 50 && !evidence.systemEventsRunning; attempt++) {
-        $.NSThread.sleepForTimeInterval(0.1);
-        evidence.systemEventsRunning =
-          $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
-      }
-      if (!evidence.systemEventsRunning) return JSON.stringify(evidence);
-    }
     if (operation === "bootstrap") {
       phase("complete");
+      return JSON.stringify(evidence);
+    }
+    for (var attempt = 0; attempt < 50 && !evidence.systemEventsRunning; attempt++) {
+      $.NSThread.sleepForTimeInterval(0.1);
+      evidence.systemEventsRunning =
+        $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
+    }
+    if (!evidence.systemEventsRunning) {
+      phase("systemEventsRunning");
       return JSON.stringify(evidence);
     }
     phase("framework-appleevents");
@@ -147,7 +133,6 @@ const jxaPhases = new Set([
   "accessibility-query",
   "accessibilityTrusted",
   "system-events-query",
-  "system-events-launch",
   "appleevents-target",
   "appleevents-address",
   "appleevents-create",
@@ -232,6 +217,16 @@ function diagnostic(value, fallback = "worker-exit") {
     if (signals.has(value?.jxaSignal)) result.jxaSignal = value.jxaSignal;
     if (jxaPhases.has(value?.jxaPhase)) result.jxaPhase = value.jxaPhase;
   }
+  if (result.stage === "system-events-launch") {
+    if (
+      Number.isSafeInteger(value?.launchStatus) &&
+      value.launchStatus >= 0 &&
+      value.launchStatus <= 255
+    )
+      result.launchStatus = value.launchStatus;
+    if (signals.has(value?.launchSignal))
+      result.launchSignal = value.launchSignal;
+  }
   return result;
 }
 
@@ -281,13 +276,16 @@ export function probeReleaseDesktopWorker({
     );
   const evidence = { desktopUnlocked: true };
   const deadline = now() + 20000;
-  // NSWorkspace's launch initialization must not share a process with the AE C query.
-  for (const [operation, required] of [
-    ["bootstrap", ["accessibilityTrusted", "systemEventsRunning"]],
-    ["inspect", capabilities.filter((key) => key !== "desktopUnlocked")],
-  ]) {
+  const timeLeft = () => {
     const remaining = Math.ceil(deadline - now());
     if (remaining <= 0) throw failure("jxa-timeout", evidence);
+    return remaining;
+  };
+  for (const [operation, required] of [
+    ["bootstrap", ["accessibilityTrusted"]],
+    ["inspect", capabilities.filter((key) => key !== "desktopUnlocked")],
+  ]) {
+    const remaining = timeLeft();
     let result;
     try {
       result = probe(
@@ -332,6 +330,41 @@ export function probeReleaseDesktopWorker({
       Object.assign(evidence, verifiedEvidence(value, required));
     } catch (error) {
       throw failure("jxa-output", { ...evidence, ...error.diagnostic });
+    }
+    if (operation === "bootstrap") {
+      if (typeof value.systemEventsRunning !== "boolean")
+        throw failure("systemEventsRunning", {
+          ...evidence,
+          stage: value.stage,
+        });
+      evidence.systemEventsRunning = value.systemEventsRunning;
+      if (!evidence.systemEventsRunning) {
+        const launchTimeout = timeLeft();
+        let launch;
+        try {
+          // Keep LaunchServices startup outside JXA's asynchronous Cocoa lifetime.
+          launch = probe(
+            "/usr/bin/open",
+            ["-g", "-j", "/System/Library/CoreServices/System Events.app"],
+            {
+              env: {},
+              encoding: "utf8",
+              timeout: launchTimeout,
+              killSignal: "SIGKILL",
+              maxBuffer: 4096,
+              stdio: ["ignore", "ignore", "ignore"],
+            },
+          );
+        } catch {
+          throw failure("system-events-launch", evidence);
+        }
+        if (launch.error || launch.status !== 0)
+          throw failure("system-events-launch", {
+            ...evidence,
+            launchStatus: launch.status,
+            launchSignal: launch.signal,
+          });
+      }
     }
   }
   return verifiedEvidence(evidence);
