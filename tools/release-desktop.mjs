@@ -46,6 +46,10 @@ function run() {
     var target = $.NSAppleEventDescriptor.descriptorWithBundleIdentifier("com.apple.systemevents");
     var address = target.aeDesc;
     evidence.stage = "appleevents-query";
+    // aeDesc's Ref type differs from AE's BridgeSupport struct type; keep the address opaque.
+    ObjC.bindFunction("AEDeterminePermissionToAutomateTarget", [
+      "int", ["void *", "unsigned int", "unsigned int", "bool"]
+    ]);
     // typeWildCard ('****') covers the reads below; false forbids consent prompts.
     var permission = $.AEDeterminePermissionToAutomateTarget(
       address, 0x2a2a2a2a, 0x2a2a2a2a, false

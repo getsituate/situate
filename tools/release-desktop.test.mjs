@@ -25,6 +25,8 @@ function jxa(input, changes = {}) {
   const calls = [];
   let launched = false;
   let waits = 0;
+  let permissionBound = false;
+  const address = Object.freeze({ opaqueDescriptor: true });
   const values = {
     trusted: true,
     systemEvents: true,
@@ -41,6 +43,16 @@ function jxa(input, changes = {}) {
       import(framework) {
         if (framework === values.throwImport)
           throw new Error("synthetic-private-import-error");
+      },
+      bindFunction(name, signature) {
+        assert.equal(name, "AEDeterminePermissionToAutomateTarget");
+        assert.deepEqual(JSON.parse(JSON.stringify(signature)), [
+          "int",
+          ["void *", "unsigned int", "unsigned int", "bool"],
+        ]);
+        if (values.throwBinding)
+          throw new Error("synthetic-private-binding-error");
+        permissionBound = !values.ignoreBinding;
       },
     },
     $: {
@@ -111,14 +123,15 @@ function jxa(input, changes = {}) {
             get aeDesc() {
               if (values.throwDescriptor)
                 throw new Error("synthetic-private-descriptor-error");
-              return "synthetic-descriptor";
+              return address;
             },
           };
         },
       },
       AEDeterminePermissionToAutomateTarget(target, eventClass, eventId, ask) {
         calls.push("permission");
-        assert.equal(target, "synthetic-descriptor");
+        if (!permissionBound) throw new Error("Ref has incompatible type");
+        assert.equal(target, address);
         assert.equal(eventClass, 0x2a2a2a2a);
         assert.equal(eventId, 0x2a2a2a2a);
         assert.equal(ask, false);
@@ -168,6 +181,7 @@ function jxa(input, changes = {}) {
 function worker(changes = {}) {
   const calls = [];
   let scriptCalls;
+  let script;
   const result = probeReleaseDesktopWorker({
     platform: "darwin",
     probe(command, args, options) {
@@ -188,12 +202,13 @@ function worker(changes = {}) {
       assert.equal(options.maxBuffer, 4096);
       assert.deepEqual(options.stdio, ["pipe", "pipe", "ignore"]);
       if (changes.processResult) return changes.processResult;
-      const simulated = jxa(options.input, changes);
+      script = options.input;
+      const simulated = jxa(script, changes);
       scriptCalls = simulated.calls;
       return { status: 0, stdout: simulated.output };
     },
   });
-  return { result, calls, scriptCalls };
+  return { result, calls, scriptCalls, script };
 }
 
 function atStage(stage, evidence = {}) {
@@ -222,6 +237,15 @@ test("worker checks the unlocked desktop before non-prompting trust and a count-
     "read",
     "count",
   ]);
+});
+
+test("permission queries bind the opaque descriptor address before using the C bridge", () => {
+  const { result, script } = worker();
+  assert.deepEqual(result, capabilities);
+  const unbound = jxa(script, { ignoreBinding: true });
+  assert.equal(JSON.parse(unbound.output).stage, "appleevents-query");
+  assert.equal(JSON.parse(unbound.output).appleEventsAllowed, undefined);
+  assert.ok(!unbound.calls.includes("read"));
 });
 
 test("cold System Events starts in the background and must become observable before permission and Finder reads", () => {
@@ -612,6 +636,7 @@ test("JXA distinguishes framework and bridge exceptions from denied capabilities
     [{ throwTrust: true }, "accessibility-query"],
     [{ throwProcessQuery: "com.apple.systemevents" }, "system-events-query"],
     [{ throwDescriptor: true }, "appleevents-target"],
+    [{ throwBinding: true }, "appleevents-query"],
     [{ throwPermission: true }, "appleevents-query"],
     [{ throwProcessQuery: "com.apple.finder" }, "finder-query"],
     [{ throwCount: true }, "menu-count-query"],
