@@ -50,7 +50,7 @@ test("retention expires only resolved logs and explicitly unpublished candidates
   );
 });
 
-test("publication fails closed without destination-bound independent encrypted backup and recovery rehearsals", () => {
+test("historical recovery evidence validation rejects incomplete or mismatched destination records", () => {
   const evidence = {
     schemaVersion: 1,
     host: "release@example.invalid",

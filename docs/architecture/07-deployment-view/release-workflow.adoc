@@ -126,12 +126,14 @@ Until then, the existing operator approvals remain in force.
 Record source and any derived release revision, public version, build identifier, variant, content digest, toolchain identity, artifact hashes and qualification outcomes.
 Keep build, qualification, notarization and public-availability states distinct, including an explicit unknown outcome.
 Retain ordinary diagnostics for seven days and resolved unpublished candidates for thirty days; unresolved operations have no automatic deletion.
-Initially retain finalized release packages, generated inputs, symbols and release/recovery evidence without automatic deletion, with private material excluded from public assets and an encrypted independent backup.
+Initially retain finalized release packages, generated inputs, symbols and release/recovery evidence without automatic deletion, with private material excluded from public assets.
+Independent backup, restore, signing-key and account-access recovery exercises are deferred operational work; their evidence is not required for release creation or publication.
+Legacy operational recovery metadata remains readable without gating delivery.
 Do not treat artifact-storage presence or a successful upload as proof of public availability.
 
 Overtaken PR checks may be cancelled.
 Do not automatically cancel an active notarization or publication because a newer commit arrived.
-Persist operation identity and recovery evidence before external effects; inspect uncertain outcomes before any explicit reconciliation.
+Persist operation identity and journals before external effects; inspect uncertain outcomes before any explicit reconciliation.
 Never blindly repeat an uncertain submission or publish differing bytes under an existing version.
 Correct a faulty release with a higher version; pausing availability must not advertise an older app.
 
@@ -141,7 +143,7 @@ Before enabling unattended publication:
 
 * Implement and test the shared script workflow, minimal Actions adapters and replacement development-terminal flow; qualify local delivery and cross-executor recovery without GitHub Actions.
 * Implement and test CalVer reservation, compatible version ordering, PR declarations, localized assembly and immutable release inputs.
-* Provision protected main/release tags, least-privilege environment access and recoverable signing credentials. Use `macos-latest`; report limits of actual native coverage without adding another qualification matrix.
+* Provision protected main/release tags, least-privilege environment access and signing credentials. Use `macos-latest`; report limits of actual native coverage without adding another qualification matrix.
 * Automate exact-artifact macOS installation/update tests.
 * Exercise interrupted notarization and publication recovery, and retain evidence without disclosing credentials or private diagnostics.
 * Implement separate GitHub Release creation/asset-consuming publication, selected retention and affected-input policies, independent dependency monitoring and authorized runner-cost limits.

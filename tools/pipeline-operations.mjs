@@ -280,9 +280,6 @@ function publisherArguments(action, plan, config, directory, stage) {
     ...(config.updaterPublicKey
       ? ["--updater-public-key", config.updaterPublicKey]
       : []),
-    ...(config.recoveryEvidence
-      ? ["--recovery-evidence", config.recoveryEvidence]
-      : []),
     ...(stage ? ["--stage", stage] : []),
   ];
 }
@@ -342,26 +339,6 @@ export async function productionStages(
       configRecord.configuration.sshKnownHosts ??
       environment.WEBSITE_SSH_KNOWN_HOSTS,
   };
-  assert(
-    config.recoveryEvidence,
-    "Blocked: independent backup and signing/access recovery evidence is required",
-  );
-  const { assertRecoveryReady } =
-    await import("../infrastructure/releases/recovery.mjs");
-  const recoveryEvidence =
-    typeof config.recoveryEvidence === "string"
-      ? json(config.recoveryEvidence)
-      : config.recoveryEvidence;
-  assertRecoveryReady(recoveryEvidence, { host: plan.destination });
-  if (typeof config.recoveryEvidence !== "string") {
-    const { atomicJson } = await import("./pipeline-state.mjs");
-    const evidenceFile = join(
-      operationDirectory(root, plan.operation),
-      "recovery-evidence.json",
-    );
-    atomicJson(evidenceFile, recoveryEvidence);
-    config.recoveryEvidence = evidenceFile;
-  }
   const host = hostFields(plan, config);
   const { createHostAllocatorLock, createBuilderNotaryJournal } =
     await import("../infrastructure/releases/allocator.mjs");

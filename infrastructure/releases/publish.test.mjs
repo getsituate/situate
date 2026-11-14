@@ -30,6 +30,7 @@ import {
   verifyStagedRelease,
   verifyImmutableInputs,
   verifyDownloadReceipt,
+  verifyPublicationInputs,
   verifyPublicAvailability,
   qualifyPublicationCompatibility,
 } from "./publish.mjs";
@@ -238,6 +239,40 @@ test("destination CLI returns only the host without release inputs or signing cr
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), { host: "release@cli-host" });
   assert.equal(result.stderr, "");
+});
+
+test("publisher accepts absent or legacy recovery evidence without allowing a duplicate attempt", (t) => {
+  const directory = temporary(t);
+  writeFileSync(join(directory, "publication-journal.json"), "{}");
+  for (const legacyArguments of [
+    [],
+    ["--recovery-evidence", join(directory, "missing-legacy-evidence.json")],
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL("./publish.mjs", import.meta.url)),
+        "publish",
+        "--release",
+        directory,
+        "--destination",
+        "release@fixture.invalid",
+        "--updater-public-key",
+        "synthetic-public-key",
+        ...legacyArguments,
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH, CI: "true" } },
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /Publication journal exists; inspect and reconcile instead of retrying/,
+    );
+    assert.equal(
+      readFileSync(join(directory, "publication-journal.json"), "utf8"),
+      "{}",
+    );
+  }
 });
 
 test("publication destination reads only the effective host from private dotenv data", (t) => {
@@ -1082,7 +1117,25 @@ test("public verification checkpoint blocks new publications until exact complet
   assert.equal(invoke("complete").status, 1);
 });
 
-test("immutable input and download receipts bind public files without copying private journals", (t) => {
+test("publication without operational recovery evidence still requires immutable GitHub Release inputs", (t) => {
+  const { directory, manifest } = fixture(t);
+  assert.throws(
+    () => verifyPublicationInputs(directory, manifest, { action: "publish" }),
+    /exact GitHub Release, immutable inputs and qualification/,
+  );
+  assert.deepEqual(
+    verifyPublicationInputs(directory, manifest, { action: "reconcile" }),
+    {},
+  );
+  manifest.releaseInputs = { sha256: "a".repeat(64) };
+  for (const action of ["publish", "reconcile"])
+    assert.throws(
+      () => verifyPublicationInputs(directory, manifest, { action }),
+      /exact GitHub Release, immutable inputs and qualification/,
+    );
+});
+
+test("immutable input and download receipts bind public files without operational recovery evidence or copying private journals", (t) => {
   const { directory, manifest, artifact } = fixture(t);
   const inputs = Buffer.from(
     JSON.stringify({
@@ -1142,6 +1195,17 @@ test("immutable input and download receipts bind public files without copying pr
     verifyDownloadReceipt(directory, manifest, receipt),
     receipt.identity,
   );
+  const releaseReceipt = join(directory, "github-release-receipt.json");
+  const receiptBytes = JSON.stringify(receipt);
+  writeFileSync(releaseReceipt, receiptBytes);
+  for (const action of ["publish", "reconcile"])
+    assert.deepEqual(
+      verifyPublicationInputs(directory, manifest, { action, releaseReceipt }),
+      {
+        releaseIdentity: receipt.identity,
+        releaseReceiptSha256: sha256(receiptBytes),
+      },
+    );
   for (const patch of [
     { identity: { ...receipt.identity, sourceRevision: "c".repeat(40) } },
     { identity: { ...receipt.identity, version: "1.2.4" } },
@@ -1176,6 +1240,14 @@ test("immutable input and download receipts bind public files without copying pr
   );
   assert.throws(
     () => verifyDownloadReceipt(directory, manifest, receipt),
+    /bytes or size/,
+  );
+  assert.throws(
+    () =>
+      verifyPublicationInputs(directory, manifest, {
+        action: "publish",
+        releaseReceipt,
+      }),
     /bytes or size/,
   );
 });

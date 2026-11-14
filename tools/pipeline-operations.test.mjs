@@ -3,6 +3,7 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -14,8 +15,78 @@ import {
   readConfiguration,
   inspectCandidateReservation,
   publicationEnvironment,
+  productionStages,
 } from "./pipeline-operations.mjs";
 import { digest } from "./pipeline-state.mjs";
+
+test("production stages do not require or forward operational recovery evidence", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "situate-pipeline-stages-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const publisher = join(root, "infrastructure", "releases");
+  mkdirSync(publisher, { recursive: true });
+  writeFileSync(
+    join(publisher, "publish.mjs"),
+    `import assert from "node:assert/strict";
+assert.equal(process.argv[2], "publish");
+assert.ok(!process.argv.includes("--recovery-evidence"));
+assert.ok(process.argv.includes("--release-receipt"));
+assert.ok(process.argv.includes("--confirm"));
+console.log("synthetic publication");
+`,
+  );
+  for (const recoveryEvidence of [
+    undefined,
+    { synthetic: true },
+    join(root, "missing-legacy-evidence.json"),
+  ]) {
+    const bytes = JSON.stringify({
+      schemaVersion: 1,
+      recoveryEvidence,
+      artifactRoot: root,
+    });
+    const environment = { CI: "true", SITUATE_RELEASE_CONFIG_JSON: bytes };
+    const plan = {
+      operation: "synthetic-operation",
+      configurationDigest: digest(bytes),
+      destination: "release@fixture.invalid",
+      releaseId: 42,
+      release: { identity: { version: "2026.11.1" } },
+    };
+    for (const workflow of ["create", "publish"]) {
+      const stages = await productionStages(
+        root,
+        { ...plan, workflow },
+        { environment },
+      );
+      assert.equal(typeof stages.build, "function");
+      assert.equal(typeof stages.qualify, "function");
+      if (workflow === "publish")
+        assert.deepEqual(
+          await stages.promote({
+            operation: {
+              stages: [
+                {
+                  name: "verify",
+                  status: "passed",
+                  output: { directory: root },
+                },
+              ],
+            },
+          }),
+          { releaseId: 42, outputSha256: digest("synthetic publication\n") },
+        );
+    }
+    assert.equal(existsSync(join(root, ".release-operations")), false);
+    await assert.rejects(
+      productionStages(
+        root,
+        { ...plan, configurationDigest: "0".repeat(64) },
+        { environment },
+      ),
+      /private, reviewed release configuration/,
+    );
+  }
+});
 
 test("publication forwards public verification identity and GitHub reads but no signing or provider keys", () => {
   const allowed = {

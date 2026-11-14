@@ -195,7 +195,7 @@ Do not automatically rewrite dependencies or commit fixes in ordinary PR/release
 | Isolated production-endpoint qualification | Private HTTPS test listener with restricted tunnel/routing in the test environment; unchanged production URL/TLS and no public pointer activation. Prefer keeping certificate keys on the existing TLS host. Implement and verify isolation before relying on it.                                  |
 | GitHub Release handoff                     | Separate creator/publisher, exact release/asset identities, hash-bound evidence and token-compatible workflow chaining; test normal, local and interrupted paths.                                                                                                                                  |
 | Repository protection                      | Required PR status, protected main/tags, no force-push/deletion, trusted release refs/events, least-privilege credentials and no production-capable persistent runners for fork PRs. No mandatory second maintainer or routine post-merge release approval. Settings need authorized provisioning. |
-| Retention/recovery                         | Apply the start rules below, independent encrypted backup and verified signing/access recovery. No extra service or spending is selected automatically.                                                                                                                                            |
+| Retention/recovery                         | Apply the retention rules below. Independent backup, restore and signing-key/account-access recovery exercises are deferred operational work, not release gates. No extra service or spending is selected automatically.                                                                           |
 
 ### Retention start rules
 
@@ -203,7 +203,7 @@ Do not automatically rewrite dependencies or commit fixes in ordinary PR/release
 - Resolved unpublished candidates: 30 days. Reserved tags/identity records are not deleted to reuse numbers; finalized GitHub Releases are not unpublished candidates merely because host promotion has not happened.
 - Unresolved operations: no automatic deletion.
 - Published packages, source/generated inputs, finalized catalogs, symbols and release evidence: no automatic deletion initially.
-- Keep private journals, diagnostics and keys out of public GitHub Release assets. Use an encrypted independent backup, not only another directory on the same host. Rehearse restoration and independent signing-key/account recovery before unattended publication.
+- Keep private journals, diagnostics and keys out of public GitHub Release assets. Operational backup, restore, signing-key and account-access recovery evidence is not required for release creation or publication; legacy metadata remains readable. Durable journals, allocator locks, inspect-first reconciliation and duplicate-effect protections remain mandatory.
 
 ## Implementation sequence and acceptance
 
@@ -243,6 +243,6 @@ Replace old release orchestration, per-release manual version selection, release
 
 ### 8. Cutover
 
-Temporarily compare correctness of old/new verification, not performance variants. Test draft/ready/fork/bot/main events and provision required statuses/main/tag protections through authorized operations. Exercise local/CI races, restore and signing recovery. Pilot creation and publication as separate workflows, including local execution without Actions. Verify one app merge can create a GitHub Release and independently promote its exact assets, while a tool-only merge schedules no client work. Delete superseded active/disabled workflows, orphaned actions and legacy DevTUI orchestration; update durable guides to actual commands. Enable unattended operation only after the evidence review.
+Temporarily compare correctness of old/new verification, not performance variants. Test draft/ready/fork/bot/main events and provision required statuses/main/tag protections through authorized operations. Exercise local/CI races and interrupted-operation reconciliation. Pilot creation and publication as separate workflows, including local execution without Actions. Verify one app merge can create a GitHub Release and independently promote its exact assets, while a tool-only merge schedules no client work. Delete superseded active/disabled workflows, orphaned actions and legacy DevTUI orchestration; update durable guides to actual commands. Enable unattended operation only after the evidence review.
 
 Use the [test guide](testing.md): focused contracts, quick/feedback checks for code changes, changed verification against up-to-date origin/main before implementation PRs, and full macOS/final-artifact gates for app releases. Report failed, unavailable, unselected and not-run checks distinctly. No actual GitHub publication, tag creation, environment modification or paid capacity is authorized merely by this plan.

@@ -43,10 +43,7 @@ const sourcePlan = {
 function environment(t, workflow = "create") {
   const directory = mkdtempSync(join(tmpdir(), "situate-actions-release-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const config = JSON.stringify({
-    schemaVersion: 1,
-    recoveryEvidence: { synthetic: true },
-  });
+  const config = JSON.stringify({ schemaVersion: 1 });
   return {
     CI: "true",
     RUNNER_TEMP: directory,
@@ -91,6 +88,10 @@ test("enabled delivery requires exact protected workflow and attested private co
       ),
     /attestation/,
   );
+  assert.throws(
+    () => configureRelease({ ...env, WEBSITE_DEPLOY_HOST: "" }, "create"),
+    /explicit destination/,
+  );
   const { configuration, state } = configureRelease(env, "create");
   assert.equal(statSync(configuration).mode & 0o777, 0o600);
   assert.equal(statSync(state).mode & 0o777, 0o700);
@@ -100,7 +101,21 @@ test("enabled delivery requires exact protected workflow and attested private co
   );
   assert.throws(() => configureRelease(env, "create"), /EEXIST/);
 });
-test("creator retains original receipts and authorizes final staged plan without rebinding", async (t) => {
+test("legacy recovery metadata remains readable without validating operational recovery", (t) => {
+  const env = environment(t);
+  const bytes = JSON.stringify({
+    schemaVersion: 1,
+    recoveryEvidence: { synthetic: true },
+  });
+  env.SITUATE_RELEASE_CONFIG_JSON = bytes;
+  env.SITUATE_RELEASE_CONFIG_SHA256 = createHash("sha256")
+    .update(bytes)
+    .digest("hex");
+  const { configuration } = configureRelease(env, "create");
+  assert.equal(readFileSync(configuration, "utf8"), bytes);
+});
+
+test("creator retains original receipts and authorizes final staged plan without recovery evidence or rebinding", async (t) => {
   const env = environment(t);
   const receipts = [
     {

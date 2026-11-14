@@ -553,7 +553,7 @@ Existing local configurations can explicitly select a Keychain `notaryProfile` o
 
 Use the shared release workflow from the repository root. The development terminal invokes the same commands; it does not assign versions, commit notes or provide a test bypass. A local test package or a successful source-only check is not a qualified release.
 
-Unattended creation and publication remain unqualified until repository protections, controlled-host coordination, credentials, isolated native qualification and recovery are provisioned and exercised. Keep explicit operator authorization in place during that transition. The scripts do not provision those controls.
+Unattended creation and publication remain unqualified until repository protections, controlled-host coordination, credentials and isolated native qualification are provisioned and exercised. Operational backup, restore, signing-key and account-access recovery evidence is not a prerequisite for release creation or publication. Keep explicit operator authorization in place during that transition. The scripts do not provision those controls.
 
 Commit the reviewed implementation and its [versionless declaration](../docs/development/release-preparation.md), then select the exact full source and comparison SHAs, operation ID, destination and private configuration:
 
@@ -582,7 +582,7 @@ Set `WEBSITE_DEPLOY_HOST` to the approved SSH destination, or select it explicit
 | `artifactRoot`     | Absolute output directory outside tracked source. If omitted, generated operation assets use the system temporary directory. Retain durable recovery evidence separately.          |
 | `sshIdentity`      | Optional absolute SSH identity path for the controlled host. Host keys must already be independently verified.                                                                     |
 | `updaterPublicKey` | Public updater verification key for publication; never the signing private key.                                                                                                    |
-| `recoveryEvidence` | Path or inline object containing independently verified backup, restore, signing-key and account-access recovery evidence bound to the exact destination.                          |
+| `recoveryEvidence` | Optional legacy audit metadata (path or inline object). Preserved when reading configuration, but not validated or required for creation or publication.                           |
 | `qualification`    | Reviewed configuration for the isolated macOS account, real accessibility journeys, retained-data assertions, exact host-channel predecessor and private production-HTTPS routing. |
 
 The qualification configuration is validated by [`validateFinalArtifactConfiguration`](scripts/final-artifact-qualification.mjs) and the [routing validator](scripts/final-artifact-routing.mjs). It is not a switch that marks native tests passed. Provision and authorize the real account, accessibility access, HTTPS listener and routing before execution. Preserve the app's embedded production URL and TLS verification; endpoint overrides or manually replacing the app cannot qualify the production updater. A universal bundle check does not establish native Intel or minimum-OS behavior.
@@ -603,7 +603,7 @@ Configure environment secrets and variables under repository **Settings → Envi
 
 `SITUATE_RELEASE_CONFIG_SHA256` is the SHA-256 of the exact text stored in `SITUATE_RELEASE_CONFIG_JSON`; hosted preparation requires it as a separate configuration attestation. GitHub supplies `GITHUB_TOKEN` automatically. Local authentication can use the GitHub CLI; no personal access token needs to be copied into a GitHub secret.
 
-Leave each automation gate unset or `false` until protected `main`, scoped host access, isolated final-artifact qualification and independent recovery have been provisioned and verified. Setting credentials does not qualify or authorize unattended application delivery.
+Leave each automation gate unset or `false` until protected `main`, scoped host access and isolated final-artifact qualification have been provisioned and verified. Setting credentials does not qualify or authorize unattended application delivery.
 
 ### Direct macOS releases
 

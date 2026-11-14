@@ -36,7 +36,6 @@ import {
 } from "../../tools/published-migrations.mjs";
 import { compareVersions } from "../../tools/release-catalog.mjs";
 export { sshArguments } from "./transport.mjs";
-import { assertRecoveryReady } from "./recovery.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const client = join(root, "client");
@@ -247,6 +246,29 @@ export function verifyDownloadReceipt(directory, manifest, receipt) {
       "Generated inputs differ from the GitHub Release identity.",
     );
   return identity;
+}
+
+export function verifyPublicationInputs(
+  directory,
+  manifest,
+  { action, releaseReceipt },
+) {
+  if (
+    (action === "publish" && !manifest.releaseInputs) ||
+    (manifest.releaseInputs && !releaseReceipt)
+  )
+    throw new Error(
+      "Publication requires exact GitHub Release, immutable inputs and qualification.",
+    );
+  if (!manifest.releaseInputs) return {};
+  return {
+    releaseIdentity: verifyDownloadReceipt(
+      directory,
+      manifest,
+      json(resolve(releaseReceipt)),
+    ),
+    releaseReceiptSha256: hash(readFileSync(resolve(releaseReceipt))),
+  };
 }
 
 function publicInputFiles(manifest) {
@@ -607,7 +629,7 @@ export async function main(args = process.argv.slice(2)) {
   const [action] = positionals;
   if (values.help) {
     console.log(
-      "Usage: node infrastructure/releases/publish.mjs destination | check|stage|publish|inspect|reconcile --release DIR --reviewed-revision SHA [--stage DIR] [--destination SSH_HOST] [--ssh-identity ABS_PATH] [--ssh-known-hosts ABS_PATH] [--updater-public-key KEY] [--confirm SSH_HOST:VERSION] [--release-receipt FILE --recovery-evidence PRIVATE_FILE]",
+      "Usage: node infrastructure/releases/publish.mjs destination | check|stage|publish|inspect|reconcile --release DIR --reviewed-revision SHA [--stage DIR] [--destination SSH_HOST] [--ssh-identity ABS_PATH] [--ssh-known-hosts ABS_PATH] [--updater-public-key KEY] [--confirm SSH_HOST:VERSION] [--release-receipt FILE] [--recovery-evidence LEGACY_FILE]",
     );
     return;
   }
@@ -655,27 +677,11 @@ export async function main(args = process.argv.slice(2)) {
   let releaseIdentity;
   let releaseReceiptSha256;
   if (action === "publish" || action === "reconcile") {
-    if (
-      !values["recovery-evidence"] ||
-      (action === "publish" && !manifest.releaseInputs) ||
-      (manifest.releaseInputs && !values["release-receipt"])
-    )
-      throw new Error(
-        "Publication requires exact GitHub Release, immutable inputs, qualification and private recovery evidence.",
-      );
-    assertRecoveryReady(json(resolve(values["recovery-evidence"])), {
-      host: config.WEBSITE_DEPLOY_HOST,
-    });
-    if (manifest.releaseInputs) {
-      releaseIdentity = verifyDownloadReceipt(
-        directory,
-        manifest,
-        json(resolve(values["release-receipt"])),
-      );
-      releaseReceiptSha256 = hash(
-        readFileSync(resolve(values["release-receipt"])),
-      );
-    }
+    ({ releaseIdentity, releaseReceiptSha256 } = verifyPublicationInputs(
+      directory,
+      manifest,
+      { action, releaseReceipt: values["release-receipt"] },
+    ));
   }
   if (action === "check") {
     console.log(`Verified direct release ${manifest.version}.`);

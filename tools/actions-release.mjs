@@ -71,13 +71,9 @@ export function configureRelease(env, workflow) {
   } catch {
     throw new Error("Private release configuration must contain valid JSON.");
   }
-  if (
-    config?.schemaVersion !== 1 ||
-    !config.recoveryEvidence ||
-    !env.WEBSITE_DEPLOY_HOST
-  )
+  if (config?.schemaVersion !== 1 || !env.WEBSITE_DEPLOY_HOST)
     throw new Error(
-      "Private configuration requires recovery evidence and an explicit destination.",
+      "Private configuration requires schema version 1 and an explicit destination.",
     );
   const state = stateDirectory(env, workflow, true);
   const configuration = join(state, "configuration.json");
