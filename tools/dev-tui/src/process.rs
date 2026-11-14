@@ -517,16 +517,64 @@ mod tests {
     }
     #[tokio::test]
     async fn missing_tool_is_a_visible_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("situate-tool");
         let (tx, _rx) = mpsc::channel(1);
         let (_stop, stop) = watch::channel(false);
         let out = execute(
-            CommandSpec::new("/nonexistent/situate-tool", &[], Path::new("/")),
+            CommandSpec::new(missing.to_str().unwrap(), &[], dir.path()),
             0,
             tx,
             stop,
         )
         .await;
-        assert!(out.error.unwrap().contains(text::START_FAILED));
+        assert!(!out.success());
+        assert!(!out.cancelled);
+        assert!(out.report.is_empty());
+        match (&out.error, out.code) {
+            (Some(error), None) => assert!(error.contains(text::START_FAILED)),
+            // User-mode emulators can report loader failure as a child exit.
+            (None, Some(127)) => {}
+            _ => panic!("Unexpected missing-tool outcome: {out:?}"),
+        }
+        let code = out.code;
+        let mut run = crate::app::tests::fake_run(crate::actions::Task::Desktop);
+        run.finish(out);
+        assert_eq!(run.status, crate::app::Status::Failed);
+        assert_eq!(run.code, code);
+    }
+    #[tokio::test]
+    async fn rejected_command_is_a_visible_startup_failure() {
+        let (tx, _rx) = mpsc::channel(1);
+        let (_stop, stop) = watch::channel(false);
+        let out = execute(CommandSpec::new("sh", &["\0"], Path::new("/")), 0, tx, stop).await;
+        assert!(!out.success());
+        assert!(!out.cancelled);
+        assert!(out.code.is_none());
+        assert!(out.report.is_empty());
+        assert!(out.error.as_deref().unwrap().contains(text::START_FAILED));
+        let mut run = crate::app::tests::fake_run(crate::actions::Task::Desktop);
+        run.finish(out);
+        assert_eq!(run.status, crate::app::Status::Failed);
+        assert!(
+            run.logs
+                .iter()
+                .any(|line| line.contains(text::START_FAILED))
+        );
+    }
+    #[tokio::test]
+    async fn exit_127_remains_a_failed_exit_rather_than_a_startup_rejection() {
+        let (out, lines) = run("printf 'executed\\n'; exit 127", false).await;
+        assert_eq!(lines, ["executed"]);
+        assert_eq!(out.code, Some(127));
+        assert!(!out.cancelled);
+        assert!(!out.success());
+        assert!(out.error.is_none());
+        let mut run = crate::app::tests::fake_run(crate::actions::Task::Desktop);
+        run.finish(out);
+        assert_eq!(run.status, crate::app::Status::Failed);
+        assert_eq!(run.code, Some(127));
+        assert!(run.logs.is_empty());
     }
     #[tokio::test]
     async fn bounds_reports_and_splits_oversized_log_lines() {
