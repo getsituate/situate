@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   ordinaryEnvironment,
+  main,
   planWorkflow,
   runLane,
   runWorkflow,
@@ -167,6 +168,92 @@ test("integrated verification rejects overwriting a declaration added to the bas
     validateDeclarations(root, { source: alpha, base, heads: [] }),
     /branch heads/,
   );
+});
+
+test("injected release adapters and verification never read local secrets", async (t) => {
+  const root = fixture(t);
+  mkdirSync(join(root, ".env"));
+  const planned = await planWorkflow(
+    root,
+    "create",
+    {
+      source,
+      base,
+      operation: "synthetic-create",
+    },
+    {
+      readBaseline: async () => ({ source: base }),
+      createSourcePlan: async () => selection(),
+    },
+  );
+  assert.equal(planned.destination, undefined);
+  for (const workflow of ["verify", "create"]) {
+    const plan = sealPlan({ ...selection(), workflow });
+    assert.equal(
+      (
+        await runWorkflow(root, plan, {
+          receipts: [receipt(plan)],
+          environment: {},
+        })
+      ).status,
+      "passed",
+    );
+  }
+  const plan = sealPlan({
+    schemaVersion: 1,
+    workflow: "publish",
+    repository: "getsituate/situate",
+    operation: "secret-free",
+    destination: "synthetic.invalid",
+    releaseId: "8",
+    lanes: [],
+  });
+  const adapters = {
+    download: async () => ({}),
+    verify: async () => ({}),
+    promote: async () => ({}),
+    inspect: async () => ({ status: "present" }),
+  };
+  await runWorkflow(root, plan, {
+    confirmation: plan.authorizationDigest,
+    adapters,
+    environment: {},
+  });
+  assert.equal(
+    (await main(["status", "--operation", plan.operation], { root })).status,
+    "completed",
+  );
+  assert.equal(
+    (await inspectWorkflow(root, plan.operation, { adapters, environment: {} }))
+      .remote.status,
+    "present",
+  );
+});
+
+test("production authorization and configuration checks precede SSH preparation", async (t) => {
+  const root = fixture(t);
+  const plan = sealPlan({
+    schemaVersion: 1,
+    workflow: "publish",
+    repository: "getsituate/situate",
+    operation: "unauthorized",
+    destination: "synthetic.invalid",
+    releaseId: "9",
+    lanes: [],
+  });
+  const environment = { CI: "1", SITUATE_RELEASE_SSH_PRIVATE_KEY: "" };
+  await assert.rejects(
+    runWorkflow(root, plan, { environment }),
+    /Confirm the exact/,
+  );
+  await assert.rejects(
+    runWorkflow(root, plan, {
+      environment,
+      confirmation: plan.authorizationDigest,
+    }),
+    /private, reviewed release configuration/,
+  );
+  assert.equal(environment.SITUATE_RELEASE_SSH_PRIVATE_KEY, "");
 });
 
 test("plans have no Actions event or runtime dependency", async (t) => {

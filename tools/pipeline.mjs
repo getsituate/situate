@@ -24,6 +24,7 @@ import {
   hostContainerEnvironment,
 } from "./pipeline-environment.mjs";
 export { ordinaryEnvironment } from "./pipeline-environment.mjs";
+import { releaseEnvironment, withReleaseSSH } from "./release-environment.mjs";
 
 export { aggregateReceipts } from "./pipeline-state.mjs";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -122,9 +123,21 @@ export async function planWorkflow(root, workflow, options, adapters = {}) {
     ["verify", "create", "publish"].includes(workflow),
     "Unknown workflow",
   );
-  const { repository = "getsituate/situate", operation, destination } = options;
+  const { repository = "getsituate/situate", operation } = options;
+  let { destination } = options;
+  if (
+    destination === undefined &&
+    !adapters.createSourcePlan &&
+    (workflow === "publish" || (workflow === "create" && operation))
+  )
+    destination = releaseEnvironment(root, [
+      "WEBSITE_DEPLOY_HOST",
+    ]).WEBSITE_DEPLOY_HOST;
   let configurationBinding = {};
-  if (workflow !== "verify" && !adapters.createSourcePlan) {
+  if (
+    !adapters.createSourcePlan &&
+    (workflow === "publish" || (workflow === "create" && operation))
+  ) {
     const { readConfiguration } = await import("./pipeline-operations.mjs");
     const configured = readConfiguration(root, options.configuration);
     if (configured)
@@ -478,6 +491,31 @@ async function executeStages(
   return operation;
 }
 
+async function withWorkflowAdapters(root, plan, adapters, environment, use) {
+  if (adapters) return use(adapters);
+  const { readConfiguration, productionStages } =
+    await import("./pipeline-operations.mjs");
+  const record = readConfiguration(root, plan.configurationFile, {
+    environment,
+  });
+  assert(
+    record && record.sha256 === plan.configurationDigest,
+    "Blocked: plan with a private, reviewed release configuration before execution",
+  );
+  const configuredEnvironment = { ...environment };
+  for (const [field, name] of [
+    ["sshIdentity", "WEBSITE_SSH_IDENTITY"],
+    ["sshKnownHosts", "WEBSITE_SSH_KNOWN_HOSTS"],
+  ])
+    if (record.configuration[field] !== undefined)
+      configuredEnvironment[name] = record.configuration[field];
+  return withReleaseSSH(
+    { root, environment: configuredEnvironment },
+    async (preparedEnv) =>
+      use(await productionStages(root, plan, { environment: preparedEnv })),
+  );
+}
+
 export async function runWorkflow(
   root,
   plan,
@@ -489,6 +527,7 @@ export async function runWorkflow(
     onEvent = () => {},
     laneOptions,
     until,
+    environment = process.env,
   } = {},
 ) {
   validatePlan(plan);
@@ -524,58 +563,57 @@ export async function runWorkflow(
       workflowStages[plan.workflow].includes(until),
       "Unknown workflow stage",
     );
-  adapters ??= await (
-    await import("./pipeline-operations.mjs")
-  ).productionStages(root, plan);
-  return withOperationLock(root, plan.operation, async () => {
-    const journal = join(
-      operationDirectory(root, plan.operation),
-      "operation.json",
-    );
-    const retained = existsSync(journal)
-      ? readOperation(root, plan.operation)
-      : undefined;
-    const resuming = retained?.status === "paused";
-    const operation = resuming ? retained : openOperation(root, plan);
-    assert.equal(
-      operation.plan.authorizationDigest,
-      plan.authorizationDigest,
-      "Operation belongs to another workflow plan",
-    );
-    if (resuming)
-      assert(
-        operation.stages.every((stage) => stage.status === "passed"),
-        "Paused operation has unresolved work; inspect it first",
+  return withWorkflowAdapters(root, plan, adapters, environment, (adapters) =>
+    withOperationLock(root, plan.operation, async () => {
+      const journal = join(
+        operationDirectory(root, plan.operation),
+        "operation.json",
       );
-    if (plan.workflow === "create" && !resuming) {
-      const results =
-        receipts ??
-        (await runLocalLanes(root, plan.verificationPlan ?? plan, {
-          ...laneOptions,
-          signal,
-          onEvent,
-        }));
-      operation.verification = {
-        ...aggregateReceipts(plan.verificationPlan ?? plan, results),
-        results: results
-          .flatMap((receipt) => receipt.results)
-          .map(({ id, status, exitCode }) => ({ id, status, exitCode })),
+      const retained = existsSync(journal)
+        ? readOperation(root, plan.operation)
+        : undefined;
+      const resuming = retained?.status === "paused";
+      const operation = resuming ? retained : openOperation(root, plan);
+      assert.equal(
+        operation.plan.authorizationDigest,
+        plan.authorizationDigest,
+        "Operation belongs to another workflow plan",
+      );
+      if (resuming)
+        assert(
+          operation.stages.every((stage) => stage.status === "passed"),
+          "Paused operation has unresolved work; inspect it first",
+        );
+      if (plan.workflow === "create" && !resuming) {
+        const results =
+          receipts ??
+          (await runLocalLanes(root, plan.verificationPlan ?? plan, {
+            ...laneOptions,
+            signal,
+            onEvent,
+          }));
+        operation.verification = {
+          ...aggregateReceipts(plan.verificationPlan ?? plan, results),
+          results: results
+            .flatMap((receipt) => receipt.results)
+            .map(({ id, status, exitCode }) => ({ id, status, exitCode })),
+        };
+        saveOperation(root, operation);
+      }
+      const result = await executeStages(root, operation, adapters, {
+        signal,
+        onEvent,
+        until,
+      });
+      return {
+        type: "result",
+        status: result.status,
+        workflow: plan.workflow,
+        operation: plan.operation,
+        planDigest: plan.authorizationDigest,
       };
-      saveOperation(root, operation);
-    }
-    const result = await executeStages(root, operation, adapters, {
-      signal,
-      onEvent,
-      until,
-    });
-    return {
-      type: "result",
-      status: result.status,
-      workflow: plan.workflow,
-      operation: plan.operation,
-      planDigest: plan.authorizationDigest,
-    };
-  });
+    }),
+  );
 }
 
 async function runLocalLanes(root, plan, options) {
@@ -585,40 +623,55 @@ async function runLocalLanes(root, plan, options) {
   return receipts;
 }
 
-export async function inspectWorkflow(root, operationId, { adapters } = {}) {
+export async function inspectWorkflow(
+  root,
+  operationId,
+  { adapters, environment = process.env } = {},
+) {
   const operation = readOperation(root, operationId);
-  adapters ??= await (
-    await import("./pipeline-operations.mjs")
-  ).productionStages(root, operation.plan);
-  assert.equal(
-    typeof adapters.inspect,
-    "function",
-    "Remote inspection is unavailable",
-  );
-  const remote = await adapters.inspect({
+  return withWorkflowAdapters(
     root,
-    operation,
-    plan: operation.plan,
-  });
-  const observation = {
-    schemaVersion: 1,
-    operationId,
-    planDigest: operation.plan.authorizationDigest,
-    stateDigest: digest(operation),
-    remote,
-  };
-  atomicJson(
-    join(operationDirectory(root, operationId), "inspection.json"),
-    observation,
+    operation.plan,
+    adapters,
+    environment,
+    async (adapters) => {
+      assert.equal(
+        typeof adapters.inspect,
+        "function",
+        "Remote inspection is unavailable",
+      );
+      const remote = await adapters.inspect({
+        root,
+        operation,
+        plan: operation.plan,
+      });
+      const observation = {
+        schemaVersion: 1,
+        operationId,
+        planDigest: operation.plan.authorizationDigest,
+        stateDigest: digest(operation),
+        remote,
+      };
+      atomicJson(
+        join(operationDirectory(root, operationId), "inspection.json"),
+        observation,
+      );
+      return { ...observation, reconciliationDigest: digest(observation) };
+    },
   );
-  return { ...observation, reconciliationDigest: digest(observation) };
 }
 
 export async function reconcileWorkflow(
   root,
   operationId,
   confirmation,
-  { adapters, signal, onEvent, resolution = "resume" } = {},
+  {
+    adapters,
+    signal,
+    onEvent,
+    resolution = "resume",
+    environment = process.env,
+  } = {},
 ) {
   assert(
     ["resume", "abandon"].includes(resolution),
@@ -641,59 +694,64 @@ export async function reconcileWorkflow(
       ),
     );
     requireReconciliation(operation, observation, confirmation);
-    adapters ??= await (
-      await import("./pipeline-operations.mjs")
-    ).productionStages(root, operation.plan);
-    assert.equal(
-      typeof adapters.reconcile,
-      "function",
-      "Explicit remote reconciliation is unavailable",
-    );
-    const currentRemote = await adapters.inspect({
+    return withWorkflowAdapters(
       root,
-      operation,
-      plan: operation.plan,
-    });
-    assert.equal(
-      digest(currentRemote),
-      digest(observation.remote),
-      "External state changed after inspection; inspect and authorize it again",
+      operation.plan,
+      adapters,
+      environment,
+      async (adapters) => {
+        assert.equal(
+          typeof adapters.reconcile,
+          "function",
+          "Explicit remote reconciliation is unavailable",
+        );
+        const currentRemote = await adapters.inspect({
+          root,
+          operation,
+          plan: operation.plan,
+        });
+        assert.equal(
+          digest(currentRemote),
+          digest(observation.remote),
+          "External state changed after inspection; inspect and authorize it again",
+        );
+        await adapters.reconcile({
+          root,
+          operation,
+          plan: operation.plan,
+          observation,
+          signal,
+          resolution,
+        });
+        if (operation.status === "abandoned") {
+          saveOperation(root, operation);
+          return {
+            type: "result",
+            status: "abandoned",
+            workflow: operation.plan.workflow,
+            operation: operationId,
+            planDigest: operation.plan.authorizationDigest,
+          };
+        }
+        assert(
+          operation.stages.every((stage) => stage.status === "passed"),
+          "Unresolved operation must be reconciled against exact external evidence before continuation",
+        );
+        operation.status = "running";
+        saveOperation(root, operation);
+        const result = await executeStages(root, operation, adapters, {
+          signal,
+          onEvent,
+        });
+        return {
+          type: "result",
+          status: result.status,
+          workflow: operation.plan.workflow,
+          operation: operationId,
+          planDigest: operation.plan.authorizationDigest,
+        };
+      },
     );
-    await adapters.reconcile({
-      root,
-      operation,
-      plan: operation.plan,
-      observation,
-      signal,
-      resolution,
-    });
-    if (operation.status === "abandoned") {
-      saveOperation(root, operation);
-      return {
-        type: "result",
-        status: "abandoned",
-        workflow: operation.plan.workflow,
-        operation: operationId,
-        planDigest: operation.plan.authorizationDigest,
-      };
-    }
-    assert(
-      operation.stages.every((stage) => stage.status === "passed"),
-      "Unresolved operation must be reconciled against exact external evidence before continuation",
-    );
-    operation.status = "running";
-    saveOperation(root, operation);
-    const result = await executeStages(root, operation, adapters, {
-      signal,
-      onEvent,
-    });
-    return {
-      type: "result",
-      status: result.status,
-      workflow: operation.plan.workflow,
-      operation: operationId,
-      planDigest: operation.plan.authorizationDigest,
-    };
   });
 }
 
