@@ -2057,7 +2057,7 @@
         "stopped-draft-recalled",
         () => field().value === "Recover this follow-up\n\nKeep this draft",
       );
-      assert(!query(".chat-activity"), "stopped-activity-visible");
+      await wait("stopped-activity-cleared", () => !query(".chat-activity"));
       fill(field(), "");
     }
     const png = Uint8Array.from(
