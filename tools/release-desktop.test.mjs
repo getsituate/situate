@@ -23,9 +23,13 @@ const capabilities = {
 
 function jxa(input, changes = {}) {
   const calls = [];
+  let launched = false;
+  let waits = 0;
   const values = {
     trusted: true,
     systemEvents: true,
+    launchReady: true,
+    readyAfter: 1,
     permission: 0,
     finder: true,
     role: "AXMenuBar",
@@ -54,12 +58,50 @@ function jxa(input, changes = {}) {
           return {
             count: (
               bundle === "com.apple.systemevents"
-                ? values.systemEvents
+                ? values.systemEvents ||
+                  (launched && values.launchReady && waits >= values.readyAfter)
                 : values.finder
             )
               ? 1
               : 0,
           };
+        },
+      },
+      NSWorkspaceOpenConfiguration: { configuration: {} },
+      NSURL: {
+        fileURLWithPath(path) {
+          assert.equal(path, "/System/Library/CoreServices/System Events.app");
+          return "synthetic-system-events-url";
+        },
+      },
+      NSWorkspace: {
+        sharedWorkspace: {
+          openApplicationAtURLConfigurationCompletionHandler(
+            url,
+            configuration,
+            completion,
+          ) {
+            calls.push("launch");
+            assert.equal(url, "synthetic-system-events-url");
+            assert.deepEqual(configuration, {
+              activates: false,
+              hides: true,
+              promptsUserIfNeeded: false,
+              addsToRecentItems: false,
+              allowsRunningApplicationSubstitution: false,
+            });
+            assert.equal(completion, null);
+            if (values.throwLaunch)
+              throw new Error("synthetic-private-launch-error");
+            launched = true;
+          },
+        },
+      },
+      NSThread: {
+        sleepForTimeInterval(seconds) {
+          assert.equal(seconds, 0.1);
+          calls.push("wait");
+          waits++;
         },
       },
       NSAppleEventDescriptor: {
@@ -182,6 +224,50 @@ test("worker checks the unlocked desktop before non-prompting trust and a count-
   ]);
 });
 
+test("cold System Events starts in the background and must become observable before permission and Finder reads", () => {
+  const { result, scriptCalls } = worker({
+    systemEvents: false,
+    readyAfter: 2,
+  });
+  assert.deepEqual(result, capabilities);
+  assert.deepEqual(scriptCalls, [
+    "trust",
+    "com.apple.systemevents",
+    "launch",
+    "wait",
+    "com.apple.systemevents",
+    "wait",
+    "com.apple.systemevents",
+    "permission",
+    "com.apple.finder",
+    "read",
+    "count",
+  ]);
+});
+
+test("failed or unready System Events launches fail closed without exposing launch errors", () => {
+  for (const changes of [
+    { throwLaunch: true },
+    { launchReady: false },
+    { readyAfter: 51 },
+  ])
+    assert.throws(
+      () => worker({ systemEvents: false, ...changes }),
+      atStage("system-events-launch", {
+        desktopUnlocked: true,
+        accessibilityTrusted: true,
+        systemEventsRunning: false,
+      }),
+    );
+  assert.throws(
+    () => worker({ systemEvents: false, permission: -1744 }),
+    atStage("appleevents-consent-required", {
+      systemEventsRunning: true,
+      appleEventsAllowed: false,
+    }),
+  );
+});
+
 test("worker rejects unsupported platforms without starting a process", () => {
   for (const platform of ["linux", "win32"])
     assert.throws(
@@ -245,7 +331,7 @@ test("desktop process exceptions never leak diagnostics or reach JXA", () => {
 test("denied trust, AppleEvents consent, missing processes and unreadable menus fail closed", () => {
   for (const [changes, stage] of [
     [{ trusted: false }, "accessibilityTrusted"],
-    [{ systemEvents: false }, "systemEventsRunning"],
+    [{ systemEvents: false, launchReady: false }, "system-events-launch"],
     [{ permission: -1744 }, "appleevents-consent-required"],
     [{ permission: -1743 }, "appleEventsAllowed"],
     [{ permission: -600 }, "appleEventsAllowed"],
@@ -274,10 +360,11 @@ test("JXA performs no scripting reads until trust and existing AppleEvents autho
     },
   });
   assert.deepEqual(jxa(script, { trusted: false }).calls, ["trust"]);
-  assert.deepEqual(jxa(script, { systemEvents: false }).calls, [
-    "trust",
-    "com.apple.systemevents",
-  ]);
+  const coldFailure = jxa(script, { systemEvents: false, launchReady: false });
+  assert.equal(coldFailure.calls.filter((call) => call === "launch").length, 1);
+  assert.equal(coldFailure.calls.filter((call) => call === "wait").length, 50);
+  assert.ok(!coldFailure.calls.includes("permission"));
+  assert.ok(!coldFailure.calls.includes("read"));
   assert.deepEqual(jxa(script, { permission: -1744 }).calls, [
     "trust",
     "com.apple.systemevents",

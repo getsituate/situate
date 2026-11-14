@@ -24,8 +24,23 @@ function run() {
     evidence.systemEventsRunning =
       $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
     if (!evidence.systemEventsRunning) {
-      evidence.stage = "systemEventsRunning";
-      return JSON.stringify(evidence);
+      evidence.stage = "system-events-launch";
+      var configuration = $.NSWorkspaceOpenConfiguration.configuration;
+      configuration.activates = false;
+      configuration.hides = true;
+      configuration.promptsUserIfNeeded = false;
+      configuration.addsToRecentItems = false;
+      configuration.allowsRunningApplicationSubstitution = false;
+      $.NSWorkspace.sharedWorkspace.openApplicationAtURLConfigurationCompletionHandler(
+        $.NSURL.fileURLWithPath("/System/Library/CoreServices/System Events.app"),
+        configuration, null
+      );
+      for (var attempt = 0; attempt < 50 && !evidence.systemEventsRunning; attempt++) {
+        $.NSThread.sleepForTimeInterval(0.1);
+        evidence.systemEventsRunning =
+          $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
+      }
+      if (!evidence.systemEventsRunning) return JSON.stringify(evidence);
     }
     evidence.stage = "appleevents-target";
     var target = $.NSAppleEventDescriptor.descriptorWithBundleIdentifier("com.apple.systemevents");
@@ -84,6 +99,7 @@ const stages = new Set([
   "framework-appleevents",
   "accessibility-query",
   "system-events-query",
+  "system-events-launch",
   "finder-query",
   "menu-role-query",
   "menu-count-query",
