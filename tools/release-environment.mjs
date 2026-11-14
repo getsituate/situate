@@ -53,7 +53,7 @@ export async function withReleaseSSH({ root, environment = process.env }, use) {
     const value = selected[name];
     if (
       typeof value !== "string" ||
-      !value.length ||
+      !value.trim() ||
       value.includes("\0") ||
       Buffer.byteLength(value) > 1024 * 1024
     )
@@ -67,7 +67,8 @@ export async function withReleaseSSH({ root, environment = process.env }, use) {
     chmodSync(directory, 0o700);
     for (const [index, name] of pathNames.entries()) {
       const path = join(directory, index === 0 ? "identity" : "known_hosts");
-      writeFileSync(path, selected[rawNames[index]], {
+      const value = selected[rawNames[index]];
+      writeFileSync(path, value.endsWith("\n") ? value : `${value}\n`, {
         mode: 0o600,
         flag: "wx",
       });

@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -26,7 +32,7 @@ test("publication forwards public verification identity and GitHub reads but no 
       APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-password",
       TAURI_SIGNING_PRIVATE_KEY: "synthetic-signing-key",
       OPENAI_API_KEY: "synthetic-provider-key",
-      PIPELINE_CONFIGURATION_JSON: "synthetic-private-configuration",
+      SITUATE_RELEASE_CONFIG_JSON: "synthetic-private-configuration",
     }),
     allowed,
   );
@@ -134,6 +140,109 @@ test("reservation inspection reconstructs interrupted identity from durable inte
       adapter(null, [{ reservation }, { reservation }]),
     ),
     /Multiple reservations/,
+  );
+});
+
+test("inline release configuration uses identical dotenv and hosted environment bytes without materializing files", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "situate-pipeline-config-env-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bytes =
+    '{"schemaVersion":1,"recoveryEvidence":{"synthetic":"$(not-a-command)"}}\n';
+  writeFileSync(
+    join(root, ".env"),
+    `SITUATE_RELEASE_CONFIG_JSON='${bytes}'\nUNRELATED_SECRET=private-sentinel\n`,
+    { mode: 0o600 },
+  );
+  const local = readConfiguration(root, undefined, { environment: {} });
+  const hosted = readConfiguration(root, undefined, {
+    environment: { CI: "true", SITUATE_RELEASE_CONFIG_JSON: bytes },
+  });
+  const expected = {
+    sha256: digest(bytes),
+    configuration: {
+      schemaVersion: 1,
+      recoveryEvidence: { synthetic: "$(not-a-command)" },
+    },
+  };
+  assert.deepEqual(local, expected);
+  assert.deepEqual(hosted, expected);
+  assert.equal(existsSync(join(root, ".release-operations")), false);
+  assert.equal(JSON.stringify(local).includes("private-sentinel"), false);
+  assert.notEqual(
+    readConfiguration(root, undefined, {
+      environment: { SITUATE_RELEASE_CONFIG_JSON: bytes.trim() },
+    }).sha256,
+    local.sha256,
+  );
+});
+
+test("configuration precedence preserves explicit empty values and rejects ambiguous or secret-bearing invalid JSON", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "situate-pipeline-config-inputs-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, "config.json");
+  const bytes = '{"schemaVersion":1,"recoveryEvidence":{"synthetic":true}}';
+  writeFileSync(file, bytes, { mode: 0o600 });
+  writeFileSync(join(root, ".env"), `SITUATE_RELEASE_CONFIG_FILE=${file}\n`, {
+    mode: 0o600,
+  });
+  assert.equal(
+    readConfiguration(root, undefined, { environment: {} }).file,
+    file,
+  );
+  assert.equal(
+    readConfiguration(root, undefined, {
+      environment: { SITUATE_RELEASE_CONFIG_JSON: bytes },
+    }).sha256,
+    digest(bytes),
+  );
+  assert.equal(
+    readConfiguration(root, file, {
+      environment: { SITUATE_RELEASE_CONFIG_JSON: "invalid" },
+    }).file,
+    file,
+  );
+  assert.throws(
+    () =>
+      readConfiguration(root, undefined, {
+        environment: { SITUATE_RELEASE_CONFIG_JSON: "" },
+      }),
+    /must contain a release configuration/,
+  );
+  assert.equal(
+    readConfiguration(root, undefined, {
+      environment: { SITUATE_RELEASE_CONFIG_FILE: "" },
+    }),
+    null,
+  );
+  assert.equal(
+    readConfiguration(root, undefined, { environment: { CI: "true" } }),
+    null,
+  );
+  assert.throws(
+    () =>
+      readConfiguration(root, undefined, {
+        environment: {
+          SITUATE_RELEASE_CONFIG_JSON: bytes,
+          SITUATE_RELEASE_CONFIG_FILE: file,
+        },
+      }),
+    /not both/,
+  );
+  assert.throws(
+    () =>
+      readConfiguration(root, undefined, {
+        environment: {
+          SITUATE_RELEASE_CONFIG_JSON: '{"PRIVATE_SENTINEL":invalid}',
+        },
+      }),
+    (error) => {
+      assert.equal(
+        error.message,
+        "Release configuration must contain valid JSON",
+      );
+      assert.equal(error.message.includes("PRIVATE_SENTINEL"), false);
+      return true;
+    },
   );
 });
 

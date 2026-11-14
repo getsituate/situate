@@ -30,8 +30,8 @@ jobs:
       actions: read
     env:
       PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_PUBLICATION_ENABLED }}
-      PIPELINE_CONFIGURATION_SHA256: ${{ vars.MACOS_PUBLICATION_CONFIGURATION_SHA256 }}
-      PIPELINE_DESTINATION: ${{ vars.MACOS_RELEASE_DESTINATION }}
+      SITUATE_RELEASE_CONFIG_SHA256: ${{ vars.SITUATE_RELEASE_CONFIG_SHA256 }}
+      WEBSITE_DEPLOY_HOST: ${{ vars.WEBSITE_DEPLOY_HOST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -44,13 +44,13 @@ jobs:
         run: node tools/actions-adapter.mjs publish-prepare --workflow publish
         env:
           PIPELINE_RELEASE_ID: ${{ inputs.release_id }}
-          PIPELINE_CONFIGURATION_JSON: ${{ secrets.MACOS_PUBLICATION_CONFIGURATION_JSON }}
+          SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}
           GH_TOKEN: ${{ github.token }}
       - run: node tools/actions-adapter.mjs publish-run --workflow publish
         if: steps.plan.outputs.selected == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.MACOS_PUBLICATION_SSH_PRIVATE_KEY }}
-          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.MACOS_PUBLICATION_SSH_KNOWN_HOSTS }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           SITUATE_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_UPDATER_PUBLIC_KEY }}

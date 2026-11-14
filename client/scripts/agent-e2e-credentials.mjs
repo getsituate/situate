@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { AgentRunError } from "./agent-e2e-runtime.mjs";
 
-const maximumBytes = 65536;
+const maximumBytes = 2 * 1024 * 1024;
 
 export function validateCredentialFile(
   metadata,

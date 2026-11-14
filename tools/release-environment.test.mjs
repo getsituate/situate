@@ -69,6 +69,28 @@ test("selected local inputs preserve bytes without forwarding unrelated secrets"
   });
 });
 
+test("SSH contents without a final newline prepare the same files locally and in CI", async (t) => {
+  const root = fixture(
+    t,
+    `SITUATE_RELEASE_SSH_PRIVATE_KEY="${key.trimEnd()}"\nSITUATE_RELEASE_SSH_KNOWN_HOSTS="${hosts.trimEnd()}"\n`,
+  );
+  for (const environment of [
+    {},
+    {
+      CI: "true",
+      SITUATE_RELEASE_SSH_PRIVATE_KEY: key.trimEnd(),
+      SITUATE_RELEASE_SSH_KNOWN_HOSTS: hosts.trimEnd(),
+    },
+  ])
+    await withReleaseSSH({ root, environment }, (prepared) => {
+      assert.equal(readFileSync(prepared.WEBSITE_SSH_IDENTITY, "utf8"), key);
+      assert.equal(
+        readFileSync(prepared.WEBSITE_SSH_KNOWN_HOSTS, "utf8"),
+        hosts,
+      );
+    });
+});
+
 test("blank local SSH templates retain agent defaults but explicit empty raw inputs do not fall back", async (t) => {
   const root = fixture(
     t,
@@ -164,6 +186,7 @@ test("invalid raw credentials fail before the callback or filesystem materializa
   const root = fixture(t);
   for (const value of [
     "",
+    "   \n",
     "nul\0value",
     "x".repeat(1024 * 1024 + 1),
     undefined,

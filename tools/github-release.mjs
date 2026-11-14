@@ -15,6 +15,7 @@ import {
 import { dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { verifyReleaseInputs } from "./release-inputs.mjs";
+import { ordinaryEnvironment } from "./pipeline-environment.mjs";
 import {
   verifyQualificationReceipt,
   verifySourceEvidence,
@@ -949,7 +950,8 @@ export async function resolveWorkflowRunRelease(
 export async function readCompletedReleaseBaseline(
   root,
   {
-    github = readOnlyGitHubAdapter(),
+    environment = process.env,
+    github = readOnlyGitHubAdapter({ environment }),
     repository = "getsituate/situate",
     revision: candidate = "HEAD",
     execute = execFileSync,
@@ -962,7 +964,7 @@ export async function readCompletedReleaseBaseline(
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...process.env,
+        ...ordinaryEnvironment(environment),
         GIT_NO_LAZY_FETCH: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
       },
@@ -1020,7 +1022,8 @@ export async function readCompletedReleaseBaseline(
 export async function readGitHubMigrationHistory(
   root,
   {
-    github = readOnlyGitHubAdapter(),
+    environment = process.env,
+    github = readOnlyGitHubAdapter({ environment }),
     repository = "getsituate/situate",
     includeBuilds = false,
   } = {},

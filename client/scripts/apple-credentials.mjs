@@ -252,13 +252,16 @@ export async function withSigningCertificate(
         stat.nlink === 1 &&
         (typeof process.getuid !== "function" ||
           (stat.uid === process.getuid() && (stat.mode & 0o077) === 0));
-    } catch {}
+    } catch {
+      // File-system diagnostics can contain private certificate paths.
+    }
     if (!valid)
       throw new Error(
         "Developer ID certificate must be an owned private regular file without links.",
       );
   }
-  let directory;
+  let directory, result, failure;
+  let failed = false;
   try {
     if (bytes) {
       try {
@@ -277,16 +280,24 @@ export async function withSigningCertificate(
       [passwordName]: password,
     };
     delete prepared[base64Name];
-    return await use(prepared);
+    result = await use(prepared);
+  } catch (error) {
+    failure = error;
+    failed = true;
   } finally {
     if (directory) {
       try {
         rmSync(directory, { recursive: true, force: true });
       } catch {
-        throw new Error("Temporary Developer ID certificate cleanup failed.");
+        failure = new Error(
+          "Temporary Developer ID certificate cleanup failed.",
+        );
+        failed = true;
       }
     }
   }
+  if (failed) throw failure;
+  return result;
 }
 
 export async function withSigningKeychain(options, use) {

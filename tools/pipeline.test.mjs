@@ -256,6 +256,38 @@ test("production authorization and configuration checks precede SSH preparation"
   assert.equal(environment.SITUATE_RELEASE_SSH_PRIVATE_KEY, "");
 });
 
+test("null legacy SSH paths do not suppress inline local credentials", async (t) => {
+  const root = fixture(t);
+  const bytes = JSON.stringify({
+    schemaVersion: 1,
+    sshIdentity: null,
+    sshKnownHosts: null,
+    recoveryEvidence: { synthetic: true },
+  });
+  writeFileSync(
+    join(root, ".env"),
+    `SITUATE_RELEASE_CONFIG_JSON='${bytes}'\nSITUATE_RELEASE_SSH_PRIVATE_KEY=synthetic-key\nSITUATE_RELEASE_SSH_KNOWN_HOSTS=\n`,
+    { mode: 0o600 },
+  );
+  const plan = sealPlan({
+    schemaVersion: 1,
+    workflow: "publish",
+    repository: "getsituate/situate",
+    operation: "inline-credentials",
+    destination: "synthetic.invalid",
+    releaseId: "9",
+    lanes: [],
+    configurationDigest: digest(bytes),
+  });
+  await assert.rejects(
+    runWorkflow(root, plan, {
+      environment: {},
+      confirmation: plan.authorizationDigest,
+    }),
+    /SITUATE_RELEASE_SSH_KNOWN_HOSTS.*nonempty/,
+  );
+});
+
 test("plans have no Actions event or runtime dependency", async (t) => {
   const root = fixture(t);
   const plan = await planWorkflow(

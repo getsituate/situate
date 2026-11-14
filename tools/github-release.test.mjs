@@ -387,6 +387,40 @@ test("workflow_run resolver uses trusted producer identity, not latest or releas
   }
 });
 
+test("baseline Git reads use the supplied environment without signing or authentication secrets", async (t) => {
+  const f = fixture(t);
+  let calls = 0;
+  const environment = {
+    PATH: "/scoped/bin",
+    HOME: "/scoped/home",
+    GH_TOKEN: "synthetic-token",
+    APPLE_API_PRIVATE_KEY: "synthetic-apple",
+    TAURI_SIGNING_PRIVATE_KEY: "synthetic-updater",
+    SITUATE_RELEASE_SSH_PRIVATE_KEY: "synthetic-ssh",
+  };
+  assert.equal(
+    await readCompletedReleaseBaseline(f.directory, {
+      environment,
+      github: f.github,
+      execute: (_command, _args, options) => {
+        calls++;
+        assert(options.env.PATH === environment.PATH);
+        assert(options.env.HOME === environment.HOME);
+        for (const name of [
+          "GH_TOKEN",
+          "APPLE_API_PRIVATE_KEY",
+          "TAURI_SIGNING_PRIVATE_KEY",
+          "SITUATE_RELEASE_SSH_PRIVATE_KEY",
+        ])
+          assert.equal(Object.hasOwn(options.env, name), false);
+        return f.identity.sourceRevision;
+      },
+    }),
+    null,
+  );
+  assert.equal(calls, 1);
+});
+
 test("completed baseline and compatibility history fail closed on unavailable or non-ancestral releases", async (t) => {
   const f = fixture(t);
   const execute = () => f.identity.sourceRevision;

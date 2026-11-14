@@ -126,7 +126,7 @@ To opt into automatic copies for new worktrees on macOS or Linux, run from any c
 node tools/install-worktree-env-hook.mjs
 ```
 
-The checked-in `tools/hooks/post-checkout` is installed as a standalone copy in the shared Git hooks directory. It discovers the primary checkout through Git, copies all of its `.env` into a linked worktree only when the destination is absent, and creates the copy with mode `0600`. It does not export variables or contact a secret manager. The source must be an owner-only regular file, without symlinks or hardlinks, no larger than 64 KiB. Both `.env` and `.env.*` must remain ignored, including on the destination branch, so interrupted temporary copies cannot enter ordinary staging.
+The checked-in `tools/hooks/post-checkout` is installed as a standalone copy in the shared Git hooks directory. It discovers the primary checkout through Git, copies all of its `.env` into a linked worktree only when the destination is absent, and creates the copy with mode `0600`. It does not export variables or contact a secret manager. The source must be an owner-only regular file, without symlinks or hardlinks, no larger than 2 MiB. Both `.env` and `.env.*` must remain ignored, including on the destination branch, so interrupted temporary copies cannot enter ordinary staging.
 
 Installation is optional and local; cloning the repository does not activate hooks. Existing hooks and `core.hooksPath` configurations are not replaced. Integrate the checked-in hook with your existing setup manually if either is already configured. An identical installed hook is left unchanged; later hook changes require reviewing and replacing the installed copy.
 

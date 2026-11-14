@@ -516,7 +516,7 @@ Production delivery uses the shared macOS release creation and publication workf
 ### One-time account setup
 
 1. Use the paid Apple Developer team intended to own the app. In **Xcode → Settings → Accounts**, sign in and select that team. Complete Xcode's first-launch setup. Install Python 3.12 or newer and the [macOS client prerequisites](#prerequisites).
-2. Export the intended **Developer ID Application** certificate and private key as a password-protected `.p12` file kept outside the checkout. Supply its absolute path through `APPLE_DEVELOPER_ID_P12_FILE` and its password through `APPLE_DEVELOPER_ID_P12_PASSWORD`. Signing imports it into an isolated temporary keychain and removes that keychain afterward. Do not use Apple Development, Apple Distribution or ad-hoc signing for the DMG.
+2. Export the intended **Developer ID Application** certificate and private key as a password-protected `.p12` file kept outside the checkout. Set `APPLE_DEVELOPER_ID_P12_BASE64` to its single-line base64 contents and `APPLE_DEVELOPER_ID_P12_PASSWORD` to its password, locally and in CI. Signing prepares a private temporary certificate file and isolated keychain, then removes both. The existing `APPLE_DEVELOPER_ID_P12_FILE` input remains available for an owned private file; do not supply both certificate formats. Do not use Apple Development, Apple Distribution or ad-hoc signing for the DMG.
 3. Use `com.getsituate.app` as the permanent bundle identifier. An iOS App Store Connect app record is not needed for current macOS delivery. Distribution must not use the development launcher's checkout-specific identifier. Accept any pending Apple agreements. Keep the identifier unchanged across updates.
 4. Create an App Store Connect **team API key** authorized for notarization under **Users and Access → Integrations → App Store Connect API**. Download its `.p8` private key, and record its Key ID and Issuer ID. Use the least role that permits notarization. The key's Apple permissions are determined by its role, not by a local vault or bundle identifier. App Store upload permission and iOS provisioning are not macOS release requirements.
 5. Set `APPLE_TEAM_ID` and `APPLE_MACOS_SIGNING_IDENTITY` in the repository-root `.env` or environment, using the intended team and an installed Developer ID Application identity. See [Credentials](#credentials) below. No `.apple-release.local.json` is required.
@@ -534,7 +534,7 @@ Store Apple signing settings and credentials in the Git-ignored `.env` at the **
 ```dotenv
 APPLE_TEAM_ID=TEAM123456
 APPLE_MACOS_SIGNING_IDENTITY="Developer ID Application: Example (TEAM123456)"
-APPLE_DEVELOPER_ID_P12_FILE=/PRIVATE/PATH/developer-id.p12
+APPLE_DEVELOPER_ID_P12_BASE64="<single-line base64 of the .p12 export>"
 APPLE_DEVELOPER_ID_P12_PASSWORD="<certificate password>"
 APPLE_API_KEY=EXAMPLE1234
 APPLE_API_ISSUER=11111111-2222-3333-4444-555555555555
@@ -543,7 +543,7 @@ APPLE_API_PRIVATE_KEY="<paste the complete .p8 PEM here, including header, body 
 
 The example values are not usable credentials. Use literal newlines within the quoted private-key value. Do not `source` the file: the scripts parse it as data and consume only the Apple variables needed by the operation. Environment variables take precedence even when explicitly empty. With `CI=true`, no `.env` is read. Incomplete credentials fail rather than falling back to another account.
 
-Signing settings use this precedence: explicit environment values, root `.env`, then the optional legacy `client/.apple-release.local.json`. Explicit empty values do not fall back. Existing JSON settings such as `notaryProfile` and `appStoreConnect` remain readable locally; the scripts do not create or rewrite that file. In CI, both local configuration files are ignored; supply settings and credentials through the environment. In the hosted workflow, set `APPLE_DEVELOPER_ID_P12_BASE64` to the certificate's canonical base64 data and `APPLE_DEVELOPER_ID_P12_PASSWORD` to its password, rather than supplying a runner-local path. The adapter creates a private certificate file for the build step and removes it afterward; do not supply both file and base64 inputs. The selected identity must match the supplied Developer ID certificate; the builder imports that certificate only for its signing operation.
+Signing settings use this precedence: explicit environment values, root `.env`, then the optional legacy `client/.apple-release.local.json`. Explicit empty values do not fall back. An explicit certificate input also overrides the other certificate format from `.env`. Existing JSON settings such as `notaryProfile` and `appStoreConnect` remain readable locally; the scripts do not create or rewrite that file. In CI, both local configuration files are ignored; supply settings and credentials through the environment. The root `.env` must be an owned, single-link regular file with mode `0600`, no larger than 2 MiB. The selected identity must match the supplied Developer ID certificate; the builder imports that certificate only for its signing operation.
 
 Apple tools require a key file. The scripts create a private temporary `.p8` outside the checkout, pass only its path and the key identifiers to Apple's tools, and delete it after completion or handled failure/cancellation. Raw credential values are not forwarded to frontend or Rust builds. Forced process termination can leave a `situate-apple-key-*` directory in the system temporary directory; inspect ownership and active processes before removing an abandoned directory. Do not share `.env`, the key, or private diagnostics with installers.
 
@@ -570,7 +570,11 @@ The public files are `release-inputs.json`, `situate-release-history.json`, `man
 
 ### Release workflow configuration
 
-Supply `--configuration /PATH/TO/private-release-config.json` while planning, or set `SITUATE_RELEASE_CONFIG_FILE`. The default path is `.release-operations/config.json` at the repository root. It must be a regular, non-symlink, single-link file with mode `0600`; the plan binds its exact digest. Review configuration changes through a new plan rather than modifying an authorized plan's inputs.
+Set `SITUATE_RELEASE_CONFIG_JSON` to the private JSON configuration, in the repository-root `.env` locally or the environment in CI. Inline configuration is parsed as data without creating a local configuration file; each later operation requires the same bytes. The plan binds the exact digest, including whitespace. Keep the original configuration with the private recovery records.
+
+Existing file inputs remain supported: supply `--configuration /PATH/TO/private-release-config.json` while planning, or set `SITUATE_RELEASE_CONFIG_FILE`. A configuration file must be an owned, regular, non-symlink, single-link file with mode `0600`. An explicit `--configuration` selects that file; otherwise select either JSON or a file variable, not both. Without either input, local execution uses `.release-operations/config.json`. CI does not read that implicit local file. Review configuration changes through a new plan rather than modifying an authorized plan's inputs.
+
+Set `WEBSITE_DEPLOY_HOST` to the approved SSH destination, or select it explicitly with `--destination`. `SITUATE_RELEASE_SSH_PRIVATE_KEY` and `SITUATE_RELEASE_SSH_KNOWN_HOSTS` contain the private key and independently verified `known_hosts` data. Local and hosted execution use the same names and contents. The shared release runner prepares private temporary SSH files and removes them when the operation completes or fails. Existing `WEBSITE_SSH_IDENTITY` and `WEBSITE_SSH_KNOWN_HOSTS` file paths remain supported; do not combine file and inline credentials. No signing, publication or provider credentials are passed to ordinary verification or the isolated application qualification process.
 
 | Field              | Purpose                                                                                                                                                                            |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -584,6 +588,22 @@ Supply `--configuration /PATH/TO/private-release-config.json` while planning, or
 The qualification configuration is validated by [`validateFinalArtifactConfiguration`](scripts/final-artifact-qualification.mjs) and the [routing validator](scripts/final-artifact-routing.mjs). It is not a switch that marks native tests passed. Provision and authorize the real account, accessibility access, HTTPS listener and routing before execution. Preserve the app's embedded production URL and TLS verification; endpoint overrides or manually replacing the app cannot qualify the production updater. A universal bundle check does not establish native Intel or minimum-OS behavior.
 
 Ordinary checks and dependency installation must receive no production credentials. Signing receives only the Apple/updater inputs it needs; qualification uses synthetic data without personal workspaces or signing/publication keys. The publisher needs read-only GitHub access and controlled-host publication access, not builder credentials.
+
+### GitHub release environments
+
+Configure environment secrets and variables under repository **Settings → Environments**. Use `macos-release` for creation and `macos-publication` for publication. Names and value formats match local `.env` inputs; the two environments can hold different scoped SSH keys and configurations.
+
+| Setting                      | `macos-release`                                                                                                                                                                                              | `macos-publication`                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| Secrets                      | `SITUATE_RELEASE_CONFIG_JSON`, `SITUATE_RELEASE_SSH_PRIVATE_KEY`, `SITUATE_RELEASE_SSH_KNOWN_HOSTS`                                                                                                          | Same names, with the publisher's configuration and key |
+| Additional signing secrets   | `APPLE_DEVELOPER_ID_P12_BASE64`, `APPLE_DEVELOPER_ID_P12_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_ISSUER`, `APPLE_API_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY`, optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | None                                                   |
+| Variables                    | `WEBSITE_DEPLOY_HOST`, `SITUATE_RELEASE_CONFIG_SHA256`, `APPLE_TEAM_ID`, `SITUATE_UPDATER_PUBLIC_KEY`                                                                                                        | Same names                                             |
+| Additional builder variables | `APPLE_MACOS_SIGNING_IDENTITY`, `SITUATE_UPDATER_ENDPOINT`                                                                                                                                                   | None                                                   |
+| Automation gate              | `MACOS_RELEASE_ENABLED`                                                                                                                                                                                      | `MACOS_PUBLICATION_ENABLED`                            |
+
+`SITUATE_RELEASE_CONFIG_SHA256` is the SHA-256 of the exact text stored in `SITUATE_RELEASE_CONFIG_JSON`; hosted preparation requires it as a separate configuration attestation. GitHub supplies `GITHUB_TOKEN` automatically. Local authentication can use the GitHub CLI; no personal access token needs to be copied into a GitHub secret.
+
+Leave each automation gate unset or `false` until protected `main`, scoped host access, isolated final-artifact qualification and independent recovery have been provisioned and verified. Setting credentials does not qualify or authorize unattended application delivery.
 
 ### Direct macOS releases
 

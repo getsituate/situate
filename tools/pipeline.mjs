@@ -24,7 +24,6 @@ import {
   hostContainerEnvironment,
 } from "./pipeline-environment.mjs";
 export { ordinaryEnvironment } from "./pipeline-environment.mjs";
-import { releaseEnvironment, withReleaseSSH } from "./release-environment.mjs";
 
 export { aggregateReceipts } from "./pipeline-state.mjs";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -129,10 +128,12 @@ export async function planWorkflow(root, workflow, options, adapters = {}) {
     destination === undefined &&
     !adapters.createSourcePlan &&
     (workflow === "publish" || (workflow === "create" && operation))
-  )
+  ) {
+    const { releaseEnvironment } = await import("./release-environment.mjs");
     destination = releaseEnvironment(root, [
       "WEBSITE_DEPLOY_HOST",
     ]).WEBSITE_DEPLOY_HOST;
+  }
   let configurationBinding = {};
   if (
     !adapters.createSourcePlan &&
@@ -493,6 +494,7 @@ async function executeStages(
 
 async function withWorkflowAdapters(root, plan, adapters, environment, use) {
   if (adapters) return use(adapters);
+  const { withReleaseSSH } = await import("./release-environment.mjs");
   const { readConfiguration, productionStages } =
     await import("./pipeline-operations.mjs");
   const record = readConfiguration(root, plan.configurationFile, {
@@ -507,7 +509,10 @@ async function withWorkflowAdapters(root, plan, adapters, environment, use) {
     ["sshIdentity", "WEBSITE_SSH_IDENTITY"],
     ["sshKnownHosts", "WEBSITE_SSH_KNOWN_HOSTS"],
   ])
-    if (record.configuration[field] !== undefined)
+    if (
+      record.configuration[field] !== undefined &&
+      record.configuration[field] !== null
+    )
       configuredEnvironment[name] = record.configuration[field];
   return withReleaseSSH(
     { root, environment: configuredEnvironment },

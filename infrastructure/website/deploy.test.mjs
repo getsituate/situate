@@ -53,6 +53,23 @@ test("configuration parses only requested values without evaluating shell expres
   assert.equal(existsSync(join(directory, "unsafe")), false);
 });
 
+test("configuration accepts the shared dotenv size budget and rejects larger files", (t) => {
+  const directory = temporary(t);
+  const prefix = "WEBSITE_DEPLOY_HOST=deploy@example.test\nUNUSED=";
+  const file = join(directory, ".env");
+  writeFileSync(file, prefix + "x".repeat(2 * 1024 * 1024 - prefix.length), {
+    mode: 0o600,
+  });
+  assert.deepEqual(configuration(["WEBSITE_DEPLOY_HOST"], {}, directory), {
+    WEBSITE_DEPLOY_HOST: "deploy@example.test",
+  });
+  writeFileSync(file, "x".repeat(2 * 1024 * 1024 + 1));
+  assert.throws(
+    () => configuration(["WEBSITE_DEPLOY_HOST"], {}, directory),
+    /root \.env/,
+  );
+});
+
 test("configuration rejects public permissions and symlinked environment files", (t) => {
   const directory = temporary(t);
   const env = join(directory, ".env");

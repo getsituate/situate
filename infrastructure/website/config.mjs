@@ -17,7 +17,7 @@ export function configuration(
       const stat = lstatSync(path);
       if (
         !stat.isFile() ||
-        stat.size > 65536 ||
+        stat.size > 2 * 1024 * 1024 ||
         (process.platform !== "win32" && stat.mode & 0o077)
       )
         throw new Error(

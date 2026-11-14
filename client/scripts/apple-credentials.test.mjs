@@ -616,6 +616,19 @@ test("materialized certificates are cleaned on callback and write failures", asy
     (error) => error === failure,
   );
   assert.ok(!existsSync(join(certificate, "..")));
+  for (const rejection of [undefined, null]) {
+    await assert.rejects(
+      withSigningCertificate(
+        { root, environment: signingCredentials },
+        async (prepared) => {
+          certificate = prepared.APPLE_DEVELOPER_ID_P12_FILE;
+          throw rejection;
+        },
+      ),
+      (error) => error === rejection,
+    );
+    assert.ok(!existsSync(join(certificate, "..")));
+  }
   const mocked = t.mock.method(fs, "writeFileSync", (path, _bytes, options) => {
     certificate = path;
     assert.deepEqual(options, { flag: "wx", mode: 0o600 });

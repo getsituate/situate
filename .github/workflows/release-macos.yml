@@ -262,8 +262,8 @@ jobs:
       contents: write
     env:
       PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_RELEASE_ENABLED }}
-      PIPELINE_CONFIGURATION_SHA256: ${{ vars.MACOS_RELEASE_CONFIGURATION_SHA256 }}
-      PIPELINE_DESTINATION: ${{ vars.MACOS_RELEASE_DESTINATION }}
+      SITUATE_RELEASE_CONFIG_SHA256: ${{ vars.SITUATE_RELEASE_CONFIG_SHA256 }}
+      WEBSITE_DEPLOY_HOST: ${{ vars.WEBSITE_DEPLOY_HOST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -274,7 +274,7 @@ jobs:
       - run: node tools/actions-adapter.mjs release-gate --workflow create
       - run: node tools/actions-adapter.mjs create-prepare
         env:
-          PIPELINE_CONFIGURATION_JSON: ${{ secrets.MACOS_RELEASE_CONFIGURATION_JSON }}
+          SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
           PIPELINE_NEEDS: ${{ toJSON(needs) }}
@@ -282,12 +282,12 @@ jobs:
       - run: node tools/actions-adapter.mjs create-stage --stage inputs
         env:
           GH_TOKEN: ${{ github.token }}
-          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_SSH_PRIVATE_KEY }}
-          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.MACOS_RELEASE_SSH_KNOWN_HOSTS }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
       - run: node tools/actions-adapter.mjs create-stage --stage build
         env:
-          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_SSH_PRIVATE_KEY }}
-          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.MACOS_RELEASE_SSH_KNOWN_HOSTS }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           APPLE_MACOS_SIGNING_IDENTITY: ${{ vars.APPLE_MACOS_SIGNING_IDENTITY }}
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
@@ -303,5 +303,5 @@ jobs:
       - run: node tools/actions-adapter.mjs create-stage --stage github
         env:
           GH_TOKEN: ${{ github.token }}
-          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_SSH_PRIVATE_KEY }}
-          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.MACOS_RELEASE_SSH_KNOWN_HOSTS }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}

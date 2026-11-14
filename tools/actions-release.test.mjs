@@ -48,6 +48,7 @@ function environment(t, workflow = "create") {
     recoveryEvidence: { synthetic: true },
   });
   return {
+    CI: "true",
     RUNNER_TEMP: directory,
     GITHUB_RUN_ID: "42",
     GITHUB_RUN_ATTEMPT: "2",
@@ -57,11 +58,11 @@ function environment(t, workflow = "create") {
     GITHUB_WORKFLOW_REF: `getsituate/situate/.github/workflows/${workflow === "create" ? "release-macos" : "publish-macos"}.yml@refs/heads/main`,
     GITHUB_EVENT_NAME: workflow === "create" ? "push" : "workflow_dispatch",
     PIPELINE_RELEASE_ENABLED: "true",
-    PIPELINE_CONFIGURATION_JSON: config,
-    PIPELINE_CONFIGURATION_SHA256: createHash("sha256")
+    SITUATE_RELEASE_CONFIG_JSON: config,
+    SITUATE_RELEASE_CONFIG_SHA256: createHash("sha256")
       .update(config)
       .digest("hex"),
-    PIPELINE_DESTINATION: "synthetic-destination",
+    WEBSITE_DEPLOY_HOST: "synthetic-destination",
     PIPELINE_PLAN: JSON.stringify(sourcePlan),
     PIPELINE_NEEDS: "{}",
   };
@@ -85,7 +86,7 @@ test("enabled delivery requires exact protected workflow and attested private co
   assert.throws(
     () =>
       configureRelease(
-        { ...env, PIPELINE_CONFIGURATION_SHA256: "f".repeat(64) },
+        { ...env, SITUATE_RELEASE_CONFIG_SHA256: "f".repeat(64) },
         "create",
       ),
     /attestation/,
@@ -95,7 +96,7 @@ test("enabled delivery requires exact protected workflow and attested private co
   assert.equal(statSync(state).mode & 0o777, 0o700);
   assert.equal(
     readFileSync(configuration, "utf8"),
-    env.PIPELINE_CONFIGURATION_JSON,
+    env.SITUATE_RELEASE_CONFIG_JSON,
   );
   assert.throws(() => configureRelease(env, "create"), /EEXIST/);
 });
@@ -136,13 +137,13 @@ test("creator retains original receipts and authorizes final staged plan without
     receipts,
   );
   for (const stage of ["inputs", "build", "qualify", "github"])
-    runReleaseStage(env, "create", stage, execute);
+    await runReleaseStage(env, "create", stage, execute);
   assert.equal(calls.length, 5);
   for (const args of calls.slice(1)) {
     assert.ok(args.includes("--receipts"));
     assert.equal(args[args.indexOf("--confirm") + 1], "d".repeat(64));
   }
-  assert.throws(
+  await assert.rejects(
     () => runReleaseStage(env, "create", "skip-qualification", execute),
     /Unsupported/,
   );
@@ -159,7 +160,7 @@ test("credentials are restricted to their external operation, never qualificatio
     APPLE_API_PRIVATE_KEY: "synthetic-apple",
     TAURI_SIGNING_PRIVATE_KEY: "synthetic-updater",
     AWS_SECRET_ACCESS_KEY: "synthetic-unrelated",
-    PIPELINE_CONFIGURATION_JSON: "synthetic-private-config",
+    SITUATE_RELEASE_CONFIG_JSON: "synthetic-private-config",
   };
   assert.deepEqual(stageEnvironment(env, "create", "qualify"), {
     PATH: "/tools",
@@ -167,7 +168,7 @@ test("credentials are restricted to their external operation, never qualificatio
   });
   const signing = stageEnvironment(env, "create", "build");
   assert.equal(signing.SSH_AUTH_SOCK, undefined);
-  assert.equal(signing.SITUATE_RELEASE_SSH_PRIVATE_KEY, undefined);
+  assert.equal(signing.SITUATE_RELEASE_SSH_PRIVATE_KEY, "synthetic-ssh-key");
   assert.equal(signing.APPLE_API_PRIVATE_KEY, "synthetic-apple");
   assert.equal(signing.GH_TOKEN, undefined);
   const inputs = stageEnvironment(env, "create", "inputs");
@@ -176,51 +177,48 @@ test("credentials are restricted to their external operation, never qualificatio
   const publisher = stageEnvironment(env, "publish");
   assert.equal(publisher.GH_TOKEN, "synthetic-gh");
   assert.equal(publisher.APPLE_TEAM_ID, "SYNTHETIC");
-  assert.equal(publisher.SITUATE_RELEASE_SSH_KNOWN_HOSTS, undefined);
+  assert.equal(
+    publisher.SITUATE_RELEASE_SSH_KNOWN_HOSTS,
+    "synthetic pinned host",
+  );
   assert.equal(publisher.TAURI_SIGNING_PRIVATE_KEY, undefined);
   assert.equal(publisher.AWS_SECRET_ACCESS_KEY, undefined);
 });
 
-test("SSH files exist only during authorized operations and are removed on success or failure", (t) => {
+test("hosted stages forward shared SSH inputs only to operations that need the host", async (t) => {
   for (const workflow of ["create", "publish"]) {
     const env = {
       ...environment(t, workflow),
       SITUATE_RELEASE_SSH_PRIVATE_KEY: "synthetic-private-key",
       SITUATE_RELEASE_SSH_KNOWN_HOSTS:
         "fixture.invalid ssh-ed25519 synthetic-pinned-host",
+      SSH_AUTH_SOCK: "/synthetic/agent",
     };
-    const { state, configuration } = configureRelease(env, workflow);
+    const { state } = configureRelease(env, workflow);
     writeFileSync(
       join(state, "plan.json"),
       JSON.stringify({ ...sourcePlan, workflow }),
       { mode: 0o600 },
     );
-    const paths = [];
     const execute = (_command, _args, { env: child }) => {
-      for (const name of ["WEBSITE_SSH_IDENTITY", "WEBSITE_SSH_KNOWN_HOSTS"]) {
-        const path = child[name];
-        paths.push(path);
-        assert.equal(statSync(path).mode & 0o777, 0o600);
-        assert.equal(statSync(dirname(path)).mode & 0o777, 0o700);
-      }
       assert.equal(
-        readFileSync(child.WEBSITE_SSH_IDENTITY, "utf8"),
-        `${env.SITUATE_RELEASE_SSH_PRIVATE_KEY}\n`,
+        child.SITUATE_RELEASE_SSH_PRIVATE_KEY,
+        env.SITUATE_RELEASE_SSH_PRIVATE_KEY,
       );
       assert.equal(
-        readFileSync(child.WEBSITE_SSH_KNOWN_HOSTS, "utf8"),
-        `${env.SITUATE_RELEASE_SSH_KNOWN_HOSTS}\n`,
+        child.SITUATE_RELEASE_SSH_KNOWN_HOSTS,
+        env.SITUATE_RELEASE_SSH_KNOWN_HOSTS,
       );
-      assert.equal(child.SITUATE_RELEASE_SSH_PRIVATE_KEY, undefined);
-      assert.equal(child.SITUATE_RELEASE_SSH_KNOWN_HOSTS, undefined);
+      assert.equal(child.WEBSITE_SSH_IDENTITY, undefined);
+      assert.equal(child.WEBSITE_SSH_KNOWN_HOSTS, undefined);
       assert.equal(child.SSH_AUTH_SOCK, undefined);
+      assert.equal(child.SITUATE_RELEASE_CONFIG_JSON, undefined);
     };
     for (const stage of workflow === "create"
       ? ["inputs", "build", "github"]
       : [undefined])
-      runReleaseStage(env, workflow, stage, execute);
-    assert.ok(paths.every((path) => !existsSync(path)));
-    assert.throws(
+      await runReleaseStage(env, workflow, stage, execute);
+    await assert.rejects(
       () =>
         runReleaseStage(
           env,
@@ -233,42 +231,26 @@ test("SSH files exist only during authorized operations and are removed on succe
         ),
       /Synthetic child failure/,
     );
-    assert.ok(paths.every((path) => !existsSync(path)));
-    assert.equal(
-      readFileSync(configuration, "utf8"),
-      env.PIPELINE_CONFIGURATION_JSON,
-    );
     assert.deepEqual(readdirSync(env.RUNNER_TEMP), [
       `situate-${workflow}-42-2`,
     ]);
     if (workflow === "create")
-      runReleaseStage(
+      await runReleaseStage(
         env,
         workflow,
         "qualify",
         (_command, _args, { env: child }) => {
+          assert.equal(child.SITUATE_RELEASE_SSH_PRIVATE_KEY, undefined);
+          assert.equal(child.SITUATE_RELEASE_SSH_KNOWN_HOSTS, undefined);
           assert.equal(child.WEBSITE_SSH_IDENTITY, undefined);
           assert.equal(child.WEBSITE_SSH_KNOWN_HOSTS, undefined);
-          assert.equal(child.SITUATE_RELEASE_SSH_PRIVATE_KEY, undefined);
-          assert.deepEqual(readdirSync(env.RUNNER_TEMP), [
-            "situate-create-42-2",
-          ]);
+          assert.equal(child.SSH_AUTH_SOCK, undefined);
         },
       );
-    assert.throws(
-      () =>
-        runReleaseStage(
-          { ...env, SITUATE_RELEASE_SSH_KNOWN_HOSTS: "" },
-          workflow,
-          workflow === "create" ? "inputs" : undefined,
-          () => assert.fail("Incomplete SSH credentials reached the child"),
-        ),
-      /both a private key/,
-    );
   }
 });
 
-test("build certificate base64 becomes a private temporary file, never a child environment value", (t) => {
+test("build uses the shared certificate preparation and never forwards its raw value", async (t) => {
   const bytes = Buffer.from([0, 1, 2, 255]);
   const env = {
     ...environment(t),
@@ -289,9 +271,9 @@ test("build certificate base64 becomes a private temporary file, never a child e
     assert.equal(child.APPLE_DEVELOPER_ID_P12_BASE64, undefined);
     assert.equal(child.APPLE_DEVELOPER_ID_P12_PASSWORD, "synthetic-password");
   };
-  runReleaseStage(env, "create", "build", execute);
+  await runReleaseStage(env, "create", "build", execute);
   assert.ok(paths.every((path) => !existsSync(path)));
-  assert.throws(
+  await assert.rejects(
     () =>
       runReleaseStage(env, "create", "build", (...args) => {
         execute(...args);
@@ -300,7 +282,7 @@ test("build certificate base64 becomes a private temporary file, never a child e
     /Synthetic signing failure/,
   );
   assert.ok(paths.every((path) => !existsSync(path)));
-  runReleaseStage(
+  await runReleaseStage(
     env,
     "create",
     "qualify",
@@ -318,7 +300,7 @@ test("build certificate base64 becomes a private temporary file, never a child e
     "YQ__",
     Buffer.alloc(1024 * 1024 + 1).toString("base64"),
   ])
-    assert.throws(
+    await assert.rejects(
       () =>
         runReleaseStage(
           { ...env, APPLE_DEVELOPER_ID_P12_BASE64: encoded },
@@ -328,7 +310,7 @@ test("build certificate base64 becomes a private temporary file, never a child e
         ),
       /canonical base64/,
     );
-  assert.throws(
+  await assert.rejects(
     () =>
       runReleaseStage(
         {
@@ -341,11 +323,11 @@ test("build certificate base64 becomes a private temporary file, never a child e
         "build",
         () => assert.fail("Ambiguous certificate reached the child"),
       ),
-    /not both/,
+    /only one/,
   );
   const existing = join(env.RUNNER_TEMP, "existing.p12");
   writeFileSync(existing, bytes, { mode: 0o600 });
-  runReleaseStage(
+  await runReleaseStage(
     {
       ...env,
       APPLE_DEVELOPER_ID_P12_BASE64: "",
@@ -363,7 +345,7 @@ test("build certificate base64 becomes a private temporary file, never a child e
   ]);
 });
 
-test("publisher selects exact explicit release and calls standalone publish, never builder", (t) => {
+test("publisher selects exact explicit release and calls standalone publish, never builder", async (t) => {
   const env = { ...environment(t, "publish"), PIPELINE_RELEASE_ID: "314" };
   const calls = [];
   const execute = (_command, args) => {
@@ -377,7 +359,7 @@ test("publisher selects exact explicit release and calls standalone publish, nev
     });
   };
   assert.equal(preparePublish(env, execute).release_id, "314");
-  runReleaseStage(env, "publish", undefined, execute);
+  await runReleaseStage(env, "publish", undefined, execute);
   assert.ok(calls[0].includes("--release-id"));
   assert.ok(calls[1].includes("publish"));
   assert.ok(!calls[1].includes("--receipts"));

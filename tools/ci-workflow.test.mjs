@@ -204,6 +204,33 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   );
 });
 
+test("release environments use the same secret names and formats as local configuration", () => {
+  for (const name of ["release-macos", "publish-macos"]) {
+    const workflow = read(name);
+    for (const [, target, secret] of workflow.matchAll(
+      /([A-Z][A-Z_]+): \$\{\{ secrets\.([A-Z][A-Z_]+) \}\}/g,
+    ))
+      assert.equal(target, secret, `${name}: ${target}`);
+    for (const canonical of [
+      "SITUATE_RELEASE_CONFIG_JSON",
+      "SITUATE_RELEASE_SSH_PRIVATE_KEY",
+      "SITUATE_RELEASE_SSH_KNOWN_HOSTS",
+    ])
+      assert.ok(
+        workflow.includes(`${canonical}: \${{ secrets.${canonical} }}`),
+      );
+    for (const canonical of [
+      "SITUATE_RELEASE_CONFIG_SHA256",
+      "WEBSITE_DEPLOY_HOST",
+    ])
+      assert.ok(workflow.includes(`${canonical}: \${{ vars.${canonical} }}`));
+    assert.doesNotMatch(
+      workflow,
+      /MACOS_(?:RELEASE|PUBLICATION)_(?:CONFIGURATION|SSH|DESTINATION)/,
+    );
+  }
+});
+
 test("tool image preserves build/publisher separation and read-only build credentials", () => {
   const workflow = read("ci-tool-image");
   const build = job(workflow, "build");

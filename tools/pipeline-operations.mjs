@@ -8,6 +8,12 @@ import {
   operationDirectory,
   saveOperation,
 } from "./pipeline-state.mjs";
+import { releaseEnvironment } from "./release-environment.mjs";
+import { ordinaryEnvironment } from "./pipeline-environment.mjs";
+import {
+  githubAdapter,
+  readOnlyGitHubAdapter,
+} from "../infrastructure/releases/github.mjs";
 
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 const sha = /^[a-f0-9]{40}$/;
@@ -23,6 +29,7 @@ const git = (root, args) =>
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: ordinaryEnvironment(),
   }).trim();
 const previous = (operation, name) => {
   const stage = operation.stages.find(
@@ -44,32 +51,82 @@ const canonical = (value) =>
 
 export function readConfiguration(
   root,
-  file = process.env.SITUATE_RELEASE_CONFIG_FILE ??
-    join(root, ".release-operations", "config.json"),
+  file,
+  { environment = process.env } = {},
 ) {
-  if (!existsSync(file)) return null;
-  const stat = lstatSync(file);
+  let bytes;
+  if (file === undefined) {
+    const names = [
+      "SITUATE_RELEASE_CONFIG_JSON",
+      "SITUATE_RELEASE_CONFIG_FILE",
+    ];
+    const explicit = names.some((name) => Object.hasOwn(environment, name));
+    const values = explicit
+      ? Object.fromEntries(
+          names
+            .filter((name) => Object.hasOwn(environment, name))
+            .map((name) => [name, environment[name]]),
+        )
+      : releaseEnvironment(root, names, environment);
+    if (Object.hasOwn(environment, "SITUATE_RELEASE_CONFIG_JSON"))
+      assert(
+        typeof values.SITUATE_RELEASE_CONFIG_JSON === "string" &&
+          values.SITUATE_RELEASE_CONFIG_JSON.length > 0,
+        "SITUATE_RELEASE_CONFIG_JSON must contain a release configuration",
+      );
+    if (values.SITUATE_RELEASE_CONFIG_JSON) {
+      assert(
+        !values.SITUATE_RELEASE_CONFIG_FILE,
+        "Select either SITUATE_RELEASE_CONFIG_JSON or SITUATE_RELEASE_CONFIG_FILE, not both",
+      );
+      bytes = values.SITUATE_RELEASE_CONFIG_JSON;
+    } else {
+      file =
+        values.SITUATE_RELEASE_CONFIG_FILE ??
+        (environment.CI
+          ? undefined
+          : join(root, ".release-operations", "config.json"));
+    }
+  }
+  if (bytes === undefined) {
+    if (file === undefined || !existsSync(file)) return null;
+    const stat = lstatSync(file);
+    assert(
+      stat.isFile() &&
+        !stat.isSymbolicLink() &&
+        stat.nlink === 1 &&
+        (stat.mode & 0o077) === 0 &&
+        (typeof process.getuid !== "function" || stat.uid === process.getuid()),
+      "Release configuration must be an owned private regular file (0600)",
+    );
+    bytes = readFileSync(file, "utf8");
+  }
+  let configuration;
+  try {
+    configuration = JSON.parse(bytes);
+  } catch {
+    throw new Error("Release configuration must contain valid JSON");
+  }
   assert(
-    stat.isFile() &&
-      !stat.isSymbolicLink() &&
-      stat.nlink === 1 &&
-      (stat.mode & 0o077) === 0,
-    "Release configuration must be a private regular file (0600)",
-  );
-  const bytes = readFileSync(file, "utf8");
-  const configuration = JSON.parse(bytes);
-  assert(
-    configuration.schemaVersion === 1,
+    configuration?.schemaVersion === 1,
     "Unsupported release configuration",
   );
-  return { file: resolve(file), sha256: digest(bytes), configuration };
+  return {
+    ...(file !== undefined ? { file: resolve(file) } : {}),
+    sha256: digest(bytes),
+    configuration,
+  };
 }
 
-export async function readBaseline(root, { repository, source }) {
+export async function readBaseline(
+  root,
+  { repository, source, environment = process.env },
+) {
   const { readCompletedReleaseBaseline } = await import("./github-release.mjs");
   const completed = await readCompletedReleaseBaseline(root, {
     repository,
     revision: source,
+    environment,
   });
   if (completed)
     return {
@@ -186,7 +243,12 @@ export function notesForCatalog(catalog) {
     .join("\n\n");
 }
 
-async function verifiedBuilds(root, plan, { hostSnapshot: history }) {
+async function verifiedBuilds(
+  root,
+  plan,
+  { hostSnapshot: history },
+  environment,
+) {
   const { readGitHubMigrationHistory } = await import("./github-release.mjs");
   assert(
     history.complete === true && Array.isArray(history.builds),
@@ -195,6 +257,7 @@ async function verifiedBuilds(root, plan, { hostSnapshot: history }) {
   const published = await readGitHubMigrationHistory(root, {
     repository: plan.repository,
     includeBuilds: true,
+    environment,
   });
   return { complete: true, builds: [...history.builds, ...published.builds] };
 }
@@ -258,8 +321,14 @@ function publish(root, args, environment = process.env) {
   );
 }
 
-export async function productionStages(root, plan) {
-  const configRecord = readConfiguration(root, plan.configurationFile);
+export async function productionStages(
+  root,
+  plan,
+  { environment = process.env } = {},
+) {
+  const configRecord = readConfiguration(root, plan.configurationFile, {
+    environment,
+  });
   assert(
     configRecord && configRecord.sha256 === plan.configurationDigest,
     "Blocked: plan with a private, reviewed release configuration before execution",
@@ -268,10 +337,10 @@ export async function productionStages(root, plan) {
     ...configRecord.configuration,
     sshIdentity:
       configRecord.configuration.sshIdentity ??
-      process.env.WEBSITE_SSH_IDENTITY,
+      environment.WEBSITE_SSH_IDENTITY,
     sshKnownHosts:
       configRecord.configuration.sshKnownHosts ??
-      process.env.WEBSITE_SSH_KNOWN_HOSTS,
+      environment.WEBSITE_SSH_KNOWN_HOSTS,
   };
   assert(
     config.recoveryEvidence,
@@ -296,7 +365,7 @@ export async function productionStages(root, plan) {
   const host = hostFields(plan, config);
   const { createHostAllocatorLock, createBuilderNotaryJournal } =
     await import("../infrastructure/releases/allocator.mjs");
-  const hostLock = createHostAllocatorLock(host);
+  const hostLock = createHostAllocatorLock(host, { environment });
   const notaryJournal = createBuilderNotaryJournal(host, {
     operationId: plan.operation,
     withAllocatorLock: hostLock,
@@ -345,6 +414,7 @@ export async function productionStages(root, plan) {
       completed = await readCompletedReleaseBaseline(root, {
         repository: plan.repository,
         revision: plan.source,
+        environment,
       });
       assert(
         completed &&
@@ -398,7 +468,9 @@ export async function productionStages(root, plan) {
     root,
     hostConfig: host,
     withAllocatorLock: hostLock,
-    readVerifiedBuilds: (snapshot) => verifiedBuilds(root, plan, snapshot),
+    environment: publicationEnvironment(environment),
+    readVerifiedBuilds: (snapshot) =>
+      verifiedBuilds(root, plan, snapshot, environment),
   });
   const stages = {
     compatibility: async ({ operation, resume = false }) => {
@@ -408,6 +480,7 @@ export async function productionStages(root, plan) {
       const fresh = await readBaseline(root, {
         repository: plan.repository,
         source: plan.source,
+        environment,
       });
       assert.equal(
         digest(fresh),
@@ -421,6 +494,7 @@ export async function productionStages(root, plan) {
       const result = await qualifyPublicCompatibilityMigrations(root, {
         revision: plan.source,
         history: readPublicationHistory(root, {
+          environment,
           destination: {
             host: plan.destination,
             sshIdentity: config.sshIdentity,
@@ -489,7 +563,12 @@ export async function productionStages(root, plan) {
         await import("../infrastructure/releases/transport.mjs");
       const built = await buildAppleRelease({
         root: join(root, "client"),
-        settings: loadAppleSettings(join(root, "client")),
+        settings: loadAppleSettings(
+          join(root, "client"),
+          undefined,
+          environment,
+        ),
+        environment,
         platform: "macos",
         macosArch: "universal",
         distribution: "direct",
@@ -511,6 +590,7 @@ export async function productionStages(root, plan) {
           return qualifyPublishedMigrations(repositoryRoot, {
             revision,
             history: readPublicationHistory(root, {
+              environment,
               destination: {
                 host: plan.destination,
                 sshIdentity: config.sshIdentity,
@@ -566,6 +646,7 @@ export async function productionStages(root, plan) {
           ),
         },
         {
+          github: githubAdapter({ environment }),
           authorize: async (expected) =>
             assert.deepEqual(expected.identity, request.identity),
           reconcile,
@@ -580,10 +661,13 @@ export async function productionStages(root, plan) {
     },
     download: async () => {
       const { downloadGitHubRelease } = await import("./github-release.mjs");
-      const result = await downloadGitHubRelease({
-        ...plan.release,
-        destination: directory,
-      });
+      const result = await downloadGitHubRelease(
+        {
+          ...plan.release,
+          destination: directory,
+        },
+        { github: readOnlyGitHubAdapter({ environment }) },
+      );
       return { directory, receipt: result.receipt, identity: result.identity };
     },
     verify: async ({ operation }) => {
@@ -591,6 +675,7 @@ export async function productionStages(root, plan) {
       publish(
         root,
         publisherArguments("check", plan, config, downloaded.directory),
+        environment,
       );
       return {
         directory: downloaded.directory,
@@ -610,11 +695,15 @@ export async function productionStages(root, plan) {
         downloaded.directory,
         stageDirectory,
       );
-      const output = publish(root, [
-        ...args,
-        "--confirm",
-        `${plan.destination}:${plan.release.identity.version}`,
-      ]);
+      const output = publish(
+        root,
+        [
+          ...args,
+          "--confirm",
+          `${plan.destination}:${plan.release.identity.version}`,
+        ],
+        environment,
+      );
       return { releaseId: plan.releaseId, outputSha256: digest(output) };
     },
     inspect: async ({ operation }) => {
@@ -633,6 +722,7 @@ export async function productionStages(root, plan) {
             publish(
               root,
               publisherArguments("inspect", plan, config, downloaded.directory),
+              environment,
             ),
           ),
         };
@@ -670,14 +760,17 @@ export async function productionStages(root, plan) {
           directory: built.directory,
           notes: notesForCatalog(inputs.catalog),
         });
-        githubRelease = await inspectGitHubOperation({
-          identity: {
-            ...record.identity,
-            ...(record.releaseId ? { releaseId: record.releaseId } : {}),
+        githubRelease = await inspectGitHubOperation(
+          {
+            identity: {
+              ...record.identity,
+              ...(record.releaseId ? { releaseId: record.releaseId } : {}),
+            },
+            evidence,
+            evidenceSha256: record.evidenceSha256,
           },
-          evidence,
-          evidenceSha256: record.evidenceSha256,
-        });
+          { github: readOnlyGitHubAdapter({ environment }) },
+        );
       }
       return {
         githubRelease,
@@ -696,11 +789,15 @@ export async function productionStages(root, plan) {
           downloaded.directory,
           stageDirectory,
         );
-        publish(root, [
-          ...args,
-          "--confirm",
-          `${plan.destination}:${plan.release.identity.version}`,
-        ]);
+        publish(
+          root,
+          [
+            ...args,
+            "--confirm",
+            `${plan.destination}:${plan.release.identity.version}`,
+          ],
+          environment,
+        );
         const last = operation.stages.at(-1);
         assert.equal(
           last.name,

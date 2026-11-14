@@ -1,13 +1,8 @@
 import { createHash } from "node:crypto";
-import {
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { withSigningCertificate } from "../client/scripts/apple-credentials.mjs";
 
 const repository = "getsituate/situate";
 const positive = /^[1-9][0-9]*$/;
@@ -61,20 +56,25 @@ function privateJson(path, value) {
 }
 export function configureRelease(env, workflow) {
   requireProvisioned(env, workflow);
-  const bytes = env.PIPELINE_CONFIGURATION_JSON;
+  const bytes = env.SITUATE_RELEASE_CONFIG_JSON;
   if (
     typeof bytes !== "string" ||
-    !/^[a-f0-9]{64}$/.test(env.PIPELINE_CONFIGURATION_SHA256 ?? "") ||
-    digest(bytes) !== env.PIPELINE_CONFIGURATION_SHA256
+    !/^[a-f0-9]{64}$/.test(env.SITUATE_RELEASE_CONFIG_SHA256 ?? "") ||
+    digest(bytes) !== env.SITUATE_RELEASE_CONFIG_SHA256
   )
     throw new Error(
       "Private release configuration does not match its provisioning attestation.",
     );
-  const config = JSON.parse(bytes);
+  let config;
+  try {
+    config = JSON.parse(bytes);
+  } catch {
+    throw new Error("Private release configuration must contain valid JSON.");
+  }
   if (
-    config.schemaVersion !== 1 ||
+    config?.schemaVersion !== 1 ||
     !config.recoveryEvidence ||
-    !env.PIPELINE_DESTINATION
+    !env.WEBSITE_DEPLOY_HOST
   )
     throw new Error(
       "Private configuration requires recovery evidence and an explicit destination.",
@@ -120,7 +120,7 @@ export async function prepareCreate(env, execute, validateSourcePlan) {
     "--operation",
     `actions-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
     "--destination",
-    env.PIPELINE_DESTINATION,
+    env.WEBSITE_DEPLOY_HOST,
     "--configuration",
     configuration,
   ]);
@@ -173,6 +173,13 @@ export function stageEnvironment(env, workflow, stage) {
   ];
   if (workflow === "publish" || ["inputs", "github"].includes(stage))
     names.push("GH_TOKEN");
+  if (workflow === "publish" || ["inputs", "build", "github"].includes(stage))
+    names.push(
+      "SITUATE_RELEASE_SSH_PRIVATE_KEY",
+      "SITUATE_RELEASE_SSH_KNOWN_HOSTS",
+      "WEBSITE_SSH_IDENTITY",
+      "WEBSITE_SSH_KNOWN_HOSTS",
+    );
   if (workflow === "publish")
     names.push("SITUATE_UPDATER_PUBLIC_KEY", "APPLE_TEAM_ID");
   if (stage === "build")
@@ -180,6 +187,7 @@ export function stageEnvironment(env, workflow, stage) {
       "APPLE_TEAM_ID",
       "APPLE_MACOS_SIGNING_IDENTITY",
       "APPLE_DEVELOPER_ID_P12_FILE",
+      "APPLE_DEVELOPER_ID_P12_BASE64",
       "APPLE_DEVELOPER_ID_P12_PASSWORD",
       "APPLE_API_KEY",
       "APPLE_API_ISSUER",
@@ -195,7 +203,7 @@ export function stageEnvironment(env, workflow, stage) {
       .map((name) => [name, env[name]]),
   );
 }
-export function runReleaseStage(env, workflow, stage, execute) {
+export async function runReleaseStage(env, workflow, stage, execute) {
   requireProvisioned(env, workflow);
   const state = stateDirectory(env, workflow);
   const plan = readJson(join(state, "plan.json"));
@@ -219,33 +227,6 @@ export function runReleaseStage(env, workflow, stage, execute) {
       throw new Error("Unsupported hosted release stage.");
     args.push("--stage", stage);
   }
-  let certificateBytes;
-  if (stage === "build" && env.APPLE_DEVELOPER_ID_P12_BASE64) {
-    const encoded = env.APPLE_DEVELOPER_ID_P12_BASE64;
-    if (env.APPLE_DEVELOPER_ID_P12_FILE)
-      throw new Error(
-        "Select either a Developer ID certificate file or its base64 input, not both.",
-      );
-    if (
-      typeof encoded !== "string" ||
-      encoded.length > 4 * Math.ceil((1024 * 1024) / 3) ||
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-        encoded,
-      )
-    )
-      throw new Error(
-        "Developer ID certificate input must be canonical base64 of at most 1 MiB.",
-      );
-    certificateBytes = Buffer.from(encoded, "base64");
-    if (
-      !certificateBytes.length ||
-      certificateBytes.length > 1024 * 1024 ||
-      certificateBytes.toString("base64") !== encoded
-    )
-      throw new Error(
-        "Developer ID certificate input must be canonical base64 of at most 1 MiB.",
-      );
-  }
   const environment = stageEnvironment(env, workflow, stage);
   if (workflow === "create" && stage === "inputs")
     Object.assign(environment, {
@@ -255,58 +236,25 @@ export function runReleaseStage(env, workflow, stage, execute) {
       GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
       GIT_CONFIG_VALUE_1: "!gh auth git-credential",
     });
-  let credentials;
-  let certificate;
-  try {
-    if (certificateBytes) {
-      certificate = mkdtempSync(
-        join(env.RUNNER_TEMP, "situate-signing-certificate-"),
-      );
-      const path = join(certificate, "developer-id.p12");
-      writeFileSync(path, certificateBytes, { mode: 0o600, flag: "wx" });
-      environment.APPLE_DEVELOPER_ID_P12_FILE = path;
-    }
-    if (
-      workflow === "publish" ||
-      ["inputs", "build", "github"].includes(stage)
-    ) {
-      const key = env.SITUATE_RELEASE_SSH_PRIVATE_KEY;
-      const hosts = env.SITUATE_RELEASE_SSH_KNOWN_HOSTS;
-      if (key || hosts) {
-        if (
-          [key, hosts].some(
-            (value) =>
-              typeof value !== "string" ||
-              !value.trim() ||
-              value.includes("\0") ||
-              Buffer.byteLength(value) > 1024 * 1024,
-          )
-        )
-          throw new Error(
-            "SSH operations require both a private key and pinned known-host data.",
-          );
-        credentials = mkdtempSync(
-          join(env.RUNNER_TEMP, "situate-operation-ssh-"),
-        );
-        const identity = join(credentials, "identity");
-        const knownHosts = join(credentials, "known_hosts");
-        privateJson(identity, key.endsWith("\n") ? key : `${key}\n`);
-        privateJson(knownHosts, hosts.endsWith("\n") ? hosts : `${hosts}\n`);
-        environment.WEBSITE_SSH_IDENTITY = identity;
-        environment.WEBSITE_SSH_KNOWN_HOSTS = knownHosts;
-      }
-    }
-    execute(process.execPath, ["tools/pipeline.mjs", ...args], {
+  const launch = async (environment) => {
+    await execute(process.execPath, ["tools/pipeline.mjs", ...args], {
       stdio: "inherit",
       env: environment,
     });
-  } finally {
-    try {
-      if (credentials) rmSync(credentials, { recursive: true, force: true });
-    } finally {
-      if (certificate) rmSync(certificate, { recursive: true, force: true });
-    }
-  }
+  };
+  if (
+    stage === "build" &&
+    (environment.APPLE_DEVELOPER_ID_P12_BASE64 ||
+      environment.APPLE_DEVELOPER_ID_P12_FILE)
+  )
+    return withSigningCertificate(
+      {
+        root: fileURLToPath(new URL("../client", import.meta.url)),
+        environment,
+      },
+      launch,
+    );
+  return launch(environment);
 }
 export async function prepareReleaseDependencies(directory, execute) {
   for (const target of [undefined, "client"])
@@ -464,7 +412,7 @@ export function preparePublish(env, execute) {
     "--operation",
     `publish-actions-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
     "--destination",
-    env.PIPELINE_DESTINATION,
+    env.WEBSITE_DEPLOY_HOST,
     "--configuration",
     configuration,
   ]);
