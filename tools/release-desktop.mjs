@@ -7,24 +7,35 @@ import { nativeDesktopIssue } from "../client/scripts/native-desktop-session.mjs
 const script = `
 function run() {
   var evidence = { stage: "framework-appkit" };
+  var phaseOutput;
+  // Use a separate pipe for fixed phases; stderr may contain UI descriptions.
+  function phase(value) {
+    evidence.stage = value;
+    phaseOutput.writeData(
+      $.NSString.stringWithString(value + "\\n").dataUsingEncoding($.NSUTF8StringEncoding)
+    );
+  }
   try {
+    ObjC.import("Foundation");
+    phaseOutput = $.NSFileHandle.alloc.initWithFileDescriptor(3);
+    phase("framework-appkit");
     ObjC.import("AppKit");
-    evidence.stage = "framework-accessibility";
+    phase("framework-accessibility");
     // The C function signatures live in the subframeworks' BridgeSupport metadata.
     ObjC.import("/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework");
-    evidence.stage = "framework-appleevents";
+    phase("framework-appleevents");
     ObjC.import("/System/Library/Frameworks/CoreServices.framework/Frameworks/AE.framework");
-    evidence.stage = "accessibility-query";
+    phase("accessibility-query");
     evidence.accessibilityTrusted = Boolean($.AXIsProcessTrusted());
     if (!evidence.accessibilityTrusted) {
-      evidence.stage = "accessibilityTrusted";
+      phase("accessibilityTrusted");
       return JSON.stringify(evidence);
     }
-    evidence.stage = "system-events-query";
+    phase("system-events-query");
     evidence.systemEventsRunning =
       $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
     if (!evidence.systemEventsRunning) {
-      evidence.stage = "system-events-launch";
+      phase("system-events-launch");
       var configuration = $.NSWorkspaceOpenConfiguration.configuration;
       configuration.activates = false;
       configuration.hides = true;
@@ -42,10 +53,10 @@ function run() {
       }
       if (!evidence.systemEventsRunning) return JSON.stringify(evidence);
     }
-    evidence.stage = "appleevents-target";
+    phase("appleevents-target");
     var target = $.NSAppleEventDescriptor.descriptorWithBundleIdentifier("com.apple.systemevents");
     var address = target.aeDesc;
-    evidence.stage = "appleevents-query";
+    phase("appleevents-query");
     // aeDesc's Ref type differs from AE's BridgeSupport struct type; keep the address opaque.
     ObjC.bindFunction("AEDeterminePermissionToAutomateTarget", [
       "int", ["void *", "unsigned int", "unsigned int", "bool"]
@@ -56,27 +67,27 @@ function run() {
     );
     evidence.appleEventsAllowed = permission === 0;
     if (!evidence.appleEventsAllowed) {
-      evidence.stage = permission === -1744 ? "appleevents-consent-required" : "appleEventsAllowed";
+      phase(permission === -1744 ? "appleevents-consent-required" : "appleEventsAllowed");
       return JSON.stringify(evidence);
     }
-    evidence.stage = "finder-query";
+    phase("finder-query");
     evidence.finderRunning =
       $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.finder").count > 0;
     if (!evidence.finderRunning) {
-      evidence.stage = "finderRunning";
+      phase("finderRunning");
       return JSON.stringify(evidence);
     }
-    evidence.stage = "menu-role-query";
+    phase("menu-role-query");
     var finder = Application("com.apple.systemevents").applicationProcesses.byName("Finder");
     var menu = finder.menuBars.at(0);
     evidence.menuBar = menu.role() === "AXMenuBar";
     if (!evidence.menuBar) {
-      evidence.stage = "menuBar";
+      phase("menuBar");
       return JSON.stringify(evidence);
     }
-    evidence.stage = "menu-count-query";
+    phase("menu-count-query");
     evidence.menuBarElementCount = menu.uiElements.length;
-    evidence.stage = "complete";
+    phase("complete");
   } catch (_) {
     // Never return AppleEvents errors, which can contain UI object descriptions.
   }
@@ -92,6 +103,43 @@ const capabilities = [
   "finderRunning",
   "menuBar",
 ];
+const jxaPhases = new Set([
+  "framework-appkit",
+  "framework-accessibility",
+  "framework-appleevents",
+  "accessibility-query",
+  "accessibilityTrusted",
+  "system-events-query",
+  "system-events-launch",
+  "appleevents-target",
+  "appleevents-query",
+  "appleevents-consent-required",
+  "appleEventsAllowed",
+  "finder-query",
+  "finderRunning",
+  "menu-role-query",
+  "menuBar",
+  "menu-count-query",
+  "complete",
+]);
+const signals = new Set([
+  "SIGABRT",
+  "SIGSEGV",
+  "SIGBUS",
+  "SIGILL",
+  "SIGFPE",
+  "SIGTRAP",
+  "SIGKILL",
+  "SIGTERM",
+  "SIGINT",
+  "SIGHUP",
+  "SIGQUIT",
+  "SIGPIPE",
+  "SIGALRM",
+  "SIGSYS",
+  "SIGXCPU",
+  "SIGXFSZ",
+]);
 const stages = new Set([
   ...capabilities,
   "menuBarElementCount",
@@ -130,6 +178,16 @@ function diagnostic(value, fallback = "worker-exit") {
     value.menuBarElementCount >= 0
   )
     result.menuBarElementCount = value.menuBarElementCount;
+  if (result.stage === "jxa-process" || result.stage === "jxa-timeout") {
+    if (
+      Number.isSafeInteger(value?.jxaStatus) &&
+      value.jxaStatus >= 0 &&
+      value.jxaStatus <= 255
+    )
+      result.jxaStatus = value.jxaStatus;
+    if (signals.has(value?.jxaSignal)) result.jxaSignal = value.jxaSignal;
+    if (jxaPhases.has(value?.jxaPhase)) result.jxaPhase = value.jxaPhase;
+  }
   return result;
 }
 
@@ -181,16 +239,27 @@ export function probeReleaseDesktopWorker({
       timeout: 20000,
       killSignal: "SIGKILL",
       maxBuffer: 4096,
-      stdio: ["pipe", "pipe", "ignore"],
+      stdio: ["pipe", "pipe", "ignore", "pipe"],
     });
   } catch {
     throw failure("jxa-process", { desktopUnlocked: true });
   }
-  if (result.error || result.status !== 0)
+  if (result.error || result.status !== 0) {
+    const trace = result.output?.[3];
+    const jxaPhase =
+      typeof trace === "string" && trace.length <= 4096
+        ? trace.trimEnd().split("\n").at(-1)
+        : undefined;
     throw failure(
       result.error?.code === "ETIMEDOUT" ? "jxa-timeout" : "jxa-process",
-      { desktopUnlocked: true },
+      {
+        desktopUnlocked: true,
+        jxaStatus: result.status,
+        jxaSignal: result.signal,
+        jxaPhase,
+      },
     );
+  }
   let value;
   try {
     value = JSON.parse(result.stdout);

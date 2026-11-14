@@ -26,6 +26,7 @@ function jxa(input, changes = {}) {
   let launched = false;
   let waits = 0;
   let permissionBound = false;
+  const phases = [];
   const address = Object.freeze({ opaqueDescriptor: true });
   const values = {
     trusted: true,
@@ -56,6 +57,29 @@ function jxa(input, changes = {}) {
       },
     },
     $: {
+      NSUTF8StringEncoding: 4,
+      NSString: {
+        stringWithString(value) {
+          return {
+            dataUsingEncoding(encoding) {
+              assert.equal(encoding, 4);
+              return value;
+            },
+          };
+        },
+      },
+      NSFileHandle: {
+        alloc: {
+          initWithFileDescriptor(descriptor) {
+            assert.equal(descriptor, 3);
+            return {
+              writeData(value) {
+                phases.push(value);
+              },
+            };
+          },
+        },
+      },
       AXIsProcessTrusted() {
         calls.push("trust");
         if (values.throwTrust)
@@ -175,7 +199,7 @@ function jxa(input, changes = {}) {
       };
     },
   });
-  return { output, calls };
+  return { output, calls, phases: phases.join("") };
 }
 
 function worker(changes = {}) {
@@ -200,12 +224,16 @@ function worker(changes = {}) {
       assert.equal(options.timeout, 20000);
       assert.equal(options.killSignal, "SIGKILL");
       assert.equal(options.maxBuffer, 4096);
-      assert.deepEqual(options.stdio, ["pipe", "pipe", "ignore"]);
+      assert.deepEqual(options.stdio, ["pipe", "pipe", "ignore", "pipe"]);
       if (changes.processResult) return changes.processResult;
       script = options.input;
       const simulated = jxa(script, changes);
       scriptCalls = simulated.calls;
-      return { status: 0, stdout: simulated.output };
+      return {
+        status: 0,
+        stdout: simulated.output,
+        output: [null, simulated.output, null, simulated.phases],
+      };
     },
   });
   return { result, calls, scriptCalls, script };
@@ -424,6 +452,110 @@ test("failed, timed-out and malformed JXA output cannot expose subprocess diagno
       () => worker({ processResult }),
       atStage(stage, { desktopUnlocked: true }),
     );
+});
+
+test("JXA process failures expose only bounded exit metadata and the last fixed phase", () => {
+  for (const [processResult, metadata] of [
+    [
+      {
+        status: null,
+        signal: "SIGABRT",
+        output: [null, null, null, "framework-appkit\nsystem-events-launch\n"],
+      },
+      { jxaSignal: "SIGABRT", jxaPhase: "system-events-launch" },
+    ],
+    [
+      {
+        status: 1,
+        signal: null,
+        output: [null, null, null, "appleevents-query\n"],
+      },
+      { jxaStatus: 1, jxaPhase: "appleevents-query" },
+    ],
+    [
+      {
+        status: 1.5,
+        signal: "synthetic-private-signal",
+        output: [null, null, null, "synthetic-private-phase\n"],
+      },
+      {},
+    ],
+    [
+      { status: -1, signal: {}, output: [null, null, null, "worker-start\n"] },
+      {},
+    ],
+    [
+      {
+        status: 256,
+        output: [null, null, null, "x".repeat(4097) + "\nframework-appkit\n"],
+      },
+      {},
+    ],
+    [
+      {
+        status: null,
+        error: { code: "ETIMEDOUT" },
+        signal: "SIGKILL",
+        output: [null, null, null, "menu-count-query\n"],
+      },
+      { jxaSignal: "SIGKILL", jxaPhase: "menu-count-query" },
+    ],
+  ]) {
+    assert.throws(
+      () =>
+        worker({
+          processResult: {
+            ...processResult,
+            stdout: "synthetic-private-stdout",
+            stderr: "synthetic-private-stderr",
+            args: ["synthetic-private-argument"],
+            privateProperty: "synthetic-private-value",
+          },
+        }),
+      (error) => {
+        const stage =
+          processResult.error?.code === "ETIMEDOUT"
+            ? "jxa-timeout"
+            : "jxa-process";
+        atStage(stage)(error);
+        assert.deepEqual(error.diagnostic, {
+          stage,
+          desktopUnlocked: true,
+          ...metadata,
+        });
+        return true;
+      },
+    );
+  }
+});
+
+test("phase sidechannel emits static markers without capabilities or UI contents", () => {
+  const { script } = worker();
+  const warm = jxa(script);
+  assert.equal(
+    warm.phases,
+    [
+      "framework-appkit",
+      "framework-accessibility",
+      "framework-appleevents",
+      "accessibility-query",
+      "system-events-query",
+      "appleevents-target",
+      "appleevents-query",
+      "finder-query",
+      "menu-role-query",
+      "menu-count-query",
+      "complete",
+      "",
+    ].join("\n"),
+  );
+  const cold = jxa(script, { systemEvents: false, throwLaunch: true });
+  assert.equal(
+    cold.phases.trimEnd().split("\n").at(-1),
+    "system-events-launch",
+  );
+  assert.ok(Buffer.byteLength(warm.phases) < 4096);
+  assert.ok(Buffer.byteLength(cold.phases) < 4096);
 });
 
 function processFixture() {
@@ -672,6 +804,67 @@ test("worker failure diagnostics survive the CLI protocol without marking denied
     }),
   );
   assert.deepEqual(JSON.parse(report), {
+    stage: "accessibilityTrusted",
+    desktopUnlocked: true,
+    accessibilityTrusted: false,
+  });
+});
+
+test("JXA crash metadata survives the worker protocol but is excluded from capability denials", async () => {
+  let report;
+  await assert.rejects(
+    main(["--worker"], {
+      worker() {
+        return worker({
+          processResult: {
+            status: null,
+            signal: "SIGSEGV",
+            output: [null, null, null, "appleevents-query\n"],
+            stderr: "synthetic-private-stderr",
+          },
+        });
+      },
+      output(value) {
+        report = value;
+      },
+    }),
+    atStage("jxa-process"),
+  );
+  const expected = {
+    stage: "jxa-process",
+    desktopUnlocked: true,
+    jxaSignal: "SIGSEGV",
+    jxaPhase: "appleevents-query",
+  };
+  assert.deepEqual(JSON.parse(report), expected);
+  const fixture = processFixture();
+  const result = probeReleaseDesktop(fixture.options);
+  fixture.child.stdout.emit("data", Buffer.from(report));
+  fixture.child.emit("close", 1);
+  await assert.rejects(result, (error) => {
+    assert.deepEqual(error.diagnostic, expected);
+    return true;
+  });
+  let deniedReport;
+  await assert.rejects(
+    main(["--worker"], {
+      worker() {
+        throw Object.assign(new Error("synthetic-private-error"), {
+          diagnostic: {
+            ...expected,
+            stage: "accessibilityTrusted",
+            accessibilityTrusted: false,
+            jxaStatus: 1,
+          },
+        });
+      },
+      output(value) {
+        deniedReport = value;
+      },
+    }),
+    atStage("accessibilityTrusted"),
+  );
+  assert.deepEqual(JSON.parse(deniedReport), {
     stage: "accessibilityTrusted",
     desktopUnlocked: true,
     accessibilityTrusted: false,
