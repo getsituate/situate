@@ -522,11 +522,31 @@ test("gh boundary uses exact repository API and isolates credentials; publisher 
   });
   await adapter.listReleases("getsituate/situate");
   assert.equal(calls[0].command, "gh");
-  assert(calls[0].args.includes("api.github.com"));
+  assert.equal(
+    calls[0].args[calls[0].args.indexOf("--hostname") + 1],
+    "github.com",
+  );
   assert(calls[0].args.includes("--paginate"));
   assert.equal(calls[0].options.env.SIGNING_KEY, undefined);
   assert.equal(calls[0].options.env.GH_HOST, undefined);
   await assert.rejects(adapter.listReleases("other/repo"));
+  await adapter.uploadAsset(
+    "getsituate/situate",
+    42,
+    "app bundle.tar.gz",
+    Buffer.from("synthetic"),
+  );
+  const upload = calls.at(-1);
+  assert.equal(
+    upload.args[upload.args.indexOf("--hostname") + 1],
+    "github.com",
+  );
+  assert(
+    upload.args.includes(
+      "https://uploads.github.com/repos/getsituate/situate/releases/42/assets?name=app%20bundle.tar.gz",
+    ),
+  );
+  assert.equal(upload.options.input.toString(), "synthetic");
   const count = calls.length;
   await assert.rejects(
     adapter.finalize("getsituate/situate", "../other"),
