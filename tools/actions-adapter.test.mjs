@@ -23,6 +23,36 @@ import {
   imageBuildRequired,
 } from "./actions-adapter.mjs";
 
+test("desktop preflight uses the shared adapter without production credentials", async () => {
+  const evidence = { desktopUnlocked: true, accessibilityTrusted: true };
+  const result = await main(
+    ["desktop"],
+    {
+      ImageOS: "macos26",
+      ImageVersion: "20261101.1",
+      GITHUB_TOKEN: "synthetic-secret",
+      APPLE_API_PRIVATE_KEY: "synthetic-secret",
+    },
+    (command, args, options) => {
+      assert.equal(command, process.execPath);
+      assert(args[0].endsWith("/tools/release-desktop.mjs"));
+      assert.deepEqual(options.env, {
+        ImageOS: "macos26",
+        ImageVersion: "20261101.1",
+      });
+      assert.equal(options.timeout, 30_000);
+      return JSON.stringify(evidence);
+    },
+  );
+  assert.deepEqual(result, evidence);
+  await assert.rejects(
+    main(["desktop"], {}, () => {
+      throw new Error("Synthetic unavailable desktop");
+    }),
+    /Synthetic unavailable desktop/,
+  );
+});
+
 test("tool-image selection ignores unchanged tool inputs and honors an explicit rebuild", () => {
   const pinned = "a".repeat(64);
   assert.equal(imageBuildRequired("push", pinned, pinned), false);

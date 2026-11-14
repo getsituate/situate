@@ -52,8 +52,8 @@ if (
 ) {
   const abort = new AbortController();
   const cancel = () => abort.abort(new Error("Qualification cancelled"));
-  process.once("SIGINT", cancel);
-  process.once("SIGTERM", cancel);
+  process.on("SIGINT", cancel);
+  process.on("SIGTERM", cancel);
   try {
     const { values } = parseArgs({
       options: {

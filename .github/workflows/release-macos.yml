@@ -205,7 +205,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/release-desktop.mjs
+      - run: node tools/actions-adapter.mjs desktop
       - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-native
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow create --lane macos-native
@@ -273,7 +273,7 @@ jobs:
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
       - run: node tools/actions-adapter.mjs release-gate --workflow create
-      - run: node tools/release-desktop.mjs
+      - run: node tools/actions-adapter.mjs desktop
       - run: node tools/actions-adapter.mjs create-prepare
         env:
           SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}

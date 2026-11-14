@@ -924,12 +924,24 @@ if (
         directory: repositoryRoot,
         command: process.execPath,
         args: process.argv.slice(1),
+        cleanupGraceMs: 90_000,
       });
     } else {
-      const result = await main(argv);
-      process.stdout.write(`${JSON.stringify(result)}\n`);
-      if (["failed", "cancelled", "unknown", "not-run"].includes(result.status))
-        process.exitCode = 1;
+      const abort = new AbortController();
+      const cancel = () => abort.abort(new Error("Pipeline cancelled"));
+      process.on("SIGINT", cancel);
+      process.on("SIGTERM", cancel);
+      try {
+        const result = await main(argv, { signal: abort.signal });
+        process.stdout.write(`${JSON.stringify(result)}\n`);
+        if (
+          ["failed", "cancelled", "unknown", "not-run"].includes(result.status)
+        )
+          process.exitCode = 1;
+      } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+      }
     }
   } catch (error) {
     process.stderr.write(`${error.message}\n`);

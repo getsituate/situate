@@ -301,6 +301,19 @@ export async function main(
   const workflow = values.workflow;
   if (!["verify", "create", "publish"].includes(workflow))
     throw new Error("Unknown pipeline workflow.");
+  if (command === "desktop") {
+    return JSON.parse(
+      execute(process.execPath, [join(root, "tools/release-desktop.mjs")], {
+        env: Object.fromEntries(
+          ["ImageOS", "ImageVersion"]
+            .filter((name) => env[name] !== undefined)
+            .map((name) => [name, env[name]]),
+        ),
+        timeout: 30_000,
+        stdio: ["ignore", "pipe", "inherit"],
+      }),
+    );
+  }
   if (command === "release-gate") {
     const { requireProvisioned } = await import("./actions-release.mjs");
     requireProvisioned(env, workflow);

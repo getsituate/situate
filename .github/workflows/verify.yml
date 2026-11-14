@@ -209,7 +209,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/release-desktop.mjs
+      - run: node tools/actions-adapter.mjs desktop
       - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-native
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-native

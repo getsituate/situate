@@ -196,7 +196,7 @@ test("creator and publisher have gated execution paths with signing scoped to bu
     /APPLE_API_|TAURI_SIGNING|GH_TOKEN|SSH_AUTH_SOCK/,
   );
   assert.ok(
-    creator.indexOf("node tools/release-desktop.mjs") <
+    creator.indexOf("node tools/actions-adapter.mjs desktop") <
       creator.indexOf("create-prepare"),
   );
   assert.equal(
