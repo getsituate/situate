@@ -158,6 +158,77 @@ fn held_writer_lock_does_not_block_reads_or_replace_data() {
 
 #[cfg(unix)]
 #[test]
+fn unrelated_fork_does_not_extend_writer_ownership_or_mask_stale_revisions() {
+    use std::io::{Read, Write};
+    use std::os::fd::AsRawFd;
+    use std::os::unix::{net::UnixStream, process::CommandExt};
+    use std::process::Command;
+    use std::time::Duration;
+
+    let root = workspace();
+    let path = root.path().join(".situate/appearance.json");
+    let original = br#"{"version":1,"accent":"cobalt","custom":{"retained":[1,null]}}"#;
+    fs::write(&path, original).unwrap();
+    let store = Storage::open(root.path()).unwrap();
+    let first = store.snapshot().unwrap();
+    let lock = store.lock().unwrap();
+    let (mut parent, child) = UnixStream::pair().unwrap();
+    parent
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    child
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let worker = std::thread::spawn(move || {
+        let fd = child.as_raw_fd();
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", ":"]);
+        // Only async-signal-safe syscalls run between fork and exec.
+        unsafe {
+            command.pre_exec(move || {
+                let mut byte = 1u8;
+                if libc::write(fd, (&byte as *const u8).cast(), 1) != 1
+                    || libc::read(fd, (&mut byte as *mut u8).cast(), 1) != 1
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let result = command.spawn();
+        drop(child);
+        result.unwrap().wait().unwrap()
+    });
+    let mut ready = [0];
+    parent.read_exact(&mut ready).unwrap();
+    let reopened = Storage::open(root.path()).unwrap();
+    let while_owned = reopened.update(Accent::Sky, first.revision.as_deref());
+    let while_owned_bytes = fs::read(&path).unwrap();
+    drop(lock);
+    let stale = reopened.update(Accent::Sky, None);
+    let after_stale_bytes = fs::read(&path).unwrap();
+    let saved = reopened.update(Accent::Lemon, first.revision.as_deref());
+    parent.write_all(&[1]).unwrap();
+    assert!(worker.join().unwrap().success());
+
+    assert_eq!(while_owned.unwrap_err(), "native.appearance.busy");
+    assert_eq!(while_owned_bytes, original);
+    assert_eq!(stale.unwrap_err(), "native.appearance.changed");
+    assert_eq!(after_stale_bytes, original);
+    let saved = saved.unwrap();
+    assert_eq!(saved.accent, Accent::Lemon);
+    assert_ne!(saved.revision, first.revision);
+    assert_eq!(
+        Storage::open(root.path()).unwrap().snapshot().unwrap(),
+        saved
+    );
+    let document: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(document["version"], 1);
+    assert_eq!(document["custom"], json!({"retained": [1, null]}));
+}
+
+#[cfg(unix)]
+#[test]
 fn read_only_directory_and_file_are_read_without_writes() {
     use std::os::unix::fs::PermissionsExt;
     let root = workspace();

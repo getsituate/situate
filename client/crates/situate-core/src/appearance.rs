@@ -1,3 +1,4 @@
+use crate::ai_storage::StorageLock;
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::{
     ambient_authority,
@@ -106,7 +107,7 @@ impl Storage {
         }
         Ok(Some(bytes))
     }
-    fn lock(&self) -> Result<std::fs::File, String> {
+    fn lock(&self) -> Result<StorageLock, String> {
         let mut options = OpenOptions::new();
         options
             .read(true)
@@ -127,7 +128,7 @@ impl Storage {
             return Err(STORAGE.into());
         }
         file.try_lock().map_err(|_| "native.appearance.busy")?;
-        Ok(file)
+        Ok(StorageLock(file))
     }
     pub fn writable(&self) -> bool {
         let directory = self
