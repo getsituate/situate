@@ -230,7 +230,8 @@ window.runPluginRuntimeSmoke = async () => {
         : undefined;
     };
     try {
-      work = service.invoke(stop ? "hang" : "hold", {}).then(
+      const invocation = crypto.randomUUID();
+      work = service.invoke(stop ? "hang" : "hold", { invocation }).then(
         () => ({ completed: true }),
         (error) => ({ completed: false, error }),
       );
@@ -240,13 +241,11 @@ window.runPluginRuntimeSmoke = async () => {
       });
       await wait(
         async () =>
-          (
-            await invoke("plugin_executor", {
-              scope: current.id,
-              request: { operation: "activity" },
-            })
-          ).runningActions > 0,
-        "The native service invocation did not start",
+          (await invoke("smoke_plugin_runtime_source", {
+            scope: current.id,
+            operation: "invocationEntered",
+          })) === invocation,
+        "The native service invocation did not enter its export",
       );
       disabling = runtime.setEnabled("native-counter", false);
       void disabling.catch(() => undefined);
