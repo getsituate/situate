@@ -15,7 +15,8 @@ test("portable checks remain available on both execution hosts without a Linux p
     "dev-tui-unit",
     "dev-tui-format",
     "dev-tui-clippy",
-    "client-browser",
+    "client-browser-chromium",
+    "client-browser-webkit",
     "client-executor-integration",
     "client-agent-runtime",
     "client-migrations",
@@ -142,8 +143,10 @@ test("runtime dependency and browser prerequisites belong to their suite workspa
   for (const id of ["runner-unit", "runner-integration"])
     assert.equal(find(id).npm, ".", id);
   for (const [id, workspace, browsers] of [
-    ["client-browser", "client", ["chromium", "webkit"]],
+    ["client-browser-chromium", "client", ["chromium"]],
+    ["client-browser-webkit", "client", ["webkit"]],
     ["client-executor-integration", "client", ["chromium"]],
+    ["client-visual", "client", ["chromium"]],
     ["requirements-browser", "requirements", ["chromium"]],
   ]) {
     assert.equal(find(id).npm, workspace, id);
@@ -155,6 +158,31 @@ test("runtime dependency and browser prerequisites belong to their suite workspa
         .browsers,
       ["chromium"],
     );
+});
+
+test("product browser engines run the same flows with independent deadlines", () => {
+  const chromium = find("client-browser-chromium");
+  const webkit = find("client-browser-webkit");
+  assert.deepEqual(chromium.covers, webkit.covers);
+  for (const engine of ["chromium", "webkit"]) {
+    const suite = find(`client-browser-${engine}`);
+    assert.equal(suite.args[suite.args.indexOf("--project") + 1], engine);
+    assert.equal(
+      suite.args[suite.args.indexOf("--output") + 1],
+      `test-results/browser/${engine}`,
+    );
+    assert.equal(suite.cwd, "client");
+    assert.equal(suite.kind, "browser");
+  }
+  const lane = planPaths(["client/app/src/App.vue"]).lanes.find(
+    (lane) => lane.id === "browser",
+  );
+  assert.deepEqual(lane.suites, [
+    "client-executor-integration",
+    "client-browser-chromium",
+    "client-browser-webkit",
+  ]);
+  assert.equal(lane.timeoutSeconds, 1800);
 });
 
 test("Swift static policy is Linux-hosted without selecting product execution", () => {
@@ -178,7 +206,8 @@ test("Docker integration is isolated from container-executed tooling", () => {
   for (const id of docker.suites)
     assert.equal(suiteExecution(find(id)), "host-docker");
   assert.equal(suiteExecution(find("client-native")), "native");
-  assert.equal(suiteExecution(find("client-browser")), "container");
+  for (const engine of ["chromium", "webkit"])
+    assert.equal(suiteExecution(find(`client-browser-${engine}`)), "container");
   assert.deepEqual(docker.suites, [
     "client-docker-context",
     "design-website-hosting",

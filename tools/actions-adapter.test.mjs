@@ -48,7 +48,8 @@ test("optional diagnostics separate portable coverage, native coverage and Docke
   );
   for (const id of [
     "root-swift",
-    "client-browser",
+    "client-browser-chromium",
+    "client-browser-webkit",
     "client-core",
     "dev-tui-unit",
   ])

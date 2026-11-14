@@ -92,7 +92,8 @@ test("release source gates are complete, unique and exclude diagnostics and advi
   const ids = suites(plan);
   assert.equal(ids.length, new Set(ids).size);
   for (const id of [
-    "client-browser",
+    "client-browser-chromium",
+    "client-browser-webkit",
     "client-native",
     "client-agent-e2e",
     "client-migrations",

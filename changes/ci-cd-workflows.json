@@ -1,26 +1,63 @@
 {
   "schemaVersion": 1,
   "id": "ci-cd-workflows",
-  "behaviorDigest": "d6148e3fbf57aa0817e994b421183854d4ac2c4f6ad93534ee87107f1a4910e9",
+  "behaviorDigest": "eb84ea5ee07ea2d5b1a81c933c82a1664670185bd1cd50242b6f36c2bdb00acd",
   "locales": {
     "en": {
       "title": "Changes",
-      "entries": []
+      "entries": [
+        {
+          "id": "chat-layout",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Chat display",
+          "paragraphs": [
+            "Chat text wraps consistently. Resizing the chat pane preserves the reading position more accurately."
+          ]
+        },
+        {
+          "id": "appearance-locks",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Appearance settings",
+          "paragraphs": [
+            "Fixed a case where an unrelated background process temporarily blocked changes to appearance settings."
+          ]
+        }
+      ]
     },
     "de": {
       "title": "Änderungen",
-      "entries": []
+      "entries": [
+        {
+          "id": "chat-layout",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Chatdarstellung",
+          "paragraphs": [
+            "Chattexte werden einheitlich umgebrochen. Beim Vergrößern oder Verkleinern des Chatbereichs bleibt die Leseposition genauer erhalten."
+          ]
+        },
+        {
+          "id": "appearance-locks",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Erscheinungsbild",
+          "paragraphs": [
+            "Ein Fehler wurde behoben, durch den ein unbeteiligter Hintergrundprozess Änderungen am Erscheinungsbild vorübergehend blockieren konnte."
+          ]
+        }
+      ]
     }
   },
-  "emptyReason": "Delivery automation and verification tooling; no application-facing release notes.",
   "translationApprovals": {
     "de": {
-      "sourceHash": "613ae78d90ad6013d1cd10c2e282714d5d7c080de01dc332d9be86c331a9d29e",
-      "translationHash": "7031877b3ba6aef8799586954577ea7d79ec65b7d86120b0e16cb826f384bcbd"
+      "sourceHash": "2a1d1303de5af7fc61ea6541f8887398405e12e115bb526e9c0d7451cbc8fba2",
+      "translationHash": "ba44531a0071855c4defe278bc18262bdc89dcf84a382af2eeaac91cda47348a"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "613ae78d90ad6013d1cd10c2e282714d5d7c080de01dc332d9be86c331a9d29e"
+    "sourceHash": "2a1d1303de5af7fc61ea6541f8887398405e12e115bb526e9c0d7451cbc8fba2"
   }
 }

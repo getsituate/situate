@@ -157,7 +157,7 @@ const portable = [
   { id: "root-swift", command: "npm", args: ["run", "quality:swift"] },
   { id: "client-format", command: "cargo", args: ["fmt"] },
   {
-    id: "client-browser",
+    id: "client-browser-chromium",
     kind: "browser",
     command: "node",
     args: ["playwright"],

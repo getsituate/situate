@@ -461,21 +461,26 @@ export function suiteInventory(files, host = process.platform) {
     "-D",
     "warnings",
   ]);
-  add(
-    "client-browser",
-    "client",
-    "browser",
-    "client",
-    process.execPath,
-    [
-      "node_modules/@playwright/test/cli.js",
-      "test",
-      "--forbid-only",
-      "--config",
-      "app/playwright.config.ts",
-    ],
-    matching(/^client\/app\/tests\/browser\/.*\.(test|spec)\.[cm]?[jt]s$/),
-  );
+  for (const engine of ["chromium", "webkit"])
+    add(
+      `client-browser-${engine}`,
+      "client",
+      "browser",
+      "client",
+      process.execPath,
+      [
+        "node_modules/@playwright/test/cli.js",
+        "test",
+        "--forbid-only",
+        "--config",
+        "app/playwright.config.ts",
+        "--project",
+        engine,
+        "--output",
+        `test-results/browser/${engine}`,
+      ],
+      matching(/^client\/app\/tests\/browser\/.*\.(test|spec)\.[cm]?[jt]s$/),
+    );
   add(
     "client-visual",
     "client",
@@ -697,7 +702,9 @@ export function suiteInventory(files, host = process.platform) {
         "client-vue",
         "client-executor-integration",
         "client-types",
-        "client-browser",
+        "client-browser-chromium",
+        "client-browser-webkit",
+        "client-visual",
         "client-visual-fixture",
         "client-native",
         "client-agent-e2e",
@@ -712,9 +719,14 @@ export function suiteInventory(files, host = process.platform) {
     )
       suite.npm = "client";
     if (suite.project === "requirements") suite.npm = "requirements";
-    if (suite.id === "client-browser") suite.browsers = ["chromium", "webkit"];
+    if (suite.id.startsWith("client-browser-"))
+      suite.browsers = [suite.id.slice("client-browser-".length)];
     if (
-      ["client-executor-integration", "requirements-browser"].includes(suite.id)
+      [
+        "client-executor-integration",
+        "client-visual",
+        "requirements-browser",
+      ].includes(suite.id)
     )
       suite.browsers = ["chromium"];
   }
@@ -1015,7 +1027,7 @@ export function executeSuite(
     const leased =
       buildLease && needsBuildLease(suite) && process.platform !== "win32";
     const suiteArgs =
-      suite.id === "client-browser" &&
+      suite.id?.startsWith("client-browser-") &&
       suite.args.some((arg) => arg.includes("@playwright/test/cli.js")) &&
       !suite.args.includes("--workers")
         ? [

@@ -87,7 +87,15 @@ const families = [
       "client-workspace-access-swift",
     ],
   ],
-  ["browser", "linux", ["client-browser", "client-executor-integration"]],
+  [
+    "browser",
+    "linux",
+    [
+      "client-browser-chromium",
+      "client-browser-webkit",
+      "client-executor-integration",
+    ],
+  ],
   [
     "macos-native",
     "macos",

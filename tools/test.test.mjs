@@ -176,7 +176,8 @@ test("supported selection separates diagnostics from unavailable native hosts", 
       "root-secrets",
       "root-rust",
       "root-swift",
-      "client-browser",
+      "client-browser-chromium",
+      "client-browser-webkit",
       "client-executor-integration",
       "client-agent-runtime",
       "client-migrations",
@@ -1777,6 +1778,14 @@ test("cancellation marks remaining suites not-run instead of passed", async () =
   );
 });
 
+test("dependency setup commands execute without suite identity", async () => {
+  const suite = command("dependency", "process.exit(0)");
+  delete suite.id;
+  const result = await executeSuite(suite, { output: silent() });
+  assert.equal(result.status, "passed");
+  assert.equal(result.exitCode, 0);
+});
+
 test("subprocess failures and missing executables return failure results", async () => {
   const result = await executeSuite(command("exit", "process.exit(7)"), {
     output: silent(),
@@ -1910,7 +1919,8 @@ test("only npm-dependent suites request workspace setup", () => {
     "client-scripts-unit",
     "client-vue",
     "client-types",
-    "client-browser",
+    "client-browser-chromium",
+    "client-browser-webkit",
     "client-visual-fixture",
     "client-native",
     "client-scripts-integration",

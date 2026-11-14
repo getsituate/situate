@@ -97,10 +97,12 @@ test("visual screens are opt-in and never added to MVP or unit runs", () => {
   assert.ok(
     suite.covers.includes("client/app/tests/browser/workspaces-layout.spec.ts"),
   );
-  assert.deepEqual(
-    suite.covers,
-    suiteInventory(files).find(({ id }) => id === "client-browser").covers,
-  );
+  for (const engine of ["chromium", "webkit"])
+    assert.deepEqual(
+      suite.covers,
+      suiteInventory(files).find(({ id }) => id === `client-browser-${engine}`)
+        .covers,
+    );
   assert.ok(
     createPlan({ extended: true }, root).suites.some(
       ({ id }) => id === "client-visual",
