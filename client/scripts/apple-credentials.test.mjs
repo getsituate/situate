@@ -28,6 +28,7 @@ import {
   readAppleEnv,
   withAppleCredentials,
   withSigningKeychain,
+  withSigningCertificate,
 } from "./apple-credentials.mjs";
 
 const { privateKey } = generateKeyPairSync("ec", {
@@ -129,9 +130,13 @@ test("rejects insecure permissions, links and oversized credential files", (t) =
       if (kind === "symlink") symlinkSync(target, path);
       else linkSync(target, path);
     } else
-      writeFileSync(path, kind === "size" ? "x".repeat(65537) : dotenv(), {
-        mode: kind === "permissions" ? 0o644 : 0o600,
-      });
+      writeFileSync(
+        path,
+        kind === "size" ? "x".repeat(2 * 1024 * 1024 + 1) : dotenv(),
+        {
+          mode: kind === "permissions" ? 0o644 : 0o600,
+        },
+      );
     assert.throws(() => readAppleEnv(root), /owned, private regular file/);
   }
 });
@@ -393,6 +398,401 @@ test("numeric App ID is required only when uploading", async (t) => {
     ),
     /APPLE_APP_ID/,
   );
+});
+
+const signingBytes = Buffer.from([0, 255, 1, 2, 128, 64]);
+const signingCredentials = {
+  APPLE_DEVELOPER_ID_P12_BASE64: signingBytes.toString("base64"),
+  APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-password",
+};
+
+test("local and CI certificates prepare identical private bytes and retain only caller configuration", async (t) => {
+  const { root, path } = fixture(
+    t,
+    dotenv({ ...signingCredentials, UNRELATED_SECRET: "excluded" }),
+  );
+  for (const environment of [
+    { KEEP: "caller" },
+    { ...signingCredentials, KEEP: "caller" },
+    { ...signingCredentials, CI: "true", KEEP: "caller" },
+  ]) {
+    if (environment.APPLE_DEVELOPER_ID_P12_BASE64) chmodSync(path, 0o644);
+    let certificate;
+    const result = await withSigningCertificate(
+      { root, environment },
+      async (prepared) => {
+        certificate = prepared.APPLE_DEVELOPER_ID_P12_FILE;
+        assert.deepEqual(readFileSync(certificate), signingBytes);
+        assert.equal(lstatSync(certificate).mode & 0o777, 0o600);
+        assert.equal(lstatSync(join(certificate, "..")).mode & 0o777, 0o700);
+        assert.deepEqual(prepared, {
+          KEEP: "caller",
+          ...(environment.CI ? { CI: "true" } : {}),
+          APPLE_DEVELOPER_ID_P12_FILE: certificate,
+          APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-password",
+        });
+        return "used";
+      },
+    );
+    assert.equal(result, "used");
+    assert.ok(!existsSync(join(certificate, "..")));
+    assert.equal(environment.APPLE_DEVELOPER_ID_P12_FILE, undefined);
+  }
+});
+
+test("certificate aliases use a single authoritative layer, including explicit empty values", async (t) => {
+  const { root, directory, path } = fixture(t);
+  const legacy = join(directory, "legacy.p12");
+  writeFileSync(legacy, "legacy bytes", { mode: 0o600 });
+  writeFileSync(
+    path,
+    dotenv({
+      APPLE_DEVELOPER_ID_P12_FILE: legacy,
+      APPLE_DEVELOPER_ID_P12_PASSWORD: "local-password",
+    }),
+    { mode: 0o600 },
+  );
+  await withSigningCertificate(
+    {
+      root,
+      environment: {
+        APPLE_DEVELOPER_ID_P12_BASE64:
+          signingCredentials.APPLE_DEVELOPER_ID_P12_BASE64,
+        APPLE_DEVELOPER_ID_P12_PASSWORD: "",
+      },
+    },
+    async (prepared) => {
+      assert.deepEqual(
+        readFileSync(prepared.APPLE_DEVELOPER_ID_P12_FILE),
+        signingBytes,
+      );
+      assert.equal(prepared.APPLE_DEVELOPER_ID_P12_PASSWORD, "");
+    },
+  );
+  await withSigningCertificate(
+    {
+      root,
+      environment: {
+        APPLE_DEVELOPER_ID_P12_BASE64:
+          signingCredentials.APPLE_DEVELOPER_ID_P12_BASE64,
+      },
+    },
+    async (prepared) =>
+      assert.equal(prepared.APPLE_DEVELOPER_ID_P12_PASSWORD, "local-password"),
+  );
+  for (const alias of [
+    "APPLE_DEVELOPER_ID_P12_BASE64",
+    "APPLE_DEVELOPER_ID_P12_FILE",
+  ]) {
+    await assert.rejects(
+      withSigningCertificate({ root, environment: { [alias]: "" } }, () =>
+        assert.fail("empty aliases must not fall back"),
+      ),
+      /Signing requires/,
+    );
+  }
+  writeFileSync(path, dotenv(signingCredentials));
+  await withSigningCertificate(
+    { root, environment: { APPLE_DEVELOPER_ID_P12_FILE: legacy } },
+    async (prepared) => {
+      assert.equal(prepared.APPLE_DEVELOPER_ID_P12_FILE, legacy);
+      assert.equal(readFileSync(legacy, "utf8"), "legacy bytes");
+    },
+  );
+  assert.ok(existsSync(legacy));
+});
+
+test("missing, malformed, oversized and ambiguous certificate inputs fail before effects without secret diagnostics", async (t) => {
+  const { root } = fixture(t, dotenv(signingCredentials));
+  const invalid = [
+    { CI: "true" },
+    { APPLE_DEVELOPER_ID_P12_BASE64: "" },
+    ...[
+      "private!",
+      "Zg",
+      "Zh==",
+      "Zg==\n",
+      "Zg===",
+      "-_==",
+      Buffer.alloc(1024 * 1024 + 1).toString("base64"),
+    ].map((value) => ({ APPLE_DEVELOPER_ID_P12_BASE64: value })),
+    { ...signingCredentials, APPLE_DEVELOPER_ID_P12_FILE: "private-file" },
+    { APPLE_DEVELOPER_ID_P12_FILE: "private-missing-file" },
+  ];
+  const calls = [];
+  const mocked = t.mock.method(fs, "mkdtempSync", () => {
+    calls.push("temporary directory");
+    assert.fail("invalid inputs must not create files");
+  });
+  syncBuiltinESMExports();
+  try {
+    for (const input of invalid) {
+      await assert.rejects(
+        withSigningKeychain(
+          {
+            root,
+            environment: {
+              APPLE_DEVELOPER_ID_P12_PASSWORD: "private-password",
+              ...input,
+            },
+            execute: async () => calls.push("security"),
+          },
+          () => calls.push("callback"),
+        ),
+        (error) => {
+          assert.doesNotMatch(
+            error.message,
+            /private!|private-file|private-missing-file|private-password/,
+          );
+          return true;
+        },
+      );
+    }
+    assert.deepEqual(calls, []);
+  } finally {
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+  }
+});
+
+test("ambiguous local aliases are rejected but ignored when environment supplies the certificate", async (t) => {
+  const { root } = fixture(
+    t,
+    dotenv({
+      ...signingCredentials,
+      APPLE_DEVELOPER_ID_P12_FILE: "synthetic-file",
+    }),
+  );
+  await assert.rejects(
+    withSigningCertificate({ root, environment: {} }, () =>
+      assert.fail("ambiguous"),
+    ),
+    /Set only one/,
+  );
+  await withSigningCertificate(
+    {
+      root,
+      environment: {
+        APPLE_DEVELOPER_ID_P12_BASE64:
+          signingCredentials.APPLE_DEVELOPER_ID_P12_BASE64,
+      },
+    },
+    async (prepared) => {
+      assert.deepEqual(
+        readFileSync(prepared.APPLE_DEVELOPER_ID_P12_FILE),
+        signingBytes,
+      );
+    },
+  );
+});
+
+test("the maximum certificate payload fits the bounded local dotenv reader", async (t) => {
+  const bytes = Buffer.alloc(1024 * 1024, 42);
+  const { root } = fixture(
+    t,
+    dotenv({
+      ...signingCredentials,
+      APPLE_DEVELOPER_ID_P12_BASE64: bytes.toString("base64"),
+      OTHER_CONFIG: "x".repeat(65536),
+    }),
+  );
+  await withSigningCertificate({ root, environment: {} }, async (prepared) => {
+    assert.deepEqual(readFileSync(prepared.APPLE_DEVELOPER_ID_P12_FILE), bytes);
+  });
+});
+
+test("materialized certificates are cleaned on callback and write failures", async (t) => {
+  const { root } = fixture(t);
+  let certificate;
+  const failure = new Error("synthetic callback failure");
+  await assert.rejects(
+    withSigningCertificate(
+      { root, environment: signingCredentials },
+      async (prepared) => {
+        certificate = prepared.APPLE_DEVELOPER_ID_P12_FILE;
+        throw failure;
+      },
+    ),
+    (error) => error === failure,
+  );
+  assert.ok(!existsSync(join(certificate, "..")));
+  const mocked = t.mock.method(fs, "writeFileSync", (path, _bytes, options) => {
+    certificate = path;
+    assert.deepEqual(options, { flag: "wx", mode: 0o600 });
+    throw new Error("private write diagnostics");
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      withSigningCertificate({ root, environment: signingCredentials }, () =>
+        assert.fail("write failed"),
+      ),
+      { message: "Temporary Developer ID certificate preparation failed." },
+    );
+    assert.ok(!existsSync(join(certificate, "..")));
+  } finally {
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+  }
+});
+
+test("certificate cleanup failure is sanitized and never reported as success", async (t) => {
+  const { root } = fixture(t);
+  let certificate;
+  const mocked = t.mock.method(fs, "rmSync", () => {
+    throw new Error("private cleanup diagnostics");
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      withSigningCertificate(
+        { root, environment: signingCredentials },
+        async (prepared) => {
+          certificate = prepared.APPLE_DEVELOPER_ID_P12_FILE;
+          return "built";
+        },
+      ),
+      { message: "Temporary Developer ID certificate cleanup failed." },
+    );
+  } finally {
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+    if (certificate)
+      rmSync(join(certificate, ".."), { recursive: true, force: true });
+  }
+});
+
+test("legacy certificate privacy checks and user-file lifetime are preserved", async (t) => {
+  for (const kind of [
+    "regular",
+    "permissions",
+    "symlink",
+    "hardlink",
+    "directory",
+    "owner",
+  ]) {
+    const { root, directory } = fixture(t);
+    const certificate = join(directory, "certificate.p12");
+    const target = join(directory, "target.p12");
+    writeFileSync(target, signingBytes, { mode: 0o600 });
+    if (kind === "symlink") symlinkSync(target, certificate);
+    else if (kind === "hardlink") linkSync(target, certificate);
+    else if (kind === "directory") mkdirSync(certificate);
+    else
+      writeFileSync(certificate, signingBytes, {
+        mode: kind === "permissions" ? 0o644 : 0o600,
+      });
+    let mocked;
+    if (kind === "owner") {
+      const original = fs.lstatSync;
+      mocked = t.mock.method(fs, "lstatSync", (...args) => {
+        const stat = original(...args);
+        stat.uid = process.getuid() + 1;
+        return stat;
+      });
+      syncBuiltinESMExports();
+    }
+    try {
+      const operation = withSigningCertificate(
+        {
+          root,
+          environment: {
+            APPLE_DEVELOPER_ID_P12_FILE: certificate,
+            APPLE_DEVELOPER_ID_P12_PASSWORD: "",
+          },
+        },
+        async (prepared) => {
+          assert.equal(prepared.APPLE_DEVELOPER_ID_P12_FILE, certificate);
+          throw new Error("callback failure");
+        },
+      );
+      await assert.rejects(
+        operation,
+        kind === "regular" ? /callback failure/ : /owned private regular file/,
+      );
+      assert.ok(existsSync(certificate));
+    } finally {
+      mocked?.mock.restore();
+      syncBuiltinESMExports();
+    }
+  }
+});
+
+test("keychain uses the shared materialized certificate and does not decode it again", async (t) => {
+  const { root } = fixture(t);
+  let certificate;
+  await withSigningCertificate(
+    {
+      root,
+      environment: {
+        ...signingCredentials,
+        CI: "true",
+        OTHER_SECRET: "excluded",
+      },
+    },
+    async (environment) => {
+      certificate = environment.APPLE_DEVELOPER_ID_P12_FILE;
+      await withSigningKeychain(
+        {
+          root,
+          environment,
+          execute: async (_command, args, options) => {
+            assert.deepEqual(options.env, {});
+            if (args[0] === "import") {
+              assert.equal(args[1], certificate);
+              assert.deepEqual(readFileSync(args[1]), signingBytes);
+            }
+          },
+        },
+        async () => "built",
+      );
+      assert.ok(existsSync(certificate));
+    },
+  );
+  assert.ok(!existsSync(certificate));
+  await withSigningKeychain(
+    {
+      root,
+      environment: signingCredentials,
+      execute: async (_command, args) => {
+        if (args[0] === "import") {
+          certificate = args[1];
+          assert.deepEqual(readFileSync(certificate), signingBytes);
+        }
+      },
+    },
+    async () => "built",
+  );
+  assert.ok(!existsSync(certificate));
+});
+
+test("keychain cleanup failure still removes the materialized certificate", async (t) => {
+  const { root } = fixture(t);
+  let certificate;
+  let keychain;
+  try {
+    await assert.rejects(
+      withSigningKeychain(
+        {
+          root,
+          environment: signingCredentials,
+          execute: async (_command, args) => {
+            if (args[0] === "import") certificate = args[1];
+            if (args[0] === "delete-keychain") {
+              keychain = args[1];
+              throw new Error("synthetic cleanup failure");
+            }
+          },
+        },
+        async () => "built",
+      ),
+      /keychain cleanup failed/,
+    );
+    assert.ok(!existsSync(certificate));
+  } finally {
+    if (keychain)
+      rmSync(join(keychain, ".."), { recursive: true, force: true });
+  }
 });
 
 test("Developer ID import is isolated, operation-scoped and cleaned after callback failure", async (t) => {

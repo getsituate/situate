@@ -21,7 +21,13 @@ const names = [
   "APPLE_API_PRIVATE_KEY",
   "APPLE_APP_ID",
 ];
-const maximumBytes = 65536;
+const maximumBytes = 2 * 1024 * 1024;
+const maximumCertificateBytes = 1024 * 1024;
+const certificateNames = [
+  "APPLE_DEVELOPER_ID_P12_BASE64",
+  "APPLE_DEVELOPER_ID_P12_FILE",
+  "APPLE_DEVELOPER_ID_P12_PASSWORD",
+];
 
 function validateEnvFile(stat) {
   if (
@@ -33,7 +39,7 @@ function validateEnvFile(stat) {
       ((stat.mode & 0o7777) !== 0o600 || stat.uid !== process.getuid()))
   )
     throw new Error(
-      "Repository-root .env must be an owned, private regular file (chmod 600), without links, no larger than 64 KiB.",
+      "Repository-root .env must be an owned, private regular file (chmod 600), without links, no larger than 2 MiB.",
     );
 }
 
@@ -188,42 +194,113 @@ export async function withAppleCredentials(
   }
 }
 
-export async function withSigningKeychain(
-  { root, environment = process.env, execute = run, signal },
+export async function withSigningCertificate(
+  { root, environment = process.env },
   use,
 ) {
-  const names = [
-    "APPLE_DEVELOPER_ID_P12_FILE",
-    "APPLE_DEVELOPER_ID_P12_PASSWORD",
-  ];
+  const [base64Name, fileName, passwordName] = certificateNames;
+  const hasCertificate = [base64Name, fileName].some((name) =>
+    Object.hasOwn(environment, name),
+  );
   const local =
     environment.CI === "true" ||
-    names.every((name) => Object.hasOwn(environment, name))
+    (hasCertificate && Object.hasOwn(environment, passwordName))
       ? {}
-      : readAppleEnv(root, names);
-  const values = Object.fromEntries(
-    names.map((name) => [
-      name,
-      Object.hasOwn(environment, name) ? environment[name] : local[name],
-    ]),
+      : readAppleEnv(root, certificateNames);
+  const source = hasCertificate ? environment : local;
+  const encoded = source[base64Name];
+  let certificate = source[fileName];
+  const password = Object.hasOwn(environment, passwordName)
+    ? environment[passwordName]
+    : local[passwordName];
+  if (encoded && certificate)
+    throw new Error(
+      "Set only one of APPLE_DEVELOPER_ID_P12_BASE64 or APPLE_DEVELOPER_ID_P12_FILE.",
+    );
+  if ((!encoded && !certificate) || typeof password !== "string")
+    throw new Error(
+      "Signing requires APPLE_DEVELOPER_ID_P12_BASE64 or APPLE_DEVELOPER_ID_P12_FILE, and APPLE_DEVELOPER_ID_P12_PASSWORD.",
+    );
+  let bytes;
+  if (encoded) {
+    if (
+      typeof encoded !== "string" ||
+      encoded.length > 4 * Math.ceil(maximumCertificateBytes / 3) ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+        encoded,
+      )
+    )
+      throw new Error(
+        "APPLE_DEVELOPER_ID_P12_BASE64 must be canonical base64 containing 1 byte to 1 MiB.",
+      );
+    bytes = Buffer.from(encoded, "base64");
+    if (
+      !bytes.length ||
+      bytes.length > maximumCertificateBytes ||
+      bytes.toString("base64") !== encoded
+    )
+      throw new Error(
+        "APPLE_DEVELOPER_ID_P12_BASE64 must be canonical base64 containing 1 byte to 1 MiB.",
+      );
+  } else {
+    let valid = false;
+    try {
+      const stat = lstatSync(certificate);
+      valid =
+        stat.isFile() &&
+        !stat.isSymbolicLink() &&
+        stat.nlink === 1 &&
+        (typeof process.getuid !== "function" ||
+          (stat.uid === process.getuid() && (stat.mode & 0o077) === 0));
+    } catch {}
+    if (!valid)
+      throw new Error(
+        "Developer ID certificate must be an owned private regular file without links.",
+      );
+  }
+  let directory;
+  try {
+    if (bytes) {
+      try {
+        directory = mkdtempSync(join(tmpdir(), "situate-certificate-"));
+        certificate = join(directory, "developer-id.p12");
+        writeFileSync(certificate, bytes, { flag: "wx", mode: 0o600 });
+      } catch {
+        throw new Error(
+          "Temporary Developer ID certificate preparation failed.",
+        );
+      }
+    }
+    const prepared = {
+      ...environment,
+      [fileName]: certificate,
+      [passwordName]: password,
+    };
+    delete prepared[base64Name];
+    return await use(prepared);
+  } finally {
+    if (directory) {
+      try {
+        rmSync(directory, { recursive: true, force: true });
+      } catch {
+        throw new Error("Temporary Developer ID certificate cleanup failed.");
+      }
+    }
+  }
+}
+
+export async function withSigningKeychain(options, use) {
+  return withSigningCertificate(options, (environment) =>
+    withPreparedSigningKeychain({ ...options, environment }, use),
   );
-  const certificate = values.APPLE_DEVELOPER_ID_P12_FILE;
-  const certificatePassword = values.APPLE_DEVELOPER_ID_P12_PASSWORD;
-  if (!certificate || typeof certificatePassword !== "string")
-    throw new Error(
-      "Signing requires APPLE_DEVELOPER_ID_P12_FILE and APPLE_DEVELOPER_ID_P12_PASSWORD for an isolated temporary keychain.",
-    );
-  const stat = lstatSync(certificate);
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    stat.nlink !== 1 ||
-    (typeof process.getuid === "function" &&
-      (stat.uid !== process.getuid() || (stat.mode & 0o077) !== 0))
-  )
-    throw new Error(
-      "Developer ID certificate must be an owned private regular file without links.",
-    );
+}
+
+async function withPreparedSigningKeychain(
+  { environment, execute = run, signal },
+  use,
+) {
+  const certificate = environment.APPLE_DEVELOPER_ID_P12_FILE;
+  const certificatePassword = environment.APPLE_DEVELOPER_ID_P12_PASSWORD;
   const directory = mkdtempSync(join(tmpdir(), "situate-signing-"));
   const keychain = join(directory, "signing.keychain-db");
   const password = randomBytes(32).toString("hex");
