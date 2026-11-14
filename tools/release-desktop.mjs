@@ -5,8 +5,9 @@ import { resolve } from "node:path";
 import { nativeDesktopIssue } from "../client/scripts/native-desktop-session.mjs";
 
 const script = `
-function run() {
-  var evidence = { stage: "framework-appkit" };
+function run(args) {
+  var operation = args[0];
+  var evidence = { stage: "framework-foundation" };
   var phaseOutput;
   // Use a separate pipe for fixed phases; stderr may contain UI descriptions.
   function phase(value) {
@@ -18,13 +19,13 @@ function run() {
   try {
     ObjC.import("Foundation");
     phaseOutput = $.NSFileHandle.alloc.initWithFileDescriptor(3);
+    phase("framework-foundation");
+    if (operation !== "bootstrap" && operation !== "inspect")
+      return JSON.stringify(evidence);
     phase("framework-appkit");
     ObjC.import("AppKit");
     phase("framework-accessibility");
-    // The C function signatures live in the subframeworks' BridgeSupport metadata.
     ObjC.import("/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework");
-    phase("framework-appleevents");
-    ObjC.import("/System/Library/Frameworks/CoreServices.framework/Frameworks/AE.framework");
     phase("accessibility-query");
     evidence.accessibilityTrusted = Boolean($.AXIsProcessTrusted());
     if (!evidence.accessibilityTrusted) {
@@ -35,6 +36,10 @@ function run() {
     evidence.systemEventsRunning =
       $.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.systemevents").count > 0;
     if (!evidence.systemEventsRunning) {
+      if (operation !== "bootstrap") {
+        phase("systemEventsRunning");
+        return JSON.stringify(evidence);
+      }
       phase("system-events-launch");
       var configuration = $.NSWorkspaceOpenConfiguration.configuration;
       configuration.activates = false;
@@ -53,6 +58,12 @@ function run() {
       }
       if (!evidence.systemEventsRunning) return JSON.stringify(evidence);
     }
+    if (operation === "bootstrap") {
+      phase("complete");
+      return JSON.stringify(evidence);
+    }
+    phase("framework-appleevents");
+    ObjC.import("/System/Library/Frameworks/CoreServices.framework/Frameworks/AE.framework");
     phase("appleevents-target");
     ObjC.bindFunction("calloc", ["void *", ["unsigned long", "unsigned long"]]);
     ObjC.bindFunction("free", ["void", ["void *"]]);
@@ -74,7 +85,7 @@ function run() {
       ObjC.bindFunction("AEDeterminePermissionToAutomateTarget", [
         "int", ["void *", "unsigned int", "unsigned int", "bool"]
       ]);
-      // typeWildCard ('****') covers the reads below; false forbids consent prompts.
+      // typeWildCard ('****'); askUserIfNeeded=false forbids consent prompts.
       permission = $.AEDeterminePermissionToAutomateTarget(
         address, 0x2a2a2a2a, 0x2a2a2a2a, false
       );
@@ -129,6 +140,7 @@ const capabilities = [
   "menuBar",
 ];
 const jxaPhases = new Set([
+  "framework-foundation",
   "framework-appkit",
   "framework-accessibility",
   "framework-appleevents",
@@ -174,6 +186,7 @@ const stages = new Set([
   "platform",
   "desktop-session-locked",
   "desktop-session-unavailable",
+  "framework-foundation",
   "framework-appkit",
   "framework-accessibility",
   "framework-appleevents",
@@ -230,18 +243,20 @@ function failure(stage, evidence) {
   );
 }
 
-function verifiedEvidence(value) {
+function verifiedEvidence(value, required = capabilities) {
   const evidence = {};
-  for (const key of capabilities) {
+  for (const key of required) {
     if (value?.[key] !== true) throw failure(key, value);
     evidence[key] = true;
   }
-  if (
-    !Number.isSafeInteger(value.menuBarElementCount) ||
-    value.menuBarElementCount <= 0
-  )
-    throw failure("menuBarElementCount", value);
-  evidence.menuBarElementCount = value.menuBarElementCount;
+  if (required.includes("menuBar")) {
+    if (
+      !Number.isSafeInteger(value.menuBarElementCount) ||
+      value.menuBarElementCount <= 0
+    )
+      throw failure("menuBarElementCount", value);
+    evidence.menuBarElementCount = value.menuBarElementCount;
+  }
   return evidence;
 }
 
@@ -249,6 +264,7 @@ export function probeReleaseDesktopWorker({
   platform = process.platform,
   architecture = process.arch,
   probe = spawnSync,
+  now = () => performance.now(),
 } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(architecture))
     throw failure("platform");
@@ -263,43 +279,62 @@ export function probeReleaseDesktopWorker({
       stages.has(desktopIssue) ? desktopIssue : "desktop-session-unavailable",
       { desktopUnlocked: false },
     );
-  let result;
-  try {
-    result = probe("/usr/bin/osascript", ["-l", "JavaScript", "-"], {
-      env: {},
-      encoding: "utf8",
-      input: script,
-      timeout: 20000,
-      killSignal: "SIGKILL",
-      maxBuffer: 4096,
-      stdio: ["pipe", "pipe", "ignore", "pipe"],
-    });
-  } catch {
-    throw failure("jxa-process", { desktopUnlocked: true });
+  const evidence = { desktopUnlocked: true };
+  const deadline = now() + 20000;
+  // NSWorkspace's launch initialization must not share a process with the AE C query.
+  for (const [operation, required] of [
+    ["bootstrap", ["accessibilityTrusted", "systemEventsRunning"]],
+    ["inspect", capabilities.filter((key) => key !== "desktopUnlocked")],
+  ]) {
+    const remaining = Math.ceil(deadline - now());
+    if (remaining <= 0) throw failure("jxa-timeout", evidence);
+    let result;
+    try {
+      result = probe(
+        "/usr/bin/osascript",
+        ["-l", "JavaScript", "-", operation],
+        {
+          env: {},
+          encoding: "utf8",
+          input: script,
+          timeout: remaining,
+          killSignal: "SIGKILL",
+          maxBuffer: 4096,
+          stdio: ["pipe", "pipe", "ignore", "pipe"],
+        },
+      );
+    } catch {
+      throw failure("jxa-process", evidence);
+    }
+    if (result.error || result.status !== 0) {
+      const trace = result.output?.[3];
+      const jxaPhase =
+        typeof trace === "string" && trace.length <= 4096
+          ? trace.trimEnd().split("\n").at(-1)
+          : undefined;
+      throw failure(
+        result.error?.code === "ETIMEDOUT" ? "jxa-timeout" : "jxa-process",
+        {
+          ...evidence,
+          jxaStatus: result.status,
+          jxaSignal: result.signal,
+          jxaPhase,
+        },
+      );
+    }
+    let value;
+    try {
+      value = JSON.parse(result.stdout);
+    } catch {
+      throw failure("jxa-output", evidence);
+    }
+    try {
+      Object.assign(evidence, verifiedEvidence(value, required));
+    } catch (error) {
+      throw failure("jxa-output", { ...evidence, ...error.diagnostic });
+    }
   }
-  if (result.error || result.status !== 0) {
-    const trace = result.output?.[3];
-    const jxaPhase =
-      typeof trace === "string" && trace.length <= 4096
-        ? trace.trimEnd().split("\n").at(-1)
-        : undefined;
-    throw failure(
-      result.error?.code === "ETIMEDOUT" ? "jxa-timeout" : "jxa-process",
-      {
-        desktopUnlocked: true,
-        jxaStatus: result.status,
-        jxaSignal: result.signal,
-        jxaPhase,
-      },
-    );
-  }
-  let value;
-  try {
-    value = JSON.parse(result.stdout);
-  } catch {
-    throw failure("jxa-output", { desktopUnlocked: true });
-  }
-  return verifiedEvidence({ ...value, desktopUnlocked: true });
+  return verifiedEvidence(evidence);
 }
 
 export async function probeReleaseDesktop({

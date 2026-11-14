@@ -21,10 +21,9 @@ const capabilities = {
   menuBarElementCount: 7,
 };
 
-function jxa(input, changes = {}) {
+function jxaStep(input, changes, operation, state) {
   const calls = [];
-  let launched = false;
-  let waits = 0;
+  const violations = [];
   let permissionBound = false;
   const bound = new Set();
   const nativeCalls = [];
@@ -44,7 +43,9 @@ function jxa(input, changes = {}) {
     count: 7,
     ...changes,
   };
-  const output = new Script(`${input}\nrun()`).runInNewContext({
+  const output = new Script(
+    `${input}\nrun(${JSON.stringify([operation])})`,
+  ).runInNewContext({
     Ref: {
       equals: (left, right) =>
         left === right || (left === nullAddress && right === null),
@@ -117,7 +118,9 @@ function jxa(input, changes = {}) {
             count: (
               bundle === "com.apple.systemevents"
                 ? values.systemEvents ||
-                  (launched && values.launchReady && waits >= values.readyAfter)
+                  (state.launched &&
+                    values.launchReady &&
+                    state.waits >= values.readyAfter)
                 : values.finder
             )
               ? 1
@@ -140,6 +143,8 @@ function jxa(input, changes = {}) {
             completion,
           ) {
             calls.push("launch");
+            if (operation !== "bootstrap")
+              violations.push("launch-in-inspection");
             assert.equal(url, "synthetic-system-events-url");
             assert.deepEqual(configuration, {
               activates: false,
@@ -151,7 +156,7 @@ function jxa(input, changes = {}) {
             assert.equal(completion, null);
             if (values.throwLaunch)
               throw new Error("synthetic-private-launch-error");
-            launched = true;
+            state.launched = true;
           },
         },
       },
@@ -159,7 +164,7 @@ function jxa(input, changes = {}) {
         sleepForTimeInterval(seconds) {
           assert.equal(seconds, 0.1);
           calls.push("wait");
-          waits++;
+          state.waits++;
         },
       },
       get NSAppleEventDescriptor() {
@@ -202,6 +207,7 @@ function jxa(input, changes = {}) {
       },
       AEDeterminePermissionToAutomateTarget(target, eventClass, eventId, ask) {
         calls.push("permission");
+        if (operation !== "inspect") violations.push("permission-in-bootstrap");
         nativeCalls.push("permission");
         if (!permissionBound) throw new Error("Ref has incompatible type");
         assert.equal(target, address);
@@ -215,6 +221,7 @@ function jxa(input, changes = {}) {
     },
     Application(bundle) {
       calls.push("read");
+      if (operation !== "inspect") violations.push("read-in-bootstrap");
       assert.equal(bundle, "com.apple.systemevents");
       assert.equal(values.permission, 0);
       return {
@@ -248,44 +255,77 @@ function jxa(input, changes = {}) {
       };
     },
   });
+  assert.deepEqual(violations, []);
   return { output, calls, phases: phases.join(""), nativeCalls };
 }
 
 function worker(changes = {}) {
   const calls = [];
-  let scriptCalls;
+  const scriptCalls = [];
+  const nativeCalls = [];
+  const state = { launched: false, waits: 0 };
   let script;
-  const result = probeReleaseDesktopWorker({
-    platform: "darwin",
-    probe(command, args, options) {
-      calls.push(command);
-      assert.deepEqual(options.env, {});
-      assert.equal(options.encoding, "utf8");
-      if (command === "/usr/sbin/ioreg") {
-        assert.deepEqual(args, ["-l", "-n", "Root", "-d", "1"]);
-        assert.equal(options.timeout, 2000);
-        return (
-          changes.desktop ?? { status: 0, stdout: '"IOConsoleLocked" = No\n' }
-        );
-      }
-      assert.equal(command, "/usr/bin/osascript");
-      assert.deepEqual(args, ["-l", "JavaScript", "-"]);
-      assert.equal(options.timeout, 20000);
-      assert.equal(options.killSignal, "SIGKILL");
-      assert.equal(options.maxBuffer, 4096);
-      assert.deepEqual(options.stdio, ["pipe", "pipe", "ignore", "pipe"]);
-      if (changes.processResult) return changes.processResult;
-      script = options.input;
-      const simulated = jxa(script, changes);
-      scriptCalls = simulated.calls;
-      return {
-        status: 0,
-        stdout: simulated.output,
-        output: [null, simulated.output, null, simulated.phases],
-      };
-    },
+  let phases = "";
+  let result;
+  try {
+    result = probeReleaseDesktopWorker({
+      platform: "darwin",
+      now: () => 0,
+      probe(command, args, options) {
+        calls.push(command);
+        assert.deepEqual(options.env, {});
+        assert.equal(options.encoding, "utf8");
+        if (command === "/usr/sbin/ioreg") {
+          assert.deepEqual(args, ["-l", "-n", "Root", "-d", "1"]);
+          assert.equal(options.timeout, 2000);
+          return (
+            changes.desktop ?? { status: 0, stdout: '"IOConsoleLocked" = No\n' }
+          );
+        }
+        assert.equal(command, "/usr/bin/osascript");
+        assert.deepEqual(args.slice(0, 3), ["-l", "JavaScript", "-"]);
+        assert.ok(["bootstrap", "inspect"].includes(args[3]));
+        assert.equal(args.length, 4);
+        assert.equal(options.timeout, 20000);
+        assert.equal(options.killSignal, "SIGKILL");
+        assert.equal(options.maxBuffer, 4096);
+        assert.deepEqual(options.stdio, ["pipe", "pipe", "ignore", "pipe"]);
+        if (
+          changes.processResult &&
+          (!changes.processOperation || changes.processOperation === args[3])
+        )
+          return changes.processResult;
+        script = changes.scriptOverride ?? options.input;
+        const simulated = jxaStep(script, changes, args[3], state);
+        scriptCalls.push(...simulated.calls);
+        nativeCalls.push(...simulated.nativeCalls);
+        phases += simulated.phases;
+        return {
+          status: 0,
+          stdout: simulated.output,
+          output: [null, simulated.output, null, simulated.phases],
+        };
+      },
+    });
+  } catch (error) {
+    if (!changes.captureFailure) throw error;
+    result = error.diagnostic;
+  }
+  return { result, calls, scriptCalls, script, phases, nativeCalls };
+}
+
+function jxa(input, changes = {}) {
+  const simulation = worker({
+    ...changes,
+    scriptOverride: input,
+    captureFailure: true,
   });
-  return { result, calls, scriptCalls, script };
+  return {
+    output: JSON.stringify(simulation.result),
+    calls: simulation.scriptCalls,
+    phases: simulation.phases,
+    nativeCalls: simulation.nativeCalls,
+  };
 }
 
 function atStage(stage, evidence = {}) {
@@ -305,8 +345,14 @@ function atStage(stage, evidence = {}) {
 test("worker checks the unlocked desktop before non-prompting trust and a count-only Finder read", () => {
   const { result, calls, scriptCalls } = worker();
   assert.deepEqual(result, capabilities);
-  assert.deepEqual(calls, ["/usr/sbin/ioreg", "/usr/bin/osascript"]);
+  assert.deepEqual(calls, [
+    "/usr/sbin/ioreg",
+    "/usr/bin/osascript",
+    "/usr/bin/osascript",
+  ]);
   assert.deepEqual(scriptCalls, [
+    "trust",
+    "com.apple.systemevents",
     "trust",
     "com.apple.systemevents",
     "permission",
@@ -339,11 +385,110 @@ test("cold System Events starts in the background and must become observable bef
     "com.apple.systemevents",
     "wait",
     "com.apple.systemevents",
+    "trust",
+    "com.apple.systemevents",
     "permission",
     "com.apple.finder",
     "read",
     "count",
   ]);
+});
+
+test("bootstrap may launch System Events but inspection never opens NSWorkspace or queries a missing service", () => {
+  const { script } = worker();
+  const bootstrap = jxaStep(script, { systemEvents: false }, "bootstrap", {
+    launched: false,
+    waits: 0,
+  });
+  assert.ok(bootstrap.calls.includes("launch"));
+  assert.ok(!bootstrap.calls.includes("permission"));
+  assert.ok(!bootstrap.calls.includes("read"));
+  assert.deepEqual(bootstrap.nativeCalls, []);
+  const missing = jxaStep(script, { systemEvents: false }, "inspect", {
+    launched: false,
+    waits: 0,
+  });
+  assert.equal(JSON.parse(missing.output).stage, "systemEventsRunning");
+  assert.deepEqual(missing.calls, ["trust", "com.apple.systemevents"]);
+  assert.deepEqual(missing.nativeCalls, []);
+  const ready = jxaStep(script, {}, "inspect", { launched: false, waits: 0 });
+  assert.ok(!ready.calls.includes("launch"));
+  assert.ok(ready.calls.includes("permission"));
+  assert.ok(ready.calls.includes("read"));
+});
+
+test("bootstrap and inspection share the twenty-second JXA budget", () => {
+  for (const bootstrapTime of [15000, 20000]) {
+    let clock = 0;
+    const operations = [];
+    const probe = (command, args, options) => {
+      if (command === "/usr/sbin/ioreg")
+        return { status: 0, stdout: '"IOConsoleLocked" = No' };
+      assert.equal(command, "/usr/bin/osascript");
+      assert.deepEqual(options.env, {});
+      operations.push(args[3]);
+      if (args[3] === "bootstrap") {
+        assert.equal(options.timeout, 20000);
+        clock = bootstrapTime;
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            accessibilityTrusted: true,
+            systemEventsRunning: true,
+          }),
+        };
+      }
+      assert.equal(args[3], "inspect");
+      assert.equal(options.timeout, 5000);
+      return { status: 0, stdout: JSON.stringify(capabilities) };
+    };
+    const run = () =>
+      probeReleaseDesktopWorker({
+        platform: "darwin",
+        probe,
+        now: () => clock,
+      });
+    if (bootstrapTime === 20000) {
+      assert.throws(
+        run,
+        atStage("jxa-timeout", {
+          accessibilityTrusted: true,
+          systemEventsRunning: true,
+        }),
+      );
+      assert.deepEqual(operations, ["bootstrap"]);
+    } else {
+      assert.deepEqual(run(), capabilities);
+      assert.deepEqual(operations, ["bootstrap", "inspect"]);
+    }
+  }
+});
+
+test("an inspection crash preserves only bootstrap observations and filtered exit metadata", () => {
+  assert.throws(
+    () =>
+      worker({
+        processOperation: "inspect",
+        processResult: {
+          status: null,
+          signal: "SIGABRT",
+          output: [null, null, null, "appleevents-query\n"],
+          stderr: "synthetic-private-error",
+        },
+      }),
+    (error) => {
+      assert.deepEqual(error.diagnostic, {
+        stage: "jxa-process",
+        desktopUnlocked: true,
+        accessibilityTrusted: true,
+        systemEventsRunning: true,
+        jxaSignal: "SIGABRT",
+        jxaPhase: "appleevents-query",
+      });
+      assert.doesNotMatch(error.message, /synthetic-private/);
+      return true;
+    },
+  );
 });
 
 test("failed or unready System Events launches fail closed without exposing launch errors", () => {
@@ -484,9 +629,13 @@ test("JXA performs no scripting reads until trust and existing AppleEvents autho
   assert.deepEqual(jxa(script, { permission: -1744 }).calls, [
     "trust",
     "com.apple.systemevents",
+    "trust",
+    "com.apple.systemevents",
     "permission",
   ]);
   assert.deepEqual(jxa(script, { finder: false }).calls, [
+    "trust",
+    "com.apple.systemevents",
     "trust",
     "com.apple.systemevents",
     "permission",
@@ -599,11 +748,18 @@ test("phase sidechannel emits static markers without capabilities or UI contents
   assert.equal(
     warm.phases,
     [
+      "framework-foundation",
       "framework-appkit",
       "framework-accessibility",
-      "framework-appleevents",
       "accessibility-query",
       "system-events-query",
+      "complete",
+      "framework-foundation",
+      "framework-appkit",
+      "framework-accessibility",
+      "accessibility-query",
+      "system-events-query",
+      "framework-appleevents",
       "appleevents-target",
       "appleevents-address",
       "appleevents-create",
