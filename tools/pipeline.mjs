@@ -135,16 +135,17 @@ export async function planWorkflow(root, workflow, options, adapters = {}) {
     ]).WEBSITE_DEPLOY_HOST;
   }
   let configurationBinding = {};
+  let configurationRecord;
   if (
     !adapters.createSourcePlan &&
     (workflow === "publish" || (workflow === "create" && operation))
   ) {
     const { readConfiguration } = await import("./pipeline-operations.mjs");
-    const configured = readConfiguration(root, options.configuration);
-    if (configured)
+    configurationRecord = readConfiguration(root, options.configuration);
+    if (configurationRecord)
       configurationBinding = {
-        configurationFile: configured.file,
-        configurationDigest: configured.sha256,
+        configurationFile: configurationRecord.file,
+        configurationDigest: configurationRecord.sha256,
       };
   }
   if (workflow === "publish") {
@@ -267,6 +268,33 @@ export async function planWorkflow(root, workflow, options, adapters = {}) {
       !verificationPlan.verificationPlan,
       "Nested verification plans are unsupported",
     );
+  }
+  if (
+    workflow === "create" &&
+    selected.appImpact &&
+    operation &&
+    configurationRecord?.configuration.qualification?.profile ===
+      "macos-direct-v1" &&
+    !configurationRecord.configuration.qualificationResources
+  ) {
+    assert.equal(
+      repository,
+      "getsituate/situate",
+      "Unexpected release repository",
+    );
+    assert(
+      destination,
+      "Select the explicit release destination before runtime preparation",
+    );
+    const { prepareReleaseRuntime } = await import("./release-runtime.mjs");
+    const runtime = await prepareReleaseRuntime(root, configurationRecord, {
+      destination,
+      operation,
+    });
+    configurationBinding = {
+      configurationFile: runtime.file,
+      configurationDigest: runtime.sha256,
+    };
   }
   return sealPlan({
     ...selected,
@@ -470,7 +498,8 @@ async function executeStages(
         operation: operation.operationId,
       });
     } catch (error) {
-      stage.status = externalStages.has(name) ? "unknown" : "failed";
+      stage.status =
+        externalStages.has(name) || error.uncertain ? "unknown" : "failed";
       operation.status = stage.status;
       saveOperation(root, operation);
       onEvent({
@@ -885,7 +914,10 @@ if (
 ) {
   const argv = process.argv.slice(2);
   const readOnly =
-    ["plan", "status", "inspect"].includes(argv[0]) || argv.includes("--help");
+    ["status", "inspect"].includes(argv[0]) ||
+    (argv[0] === "plan" &&
+      (argv[1] !== "create" || !argv.includes("--operation"))) ||
+    argv.includes("--help");
   try {
     if (!readOnly && !coordinated(repositoryRoot)) {
       process.exitCode = await runCoordinated({

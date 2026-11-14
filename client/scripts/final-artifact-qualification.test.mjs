@@ -219,7 +219,9 @@ test("native preparation binds both live public updater signatures and version t
       const lstat = fs.lstatSync;
       subtest.mock.method(fs, "lstatSync", (path, ...args) => {
         const stat = lstat(path, ...args);
-        return path === fs.realpathSync(directory) ? Object.assign(stat, { uid: 501 }) : stat;
+        return path === fs.realpathSync(directory)
+          ? Object.assign(stat, { uid: 501 })
+          : stat;
       });
       subtest.mock.method(childProcess, "spawnSync", () => ({
         status: 0,
@@ -398,16 +400,29 @@ test("AX entry, window assertions and chords reject unreviewed roles and keys", 
     assert.throws(() => accessibilityScript(123, action));
 });
 
-
 function deviceStateFixture(t) {
-  const home = fs.realpathSync(fs.mkdtempSync(join(os.tmpdir(), "situate-device-state-")));
+  const home = fs.realpathSync(
+    fs.mkdtempSync(join(os.tmpdir(), "situate-device-state-")),
+  );
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const owned = join(home, "owned");
   fs.mkdirSync(owned);
   const identifier = "com.example.qualification";
   const application = join(home, "Library", "Application Support", identifier);
-  const preferences = join(home, "Library", "Preferences", identifier + ".plist");
-  return { home, owned, identifier, application, preferences, uid: fs.lstatSync(home).uid };
+  const preferences = join(
+    home,
+    "Library",
+    "Preferences",
+    identifier + ".plist",
+  );
+  return {
+    home,
+    owned,
+    identifier,
+    application,
+    preferences,
+    uid: fs.lstatSync(home).uid,
+  };
 }
 
 test("candidate device state archives only initially absent app namespaces without changing bytes or modes", (t) => {
@@ -417,41 +432,80 @@ test("candidate device state archives only initially absent app namespaces witho
   fs.mkdirSync(join(fixture.application, "nested"), { recursive: true });
   const bytes = Buffer.from([0, 255, 1, 13, 10]);
   fs.writeFileSync(note, bytes, { mode: 0o640 });
-  fs.mkdirSync(join(fixture.home, "Library", "Preferences"), { recursive: true });
+  fs.mkdirSync(join(fixture.home, "Library", "Preferences"), {
+    recursive: true,
+  });
   fs.writeFileSync(fixture.preferences, "synthetic preferences");
-  const sibling = join(fixture.home, "Library", "Application Support", "unrelated");
+  const sibling = join(
+    fixture.home,
+    "Library",
+    "Application Support",
+    "unrelated",
+  );
   fs.mkdirSync(sibling);
   fs.writeFileSync(join(sibling, "untouched"), "retain");
   const before = fs.statSync(note);
   const destination = archive(fixture.owned);
-  const moved = join(destination, "Library", "Application Support", fixture.identifier, "nested", "registry.bin");
+  const moved = join(
+    destination,
+    "Library",
+    "Application Support",
+    fixture.identifier,
+    "nested",
+    "registry.bin",
+  );
   assert.deepEqual(fs.readFileSync(moved), bytes);
   assert.equal(fs.statSync(moved).ino, before.ino);
   assert.equal(fs.statSync(moved).mode, before.mode);
-  assert.equal(fs.readFileSync(join(destination, "Library", "Preferences", fixture.identifier + ".plist"), "utf8"), "synthetic preferences");
+  assert.equal(
+    fs.readFileSync(
+      join(
+        destination,
+        "Library",
+        "Preferences",
+        fixture.identifier + ".plist",
+      ),
+      "utf8",
+    ),
+    "synthetic preferences",
+  );
   assert.equal(fs.existsSync(fixture.application), false);
   assert.equal(fs.existsSync(fixture.preferences), false);
   assert.equal(fs.readFileSync(join(sibling, "untouched"), "utf8"), "retain");
   assert.throws(() => archive(fixture.owned), /already archived/);
   fs.mkdirSync(fixture.application);
-  fs.writeFileSync(join(fixture.application, "A-authored"), "preserve through update");
-  assert.equal(fs.readFileSync(join(fixture.application, "A-authored"), "utf8"), "preserve through update");
+  fs.writeFileSync(
+    join(fixture.application, "A-authored"),
+    "preserve through update",
+  );
+  assert.equal(
+    fs.readFileSync(join(fixture.application, "A-authored"), "utf8"),
+    "preserve through update",
+  );
 });
 
 test("pre-existing app data and dangling links cannot obtain an absent-before proof", (t) => {
   const fixture = deviceStateFixture(t);
   fs.mkdirSync(fixture.application, { recursive: true });
-  assert.throws(() => captureQualificationDeviceState(fixture), /retains prior app data/);
+  assert.throws(
+    () => captureQualificationDeviceState(fixture),
+    /retains prior app data/,
+  );
   fs.rmdirSync(fixture.application);
   fs.symlinkSync(join(fixture.home, "missing"), fixture.application);
-  assert.throws(() => captureQualificationDeviceState(fixture), /retains prior app data/);
+  assert.throws(
+    () => captureQualificationDeviceState(fixture),
+    /retains prior app data/,
+  );
 });
 
 test("archive refuses generated links and hard links before moving any app data", (t) => {
   const fixture = deviceStateFixture(t);
   const archive = captureQualificationDeviceState(fixture);
   fs.mkdirSync(fixture.application, { recursive: true });
-  fs.mkdirSync(join(fixture.home, "Library", "Preferences"), { recursive: true });
+  fs.mkdirSync(join(fixture.home, "Library", "Preferences"), {
+    recursive: true,
+  });
   fs.writeFileSync(fixture.preferences, "unchanged");
   const original = join(fixture.application, "original");
   const unsafe = join(fixture.application, "unsafe");
@@ -462,7 +516,10 @@ test("archive refuses generated links and hard links before moving any app data"
   fs.linkSync(original, unsafe);
   assert.throws(() => archive(fixture.owned), /Unsafe or foreign/);
   assert.equal(fs.readFileSync(fixture.preferences, "utf8"), "unchanged");
-  assert.equal(fs.existsSync(join(fixture.owned, "candidate-device-state")), false);
+  assert.equal(
+    fs.existsSync(join(fixture.owned, "candidate-device-state")),
+    false,
+  );
 });
 
 test("archive rejects foreign ownership and swapped namespace parents before moving files", (t) => {
@@ -472,17 +529,31 @@ test("archive rejects foreign ownership and swapped namespace parents before mov
   const foreign = join(fixture.application, "foreign");
   fs.writeFileSync(foreign, "synthetic foreign owner");
   const lstat = fs.lstatSync;
-  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
   const mock = t.mock.method(fs, "lstatSync", (path, ...args) => {
     const stat = lstat(path, ...args);
-    return path === foreign ? Object.assign(stat, { uid: fixture.uid + 1 }) : stat;
+    return path === foreign
+      ? Object.assign(stat, { uid: fixture.uid + 1 })
+      : stat;
   });
   syncBuiltinESMExports();
   assert.throws(() => archive(fixture.owned), /Unsafe or foreign/);
   mock.mock.restore();
   syncBuiltinESMExports();
-  fs.renameSync(join(fixture.home, "Library"), join(fixture.home, "moved-library"));
-  fs.symlinkSync(join(fixture.home, "moved-library"), join(fixture.home, "Library"));
+  fs.renameSync(
+    join(fixture.home, "Library"),
+    join(fixture.home, "moved-library"),
+  );
+  fs.symlinkSync(
+    join(fixture.home, "moved-library"),
+    join(fixture.home, "Library"),
+  );
   assert.throws(() => archive(fixture.owned), /Unsafe application data parent/);
-  assert.equal(fs.existsSync(join(fixture.owned, "candidate-device-state")), false);
+  assert.equal(
+    fs.existsSync(join(fixture.owned, "candidate-device-state")),
+    false,
+  );
 });

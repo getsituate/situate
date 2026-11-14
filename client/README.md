@@ -570,11 +570,11 @@ The public files are `release-inputs.json`, `situate-release-history.json`, `man
 
 ### Release workflow configuration
 
-Set `SITUATE_RELEASE_CONFIG_JSON` to the private JSON configuration, in the repository-root `.env` locally or the environment in CI. Inline configuration is parsed as data without creating a local configuration file; each later operation requires the same bytes. The plan binds the exact digest, including whitespace. Keep the original configuration with the private recovery records.
+Set `SITUATE_RELEASE_CONFIG_JSON` to the private JSON configuration, in the repository-root `.env` locally or the environment in CI. Inline configuration is parsed as data. Fully resolved configurations bind their exact bytes, including whitespace, into the plan. The automatic profile below records the original template hash and seals a separate private runtime configuration before planning. Keep the original configuration and sealed plan with the private operation records.
 
 Existing file inputs remain supported: supply `--configuration /PATH/TO/private-release-config.json` while planning, or set `SITUATE_RELEASE_CONFIG_FILE`. A configuration file must be an owned, regular, non-symlink, single-link file with mode `0600`. An explicit `--configuration` selects that file; otherwise select either JSON or a file variable, not both. Without either input, local execution uses `.release-operations/config.json`. CI does not read that implicit local file. Review configuration changes through a new plan rather than modifying an authorized plan's inputs.
 
-Set `WEBSITE_DEPLOY_HOST` to the approved SSH destination, or select it explicitly with `--destination`. `SITUATE_RELEASE_SSH_PRIVATE_KEY` and `SITUATE_RELEASE_SSH_KNOWN_HOSTS` contain the private key and independently verified `known_hosts` data. Local and hosted execution use the same names and contents. The shared release runner prepares private temporary SSH files and removes them when the operation completes or fails. Existing `WEBSITE_SSH_IDENTITY` and `WEBSITE_SSH_KNOWN_HOSTS` file paths remain supported; do not combine file and inline credentials. No signing, publication or provider credentials are passed to ordinary verification or the isolated application qualification process.
+Set `WEBSITE_DEPLOY_HOST` to the approved SSH destination, or select it explicitly with `--destination`. `SITUATE_RELEASE_SSH_PRIVATE_KEY` and `SITUATE_RELEASE_SSH_KNOWN_HOSTS` contain the private key and independently verified `known_hosts` data. Local and hosted execution use the same names and contents. The shared release runner prepares private temporary SSH files and removes them when the operation completes or fails. Existing `WEBSITE_SSH_IDENTITY` and `WEBSITE_SSH_KNOWN_HOSTS` file paths remain supported; do not combine file and inline credentials. Ordinary verification receives no signing, publication or provider credentials. The qualification orchestrator uses scoped SSH access to prepare the private listener; the isolated native worker receives no production credentials.
 
 | Field              | Purpose                                                                                                                                                                            |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -585,7 +585,32 @@ Set `WEBSITE_DEPLOY_HOST` to the approved SSH destination, or select it explicit
 | `recoveryEvidence` | Optional legacy audit metadata (path or inline object). Preserved when reading configuration, but not validated or required for creation or publication.                           |
 | `qualification`    | Reviewed configuration for the isolated macOS account, real accessibility journeys, retained-data assertions, exact host-channel predecessor and private production-HTTPS routing. |
 
-The qualification configuration is validated by [`validateFinalArtifactConfiguration`](scripts/final-artifact-qualification.mjs) and the [routing validator](scripts/final-artifact-routing.mjs). It is not a switch that marks native tests passed. Provision and authorize the real account, accessibility access, HTTPS listener and routing before execution. Preserve the app's embedded production URL and TLS verification; endpoint overrides or manually replacing the app cannot qualify the production updater. A universal bundle check does not establish native Intel or minimum-OS behavior.
+For automatic direct-release qualification, use `qualification.profile: "macos-direct-v1"` and supply the existing TLS host's settings:
+
+```json
+{
+  "schemaVersion": 1,
+  "updaterPublicKey": "EXISTING_UPDATER_PUBLIC_KEY",
+  "qualification": {
+    "profile": "macos-direct-v1",
+    "tls": {
+      "caddyContainer": "production-caddy",
+      "certificateMount": "/data",
+      "certificatePath": "caddy/certificates/ISSUER/getsituate.com/getsituate.com.crt",
+      "keyPath": "caddy/certificates/ISSUER/getsituate.com/getsituate.com.key",
+      "hostPort": 24443
+    }
+  }
+}
+```
+
+Use the actual existing container and certificate-relative paths, not the example values. Certificate keys remain on the TLS host. Preparation checks desktop/accessibility access, resolves account and runner-image identity, and downloads the exact host-channel predecessor with manifest-bound hashes. It prepares an operation-owned private listener identity and writes the resolved configuration under `.release-operations/`. Preparation is one-shot: reuse the original sealed plan after inspection rather than regenerating authorization for retained inputs.
+
+After building, the orchestrator stages the exact candidate packages outside public release storage and starts a loopback-only listener using the existing Caddy image and read-only certificate volume. An owned privileged guardian forwards HTTPS and temporarily changes only the disposable runner's hostname mapping. Its stdin lifeline closes the forward and restores routing if the caller exits. Native qualification runs in a separate credential-free worker. It exercises the candidate and predecessor through production accessibility controls with a bounded local AI fixture, then verifies the predecessor's actual production updater, retained state and relaunch. Private staging and operation evidence remain available for inspection; this does not activate the public update pointer.
+
+GitHub-hosted account selection uses the allocated runner's real identity. Local automatic execution requires an explicitly identified disposable macOS host in `qualification.account`, with `mode: "ephemeral-host"` and matching `uid`, `name` and `home`; do not use a personal or shared host because routing changes are machine-wide. Fully resolved account, journey and routing configurations remain supported.
+
+The configuration is validated by [`validateFinalArtifactConfiguration`](scripts/final-artifact-qualification.mjs) and the [routing validator](scripts/final-artifact-routing.mjs). Missing accessibility, TLS or product-state evidence fails qualification. Endpoint overrides or manually replacing the predecessor cannot qualify the production updater. A universal bundle check does not establish native Intel or minimum-OS behavior.
 
 Ordinary checks and dependency installation must receive no production credentials. Signing receives only the Apple/updater inputs it needs; qualification uses synthetic data without personal workspaces or signing/publication keys. The publisher needs read-only GitHub access and controlled-host publication access, not builder credentials.
 

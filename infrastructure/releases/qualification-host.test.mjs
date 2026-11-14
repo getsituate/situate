@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough, Writable } from "node:stream";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -8,6 +10,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -174,13 +177,19 @@ test("host prepares immutable identity before staging and privately serves exact
   assert.equal(JSON.parse(identityBytes).operationId, operation.operationId);
   assert.match(
     prepared.identityPath,
-    /^\/private-qualification\/[a-f0-9]{64}\/identity.json$/,
+    /^\/releases\/\.qualification\/[a-f0-9]{64}\/identity.json$/,
   );
   assert.equal(
     h.success("stage").candidateFeedSha256,
     h.files[config.feedPath].sha256,
   );
   assert.equal(h.success("serve").status, "serving");
+  assert.equal(statSync(resource).mode & 0o777, 0o700);
+  assert.equal(statSync(join(resource, "payload")).mode & 0o777, 0o755);
+  assert.equal(
+    statSync(join(resource, "payload", config.feedPath)).mode & 0o777,
+    0o644,
+  );
   const run = h.calls().find((args) => args[1] === "run");
   assert(run.includes("sha256:" + "b".repeat(64)));
   assert(
@@ -189,8 +198,8 @@ test("host prepares immutable identity before staging and privately serves exact
       run.includes("--cap-drop=ALL"),
   );
   assert.equal(
-    run[run.indexOf("--cap-add=DAC_READ_SEARCH")],
-    "--cap-add=DAC_READ_SEARCH",
+    run[run.indexOf("--cap-add=NET_BIND_SERVICE")],
+    "--cap-add=NET_BIND_SERVICE",
   );
   assert.equal(run[run.indexOf("--publish") + 1], "127.0.0.1:24443:8443/tcp");
   const mounts = run.flatMap((arg, index) =>
@@ -297,6 +306,28 @@ test("host rejects archive links and unexpected members without extracting them"
   );
   assert(!existsSync(join(h.root, "outside")));
   assert.equal(h.state().status, "stage-failed");
+});
+
+test("cleanup can retain candidate bytes while removing the owned listener", (t) => {
+  const h = harness(t);
+  h.success("prepare");
+  h.success("stage");
+  h.success("serve");
+  const cleaned = h.success("cleanup", { ...h.request, retainArtifacts: true });
+  assert.equal(cleaned.status, "cleaned-retained");
+  assert.equal(cleaned.artifactsRetained, true);
+  assert.equal(h.success("inspect").containerRunning, false);
+  assert(
+    existsSync(
+      join(
+        h.root,
+        "private",
+        sha(operation.operationNonce),
+        "payload",
+        config.feedPath,
+      ),
+    ),
+  );
 });
 
 test("serve records uncertain failure once and cleanup refuses a foreign container", (t) => {
@@ -455,13 +486,14 @@ test("runner preserves concurrent hosts edits and refuses preexisting hostname o
   }
 });
 
-function controllerFixture() {
-  const calls = [];
+function controllerFixture({ ready = true, cleaned = true } = {}) {
+  const calls = [],
+    spawns = [];
   const facts = {
     ...operation,
     status: "serving",
     containerRunning: true,
-    identityPath: "/private-qualification/identity.json",
+    identityPath: "/releases/.qualification/identity.json",
     identitySha256: "b".repeat(64),
     publicFeedSha256: config.publicFeedSha256,
   };
@@ -477,102 +509,145 @@ function controllerFixture() {
       return JSON.stringify(facts);
     },
   });
-  const runnerCalls = [];
-  const execute = (command, args, options) => {
-    runnerCalls.push({ command, args, options });
-    return "{}";
+  const spawnProcess = (command, args, options) => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    let stopped = false;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      child.stdout.write(
+        JSON.stringify({
+          closed: true,
+          cleaned,
+          uncertain: !cleaned,
+          operationNonce: operation.operationNonce,
+        }) + "\n",
+      );
+      child.stdout.end();
+      child.stderr.end();
+      child.emit("close", cleaned && ready ? 0 : 1);
+    };
+    const input = [];
+    child.stdin = new Writable({
+      write(chunk, _encoding, done) {
+        input.push(chunk.toString());
+        done();
+      },
+      final(done) {
+        done();
+        queueMicrotask(stop);
+      },
+    });
+    spawns.push({ command, args, options, child, input, stop });
+    queueMicrotask(() => {
+      if (ready)
+        child.stdout.write(
+          JSON.stringify({
+            ready: true,
+            operationNonce: operation.operationNonce,
+          }) + "\n",
+        );
+      else stop();
+    });
+    return child;
   };
-  const route = { ...routeRequest, host, trustedEphemeralRunner: true };
-  return { host, route, calls, runnerCalls, execute, facts };
+  return {
+    host,
+    route: { ...routeRequest, host, trustedEphemeralRunner: true },
+    calls,
+    spawns,
+    spawnProcess,
+    facts,
+  };
 }
 
-test("controller forwards with verified SSH and limits callback facts and credential environments", async () => {
+test("controller binds an isolated guardian lifeline and limits callback facts and environments", async () => {
   const f = controllerFixture();
-  let called = false;
+  let lifetime;
   const result = await withQualificationRoute(
     f.route,
-    async (facts) => {
-      called = true;
+    async (facts, signal) => {
+      lifetime = signal;
+      assert.equal(signal.aborted, false);
       assert.equal(facts.operationId, operation.operationId);
       assert.equal(facts.privateAddress, "127.0.0.2");
       assert.equal(facts.sshIdentity, undefined);
       return "qualified";
     },
-    { execute: f.execute, platform: "darwin" },
+    { spawnProcess: f.spawnProcess, platform: "darwin" },
   );
   assert.equal(result, "qualified");
-  assert(called);
-  const ssh = f.runnerCalls.filter((entry) => entry.args[1] === "/usr/bin/ssh");
-  assert.equal(ssh.length, 3);
-  assert(ssh[0].args.includes("StrictHostKeyChecking=yes"));
-  assert(ssh[0].args.includes("ConnectionAttempts=1"));
-  assert(ssh[0].args.includes("127.0.0.2:443:127.0.0.1:24443"));
-  assert(ssh[0].args.includes("ExitOnForwardFailure=yes"));
-  assert(ssh[1].args.includes("check") && ssh[2].args.includes("exit"));
-  assert(
-    f.runnerCalls.every(
-      (entry) =>
-        !Object.hasOwn(entry.options.env, "GITHUB_TOKEN") &&
-        !Object.hasOwn(entry.options.env, "SSH_AUTH_SOCK"),
-    ),
-  );
+  assert.equal(lifetime.aborted, true);
+  assert.equal(f.spawns.length, 1);
+  assert.equal(f.spawns[0].command, "/usr/bin/sudo");
+  assert.deepEqual(f.spawns[0].args.slice(0, 2), ["-n", "/usr/bin/python3"]);
+  assert.deepEqual(f.spawns[0].options.stdio, ["pipe", "pipe", "pipe"]);
+  assert.equal(f.spawns[0].input.join(""), "close\n");
+  assert(!Object.hasOwn(f.spawns[0].options.env, "GITHUB_TOKEN"));
+  assert(!Object.hasOwn(f.spawns[0].options.env, "SSH_AUTH_SOCK"));
   assert(!Object.hasOwn(f.calls[0].options.env, "GITHUB_TOKEN"));
-  assert.equal(f.runnerCalls.at(-1).args.at(-2), "runner-cleanup");
 });
 
-test("controller tears down on callback failure, retains uncertain SSH ownership and never retries", async () => {
-  for (const failExit of [false, true]) {
-    const f = controllerFixture();
-    const execute = (command, args, options) => {
-      f.execute(command, args, options);
-      if (failExit && args.includes("exit"))
-        throw new Error("Synthetic control failure");
-      return "{}";
-    };
+test("controller closes its lifeline on callback failure and distinguishes uncertain teardown", async () => {
+  for (const cleaned of [false, true]) {
+    const f = controllerFixture({ cleaned });
+    const cause = new Error("Synthetic qualification failure");
     await assert.rejects(
       withQualificationRoute(
         f.route,
         async () => {
-          throw new Error("Synthetic qualification failure");
+          throw cause;
         },
-        { execute, platform: "darwin" },
+        { spawnProcess: f.spawnProcess, platform: "darwin" },
       ),
-      { name: "AggregateError" },
+      (error) => {
+        assert.equal(error.name, "AggregateError");
+        assert(error.errors.includes(cause));
+        assert.equal(error.uncertain, !cleaned);
+        return true;
+      },
     );
-    assert.equal(
-      f.runnerCalls.filter((entry) => entry.args.includes("exit")).length,
-      1,
-    );
-    assert.equal(
-      f.runnerCalls.some((entry) => entry.args.includes("runner-cleanup")),
-      !failExit,
-    );
-    assert(f.runnerCalls.some((entry) => entry.args.includes("runner-failed")));
+    assert.equal(f.spawns.length, 1);
+    assert.equal(f.spawns[0].input.join(""), "close\n");
   }
 });
 
-test("controller does not take over an existing runner reservation after failed prepare", async () => {
+test("guardian exit aborts the active qualification lifetime", async () => {
   const f = controllerFixture();
-  let callback = false;
-  const execute = (command, args, options) => {
-    f.execute(command, args, options);
-    if (args.includes("runner-prepare"))
-      throw new Error("Synthetic existing ownership");
-    return "{}";
-  };
+  await assert.rejects(
+    withQualificationRoute(
+      f.route,
+      async (_facts, signal) => {
+        queueMicrotask(() => f.spawns[0].stop());
+        await new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      },
+      { spawnProcess: f.spawnProcess, platform: "darwin" },
+    ),
+    (error) => error.uncertain === true,
+  );
+});
+
+test("controller cannot enter qualification without verified guardian readiness", async () => {
+  const f = controllerFixture({ ready: false, cleaned: false });
+  let called = false;
   await assert.rejects(
     withQualificationRoute(
       f.route,
       () => {
-        callback = true;
+        called = true;
       },
-      { execute, platform: "darwin" },
+      { spawnProcess: f.spawnProcess, platform: "darwin" },
     ),
     { name: "AggregateError" },
   );
-  assert.equal(callback, false);
-  assert.equal(f.runnerCalls.length, 1);
-  assert(f.runnerCalls[0].args.includes("runner-prepare"));
+  assert.equal(called, false);
+  assert.equal(f.spawns.length, 1);
 });
 
 test("controller rejects untrusted runners and invalid input without remote effects", async () => {
@@ -584,18 +659,18 @@ test("controller rejects untrusted runners and invalid input without remote effe
   ])
     await assert.rejects(
       withQualificationRoute(route, () => {}, {
-        execute: f.execute,
+        spawnProcess: f.spawnProcess,
         platform: "darwin",
       }),
     );
   await assert.rejects(
     withQualificationRoute(f.route, () => {}, {
-      execute: f.execute,
+      spawnProcess: f.spawnProcess,
       platform: "linux",
     }),
   );
   assert.equal(f.calls.length, 0);
-  assert.equal(f.runnerCalls.length, 0);
+  assert.equal(f.spawns.length, 0);
   assert.throws(
     () => f.host.prepare({ operationNonce: "../escape" }),
     /identity/,

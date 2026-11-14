@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   closeSync,
@@ -147,6 +147,9 @@ export function createQualificationHost(
       ...identity(request),
       config: binding,
       ...(request.files ? { files: request.files } : {}),
+      ...(action === "cleanup" && request.retainArtifacts === true
+        ? { retainArtifacts: true }
+        : {}),
     };
     let output;
     try {
@@ -248,7 +251,17 @@ export function createQualificationHost(
       }
     },
   };
-  controllers.set(controller, { binding, args, env });
+  controllers.set(controller, {
+    binding,
+    args,
+    env,
+    ssh: {
+      host: config.host,
+      identityPath: config.sshIdentity,
+      knownHostsPath: config.sshKnownHosts,
+      hostPort: binding.hostPort,
+    },
+  });
   return controller;
 }
 
@@ -256,7 +269,7 @@ export function createQualificationHost(
 export async function withQualificationRoute(
   routeConfig,
   callback,
-  { execute = execFileSync, platform = process.platform } = {},
+  { spawnProcess = spawn, platform = process.platform, signal } = {},
 ) {
   const {
     host,
@@ -292,62 +305,95 @@ export async function withQualificationRoute(
       state.containerRunning === true,
     "Private listener is not verified serving",
   );
-  const request = { ...operation, hostname, privateAddress, localPort };
-  const env = { PATH: context.env.PATH, LANG: "C" };
-  const socket = "/private/var/run/situate-qualification-route/ssh";
-  const effect = (args, label) => {
-    try {
-      return execute("/usr/bin/sudo", ["-n", ...args], {
-        env,
-        timeout: 30_000,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        maxBuffer: 1024 * 1024,
-      });
-    } catch {
-      throw new Error(
-        `Private runner ${label} outcome is uncertain; inspect operation ${operation.operationNonce}`,
-      );
-    }
+  signal?.throwIfAborted();
+  const request = {
+    route: { ...operation, hostname, privateAddress, localPort },
+    ssh: context.ssh,
   };
-  const runner = (action) =>
-    effect(
-      [
-        "/usr/bin/python3",
-        "-c",
-        `import base64;exec(base64.b64decode("${program()}"))`,
-        action,
-        Buffer.from(JSON.stringify(request)).toString("base64"),
-      ],
-      action,
-    );
-  const ssh = (args) =>
-    effect(["/usr/bin/ssh", "-F", "/dev/null", ...args], "SSH control");
-  const base = ["-S", socket, ...context.args];
-  let reserved = false;
-  let masterAttempted = false;
-  let teardownFailed = false;
+  const guardian = readFileSync(
+    new URL("./qualification-route-guardian.py", import.meta.url),
+  ).toString("base64");
+  const code = `import base64,json,types,sys\nr=types.ModuleType('qualification_runner')\nexec(base64.b64decode('${program()}'),r.__dict__)\ng=types.ModuleType('qualification_guardian')\nexec(base64.b64decode('${guardian}'),g.__dict__)\nsys.exit(g.guardian_main(r,json.loads(base64.b64decode('${Buffer.from(JSON.stringify(request)).toString("base64")}'))))`;
+  const ready = Promise.withResolvers();
+  const exited = Promise.withResolvers();
+  const lifetime = new AbortController();
   const errors = [];
+  let pending = "",
+    size = 0,
+    closed,
+    isReady = false;
+  const child = spawnProcess(
+    "/usr/bin/sudo",
+    ["-n", "/usr/bin/python3", "-c", code],
+    {
+      env: { PATH: context.env.PATH, LANG: "C" },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  const failure = () => {
+    const error = new Error(
+      "Private route guardian failed; inspect retained operation evidence",
+    );
+    error.operationNonce = operation.operationNonce;
+    error.uncertain = true;
+    return error;
+  };
+  const fail = () => {
+    const error = failure();
+    lifetime.abort(error);
+    if (!isReady) ready.reject(error);
+    if (!child.stdin.destroyed && !child.stdin.writableEnded) child.stdin.end();
+  };
+  child.stdout.on("data", (chunk) => {
+    size += chunk.length;
+    if (size > 64 * 1024) {
+      fail();
+      return;
+    }
+    pending += chunk.toString("utf8");
+    let newline;
+    while ((newline = pending.indexOf("\n")) !== -1) {
+      const line = pending.slice(0, newline);
+      pending = pending.slice(newline + 1);
+      try {
+        const value = JSON.parse(line);
+        if (value.operationNonce !== operation.operationNonce)
+          throw new Error();
+        if (value.ready === true && !isReady) {
+          isReady = true;
+          ready.resolve();
+        } else if (value.closed === true && !closed) closed = value;
+        else throw new Error();
+      } catch {
+        fail();
+      }
+    }
+  });
+  child.stderr.resume();
+  child.stdin.on("error", fail);
+  child.once("error", () => {
+    fail();
+    exited.resolve({ failed: true });
+  });
+  child.once("close", (status) => {
+    const okay =
+      status === 0 && closed?.cleaned === true && closed?.uncertain === false;
+    if (!okay || !isReady) fail();
+    lifetime.abort(failure());
+    exited.resolve({ failed: !okay });
+  });
+  const startup = setTimeout(fail, 35_000);
+  startup.unref();
+  const cancel = () => {
+    lifetime.abort(signal.reason);
+    fail();
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
   let result;
   try {
-    runner("runner-prepare");
-    reserved = true;
-    runner("runner-ssh-pending");
-    masterAttempted = true;
-    ssh([
-      "-M",
-      "-f",
-      "-N",
-      "-o",
-      "ControlPersist=no",
-      "-o",
-      "ExitOnForwardFailure=yes",
-      "-L",
-      `${privateAddress}:${localPort}:127.0.0.1:${context.binding.hostPort}`,
-      ...base,
-    ]);
-    ssh(["-O", "check", ...base]);
-    runner("runner-serving");
+    await ready.promise;
+    clearTimeout(startup);
+    lifetime.signal.throwIfAborted();
     result = await callback(
       Object.freeze({
         ...state,
@@ -355,44 +401,23 @@ export async function withQualificationRoute(
         interface: "lo0",
         runnerPort: localPort,
       }),
+      lifetime.signal,
     );
   } catch (error) {
     errors.push(error);
-    if (reserved) {
-      try {
-        runner("runner-failed");
-      } catch (recordError) {
-        errors.push(recordError);
-      }
-    }
   } finally {
-    if (reserved) {
-      if (masterAttempted) {
-        try {
-          ssh(["-O", "exit", ...base]);
-        } catch {
-          teardownFailed = true;
-          errors.push(
-            new Error(
-              "SSH forward teardown is uncertain; runner ownership retained",
-            ),
-          );
-        }
-      }
-      if (teardownFailed) {
-        try {
-          runner("runner-failed");
-        } catch (error) {
-          errors.push(error);
-        }
-      } else {
-        try {
-          runner("runner-cleanup");
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-    }
+    clearTimeout(startup);
+    signal?.removeEventListener("abort", cancel);
+    if (!child.stdin.destroyed && !child.stdin.writableEnded)
+      child.stdin.end("close\n");
+    let timer;
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ failed: true }), 90_000);
+      timer.unref();
+    });
+    const outcome = await Promise.race([exited.promise, timeout]);
+    clearTimeout(timer);
+    if (outcome.failed) errors.push(failure());
   }
   if (errors.length) {
     const error = new AggregateError(
@@ -400,7 +425,7 @@ export async function withQualificationRoute(
       "Private qualification route failed; inspect retained operation evidence before recovery",
     );
     error.operationNonce = operation.operationNonce;
-    error.uncertain = true;
+    error.uncertain = errors.some((item) => item?.uncertain === true);
     throw error;
   }
   return result;

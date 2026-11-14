@@ -163,7 +163,7 @@ test("creator retains original receipts and authorizes final staged plan without
     /Unsupported/,
   );
 });
-test("credentials are restricted to their external operation, never qualification", () => {
+test("stage credentials exclude signing and GitHub access from private qualification setup", () => {
   const env = {
     PATH: "/tools",
     HOME: "/home/fixture",
@@ -180,6 +180,8 @@ test("credentials are restricted to their external operation, never qualificatio
   assert.deepEqual(stageEnvironment(env, "create", "qualify"), {
     PATH: "/tools",
     HOME: "/home/fixture",
+    SITUATE_RELEASE_SSH_PRIVATE_KEY: "synthetic-ssh-key",
+    SITUATE_RELEASE_SSH_KNOWN_HOSTS: "synthetic pinned host",
   });
   const signing = stageEnvironment(env, "create", "build");
   assert.equal(signing.SSH_AUTH_SOCK, undefined);
@@ -230,7 +232,7 @@ test("hosted stages forward shared SSH inputs only to operations that need the h
       assert.equal(child.SITUATE_RELEASE_CONFIG_JSON, undefined);
     };
     for (const stage of workflow === "create"
-      ? ["inputs", "build", "github"]
+      ? ["inputs", "build", "qualify", "github"]
       : [undefined])
       await runReleaseStage(env, workflow, stage, execute);
     await assert.rejects(
@@ -255,8 +257,16 @@ test("hosted stages forward shared SSH inputs only to operations that need the h
         workflow,
         "qualify",
         (_command, _args, { env: child }) => {
-          assert.equal(child.SITUATE_RELEASE_SSH_PRIVATE_KEY, undefined);
-          assert.equal(child.SITUATE_RELEASE_SSH_KNOWN_HOSTS, undefined);
+          assert.equal(
+            child.SITUATE_RELEASE_SSH_PRIVATE_KEY,
+            env.SITUATE_RELEASE_SSH_PRIVATE_KEY,
+          );
+          assert.equal(
+            child.SITUATE_RELEASE_SSH_KNOWN_HOSTS,
+            env.SITUATE_RELEASE_SSH_KNOWN_HOSTS,
+          );
+          assert.equal(child.APPLE_API_PRIVATE_KEY, undefined);
+          assert.equal(child.GH_TOKEN, undefined);
           assert.equal(child.WEBSITE_SSH_IDENTITY, undefined);
           assert.equal(child.WEBSITE_SSH_KNOWN_HOSTS, undefined);
           assert.equal(child.SSH_AUTH_SOCK, undefined);

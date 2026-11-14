@@ -74,7 +74,17 @@ export function simulatorTarget(hostTriple) {
 }
 
 // A separate process group lets Ctrl-C stop Tauri's children without closing Xcode.
-export function run(command, args, { cwd, env, signal, capture = false } = {}) {
+export function run(
+  command,
+  args,
+  { cwd, env, signal, capture = false, terminationGraceMs = 2000 } = {},
+) {
+  if (
+    !Number.isSafeInteger(terminationGraceMs) ||
+    terminationGraceMs < 0 ||
+    terminationGraceMs > 120_000
+  )
+    throw new Error("Invalid subprocess termination grace");
   signal?.throwIfAborted();
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, {
@@ -103,7 +113,7 @@ export function run(command, args, { cwd, env, signal, capture = false } = {}) {
     };
     const abort = () => {
       kill("SIGTERM");
-      timer = setTimeout(() => kill("SIGKILL"), 2000);
+      timer = setTimeout(() => kill("SIGKILL"), terminationGraceMs);
     };
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();

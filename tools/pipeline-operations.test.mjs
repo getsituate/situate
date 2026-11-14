@@ -229,6 +229,7 @@ test("inline release configuration uses identical dotenv and hosted environment 
     environment: { CI: "true", SITUATE_RELEASE_CONFIG_JSON: bytes },
   });
   const expected = {
+    bytes,
     sha256: digest(bytes),
     configuration: {
       schemaVersion: 1,

@@ -183,16 +183,25 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   assert.match(job(publisher, "publish"), /runs-on: macos-latest/);
   assert.match(publisher, /APPLE_TEAM_ID:.*vars\.APPLE_TEAM_ID/);
   assert.doesNotMatch(
-    creator.split("create-stage --stage inputs")[0],
+    creator.split("create-prepare")[0],
     /SITUATE_RELEASE_SSH_PRIVATE_KEY|SITUATE_RELEASE_SSH_KNOWN_HOSTS/,
   );
   const qualification = creator
     .split("create-stage --stage qualify")[1]
     .split("create-stage --stage github")[0];
-  assert.doesNotMatch(qualification, /SITUATE_RELEASE_SSH|SSH_AUTH_SOCK/);
+  assert.match(qualification, /SITUATE_RELEASE_SSH_PRIVATE_KEY/);
+  assert.match(qualification, /SITUATE_RELEASE_SSH_KNOWN_HOSTS/);
+  assert.doesNotMatch(
+    qualification,
+    /APPLE_API_|TAURI_SIGNING|GH_TOKEN|SSH_AUTH_SOCK/,
+  );
+  assert.ok(
+    creator.indexOf("node tools/release-desktop.mjs") <
+      creator.indexOf("create-prepare"),
+  );
   assert.equal(
     (creator.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY:/g) ?? []).length,
-    3,
+    5,
   );
   assert.equal(
     (publisher.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY:/g) ?? []).length,

@@ -113,6 +113,7 @@ export function readConfiguration(
   );
   return {
     ...(file !== undefined ? { file: resolve(file) } : {}),
+    bytes,
     sha256: digest(bytes),
     configuration,
   };
@@ -587,16 +588,14 @@ export async function productionStages(
     },
     qualify: async ({ operation, signal }) => {
       const built = previous(operation, "build");
-      const { createFinalArtifactQualificationHost } =
-        await import("../client/scripts/final-artifact-qualification.mjs");
-      const qualificationHost = createFinalArtifactQualificationHost(
-        config.qualification,
-      );
-      const { writeQualificationReceipt } =
-        await import("./release-qualification.mjs");
-      return writeQualificationReceipt({
+      const { runPreparedQualification } =
+        await import("./release-runtime.mjs");
+      return runPreparedQualification(root, {
+        plan,
+        record: configRecord,
+        configuration: config,
         directory: built.directory,
-        qualificationHost,
+        environment,
         signal,
       });
     },

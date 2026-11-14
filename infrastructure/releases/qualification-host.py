@@ -207,13 +207,15 @@ def perform(action, request, source=None):
             operation.mkdir(mode=0o700)
             identity = encoded({'schemaVersion': 1, 'operationId': request['operationId'], 'operationNonce': nonce, 'hostname': config['hostname'], **discovered})
             state = {'operationId': request['operationId'], 'operationNonce': nonce, 'config': config, 'status': 'prepared', **discovered,
-                     'identityPath': '/private-qualification/' + token + '/identity.json',
+                     'identityPath': '/releases/.qualification/' + token + '/identity.json',
                      'identitySha256': sha(identity), 'containerName': 'situate-qualification-' + token[:32]}
             state['status'] = 'prepare-pending'
             save(operation / 'state.json', state)
             try:
                 (operation / 'identity').mkdir(mode=0o700)
                 write_new(operation / 'identity' / 'identity.json', identity)
+                os.chmod(operation / 'identity', 0o755)
+                os.chmod(operation / 'identity' / 'identity.json', 0o644)
                 state['status'] = 'prepared'
                 save(operation / 'state.json', state)
                 return facts(state)
@@ -242,7 +244,7 @@ def perform(action, request, source=None):
         if action == 'serve':
             require(state['status'] == 'staged', 'Serve requires verified staged bytes')
         if action == 'cleanup':
-            state['artifactsRetained'] = state.get('uncertain', False) or state['status'].endswith(('-pending', '-failed'))
+            state['artifactsRetained'] = request.get('retainArtifacts') is True or state.get('uncertain', False) or state['status'].endswith(('-pending', '-failed'))
         state['status'] = action + '-pending'
         save(operation / 'state.json', state)
         try:
@@ -264,6 +266,10 @@ def perform(action, request, source=None):
                             outgoing.flush()
                             os.fsync(outgoing.fileno())
                 verify(payload, files)
+                # The private parent remains 0700; Caddy reads these read-only bind mounts without DAC overrides.
+                os.chmod(payload, 0o755)
+                for path in payload.rglob('*'):
+                    os.chmod(path, 0o755 if path.is_dir() else 0o644)
                 state['candidateFeedSha256'] = files[config['feedPath']]['sha256']
                 state['status'] = 'staged'
             elif action == 'serve':
@@ -272,16 +278,17 @@ def perform(action, request, source=None):
                 require(discover(config) == {key: state[key] for key in ['imageId', 'certificateVolume']}, 'Production Caddy image or certificate volume changed')
                 require(owned_container(state) is None, 'Listener already exists; inspect before recovery')
                 write_new(operation / 'caddy.json', encoded(caddy_config(state)))
+                os.chmod(operation / 'caddy.json', 0o644)
                 args = ['docker', 'run', '--detach', '--pull=never', '--name', state['containerName'],
                         '--label', LABEL + '=' + nonce, '--read-only', '--user', '0:0', '--cap-drop=ALL',
-                        '--cap-add=DAC_READ_SEARCH', '--security-opt=no-new-privileges:true', '--pids-limit=64',
+                        '--cap-add=NET_BIND_SERVICE', '--security-opt=no-new-privileges:true', '--pids-limit=64',
                         '--publish', '127.0.0.1:' + str(config['hostPort']) + ':8443/tcp',
                         '--mount', 'type=volume,src=' + state['certificateVolume'] + ',dst=/cert-store,readonly',
                         '--mount', 'type=bind,src=' + str(operation / 'payload') + ',dst=/candidate,readonly',
                         '--mount', 'type=bind,src=' + str(operation / 'identity') + ',dst=/identity,readonly',
                         '--mount', 'type=bind,src=' + str(operation / 'caddy.json') + ',dst=/etc/caddy/qualification.json,readonly',
                         '--entrypoint', 'caddy', state['imageId'], 'run', '--config', '/etc/caddy/qualification.json']
-                # Caddy needs read/search access to root-owned certificates, but no write or network-bind capability.
+                # The existing Caddy binary carries cap_net_bind_service=ep, even when listening on a high port.
                 command(args)
                 item = owned_container(state)
                 require(item is not None and item['State']['Running'] is True, 'Private listener did not remain running')

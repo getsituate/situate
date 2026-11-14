@@ -169,7 +169,10 @@ export function stageEnvironment(env, workflow, stage) {
   ];
   if (workflow === "publish" || ["inputs", "github"].includes(stage))
     names.push("GH_TOKEN");
-  if (workflow === "publish" || ["inputs", "build", "github"].includes(stage))
+  if (
+    workflow === "publish" ||
+    ["inputs", "build", "qualify", "github"].includes(stage)
+  )
     names.push(
       "SITUATE_RELEASE_SSH_PRIVATE_KEY",
       "SITUATE_RELEASE_SSH_KNOWN_HOSTS",

@@ -205,6 +205,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/release-desktop.mjs
       - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-native
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow create --lane macos-native
@@ -272,9 +273,12 @@ jobs:
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
       - run: node tools/actions-adapter.mjs release-gate --workflow create
+      - run: node tools/release-desktop.mjs
       - run: node tools/actions-adapter.mjs create-prepare
         env:
           SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
           PIPELINE_NEEDS: ${{ toJSON(needs) }}
@@ -300,6 +304,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - run: node tools/actions-adapter.mjs create-stage --stage qualify
+        env:
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
       - run: node tools/actions-adapter.mjs create-stage --stage github
         env:
           GH_TOKEN: ${{ github.token }}

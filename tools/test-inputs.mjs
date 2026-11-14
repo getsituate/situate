@@ -10,7 +10,7 @@ const platformInput =
 const declarations = /^changes\//;
 const swiftPolicy = /^\.(?:swift-format|swiftlint\.yml)$/;
 const delivery =
-  /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery))(?:\.test)?\.mjs$/;
+  /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery|qualification-(?:host|route-guardian)))(?:\.test)?\.(?:mjs|py)$/;
 const migrationContracts =
   /^tools\/(?:migration-history|published-migrations)(?:\.test)?\.mjs$/;
 const migrationConsumers =
