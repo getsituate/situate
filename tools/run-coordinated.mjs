@@ -31,9 +31,18 @@ export async function runCoordinated({
   environment = process.env,
   signal,
   output,
+  cleanupGraceMs = 2000,
   onTiming = () => {},
 }) {
   signal?.throwIfAborted();
+  if (
+    !Number.isInteger(cleanupGraceMs) ||
+    cleanupGraceMs < 1 ||
+    cleanupGraceMs > 120000
+  )
+    throw new Error(
+      "Coordinated cleanup grace must be an integer from 1 to 120000 ms.",
+    );
   if (!["worktree", "desktop", "build"].includes(resource))
     throw new Error("Unknown coordinated resource.");
   const dockerLeaseDirectory =
@@ -48,6 +57,8 @@ export async function runCoordinated({
     [
       "-u",
       fileURLToPath(new URL("./worktree-supervisor.py", import.meta.url)),
+      "--cleanup-grace-ms",
+      String(cleanupGraceMs),
       ...(dockerLease ? ["--docker-lease", dockerLease] : []),
       resource,
       realpathSync(directory),

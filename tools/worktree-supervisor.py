@@ -110,7 +110,7 @@ def observe(known, processes, group, ancestors):
     return live
 
 
-def send_owned(known, processes, live, name, ancestors):
+def send_owned(known, processes, live, name, ancestors, attempted=None):
     if name == signal.SIGKILL:
         # Reparenting must not let a nested supervisor lose its lease before an orphan exits.
         parents = {parent for pid in live for parent, born in ancestors.get(pid, set())
@@ -120,16 +120,25 @@ def send_owned(known, processes, live, name, ancestors):
     for pid in sorted(live, reverse=True):
         if processes.get(pid, (None, None, None))[2] != known[pid]:
             continue
+        identity = (pid, known[pid], name)
+        if attempted is not None:
+            if identity in attempted:
+                continue
+            attempted.add(identity)
         try:
             os.kill(pid, name)
+            sent = True
+        except PermissionError:
+            report("Cannot signal an owned process; retaining the resource lease until its absence is verified.")
             sent = True
         except ProcessLookupError:
             pass
     return sent
 
 
-def drain(child, known, ancestors, docker_lease=None):
+def drain(child, known, ancestors, docker_lease=None, cleanup_grace_ms=2000):
     term_started = None
+    attempted = set()
     while True:
         try:
             processes = snapshot()
@@ -151,8 +160,8 @@ def drain(child, known, ancestors, docker_lease=None):
             return
         if docker_lease is not None and wait_for_docker_creation(docker_lease):
             continue
-        name = signal.SIGTERM if term_started is None or time.monotonic() - term_started < 2 else signal.SIGKILL
-        if send_owned(known, processes, live, name, ancestors) and term_started is None:
+        name = signal.SIGTERM if term_started is None or time.monotonic() - term_started < cleanup_grace_ms / 1000 else signal.SIGKILL
+        if send_owned(known, processes, live, name, ancestors, attempted) and term_started is None:
             term_started = time.monotonic()
         time.sleep(0.05)
 
@@ -507,6 +516,13 @@ def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
 
 def main(coordination_directory=None):
     arguments = sys.argv[1:]
+    cleanup_grace_ms = 2000
+    if arguments[:1] == ['--cleanup-grace-ms']:
+        if (len(arguments) < 2 or not re.fullmatch(r'[0-9]+', arguments[1])
+                or not 1 <= int(arguments[1]) <= 120000):
+            raise ValueError('Coordinated cleanup grace must be an integer from 1 to 120000 ms.')
+        cleanup_grace_ms = int(arguments[1])
+        arguments = arguments[2:]
     docker_lease = None
     if arguments[:1] == ['--docker-lease']:
         docker_lease = Path(arguments[1])
@@ -578,7 +594,7 @@ def main(coordination_directory=None):
         creating = docker_lease if docker_lease is not None and not docker_build_unstarted(docker_lease) else None
         if creating is not None:
             wait_for_docker_creation(creating)
-        drain(child, known, ancestors, docker_lease=creating)
+        drain(child, known, ancestors, docker_lease=creating, cleanup_grace_ms=cleanup_grace_ms)
         drained = True
         if resource == "worktree":
             release_dependency_directories(worktree_root(directory), known)
@@ -589,7 +605,7 @@ def main(coordination_directory=None):
             creating = docker_lease if creation_started else None
             if creating is not None:
                 wait_for_docker_creation(creating)
-            drain(child, known, ancestors, docker_lease=creating)
+            drain(child, known, ancestors, docker_lease=creating, cleanup_grace_ms=cleanup_grace_ms)
             if resource == "worktree":
                 release_dependency_directories(worktree_root(directory), known)
         if docker_lease is not None:

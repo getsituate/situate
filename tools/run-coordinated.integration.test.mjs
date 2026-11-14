@@ -58,11 +58,17 @@ except Exception as error:
     }
     rmSync(directory, { recursive: true, force: true });
   });
-  function run(cwd, source, resource = "worktree", environment = {}) {
+  function run(
+    cwd,
+    source,
+    resource = "worktree",
+    environment = {},
+    cleanupGraceMs,
+  ) {
     const worker = join(directory, `worker-${children.length}.mjs`);
     writeFileSync(worker, source);
     const script = `import {runCoordinated} from ${JSON.stringify(helper)};
-      process.exitCode = await runCoordinated({directory: ${JSON.stringify(cwd)}, resource: ${JSON.stringify(resource)}, command: process.execPath, args: [${JSON.stringify(worker)}], onTiming: event => console.log('TIMING:' + JSON.stringify(event))});`;
+      process.exitCode = await runCoordinated({directory: ${JSON.stringify(cwd)}, resource: ${JSON.stringify(resource)}, cleanupGraceMs: ${JSON.stringify(cleanupGraceMs)}, command: process.execPath, args: [${JSON.stringify(worker)}], onTiming: event => console.log('TIMING:' + JSON.stringify(event))});`;
     const inheritedEnvironment = { ...process.env };
     delete inheritedEnvironment.SITUATE_TOOL_BUILD_SLOTS;
     const child = spawn(
@@ -674,6 +680,162 @@ test("hard caller termination drains detached descendants and releases only owne
   assert.equal(await next.done, 0, next.output);
   assert.equal(existsSync(lock), false);
   assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+});
+
+for (const cancellation of ["SIGTERM", "SIGKILL"]) {
+  test(`coordinated ${cancellation} grants delayed cleanup its selected grace and sends TERM once`, async (t) => {
+    const { directory, run } = fixture(t);
+    const ready = join(directory, "ready");
+    const terms = join(directory, "terms");
+    const finished = join(directory, "finished");
+    const owner = run(
+      directory,
+      `
+      import {appendFileSync, writeFileSync} from 'node:fs';
+      let stopping = false;
+      process.on('SIGTERM', () => {
+        appendFileSync(${JSON.stringify(terms)}, 'TERM\\n');
+        if (stopping) process.exit(45);
+        stopping = true;
+        setTimeout(() => {writeFileSync(${JSON.stringify(finished)}, 'cleaned');process.exit(0);}, 2700);
+      });
+      writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+      setInterval(() => {}, 1000);
+    `,
+      "worktree",
+      {},
+      6000,
+    );
+    await until(() => existsSync(ready));
+    const next = run(
+      directory,
+      `
+      import {existsSync} from 'node:fs';
+      if (!existsSync(${JSON.stringify(finished)})) throw new Error('cleanup did not finish before lease release');
+    `,
+    );
+    await until(() => next.output.includes("Waiting for the current worktree"));
+    const started = performance.now();
+    owner.kill(cancellation);
+    assert.equal(await next.done, 0, next.output);
+    assert.ok(performance.now() - started >= 2600);
+    assert.equal(readFileSync(terms, "utf8"), "TERM\n");
+    assert.equal(readFileSync(finished, "utf8"), "cleaned");
+    assert.equal(
+      await owner.done,
+      cancellation === "SIGTERM" ? 143 : null,
+      owner.output,
+    );
+  });
+}
+
+test("permission-denied descendants keep the coordinated lease until verified absent", async (t) => {
+  const { directory, run } = fixture(
+    t,
+    (root) => `
+real_kill = supervisor.os.kill
+root = Path(${JSON.stringify(root)})
+def denied_kill(pid, name):
+    target = root / 'protected.pid'
+    if target.exists() and target.read_text() == str(pid):
+        with (root / 'denied.jsonl').open('a') as stream:
+            stream.write(str(int(name)) + '\\n')
+        raise PermissionError('Synthetic privileged descendant')
+    return real_kill(pid, name)
+supervisor.os.kill = denied_kill
+`,
+  );
+  const owner = run(
+    directory,
+    gated(directory, "protected"),
+    "worktree",
+    {},
+    100,
+  );
+  try {
+    await until(() => existsSync(join(directory, "protected")));
+    const pid = Number(readFileSync(join(directory, "protected"), "utf8"));
+    writeFileSync(join(directory, "protected.pid"), String(pid));
+    const next = run(directory, "console.log('after-protected-exit');");
+    await until(() => next.output.includes("Waiting for the current worktree"));
+    owner.kill("SIGTERM");
+    await until(
+      () =>
+        existsSync(join(directory, "denied.jsonl")) &&
+        readFileSync(join(directory, "denied.jsonl"), "utf8").includes("9\n"),
+    );
+    assert.equal(owner.exitCode, null);
+    assert.equal(next.exitCode, null);
+    process.kill(pid, 0);
+    assert.equal(
+      readFileSync(join(directory, "denied.jsonl"), "utf8"),
+      "15\n9\n",
+    );
+    assert.match(owner.output, /retaining the resource lease/);
+    writeFileSync(join(directory, "protected-release"), "");
+    assert.equal(await owner.done, 143, owner.output);
+    assert.equal(await next.done, 0, next.output);
+    assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  } finally {
+    writeFileSync(join(directory, "protected-release"), "");
+  }
+});
+
+test("supervisor validates cleanup grace before acquiring a lease", () => {
+  const source = `import importlib.util,sys
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(supervisorSource)})
+s=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(s)
+def acquire(*args,**kwargs): raise AssertionError('Invalid grace acquired a lease')
+s.acquire=acquire
+for value in ['0','-1','120001','1.5','NaN','']:
+    sys.argv=['supervisor','--cleanup-grace-ms',value,'worktree','/unstarted','/unstarted']
+    try: s.main()
+    except ValueError as error: assert 'cleanup grace' in str(error)
+    else: raise AssertionError('Invalid grace accepted')
+sys.argv=['supervisor','--cleanup-grace-ms']
+try: s.main()
+except ValueError as error: assert 'cleanup grace' in str(error)
+else: raise AssertionError('Missing grace accepted')`;
+  execFileSync("python3", ["-c", source], { timeout: 5000 });
+});
+
+test("termination attempts are deduplicated by signal and owned PID birth across tree/group discovery", () => {
+  const source = `import importlib.util,signal
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(supervisorSource)})
+s=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(s)
+known={10:'worker'}
+ancestors={}
+processes={10:(1,10,'worker'),20:(10,10,'old-child')}
+live=s.observe(known,processes,10,ancestors)
+calls=[]
+s.os.kill=lambda pid,name:calls.append((pid,name))
+attempted=set()
+s.send_owned(known,processes,live,signal.SIGTERM,ancestors,attempted)
+s.send_owned(known,processes,live,signal.SIGTERM,ancestors,attempted)
+assert calls==[(20,signal.SIGTERM),(10,signal.SIGTERM)],calls
+processes[20]=(10,10,'new-child')
+live=s.observe(known,processes,10,ancestors)
+s.send_owned(known,processes,live,signal.SIGTERM,ancestors,attempted)
+assert calls==[(20,signal.SIGTERM),(10,signal.SIGTERM),(20,signal.SIGTERM)],calls`;
+  execFileSync("python3", ["-c", source], { timeout: 5000 });
+});
+
+test("cleanup grace is validated before starting a coordinated command", async (t) => {
+  const { directory, run } = fixture(t);
+  for (const value of [0, -1, 120001, 1.5, "90000", null]) {
+    const child = run(
+      directory,
+      "throw new Error('invalid grace started the worker');",
+      "worktree",
+      {},
+      value,
+    );
+    assert.equal(await child.done, 1, child.output);
+    assert.match(child.output, /cleanup grace/i);
+    assert.doesNotMatch(child.output, /invalid grace started/);
+  }
 });
 
 test("desktop phases queue across worktrees without blocking worktree-only commands", async (t) => {
