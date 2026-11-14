@@ -143,6 +143,8 @@ function jxa(input, changes = {}) {
       NSAppleEventDescriptor: {
         descriptorWithBundleIdentifier(bundle) {
           assert.equal(bundle, "com.apple.systemevents");
+          if (values.throwFactory)
+            throw new Error("synthetic-private-factory-error");
           return {
             get aeDesc() {
               if (values.throwDescriptor)
@@ -541,6 +543,7 @@ test("phase sidechannel emits static markers without capabilities or UI contents
       "accessibility-query",
       "system-events-query",
       "appleevents-target",
+      "appleevents-address",
       "appleevents-query",
       "finder-query",
       "menu-role-query",
@@ -556,6 +559,21 @@ test("phase sidechannel emits static markers without capabilities or UI contents
   );
   assert.ok(Buffer.byteLength(warm.phases) < 4096);
   assert.ok(Buffer.byteLength(cold.phases) < 4096);
+});
+
+test("descriptor factory and opaque getter failures identify distinct phases before permission or UI reads", () => {
+  const { script } = worker();
+  for (const [changes, stage] of [
+    [{ throwFactory: true }, "appleevents-target"],
+    [{ throwDescriptor: true }, "appleevents-address"],
+  ]) {
+    const result = jxa(script, changes);
+    assert.equal(JSON.parse(result.output).stage, stage);
+    assert.equal(result.phases.trimEnd().split("\n").at(-1), stage);
+    assert.ok(!result.calls.includes("permission"));
+    assert.ok(!result.calls.includes("read"));
+    assert.doesNotMatch(result.output + result.phases, /synthetic-private/);
+  }
 });
 
 function processFixture() {
@@ -767,7 +785,8 @@ test("JXA distinguishes framework and bridge exceptions from denied capabilities
     ],
     [{ throwTrust: true }, "accessibility-query"],
     [{ throwProcessQuery: "com.apple.systemevents" }, "system-events-query"],
-    [{ throwDescriptor: true }, "appleevents-target"],
+    [{ throwFactory: true }, "appleevents-target"],
+    [{ throwDescriptor: true }, "appleevents-address"],
     [{ throwBinding: true }, "appleevents-query"],
     [{ throwPermission: true }, "appleevents-query"],
     [{ throwProcessQuery: "com.apple.finder" }, "finder-query"],

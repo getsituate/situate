@@ -55,6 +55,7 @@ function run() {
     }
     phase("appleevents-target");
     var target = $.NSAppleEventDescriptor.descriptorWithBundleIdentifier("com.apple.systemevents");
+    phase("appleevents-address");
     var address = target.aeDesc;
     phase("appleevents-query");
     // aeDesc's Ref type differs from AE's BridgeSupport struct type; keep the address opaque.
@@ -112,6 +113,7 @@ const jxaPhases = new Set([
   "system-events-query",
   "system-events-launch",
   "appleevents-target",
+  "appleevents-address",
   "appleevents-query",
   "appleevents-consent-required",
   "appleEventsAllowed",
@@ -156,6 +158,7 @@ const stages = new Set([
   "menu-role-query",
   "menu-count-query",
   "appleevents-target",
+  "appleevents-address",
   "appleevents-query",
   "appleevents-consent-required",
   "jxa-process",
