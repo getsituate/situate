@@ -30,14 +30,24 @@ import {
   PINNED_AGENT_MODEL,
 } from "./agent-e2e-provider.mjs";
 
-import { finalArtifactJourneys, startFinalArtifactProvider } from "./final-artifact-journeys.mjs";
+import {
+  finalArtifactJourneys,
+  startFinalArtifactProvider,
+} from "./final-artifact-journeys.mjs";
 
 const hash = (path) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
 const quote = (value) => JSON.stringify(value);
 const journeyNames = ["workspace", "onboarding", "plugins"];
 
-export async function qualifyPredecessorUpdate({ install, author, report, update, reopen, restart }) {
+export async function qualifyPredecessorUpdate({
+  install,
+  author,
+  report,
+  update,
+  reopen,
+  restart,
+}) {
   await install();
   await author();
   const retained = report();
@@ -156,8 +166,15 @@ export function validateFinalArtifactConfiguration(configuration) {
       configuration.runnerImage.length > 0,
     "Blocked: resolved runner image identity is required",
   );
-  if (!configuration.journeys && !configuration.lifecycle && !configuration.updateActions) {
-    assert(configuration.profile === "macos-direct-v1", "Blocked: a reviewed final-artifact profile is required");
+  if (
+    !configuration.journeys &&
+    !configuration.lifecycle &&
+    !configuration.updateActions
+  ) {
+    assert(
+      configuration.profile === "macos-direct-v1",
+      "Blocked: a reviewed final-artifact profile is required",
+    );
     return configuration;
   }
   for (const name of journeyNames) {
@@ -222,10 +239,21 @@ function validateAction(action) {
     "Invalid native accessibility action",
   );
   if (action.windows !== undefined) {
-    assert(Number.isInteger(action.windows) && action.windows > 0 && action.windows <= 4, "Invalid owned window count");
+    assert(
+      Number.isInteger(action.windows) &&
+        action.windows > 0 &&
+        action.windows <= 4,
+      "Invalid owned window count",
+    );
   } else if (action.key) {
-    assert(["return", "a", "g", "w"].includes(action.key.key) &&
-      Array.isArray(action.key.modifiers) && action.key.modifiers.every((value) => ["command", "shift"].includes(value)), "Invalid accessibility key chord");
+    assert(
+      ["return", "a", "g", "w"].includes(action.key.key) &&
+        Array.isArray(action.key.modifiers) &&
+        action.key.modifiers.every((value) =>
+          ["command", "shift"].includes(value),
+        ),
+      "Invalid accessibility key chord",
+    );
   } else if (action.click || action.assert || action.focus) {
     const target = action.click ?? action.assert ?? action.focus;
     assert(
@@ -239,7 +267,8 @@ function validateAction(action) {
       ].includes(target.role) &&
         typeof target.name === "string" &&
         target.name.length > 0 &&
-        (target.window === undefined || (typeof target.window === "string" && target.window.length > 0)) &&
+        (target.window === undefined ||
+          (typeof target.window === "string" && target.window.length > 0)) &&
         (target.value === undefined || typeof target.value === "string"),
       "Invalid accessibility target",
     );
@@ -261,11 +290,15 @@ export function accessibilityScript(pid, action) {
     return `${prefix}if count of windows is not ${action.windows} then error "Owned window count differs"\nend tell\nend tell`;
   if (action.key) {
     const code = { return: 36, tab: 48, escape: 53 }[action.key.key];
-    const modifiers = action.key.modifiers.length ? ` using {${action.key.modifiers.map((value) => `${value} down`).join(", ")}}` : "";
+    const modifiers = action.key.modifiers.length
+      ? ` using {${action.key.modifiers.map((value) => `${value} down`).join(", ")}}`
+      : "";
     return `${prefix}${code ? `key code ${code}` : `keystroke ${quote(action.key.key)}`}${modifiers}\nend tell\nend tell`;
   }
   const target = action.click ?? action.assert ?? action.focus;
-  const selectWindow = target.window ? `if count of (windows whose name is ${quote(target.window)}) is not 1 then error "Owned window must be unique"\nperform action "AXRaise" of first window whose name is ${quote(target.window)}\n` : "";
+  const selectWindow = target.window
+    ? `if count of (windows whose name is ${quote(target.window)}) is not 1 then error "Owned window must be unique"\nperform action "AXRaise" of first window whose name is ${quote(target.window)}\n`
+    : "";
   const contents = target.window
     ? `entire contents of first window whose name is ${quote(target.window)}`
     : "entire contents";
@@ -331,7 +364,8 @@ export function createFinalArtifactQualificationHost(
       const ids = output.trim().split(/,\s*/).filter(Boolean).map(Number);
       for (const id of ids) {
         if (
-          Number.isSafeInteger(id) && id !== previousPid &&
+          Number.isSafeInteger(id) &&
+          id !== previousPid &&
           (await processPath(id)).startsWith(`${app}/Contents/MacOS/`)
         ) {
           assert(
@@ -646,7 +680,10 @@ export function createFinalArtifactQualificationHost(
           await launch(false, previousPid);
         },
         reopen: reopenState,
-        restart: async () => { await quit(); await launch(); },
+        restart: async () => {
+          await quit();
+          await launch();
+        },
       });
       return {
         predecessorManifestSha256: predecessor.manifestSha256,
@@ -680,29 +717,43 @@ export function createFinalArtifactQualificationHost(
     },
   };
   function seedWorkspace() {
-      mkdirSync(join(stateRoot, "workspace"), { recursive: true });
-      for (const fixture of configuration.fixtureFiles ?? []) {
-        assert(
-          typeof fixture.path === "string" &&
-            !isAbsolute(fixture.path) &&
-            !fixture.path.split("/").includes("..") &&
-            typeof fixture.contents === "string",
-          "Invalid synthetic fixture file",
-        );
-        const path = join(stateRoot, "workspace", fixture.path);
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, fixture.contents, { flag: "wx", mode: 0o600 });
-      }
+    mkdirSync(join(stateRoot, "workspace"), { recursive: true });
+    for (const fixture of configuration.fixtureFiles ?? []) {
+      assert(
+        typeof fixture.path === "string" &&
+          !isAbsolute(fixture.path) &&
+          !fixture.path.split("/").includes("..") &&
+          typeof fixture.contents === "string",
+        "Invalid synthetic fixture file",
+      );
+      const path = join(stateRoot, "workspace", fixture.path);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, fixture.contents, { flag: "wx", mode: 0o600 });
+    }
   }
   function fixturePath(name, path = "") {
-    assert(/^Qualification (candidate|predecessor)$/.test(name), "Invalid synthetic workspace name");
-    assert(!isAbsolute(path) && !path.split("/").includes(".."), "Invalid synthetic workspace path");
+    assert(
+      /^Qualification (candidate|predecessor)$/.test(name),
+      "Invalid synthetic workspace name",
+    );
+    assert(
+      !isAbsolute(path) && !path.split("/").includes(".."),
+      "Invalid synthetic workspace path",
+    );
     const root = join(stateRoot, "workspace", name);
-    assert(!relative(realpathSync(stateRoot), realpathSync(root)).startsWith(".."), "Synthetic workspace escaped its owner");
+    assert(
+      !relative(realpathSync(stateRoot), realpathSync(root)).startsWith(".."),
+      "Synthetic workspace escaped its owner",
+    );
     const target = join(root, path);
     if (existsSync(target)) {
       const stat = lstatSync(target);
-      assert((stat.isDirectory() || stat.nlink === 1) && !stat.isSymbolicLink() && !relative(root, realpathSync(target)).startsWith(".."), "Unsafe synthetic fixture target");
+      assert(
+        (stat.isDirectory() || stat.nlink === 1) &&
+          !stat.isSymbolicLink() &&
+          !relative(root, realpathSync(target)).startsWith(".."),
+        "Unsafe synthetic fixture target",
+      );
     }
     return target;
   }
@@ -710,17 +761,31 @@ export function createFinalArtifactQualificationHost(
     if (defaultProfile) {
       productJourneys = finalArtifactJourneys({
         actions,
-        phase: stateRoot.endsWith("predecessor-state") ? "predecessor" : "candidate",
-        seed: async (name, path, contents) => writeFileSync(fixturePath(name, path), contents, { flag: "wx", mode: 0o600 }),
-        writable: async (name, value) => chmodSync(fixturePath(name), value ? 0o700 : 0o500),
+        phase: stateRoot.endsWith("predecessor-state")
+          ? "predecessor"
+          : "candidate",
+        seed: async (name, path, contents) =>
+          writeFileSync(fixturePath(name, path), contents, {
+            flag: "wx",
+            mode: 0o600,
+          }),
+        writable: async (name, value) =>
+          chmodSync(fixturePath(name), value ? 0o700 : 0o500),
         verifyFiles: async (name, files) => {
           for (const [path, contents] of files)
-            assert.equal(readFileSync(fixturePath(name, path), "utf8"), contents, "Synthetic retained file differs");
+            assert.equal(
+              readFileSync(fixturePath(name, path), "utf8"),
+              contents,
+              "Synthetic retained file differs",
+            );
         },
       });
       await productJourneys.exercise();
       const report = provider.report();
-      assert(!report.failed && !report.budgetDenials, "Fixture provider failed or exceeded its budget");
+      assert(
+        !report.failed && !report.budgetDenials,
+        "Fixture provider failed or exceeded its budget",
+      );
       await quit();
       await launch();
       await reopenState(report);
@@ -730,9 +795,18 @@ export function createFinalArtifactQualificationHost(
     for (const name of journeyNames) {
       const before = provider.report().requests;
       await actions(configuration.journeys[name].actions);
-      assert(provider.report().requests > before, "Synthetic journey did not exercise the fixture provider");
+      assert(
+        provider.report().requests > before,
+        "Synthetic journey did not exercise the fixture provider",
+      );
     }
-    for (const name of ["multiwindow", "unsavedCancellation", "replacement", "relaunch", "recovery"]) {
+    for (const name of [
+      "multiwindow",
+      "unsavedCancellation",
+      "replacement",
+      "relaunch",
+      "recovery",
+    ]) {
       const scenario = configuration.lifecycle[name];
       await actions(scenario.before);
       await actions(scenario.actions);
@@ -741,8 +815,8 @@ export function createFinalArtifactQualificationHost(
     const report = provider.report();
     assert(
       report.pluginEffects.POST - initial.pluginEffects.POST === 1 &&
-      report.pluginEffects.DELETE - initial.pluginEffects.DELETE === 1 &&
-      report.budgetDenials === 0,
+        report.pluginEffects.DELETE - initial.pluginEffects.DELETE === 1 &&
+        report.budgetDenials === 0,
       "Synthetic plugin effects or provider budgets differ",
     );
     retainedFiles();
@@ -752,13 +826,14 @@ export function createFinalArtifactQualificationHost(
   }
   async function reopenState(report) {
     if (defaultProfile) await productJourneys.reopen();
-    else for (const name of journeyNames)
-      await actions(configuration.journeys[name].reopen);
+    else
+      for (const name of journeyNames)
+        await actions(configuration.journeys[name].reopen);
     assert(
       provider.report().failed !== true &&
-      provider.report().requests === report.requests &&
-      provider.report().pluginEffects.POST === report.pluginEffects.POST &&
-      provider.report().pluginEffects.DELETE === report.pluginEffects.DELETE,
+        provider.report().requests === report.requests &&
+        provider.report().pluginEffects.POST === report.pluginEffects.POST &&
+        provider.report().pluginEffects.DELETE === report.pluginEffects.DELETE,
       "Reopening replayed provider requests or plugin effects",
     );
     if (!defaultProfile) retainedFiles();

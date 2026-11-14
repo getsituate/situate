@@ -300,38 +300,92 @@ test("A authors update state before replacement, then B asserts it before and af
   let version = "B";
   let retained;
   await qualifyPredecessorUpdate({
-    install: async () => { calls.push("install A"); version = "A"; },
-    author: async () => { assert.equal(version, "A"); retained = "A-authored"; calls.push("author A"); },
+    install: async () => {
+      calls.push("install A");
+      version = "A";
+    },
+    author: async () => {
+      assert.equal(version, "A");
+      retained = "A-authored";
+      calls.push("author A");
+    },
     report: () => ({ requests: 12 }),
-    update: async () => { assert.equal(retained, "A-authored"); calls.push("production updater"); version = "B"; },
-    reopen: async (report) => { assert.equal(version, "B"); assert.equal(report.requests, 12); calls.push("B product/files/no replay"); },
-    restart: async () => { calls.push("restart B"); },
+    update: async () => {
+      assert.equal(retained, "A-authored");
+      calls.push("production updater");
+      version = "B";
+    },
+    reopen: async (report) => {
+      assert.equal(version, "B");
+      assert.equal(report.requests, 12);
+      calls.push("B product/files/no replay");
+    },
+    restart: async () => {
+      calls.push("restart B");
+    },
   });
-  assert.deepEqual(calls, ["install A", "author A", "production updater", "B product/files/no replay", "restart B", "B product/files/no replay"]);
+  assert.deepEqual(calls, [
+    "install A",
+    "author A",
+    "production updater",
+    "B product/files/no replay",
+    "restart B",
+    "B product/files/no replay",
+  ]);
 });
 
 test("failed post-update product assertions fail qualification before restart", async () => {
   let restarted = false;
-  await assert.rejects(qualifyPredecessorUpdate({
-    install: async () => {},
-    author: async () => {},
-    report: () => ({ requests: 4 }),
-    update: async () => {},
-    reopen: async () => { throw new Error("draft missing"); },
-    restart: async () => { restarted = true; },
-  }), /draft missing/);
+  await assert.rejects(
+    qualifyPredecessorUpdate({
+      install: async () => {},
+      author: async () => {},
+      report: () => ({ requests: 4 }),
+      update: async () => {},
+      reopen: async () => {
+        throw new Error("draft missing");
+      },
+      restart: async () => {
+        restarted = true;
+      },
+    }),
+    /draft missing/,
+  );
   assert.equal(restarted, false);
 });
 
 test("AX entry, window assertions and chords reject unreviewed roles and keys", () => {
-  assert.match(accessibilityScript(123, { focus: { role: "AXTextArea", name: "Message", window: "Qualification — Situate" } }), /AXFocused/);
-  assert.match(accessibilityScript(123, { assert: { role: "AXTextArea", name: "Message", value: "retained" } }), /Accessibility value differs/);
-  assert.match(accessibilityScript(123, { windows: 2 }), /count of windows is not 2/);
-  assert.match(accessibilityScript(123, { key: { key: "g", modifiers: ["command", "shift"] } }), /command down, shift down/);
+  assert.match(
+    accessibilityScript(123, {
+      focus: {
+        role: "AXTextArea",
+        name: "Message",
+        window: "Qualification — Situate",
+      },
+    }),
+    /AXFocused/,
+  );
+  assert.match(
+    accessibilityScript(123, {
+      assert: { role: "AXTextArea", name: "Message", value: "retained" },
+    }),
+    /Accessibility value differs/,
+  );
+  assert.match(
+    accessibilityScript(123, { windows: 2 }),
+    /count of windows is not 2/,
+  );
+  assert.match(
+    accessibilityScript(123, {
+      key: { key: "g", modifiers: ["command", "shift"] },
+    }),
+    /command down, shift down/,
+  );
   for (const action of [
     { windows: 0 },
     { key: { key: "r", modifiers: ["command"] } },
     { key: { key: "g", modifiers: ["option"] } },
     { focus: { role: "AXWebArea", name: "anything" } },
-  ]) assert.throws(() => accessibilityScript(123, action));
+  ])
+    assert.throws(() => accessibilityScript(123, action));
 });
