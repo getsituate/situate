@@ -1,4 +1,5 @@
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -257,12 +258,21 @@ setInterval(() => {}, 1000);
         const pid = Number(await readFile(ready, "utf8"));
         const cleanupDeadline = performance.now() + 3000;
         while (true) {
-          try {
-            process.kill(pid, 0);
-          } catch (error) {
-            assert.equal(error.code, "ESRCH");
+          const result = spawnSync("ps", ["-o", "stat=", "-p", String(pid)], {
+            encoding: "utf8",
+          });
+          if (result.error) throw result.error;
+          if (
+            result.status === 1 &&
+            !result.stdout.trim() &&
+            !result.stderr.trim()
+          )
             break;
-          }
+          assert.equal(result.status, 0, result.stderr);
+          const state = result.stdout.trim();
+          assert.ok(state, "ps returned no process state");
+          // Exited zombies remain visible until the outer supervisor reaps them.
+          if (state.startsWith("Z")) break;
           assert.ok(
             performance.now() < cleanupDeadline,
             "Child survived cleanup",
