@@ -1,6 +1,7 @@
 import {
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   realpathSync,
@@ -8,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import {
@@ -48,7 +49,49 @@ export function signingEnvironment(environment = process.env) {
     ...baseNames,
     ...signingNames,
     "SITUATE_COORDINATED_WORKTREE",
+    "GITHUB_ACTIONS",
+    "RUNNER_ENVIRONMENT",
   ]);
+}
+
+const hostedExperiment = (environment) =>
+  environment.CI === "true" &&
+  environment.GITHUB_ACTIONS === "true" &&
+  environment.RUNNER_ENVIRONMENT === "github-hosted";
+
+function canonicalPath(path) {
+  const suffix = [];
+  let current = resolve(path);
+  while (true) {
+    try {
+      return join(realpathSync(current), ...suffix);
+    } catch (error) {
+      if (
+        !["ENOENT", "ENOTDIR"].includes(error.code) ||
+        dirname(current) === current
+      )
+        throw error;
+      suffix.unshift(basename(current));
+      current = dirname(current);
+    }
+  }
+}
+
+async function userSearchList(execute, options) {
+  const output = await execute(
+    "security",
+    ["list-keychains", "-d", "user"],
+    options,
+  );
+  return output
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .map((line) => {
+      const path = JSON.parse(line.trim());
+      if (typeof path !== "string" || !isAbsolute(path))
+        throw new Error("invalid-search-list");
+      return path;
+    });
 }
 
 const errorCode = (error) => {
@@ -108,6 +151,7 @@ export async function checkSigning({
   platform = process.platform,
   execute = run,
   signal,
+  probeSearchList = false,
 } = {}) {
   const report = {
     version: 1,
@@ -116,8 +160,18 @@ export async function checkSigning({
     code: "probe-failed",
     attempts: [],
   };
-  let temporary;
+  let temporary, ownedPath, ownedCanonical, cleanupOptions;
   try {
+    if (typeof probeSearchList !== "boolean") {
+      report.status = "blocked";
+      report.code = "invalid-options";
+      return report;
+    }
+    if (probeSearchList && !hostedExperiment(environment)) {
+      report.status = "blocked";
+      report.code = "hosted-ci-required";
+      return report;
+    }
     if (platform !== "darwin") {
       report.status = "blocked";
       report.code = "macos-required";
@@ -165,11 +219,43 @@ export async function checkSigning({
       return report;
     }
     const options = { env: select(env, baseNames), signal, capture: true };
+    cleanupOptions = { ...options, signal: undefined };
     temporary = mkdtempSync(join(tmpdir(), "situate-signing-probe-"));
     report.stage = "keychain";
+    if (probeSearchList)
+      report.searchListProbe = {
+        status: "not-started",
+        code: "baseline-incomplete",
+        registered: null,
+        removal: "not-needed",
+        attempts: [],
+      };
     await withSigningKeychain(
-      { root, environment: env, execute, signal },
+      {
+        root,
+        environment: env,
+        signal,
+        execute: probeSearchList
+          ? async (command, args, commandOptions) => {
+              if (command === "security" && args[0] === "create-keychain") {
+                ownedPath = args.at(-1);
+                ownedCanonical = canonicalPath(ownedPath);
+              }
+              return execute(command, args, commandOptions);
+            }
+          : execute,
+      },
       async (keychain) => {
+        ownedPath = keychain;
+        ownedCanonical = canonicalPath(keychain);
+        const isOwned = (path) => {
+          if (probeSearchList) return canonicalPath(path) === ownedCanonical;
+          try {
+            return realpathSync(path) === ownedCanonical;
+          } catch {
+            return false;
+          }
+        };
         report.stage = "observations";
         report.keychain = { filePresent: existsSync(keychain) };
         const status = JSON.parse(
@@ -180,27 +266,9 @@ export async function checkSigning({
           (status.code === 0 && typeof status.unlocked !== "boolean")
         )
           throw new Error("invalid-status");
-        const search = await execute(
-          "security",
-          ["list-keychains", "-d", "user"],
-          options,
+        const inSearchList = (await userSearchList(execute, options)).some(
+          isOwned,
         );
-        const canonicalKeychain = report.keychain.filePresent
-          ? realpathSync(keychain)
-          : null;
-        const inSearchList = search
-          .split(/\r?\n/)
-          .filter((line) => line.trim())
-          .some((line) => {
-            const path = JSON.parse(line.trim());
-            if (typeof path !== "string")
-              throw new Error("invalid-search-list");
-            try {
-              return realpathSync(path) === canonicalKeychain;
-            } catch {
-              return false;
-            }
-          });
         Object.assign(report.keychain, {
           unlocked: status.code === 0 ? status.unlocked : null,
           statusCode: status.code,
@@ -230,64 +298,73 @@ export async function checkSigning({
           report.code = "identity-not-unique";
           return;
         }
-        report.stage = "attempts";
-        for (const [kind, identity] of [
-          ["configured", selector],
-          ["matched-sha", matching[0][1]],
-        ]) {
-          signal?.throwIfAborted();
-          const copy = join(temporary, `${kind}.app`);
-          mkdirSync(join(copy, "Contents/MacOS"), { recursive: true });
-          mkdirSync(join(copy, "Contents/Helpers"));
-          writeFileSync(
-            join(copy, "Contents/Info.plist"),
-            `<?xml version="1.0" encoding="UTF-8"?>
+        const runAttempts = async (attempts, phase) => {
+          for (const [kind, identity] of [
+            ["configured", selector],
+            ["matched-sha", matching[0][1]],
+          ]) {
+            signal?.throwIfAborted();
+            const copy = join(
+              temporary,
+              `${phase === "baseline" ? kind : `registered-${kind}`}.app`,
+            );
+            mkdirSync(join(copy, "Contents/MacOS"), { recursive: true });
+            mkdirSync(join(copy, "Contents/Helpers"));
+            writeFileSync(
+              join(copy, "Contents/Info.plist"),
+              `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>dev.situate.signing-probe</string>
 <key>CFBundleExecutable</key><string>probe</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 </dict></plist>\n`,
-          );
-          copyFileSync("/usr/bin/true", join(copy, "Contents/MacOS/probe"));
-          copyFileSync("/usr/bin/true", join(copy, "Contents/Helpers/helper"));
-          const attempt = {
-            selector: kind,
-            status: "failed",
-            stage: "sign",
-            errorCode: null,
-            reason: "none",
-          };
-          report.attempts.push(attempt);
-          try {
-            await execute(
-              "codesign",
-              [
-                "--force",
-                "--deep",
-                "--options",
-                "runtime",
-                "--timestamp",
-                "--keychain",
-                keychain,
-                "--sign",
-                identity,
-                copy,
-              ],
-              options,
             );
-            attempt.stage = "verify";
-            await execute(
-              "codesign",
-              ["--verify", "--deep", "--strict", copy],
-              options,
+            copyFileSync("/usr/bin/true", join(copy, "Contents/MacOS/probe"));
+            copyFileSync(
+              "/usr/bin/true",
+              join(copy, "Contents/Helpers/helper"),
             );
-            attempt.status = "passed";
-          } catch (error) {
-            attempt.errorCode = errorCode(error);
-            attempt.reason = attemptReason(error, attempt.stage);
-            signal?.throwIfAborted();
+            const attempt = {
+              selector: kind,
+              status: "failed",
+              stage: "sign",
+              errorCode: null,
+              reason: "none",
+            };
+            attempts.push(attempt);
+            try {
+              await execute(
+                "codesign",
+                [
+                  "--force",
+                  "--deep",
+                  "--options",
+                  "runtime",
+                  "--timestamp",
+                  "--keychain",
+                  keychain,
+                  "--sign",
+                  identity,
+                  copy,
+                ],
+                options,
+              );
+              attempt.stage = "verify";
+              await execute(
+                "codesign",
+                ["--verify", "--deep", "--strict", copy],
+                options,
+              );
+              attempt.status = "passed";
+            } catch (error) {
+              attempt.errorCode = errorCode(error);
+              attempt.reason = attemptReason(error, attempt.stage);
+              signal?.throwIfAborted();
+            }
           }
-        }
+        };
+        report.stage = "attempts";
+        await runAttempts(report.attempts, "baseline");
         report.stage = "cleanup";
         const passed =
           report.attempts.every((attempt) => attempt.status === "passed") &&
@@ -295,6 +372,74 @@ export async function checkSigning({
           report.keychain.unlocked === true;
         report.status = passed ? "passed" : "failed";
         report.code = passed ? "probe-complete" : "signing-probe-failed";
+        if (probeSearchList) {
+          const probe = report.searchListProbe;
+          let mutationAttempted = false;
+          probe.status = "failed";
+          probe.code = "registration-failed";
+          try {
+            const current = await userSearchList(execute, options);
+            const registered = current.some(isOwned)
+              ? current
+              : [...current, ownedCanonical];
+            mutationAttempted = true;
+            await execute(
+              "security",
+              ["list-keychains", "-d", "user", "-s", ...registered],
+              options,
+            );
+            probe.registered = (await userSearchList(execute, options)).some(
+              isOwned,
+            );
+            if (!probe.registered) throw new Error("registration-unconfirmed");
+            await runAttempts(probe.attempts, "registered");
+            probe.status = probe.attempts.every(
+              (attempt) => attempt.status === "passed",
+            )
+              ? "passed"
+              : "failed";
+            probe.code =
+              probe.status === "passed"
+                ? "probe-complete"
+                : "signing-probe-failed";
+          } catch (error) {
+            probe.status = signal?.aborted ? "cancelled" : "failed";
+            probe.code = signal?.aborted
+              ? "interrupted"
+              : probe.registered
+                ? "probe-failed"
+                : "registration-failed";
+            if (signal?.aborted) throw error;
+          } finally {
+            if (mutationAttempted) {
+              try {
+                const current = await userSearchList(execute, cleanupOptions);
+                const remaining = current.filter((path) => !isOwned(path));
+                if (remaining.length !== current.length)
+                  await execute(
+                    "security",
+                    ["list-keychains", "-d", "user", "-s", ...remaining],
+                    cleanupOptions,
+                  );
+                probe.removal = (
+                  await userSearchList(execute, cleanupOptions)
+                ).some(isOwned)
+                  ? "failed"
+                  : "passed";
+              } catch {
+                probe.removal = "unknown";
+              }
+              if (probe.removal !== "passed") {
+                probe.status = "failed";
+                probe.code = "search-list-cleanup-failed";
+              }
+            }
+            if (probe.status !== "passed") {
+              report.status = "failed";
+              report.code = "search-list-probe-failed";
+            }
+          }
+        }
       },
     );
     signal?.throwIfAborted();
@@ -303,6 +448,41 @@ export async function checkSigning({
     report.status = signal?.aborted ? "cancelled" : "failed";
     report.code = signal?.aborted ? "interrupted" : "probe-failed";
   } finally {
+    if (report.searchListProbe) {
+      const cleanup = {
+        status: "unknown",
+        fileAbsent: null,
+        entryAbsent: null,
+      };
+      report.searchListProbe.cleanup = cleanup;
+      if (ownedPath && ownedCanonical && cleanupOptions) {
+        try {
+          lstatSync(ownedPath);
+          cleanup.fileAbsent = false;
+        } catch (error) {
+          if (error.code === "ENOENT") cleanup.fileAbsent = true;
+        }
+        try {
+          cleanup.entryAbsent = !(
+            await userSearchList(execute, cleanupOptions)
+          ).some((path) => canonicalPath(path) === ownedCanonical);
+        } catch {
+          cleanup.entryAbsent = null;
+        }
+        cleanup.status =
+          cleanup.fileAbsent === false || cleanup.entryAbsent === false
+            ? "failed"
+            : cleanup.fileAbsent === true && cleanup.entryAbsent === true
+              ? "passed"
+              : "unknown";
+      }
+      if (cleanup.status !== "passed") {
+        report.status = "failed";
+        report.stage = "cleanup";
+        report.code = "keychain-cleanup-unverified";
+        report.searchListProbe.status = "failed";
+      }
+    }
     if (temporary) {
       try {
         rmSync(temporary, { recursive: true, force: true });
@@ -323,23 +503,38 @@ export async function main(
     execute = run,
   } = {},
 ) {
+  let probeSearchList;
   try {
     const { values } = parseArgs({
       args,
-      options: { help: { type: "boolean" } },
+      options: {
+        help: { type: "boolean" },
+        "probe-search-list": { type: "boolean", default: false },
+      },
     });
     if (values.help) {
       console.log(
-        "Usage: node tools/signing-check.mjs [--help]\nProbe macOS deep signing access using isolated synthetic app bundles.",
+        "Usage: node tools/signing-check.mjs [--help] [--probe-search-list]\nProbe macOS deep signing access using isolated synthetic app bundles.",
       );
       return 0;
     }
+    probeSearchList = values["probe-search-list"];
   } catch {
     console.log(
       JSON.stringify({
         version: 1,
         status: "blocked",
         code: "invalid-options",
+      }),
+    );
+    return 1;
+  }
+  if (probeSearchList && !hostedExperiment(environment)) {
+    console.log(
+      JSON.stringify({
+        version: 1,
+        status: "blocked",
+        code: "hosted-ci-required",
       }),
     );
     return 1;
@@ -351,7 +546,10 @@ export async function main(
         directory,
         resource: "worktree",
         command: process.execPath,
-        args: [fileURLToPath(import.meta.url)],
+        args: [
+          fileURLToPath(import.meta.url),
+          ...(probeSearchList ? ["--probe-search-list"] : []),
+        ],
         environment: env,
         cleanupGraceMs: 90000,
       });
@@ -375,6 +573,7 @@ export async function main(
       platform,
       execute,
       signal: abort.signal,
+      probeSearchList,
     });
     console.log(JSON.stringify(report));
     return report.status === "passed"

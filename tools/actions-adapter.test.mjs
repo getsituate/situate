@@ -524,6 +524,8 @@ test("signing diagnostics forward only signing inputs after trusted-main authori
     PATH: "/synthetic/bin",
     HOME: "/synthetic/home",
     CI: "true",
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
     APPLE_TEAM_ID: "TEAM123456",
     APPLE_MACOS_SIGNING_IDENTITY:
       "Developer ID Application: Example (TEAM123456)",
@@ -548,7 +550,7 @@ test("signing diagnostics forward only signing inputs after trusted-main authori
   assert.deepEqual(calls, [
     {
       command: process.execPath,
-      args: ["tools/signing-check.mjs"],
+      args: ["tools/signing-check.mjs", "--probe-search-list"],
       options: { stdio: "inherit", env: signing },
     },
   ]);
@@ -557,6 +559,9 @@ test("signing diagnostics forward only signing inputs after trusted-main authori
     { GITHUB_REF: "refs/heads/feature" },
     { GITHUB_EVENT_NAME: "push" },
     { DIAGNOSTIC_TARGET: "portable" },
+    { CI: "false" },
+    { GITHUB_ACTIONS: "false" },
+    { RUNNER_ENVIRONMENT: "self-hosted" },
   ]) {
     await assert.rejects(
       main(
@@ -564,7 +569,7 @@ test("signing diagnostics forward only signing inputs after trusted-main authori
         { ...env, ...changed },
         execute,
       ),
-      /trusted main|macOS/,
+      /trusted main|macOS|GitHub-hosted/,
     );
   }
   assert.equal(calls.length, 1);
