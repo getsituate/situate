@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "native-plugin-initial-snapshot",
-  "behaviorDigest": "df49ee6dc273abeaa74c25f1378e406a4bb9835575c4ed1dfd2305cf3310562f",
+  "behaviorDigest": "fe626614900523b327887798f71e8f71a377d942513bb2c4acc317984ff5b2a3",
   "locales": {
     "en": {
       "title": "Changes",
@@ -15,12 +15,12 @@
   "emptyReason": "Corrects native smoke plugin initialization synchronization; application behavior is unchanged.",
   "translationApprovals": {
     "de": {
-      "sourceHash": "84bdb97317fcf8b44f6bd563191c4bc67bd069e4d2911bb2df39cf06bba08dc1",
-      "translationHash": "19140edd549c4b922aee739fe4ed6ca2e3a24628addcc658b4b8dae6bb810f5b"
+      "sourceHash": "9e00c0ff52c3061b11550f8472d297ad8f3776dd2a36377c478ca94308add6f0",
+      "translationHash": "3f31fd222f3b67406e816c4f96f7fc5483cb42ebc20eb6cd060423701e118672"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "84bdb97317fcf8b44f6bd563191c4bc67bd069e4d2911bb2df39cf06bba08dc1"
+    "sourceHash": "9e00c0ff52c3061b11550f8472d297ad8f3776dd2a36377c478ca94308add6f0"
   }
 }

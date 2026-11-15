@@ -14,6 +14,10 @@ const uiSource = await readFile(
   new URL("plugin-runtime-fixture.js", directory),
   "utf8",
 );
+const checksSmoke = await readFile(
+  new URL("plugin-checks-smoke.js", directory),
+  "utf8",
+);
 const rust = await readFile(
   new URL("plugin_runtime_smoke.rs", directory),
   "utf8",
@@ -103,6 +107,41 @@ test("counter interaction waits for the initial service snapshot rather than a p
   });
   assert.equal(clicks, 1);
   assert.equal(state.count.value, 1);
+});
+
+test("counter preview waits for its initial snapshot before the single click", async () => {
+  const start = checksSmoke.indexOf(
+    "      await preview.open({viewId:'native-check:counter'});",
+  );
+  const end = checksSmoke.indexOf(
+    "      await preview.step({action:'capture'});",
+    start,
+  );
+  assert(start >= 0 && end > start);
+  let reads = 0,
+    clicks = 0;
+  await vm.runInNewContext(
+    `(async () => { ${checksSmoke.slice(start, end)} })()`,
+    {
+      assert,
+      host: { signal: { aborted: false } },
+      preview: {
+        open: async () => {},
+        step: async ({ action }) => {
+          if (action === "read") return clicks ? "1" : ++reads >= 3 ? "0" : "";
+          assert.equal(action, "click");
+          assert.equal(
+            reads,
+            3,
+            "preview clicked before its initial service snapshot",
+          );
+          clicks++;
+        },
+      },
+    },
+  );
+  assert.equal(clicks, 1);
+  assert.equal(reads, 3);
 });
 
 async function journey(useActivity = false) {

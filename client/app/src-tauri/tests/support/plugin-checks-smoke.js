@@ -224,7 +224,11 @@ window.runPluginChecksSmoke = async () => {
       assert.equal((await host.network.request({url:'https://example.invalid/items',method:'POST',body:'synthetic'})).body, 'synthetic reply');
       assert.equal((await plugin.invokeTool('count',{})).content[0].text, '0');
       await preview.open({viewId:'native-check:counter'});
-      assert.equal((await preview.step({action:'read',selector:'output'})), '0');
+      let initial;
+      do {
+        initial = await preview.step({action:'read',selector:'output'});
+      } while (initial !== '0' && !host.signal.aborted);
+      assert.equal(initial, '0');
       await preview.step({action:'click',selector:'button'});
       let displayed;
       do {
