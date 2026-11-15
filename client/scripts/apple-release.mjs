@@ -52,15 +52,6 @@ import { verifyReleaseInputs } from "../../tools/release-inputs.mjs";
 import { qualifyPublishedMigrations } from "../../tools/published-migrations.mjs";
 import { canonical } from "../../tools/release-catalog.mjs";
 import { assertNoDictationTtsResources } from "./dictation-resources.mjs";
-import {
-  collectNativeLicenses,
-  verifyLicenseResources,
-} from "./native-licenses.mjs";
-import {
-  bindNativeLicenses,
-  frontendLicenseAsset,
-  verifyFrontendLicenses,
-} from "./native-licenses-frontend.mjs";
 
 const macTargets = {
   arm64: "aarch64-apple-darwin",
@@ -483,7 +474,6 @@ async function buildMac({
   provenance,
   historyFile,
   historyBinding,
-  licenseResources,
 }) {
   const buildConfiguration = updater
     ? { ...updater.public, ...provenance }
@@ -528,7 +518,9 @@ async function buildMac({
             [identityFile]: "situate-distribution.json",
             [historyFile]: releaseHistoryAsset,
             [join(output, "release-inputs.json")]: "release-inputs.json",
-            ...licenseResources,
+            [join(root, "app/public/situate-licenses.txt")]:
+              "licenses/situate-licenses.txt",
+            [join(root, "app/public/licenses")]: "licenses/",
           },
           macOS: {
             bundleVersion: plan.buildNumber,
@@ -542,7 +534,6 @@ async function buildMac({
     ],
     { ...options, cwd: join(root, "app") },
   );
-  verifyFrontendLicenses(root, options.env);
   const staging = join(scratch, "dmg");
   mkdirSync(staging);
   const app = join(staging, "Situate.app");
@@ -590,7 +581,6 @@ async function buildMac({
     throw new Error(
       "Signed macOS build configuration does not match the build input.",
     );
-  verifyLicenseResources(app, licenseResources);
   await assertNoDictationTtsResources(app);
   const zip = join(scratch, "Situate.zip");
   await execute("ditto", ["-c", "-k", "--keepParent", app, zip], options);
@@ -858,7 +848,6 @@ async function buildResolvedAppleRelease({
   environment = process.env,
   execute = run,
   qualifyMigrations = qualifyPublishedMigrations,
-  collectLicenses = collectNativeLicenses,
   signal,
 }) {
   const plan = applePlan({
@@ -1187,24 +1176,6 @@ async function buildResolvedAppleRelease({
     };
     for (const target of plan.platforms) {
       const build = buildMac;
-      const licenseTargets = plan.rustTargets;
-      const licenseDirectory = join(scratch, `licenses-${target}`);
-      const licenseResources = await collectLicenses({
-        root,
-        targets: licenseTargets,
-        output: licenseDirectory,
-        execute,
-        options: { cwd: root, env, signal },
-      });
-      const licenseEnvironment = bindNativeLicenses(
-        licenseDirectory,
-        licenseResources,
-        licenseTargets,
-      );
-      licenseResources[join(root, "app/dist/third-party-js-notices.txt")] =
-        "licenses/third-party-js-notices.txt";
-      licenseResources[join(root, "app/dist", frontendLicenseAsset)] =
-        `licenses/${frontendLicenseAsset}`;
       console.log(`Building Apple distribution package: ${target}`);
       manifest.artifacts.push({
         ...(await build({
@@ -1213,16 +1184,12 @@ async function buildResolvedAppleRelease({
           scratch,
           historyFile,
           historyBinding,
-          licenseResources,
           plan,
           settings,
           config,
           cli,
           execute,
-          options: {
-            ...options,
-            env: { ...options.env, ...licenseEnvironment },
-          },
+          options,
           report,
           updater,
           provenance: {

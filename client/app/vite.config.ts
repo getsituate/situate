@@ -7,8 +7,6 @@ import vue from "@vitejs/plugin-vue";
 import { uiBoundary } from "../scripts/ui-boundary.mjs";
 import { readFileSync } from "node:fs";
 import { releaseHistoryPlugin } from "../scripts/release-history.mjs";
-import { javascriptLicensesPlugin } from "../scripts/native-licenses.mjs";
-import { frontendLicensesPlugin } from "../scripts/native-licenses-frontend.mjs";
 
 const sourceRoots = [
   ".",
@@ -21,13 +19,6 @@ const sourceRoots = [
 
 const host = process.env.TAURI_DEV_HOST;
 const appRoot = fileURLToPath(new URL(".", import.meta.url));
-
-const jsLicenseComponents = new Map();
-const jsLicenses = () =>
-  javascriptLicensesPlugin({
-    root: fileURLToPath(new URL("../", import.meta.url)),
-    components: jsLicenseComponents,
-  });
 
 const nativeScripts = [
   {
@@ -49,7 +40,7 @@ async function buildNativeScript(
     configFile: false,
     root: appRoot,
     worker: { format: "es" },
-    plugins: [vue(), jsLicenses()],
+    plugins: [vue()],
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
       __VUE_OPTIONS_API__: true,
@@ -155,10 +146,6 @@ export default defineConfig(({ mode }) => ({
         );
       },
     },
-    jsLicenses(),
-    frontendLicensesPlugin({
-      root: fileURLToPath(new URL("../", import.meta.url)),
-    }),
     {
       name: "browser-runtime-boundary",
       generateBundle(_options, bundle) {
@@ -175,7 +162,7 @@ export default defineConfig(({ mode }) => ({
       },
     },
   ],
-  worker: { format: "es", plugins: () => [jsLicenses()] },
+  worker: { format: "es" },
   clearScreen: false,
   optimizeDeps: {
     // Source-only edits reuse the dependency cache; late shared helpers reload active pages.
@@ -184,7 +171,6 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: ["es2020", "safari16", "chrome105"],
     manifest: true,
-    license: { fileName: "third-party-licenses.md" },
     rolldownOptions: {
       input: {
         app: fileURLToPath(new URL("./index.html", import.meta.url)),

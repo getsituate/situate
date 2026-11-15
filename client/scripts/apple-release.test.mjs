@@ -335,11 +335,21 @@ test("generated version replaces committed version without source edits and migr
           migrations: 0,
         };
       },
-      collectLicenses: async () => {
-        throw new Error("synthetic license stop");
+      execute: async (command, args, options) => {
+        if (command === process.execPath && args[1] === "build") {
+          const overlay = JSON.parse(args[args.indexOf("--config") + 1]);
+          assert.equal(overlay.version, fixture.expectedVersion);
+          assert.equal(
+            overlay.bundle.macOS.bundleVersion,
+            fixture.evidence.buildNumber,
+          );
+          assert.equal(options.env.TAURI_SIGNING_PRIVATE_KEY, undefined);
+          throw new Error("synthetic pre-sign build stop");
+        }
+        return fixture.execute(command, args, options);
       },
     }),
-    /synthetic license stop/,
+    /synthetic pre-sign build stop/,
   );
   assert.equal(migrations, 1);
   assert.equal(
@@ -395,13 +405,19 @@ test("public union and successful source results bind the same manifest and pre-
       publicCompatibility,
       sourceVerification,
       qualifyMigrations: async () => hostProof,
-      collectLicenses: async ({ output }) => {
-        mkdirSync(output, { recursive: true });
-        return {};
-      },
       execute: async (command, args, options) => {
         if (command === process.execPath && args[1] === "build") {
           const overlay = JSON.parse(args[args.indexOf("--config") + 1]);
+          assert.equal(
+            overlay.bundle.resources[
+              join(fixture.root, "app/public/situate-licenses.txt")
+            ],
+            "licenses/situate-licenses.txt",
+          );
+          assert.equal(
+            overlay.bundle.resources[join(fixture.root, "app/public/licenses")],
+            "licenses/",
+          );
           const resource = Object.entries(overlay.bundle.resources).find(
             ([, destination]) => destination === "situate-distribution.json",
           )[0];
@@ -468,8 +484,11 @@ test("public evidence rejects foreign source, failed or incomplete suites and pr
         publicCompatibility,
         sourceVerification,
         qualifyMigrations: async () => fixture.evidence.migrationQualification,
-        collectLicenses: async () =>
-          assert.fail("invalid evidence must not reach the build"),
+        execute: async (command, args, options) => {
+          if (command === process.execPath && args[1] === "build")
+            assert.fail("invalid evidence must not reach the build");
+          return fixture.execute(command, args, options);
+        },
       }),
       /Public compatibility evidence|Source verification/,
     );
@@ -495,11 +514,15 @@ test("runner metadata records resolved image values and rejects unsafe image or 
           releases: [],
           migrations: 0,
         }),
-        collectLicenses: async () => {
-          throw new Error("synthetic license stop");
+        execute: async (command, args, options) => {
+          if (command === process.execPath && args[1] === "build") {
+            assert.equal(options.env.TAURI_SIGNING_PRIVATE_KEY, undefined);
+            throw new Error("synthetic pre-sign build stop");
+          }
+          return fixture.execute(command, args, options);
         },
       }),
-      scenario === "hosted" ? /synthetic license stop/ : /safe/,
+      scenario === "hosted" ? /synthetic pre-sign build stop/ : /safe/,
     );
     const output = join(
       fixture.root,
