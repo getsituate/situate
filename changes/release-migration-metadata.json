@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "release-migration-metadata",
+  "behaviorDigest": "2a3903a85774f2777b6a41e2f6b5b9a5831844cb464292284e10655ed052cdde",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Corrects release declaration collection across legacy migration metadata; application behavior is unchanged.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "dc83d5639e111814508cf118e1ee0466396634356a2552692c8ff5aae15bdb69",
+      "translationHash": "521fda606a13efbb59e2fff14ccb7885aa5c048b4587f8ca2e6469bb040b3b27"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "dc83d5639e111814508cf118e1ee0466396634356a2552692c8ff5aae15bdb69"
+  }
+}

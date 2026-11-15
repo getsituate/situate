@@ -215,6 +215,55 @@ test("Git ranges require new immutable declarations, behavior review, ancestry a
   );
 });
 
+test("release collection crosses migration metadata replacement but keeps catalogs immutable", (t) => {
+  const repo = repository(t);
+  repo.write("releases/legacy-migration-evidence.json", "{}");
+  repo.write("releases/0.1.6/release.json", "{}");
+  repo.write(
+    "client/packages/localization/src/catalogs/releases/0.1.6/en.json",
+    "{}",
+  );
+  const baseline = repo.commit();
+  repo.git("rm", "releases/legacy-migration-evidence.json");
+  repo.write(
+    "releases/migration-checkpoint.json",
+    JSON.stringify({ release: { revision: baseline } }),
+  );
+  const migrated = repo.commit();
+  const value = draft("migration-metadata", true);
+  value.behaviorDigest = behaviorDigest(repo.root, migrated);
+  repo.write(
+    "changes/migration-metadata.json",
+    JSON.stringify(approved(value)),
+  );
+  const head = repo.commit();
+  assert.deepEqual(
+    collectFragments(repo.root, { base: baseline, head }).map(
+      (item) => item.id,
+    ),
+    ["migration-metadata"],
+  );
+  assert.throws(
+    () => validateFragmentRange(repo.root, { base: baseline, head }),
+    /historical catalogs/,
+  );
+  for (const file of [
+    "releases/0.1.6/release.json",
+    "releases/0.1.7/release.json",
+    "client/packages/localization/src/catalogs/releases/0.1.6/en.json",
+    "releases/other-metadata.json",
+  ]) {
+    repo.git("checkout", "--detach", head);
+    repo.write(file, '{"changed":true}');
+    const changed = repo.commit();
+    assert.throws(
+      () => collectFragments(repo.root, { base: baseline, head: changed }),
+      /historical catalogs/,
+      file,
+    );
+  }
+});
+
 test("concurrent PRs use independent IDs and assembly retains both declarations", (t) => {
   const repo = repository(t);
   for (const id of ["change-alpha", "change-beta"]) {
