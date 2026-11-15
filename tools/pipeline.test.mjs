@@ -474,6 +474,14 @@ test("private release authorization retains original source receipts without reb
       ...selection(),
       source: revision,
       appImpact: true,
+      lanes: [
+        {
+          id: "tooling",
+          host: "linux",
+          suites: ["runner-unit", "delivery-unit"],
+        },
+        { id: "macos-native", host: "macos", suites: ["client-native"] },
+      ],
     }),
   };
   const original = await planWorkflow(
@@ -502,15 +510,33 @@ test("private release authorization retains original source receipts without reb
   );
   assert.notEqual(final.authorizationDigest, original.authorizationDigest);
   const sourceReceipt = receipt(original);
+  sourceReceipt.results.push({
+    id: "delivery-unit",
+    status: "passed",
+    exitCode: 0,
+  });
+  const nativeReceipt = {
+    ...receipt(original),
+    lane: "macos-native",
+    host: "macos",
+    results: [{ id: "client-native", status: "passed", exitCode: 0 }],
+  };
   const stages = Object.fromEntries(
     ["compatibility", "reserve", "inputs", "build", "qualify", "github"].map(
       (name) => [
         name,
         async ({ operation }) => {
-          assert.equal(
-            operation.verification.planDigest,
-            original.authorizationDigest,
-          );
+          assert.deepEqual(operation.verification, {
+            schemaVersion: 1,
+            source: revision,
+            planDigest: original.authorizationDigest,
+            status: "passed",
+            lanes: ["macos-native", "tooling"],
+            results: [
+              { id: "tooling", status: "passed", exitCode: 0 },
+              { id: "macos-native", status: "passed", exitCode: 0 },
+            ],
+          });
           return { evidence: name };
         },
       ],
@@ -520,7 +546,7 @@ test("private release authorization retains original source receipts without reb
     (
       await runWorkflow(root, final, {
         adapters: stages,
-        receipts: [sourceReceipt],
+        receipts: [sourceReceipt, nativeReceipt],
         confirmation: final.authorizationDigest,
       })
     ).status,
@@ -544,6 +570,47 @@ test("private release authorization retains original source receipts without reb
     ),
     /Verification inputs changed: lanes/,
   );
+});
+
+test("lane evidence never hides a failed or nonzero suite result", async (t) => {
+  const { root, source: revision } = committedFixture(t);
+  let effects = 0;
+  for (const [index, failed] of [
+    { id: "delivery-unit", status: "failed", exitCode: 1 },
+    { id: "delivery-unit", status: "passed", exitCode: 1 },
+  ].entries()) {
+    const plan = sealPlan({
+      ...selection(),
+      source: revision,
+      workflow: "create",
+      appImpact: true,
+      repository: "getsituate/situate",
+      operation: `failed-suite-${index}`,
+      destination: "synthetic.invalid",
+      lanes: [
+        {
+          id: "tooling",
+          host: "linux",
+          suites: ["runner-unit", "delivery-unit"],
+        },
+      ],
+    });
+    const sourceReceipt = receipt(plan);
+    sourceReceipt.results.push(failed);
+    await assert.rejects(
+      runWorkflow(root, plan, {
+        receipts: [sourceReceipt],
+        confirmation: plan.authorizationDigest,
+        adapters: {
+          compatibility: async () => {
+            effects++;
+          },
+        },
+      }),
+      /A selected suite did not pass/,
+    );
+  }
+  assert.equal(effects, 0);
 });
 
 test("staging executes prerequisites once and an intentional pause can continue", async (t) => {
