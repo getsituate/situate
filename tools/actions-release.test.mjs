@@ -202,6 +202,27 @@ test("stage credentials exclude signing and GitHub access from private qualifica
   assert.equal(publisher.AWS_SECRET_ACCESS_KEY, undefined);
 });
 
+test("build stages retain hosted runner context without forwarding unrelated credentials", () => {
+  const build = stageEnvironment(
+    {
+      CI: "true",
+      GITHUB_ACTIONS: "true",
+      RUNNER_ENVIRONMENT: "github-hosted",
+      APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-password",
+      GH_TOKEN: "unrelated-secret",
+      OTHER_SECRET: "unrelated-secret",
+    },
+    "create",
+    "build",
+  );
+  assert.deepEqual(build, {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-password",
+  });
+});
+
 test("hosted stages forward shared SSH inputs only to operations that need the host", async (t) => {
   for (const workflow of ["create", "publish"]) {
     const env = {

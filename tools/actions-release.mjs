@@ -154,6 +154,7 @@ export function stageEnvironment(env, workflow, stage) {
     "RUNNER_TEMP",
     "RUNNER_OS",
     "RUNNER_ARCH",
+    "RUNNER_ENVIRONMENT",
     "ImageOS",
     "ImageVersion",
     "GITHUB_ACTIONS",

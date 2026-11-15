@@ -8,11 +8,12 @@ import {
   mkdtempSync,
   openSync,
   readSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseEnv } from "node:util";
 
 const names = [
@@ -289,9 +290,14 @@ export async function withSigningCertificate(
       try {
         rmSync(directory, { recursive: true, force: true });
       } catch {
-        failure = new Error(
+        const cleanup = new Error(
           "Temporary Developer ID certificate cleanup failed.",
         );
+        failure = failed
+          ? new AggregateError([failure, cleanup], cleanup.message, {
+              cause: failure,
+            })
+          : cleanup;
         failed = true;
       }
     }
@@ -300,14 +306,73 @@ export async function withSigningCertificate(
   return result;
 }
 
+export function isHostedSigningEnvironment(environment) {
+  return (
+    environment?.CI === "true" &&
+    environment?.GITHUB_ACTIONS === "true" &&
+    environment?.RUNNER_ENVIRONMENT === "github-hosted"
+  );
+}
+
+// Deleted keychains still need canonical matching in the final search-list check.
+function canonicalKeychainPath(path) {
+  const suffix = [];
+  let current = resolve(path);
+  while (true) {
+    try {
+      return join(realpathSync(current), ...suffix);
+    } catch (error) {
+      if (
+        !["ENOENT", "ENOTDIR"].includes(error.code) ||
+        dirname(current) === current
+      )
+        throw error;
+      suffix.unshift(basename(current));
+      current = dirname(current);
+    }
+  }
+}
+
+async function signingSearchList(execute, options) {
+  const output = await execute(
+    "security",
+    ["list-keychains", "-d", "user"],
+    options,
+  );
+  return output
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .map((line) => {
+      const path = JSON.parse(line.trim());
+      if (typeof path !== "string" || !isAbsolute(path))
+        throw new Error("Invalid keychain search list.");
+      return path;
+    });
+}
+
 export async function withSigningKeychain(options, use) {
+  if (
+    Object.hasOwn(options, "registerSearchList") &&
+    typeof options.registerSearchList !== "boolean"
+  )
+    throw new Error(
+      "Signing keychain search-list registration must be a boolean.",
+    );
+  if (
+    options.registerSearchList &&
+    !isHostedSigningEnvironment(options.environment ?? process.env)
+  )
+    throw new Error(
+      "Signing keychain search-list registration requires GitHub-hosted CI.",
+    );
+  if (options.registerSearchList) options.signal?.throwIfAborted();
   return withSigningCertificate(options, (environment) =>
     withPreparedSigningKeychain({ ...options, environment }, use),
   );
 }
 
 async function withPreparedSigningKeychain(
-  { environment, execute = run, signal },
+  { environment, execute = run, signal, registerSearchList = false },
   use,
 ) {
   const certificate = environment.APPLE_DEVELOPER_ID_P12_FILE;
@@ -321,18 +386,26 @@ async function withPreparedSigningKeychain(
       .map((name) => [name, environment[name]]),
   );
   const options = { env, signal, capture: true };
-  let created = false;
+  let deleteRequired = false;
+  let registrationAttempted = false;
+  let canonicalKeychain;
   let result;
   let failure;
+  const isOwned = (path) => canonicalKeychainPath(path) === canonicalKeychain;
+  const cleanupOptions = { ...options, signal: undefined };
   try {
     // Command failures must not expose security's arguments or private input.
     try {
+      if (registerSearchList) {
+        canonicalKeychain = canonicalKeychainPath(keychain);
+        deleteRequired = true;
+      }
       await execute(
         "security",
         ["create-keychain", "-p", password, keychain],
         options,
       );
-      created = true;
+      deleteRequired = true;
       await execute(
         "security",
         ["set-keychain-settings", "-lut", "21600", keychain],
@@ -375,20 +448,104 @@ async function withPreparedSigningKeychain(
     } catch {
       throw new Error("Temporary Developer ID keychain setup failed.");
     }
+    if (registerSearchList) {
+      try {
+        const current = await signingSearchList(execute, options);
+        const registered = current.some(isOwned)
+          ? current
+          : [...current, canonicalKeychain];
+        registrationAttempted = true;
+        await execute(
+          "security",
+          ["list-keychains", "-d", "user", "-s", ...registered],
+          options,
+        );
+        if (!(await signingSearchList(execute, options)).some(isOwned))
+          throw new Error("Registration unconfirmed.");
+      } catch {
+        throw new Error(
+          "Temporary signing keychain search-list registration failed.",
+        );
+      }
+    }
+    if (registerSearchList) signal?.throwIfAborted();
     result = await use(keychain);
+    if (registerSearchList) signal?.throwIfAborted();
   } catch (error) {
     failure = { error };
   }
+  const cleanupFailures = [];
+  if (registerSearchList && (deleteRequired || registrationAttempted)) {
+    try {
+      const current = await signingSearchList(execute, cleanupOptions);
+      const remaining = current.filter((path) => !isOwned(path));
+      if (remaining.length !== current.length)
+        await execute(
+          "security",
+          ["list-keychains", "-d", "user", "-s", ...remaining],
+          cleanupOptions,
+        );
+      if ((await signingSearchList(execute, cleanupOptions)).some(isOwned))
+        throw new Error("Removal unconfirmed.");
+    } catch {
+      cleanupFailures.push(
+        new Error("Temporary signing keychain search-list cleanup failed."),
+      );
+    }
+  }
   try {
-    if (created)
-      await execute("security", ["delete-keychain", keychain], {
-        ...options,
-        signal: undefined,
-      });
-    rmSync(directory, { recursive: true, force: true });
+    if (deleteRequired)
+      await execute("security", ["delete-keychain", keychain], cleanupOptions);
   } catch {
-    throw new Error(
+    cleanupFailures.push(
+      new Error("Temporary signing keychain deletion failed."),
+    );
+  }
+  if (registerSearchList) {
+    try {
+      let absent = false;
+      try {
+        lstatSync(keychain);
+      } catch (error) {
+        if (error.code === "ENOENT") absent = true;
+        else throw error;
+      }
+      if (!absent) throw new Error("Keychain still present.");
+    } catch {
+      cleanupFailures.push(
+        new Error(
+          "Temporary signing keychain file cleanup could not be verified.",
+        ),
+      );
+    }
+    try {
+      if (
+        !canonicalKeychain ||
+        (await signingSearchList(execute, cleanupOptions)).some(isOwned)
+      )
+        throw new Error("Keychain search-list absence unconfirmed.");
+    } catch {
+      cleanupFailures.push(
+        new Error(
+          "Temporary signing keychain search-list absence could not be verified.",
+        ),
+      );
+    }
+  }
+  if (!cleanupFailures.length) {
+    try {
+      rmSync(directory, { recursive: true, force: true });
+    } catch {
+      cleanupFailures.push(
+        new Error("Temporary signing keychain directory cleanup failed."),
+      );
+    }
+  }
+  if (cleanupFailures.length) {
+    throw new AggregateError(
+      failure ? [failure.error, ...cleanupFailures] : cleanupFailures,
       "Temporary signing keychain cleanup failed; inspect the private signing temporary directory before retrying.",
+      { cause: failure?.error },
     );
   }
   if (failure) throw failure.error;

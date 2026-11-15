@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "hosted-signing-keychain",
+  "behaviorDigest": "7066faf1487d165f77336e1eec801b4b54fd72dbd7ec74b0f7b7183c2bce1037",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Fixes Developer ID signing Keychain setup for disposable GitHub-hosted release jobs.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "16acfc0923c8c255786b8448ec85849f2fc3ab3aa047a579ed878289b097d59b",
+      "translationHash": "eaf333e2fac3e11e049392201bbedbf95c62629ab9faef699621f184eaebb3a4"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "16acfc0923c8c255786b8448ec85849f2fc3ab3aa047a579ed878289b097d59b"
+  }
+}

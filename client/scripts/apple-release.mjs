@@ -27,6 +27,7 @@ import { isDeepStrictEqual, parseArgs } from "node:util";
 import { assertLocalPath } from "./ios-project-lock.mjs";
 import { run } from "./ios-xcode.mjs";
 import {
+  isHostedSigningEnvironment,
   notaryAuthentication,
   readAppleEnv,
   withAppleCredentials,
@@ -824,11 +825,18 @@ export async function buildAppleRelease(options) {
       "Blocked: a controlled-host durable notarization journal is required.",
     );
   return withAppleCredentials(options, (settings) =>
-    withSigningKeychain(options, (signingKeychain) =>
-      buildResolvedAppleRelease({
+    withSigningKeychain(
+      {
         ...options,
-        settings: { ...settings, signingKeychain, notaryJournal: journal },
-      }),
+        registerSearchList: isHostedSigningEnvironment(
+          options.environment ?? process.env,
+        ),
+      },
+      (signingKeychain) =>
+        buildResolvedAppleRelease({
+          ...options,
+          settings: { ...settings, signingKeychain, notaryJournal: journal },
+        }),
     ),
   );
 }

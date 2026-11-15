@@ -14,15 +14,17 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { applePosixFixture } from "./apple-posix-fixture.mjs";
 import {
+  isHostedSigningEnvironment,
   loadAppleCredentials,
   notaryAuthentication,
   readAppleEnv,
@@ -890,4 +892,502 @@ test("Developer ID setup errors do not leak arguments and cleanup never reports 
     ),
     /cleanup failed/,
   );
+});
+
+const hostedSigning = {
+  CI: "true",
+  GITHUB_ACTIONS: "true",
+  RUNNER_ENVIRONMENT: "github-hosted",
+};
+const privateToolOutput =
+  "synthetic-password PRIVATE /synthetic/private-account";
+
+function hostedKeychainFixture(t, intercept = () => {}) {
+  const { root, directory } = fixture(t);
+  const list = [
+    join(directory, "first.keychain-db"),
+    join(directory, "foreign", "signing.keychain-db"),
+    join(directory, "last.keychain-db"),
+  ];
+  mkdirSync(dirname(list[1]));
+  for (const path of list)
+    writeFileSync(path, "unrelated synthetic keychain", { mode: 0o600 });
+  const calls = [];
+  const certificates = [];
+  let keychain, canonical;
+  const execute = async (command, args, options) => {
+    calls.push({ command, args, options });
+    assert.equal(command, "security");
+    assert.equal(options.capture, true);
+    assert.ok(
+      Object.keys(options.env).every((name) =>
+        ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME"].includes(name),
+      ),
+    );
+    if (args[0] === "create-keychain") {
+      keychain = args.at(-1);
+      assert.equal(lstatSync(dirname(keychain)).mode & 0o777, 0o700);
+      writeFileSync(keychain, "synthetic owned keychain", { mode: 0o600 });
+      canonical = realpathSync(keychain);
+      t.after(() =>
+        rmSync(dirname(keychain), { recursive: true, force: true }),
+      );
+    }
+    if (args[0] === "import") {
+      certificates.push(args[1]);
+      assert.deepEqual(readFileSync(args[1]), signingBytes);
+      t.after(() => rmSync(dirname(args[1]), { recursive: true, force: true }));
+    }
+    const override = await intercept(command, args, options);
+    if (override !== undefined) return override;
+    if (args[0] === "list-keychains") {
+      if (args.includes("-s")) list.splice(0, list.length, ...args.slice(4));
+      return list.map((path) => JSON.stringify(path)).join("\n");
+    }
+    if (args[0] === "delete-keychain") {
+      list.splice(
+        0,
+        list.length,
+        ...list.filter((path) => {
+          try {
+            return realpathSync(path) !== canonical;
+          } catch {
+            return resolve(path) !== resolve(keychain);
+          }
+        }),
+      );
+      rmSync(keychain, { force: true });
+    }
+    return "";
+  };
+  return {
+    root,
+    execute,
+    list,
+    calls,
+    certificates,
+    get keychain() {
+      return keychain;
+    },
+    get canonical() {
+      return canonical;
+    },
+    run(use, options = {}) {
+      return withSigningKeychain(
+        {
+          root,
+          environment: { ...signingCredentials, ...hostedSigning },
+          execute,
+          registerSearchList: true,
+          ...options,
+        },
+        use,
+      );
+    },
+  };
+}
+
+test("hosted signing predicate requires all three exact public markers", () => {
+  assert.equal(isHostedSigningEnvironment(hostedSigning), true);
+  for (const environment of [
+    undefined,
+    null,
+    {},
+    { ...hostedSigning, CI: "false" },
+    { ...hostedSigning, CI: true },
+    { ...hostedSigning, GITHUB_ACTIONS: "TRUE" },
+    { ...hostedSigning, GITHUB_ACTIONS: undefined },
+    { ...hostedSigning, RUNNER_ENVIRONMENT: "self-hosted" },
+    { ...hostedSigning, RUNNER_ENVIRONMENT: undefined },
+  ])
+    assert.equal(isHostedSigningEnvironment(environment), false);
+});
+
+test("requested registration rejects invalid types and non-hosted contexts before private inputs", async () => {
+  const forbidden = () =>
+    assert.fail("guard accessed private input or executed a command");
+  for (const registerSearchList of [undefined, null, "true", "false", 1, {}]) {
+    await assert.rejects(
+      withSigningKeychain(
+        {
+          registerSearchList,
+          get environment() {
+            return forbidden();
+          },
+          get root() {
+            return forbidden();
+          },
+          execute: forbidden,
+        },
+        forbidden,
+      ),
+      /must be a boolean/,
+    );
+  }
+  for (const markers of [
+    {},
+    { ...hostedSigning, CI: "false" },
+    { ...hostedSigning, GITHUB_ACTIONS: "false" },
+    { ...hostedSigning, RUNNER_ENVIRONMENT: "self-hosted" },
+  ]) {
+    const environment = new Proxy(markers, {
+      get(target, name) {
+        if (!["CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"].includes(name))
+          forbidden();
+        return target[name];
+      },
+      getOwnPropertyDescriptor: forbidden,
+    });
+    await assert.rejects(
+      withSigningKeychain(
+        {
+          registerSearchList: true,
+          environment,
+          get root() {
+            return forbidden();
+          },
+          execute: forbidden,
+        },
+        forbidden,
+      ),
+      /requires GitHub-hosted CI/,
+    );
+  }
+});
+
+test("pre-aborted hosted registration does not select private inputs or create a keychain", async () => {
+  const abort = new AbortController();
+  const reason = new Error("synthetic cancellation");
+  abort.abort(reason);
+  const forbidden = () =>
+    assert.fail("pre-abort accessed private inputs or executed a command");
+  const environment = new Proxy(hostedSigning, {
+    get(target, name) {
+      if (!["CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"].includes(name))
+        forbidden();
+      return target[name];
+    },
+    getOwnPropertyDescriptor: forbidden,
+  });
+  await assert.rejects(
+    withSigningKeychain(
+      {
+        registerSearchList: true,
+        environment,
+        signal: abort.signal,
+        get root() {
+          return forbidden();
+        },
+        execute: forbidden,
+      },
+      forbidden,
+    ),
+    (error) => error === reason,
+  );
+});
+
+test("local, self-hosted and hosted defaults never register a search list automatically", async (t) => {
+  for (const environment of [
+    { ...signingCredentials, CI: "false" },
+    {
+      ...signingCredentials,
+      CI: "true",
+      GITHUB_ACTIONS: "true",
+      RUNNER_ENVIRONMENT: "self-hosted",
+    },
+    { ...signingCredentials, ...hostedSigning },
+  ]) {
+    const f = hostedKeychainFixture(t);
+    assert.equal(
+      await withSigningKeychain(
+        { root: f.root, execute: f.execute, environment },
+        () => "built",
+      ),
+      "built",
+    );
+    assert.ok(!f.calls.some(({ args }) => args[0] === "list-keychains"));
+    assert.equal(existsSync(dirname(f.keychain)), false);
+  }
+});
+
+test("registration is confirmed before callback and cleanup preserves current unrelated entries and order", async (t) => {
+  const f = hostedKeychainFixture(t);
+  const original = [...f.list];
+  const concurrent = dirname(original[0]) + "/./concurrent.keychain-db";
+  assert.equal(
+    await f.run((keychain) => {
+      assert.equal(keychain, f.keychain);
+      assert.deepEqual(f.list, [...original, f.canonical]);
+      assert.equal(f.calls.at(-1).args[0], "list-keychains");
+      assert.ok(!f.calls.at(-1).args.includes("-s"));
+      f.list.push(dirname(keychain) + "/./signing.keychain-db", concurrent);
+      return "built";
+    }),
+    "built",
+  );
+  assert.deepEqual(f.list, [...original, concurrent]);
+  for (const path of original) assert.ok(existsSync(path));
+  assert.equal(existsSync(dirname(f.keychain)), false);
+  for (const certificate of f.certificates)
+    assert.equal(existsSync(certificate), false);
+  const writes = f.calls.filter(
+    ({ args }) => args[0] === "list-keychains" && args.includes("-s"),
+  );
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes[0].args.slice(4), [...original, f.canonical]);
+  assert.deepEqual(writes[1].args.slice(4), [...original, concurrent]);
+  assert.equal(writes[1].options.signal, undefined);
+  assert.ok(
+    f.calls.some(
+      ({ args }) => args[0] === "set-keychain-settings" && args[2] === "21600",
+    ),
+  );
+  assert.ok(
+    !f.calls.some(({ args }) =>
+      [
+        "default-keychain",
+        "add-trusted-cert",
+        "trust-settings-import",
+      ].includes(args[0]),
+    ),
+  );
+});
+
+for (const at of [
+  "create-keychain",
+  "import",
+  "registration-write",
+  "registration-confirmation",
+]) {
+  test(`partial setup failure at ${at} blocks callback and still deletes the owned keychain`, async (t) => {
+    let writes = 0;
+    const f = hostedKeychainFixture(t, (_command, args) => {
+      if (args[0] === at) throw new Error(privateToolOutput);
+      if (
+        args[0] === "list-keychains" &&
+        args.includes("-s") &&
+        ++writes === 1
+      ) {
+        if (at === "registration-write") {
+          f.list.splice(0, f.list.length, ...args.slice(4));
+          throw new Error(privateToolOutput);
+        }
+        if (at === "registration-confirmation") return "";
+      }
+    });
+    const original = [...f.list];
+    await assert.rejects(
+      f.run(() => assert.fail("failed setup called build callback")),
+      (error) => {
+        assert.match(error.message, /setup failed|registration failed/);
+        assert.ok(!error.message.includes(privateToolOutput));
+        return true;
+      },
+    );
+    assert.deepEqual(f.list, original);
+    assert.ok(f.calls.some(({ args }) => args[0] === "delete-keychain"));
+    assert.equal(f.calls.at(-1).args[0], "list-keychains");
+    assert.equal(existsSync(dirname(f.keychain)), false);
+    for (const certificate of f.certificates)
+      assert.equal(existsSync(certificate), false);
+  });
+}
+
+test("callback failure is preserved unchanged when hosted cleanup succeeds", async (t) => {
+  const f = hostedKeychainFixture(t);
+  const buildError = Object.assign(new Error("synthetic build failure"), {
+    journal: { submission: "synthetic-id" },
+  });
+  await assert.rejects(
+    f.run(() => {
+      throw buildError;
+    }),
+    (error) => error === buildError,
+  );
+  assert.equal(existsSync(dirname(f.keychain)), false);
+  assert.ok(!f.list.includes(f.canonical));
+});
+
+for (const at of ["registration", "callback"]) {
+  test(`cancellation at ${at} preserves non-aborted cleanup and cannot return success`, async (t) => {
+    const abort = new AbortController();
+    const reason = new Error("synthetic cancellation");
+    let cancelled = false;
+    const f = hostedKeychainFixture(t, (_command, args, options) => {
+      if (cancelled) assert.equal(options.signal, undefined);
+      if (
+        !cancelled &&
+        at === "registration" &&
+        args[0] === "list-keychains" &&
+        args.includes("-s")
+      ) {
+        f.list.splice(0, f.list.length, ...args.slice(4));
+        cancelled = true;
+        abort.abort(reason);
+        throw reason;
+      }
+    });
+    const original = [...f.list];
+    await assert.rejects(
+      f.run(
+        () => {
+          assert.equal(at, "callback");
+          cancelled = true;
+          abort.abort(reason);
+          return "must not succeed";
+        },
+        { signal: abort.signal },
+      ),
+      (error) =>
+        at === "callback"
+          ? error === reason
+          : /registration failed/.test(error.message),
+    );
+    assert.deepEqual(f.list, original);
+    assert.equal(existsSync(dirname(f.keychain)), false);
+    assert.equal(f.calls.at(-1).options.signal, undefined);
+  });
+}
+
+for (const fault of [
+  "removal-write",
+  "removal-confirmation",
+  "delete-failed",
+  "delete-after-effect",
+  "file-present",
+  "entry-present",
+  "post-delete-read",
+]) {
+  test(`cleanup failure stays blocking and preserves original build error: ${fault}`, async (t) => {
+    let writes = 0;
+    let deleted = false;
+    const f = hostedKeychainFixture(t, (_command, args) => {
+      if (args[0] === "list-keychains") {
+        if (deleted && fault === "post-delete-read")
+          throw new Error(privateToolOutput);
+        if (
+          args.includes("-s") &&
+          ++writes === 2 &&
+          ["removal-write", "removal-confirmation", "entry-present"].includes(
+            fault,
+          )
+        ) {
+          if (fault === "removal-confirmation") return "";
+          throw new Error(privateToolOutput);
+        }
+      }
+      if (args[0] === "delete-keychain") {
+        deleted = true;
+        if (fault === "delete-failed") throw new Error(privateToolOutput);
+        if (fault === "delete-after-effect") {
+          f.list.splice(
+            0,
+            f.list.length,
+            ...f.list.filter((path) => path !== f.canonical),
+          );
+          rmSync(f.keychain);
+          throw new Error(privateToolOutput);
+        }
+        if (fault === "entry-present") {
+          rmSync(f.keychain);
+          return "";
+        }
+        if (fault === "file-present") return "";
+      }
+    });
+    const buildError = Object.assign(new Error("synthetic build failure"), {
+      journal: { submission: "synthetic-id" },
+    });
+    await assert.rejects(
+      f.run(() => {
+        throw buildError;
+      }),
+      (error) => {
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.cause, buildError);
+        assert.equal(error.errors[0], buildError);
+        assert.equal(error.errors[0].journal, buildError.journal);
+        assert.match(error.message, /keychain cleanup failed/);
+        assert.ok(!error.message.includes(privateToolOutput));
+        for (const cleanup of error.errors.slice(1)) {
+          assert.ok(!cleanup.message.includes(privateToolOutput));
+          assert.equal(cleanup.cause, undefined);
+        }
+        return true;
+      },
+    );
+    assert.ok(deleted);
+    assert.equal(f.calls.at(-1).args[0], "list-keychains");
+    for (const certificate of f.certificates)
+      assert.equal(existsSync(certificate), false);
+    if (
+      ["removal-write", "removal-confirmation", "delete-after-effect"].includes(
+        fault,
+      )
+    ) {
+      assert.equal(existsSync(f.keychain), false);
+      assert.ok(!f.list.includes(f.canonical));
+    }
+  });
+}
+
+test("cleanup failure after a successful callback is still a sanitized rejection", async (t) => {
+  let writes = 0;
+  const f = hostedKeychainFixture(t, (_command, args) => {
+    if (args[0] === "list-keychains" && args.includes("-s") && ++writes === 2)
+      throw new Error(privateToolOutput);
+  });
+  await assert.rejects(
+    f.run(() => "built"),
+    (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.match(error.message, /keychain cleanup failed/);
+      assert.equal(error.cause, undefined);
+      assert.ok(
+        error.errors.every(
+          (entry) => !entry.message.includes(privateToolOutput),
+        ),
+      );
+      return true;
+    },
+  );
+  assert.equal(existsSync(f.keychain), false);
+  assert.ok(!f.list.includes(f.canonical));
+});
+
+test("certificate cleanup failure also preserves the original callback error and journal", async (t) => {
+  const f = hostedKeychainFixture(t);
+  const originalRm = fs.rmSync;
+  const mocked = t.mock.method(fs, "rmSync", (path, options) => {
+    if (String(path).includes("situate-certificate-"))
+      throw new Error(privateToolOutput);
+    return originalRm(path, options);
+  });
+  syncBuiltinESMExports();
+  const buildError = Object.assign(new Error("synthetic build failure"), {
+    journal: { submission: "synthetic-id" },
+  });
+  try {
+    await assert.rejects(
+      f.run(() => {
+        throw buildError;
+      }),
+      (error) => {
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.cause, buildError);
+        assert.equal(error.errors[0], buildError);
+        assert.equal(
+          error.message,
+          "Temporary Developer ID certificate cleanup failed.",
+        );
+        assert.ok(!error.errors[1].message.includes(privateToolOutput));
+        return true;
+      },
+    );
+  } finally {
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+    for (const certificate of f.certificates)
+      rmSync(dirname(certificate), { recursive: true, force: true });
+  }
 });

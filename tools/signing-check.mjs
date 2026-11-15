@@ -13,6 +13,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import {
+  isHostedSigningEnvironment,
   readAppleEnv,
   withSigningKeychain,
 } from "../client/scripts/apple-credentials.mjs";
@@ -53,11 +54,6 @@ export function signingEnvironment(environment = process.env) {
     "RUNNER_ENVIRONMENT",
   ]);
 }
-
-const hostedExperiment = (environment) =>
-  environment.CI === "true" &&
-  environment.GITHUB_ACTIONS === "true" &&
-  environment.RUNNER_ENVIRONMENT === "github-hosted";
 
 function canonicalPath(path) {
   const suffix = [];
@@ -167,7 +163,7 @@ export async function checkSigning({
       report.code = "invalid-options";
       return report;
     }
-    if (probeSearchList && !hostedExperiment(environment)) {
+    if (probeSearchList && !isHostedSigningEnvironment(environment)) {
       report.status = "blocked";
       report.code = "hosted-ci-required";
       return report;
@@ -198,7 +194,11 @@ export async function checkSigning({
       delete local.APPLE_DEVELOPER_ID_P12_BASE64;
       delete local.APPLE_DEVELOPER_ID_P12_FILE;
     }
-    const env = { ...local, ...selected };
+    const env = {
+      ...local,
+      ...selected,
+      ...select(environment, ["GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"]),
+    };
     const selector = env.APPLE_MACOS_SIGNING_IDENTITY;
     if (
       !/^[A-Z0-9]{10}$/.test(env.APPLE_TEAM_ID ?? "") ||
@@ -235,6 +235,8 @@ export async function checkSigning({
         root,
         environment: env,
         signal,
+        registerSearchList:
+          !probeSearchList && isHostedSigningEnvironment(environment),
         execute: probeSearchList
           ? async (command, args, commandOptions) => {
               if (command === "security" && args[0] === "create-keychain") {
@@ -529,7 +531,7 @@ export async function main(
     );
     return 1;
   }
-  if (probeSearchList && !hostedExperiment(environment)) {
+  if (probeSearchList && !isHostedSigningEnvironment(environment)) {
     console.log(
       JSON.stringify({
         version: 1,

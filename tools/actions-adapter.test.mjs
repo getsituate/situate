@@ -550,7 +550,7 @@ test("signing diagnostics forward only signing inputs after trusted-main authori
   assert.deepEqual(calls, [
     {
       command: process.execPath,
-      args: ["tools/signing-check.mjs", "--probe-search-list"],
+      args: ["tools/signing-check.mjs"],
       options: { stdio: "inherit", env: signing },
     },
   ]);
