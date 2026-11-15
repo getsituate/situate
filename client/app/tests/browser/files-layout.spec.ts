@@ -18,6 +18,7 @@ async function enterFiles(page: Page, holdRead = false): Promise<void> {
     exact: true,
   });
   if (await expand.isVisible()) await expand.click();
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
   if (holdRead)
     await page.evaluate(() => window.__filesTest.holdRead("Notes/Garden.md"));
   await page.getByRole("button", { name: "Garden.md", exact: true }).click();

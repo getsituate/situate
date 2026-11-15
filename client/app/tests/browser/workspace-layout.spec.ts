@@ -1072,6 +1072,7 @@ test(
     )
       .getByRole("button", { name: "Files", exact: true })
       .click();
+    await page.getByRole("button", { name: "Notes", exact: true }).click();
     await page.getByRole("button", { name: "Garden.md", exact: true }).click();
     await (
       await paneOptions(page)
@@ -1082,6 +1083,10 @@ test(
     await panes
       .last()
       .getByRole("button", { name: "Files", exact: true })
+      .click();
+    await panes
+      .last()
+      .getByRole("button", { name: "Notes", exact: true })
       .click();
     await panes
       .last()
@@ -1260,6 +1265,7 @@ test("a live reference follows a managed move after its old path is reused", asy
   )
     .getByRole("button", { name: "Files", exact: true })
     .click();
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
   await page.getByRole("button", { name: "Garden.md", exact: true }).click();
   await page
     .getByRole("button", { name: "New chat with this file", exact: true })
@@ -1308,6 +1314,7 @@ test(
     )
       .getByRole("button", { name: "Files", exact: true })
       .click();
+    await page.getByRole("button", { name: "Notes", exact: true }).click();
     await page.getByRole("button", { name: "Garden.md", exact: true }).click();
     await page
       .getByRole("button", { name: "New chat with this file", exact: true })
