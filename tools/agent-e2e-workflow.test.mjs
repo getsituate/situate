@@ -26,8 +26,12 @@ test("paid workflow is manual, trusted default branch, protected environment and
   assert.match(workflow, /permissions:\n {2}contents: read/);
   for (const match of workflow.matchAll(/uses: (\S+)/g))
     assert.match(match[1], /@[a-f0-9]{40}$/);
-  assert.equal((workflow.match(/secrets\./g) ?? []).length, 1);
-  const [setup, run] = workflow.split(
+  const native = workflow
+    .split("\n  native:\n")[1]
+    .split(/\n {2}[a-z][a-z-]*:\n/)[0];
+  assert.equal((native.match(/secrets\./g) ?? []).length, 1);
+  assert.doesNotMatch(native, /APPLE_|TAURI_SIGNING|SSH/);
+  const [setup, run] = native.split(
     "      - run: node tools/actions-adapter.mjs diagnostics --lane provider",
   );
   assert.doesNotMatch(setup, /secrets\./);

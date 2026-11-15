@@ -248,6 +248,49 @@ test("release environments use the same secret names and formats as local config
   }
 });
 
+test("signing diagnostics use a separate trusted-main job with certificate-only credentials", () => {
+  const workflow = read("diagnostics");
+  assert.match(
+    workflow,
+    /options: \[coverage, design, visual, provider, signing\]/,
+  );
+  assert.match(job(workflow, "native"), /inputs\.selection != 'signing'/);
+  const signing = job(workflow, "signing");
+  for (const guard of [
+    "github.repository == 'getsituate/situate'",
+    "github.ref == 'refs/heads/main'",
+    "github.event_name == 'workflow_dispatch'",
+    "inputs.selection == 'signing'",
+  ])
+    assert.ok(signing.includes(guard));
+  assert.match(signing, /runs-on: macos-latest/);
+  assert.match(signing, /environment: macos-release/);
+  assert.match(signing, /timeout-minutes: 10/);
+  assert.match(signing, /ref:.*github\.sha/);
+  assert.match(
+    signing,
+    /run: node tools\/actions-adapter\.mjs diagnostics --lane signing/,
+  );
+  assert.match(signing, /DIAGNOSTIC_TARGET: native/);
+  assert.match(
+    signing,
+    /APPLE_DEVELOPER_ID_P12_BASE64:.*secrets\.APPLE_DEVELOPER_ID_P12_BASE64/,
+  );
+  assert.match(
+    signing,
+    /APPLE_DEVELOPER_ID_P12_PASSWORD:.*secrets\.APPLE_DEVELOPER_ID_P12_PASSWORD/,
+  );
+  assert.match(signing, /APPLE_TEAM_ID:.*secrets\.APPLE_TEAM_ID/);
+  assert.match(
+    signing,
+    /APPLE_MACOS_SIGNING_IDENTITY:.*secrets\.APPLE_MACOS_SIGNING_IDENTITY/,
+  );
+  assert.doesNotMatch(
+    signing,
+    /APPLE_API_|TAURI_SIGNING|GH_TOKEN|SSH|PAID_|contents: write|packages: write|create-stage|publish-run/,
+  );
+});
+
 test("tool image preserves build/publisher separation and read-only build credentials", () => {
   const workflow = read("ci-tool-image");
   const build = job(workflow, "build");

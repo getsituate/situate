@@ -424,7 +424,10 @@ test("coverage is a read-only explicit diagnostic, separate from required verifi
     "utf8",
   );
   assert.match(diagnostics, /workflow_dispatch:/);
-  assert.match(diagnostics, /options: \[coverage, design, visual, provider\]/);
+  assert.match(
+    diagnostics,
+    /options: \[coverage, design, visual, provider, signing\]/,
+  );
   assert.match(diagnostics, /github.repository == 'getsituate\/situate'/);
   assert.match(diagnostics, /github.ref == 'refs\/heads\/main'/);
   assert.match(diagnostics, /github.event_name == 'workflow_dispatch'/);
@@ -441,7 +444,7 @@ test("coverage is a read-only explicit diagnostic, separate from required verifi
   assert.doesNotMatch(portable, /secrets\.|pipeline-bootstrap|run: node /);
   const steps = diagnostics
     .split("\n  native:\n")[1]
-    ?.split("\n  docker:\n")[0];
+    ?.split(/\n {2}[a-z][a-z-]*:\n/)[0];
   assert.match(steps, /runs-on: macos-latest/);
   assert.match(steps, /run: node tools\/actions-adapter\.mjs diagnostics\n/);
   const coverageStep = steps

@@ -410,6 +410,16 @@ export async function main(
     )
       throw new Error("Diagnostics require an explicit trusted main dispatch.");
     const selection = values.lane ?? env.DIAGNOSTIC_SELECTION;
+    if (selection === "signing") {
+      if (env.DIAGNOSTIC_TARGET !== "native")
+        throw new Error("Signing diagnostics require macOS execution.");
+      const { signingEnvironment } = await import("./signing-check.mjs");
+      execute(process.execPath, ["tools/signing-check.mjs"], {
+        stdio: "inherit",
+        env: signingEnvironment(env),
+      });
+      return;
+    }
     if (selection === "provider") {
       if (
         env.DIAGNOSTIC_TARGET !== "native" ||

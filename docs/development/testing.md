@@ -380,7 +380,9 @@ Coverage is opt-in and does not gate PRs or releases. On macOS, `node tools/test
 
 Reports live under `client/target/coverage/`: Vue HTML/LCOV in `vue/` and Rust LCOV in `rust.lcov`. Coverage does not execute signed-installation/update journeys or impose a universal percentage threshold. Inspect uncovered behavior rather than treating aggregate percentages as acceptance evidence.
 
-The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides explicit `coverage`, `design`, `visual` and `provider` selections on trusted main. These do not feed required verification or release results. Paid provider diagnostics additionally require protected authorization and the dedicated test credential; ordinary fixtures make no paid calls. No coverage-commenting workflow is active.
+The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides explicit `coverage`, `design`, `visual`, `provider` and `signing` selections on trusted main. These do not feed required verification or release results. Paid provider diagnostics additionally require protected authorization and the dedicated test credential; ordinary fixtures make no paid calls. No coverage-commenting workflow is active.
+
+The `signing` selection tests Developer ID signing access in a temporary Keychain on macOS, using the protected `macos-release` environment. It does not build, notarize or publish an application or reserve a version. Run `node tools/signing-check.mjs` locally with the [Apple signing inputs](../../client/README.md#apple-distribution) to perform the same check.
 
 ## CI gates
 

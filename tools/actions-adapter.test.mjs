@@ -519,6 +519,57 @@ test("adapter subprocess executes fixture runner and transports exact plan-bound
   assert.match(result.stderr, /digest mismatch/);
 });
 
+test("signing diagnostics forward only signing inputs after trusted-main authorization", async () => {
+  const signing = {
+    PATH: "/synthetic/bin",
+    HOME: "/synthetic/home",
+    CI: "true",
+    APPLE_TEAM_ID: "TEAM123456",
+    APPLE_MACOS_SIGNING_IDENTITY:
+      "Developer ID Application: Example (TEAM123456)",
+    APPLE_DEVELOPER_ID_P12_BASE64: "c3ludGhldGlj",
+    APPLE_DEVELOPER_ID_P12_PASSWORD: "synthetic-password",
+  };
+  const env = {
+    ...environment,
+    ...signing,
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    DIAGNOSTIC_TARGET: "native",
+    GH_TOKEN: "unrelated-secret",
+    APPLE_API_PRIVATE_KEY: "unrelated-secret",
+    TAURI_SIGNING_PRIVATE_KEY: "unrelated-secret",
+    SSH_AUTH_SOCK: "/synthetic/agent",
+    OTHER_SECRET: "unrelated-secret",
+  };
+  const calls = [];
+  const execute = (command, args, options) =>
+    calls.push({ command, args, options });
+  await main(["diagnostics", "--lane", "signing"], env, execute);
+  assert.deepEqual(calls, [
+    {
+      command: process.execPath,
+      args: ["tools/signing-check.mjs"],
+      options: { stdio: "inherit", env: signing },
+    },
+  ]);
+  for (const changed of [
+    { GITHUB_REPOSITORY: "other/repository" },
+    { GITHUB_REF: "refs/heads/feature" },
+    { GITHUB_EVENT_NAME: "push" },
+    { DIAGNOSTIC_TARGET: "portable" },
+  ]) {
+    await assert.rejects(
+      main(
+        ["diagnostics", "--lane", "signing"],
+        { ...env, ...changed },
+        execute,
+      ),
+      /trusted main|macOS/,
+    );
+  }
+  assert.equal(calls.length, 1);
+});
+
 test("unprovisioned remote operations and paid diagnostics fail visibly before executing commands", async () => {
   const execute = () => {
     throw new Error("Unexpected external command");

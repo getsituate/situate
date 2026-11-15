@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "signing-access-diagnostic",
+  "behaviorDigest": "a42ee8c76c54556d1be19fff5b16c26f1ba0053e480a92dc081750a79cf9d0ec",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Adds optional Developer ID signing diagnostics without creating or publishing application releases.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "41a806dd81f519a4c77c20d84c3936ecbce333a14c6091150cd6778d90f10632",
+      "translationHash": "fead1a80caf33f59c8e331599c2327138735d258dbb0ce692e3ce115b5870e7e"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "41a806dd81f519a4c77c20d84c3936ecbce333a14c6091150cd6778d90f10632"
+  }
+}
