@@ -22,7 +22,7 @@ Selecting a conversation in the main navigation reveals an already open instance
 
 Tab names are optional. An unnamed tab uses its first pane's current view title, or the localized new-tab label when empty. Closing the last pane leaves an empty view chooser in that tab. Closing the last tab or all tabs opens one fresh empty tab with a focused pane and the normal view chooser. Opening a view or conversation fills that pane. Users can reopen a closed tab with its arrangement and histories. Closing or reopening a tab neither deletes content nor stops or restarts workspace work.
 
-Situate stores the workspace's tab and pane presentation in its `.situate` directory and restores it from there. Stored state includes tab identities, names and order, split arrangements and sizes, active tab and pane, pane navigation histories, pinned views and supported view presentation state. File targets and revisions, reading/source mode, selection, cursor and scroll position, and chat scroll position are retained; drafts remain owned by their content modules. Layout and conversation content belong to the portable, synchronizable workspace, not a device-only preference store. Operational AI settings, including conversation-specific model selections for future requests, are the device-local exception under [REQ-0015](REQ-0015-connect-user-provided-models.md). After workspace synchronization, another device can restore the same open tabs and conversations using its own responsive presentation and independently configured AI access. This does not require live mirroring of an in-flight agent run or change the completed-turn continuation boundary below.
+Situate must persist and restore each workspace's tab and pane presentation as device-local layout state (`layout.json`). Stored state includes tab identities, names and order, split arrangements and sizes, active tab and pane, pane navigation histories, pinned views and supported view presentation state. File targets and revisions, reading/source mode, selection, cursor and scroll position, and chat scroll position are retained; drafts remain owned by their content modules. Layout state is excluded from workspace synchronization and transfer; changing tabs, panes or navigation on one device must not overwrite another device's presentation. Conversation content remains portable and synchronizable, so another device can open the same conversations using its own layout and independently configured AI access. Operational AI settings, including conversation-specific model selections for future requests, remain device-local under [REQ-0015](REQ-0015-connect-user-provided-models.md). Device-local layout upgrades preserve the retained state, with migration where needed; restoring it in an older app after an upgrade is not required under [REQ-0069](REQ-0069-preserve-workspace-version-compatibility.md). This does not require live mirroring of an in-flight agent run or change the completed-turn continuation boundary below.
 
 Agent execution is tied to an open workspace in a running application, not an always-running server agent. Desktop background work can continue while the workspace remains open. Switching active workspaces on mobile leaves the previous workspace open and permits its work to continue subject to operating-system limits; it is not explicit closure. Switching mobile applications should allow work to continue where the operating system permits it; operating-system suspension may pause a longer agent run. On returning to the application, such paused work resumes from its saved state without repeating actions recorded as completed. Mobile suspension or forced termination does not guarantee graceful closure.
 
@@ -52,6 +52,8 @@ Private plugin management and marketplace clarification, 2026-10-06; not publicl
 
 Private UI architecture clarification; date not recorded, not publicly available. Named topic tabs containing pane layouts and independent pane navigation histories were confirmed.
 
+Private layout storage clarification; date not recorded, not publicly available. Layout and pane navigation state are device-local and excluded from synchronization and workspace transfer. Device-local upgrades preserve state without requiring downgrade compatibility.
+
 Private multi-device AI configuration clarification; date not recorded, not publicly available. Cross-device conversation continuation uses the destination's local access and model selection without transferring operational AI settings.
 
 ## Acceptance criteria
@@ -72,7 +74,9 @@ Private multi-device AI configuration clarification; date not recorded, not publ
 - Clearing a tab's name restores automatic naming without changing its identity.
 - Closing the last pane leaves a chooser. Closing the last tab or all tabs opens exactly one fresh empty tab; subsequent view navigation fills its existing pane.
 - Reopening a closed tab restores its layout and histories without recreating conversations or restarting work.
-- Reopening a workspace restores tabs, open targets, arrangements, active selection, histories, pinned views and supported presentation state from its `.situate` directory, including after transferring that state through workspace synchronization.
+- Reopening a workspace on the same device restores tabs, open targets, arrangements, active selection, histories, pinned views and supported presentation state from device-local layout storage.
+- Workspace synchronization and transfer exclude layout state; another device's tabs, panes and navigation remain independent while conversation content stays portable.
+- Upgrading the app preserves device-local layout state, with migration where needed; downgrading to an older app after a layout-format upgrade is not required.
 
 - After operating-system suspension, an agent run can resume on the same device from its saved state without repeating actions recorded as completed; graceful closure is not guaranteed.
 - Uncertain external outcomes after interruptions are left to the chosen coding agent and model judgment, without an additional Situate-specific recovery or automatic checking protocol; history and task-scope obligations remain in force.
@@ -86,6 +90,5 @@ Private multi-device AI configuration clarification; date not recorded, not publ
 
 - How are active and other open workspaces, and explicit closure, presented on mobile under [REQ-0037](REQ-0037-keep-workspaces-independent.md)?
 - Can tabs move between windows of the same workspace, and how are concurrent presentations of that workspace assigned to windows?
-- How are concurrent layout edits from different devices reconciled by workspace synchronization?
 - What processing-state information do users need to keep an overview of multiple topics?
 - Which additional topic-state indicators are needed alongside the responsive panes and view switching in [REQ-0026](REQ-0026-provide-plugin-defined-views.md)?

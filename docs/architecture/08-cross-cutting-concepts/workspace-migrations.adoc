@@ -18,6 +18,8 @@ See link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-
 
 ==== Compatibility boundary and migration position
 
+The mixed-version compatibility boundary covers synchronizable workspace data, whether or not synchronization is currently enabled. Device-local layout, settings and provider connections are excluded; upgrades must preserve them through migration where needed, but older apps need not read their upgraded formats. A device-local format change alone must not raise the portable workspace's `minimumAppVersion`. Public plugin-interface compatibility remains governed by REQ-0070.
+
 Persist two values centrally in `.situate`; no separate core format version or target-format setting is needed.
 The values live in `.situate/migrations.json`.
 The first migration creates this file without changing other managed records or increasing their minimum app version.

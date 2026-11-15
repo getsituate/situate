@@ -126,19 +126,19 @@ The host releases view-scoped resources without stopping independent plugin or a
 Content drafts cannot rely on keeping historical views mounted.
 Workspace closure continues to use Application Core coordination rather than being inferred from tab, pane or component counts.
 
-Persist versioned presentation state through core storage under the workspace's `.situate` directory, not in a device-only preference store. Persist tab identities, names and order, split geometry, active tab and pane, navigation histories, pinned views and supported presentation sessions. Restoring the synchronized workspace restores its open tabs and conversations; a device projects that arrangement for its available space. DOM references, mounted components, request handles and device viewport measurements are not persisted.
+Persist versioned presentation state through core storage as device-local state scoped to the workspace. Persist tab identities, names and order, split geometry, active tab and pane, navigation histories, pinned views and supported presentation sessions. Each device restores its own arrangement independently of synchronized conversation content. Layout and navigation state must not be synchronized or transferred with the workspace. DOM references, mounted components, request handles and device viewport measurements are not persisted.
 File target/revision, reading/source mode, selection, cursor and scroll position, and chat scroll position are supported restorable state. Drafts and per-conversation model overrides remain in their domain stores, not duplicated in layout data. Missing targets retain their history entry and render an unavailable state with applicable recovery actions rather than redirecting silently.
-Pane histories initially have no product-imposed limit. Storage versioning, validation and write-failure handling must preserve existing data rather than silently replace unreadable state. Cross-device concurrent-edit reconciliation and assignment of multiple same-workspace windows remain separate design questions; persistence does not itself implement synchronization transport.
+Pane histories initially have no product-imposed limit. Storage versioning, validation and write-failure handling must preserve existing data rather than silently replace unreadable state. Assignment of multiple same-workspace windows remains a separate design question; device-local persistence does not implement synchronization transport.
 The UI owns presentation semantics; Application Core provides storage and authorization.
 No global event bus, particular state-management library or docking dependency is selected by this decomposition.
 
 ====== Layout persistence
 
-The native layout adapter stores a versioned envelope in `.situate/layout.json`, separate from conversation and file records.
+The native layout adapter currently stores a versioned envelope in `.situate/layout.json`, separate from conversation and file records. That workspace-directory location does not yet implement the device-local storage boundary required by REQ-0011; moving existing layouts must preserve their state through migration.
 Byte-hash revisions, workspace locking and atomic replacement reject stale saves; frontend saves are serialized and uncertain outcomes require readback before another write.
 The envelope is bounded to 2 MiB. Invalid or newer state is preserved and reported, not replaced by an empty successful layout. A missing record is distinguished from a valid saved layout with zero tabs; the latter receives a fresh empty tab while retaining pins and closed histories.
 Close and quit coordination includes layout persistence alongside domain save barriers. Inactive but still-open workspace presentations retain their sessions; unmounting the shell does not discard pending saves.
-This storage protocol does not provide a synchronization transport, concurrent-device merge policy or atomic exclusion of noncooperating filesystem writers.
+Layout upgrades require data-preserving migration where needed, not mixed-version or downgrade compatibility; see link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069]. This storage protocol does not provide atomic exclusion of noncooperating filesystem writers.
 
 ====== Implementation mapping and verification boundary
 
