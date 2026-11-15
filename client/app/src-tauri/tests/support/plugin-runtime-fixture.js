@@ -1,5 +1,5 @@
 export default ({ vue, ui, navigation, service }) => {
-  const count = vue.ref(0);
+  const count = vue.ref(null);
   const read = async () => {
     count.value = await service.invoke("readCount", {});
   };

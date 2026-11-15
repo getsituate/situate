@@ -10,6 +10,10 @@ const smoke = await readFile(
   new URL("plugin-runtime-smoke.js", directory),
   "utf8",
 );
+const uiSource = await readFile(
+  new URL("plugin-runtime-fixture.js", directory),
+  "utf8",
+);
 const rust = await readFile(
   new URL("plugin_runtime_smoke.rs", directory),
   "utf8",
@@ -21,6 +25,85 @@ const lifecycle = smoke.slice(
   smoke.indexOf("  async function disableHeldRoot(stop)"),
   smoke.indexOf("  await disableHeldRoot(false);"),
 );
+
+test("counter interaction waits for the initial service snapshot rather than a placeholder zero", async () => {
+  let resolveRead,
+    initialRead,
+    increment,
+    pendingRead = true,
+    clicks = 0;
+  const window = {};
+  const factory = vm.runInNewContext(
+    `(${uiSource.replace("export default", "").trim().replace(/;$/, "")})`,
+    { window },
+  );
+  const plugin = factory({
+    vue: {
+      ref: (value) => ({ value }),
+      onMounted: (callback) => {
+        initialRead = callback();
+      },
+    },
+    ui: { SituateButton: {} },
+    navigation: {},
+    service: {
+      invoke: async (operation) => {
+        if (operation === "readCount")
+          return new Promise((resolve) => {
+            resolveRead = resolve;
+          });
+        assert.equal(operation, "increment");
+        return 1;
+      },
+    },
+  });
+  const state = plugin.views[0].component.setup();
+  const counter = {
+    querySelector(selector) {
+      if (selector === "output")
+        return {
+          textContent:
+            state.count.value === null ? "" : String(state.count.value),
+        };
+      assert.equal(selector, "button");
+      return {
+        click() {
+          assert.equal(
+            pendingRead,
+            false,
+            "interaction raced the initial service snapshot",
+          );
+          clicks++;
+          increment = state.increment();
+        },
+      };
+    },
+  };
+  const wait = async (condition, message) => {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (await condition()) return;
+      if (pendingRead) {
+        pendingRead = false;
+        resolveRead(0);
+        await initialRead;
+      }
+      await increment;
+    }
+    throw new Error(message);
+  };
+  const interaction = smoke.slice(
+    smoke.indexOf("  const counter = () =>"),
+    smoke.indexOf(
+      '  await window.nativePluginOpen("native-counter:settings");',
+    ),
+  );
+  await vm.runInNewContext(`(async () => { ${interaction} })()`, {
+    document: { querySelector: () => counter },
+    wait,
+  });
+  assert.equal(clicks, 1);
+  assert.equal(state.count.value, 1);
+});
 
 async function journey(useActivity = false) {
   let admitted = false,

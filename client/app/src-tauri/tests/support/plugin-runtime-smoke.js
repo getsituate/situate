@@ -37,8 +37,10 @@ window.runPluginRuntimeSmoke = async () => {
   const counter = () =>
     document.querySelector('[data-native-plugin="counter"]');
   await wait(counter, "The plugin counter did not mount");
-  if (counter().querySelector("output").textContent !== "0")
-    throw new Error("The plugin counter did not initialize independently");
+  await wait(
+    () => counter()?.querySelector("output").textContent === "0",
+    "The plugin counter did not initialize independently",
+  );
   counter().querySelector("button").click();
   await wait(
     () => counter()?.querySelector("output").textContent === "1",
