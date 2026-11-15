@@ -548,7 +548,10 @@ test("coverage and visual diagnostics use a separate explicitly selected workflo
     "utf8",
   );
   assert.match(source, /workflow_dispatch:/);
-  assert.match(source, /options: \[coverage, design, visual, provider\]/);
+  assert.match(
+    source,
+    /options: \[coverage, design, visual, provider, signing\]/,
+  );
   assert.match(source, /run: node tools\/actions-adapter\.mjs diagnostics\n/);
   assert.match(source, /DIAGNOSTIC_SELECTION: \$\{\{ inputs.selection \}\}/);
   assert.doesNotMatch(
