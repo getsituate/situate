@@ -628,9 +628,11 @@ export async function runWorkflow(
           }));
         operation.verification = {
           ...aggregateReceipts(plan.verificationPlan ?? plan, results),
-          results: results
-            .flatMap((receipt) => receipt.results)
-            .map(({ id, status, exitCode }) => ({ id, status, exitCode })),
+          results: results.map(({ lane, status }) => ({
+            id: lane,
+            status,
+            exitCode: 0,
+          })),
         };
         saveOperation(root, operation);
       }
