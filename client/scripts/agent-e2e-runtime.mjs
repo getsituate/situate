@@ -14,7 +14,7 @@ import {
 import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseArgs } from "node:util";
+import { parseArgs, stripVTControlCharacters } from "node:util";
 import { nativeDesktopIssue } from "./native-desktop-session.mjs";
 
 export const MODEL = "gpt-4.1-mini";
@@ -305,7 +305,7 @@ export function runChild(
         ).split(/[\r\n]/);
         partialLines[stream] = lines.pop().slice(-8192);
         for (const raw of lines) {
-          const line = raw.replace(/\x1b\[[0-9;]*m/g, "");
+          const line = stripVTControlCharacters(raw);
           if (
             /^\s*(?:Updating (?:crates\.io index|git repository)|Downloading crates|Downloaded \S)/.test(
               line,
