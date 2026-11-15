@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { test } from "node:test";
 import {
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -317,6 +320,72 @@ function buildFixture(t) {
     state,
   };
 }
+
+test("hosted builds register their isolated Keychain only for the build lifetime", async (t) => {
+  const fixture = buildFixture(t);
+  const other = join(fixture.root, "other.keychain-db");
+  writeFileSync(other, "synthetic unrelated keychain", { mode: 0o600 });
+  let searchList = [other];
+  let keychain;
+  let reachedBuild = false;
+  const { privateKey } = generateKeyPairSync("ec", {
+    namedCurve: "prime256v1",
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    publicKeyEncoding: { type: "spki", format: "pem" },
+  });
+  await assert.rejects(
+    buildAppleRelease({
+      ...fixture,
+      environment: {
+        ...fixture.environment,
+        CI: "true",
+        GITHUB_ACTIONS: "true",
+        RUNNER_ENVIRONMENT: "github-hosted",
+        APPLE_API_KEY: "EXAMPLE1234",
+        APPLE_API_ISSUER: "11111111-2222-3333-4444-555555555555",
+        APPLE_API_PRIVATE_KEY: privateKey,
+      },
+      qualifyMigrations: async () => ({
+        schemaVersion: 1,
+        source: "macos-direct-publication",
+        releases: [],
+        migrations: 0,
+      }),
+      execute: async (command, args, options) => {
+        if (command === "security") {
+          if (args[0] === "create-keychain") {
+            keychain = args.at(-1);
+            writeFileSync(keychain, "synthetic signing keychain", {
+              mode: 0o600,
+            });
+          } else if (args[0] === "list-keychains") {
+            if (args[3] === "-s") searchList = args.slice(4);
+            return searchList.map((path) => JSON.stringify(path)).join("\n");
+          } else if (args[0] === "delete-keychain") {
+            searchList = searchList.filter(
+              (path) => realpathSync(path) !== realpathSync(keychain),
+            );
+            rmSync(keychain);
+          }
+        }
+        if (command === process.execPath && args[1] === "build") {
+          reachedBuild = true;
+          assert.ok(
+            searchList.some(
+              (path) => realpathSync(path) === realpathSync(keychain),
+            ),
+          );
+          throw new Error("synthetic pre-sign build stop");
+        }
+        return fixture.execute(command, args, options);
+      },
+    }),
+    /synthetic pre-sign build stop/,
+  );
+  assert.equal(reachedBuild, true);
+  assert.deepEqual(searchList, [other]);
+  assert.equal(existsSync(keychain), false);
+});
 
 test("generated version replaces committed version without source edits and migration ancestry remains mandatory", async (t) => {
   const fixture = buildFixture(t);

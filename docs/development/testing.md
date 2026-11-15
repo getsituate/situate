@@ -384,7 +384,9 @@ The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides exp
 
 The `signing` selection tests Developer ID signing access in a temporary Keychain on macOS, using the protected `macos-release` environment. It does not build, notarize or publish an application or reserve a version. Run `node tools/signing-check.mjs` locally with the [Apple signing inputs](../../client/README.md#apple-distribution) to perform the baseline check.
 
-On the disposable GitHub-hosted runner, the workflow also runs `--probe-search-list`: it repeats both signing attempts after temporarily appending its own Keychain to the user search list, then removes only that entry. Other entries and their order are preserved. Baseline failures remain nonpassing even if the registered attempts succeed. This search-list experiment is blocked on local and self-hosted execution.
+On the disposable GitHub-hosted runner, the workflow uses the same temporary Keychain registration as release builds. It removes only its owned entry afterward, preserving other entries and their order. Local and self-hosted defaults do not change the search list.
+
+The optional `--probe-search-list` comparison is restricted to disposable GitHub-hosted execution: it retains the unregistered baseline, appends its own Keychain and repeats both attempts, then confirms cleanup. Baseline failures remain nonpassing even if registered signing succeeds.
 
 ## CI gates
 

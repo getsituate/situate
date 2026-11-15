@@ -145,6 +145,7 @@ function fixture(
           }
         }),
       );
+      rmSync(keychain);
     }
     if (command === "security" && args[0] === "find-identity")
       return (
@@ -612,8 +613,9 @@ test("function experiment opt-in must be a boolean before any environment access
   }
 });
 
-test("public hosted markers are forwarded but cannot enable the experiment without the flag", async (t) => {
+test("hosted defaults use release registration without enabling the comparison experiment", async (t) => {
   const f = fixture(t);
+  const original = [...f.searchList];
   const environment = {
     ...f.environment,
     ...hosted,
@@ -633,11 +635,8 @@ test("public hosted markers are forwarded but cannot enable the experiment witho
   const report = await f.check({ environment });
   assert.equal(report.status, "passed");
   assert.equal(report.searchListProbe, undefined);
-  assert.ok(
-    !f.calls.some(
-      ({ args }) => args.includes("-s") && args[0] === "list-keychains",
-    ),
-  );
+  assert.equal(report.keychain.inSearchList, true);
+  assert.deepEqual(f.searchList, original);
 });
 
 test("registered attempts do not replace failed baseline and removal preserves concurrent entries in order", async (t) => {
