@@ -178,7 +178,13 @@ function treeFiles(root, at, directory) {
 }
 export function validateFragmentRange(
   root,
-  { base, head, requireNew = true, checkBehavior = true } = {},
+  {
+    base,
+    head,
+    requireNew = true,
+    checkBehavior = true,
+    allowMigrationMetadata = false,
+  } = {},
 ) {
   revision(root, base);
   revision(root, head);
@@ -211,7 +217,15 @@ export function validateFragmentRange(
     localeRoot,
   ])
     .split("\0")
-    .filter(Boolean);
+    .filter(
+      (file) =>
+        file &&
+        (!allowMigrationMetadata ||
+          ![
+            "releases/legacy-migration-evidence.json",
+            "releases/migration-checkpoint.json",
+          ].includes(file)),
+    );
   assert(!immutable.length, "Finalized historical catalogs are immutable");
   const locales = localesAt(root, head);
   const expectedBehavior = checkBehavior
@@ -251,6 +265,8 @@ export function collectFragments(root, options) {
     ...options,
     requireNew: false,
     checkBehavior: false,
+    // Published source baselines may precede the migration-ledger replacement.
+    allowMigrationMetadata: true,
   });
 }
 export function approveSource(fragment, expectedHash, options) {
