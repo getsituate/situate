@@ -382,7 +382,9 @@ Reports live under `client/target/coverage/`: Vue HTML/LCOV in `vue/` and Rust L
 
 The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides explicit `coverage`, `design`, `visual`, `provider` and `signing` selections on trusted main. These do not feed required verification or release results. Paid provider diagnostics additionally require protected authorization and the dedicated test credential; ordinary fixtures make no paid calls. No coverage-commenting workflow is active.
 
-The `signing` selection tests Developer ID signing access in a temporary Keychain on macOS, using the protected `macos-release` environment. It does not build, notarize or publish an application or reserve a version. Run `node tools/signing-check.mjs` locally with the [Apple signing inputs](../../client/README.md#apple-distribution) to perform the same check.
+The `signing` selection tests Developer ID signing access in a temporary Keychain on macOS, using the protected `macos-release` environment. It does not build, notarize or publish an application or reserve a version. Run `node tools/signing-check.mjs` locally with the [Apple signing inputs](../../client/README.md#apple-distribution) to perform the baseline check.
+
+On the disposable GitHub-hosted runner, the workflow also runs `--probe-search-list`: it repeats both signing attempts after temporarily appending its own Keychain to the user search list, then removes only that entry. Other entries and their order are preserved. Baseline failures remain nonpassing even if the registered attempts succeed. This search-list experiment is blocked on local and self-hosted execution.
 
 ## CI gates
 

@@ -413,11 +413,23 @@ export async function main(
     if (selection === "signing") {
       if (env.DIAGNOSTIC_TARGET !== "native")
         throw new Error("Signing diagnostics require macOS execution.");
+      if (
+        env.CI !== "true" ||
+        env.GITHUB_ACTIONS !== "true" ||
+        env.RUNNER_ENVIRONMENT !== "github-hosted"
+      )
+        throw new Error(
+          "Search-list diagnostics require a GitHub-hosted runner.",
+        );
       const { signingEnvironment } = await import("./signing-check.mjs");
-      execute(process.execPath, ["tools/signing-check.mjs"], {
-        stdio: "inherit",
-        env: signingEnvironment(env),
-      });
+      execute(
+        process.execPath,
+        ["tools/signing-check.mjs", "--probe-search-list"],
+        {
+          stdio: "inherit",
+          env: signingEnvironment(env),
+        },
+      );
       return;
     }
     if (selection === "provider") {

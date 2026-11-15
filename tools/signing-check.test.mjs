@@ -4,14 +4,15 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkSigning, main } from "./signing-check.mjs";
+import { checkSigning, main, signingEnvironment } from "./signing-check.mjs";
 import { run } from "../client/scripts/ios-xcode.mjs";
 
 const secret = "synthetic-private-value";
@@ -32,6 +33,7 @@ function fixture(
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const calls = [];
   const files = [];
+  const searchList = [join(directory, "unrelated")];
   let keychain;
   let cleanupFailed = false;
   const environment = {
@@ -75,6 +77,10 @@ function fixture(
       );
       assert.equal(statSync(dirname(keychain)).mode & 0o777, 0o700);
       writeFileSync(keychain, secret, { mode: 0o600 });
+      if (member)
+        searchList.push(
+          keychain.replace("/signing.keychain-db", "/./signing.keychain-db"),
+        );
     }
     if (command === "security" && args[0] === "import") {
       files.push(args[1]);
@@ -110,14 +116,36 @@ function fixture(
     try {
       override = await intercept(command, args, options);
     } catch (error) {
-      cleanupFailed = command === "security" && args[0] === "delete-keychain";
+      if (command === "security" && args[0] === "delete-keychain")
+        cleanupFailed = true;
       throw error;
     }
     if (override !== undefined) return override;
     if (command === "python3")
       return JSON.stringify({ code: 0, unlocked: true });
-    if (command === "security" && args[0] === "list-keychains")
-      return `${JSON.stringify(member ? keychain.replace("/signing.keychain-db", "/./signing.keychain-db") : join(directory, "unrelated"))}\n`;
+    if (command === "security" && args[0] === "list-keychains") {
+      if (args.includes("-s"))
+        searchList.splice(
+          0,
+          searchList.length,
+          ...args.slice(args.indexOf("-s") + 1),
+        );
+      return searchList.map((path) => JSON.stringify(path)).join("\n");
+    }
+    if (command === "security" && args[0] === "delete-keychain") {
+      const owned = realpathSync(keychain);
+      searchList.splice(
+        0,
+        searchList.length,
+        ...searchList.filter((path) => {
+          try {
+            return realpathSync(path) !== owned;
+          } catch {
+            return resolve(path) !== resolve(keychain);
+          }
+        }),
+      );
+    }
     if (command === "security" && args[0] === "find-identity")
       return (
         identities ??
@@ -130,6 +158,7 @@ function fixture(
     execute,
     calls,
     files,
+    searchList,
     async check(options = {}) {
       const report = await checkSigning({
         root: directory,
@@ -436,7 +465,7 @@ test("CLI help does not inspect environment or execute commands", async (t) => {
     },
   );
   assert.equal(
-    await main(["--help"], {
+    await main(["--help", "--probe-search-list"], {
       environment,
       execute: () => assert.fail("help executed command"),
     }),
@@ -515,4 +544,437 @@ test("captured runner output and private failure messages never reach reports or
       );
   }
   assert.deepEqual(leaked, []);
+});
+
+const hosted = {
+  CI: "true",
+  GITHUB_ACTIONS: "true",
+  RUNNER_ENVIRONMENT: "github-hosted",
+};
+
+test("search-list experiment rejects non-hosted contexts before private input access", async (t) => {
+  const output = [];
+  t.mock.method(console, "log", (line) => output.push(line));
+  for (const markers of [
+    {},
+    { ...hosted, CI: "false" },
+    { ...hosted, CI: "TRUE" },
+    { ...hosted, GITHUB_ACTIONS: "false" },
+    { ...hosted, GITHUB_ACTIONS: undefined },
+    { ...hosted, RUNNER_ENVIRONMENT: "self-hosted" },
+    { ...hosted, RUNNER_ENVIRONMENT: undefined },
+  ]) {
+    const environment = new Proxy(markers, {
+      get(target, key) {
+        assert.ok(["CI", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT"].includes(key));
+        return target[key];
+      },
+      getOwnPropertyDescriptor() {
+        assert.fail("private input selection before hosted guard");
+      },
+    });
+    const report = await checkSigning({
+      platform: "darwin",
+      environment,
+      probeSearchList: true,
+      execute: () => assert.fail("guard executed command"),
+    });
+    assert.equal(report.status, "blocked");
+    assert.equal(report.code, "hosted-ci-required");
+    assert.equal(
+      await main(["--probe-search-list"], {
+        platform: "darwin",
+        environment,
+        execute: () => assert.fail("guard executed command"),
+      }),
+      1,
+    );
+    assert.equal(JSON.parse(output.at(-1)).code, "hosted-ci-required");
+  }
+});
+
+test("function experiment opt-in must be a boolean before any environment access", async () => {
+  for (const probeSearchList of ["true", "false", 1, {}]) {
+    const report = await checkSigning({
+      probeSearchList,
+      environment: new Proxy(
+        {},
+        {
+          get() {
+            assert.fail("invalid opt-in read environment");
+          },
+        },
+      ),
+      execute: () => assert.fail("invalid opt-in executed command"),
+    });
+    assert.equal(report.status, "blocked");
+    assert.equal(report.code, "invalid-options");
+  }
+});
+
+test("public hosted markers are forwarded but cannot enable the experiment without the flag", async (t) => {
+  const f = fixture(t);
+  const environment = {
+    ...f.environment,
+    ...hosted,
+    SITUATE_COORDINATED_WORKTREE: root,
+  };
+  const forwarded = signingEnvironment(environment);
+  assert.equal(forwarded.GITHUB_ACTIONS, "true");
+  assert.equal(forwarded.RUNNER_ENVIRONMENT, "github-hosted");
+  assert.equal(forwarded.SITUATE_COORDINATED_WORKTREE, root);
+  for (const key of [
+    "GH_TOKEN",
+    "SSH_AUTH_SOCK",
+    "OPENAI_API_KEY",
+    "APPLE_API_KEY",
+  ])
+    assert.equal(forwarded[key], undefined);
+  const report = await f.check({ environment });
+  assert.equal(report.status, "passed");
+  assert.equal(report.searchListProbe, undefined);
+  assert.ok(
+    !f.calls.some(
+      ({ args }) => args.includes("-s") && args[0] === "list-keychains",
+    ),
+  );
+});
+
+test("registered attempts do not replace failed baseline and removal preserves concurrent entries in order", async (t) => {
+  let concurrent, canonicalOwned;
+  const f = fixture(t, {
+    intercept(command, args) {
+      if (command === "security" && args[0] === "create-keychain")
+        canonicalOwned = realpathSync(args.at(-1));
+      const registered = f.searchList.includes(canonicalOwned);
+      if (command === "codesign" && args[0] === "--force" && !registered)
+        throw new Error(`codesign failed (1).\n${secret}: no identity found`);
+      if (
+        command === "codesign" &&
+        args[0] === "--verify" &&
+        registered &&
+        !concurrent
+      ) {
+        concurrent = dirname(f.searchList[0]) + "/./concurrent-private-entry";
+        f.searchList.push(concurrent);
+      }
+    },
+  });
+  const others = [
+    f.searchList[0],
+    join(dirname(f.searchList[0]), "foreign", "signing.keychain-db"),
+    join(dirname(f.searchList[0]), "second-private-entry"),
+  ];
+  f.searchList.push(...others.slice(1));
+  const report = await f.check({
+    environment: { ...f.environment, ...hosted },
+    probeSearchList: true,
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(report.code, "signing-probe-failed");
+  assert.equal(report.keychain.inSearchList, false);
+  assert.ok(
+    report.attempts.every((attempt) => attempt.reason === "identity-not-found"),
+  );
+  assert.equal(report.searchListProbe.status, "passed");
+  assert.equal(report.searchListProbe.registered, true);
+  assert.ok(
+    report.searchListProbe.attempts.every(
+      (attempt) => attempt.status === "passed",
+    ),
+  );
+  assert.equal(report.searchListProbe.removal, "passed");
+  assert.deepEqual(report.searchListProbe.cleanup, {
+    status: "passed",
+    fileAbsent: true,
+    entryAbsent: true,
+  });
+  const writes = f.calls.filter(
+    ({ command, args }) =>
+      command === "security" &&
+      args[0] === "list-keychains" &&
+      args.includes("-s"),
+  );
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes[0].args.slice(4, -1), others);
+  assert.equal(writes[0].args.at(-1), canonicalOwned);
+  assert.deepEqual(writes[1].args.slice(4), [...others, concurrent]);
+  assert.deepEqual(f.searchList, [...others, concurrent]);
+  const firstWrite = f.calls.indexOf(writes[0]);
+  assert.equal(
+    f.calls.slice(0, firstWrite).filter(({ command }) => command === "codesign")
+      .length,
+    2,
+  );
+  assert.equal(writes[1].options.signal, undefined);
+});
+
+test("CLI flag runs the experiment but returns one when only the registered treatment succeeds", async (t) => {
+  const output = [];
+  t.mock.method(console, "log", (line) => output.push(line));
+  const f = fixture(t, {
+    intercept(command, args) {
+      if (
+        command === "codesign" &&
+        args[0] === "--force" &&
+        !f.searchList.some((path) => path.endsWith("signing.keychain-db"))
+      )
+        throw new Error(`codesign failed (1).\n${secret}: no identity found`);
+    },
+  });
+  const code = await main(["--probe-search-list"], {
+    platform: "darwin",
+    environment: {
+      ...f.environment,
+      ...hosted,
+      SITUATE_COORDINATED_WORKTREE: root,
+    },
+    execute: f.execute,
+  });
+  assert.equal(code, 1);
+  const report = JSON.parse(output[0]);
+  assert.equal(report.status, "failed");
+  assert.equal(report.searchListProbe.status, "passed");
+  assert.ok(!output.join("").includes(secret));
+  for (const file of f.files) assert.equal(existsSync(file), false);
+});
+
+for (const failure of ["registration-write", "registration-confirmation"]) {
+  test(`registration failure is nonpassing and cleans from the first mutation attempt: ${failure}`, async (t) => {
+    let writes = 0;
+    const f = fixture(t, {
+      intercept(command, args) {
+        if (
+          command === "security" &&
+          args[0] === "list-keychains" &&
+          args.includes("-s") &&
+          ++writes === 1
+        ) {
+          if (failure === "registration-write") {
+            f.searchList.splice(0, f.searchList.length, ...args.slice(4));
+            throw new Error(secret);
+          }
+          return "";
+        }
+      },
+    });
+    const original = [...f.searchList];
+    const report = await f.check({
+      environment: { ...f.environment, ...hosted },
+      probeSearchList: true,
+    });
+    assert.equal(report.status, "failed");
+    assert.equal(report.searchListProbe.code, "registration-failed");
+    assert.equal(report.searchListProbe.removal, "passed");
+    assert.deepEqual(report.searchListProbe.attempts, []);
+    assert.deepEqual(report.searchListProbe.cleanup, {
+      status: "passed",
+      fileAbsent: true,
+      entryAbsent: true,
+    });
+    assert.deepEqual(f.searchList, original);
+  });
+}
+
+for (const at of ["registration", "registered-sign"]) {
+  test(`cancellation during ${at} still removes only the owned entry with non-aborted cleanup commands`, async (t) => {
+    const abort = new AbortController();
+    let cancelled = false;
+    const f = fixture(t, {
+      intercept(command, args, options) {
+        if (cancelled && command === "security")
+          assert.equal(options.signal, undefined);
+        const mutation =
+          command === "security" &&
+          args[0] === "list-keychains" &&
+          args.includes("-s");
+        const registeredSign =
+          command === "codesign" &&
+          f.searchList.some((path) => path.endsWith("signing.keychain-db"));
+        if (
+          !cancelled &&
+          ((at === "registration" && mutation) ||
+            (at === "registered-sign" && registeredSign))
+        ) {
+          if (mutation)
+            f.searchList.splice(0, f.searchList.length, ...args.slice(4));
+          cancelled = true;
+          abort.abort(new Error(secret));
+          throw new Error(secret);
+        }
+      },
+    });
+    const original = [...f.searchList];
+    const report = await f.check({
+      environment: { ...f.environment, ...hosted },
+      probeSearchList: true,
+      signal: abort.signal,
+    });
+    assert.equal(report.status, "cancelled");
+    assert.equal(report.searchListProbe.status, "cancelled");
+    assert.equal(report.searchListProbe.removal, "passed");
+    assert.deepEqual(report.searchListProbe.cleanup, {
+      status: "passed",
+      fileAbsent: true,
+      entryAbsent: true,
+    });
+    assert.deepEqual(f.searchList, original);
+  });
+}
+
+for (const failure of [
+  "removal-write",
+  "removal-confirmation",
+  "fallback-delete",
+  "stale-entry",
+  "post-delete-read",
+]) {
+  test(`cleanup failures and unknown post-deletion state cannot report success: ${failure}`, async (t) => {
+    let writes = 0;
+    let deleted = false;
+    const f = fixture(t, {
+      intercept(command, args) {
+        if (command === "security" && args[0] === "list-keychains") {
+          if (deleted && failure === "post-delete-read")
+            throw new Error(secret);
+          if (
+            args.includes("-s") &&
+            ++writes === 2 &&
+            failure !== "post-delete-read"
+          ) {
+            if (failure === "removal-confirmation") return "";
+            throw new Error(secret);
+          }
+        }
+        if (command === "security" && args[0] === "delete-keychain") {
+          deleted = true;
+          if (failure === "fallback-delete") throw new Error(secret);
+          if (failure === "stale-entry") return "";
+        }
+      },
+    });
+    const report = await f.check({
+      environment: { ...f.environment, ...hosted },
+      probeSearchList: true,
+    });
+    assert.equal(report.status, "failed");
+    assert.equal(report.searchListProbe.status, "failed");
+    assert.ok(report.attempts.every((attempt) => attempt.status === "passed"));
+    assert.ok(
+      report.searchListProbe.attempts.every(
+        (attempt) => attempt.status === "passed",
+      ),
+    );
+    const cleanup = report.searchListProbe.cleanup;
+    if (failure === "post-delete-read") {
+      assert.equal(cleanup.status, "unknown");
+      assert.equal(cleanup.entryAbsent, null);
+      assert.equal(cleanup.fileAbsent, true);
+    } else if (failure === "fallback-delete") {
+      assert.deepEqual(cleanup, {
+        status: "failed",
+        fileAbsent: false,
+        entryAbsent: false,
+      });
+    } else if (failure === "stale-entry") {
+      assert.deepEqual(cleanup, {
+        status: "failed",
+        fileAbsent: true,
+        entryAbsent: false,
+      });
+    } else {
+      assert.equal(
+        report.searchListProbe.removal,
+        failure === "removal-confirmation" ? "failed" : "unknown",
+      );
+      assert.deepEqual(cleanup, {
+        status: "passed",
+        fileAbsent: true,
+        entryAbsent: true,
+      });
+    }
+  });
+}
+
+test("CLI abort handlers remain installed through registered-phase removal and post-deletion checks", async (t) => {
+  const output = [];
+  t.mock.method(console, "log", (line) => output.push(line));
+  const previous = process.listenerCount("SIGTERM");
+  let cancelled = false;
+  const f = fixture(t, {
+    intercept(command, args, options) {
+      if (cancelled && command === "security") {
+        assert.equal(process.listenerCount("SIGTERM"), previous + 1);
+        assert.equal(options.signal, undefined);
+      }
+      if (
+        !cancelled &&
+        command === "codesign" &&
+        f.searchList.some((path) => path.endsWith("signing.keychain-db"))
+      ) {
+        cancelled = true;
+        process.emit("SIGTERM");
+        process.emit("SIGTERM");
+        throw new Error(secret);
+      }
+    },
+  });
+  assert.equal(
+    await main(["--probe-search-list"], {
+      platform: "darwin",
+      environment: {
+        ...f.environment,
+        ...hosted,
+        SITUATE_COORDINATED_WORKTREE: root,
+      },
+      execute: f.execute,
+    }),
+    130,
+  );
+  const report = JSON.parse(output[0]);
+  assert.equal(report.status, "cancelled");
+  assert.equal(report.searchListProbe.removal, "passed");
+  assert.equal(report.searchListProbe.cleanup.status, "passed");
+  assert.ok(!output.join("").includes(secret));
+  for (const file of f.files) assert.equal(existsSync(file), false);
+  assert.equal(process.listenerCount("SIGTERM"), previous);
+});
+
+test("setup failure before the callback still checks the owned file and entry after deletion", async (t) => {
+  const f = fixture(t, {
+    intercept(_command, args) {
+      if (args[0] === "import") throw new Error(secret);
+    },
+  });
+  const report = await f.check({
+    environment: { ...f.environment, ...hosted },
+    probeSearchList: true,
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(report.code, "probe-failed");
+  assert.deepEqual(report.searchListProbe.cleanup, {
+    status: "passed",
+    fileAbsent: true,
+    entryAbsent: true,
+  });
+});
+
+test("failure before any keychain path is known does not claim successful cleanup", async (t) => {
+  const f = fixture(t);
+  const report = await f.check({
+    environment: {
+      ...f.environment,
+      ...hosted,
+      APPLE_DEVELOPER_ID_P12_BASE64: "!",
+    },
+    probeSearchList: true,
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(report.code, "keychain-cleanup-unverified");
+  assert.deepEqual(report.searchListProbe.cleanup, {
+    status: "unknown",
+    fileAbsent: null,
+    entryAbsent: null,
+  });
+  assert.equal(f.calls.length, 0);
 });
