@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "browser-verification-runtime",
+  "behaviorDigest": "145f558001c85fdb502afb81100930311a8a9e01295831b90d352ba5be7da873",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Updates browser verification tooling and native build-timeout diagnostics; application behavior is unchanged.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "5d8ca6f7e1abfc46dc93ea241c11578dab8133f7ee981965365689d189814e10",
+      "translationHash": "e7f9a7bd1e9475134cacd111130b81daa4e210343ca6865e09fdb4c518e8883d"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "5d8ca6f7e1abfc46dc93ea241c11578dab8133f7ee981965365689d189814e10"
+  }
+}
