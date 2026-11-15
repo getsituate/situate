@@ -518,6 +518,44 @@ test("build failure reports allowlist diagnostic fields", async () => {
   }
 });
 
+test("build deadlines preserve failure and cleanup while bounding report fields", async () => {
+  for (const [lastStage, elapsedMs, expectedStage, expectedMs] of [
+    ["compilation", 900001, "compilation", 900001],
+    ["/private/home sk-synthetic-secret", Infinity, "unknown", null],
+    ["linking", -1, "linking", null],
+    ["dependency", 2147483648, "dependency", null],
+  ]) {
+    const { result, launches, providers, builds } = await journey({
+      build: async () => {
+        const error = new AgentRunError("budget", "deadline-exceeded");
+        error.build = {
+          reason: "deadline-exceeded",
+          lastStage,
+          elapsedMs,
+          stderr: "sk-synthetic-secret /private/home --token=secret",
+        };
+        throw error;
+      },
+    });
+    assert.equal(result.outcome, "budget");
+    assert.equal(result.code, "deadline-exceeded");
+    assert.equal(result.phasesPassed, 0);
+    assert.equal(result.cleanup, "not-needed");
+    assert.equal(launches.length, 0);
+    assert.equal(providers.length, 0);
+    assert.equal(builds.length, 0);
+    assert.deepEqual(result.build, {
+      reason: "deadline-exceeded",
+      lastStage: expectedStage,
+      elapsedMs: expectedMs,
+    });
+    assert.doesNotMatch(
+      JSON.stringify(result),
+      /synthetic-secret|private|token=/,
+    );
+  }
+});
+
 test("native failure and cleanup failure remain nonpassing with no raw error payload", async () => {
   let cleanup = false;
   const { result } = await journey({

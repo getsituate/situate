@@ -262,6 +262,29 @@ export async function runAgent(
       Object.assign(report, error.stage);
     if (
       error instanceof AgentRunError &&
+      error.outcome === "budget" &&
+      error.code === "deadline-exceeded" &&
+      error.build?.reason === "deadline-exceeded"
+    )
+      report.build = {
+        reason: "deadline-exceeded",
+        lastStage: [
+          "dependency",
+          "frontend",
+          "compilation",
+          "linking",
+        ].includes(error.build.lastStage)
+          ? error.build.lastStage
+          : "unknown",
+        elapsedMs:
+          Number.isInteger(error.build.elapsedMs) &&
+          error.build.elapsedMs >= 0 &&
+          error.build.elapsedMs <= 2147483647
+            ? error.build.elapsedMs
+            : null,
+      };
+    if (
+      error instanceof AgentRunError &&
       ["sccache-tempdir-unavailable", "command-failed"].includes(
         error.build?.reason,
       )
