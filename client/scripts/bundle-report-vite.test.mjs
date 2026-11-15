@@ -38,7 +38,6 @@ test("browser build paths resolve escaped directories without a provider environ
   assert.ok(
     loaded.config.server.fs.allow.some((path) => resolve(path) === directory),
   );
-  assert.equal(loaded.config.build.license.fileName, "third-party-licenses.md");
   assert.ok(
     !loaded.config.plugins.some(
       (plugin) => plugin?.name === "pi-browser-environment",

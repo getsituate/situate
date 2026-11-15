@@ -710,10 +710,10 @@ Rig (`rig-core` and `rig-agent`) is MIT licensed; its [copyright and permission 
 
 ### License material in Apple packages
 
-Apple distribution builds collect notices for bundled JavaScript, target-specific Rust packages, the selected Rust standard library and runtime, and pinned Swift dependencies. JavaScript notices cover the main app, workers and both native renderer scripts. The packages retain Situate's software and artwork notices, third-party notices, and checksum-verified source archives and public source URLs for MPL components.
+The app includes the manually maintained [licenses and notices](app/public/situate-licenses.txt) and [corresponding source archives](app/public/licenses/sources/). Update these files when changing shipped dependencies, the Rust runtime or third-party assets. Preserve applicable copyright, license and attribution notices.
 
 Open **Settings → About Situate → View licenses and notices** to read the notices and copy source URLs. The notice text is bundled with the app.
 
-The collector requires the locked Cargo archives. When a crate omits its license text, it retrieves notices from the exact upstream revision recorded in that archive. Missing or changed license material blocks the distribution build. Swift notices are version-, revision- and hash-bound; they do not include the dependency's complete source repository or unused data files.
+Packaging copies the checked-in material without downloading notices. Review dependency terms and maintain the notices and any required source delivery when updating dependencies.
 
-Before notarization or upload, packaging verifies the copied license resources and rejects unexpected FluidAudio resource bundles or TTS dictionaries. Dictation model weights remain separate downloads. These checks verify the collected material and package contents; they do not replace review of new dependency terms.
+Packaging rejects unexpected FluidAudio resource bundles or TTS dictionaries. Dictation model weights remain separate downloads.
