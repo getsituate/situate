@@ -255,7 +255,8 @@ jobs:
         browser,
         macos-native,
       ]
-    if: needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true'
+    # Implicit success() rejects skipped lanes; the aggregate verifies selected receipts.
+    if: ${{ !cancelled() && needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
     runs-on: macos-latest
     environment: macos-release
     timeout-minutes: 180
