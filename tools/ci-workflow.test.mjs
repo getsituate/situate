@@ -133,6 +133,14 @@ test("PR check covers draft, ready, fork and merge-queue events without path fil
   );
 });
 
+test("creator can follow a successful aggregate when unselected lanes were skipped", () => {
+  const creator = job(read("release-macos"), "create");
+  assert.match(
+    creator,
+    /if: \$\{\{ !cancelled\(\) && needs\.required\.result == 'success' && needs\.plan\.outputs\.app_impact == 'true' \}\}/,
+  );
+});
+
 test("creator and publisher have gated execution paths with signing scoped to build only", () => {
   const creator = job(read("release-macos"), "create");
   assert.match(creator, /app_impact == 'true'/);
