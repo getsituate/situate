@@ -48,7 +48,7 @@ root or extra capabilities.
 Download browsers directly from upstream into the external cache at runtime:
 
 ```sh
-node /opt/ci-tools/playwright-1.63.0/cli.js install chromium webkit
+node /opt/ci-tools/playwright-1.64.1/cli.js install chromium webkit
 ```
 
 Use each version recorded in `ci-browsers.json` if the projects differ. The repository's

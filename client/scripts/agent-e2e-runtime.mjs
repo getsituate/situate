@@ -14,7 +14,7 @@ import {
 import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseArgs } from "node:util";
+import { parseArgs, stripVTControlCharacters } from "node:util";
 import { nativeDesktopIssue } from "./native-desktop-session.mjs";
 
 export const MODEL = "gpt-4.1-mini";
@@ -263,6 +263,7 @@ export function runChild(
   if (signal?.aborted)
     return Promise.reject(new AgentRunError("cancel", "interrupted"));
   return new Promise((resolve, reject) => {
+    const started = performance.now();
     const child = spawn(
       process.execPath,
       ["--eval", supervisor, buildDiagnostics ? "1" : "0", command, ...args],
@@ -289,6 +290,8 @@ export function runChild(
     let exitCode;
     let tempDirectoryFailure = false;
     const tails = { stdout: "", stderr: "" };
+    const partialLines = { stdout: "", stderr: "" };
+    let lastStage = "unknown";
     const inspect = (stream, chunk) => {
       for (let offset = 0; offset < chunk.length; offset += 4096) {
         tails[stream] = (
@@ -296,6 +299,28 @@ export function runChild(
         ).slice(-8192);
         if (/sccache[\s\S]*Failed to create temp dir/.test(tails[stream]))
           tempDirectoryFailure = true;
+        const lines = (
+          partialLines[stream] +
+          chunk.subarray(offset, offset + 4096).toString()
+        ).split(/[\r\n]/);
+        partialLines[stream] = lines.pop().slice(-8192);
+        for (const raw of lines) {
+          const line = stripVTControlCharacters(raw);
+          if (
+            /^\s*(?:Updating (?:crates\.io index|git repository)|Downloading crates|Downloaded \S)/.test(
+              line,
+            )
+          )
+            lastStage = "dependency";
+          else if (
+            /^\s*(?:Running beforeBuildCommand|vite v\d+\.\d+\.\d+ building)/.test(
+              line,
+            )
+          )
+            lastStage = "frontend";
+          else if (/^\s*Compiling \S/.test(line)) lastStage = "compilation";
+          else if (/^\s*Linking \S/.test(line)) lastStage = "linking";
+        }
       }
     };
     const unsafeCleanup = () => {
@@ -356,7 +381,23 @@ export function runChild(
     };
     const stop = (outcome, code, graceful = true) => {
       if (finished) return;
-      if (outcome) failure ??= new AgentRunError(outcome, code);
+      if (outcome) {
+        failure ??= new AgentRunError(outcome, code);
+        if (
+          buildDiagnostics &&
+          failure.outcome === "budget" &&
+          failure.code === "deadline-exceeded" &&
+          !failure.build
+        )
+          failure.build = {
+            reason: "deadline-exceeded",
+            lastStage,
+            elapsedMs: Math.min(
+              2147483647,
+              Math.max(0, Math.round(performance.now() - started)),
+            ),
+          };
+      }
       if (terminating) return;
       terminating = true;
       if (graceful && ready && process.platform !== "win32") {

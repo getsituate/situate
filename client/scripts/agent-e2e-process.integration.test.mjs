@@ -1,7 +1,8 @@
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -88,10 +89,12 @@ test(
       signal: controller.signal,
       buildDiagnostics: true,
     });
-    const rejected = assert.rejects(
-      pending,
-      (error) => error.outcome === "cancel",
-    );
+    const rejected = assert.rejects(pending, (error) => {
+      assert.equal(error.outcome, "cancel");
+      assert.equal(error.code, "interrupted");
+      assert.equal(error.build, undefined);
+      return true;
+    });
     try {
       const deadline = performance.now() + 3000;
       while (true) {
@@ -176,6 +179,118 @@ output.write("che: caused by: Failed to create temp dir: /private/home\\n", () =
     "",
   );
 });
+
+for (const [lastStage, output] of [
+  [
+    "unknown",
+    "Blocking waiting for file lock /private/home sk-synthetic-secret --token=secret",
+  ],
+  ["dependency", "    Updating crates.io index /private/home"],
+  ["frontend", "vite v8.3.5 building client environment for production..."],
+  [
+    "compilation",
+    "\u001b[32m   Compiling\u001b[0m synthetic v1.0.0 (/private/home)",
+  ],
+  ["linking", "   Linking /private/home/synthetic"],
+]) {
+  test(
+    `build deadline retains only the last observed stage: ${lastStage}`,
+    { timeout: 10000 },
+    async (t) => {
+      const root = await mkdtemp(join(tmpdir(), "situate-build-deadline-"));
+      const ready = join(root, "ready");
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const pending = runChild(
+        process.execPath,
+        [
+          "--eval",
+          `
+const output = process.${lastStage === "frontend" ? "stdout" : "stderr"};
+${lastStage === "unknown" ? "" : 'output.write("   Compiling earlier v1.0.0\\n");'}
+output.write("synthetic-secret /private/home --token=secret\\n".repeat(10000));
+output.write(${JSON.stringify(output.slice(0, 8))});
+output.write(${JSON.stringify(output.slice(8) + "\n")});
+output.write("unclassified stderr sk-synthetic-secret --token=secret\\n", () => {
+  require('node:fs').writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+});
+setInterval(() => {}, 1000);
+`,
+        ],
+        { env: {}, timeoutMs: 900000, buildDiagnostics: true },
+      );
+      const rejected = assert.rejects(pending, (error) => {
+        assert.equal(error.outcome, "budget");
+        assert.equal(error.code, "deadline-exceeded");
+        assert.equal(error.cleanupUnsafe, undefined);
+        assert.deepEqual(Object.keys(error.build).sort(), [
+          "elapsedMs",
+          "lastStage",
+          "reason",
+        ]);
+        assert.equal(error.build.reason, "deadline-exceeded");
+        assert.equal(error.build.lastStage, lastStage);
+        assert.ok(Number.isInteger(error.build.elapsedMs));
+        assert.ok(
+          error.build.elapsedMs >= 0 && error.build.elapsedMs <= 2147483647,
+        );
+        assert.doesNotMatch(JSON.stringify(error), /synthetic|private|token/);
+        return true;
+      });
+      try {
+        const deadline = performance.now() + 5000;
+        while (true) {
+          try {
+            await access(ready);
+            break;
+          } catch (error) {
+            assert.equal(error.code, "ENOENT");
+          }
+          assert.ok(
+            performance.now() < deadline,
+            "Child did not produce output",
+          );
+          await new Promise(setImmediate);
+        }
+        await new Promise(setImmediate);
+        t.mock.timers.tick(900000);
+        t.mock.timers.tick(1000);
+        await rejected;
+        const pid = Number(await readFile(ready, "utf8"));
+        const cleanupDeadline = performance.now() + 3000;
+        while (true) {
+          const result = spawnSync("ps", ["-o", "stat=", "-p", String(pid)], {
+            encoding: "utf8",
+          });
+          if (result.error) throw result.error;
+          if (
+            result.status === 1 &&
+            !result.stdout.trim() &&
+            !result.stderr.trim()
+          )
+            break;
+          assert.equal(result.status, 0, result.stderr);
+          const state = result.stdout.trim();
+          assert.ok(state, "ps returned no process state");
+          // Exited zombies remain visible until the outer supervisor reaps them.
+          if (state.startsWith("Z")) break;
+          assert.ok(
+            performance.now() < cleanupDeadline,
+            "Child survived cleanup",
+          );
+          await new Promise(setImmediate);
+        }
+      } finally {
+        t.mock.timers.tick(901000);
+        try {
+          await rejected;
+        } finally {
+          t.mock.timers.reset();
+          await rm(root, { recursive: true, force: true });
+        }
+      }
+    },
+  );
+}
 
 test("child cancellation and spawn failures return sanitized typed outcomes", async () => {
   const controller = new AbortController();
