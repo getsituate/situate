@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "file-view-layout-retention",
-  "behaviorDigest": "68a18e50e92c4ba076139620922338f62621b625b6c8e47858a366d0bb169e79",
+  "behaviorDigest": "60677067ae9f4edb0f8767a25cce73c414e93371262dea9eed08da28ba873d46",
   "locales": {
     "en": {
       "title": "Changes",
@@ -9,7 +9,9 @@
         {
           "id": "retain-file-view",
           "type": "fixed",
-          "platforms": ["macos"],
+          "platforms": [
+            "macos"
+          ],
           "title": "Keep your place in Files",
           "paragraphs": [
             "Returning to Files restores the last file and folder state in that pane. Opening a file no longer opens unrelated folders. New file browsers start with folders closed."
@@ -18,11 +20,13 @@
         {
           "id": "bounded-device-local-layouts",
           "type": "changed",
-          "platforms": ["macos"],
+          "platforms": [
+            "macos"
+          ],
           "title": "Device-local layouts and navigation limits",
           "paragraphs": [
             "Layouts stay on the current device and workspace location. Copying or moving a workspace does not transfer its layout. Existing layouts are retained at their current location.",
-            "Each workspace supports up to 20 open tabs, with six panes per tab. Each pane keeps 50 navigation entries, and the 20 most recently closed tabs can be reopened. Existing open tabs and panes above these limits remain available."
+            "Each workspace supports up to 20 open tabs, with six panes per tab. Each pane keeps 50 navigation entries, and the 20 most recently closed tabs can be reopened. Existing open tabs and panes above these limits remain available. If you try to open another tab or pane at the limit, a dialog explains how to make room."
           ]
         }
       ]
@@ -33,7 +37,9 @@
         {
           "id": "retain-file-view",
           "type": "fixed",
-          "platforms": ["macos"],
+          "platforms": [
+            "macos"
+          ],
           "title": "Die Dateiansicht behält deinen Zustand",
           "paragraphs": [
             "Wenn du zur Dateiansicht zurückkehrst, werden die zuletzt geöffnete Datei und der Ordnerzustand dieses Bereichs wiederhergestellt. Beim Öffnen einer Datei werden keine anderen Ordner mehr aufgeklappt. Neue Dateiansichten starten mit geschlossenen Ordnern."
@@ -42,11 +48,13 @@
         {
           "id": "bounded-device-local-layouts",
           "type": "changed",
-          "platforms": ["macos"],
+          "platforms": [
+            "macos"
+          ],
           "title": "Gerätelokale Layouts und Navigationsgrenzen",
           "paragraphs": [
             "Layouts bleiben an dieses Gerät und den Speicherort des Arbeitsbereichs gebunden. Beim Kopieren oder Verschieben eines Arbeitsbereichs wird das Layout nicht übernommen. Vorhandene Layouts bleiben am bisherigen Speicherort erhalten.",
-            "Jeder Arbeitsbereich unterstützt bis zu 20 offene Tabs mit jeweils sechs Bereichen. Jeder Bereich behält 50 Navigationseinträge. Die 20 zuletzt geschlossenen Tabs können wieder geöffnet werden. Bereits offene Tabs und Bereiche oberhalb dieser Grenzen bleiben erhalten."
+            "Jeder Arbeitsbereich unterstützt bis zu 20 offene Tabs mit jeweils sechs Bereichen. Jeder Bereich behält 50 Navigationseinträge. Die 20 zuletzt geschlossenen Tabs können wieder geöffnet werden. Bereits offene Tabs und Bereiche oberhalb dieser Grenzen bleiben erhalten. Wenn du an der Grenze einen weiteren Tab oder Bereich öffnen möchtest, erklärt ein Dialog, wie du Platz schaffen kannst."
           ]
         }
       ]
@@ -54,12 +62,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "bf50aa0b6a3248e4325845e4c53070d6d62a4d21948ed14f357e92772e87a056",
-      "translationHash": "3b7ed29dda3cabb066cf7c210e9f6922270dd6b6be87263b47b42cd81ac602af"
+      "sourceHash": "5abbe5e129d9afc56c92f75d0cd914d9755051845f55fdfcefc63b368820f371",
+      "translationHash": "c944997dfbe7719656c4c42b27b28ae45c096bc06ae9cc306f1c22b2f092fa2b"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "bf50aa0b6a3248e4325845e4c53070d6d62a4d21948ed14f357e92772e87a056"
+    "sourceHash": "5abbe5e129d9afc56c92f75d0cd914d9755051845f55fdfcefc63b368820f371"
   }
 }
