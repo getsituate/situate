@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "delete-conversations",
-  "behaviorDigest": "f1f3c0f6003696c2bbcd1bfef348dcb7e0cdb2b2b4b92fe8ececf5a07443af5f",
+  "behaviorDigest": "cc1ce2678050e3eb47a350518cd9f5e720e1ba8c8f3a4405ddaa0228c5a4a560",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,7 +12,8 @@
           "platforms": ["macos"],
           "title": "Delete conversations",
           "paragraphs": [
-            "Delete conversations from their options menu after a confirmation. Deleting a conversation stops any running reply or recording; referenced notes and files remain unchanged."
+            "Delete conversations from their options menu after a confirmation. Deleting a conversation stops any running reply or recording; referenced notes and files remain unchanged.",
+            "Tabs with references to missing conversations or views show the existing new-tab chooser, including after reopening a workspace. Loading and access errors remain visible."
           ]
         }
       ]
@@ -26,7 +27,8 @@
           "platforms": ["macos"],
           "title": "Gespräche löschen",
           "paragraphs": [
-            "Gespräche lassen sich nach einer Bestätigung über ihr Optionsmenü löschen. Dabei werden laufende Antworten oder Aufnahmen abgebrochen; referenzierte Notizen und Dateien bleiben unverändert."
+            "Gespräche lassen sich nach einer Bestätigung über ihr Optionsmenü löschen. Dabei werden laufende Antworten oder Aufnahmen abgebrochen; referenzierte Notizen und Dateien bleiben unverändert.",
+            "Tabs mit Verweisen auf nicht mehr vorhandene Gespräche oder Ansichten zeigen die vorhandene Auswahl für einen neuen Tab, auch nach dem erneuten Öffnen eines Arbeitsbereichs. Lade- und Zugriffsfehler bleiben sichtbar."
           ]
         }
       ]
@@ -34,12 +36,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "37f4f66cf41afadaf13951dcbc987db576b3c9ce396293f68d1eb2a22e8a198a",
-      "translationHash": "5d7d9c5af69c29b994d2971a3a0a3f40bb5c78c72bde51f4a445eec85f7adab3"
+      "sourceHash": "b64b74d4551cc8a894f536d3a3ef719e9ce6362599f06907aa5d93778d72a2bf",
+      "translationHash": "632485f7f5d64968d0b458f9d19b1e9c0a5c399ff008c7023ede6477b989fc6d"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "37f4f66cf41afadaf13951dcbc987db576b3c9ce396293f68d1eb2a22e8a198a"
+    "sourceHash": "b64b74d4551cc8a894f536d3a3ef719e9ce6362599f06907aa5d93778d72a2bf"
   }
 }
