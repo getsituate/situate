@@ -433,7 +433,7 @@ test("aggregate distinguishes deliberate unselection from failure, cancellation,
   );
 });
 
-test("adapter subprocess executes fixture runner and transports exact plan-bound receipt without Actions APIs", (t) => {
+test("adapter subprocess transports plan-bound receipts and reports planner failures without Actions APIs", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-adapter-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, "tools"));
@@ -517,6 +517,24 @@ test("adapter subprocess executes fixture runner and transports exact plan-bound
   );
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /digest mismatch/);
+
+  writeFileSync(
+    join(directory, "tools/pipeline.mjs"),
+    "console.error('Every pull request requires a new declaration'); process.exitCode = 1;",
+  );
+  const previousOutput = readFileSync(output, "utf8");
+  const failedPlan = spawnSync(
+    process.execPath,
+    ["tools/actions-adapter.mjs", "plan"],
+    { cwd: directory, env, encoding: "utf8" },
+  );
+  assert.equal(failedPlan.status, 1);
+  assert.match(
+    failedPlan.stderr,
+    /Every pull request requires a new declaration/,
+  );
+  assert.equal(failedPlan.stdout, "");
+  assert.equal(readFileSync(output, "utf8"), previousOutput);
 });
 
 test("signing diagnostics forward only signing inputs after trusted-main authorization", async () => {
