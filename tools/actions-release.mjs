@@ -206,6 +206,8 @@ export function stageEnvironment(env, workflow, stage) {
     stage === "build" &&
     env.SITUATE_RELEASE_BUILD_CACHE === "1" &&
     trustedReleaseCacheHost(env);
+  if (workflow === "create" && stage === "inputs")
+    names.push("PIPELINE_REQUIRE_LATEST_MAIN");
   if (cacheEnabled)
     names.push(
       "SITUATE_RELEASE_BUILD_CACHE",
@@ -274,8 +276,12 @@ export async function runReleaseStage(env, workflow, stage, execute) {
     );
   return launch(environment);
 }
-export async function prepareReleaseDependencies(directory, execute) {
-  for (const target of [undefined, "client"])
+export async function prepareReleaseDependencies(
+  directory,
+  execute,
+  { toolchainOnly = false } = {},
+) {
+  for (const target of toolchainOnly ? [] : [undefined, "client"])
     execute(
       process.execPath,
       ["tools/npm-ci.mjs", ...(target ? [target] : [])],
@@ -313,19 +319,23 @@ export async function prepareReleaseDependencies(directory, execute) {
         "x86_64-apple-darwin",
       ],
     ],
-    [
-      "rustup",
-      [
-        "run",
-        channel,
-        "cargo",
-        "fetch",
-        "--locked",
-        "--manifest-path",
-        "client/Cargo.toml",
-      ],
-    ],
-    ["xcodebuild", ["-version"]],
+    ...(!toolchainOnly
+      ? [
+          [
+            "rustup",
+            [
+              "run",
+              channel,
+              "cargo",
+              "fetch",
+              "--locked",
+              "--manifest-path",
+              "client/Cargo.toml",
+            ],
+          ],
+          ["xcodebuild", ["-version"]],
+        ]
+      : []),
   ])
     execute(
       process.execPath,

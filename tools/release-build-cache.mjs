@@ -430,7 +430,7 @@ function emitPlan(plan) {
     if (plan.enabled) {
       appendFileSync(
         process.env.GITHUB_OUTPUT,
-        `key=${plan.key}\nrestore-key=${plan.restoreKey}\npaths<<SITUATE_CACHE_PATHS\n${plan.paths.join("\n")}\nSITUATE_CACHE_PATHS\n`,
+        `key=${plan.key}\nrestore-key=${plan.restoreKey}\npaths<<SITUATE_CACHE_PATHS\n${plan.paths.map((path) => path.replace(`${process.env.HOME}/`, "~/")).join("\n")}\nSITUATE_CACHE_PATHS\n`,
       );
       appendFileSync(
         process.env.GITHUB_ENV,
@@ -454,11 +454,19 @@ if (
       const prepared = await prepareReleaseCacheTool();
       if (process.env.GITHUB_PATH)
         appendFileSync(process.env.GITHUB_PATH, `${prepared.bin}\n`);
-      console.log(JSON.stringify(prepared));
+      console.log(
+        JSON.stringify({ version: prepared.version, sha256: prepared.sha256 }),
+      );
     } else if (command === "plan") {
       emitPlan(releaseBuildCachePlan());
     } else if (["start", "report"].includes(command)) {
-      console.log(JSON.stringify(releaseCacheMeasurement(command)));
+      const measurement = releaseCacheMeasurement(command);
+      if (command === "report" && process.env.GITHUB_OUTPUT)
+        appendFileSync(
+          process.env.GITHUB_OUTPUT,
+          `flushed=${measurement.flushed === true}\n`,
+        );
+      console.log(JSON.stringify(measurement));
     } else {
       throw new Error("Unknown release-cache command.");
     }
