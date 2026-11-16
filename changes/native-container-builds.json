@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "native-container-builds",
+  "behaviorDigest": "42b6efc0bb566c78903bff2f2d509e164e02073f81fe3b7e696af4f1c450240e",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Adds multi-architecture CI tool images, isolated persistent container caches and phase-scoped build admission. No product changes.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "f51f4ae0df3c987f0f7eea5fe82268db63847a5eb1c2d97d16aa796198a794b6",
+      "translationHash": "c6917f6ab271a60a4b02d91090c1a9420ad8984b15915dbb12c52156a7f0ac99"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "f51f4ae0df3c987f0f7eea5fe82268db63847a5eb1c2d97d16aa796198a794b6"
+  }
+}
