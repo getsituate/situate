@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { test } from "node:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -104,6 +105,54 @@ test("distribution environment excludes signing keys, personal settings and ambi
     "NODE_OPTIONS",
   ])
     assert.equal(env[name], undefined);
+});
+
+test("hosted production builds enable only the bounded local compiler cache", (t) => {
+  const { directory } = qualificationFixture(t);
+  const executable = join(directory, "sccache");
+  writeFileSync(executable, "#!/bin/sh\nprintf 'sccache 0.19.0\\n'\n");
+  chmodSync(executable, 0o700);
+  const source = {
+    PATH: directory,
+    HOME: "/Users/runner",
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    RUNNER_OS: "macOS",
+    RUNNER_ARCH: "ARM64",
+    GITHUB_REPOSITORY: "getsituate/situate",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REF_PROTECTED: "true",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_WORKFLOW_REF:
+      "getsituate/situate/.github/workflows/release-macos.yml@refs/heads/main",
+    GITHUB_SHA: "a".repeat(40),
+    SITUATE_RELEASE_BUILD_CACHE: "1",
+    RUSTC_WRAPPER: "/foreign/wrapper",
+    SCCACHE_BUCKET: "private",
+    AWS_SECRET_ACCESS_KEY: "synthetic",
+  };
+  const result = appleEnvironment(source, directory);
+  assert.equal(result.RUSTC_WRAPPER, executable);
+  assert.equal(result.SCCACHE_CACHE_SIZE, "2G");
+  assert.equal(result.SCCACHE_CONF, "/dev/null");
+  assert.equal(result.SCCACHE_SERVER_PORT, "4228");
+  assert.equal(result.SCCACHE_BUCKET, undefined);
+  assert.equal(result.AWS_SECRET_ACCESS_KEY, undefined);
+  assert.equal(
+    result.CARGO_TARGET_DIR,
+    join(directory, "target/apple-release/cargo"),
+  );
+  for (const change of [
+    { SITUATE_RELEASE_BUILD_CACHE: undefined },
+    { RUNNER_ENVIRONMENT: "self-hosted" },
+    { GITHUB_REF_PROTECTED: "false" },
+    { PATH: "/nonexistent" },
+  ])
+    assert.equal(
+      appleEnvironment({ ...source, ...change }, directory).RUSTC_WRAPPER,
+      undefined,
+    );
 });
 
 test("signing settings retain private dotenv, explicit-empty precedence and CI environment-only behavior", (t) => {

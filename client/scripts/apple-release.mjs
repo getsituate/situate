@@ -51,6 +51,7 @@ import {
 
 import { verifyReleaseInputs } from "../../tools/release-inputs.mjs";
 import { qualifyPublishedMigrations } from "../../tools/published-migrations.mjs";
+import { releaseCompilerCacheEnvironment } from "../../tools/release-build-cache.mjs";
 import { canonical } from "../../tools/release-catalog.mjs";
 import { assertNoDictationTtsResources } from "./dictation-resources.mjs";
 
@@ -112,6 +113,7 @@ export function appleEnvironment(environment, root) {
     .filter(Boolean)
     .join(delimiter);
   env.CARGO_TARGET_DIR = join(root, "target/apple-release/cargo");
+  Object.assign(env, releaseCompilerCacheEnvironment(environment));
   return env;
 }
 

@@ -3,6 +3,10 @@ import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withSigningCertificate } from "../client/scripts/apple-credentials.mjs";
+import {
+  trustedReleaseCacheHost,
+  releaseCachePaths,
+} from "./release-build-cache.mjs";
 
 const repository = "getsituate/situate";
 const positive = /^[1-9][0-9]*$/;
@@ -197,11 +201,25 @@ export function stageEnvironment(env, workflow, stage) {
       "TAURI_SIGNING_PRIVATE_KEY",
       "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
     );
-  return Object.fromEntries(
+  const cacheEnabled =
+    workflow === "create" &&
+    stage === "build" &&
+    env.SITUATE_RELEASE_BUILD_CACHE === "1" &&
+    trustedReleaseCacheHost(env);
+  if (cacheEnabled)
+    names.push(
+      "SITUATE_RELEASE_BUILD_CACHE",
+      "GITHUB_REF_PROTECTED",
+      "GITHUB_EVENT_NAME",
+      "GITHUB_WORKFLOW_REF",
+    );
+  const environment = Object.fromEntries(
     names
       .filter((name) => Object.hasOwn(env, name))
       .map((name) => [name, env[name]]),
   );
+  if (cacheEnabled) environment.CARGO_HOME = releaseCachePaths(env).cargoHome;
+  return environment;
 }
 export async function runReleaseStage(env, workflow, stage, execute) {
   requireProvisioned(env, workflow);
