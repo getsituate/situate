@@ -9,9 +9,7 @@
         {
           "id": "dismiss-error-review",
           "type": "fixed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Dismiss error reminders",
           "paragraphs": [
             "Closing an error dialog now also hides its Review error button. Other pending errors remain available for review."
@@ -25,9 +23,7 @@
         {
           "id": "dismiss-error-review",
           "type": "fixed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Fehlerhinweise schließen",
           "paragraphs": [
             "Beim Schließen eines Fehlerdialogs verschwindet jetzt auch der zugehörige Button „Fehler ansehen“. Andere noch offene Fehler können weiterhin angesehen werden."
