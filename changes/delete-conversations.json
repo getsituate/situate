@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "delete-conversations",
-  "behaviorDigest": "cc1ce2678050e3eb47a350518cd9f5e720e1ba8c8f3a4405ddaa0228c5a4a560",
+  "behaviorDigest": "8fae65713e9871a7a7c5261f50b23e100687effad04e73297978ff7fb65f49ce",
   "locales": {
     "en": {
       "title": "Changes",
@@ -36,12 +36,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "b64b74d4551cc8a894f536d3a3ef719e9ce6362599f06907aa5d93778d72a2bf",
-      "translationHash": "632485f7f5d64968d0b458f9d19b1e9c0a5c399ff008c7023ede6477b989fc6d"
+      "sourceHash": "2033007ab1eea247ebb20d6df25c65c70a80542d98f683f3b7607da34ccc7cb0",
+      "translationHash": "3a1f0db47cdc7ac339e50f2fef21888a17f8fe005297874688e117ce6d043c13"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "b64b74d4551cc8a894f536d3a3ef719e9ce6362599f06907aa5d93778d72a2bf"
+    "sourceHash": "2033007ab1eea247ebb20d6df25c65c70a80542d98f683f3b7607da34ccc7cb0"
   }
 }
