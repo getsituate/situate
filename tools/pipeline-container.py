@@ -304,6 +304,10 @@ def main(argv=None, environment=None):
         return docker_client(args[1], args[2], args[3:], environment)
     if not args or args[0] not in ("actions", "lane", "suites", "monitoring"):
         raise ValueError("Usage: python3 tools/pipeline-container.py actions|lane|suites|monitoring ARGUMENTS")
+    if args[:2] == ["actions", "aggregate"]:
+        needs = json.loads(environment.get("PIPELINE_NEEDS", "{}"))
+        if needs.get("plan", {}).get("result") != "success":
+            raise ValueError("Planning did not succeed; verification was not run. See the plan job for the original error.")
     lock = json.loads((ROOT / "tools/ci-image.lock.json").read_text())
     platform = image_platform(lock)
     subprocess.run(["docker", "info"], check=True, stdout=subprocess.DEVNULL, env=environment)

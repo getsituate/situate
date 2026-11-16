@@ -57,6 +57,21 @@ function python(source) {
   return JSON.parse(result.stdout);
 }
 
+test("failed, cancelled or missing planning blocks verification before Docker starts", () => {
+  for (const result of ["failure", "cancelled", "skipped", undefined]) {
+    const needs = result ? { plan: { result } } : {};
+    const error = python(
+      `def unexpected(*args, **kwargs): raise AssertionError("Docker must not start")
+m.subprocess.run = unexpected
+try:
+    m.main(["actions", "aggregate", "--workflow", "verify"], {"PIPELINE_NEEDS": ${JSON.stringify(JSON.stringify(needs))}})
+except ValueError as error:
+    print(json.dumps(str(error)))`,
+    );
+    assert.match(error, /Planning did not succeed; verification was not run/);
+  }
+});
+
 test("tool containers isolate dependencies and credentials and retain their owner identity", (t) => {
   const root = fixture(t);
   writeFileSync(join(root, ".env"), "PRIVATE_SYNTHETIC_INPUT=fixture");

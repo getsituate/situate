@@ -624,6 +624,7 @@ test("adapter subprocess transports plan-bound receipts and reports planner fail
     failedPlan.stderr,
     /Every pull request requires a new declaration/,
   );
+  assert.match(failedPlan.stderr, /failed \(1\)/);
   assert.equal(failedPlan.stdout, "");
   assert.equal(readFileSync(output, "utf8"), previousOutput);
 });
