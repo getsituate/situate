@@ -18,6 +18,7 @@ import {
   main,
   matrices,
   resolveMergeGroupHeads,
+  resolvePullRequestBase,
   validatePlan,
   diagnosticPlan,
   imageBuildRequired,
@@ -279,6 +280,35 @@ test("event adapter rejects missing history and uses integrated PR source, prece
         {},
       ),
     /Unsupported/,
+  );
+});
+
+test("PR base resolution rejects unrelated history and mismatched merge parents", () => {
+  const head = "d".repeat(40),
+    currentBase = "e".repeat(40);
+  for (const parents of [
+    `${source} ${currentBase}`,
+    `${source} ${currentBase} ${base}`,
+    `${source} ${currentBase} ${head} ${base}`,
+  ]) {
+    assert.throws(
+      () => resolvePullRequestBase(source, base, head, () => parents),
+      /merge commit does not match/,
+    );
+  }
+  assert.throws(
+    () =>
+      resolvePullRequestBase(source, base, head, (_command, args) => {
+        if (args[0] === "rev-list") return `${source} ${currentBase} ${head}`;
+        assert.deepEqual(args, [
+          "merge-base",
+          "--is-ancestor",
+          base,
+          currentBase,
+        ]);
+        throw new Error("Not an ancestor");
+      }),
+    /Not an ancestor/,
   );
 });
 

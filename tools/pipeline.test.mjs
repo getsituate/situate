@@ -22,6 +22,7 @@ import {
   restoreWorkflow,
   validateDeclarations,
 } from "./pipeline.mjs";
+import { main as actionsMain } from "./actions-adapter.mjs";
 import { digest, readOperation, sealPlan } from "./pipeline-state.mjs";
 
 const source = "a".repeat(40),
@@ -128,6 +129,60 @@ test("merge groups review original branch heads and preserve their exact declara
   await assert.rejects(
     validateDeclarations(root, { source, base, heads: [alpha] }),
     /Integrated declarations differ from branch inputs/,
+  );
+});
+
+test("PR planning excludes declarations merged into main after the event base", async (t) => {
+  const { root, git, base, branch } = declarationFixture(t);
+  const alpha = branch("alpha"),
+    beta = branch("beta");
+  git("checkout", "-qb", "integrated", beta);
+  git("merge", "--no-ff", alpha, "-m", "test: merge PR into updated main");
+  const source = git("rev-parse", "HEAD");
+  await assert.rejects(
+    validateDeclarations(root, { source, base, heads: [alpha] }),
+    /Integrated declarations differ/,
+  );
+  const event = join(root, "event.json");
+  writeFileSync(
+    event,
+    JSON.stringify({
+      pull_request: { base: { sha: base }, head: { sha: alpha } },
+    }),
+  );
+  let plannedBase;
+  await actionsMain(
+    ["plan"],
+    {
+      GITHUB_REPOSITORY: "getsituate/situate",
+      GITHUB_EVENT_NAME: "pull_request",
+      GITHUB_SHA: source,
+      GITHUB_EVENT_PATH: event,
+    },
+    (command, args) => {
+      if (command === "git") return git(...args);
+      plannedBase = args[args.indexOf("--base") + 1];
+      assert.equal(args[args.indexOf("--source") + 1], source);
+      assert.equal(args[args.indexOf("--declaration-head") + 1], alpha);
+      return JSON.stringify({
+        schemaVersion: 1,
+        source,
+        base: plannedBase,
+        appImpact: false,
+        lanes: [],
+        authorizationDigest: "a".repeat(64),
+      });
+    },
+  );
+  assert.equal(plannedBase, beta);
+  const declarations = await validateDeclarations(root, {
+    source,
+    base: plannedBase,
+    heads: [alpha],
+  });
+  assert.deepEqual(
+    declarations.fragments.map(({ id }) => id),
+    ["alpha"],
   );
 });
 

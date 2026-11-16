@@ -174,6 +174,20 @@ export function eventSelection(env, event) {
     throw new Error("Complete source and base history is required.");
   return { source, base, ...(declarationHead ? { declarationHead } : {}) };
 }
+export function resolvePullRequestBase(source, base, head, execute = run) {
+  const parents = execute("git", ["rev-list", "--parents", "-n", "1", source])
+    .trim()
+    .split(/\s+/);
+  if (
+    parents.length !== 3 ||
+    parents[0] !== source ||
+    parents[2] !== head ||
+    !sha.test(parents[1])
+  )
+    throw new Error("PR merge commit does not match the declared head.");
+  execute("git", ["merge-base", "--is-ancestor", base, parents[1]]);
+  return parents[1];
+}
 export function resolveMergeGroupHeads(source, env, execute = run) {
   if (env.GITHUB_REPOSITORY !== repository || !sha.test(source ?? ""))
     throw new Error("Invalid merge-group repository or source.");
@@ -772,7 +786,15 @@ export async function main(
     );
   if (command === "plan") {
     const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
-    const { source, base, declarationHead } = eventSelection(env, event);
+    const {
+      source,
+      base: eventBase,
+      declarationHead,
+    } = eventSelection(env, event);
+    const base =
+      env.GITHUB_EVENT_NAME === "pull_request"
+        ? resolvePullRequestBase(source, eventBase, declarationHead, execute)
+        : eventBase;
     const declarationHeads =
       env.GITHUB_EVENT_NAME === "merge_group"
         ? resolveMergeGroupHeads(source, env, execute)
