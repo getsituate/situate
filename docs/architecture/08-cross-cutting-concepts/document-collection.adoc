@@ -7,7 +7,7 @@ endif::[]
 
 Status: accepted product boundaries; storage schemas, processing mechanisms and platform qualification remain technical design work, not implemented guarantees.
 The authoritative scope is link:{architecture-repository-root}/requirements/data/foundations.md#initial-document-access-and-data-ownership[initial document access], with link:{architecture-repository-root}/requirements/data/requirements/REQ-0054-connect-document-sources.md[REQ-0054] through link:{architecture-repository-root}/requirements/data/requirements/REQ-0060-save-document-searches.md[REQ-0060].
-The link:{architecture-repository-root}/docs/development/document-store-plan.md[implementation plan] selects direct source access through chat first and separates the later collection roadmap.
+The link:{architecture-repository-root}/docs/development/document-sources.md[direct source reference] describes source access through chat and its execution boundaries.
 
 ==== First iteration: direct source access
 

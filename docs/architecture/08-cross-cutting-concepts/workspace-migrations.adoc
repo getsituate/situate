@@ -10,7 +10,7 @@ endif::[]
 
 Status: accepted design, implemented by the native opening gate and the independent link:{architecture-repository-root}/client/crates/situate-migrations[situate-migrations package].
 Exact published-binary provenance and native macOS release qualification remain separate verification requirements. iOS qualification is deferred.
-See the link:{architecture-repository-root}/docs/development/workspace-migrations-plan.md[implementation plan] for package boundaries, delivery steps and verification.
+See the link:{architecture-repository-root}/docs/development/testing.md#workspace-migration-checks[testing guide] for migration checks.
 
 The workspace core is one compatibility unit: either it opens after migration or it remains closed.
 Plugins have separate code, data-format and app-capability checks; an incompatible plugin does not by itself block the core.

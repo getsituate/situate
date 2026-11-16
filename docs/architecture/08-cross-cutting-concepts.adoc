@@ -2,7 +2,7 @@
 == Cross-cutting Concepts
 
 These concepts define the selected architecture; decision status and implementation evidence remain separate.
-Conversation storage follows <<adr-0016>>; its implementation and verification gates are tracked in the link:../development/conversation-storage-implementation-plan.md[conversation storage plan].
+Conversation storage follows <<adr-0016>>.
 They do not establish delivery of the broader plugin, synchronization or mobile execution strategy.
 
 :architecture-repository-root: ../..
