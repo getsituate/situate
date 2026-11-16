@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "file-view-layout-retention",
+  "behaviorDigest": "88d587390254f3c6e811cedf44b7a4955912b81443307243ee69f959e3865e17",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "retain-file-view",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Keep your place in Files",
+          "paragraphs": [
+            "Returning to Files restores the last file and folder state in that pane. Opening a file no longer opens unrelated folders. New file browsers start with folders closed."
+          ]
+        },
+        {
+          "id": "bounded-device-local-layouts",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Device-local layouts and navigation limits",
+          "paragraphs": [
+            "Layouts stay on the current device and workspace location. Copying or moving a workspace does not transfer its layout. Existing layouts are retained at their current location.",
+            "Each workspace supports up to 20 open tabs, with six panes per tab. Each pane keeps 50 navigation entries, and the 20 most recently closed tabs can be reopened. Existing open tabs and panes above these limits remain available."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "retain-file-view",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Die Dateiansicht behält deinen Zustand",
+          "paragraphs": [
+            "Wenn du zur Dateiansicht zurückkehrst, werden die zuletzt geöffnete Datei und der Ordnerzustand dieses Bereichs wiederhergestellt. Beim Öffnen einer Datei werden keine anderen Ordner mehr aufgeklappt. Neue Dateiansichten starten mit geschlossenen Ordnern."
+          ]
+        },
+        {
+          "id": "bounded-device-local-layouts",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Gerätelokale Layouts und Navigationsgrenzen",
+          "paragraphs": [
+            "Layouts bleiben an dieses Gerät und den Speicherort des Arbeitsbereichs gebunden. Beim Kopieren oder Verschieben eines Arbeitsbereichs wird das Layout nicht übernommen. Vorhandene Layouts bleiben am bisherigen Speicherort erhalten.",
+            "Jeder Arbeitsbereich unterstützt bis zu 20 offene Tabs mit jeweils sechs Bereichen. Jeder Bereich behält 50 Navigationseinträge. Die 20 zuletzt geschlossenen Tabs können wieder geöffnet werden. Bereits offene Tabs und Bereiche oberhalb dieser Grenzen bleiben erhalten."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "1d08b3d06407a6efac797f04ba4ebe798d64f6f10caee472ef176baa66a8e748",
+      "translationHash": "ba511922e68bdfcf14348c3c05e73e01c13a91f9959f88d8f04e3515b62bf0d4"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "1d08b3d06407a6efac797f04ba4ebe798d64f6f10caee472ef176baa66a8e748"
+  }
+}
