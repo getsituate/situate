@@ -96,16 +96,24 @@ def arguments(root, state, image, command, environment, name, token, lease=None)
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
     args += mount(root) + mount(state)
     cache = state / "cache"
-    cache.mkdir(exist_ok=True)
-    args += mount(cache, "/ci-cache")
+    guest_caches = sys.platform == "darwin"
+    if guest_caches:
+        # VirtioFS can retain host descriptors for deleted Cargo cache files.
+        args += ["--tmpfs", "/ci-cache:exec,mode=1777"]
+    else:
+        cache.mkdir(exist_ok=True)
+        args += mount(cache, "/ci-cache")
     for path in dependency_paths(root):
         if ',' in str(path):
             raise ValueError("Docker mount paths cannot contain commas.")
         args += ["--tmpfs", f"{path}:exec,mode=1777"]
     for relative in ("client/target", "tools/dev-tui/target"):
-        target = cache / relative.replace('/', '-')
-        target.mkdir(exist_ok=True)
-        args += mount(target, root / relative)
+        if guest_caches:
+            args += ["--tmpfs", f"{root / relative}:exec,mode=1777"]
+        else:
+            target = cache / relative.replace('/', '-')
+            target.mkdir(exist_ok=True)
+            args += mount(target, root / relative)
     empty = state / "empty-env"
     empty.write_text("")
     empty.chmod(0o600)
