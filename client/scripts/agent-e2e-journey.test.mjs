@@ -631,7 +631,7 @@ test("the later import starts a new ordinary chat with unchanged named sources a
     /later-imported-tasks\.md and later-imported-notes\.md/,
   );
   assert.match(result.prompt, /situate-task-id: null/);
-  assert.match(result.prompt, /prepareCopy: true/);
+  assert.doesNotMatch(result.prompt, /prepareCopy/);
 });
 
 for (const [options, reason] of [

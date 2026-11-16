@@ -67,7 +67,7 @@ function conversation(prompt, tools = [], support = false) {
       role: "developer",
       content:
         workingMethod +
-        " Use prepareCopy and show_imported_files." +
+        " Use situate-task-id: null and show_imported_files." +
         (support
           ? " Propose at most three useful optional plugins directly in chat."
           : ""),
@@ -122,7 +122,8 @@ function importRequest(prompt = importPrompt) {
     input: [
       {
         role: "developer",
-        content: workingMethod + " Use prepareCopy and show_imported_files.",
+        content:
+          workingMethod + " Use situate-task-id: null and show_imported_files.",
       },
       { role: "user", content: [{ type: "input_text", text: prompt }] },
     ],
@@ -192,7 +193,7 @@ test("missing or repeated main instruction copies cannot be supplied by history 
       const body = importRequest(prompt);
       body.input[0].content =
         workingMethod.repeat(copies) +
-        " Use prepareCopy and show_imported_files.";
+        " Use situate-task-id: null and show_imported_files.";
       body.input.push(
         {
           type: "function_call",
@@ -226,7 +227,7 @@ test("quoted setup preferences do not count as the adopted working method docume
       JSON.stringify({ description });
     body.input[0].content =
       workingMethod.replaceAll("\n", "\r\n").repeat(copies) +
-      " Use prepareCopy and show_imported_files.";
+      " Use situate-task-id: null and show_imported_files.";
     if (copies === 1) assert.equal(fixtureTurn(body).item.name, "read");
     else
       assert.throws(() => fixtureTurn(body), /fixture_working_method_copies/);
@@ -267,7 +268,7 @@ test("observed derived requests exclude main method instructions without rejecti
 test("retained imports continue after guidance ends without setup-only instructions", () => {
   const input = [{ role: "user", content: importPrompt }];
   const instructions =
-    workingMethod + "Use write or create_batch with prepareCopy true.";
+    workingMethod + "Use write or create_batch with situate-task-id: null.";
   const tools = ["write", "create_batch", "show_imported_files"].map(
     (name) => ({ name }),
   );
@@ -304,7 +305,7 @@ test("ordinary chats publish converted copies without setup tools or model UUIDs
     ["read", "create_batch"],
   );
   assert.equal(calls[0].arguments.path, ".situate/working-method.md");
-  assert.equal(calls[1].arguments.prepareCopy, true);
+  assert.equal(calls[1].arguments.prepareCopy, undefined);
   assert.equal(calls[1].arguments.manifestPath, undefined);
   const copies = calls[1].arguments.entries;
   assert.deepEqual(
@@ -372,7 +373,7 @@ test("import publishes one prepared batch and recommends support in the same tur
     ["read", "create_batch", "show_imported_files", "read", "read", "read"],
   );
   assert.equal(calls[0].arguments.path, ".situate/working-method.md");
-  assert.equal(calls[1].arguments.prepareCopy, true);
+  assert.equal(calls[1].arguments.prepareCopy, undefined);
   assert.equal(calls[1].arguments.manifestPath, undefined);
   const copies = calls[1].arguments.entries;
   assert.deepEqual(

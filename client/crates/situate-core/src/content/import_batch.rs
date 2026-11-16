@@ -294,6 +294,16 @@ impl ContentStore {
         let identity_map = if prepare_copy {
             regenerate(&mut image, "", &HashSet::new())?
         } else {
+            for (path, bytes) in &mut image.entries {
+                if is_markdown(path)
+                    && let Some(bytes) = bytes
+                    && let FileContent::Text(text) = classify_file(bytes)?
+                {
+                    *bytes = crate::metadata::allocate_task_ids(text)
+                        .map_err(ContentError::History)?
+                        .into_bytes();
+                }
+            }
             HashMap::new()
         };
         if identity_map.len() > MAX_IDENTITIES {
@@ -309,8 +319,7 @@ impl ContentStore {
             {
                 return Err(batch_too_large());
             }
-            if prepare_copy
-                && is_markdown(path)
+            if is_markdown(path)
                 && let FileContent::Text(text) = classify_file(bytes)?
             {
                 task_count += crate::metadata::inspect(text).tasks.len();
