@@ -95,6 +95,11 @@ export async function requalifyCheckpoint(
           planBytes: checkpointFile(join(directory, "plan.json")),
           configurationBytes: retained.configurationBytes,
           authorization: runtimeAuthorization,
+          recoveryAuthorization,
+          inspection,
+          ...(attempt.status === "passed"
+            ? { receiptBytes: checkpointFile(attempt.receipt.path) }
+            : {}),
         });
         const acknowledgement = await store.commit(checkpoint);
         assert(
@@ -102,6 +107,7 @@ export async function requalifyCheckpoint(
             acknowledgement.checkpointId === checkpoint.descriptor.checkpointId,
           "Qualification checkpoint has no durable acknowledgement",
         );
+        return acknowledgement;
       };
       await persist();
       let qualify = adapters?.qualify;
@@ -133,8 +139,9 @@ export async function requalifyCheckpoint(
           signal,
         });
         assert(
-          result?.receipt?.manifestSha256 ===
-            runtimeAuthorization.manifestSha256 &&
+          result?.receipt?.sourceRevision === plan.source &&
+            result.receipt.manifestSha256 ===
+              runtimeAuthorization.manifestSha256 &&
             result.receipt.runtimeAuthorizationDigest ===
               runtimeAuthorization.authorizationDigest,
           "Qualification receipt differs from original manifest or runtime authorization",
@@ -151,10 +158,11 @@ export async function requalifyCheckpoint(
         );
         attempt.status = "passed";
         attempt.receipt = result;
-        await persist();
+        const qualified = await persist();
         atomicJson(attemptFile, attempt);
         return {
           status: "qualified",
+          checkpointId: qualified.checkpointId,
           operationId: plan.operation,
           authorizationDigest: runtimeAuthorization.authorizationDigest,
           receipt: result,

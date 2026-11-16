@@ -59,6 +59,7 @@ test("restored qualification executes only a distinct authorized attempt without
       assert.deepEqual(input.qualificationRuntime, f.runtime);
       assert.deepEqual(input.inspection, f.inspection);
       const receipt = {
+        sourceRevision: f.plan.source,
         manifestSha256: runtimeAuthorization.manifestSha256,
         runtimeAuthorizationDigest: runtimeAuthorization.authorizationDigest,
       };

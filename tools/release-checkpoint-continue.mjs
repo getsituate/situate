@@ -30,6 +30,7 @@ import {
   createGitHubRelease,
 } from "./github-release.mjs";
 import { notesForCatalog } from "./pipeline-operations.mjs";
+import { validateQualifiedRestore } from "./release-checkpoint-qualified.mjs";
 import { withReleaseSSH } from "./release-environment.mjs";
 import { coordinated, runCoordinated } from "./run-coordinated.mjs";
 
@@ -41,11 +42,12 @@ export async function continueQualifiedCheckpoint(
     qualificationInspection,
     publicationInspection,
     confirmation,
+    restoredDirectory,
     environment = process.env,
     adapters,
   } = {},
 ) {
-  const directory = recoveryAuthorization.directory;
+  const directory = restoredDirectory ?? recoveryAuthorization.directory;
   const planBytes = checkpointFile(join(directory, "plan.json"));
   const plan = JSON.parse(planBytes);
   assert.equal(
@@ -53,6 +55,18 @@ export async function continueQualifiedCheckpoint(
     "getsituate/situate",
     "Unexpected release repository",
   );
+  const portable = restoredDirectory
+    ? validateQualifiedRestore(
+        JSON.parse(checkpointFile(join(directory, "qualified-restore.json"))),
+        directory,
+        plan,
+      )
+    : undefined;
+  if (portable) {
+    assert.deepEqual(portable.recoveryAuthorization, recoveryAuthorization);
+    assert.deepEqual(portable.runtimeAuthorization, runtimeAuthorization);
+    assert.deepEqual(portable.qualificationInspection, qualificationInspection);
+  }
   const retained = validateRestoredCheckpoint(
     recoveryAuthorization.descriptor,
     directory,
@@ -83,15 +97,24 @@ export async function continueQualifiedCheckpoint(
     operationDirectory(root, plan.operation),
     `qualification-${runtimeAuthorization.routeNonce}.json`,
   );
-  const attempt = JSON.parse(checkpointFile(attemptFile));
+  const attempt =
+    portable?.qualificationOperation.qualificationAttempt ??
+    JSON.parse(checkpointFile(attemptFile));
   assert(
     attempt.status === "passed" &&
       attempt.authorizationDigest === runtimeAuthorization.authorizationDigest,
     "A distinct passed qualification attempt is required",
   );
   const result = attempt.receipt;
-  assert.equal(result?.path, join(directory, "release-qualification.json"));
-  const receipt = JSON.parse(checkpointFile(result.path));
+  assert.equal(
+    result?.path,
+    join(recoveryAuthorization.directory, "release-qualification.json"),
+  );
+  const receiptBytes = checkpointFile(
+    join(directory, "release-qualification.json"),
+  );
+  const receipt = JSON.parse(receiptBytes);
+  assert.equal(receipt.sourceRevision, plan.source);
   assert.deepEqual(receipt, result.receipt);
   assert.equal(receipt.manifestSha256, digest(retained.manifestBytes));
   assert.equal(
@@ -99,6 +122,15 @@ export async function continueQualifiedCheckpoint(
     runtimeAuthorization.authorizationDigest,
   );
   const state = publicationInspection.remote?.checkpoints;
+  if (portable)
+    for (const source of [
+      portable.descriptor.buildDescriptor,
+      portable.descriptor.qualificationDescriptor,
+    ])
+      assert(
+        state?.checkpoints?.some((value) => digest(value) === digest(source)),
+        "Mapped restore source differs from current inspection",
+      );
   assert.deepEqual(
     state?.coordination?.active,
     checkpointIdentity(plan),
@@ -116,12 +148,14 @@ export async function continueQualifiedCheckpoint(
     "Publication reservation differs",
   );
   assert.equal(publicationInspection.remote.reservation.status, "reserved");
-  const snapshot = Buffer.from(
-    `${JSON.stringify({ ...retained.operation, qualificationAttempt: attempt })}\n`,
-  );
-  const authorizationBytes = Buffer.from(
-    `${JSON.stringify(runtimeAuthorization)}\n`,
-  );
+  const snapshot = portable
+    ? checkpointFile(join(directory, "qualification-operation.json"))
+    : Buffer.from(
+        `${JSON.stringify({ ...retained.operation, qualificationAttempt: attempt })}\n`,
+      );
+  const authorizationBytes = portable
+    ? checkpointFile(join(directory, "runtime-authorization.json"))
+    : Buffer.from(`${JSON.stringify(runtimeAuthorization)}\n`);
   assert(
     state.checkpoints.some(
       (checkpoint) =>
@@ -134,6 +168,11 @@ export async function continueQualifiedCheckpoint(
           (item) =>
             item.name === "runtime-authorization.json" &&
             item.sha256 === digest(authorizationBytes),
+        ) &&
+        checkpoint.files.some(
+          (item) =>
+            item.name === "release-qualification.json" &&
+            item.sha256 === digest(receiptBytes),
         ),
     ),
     "Passed attempt has no matching durable checkpoint",
@@ -316,6 +355,7 @@ export async function main(
         "qualification-inspection",
         "publication-inspection",
         "confirm",
+        "restored-directory",
       ].map((name) => [name, { type: "string" }]),
     ),
   });
@@ -323,17 +363,37 @@ export async function main(
     assert(values[name], `Select --${name} FILE`);
     return JSON.parse(readFileSync(values[name], "utf8"));
   };
-  const recoveryAuthorization = read("restore-authorization");
+  const original = (option, name) => {
+    if (values[option]) return read(option);
+    assert(
+      values["restored-directory"],
+      `Select --${option} FILE or --restored-directory DIRECTORY`,
+    );
+    return JSON.parse(checkpointFile(join(values["restored-directory"], name)));
+  };
+  const recoveryAuthorization = original(
+    "restore-authorization",
+    "original-recovery-authorization.json",
+  );
   const qualificationInspection = values["qualification-inspection"]
     ? read("qualification-inspection")
-    : recoveryAuthorization.inspection;
+    : values["restored-directory"]
+      ? original(
+          "qualification-inspection",
+          "original-qualification-inspection.json",
+        )
+      : recoveryAuthorization.inspection;
   assert(qualificationInspection, "Select --qualification-inspection FILE");
   return continueQualifiedCheckpoint(root, {
     recoveryAuthorization,
-    runtimeAuthorization: read("runtime-authorization"),
+    runtimeAuthorization: original(
+      "runtime-authorization",
+      "runtime-authorization.json",
+    ),
     qualificationInspection: inspected(qualificationInspection),
     publicationInspection: inspected(read("publication-inspection")),
     confirmation: values.confirm,
+    restoredDirectory: values["restored-directory"],
     ...options,
   });
 }

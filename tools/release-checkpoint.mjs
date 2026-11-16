@@ -213,6 +213,9 @@ export function createCheckpoint({
   configurationBytes,
   directory,
   authorization,
+  recoveryAuthorization,
+  inspection,
+  receiptBytes,
 }) {
   const plan = validatePlan(operation.plan);
   assert.deepEqual(JSON.parse(planBytes), plan, "Original plan bytes differ");
@@ -305,7 +308,52 @@ export function createCheckpoint({
       files.push({ name: `predecessor-${item.name}`, file, ...value });
     }
   } else if (kind === "runtime-authorization") {
-    assert(authorization, "Missing runtime authorization");
+    assert(
+      authorization && recoveryAuthorization && inspection,
+      "Missing original runtime authorization inputs",
+    );
+    assert.equal(
+      digest(recoveryAuthorization),
+      authorization.recoveryAuthorizationDigest,
+      "Original recovery authorization differs",
+    );
+    assert.equal(
+      inspection.reconciliationDigest,
+      authorization.inspectionDigest,
+      "Original qualification inspection differs",
+    );
+    files.push(
+      {
+        name: "original-recovery-authorization.json",
+        bytes: Buffer.from(`${JSON.stringify(recoveryAuthorization)}\n`),
+      },
+      {
+        name: "original-qualification-inspection.json",
+        bytes: Buffer.from(`${JSON.stringify(inspection)}\n`),
+      },
+    );
+    if (operation.qualificationAttempt?.status === "passed") {
+      assert(
+        receiptBytes,
+        "Passed qualification requires original receipt bytes",
+      );
+      const receipt = JSON.parse(receiptBytes);
+      assert.deepEqual(
+        receipt,
+        operation.qualificationAttempt.receipt?.receipt,
+        "Qualification receipt differs from passed attempt",
+      );
+      assert.equal(receipt.sourceRevision, plan.source);
+      assert.equal(receipt.manifestSha256, authorization.manifestSha256);
+      assert.equal(
+        receipt.runtimeAuthorizationDigest,
+        authorization.authorizationDigest,
+      );
+      files.push({
+        name: "release-qualification.json",
+        bytes: Buffer.from(receiptBytes),
+      });
+    }
     files.push({
       name: "runtime-authorization.json",
       bytes: Buffer.from(`${JSON.stringify(authorization)}\n`),

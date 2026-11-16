@@ -202,11 +202,20 @@ export function createHostCheckpointStore(
     },
     inspect: ({ plan }) =>
       exchange({ action: "inspect", identity: checkpointIdentity(plan) }),
-    async restore({ plan, checkpointId, inspectionDigest, destination }) {
+    restoreQualified(request) {
+      return this.restore({ ...request, qualified: true });
+    },
+    async restore({
+      plan,
+      checkpointId,
+      inspectionDigest,
+      destination,
+      qualified = false,
+    }) {
       const staging = stagingDirectory(destination);
       const descriptor = await exchange(
         {
-          action: "restore",
+          action: qualified ? "restore-qualified" : "restore",
           identity: checkpointIdentity(plan),
           checkpointId,
           inspectionDigest,
@@ -235,7 +244,18 @@ export function createHostCheckpointStore(
                 buffer = buffer.subarray(end + 1);
                 assert.equal(descriptor.checkpointId, checkpointId);
                 assert(
-                  descriptor.files?.length <= 16,
+                  Array.isArray(descriptor.files) &&
+                    descriptor.files.length >= 3 &&
+                    descriptor.files.length <= 24 &&
+                    descriptor.files.every(
+                      (item) =>
+                        Number.isSafeInteger(item.size) && item.size >= 0,
+                    ) &&
+                    descriptor.files.reduce(
+                      (total, item) => total + item.size,
+                      0,
+                    ) <=
+                      16 * 1024 ** 3,
                   "Invalid checkpoint inventory",
                 );
               }
@@ -290,9 +310,36 @@ export function createHostCheckpointStore(
           }
         },
       );
-      validateRestoredCheckpoint(descriptor, staging, plan);
+      let retained;
+      if (qualified) {
+        const { validateQualifiedRestore } =
+          await import("../../tools/release-checkpoint-qualified.mjs");
+        retained = validateQualifiedRestore(descriptor, staging, plan);
+        const bytes = Buffer.from(`${JSON.stringify(descriptor)}\n`);
+        writeRestoredFile(
+          staging,
+          {
+            name: "qualified-restore.json",
+            size: bytes.length,
+            sha256: createHash("sha256").update(bytes).digest("hex"),
+          },
+          bytes,
+        );
+        const parent = openSync(staging, "r");
+        try {
+          fsyncSync(parent);
+        } finally {
+          closeSync(parent);
+        }
+      } else validateRestoredCheckpoint(descriptor, staging, plan);
       commitRestore(staging, destination);
-      return { descriptor, directory: destination };
+      return qualified
+        ? {
+            ...retained,
+            directory: destination,
+            mapping: { ...retained.mapping, directory: destination },
+          }
+        : { descriptor, directory: destination };
     },
   };
 }

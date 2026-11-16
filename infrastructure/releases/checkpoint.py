@@ -1,6 +1,6 @@
 """Immutable private checkpoints, sharing the release host's storage and lock."""
 
-MAX_FILES = 16
+MAX_FILES = 24
 MAX_BYTES = 16 * 1024 * 1024 * 1024
 
 
@@ -91,6 +91,29 @@ def checkpoint_bindings(directory, descriptor):
                 or authorization.get('configurationDigest') != plan.get('configurationDigest')
                 or authorization.get('authorizationDigest') != hashlib.sha256(encoded).hexdigest()):
             raise ValueError('Runtime authorization binding differs')
+        originals = {'original-recovery-authorization.json', 'original-qualification-inspection.json'}
+        if originals & set(inventory):
+            expected.update(originals)
+            recovery = checkpoint_read(directory / 'original-recovery-authorization.json')
+            inspection = checkpoint_read(directory / 'original-qualification-inspection.json')
+            observation = {key: value for key, value in inspection.items() if key != 'reconciliationDigest'}
+            def canonical_hash(value):
+                return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+            if (canonical_hash(recovery) != authorization.get('recoveryAuthorizationDigest')
+                    or canonical_hash(observation) != inspection.get('reconciliationDigest')
+                    or inspection.get('reconciliationDigest') != authorization.get('inspectionDigest')
+                    or recovery.get('inspectionDigest') != authorization.get('inspectionDigest')
+                    or recovery.get('planDigest') != identity['planDigest']
+                    or recovery.get('operationId') != identity['operationId']):
+                raise ValueError('Original qualification authorization inputs differ')
+            if operation.get('qualificationAttempt', {}).get('status') == 'passed':
+                expected.add('release-qualification.json')
+                receipt = checkpoint_read(directory / 'release-qualification.json')
+                if (receipt != operation['qualificationAttempt'].get('receipt', {}).get('receipt')
+                        or receipt.get('sourceRevision') != identity['sourceRevision']
+                        or receipt.get('manifestSha256') != authorization.get('manifestSha256')
+                        or receipt.get('runtimeAuthorizationDigest') != authorization.get('authorizationDigest')):
+                    raise ValueError('Passed qualification receipt differs')
     elif descriptor['kind'] == 'build':
         manifest = checkpoint_read(directory / 'manifest.json')
         predecessor = checkpoint_read(directory / 'predecessor-manifest.json')
@@ -318,17 +341,54 @@ def checkpoint_main():
         if action == 'inspect':
             print(json.dumps(state))
             return
-        if action != 'restore' or request.get('inspectionDigest') != state['inspectionDigest']:
+        if action not in ('restore', 'restore-qualified') or request.get('inspectionDigest') != state['inspectionDigest']:
             raise ValueError('Restore requires exact fresh inspection')
         if state['coordination']['active'] != identity or not state['terminalNotary'] or state['publication'] is not None or state['unresolvedPublication']:
             raise ValueError('Restore blocked by claim or unresolved external work')
-        selected = [item for item in state['checkpoints'] if item['checkpointId'] == request['checkpointId'] and item['kind'] == 'build']
+        kind = 'build' if action == 'restore' else 'runtime-authorization'
+        selected = [item for item in state['checkpoints'] if item['checkpointId'] == request['checkpointId'] and item['kind'] == kind]
         if len(selected) != 1:
-            raise ValueError('Select one complete build checkpoint')
+            raise ValueError('Select one complete checkpoint')
         descriptor = selected[0]
+        sources = {item['name']: directory / descriptor['checkpointId'] / item['name'] for item in descriptor['files']}
+        if action == 'restore-qualified':
+            selected_directory = directory / descriptor['checkpointId']
+            snapshot = checkpoint_read(selected_directory / 'operation.json')
+            if snapshot.get('qualificationAttempt', {}).get('status') != 'passed':
+                raise ValueError('Selected qualification attempt is not passed')
+            metadata = ['original-recovery-authorization.json', 'original-qualification-inspection.json', 'runtime-authorization.json', 'release-qualification.json']
+            if not set(metadata) <= set(sources):
+                raise ValueError('Original qualification inputs were not retained')
+            attempts = {}
+            for value in state['checkpoints']:
+                if value['kind'] == 'runtime-authorization':
+                    attempt = checkpoint_read(directory / value['checkpointId'] / 'operation.json').get('qualificationAttempt', {})
+                    attempts.setdefault(attempt.get('authorizationDigest'), set()).add(attempt.get('status'))
+            if any(values != {'intent', 'passed'} for values in attempts.values()):
+                raise ValueError('Qualification family contains interrupted or unknown work')
+            recovery = checkpoint_read(selected_directory / 'original-recovery-authorization.json')
+            build = recovery.get('descriptor')
+            if not build or build.get('kind') != 'build' or build not in state['checkpoints']:
+                raise ValueError('Original build checkpoint is unavailable or differs')
+            original_operation = checkpoint_read(directory / build['checkpointId'] / 'operation.json')
+            if {key: value for key, value in snapshot.items() if key != 'qualificationAttempt'} != original_operation:
+                raise ValueError('Passed attempt changed original operation history')
+            authorization = checkpoint_read(selected_directory / 'runtime-authorization.json')
+            if not any(item['name'] == 'manifest.json' and item['sha256'] == authorization.get('manifestSha256') for item in build['files']):
+                raise ValueError('Passed attempt manifest binding differs')
+            inventory = {item['name']: item for item in descriptor['files']}
+            files = [*build['files'], {**inventory['operation.json'], 'name': 'qualification-operation.json'}, *(inventory[name] for name in metadata)]
+            if (len(files) > MAX_FILES or len({item['name'] for item in files}) != len(files)
+                    or sum(item['size'] for item in files) > MAX_BYTES):
+                raise ValueError('Qualified restore inventory differs')
+            sources = {item['name']: directory / build['checkpointId'] / item['name'] for item in build['files']}
+            sources['qualification-operation.json'] = selected_directory / 'operation.json'
+            sources.update({name: selected_directory / name for name in metadata})
+            descriptor = {'schemaVersion': 1, 'checkpointId': descriptor['checkpointId'], 'kind': 'qualified-restore',
+                          'identity': identity, 'files': files, 'buildDescriptor': build, 'qualificationDescriptor': descriptor}
     # Committed payloads are immutable; transfers do not hold the release lock.
     print(json.dumps(descriptor), flush=True)
     for item in descriptor['files']:
-        with os.fdopen(open_regular(directory / descriptor['checkpointId'] / item['name'], os.O_RDONLY), 'rb') as stream:
+        with os.fdopen(open_regular(sources[item['name']], os.O_RDONLY), 'rb') as stream:
             shutil.copyfileobj(stream, sys.stdout.buffer, 1024 * 1024)
     sys.stdout.buffer.flush()

@@ -8,6 +8,8 @@ import {
   readdirSync,
   symlinkSync,
   writeFileSync,
+  rmSync,
+  statSync,
 } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -18,14 +20,20 @@ import {
 import { createQualificationRuntimeAuthorization } from "../../tools/release-runtime-authorization.mjs";
 import { digest } from "../../tools/pipeline-state.mjs";
 import { inspectWorkflow, restoreWorkflow } from "../../tools/pipeline.mjs";
+import { requalifyCheckpoint } from "../../tools/release-checkpoint-qualify.mjs";
+import { restoreQualifiedCheckpoint } from "../../tools/release-checkpoint-restore-qualified.mjs";
+import { continueQualifiedCheckpoint } from "../../tools/release-checkpoint-continue.mjs";
 import {
   createCheckpoint,
   checkpointIdentity,
 } from "../../tools/release-checkpoint.mjs";
 import { checkpointProgram, createHostCheckpointStore } from "./checkpoint.mjs";
 
-function host(t, fixture = checkpointFixture(t)) {
-  const storage = join(fixture.root, "host");
+function host(
+  t,
+  fixture = checkpointFixture(t),
+  storage = join(fixture.root, "host"),
+) {
   mkdirSync(storage, { mode: 0o700 });
   const identity = checkpointIdentity(fixture.plan);
   writeFileSync(
@@ -265,48 +273,320 @@ test("runtime authorizations persist one immutable intent and outcome per fresh 
       status: "intent",
     },
   };
-  const intent = createCheckpoint({
-    ...f,
-    kind: "runtime-authorization",
-    operation,
-    authorization,
-  });
-  await f.store.commit(intent);
-  await assert.rejects(
-    f.store.commit(
-      createCheckpoint({
-        ...f,
-        kind: "runtime-authorization",
-        operation,
-        authorization,
-      }),
-    ),
-  );
-  operation.qualificationAttempt.status = "passed";
-  await f.store.commit(
+  const receipt = {
+    sourceRevision: f.plan.source,
+    manifestSha256: authorization.manifestSha256,
+    runtimeAuthorizationDigest: authorization.authorizationDigest,
+  };
+  const receiptBytes = Buffer.from(JSON.stringify(receipt));
+  const checkpoint = () =>
     createCheckpoint({
       ...f,
       kind: "runtime-authorization",
       operation,
       authorization,
-    }),
-  );
-  await assert.rejects(
-    f.store.commit(
-      createCheckpoint({
-        ...f,
-        kind: "runtime-authorization",
-        operation,
-        authorization,
-      }),
-    ),
-  );
+      recoveryAuthorization: input.recoveryAuthorization,
+      inspection: input.inspection,
+      receiptBytes,
+    });
+  await f.store.commit(checkpoint());
+  await assert.rejects(f.store.commit(checkpoint()));
+  operation.qualificationAttempt.status = "passed";
+  operation.qualificationAttempt.receipt = {
+    path: join(f.directory, "release-qualification.json"),
+    receipt,
+  };
+  await f.store.commit(checkpoint());
+  await assert.rejects(f.store.commit(checkpoint()));
   assert.equal(
     (await f.store.inspect({ plan: f.plan })).checkpoints.filter(
       (entry) => entry.kind === "runtime-authorization",
     ).length,
     2,
   );
+});
+
+test("qualified checkpoints survive loss of both producer roots and continue from an explicit fresh mapping without rebuilding", async (t) => {
+  const input = runtimeFixture(t);
+  const durable = checkpointFixture(t);
+  const f = host(t, input, join(durable.root, "host"));
+  const built = createCheckpoint({ ...input, kind: "build" });
+  built.descriptor = input.recoveryAuthorization.descriptor;
+  await f.store.commit(built);
+  const runner = checkpointFixture(t);
+  const firstDirectory = join(runner.root, "restored");
+  const remote = async () => {
+    const state = await f.store.inspect({ plan: input.plan });
+    return {
+      checkpoints: state,
+      coordination: state.coordination,
+      notarization: state.notarization,
+      reservation: {
+        status: "reserved",
+        reservation: input.operation.reservation,
+      },
+      githubRelease: null,
+    };
+  };
+  const inspected = await inspectWorkflow(runner.root, input.plan.operation, {
+    plan: input.plan,
+    adapters: { inspect: remote },
+  });
+  const restored = await restoreWorkflow(
+    runner.root,
+    input.plan.operation,
+    inspected.reconciliationDigest,
+    {
+      plan: input.plan,
+      checkpointId: built.descriptor.checkpointId,
+      destination: firstDirectory,
+      adapters: {
+        inspect: remote,
+        restore: async ({ destination }) => ({
+          ...(await f.store.restore({
+            plan: input.plan,
+            checkpointId: built.descriptor.checkpointId,
+            inspectionDigest: inspected.remote.checkpoints.inspectionDigest,
+            destination,
+          })),
+          manifestSha256: input.recoveryAuthorization.manifestSha256,
+        }),
+      },
+    },
+  );
+  const originalRecovery = restored.recoveryAuthorization;
+  const authorization = createQualificationRuntimeAuthorization({
+    ...input,
+    inspection: inspected,
+    recoveryAuthorization: originalRecovery,
+  });
+  let qualifications = 0;
+  const receipt = {
+    sourceRevision: input.plan.source,
+    manifestSha256: authorization.manifestSha256,
+    runtimeAuthorizationDigest: authorization.authorizationDigest,
+  };
+  const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+  const qualified = await requalifyCheckpoint(runner.root, {
+    recoveryAuthorization: originalRecovery,
+    inspection: inspected,
+    runtimeAuthorization: authorization,
+    adapters: {
+      inspection: { inspect: remote },
+      store: f.store,
+      qualify: async (_root, options) => {
+        qualifications++;
+        const path = join(options.directory, "release-qualification.json");
+        writeFileSync(path, receiptBytes, { mode: 0o600 });
+        return { path, receipt };
+      },
+    },
+  });
+  const state = await f.store.inspect({ plan: input.plan });
+  const passed = state.checkpoints.find(
+    (value) =>
+      value.kind === "runtime-authorization" &&
+      value.files.some((item) => item.name === "release-qualification.json"),
+  );
+  assert(passed);
+  assert.equal(qualified.checkpointId, passed.checkpointId);
+  assert.equal(
+    passed.files.find((item) => item.name === "release-qualification.json")
+      .sha256,
+    digest(receiptBytes),
+  );
+  rmSync(input.root, { recursive: true, force: true });
+  rmSync(runner.root, { recursive: true, force: true });
+  assert.equal(existsSync(input.root), false);
+  assert.equal(existsSync(runner.root), false);
+  const fresh = checkpointFixture(t);
+  const bootstrap = await f.store.bootstrap({
+    operationId: input.plan.operation,
+    destination: join(fresh.root, "bootstrap"),
+  });
+  const plan = JSON.parse(readFileSync(bootstrap.planFile));
+  assert.deepEqual(plan, input.plan);
+  const current = await inspectWorkflow(fresh.root, plan.operation, {
+    plan,
+    adapters: { inspect: remote },
+  });
+  const destination = join(fresh.root, "qualified");
+  const recovered = await restoreQualifiedCheckpoint(fresh.root, {
+    plan,
+    checkpointId: passed.checkpointId,
+    destination,
+    inspection: current,
+    confirmation: current.reconciliationDigest,
+    adapters: { inspection: { inspect: remote }, store: f.store },
+  });
+  assert.deepEqual(recovered.recoveryAuthorization, originalRecovery);
+  assert.deepEqual(recovered.qualificationInspection, inspected);
+  assert.deepEqual(recovered.runtimeAuthorization, authorization);
+  assert.equal(recovered.recoveryAuthorization.directory, firstDirectory);
+  assert.notEqual(recovered.directory, firstDirectory);
+  assert.equal(statSync(recovered.mappingFile).mode & 0o077, 0);
+  assert.deepEqual(
+    readFileSync(join(destination, "configuration.json")),
+    Buffer.from(input.configurationBytes),
+  );
+  assert.deepEqual(
+    readFileSync(join(destination, "release-qualification.json")),
+    receiptBytes,
+  );
+  let publications = 0;
+  let completed = false;
+  const continuation = {
+    recoveryAuthorization: recovered.recoveryAuthorization,
+    qualificationInspection: recovered.qualificationInspection,
+    runtimeAuthorization: recovered.runtimeAuthorization,
+    restoredDirectory: recovered.directory,
+    publicationInspection: current,
+    confirmation: current.reconciliationDigest,
+    adapters: {
+      inspection: { inspect: remote },
+      store: f.store,
+      coordinator: {
+        inspect: async () => (await f.store.inspect({ plan })).coordination,
+        complete: async () => {
+          const terminal = await f.store.inspect({ plan });
+          assert(terminal.checkpoints.some((value) => value.kind === "intent"));
+          completed = true;
+        },
+      },
+      evidence: ({ directory }) => {
+        assert.equal(directory, destination);
+        assert.deepEqual(
+          readFileSync(join(directory, "release-qualification.json")),
+          receiptBytes,
+        );
+        return { files: {}, evidence: {} };
+      },
+      createRelease: async (request, { authorize }) => {
+        publications++;
+        await authorize({ identity: request.identity });
+        writeFileSync(
+          request.journalPath,
+          JSON.stringify({
+            schemaVersion: 1,
+            state: "complete",
+            identity: request.identity,
+            releaseId: 77,
+            evidenceSha256: "a".repeat(64),
+          }),
+          { mode: 0o600 },
+        );
+        return {
+          identity: { ...request.identity, releaseId: 77 },
+          evidenceSha256: "a".repeat(64),
+        };
+      },
+    },
+  };
+  writeFileSync(join(destination, "release-qualification.json"), "changed");
+  await assert.rejects(continueQualifiedCheckpoint(fresh.root, continuation));
+  assert.equal(publications, 0);
+  writeFileSync(join(destination, "release-qualification.json"), receiptBytes);
+  assert.equal(
+    (await continueQualifiedCheckpoint(fresh.root, continuation)).status,
+    "created",
+  );
+  assert.equal(publications, 1);
+  assert.equal(qualifications, 1);
+  assert.equal(completed, true);
+  assert.deepEqual(
+    JSON.parse(
+      readFileSync(join(destination, "original-recovery-authorization.json")),
+    ),
+    originalRecovery,
+  );
+});
+
+test("qualified restoration rejects interrupted, unknown and legacy incomplete attempts without synthesizing authorization inputs", async (t) => {
+  for (const status of ["intent", "unknown", "legacy-passed"]) {
+    const input = runtimeFixture(t);
+    const f = host(t, input);
+    const build = createCheckpoint({ ...input, kind: "build" });
+    build.descriptor = input.recoveryAuthorization.descriptor;
+    await f.store.commit(build);
+    const state = await f.store.inspect({ plan: f.plan });
+    const observation = {
+      operationId: f.plan.operation,
+      planDigest: f.plan.authorizationDigest,
+      remote: { checkpoints: state },
+    };
+    const inspection = {
+      ...observation,
+      reconciliationDigest: digest(observation),
+    };
+    const recoveryAuthorization = {
+      ...input.recoveryAuthorization,
+      directory: f.directory,
+      inspectionDigest: inspection.reconciliationDigest,
+    };
+    const authorization = createQualificationRuntimeAuthorization({
+      ...input,
+      inspection,
+      recoveryAuthorization,
+    });
+    const operation = {
+      ...f.operation,
+      qualificationAttempt: {
+        status: "intent",
+        authorizationDigest: authorization.authorizationDigest,
+      },
+    };
+    const receipt = {
+      sourceRevision: f.plan.source,
+      manifestSha256: authorization.manifestSha256,
+      runtimeAuthorizationDigest: authorization.authorizationDigest,
+    };
+    const checkpoint = () =>
+      createCheckpoint({
+        ...f,
+        kind: "runtime-authorization",
+        operation,
+        authorization,
+        inspection,
+        recoveryAuthorization,
+        receiptBytes: Buffer.from(JSON.stringify(receipt)),
+      });
+    let selected = checkpoint();
+    await f.store.commit(selected);
+    if (status !== "intent") {
+      operation.qualificationAttempt.status =
+        status === "unknown" ? "unknown" : "passed";
+      if (status === "legacy-passed")
+        operation.qualificationAttempt.receipt = {
+          path: join(f.directory, "release-qualification.json"),
+          receipt,
+        };
+      selected = checkpoint();
+      if (status === "legacy-passed") {
+        const legacy = new Set([
+          "plan.json",
+          "configuration.json",
+          "operation.json",
+          "runtime-authorization.json",
+        ]);
+        selected.files = selected.files.filter((item) => legacy.has(item.name));
+        selected.descriptor.files = selected.descriptor.files.filter((item) =>
+          legacy.has(item.name),
+        );
+      }
+      await f.store.commit(selected);
+    }
+    const current = await f.store.inspect({ plan: f.plan });
+    const destination = join(f.root, "not-qualified");
+    await assert.rejects(
+      f.store.restoreQualified({
+        plan: f.plan,
+        checkpointId: selected.descriptor.checkpointId,
+        inspectionDigest: current.inspectionDigest,
+        destination,
+      }),
+    );
+    assert.equal(existsSync(destination), false);
+  }
 });
 
 test("interrupted uploads never become committed candidates and cannot be overwritten", async (t) => {
