@@ -75,6 +75,11 @@ test("worker allocations leave capacity for other worktrees", () => {
   assert.equal(needsBuildLease({ kind: "native" }), false);
   assert.equal(needsBuildLease({ id: "client-types" }), true);
   assert.equal(
+    needsBuildLease({ id: "npm-dependencies", command: "npm" }),
+    true,
+  );
+  assert.equal(needsBuildLease({ id: "root-format", command: "npm" }), false);
+  assert.equal(
     needsBuildLease({ id: "client-executor-integration", kind: "integration" }),
     true,
   );

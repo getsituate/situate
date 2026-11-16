@@ -30,7 +30,12 @@ export function ordinaryEnvironment(environment = process.env) {
     "SCCACHE_DIR",
   ];
   if (environment.SITUATE_TOOL_CONTAINER === "1") {
-    names.push("NSS_WRAPPER_PASSWD", "NSS_WRAPPER_GROUP");
+    names.push(
+      "NSS_WRAPPER_PASSWD",
+      "NSS_WRAPPER_GROUP",
+      "SITUATE_HOST_ADMISSION",
+      "SITUATE_HOST_ADMITTED",
+    );
     if (environment.SITUATE_TOOL_BUILD_SLOTS === "1")
       names.push("SITUATE_TOOL_BUILD_SLOTS");
     if (environment.LD_PRELOAD === "/opt/ci-tools/libnss_wrapper.so")
@@ -47,6 +52,12 @@ export function hostContainerEnvironment(environment) {
   const allowed = ordinaryEnvironment(environment);
   for (const key of [
     "SITUATE_DOCKER_LEASE",
+    "SITUATE_CONTAINER_CACHE",
+    "SITUATE_CONTAINER_CACHE_DIR",
+    "XDG_CACHE_HOME",
+    "GITHUB_ACTIONS",
+    "BUILD_ID",
+    "TF_BUILD",
     "DOCKER_HOST",
     "DOCKER_CONTEXT",
     "DOCKER_CONFIG",

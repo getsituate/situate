@@ -321,6 +321,73 @@ for (const platform of ["linux", "darwin"]) {
   });
 }
 
+test("multi-architecture preflight inspects the selected native platform explicitly", () => {
+  const multi = {
+    version: 2,
+    platforms: ["linux/amd64", "linux/arm64"],
+    image: image.image,
+  };
+  for (const [arch, expected] of [
+    ["x64", "linux/amd64"],
+    ["arm64", "linux/arm64"],
+  ]) {
+    const checks = prerequisites("/checkout", {
+      platform: "darwin",
+      arch,
+      suites: portable,
+      readLock: () => multi,
+    });
+    const check = checks.find(
+      ({ name }) => name === "Pinned portable-check image",
+    );
+    assert.equal(check.expected, expected);
+    assert.deepEqual(check.args.slice(0, 4), [
+      "image",
+      "inspect",
+      "--platform",
+      expected,
+    ]);
+    const run = fixture("darwin", portable, {
+      options: { arch, readLock: () => multi },
+      execute: (command, args) => ({
+        status: 0,
+        stdout:
+          command === "npm" ? pins.npm : args[0] === "image" ? expected : "",
+      }),
+    });
+    assert.equal(run.result, 0, run.errors.join("\n"));
+  }
+});
+
+test("visual preflight retains AMD64 and mixed selections inspect both architectures", () => {
+  const multi = {
+    version: 2,
+    platforms: ["linux/amd64", "linux/arm64"],
+    image: image.image,
+  };
+  const visual = { id: "client-visual", kind: "browser" };
+  for (const [suites, expected] of [
+    [[visual], ["linux/amd64"]],
+    [
+      [...portable, visual],
+      ["linux/arm64", "linux/amd64"],
+    ],
+  ]) {
+    const checks = prerequisites("/checkout", {
+      platform: "darwin",
+      arch: "arm64",
+      suites,
+      readLock: () => multi,
+    });
+    assert.deepEqual(
+      checks
+        .filter(({ name }) => name === "Pinned portable-check image")
+        .map(({ expected }) => expected),
+      expected,
+    );
+  }
+});
+
 for (const platform of ["linux", "darwin"]) {
   test(`${platform}: host Docker context checks need Buildx but not the portable image`, () => {
     const run = fixture(platform, [{ id: "client-docker-context" }], {

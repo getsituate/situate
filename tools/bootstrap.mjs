@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { readImageLock } from "./ci-image.mjs";
+import { readImageLock, selectImagePlatform } from "./ci-image.mjs";
 import { createPlan } from "./test.mjs";
 import { suiteExecution } from "./test-scope.mjs";
 
@@ -18,6 +18,7 @@ export function prerequisites(
     quick = false,
     suite = [],
     platform = process.platform,
+    arch = process.arch,
     suites = createPlan(
       { coverage, extended, quick, suite, platform },
       directory,
@@ -48,12 +49,30 @@ export function prerequisites(
   }
   if (portable) {
     const lock = readLock(directory);
-    add(
-      "Pinned portable-check image",
-      "docker",
-      ["image", "inspect", lock.image, "--format", "{{.Os}}/{{.Architecture}}"],
-      { expected: lock.platform },
+    const platforms = new Set(
+      suites
+        .filter((entry) => execution(entry) === "container")
+        .map((entry) =>
+          selectImagePlatform(lock, {
+            arch,
+            visual: entry.id === "client-visual",
+          }),
+        ),
     );
+    for (const imagePlatform of platforms)
+      add(
+        "Pinned portable-check image",
+        "docker",
+        [
+          "image",
+          "inspect",
+          ...(lock.version === 2 ? ["--platform", imagePlatform] : []),
+          lock.image,
+          "--format",
+          "{{.Os}}/{{.Architecture}}",
+        ],
+        { expected: imagePlatform },
+      );
   }
   if (
     suites.some(
@@ -124,6 +143,7 @@ export function main(
   {
     directory = root,
     platform = process.platform,
+    arch = process.arch,
     environment = process.env,
     nodeVersion = process.versions.node,
     execute = spawnSync,
@@ -190,6 +210,7 @@ export function main(
     for (const check of prerequisites(directory, {
       ...values,
       platform,
+      arch,
       readLock,
       suites,
     })) {

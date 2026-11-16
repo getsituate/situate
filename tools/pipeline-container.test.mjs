@@ -135,6 +135,19 @@ print(json.dumps({'args':args,'hostCacheExists':(state/'cache').exists()}))`,
   }
 });
 
+test("private startup directories do not change the test process file-creation mask", (t) => {
+  const root = fixture(t);
+  const value = python(`import subprocess,stat
+root=pathlib.Path(${JSON.stringify(root)})
+args=m.arguments(root,root/'state','ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],{},'fixture','fixture')
+prefix=args[args.index('-c')+1].split('source /opt/ci-tools/ci-user.sh')[0]
+environment={**os.environ,**{key:str(root/key) for key in ('HOME','CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')}}
+result=subprocess.run(['bash','-c',prefix+'umask'],env=environment,capture_output=True,text=True,check=True)
+print(json.dumps({'mask':result.stdout.strip(),'modes':[(root/key).stat().st_mode&0o777 for key in ('HOME','CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')]}))`);
+  assert.equal(value.mask, "0022");
+  assert.deepEqual(value.modes, [0o700, 0o700, 0o700, 0o700]);
+});
+
 test("Git mounts expose an anonymous origin without host credentials or hooks", (t) => {
   const root = fixture(t);
   for (const args of [
@@ -369,7 +382,7 @@ test("browser downloads follow selected workspace metadata and share matching ve
   );
 });
 
-test("browser download output cannot corrupt the suite progress stream", (t) => {
+test("browser download output cannot corrupt the suite progress stream", async (t) => {
   const root = fixture(t);
   mkdirSync(join(root, "client/docker"));
   writeFileSync(
@@ -377,7 +390,7 @@ test("browser download output cannot corrupt the suite progress stream", (t) => 
     JSON.stringify({ requirements: { version: "1.63.0" } }),
   );
   const calls = [];
-  prepareContainerLane(
+  await prepareContainerLane(
     root,
     [{ npm: "requirements", browsers: ["chromium"] }],
     (_command, _args, options) => {
@@ -388,14 +401,14 @@ test("browser download output cannot corrupt the suite progress stream", (t) => 
   assert.deepEqual(calls, [["ignore", 2, 2]]);
 });
 
-test("a failed browser download blocks the selected lane", (t) => {
+test("a failed browser download blocks the selected lane", async (t) => {
   const root = fixture(t);
   mkdirSync(join(root, "client/docker"));
   writeFileSync(
     join(root, "client/docker/ci-browsers.json"),
     JSON.stringify({ requirements: { version: "1.63.0" } }),
   );
-  assert.throws(
+  await assert.rejects(
     () =>
       prepareContainerLane(
         root,

@@ -16,7 +16,12 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { archiveDigest, context, validateProvenance } from "./ci-publish.mjs";
+import {
+  archiveDigest,
+  context,
+  platformContext,
+  validateProvenance,
+} from "./ci-publish.mjs";
 
 export const namespace = "/opt/situate/ci-image-transfers";
 const canonical = (value) =>
@@ -74,7 +79,8 @@ FIELDS = {'version','repository','repositoryId','runId','attempt','workflowSha',
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',',':')).encode()
 def identity(value):
-    if set(value) != FIELDS or type(value['version']) is not int or value['version'] != 1 or value['repository'] != 'getsituate/situate':
+    fields = FIELDS | {'platform'} if value.get('version') == 2 else FIELDS
+    if set(value) != fields or type(value['version']) is not int or value['version'] not in [1,2] or value['repository'] != 'getsituate/situate':
         raise ValueError('Invalid transfer provenance')
     for key in ['repositoryId','runId','attempt']:
         if not isinstance(value[key], str) or not re.fullmatch(r'[1-9][0-9]{0,19}', value[key]):
@@ -90,7 +96,11 @@ def identity(value):
             raise ValueError('Invalid image digest')
     if type(value['bytes']) is not int or not 0 < value['bytes'] <= MAX:
         raise ValueError('Invalid archive size')
-    if value['localTag'] != 'situate-ci-build:' + value['runId'] + '-' + value['attempt'] or value['publishTag'] != 'ghcr.io/getsituate/situate-ci-linux:build-' + value['runId'] + '-' + value['attempt']:
+    suffix = ''
+    if value['version'] == 2:
+        if value['platform'] not in ['linux/amd64','linux/arm64']: raise ValueError('Invalid transfer platform')
+        suffix = '-' + value['platform'].split('/')[1]
+    if value['localTag'] != 'situate-ci-build:' + value['runId'] + '-' + value['attempt'] + suffix or value['publishTag'] != 'ghcr.io/getsituate/situate-ci-linux:build-' + value['runId'] + '-' + value['attempt'] + suffix:
         raise ValueError('Invalid image tag')
     return 'getsituate-situate-' + value['runId'] + '-' + value['attempt'] + '-' + value['revision'] + '-' + hashlib.sha256(canonical(value)).hexdigest()
 def regular(path, limit):
@@ -243,7 +253,7 @@ export function explicitIdentity(values) {
   for (const key of ["workflow-sha", "source"])
     if (!/^[a-f0-9]{40}$/.test(values[key] ?? ""))
       throw new Error("Provide exact workflow and source revisions.");
-  return {
+  const expected = {
     source: values.source,
     context: {
       repository: "getsituate/situate",
@@ -255,6 +265,9 @@ export function explicitIdentity(values) {
       publishTag: `ghcr.io/getsituate/situate-ci-linux:build-${values["run-id"]}-${values.attempt}`,
     },
   };
+  if (values.platform !== undefined)
+    expected.context = platformContext(expected.context, values.platform);
+  return expected;
 }
 function checkedProvenance(value, env, expected) {
   const result = validateProvenance(value, expected?.context ?? context(env));
@@ -373,6 +386,7 @@ export async function main(
     options: Object.fromEntries(
       [
         "provenance",
+        "platform",
         "repository-id",
         "run-id",
         "attempt",
@@ -394,6 +408,8 @@ export async function main(
   ].some((key) => values[key] !== undefined)
     ? explicitIdentity(values)
     : undefined;
+  if (values.platform !== undefined && !expected)
+    environment = { ...environment, CI_IMAGE_PLATFORM: values.platform };
   if (!expected) context(environment);
   environment = {
     ...environment,

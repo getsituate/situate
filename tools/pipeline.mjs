@@ -394,7 +394,10 @@ export async function runLane(
   if (environment.SITUATE_TOOL_CONTAINER === "1" && !runner) {
     const { prepareContainerLane } =
       await import("./pipeline-container-entry.mjs");
-    prepareContainerLane(root, suites);
+    await prepareContainerLane(root, suites, undefined, {
+      environment,
+      signal,
+    });
   }
   const executionEnvironment =
     lane.execution === "host-docker"

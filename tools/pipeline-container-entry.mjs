@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, relative, isAbsolute } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { readImageLock } from "./ci-image.mjs";
+import { withHostBuildAdmission } from "./container-admission.mjs";
+import { runCoordinated } from "./run-coordinated.mjs";
 
 export function browserInstallations(suites, manifest) {
   const browsers = new Map();
@@ -25,15 +26,48 @@ export function browserInstallations(suites, manifest) {
   ]);
 }
 
-export function prepareContainerLane(root, suites, execute = spawnSync) {
+export async function prepareContainerLane(
+  root,
+  suites,
+  execute,
+  { environment = process.env, signal } = {},
+) {
   const manifest = JSON.parse(
     readFileSync(resolve(root, "client/docker/ci-browsers.json"), "utf8"),
   );
-  for (const args of browserInstallations(suites, manifest)) {
-    const result = execute(process.execPath, args, { stdio: ["ignore", 2, 2] });
-    if (result.error) throw result.error;
-    assert.equal(result.status, 0, "Browser dependency download failed");
-  }
+  const installations = browserInstallations(suites, manifest);
+  if (!installations.length) return;
+  return withHostBuildAdmission(
+    async (admittedEnvironment) => {
+      for (const args of installations) {
+        signal?.throwIfAborted();
+        const commandArgs = [
+          resolve(root, "tools/container-browser-install.py"),
+          process.execPath,
+          ...args,
+        ];
+        const result = execute
+          ? await execute("python3", commandArgs, {
+              stdio: ["ignore", 2, 2],
+              env: admittedEnvironment,
+            })
+          : {
+              status: await runCoordinated({
+                directory: root,
+                resource: "build",
+                command: "python3",
+                args: commandArgs,
+                environment: admittedEnvironment,
+                signal,
+                output: process.stderr,
+              }),
+            };
+        if (result.error) throw result.error;
+        assert.equal(result.status, 0, "Browser dependency download failed");
+      }
+    },
+    { environment, signal },
+  );
 }
 
 async function withCancellation(run) {
@@ -140,9 +174,12 @@ export async function main(
           request.jobs <= 8),
       "Expected from 1 to 8 suite workers",
     );
-    prepareContainerLane(root, suites);
-    const report = await withCancellation((signal) =>
-      runPlan(
+    const report = await withCancellation(async (signal) => {
+      await prepareContainerLane(root, suites, undefined, {
+        environment,
+        signal,
+      });
+      return runPlan(
         { ...plan, suites },
         {
           directory: root,
@@ -162,8 +199,8 @@ export async function main(
           onResult: (result) =>
             console.log(JSON.stringify({ type: "result", result })),
         },
-      ),
-    );
+      );
+    });
     writeFileSync(reportFile, JSON.stringify(report), { mode: 0o600 });
     if (report.status !== "passed") process.exitCode = 1;
     return report;

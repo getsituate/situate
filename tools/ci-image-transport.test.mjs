@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { context } from "./ci-publish.mjs";
+import { context, platformContext } from "./ci-publish.mjs";
 import {
   main,
   receiverSource,
@@ -113,6 +113,115 @@ test("exact run/source fingerprint transfers immutable data without Actions APIs
     uploaded.transfer,
   );
 });
+test("platform receipts transfer separately and reject cross-architecture substitutions", async (t) => {
+  const f = fixture(t);
+  const transfers = [];
+  for (const platform of ["linux/amd64", "linux/arm64"]) {
+    const provenance = {
+      ...f.provenance,
+      version: 2,
+      ...platformContext(context(f.environment), platform),
+    };
+    const environment = { ...f.environment, CI_IMAGE_PLATFORM: platform };
+    const options = { environment, remote: f.remote };
+    const uploaded = await transfer("upload", f.source, provenance, options);
+    transfers.push(uploaded.transfer);
+    const destination = join(f.directory, platform.split("/")[1]);
+    await transfer("download", destination, provenance, options);
+    assert.deepEqual(readFileSync(join(destination, "image.tar")), f.archive);
+    await assert.rejects(
+      transfer(
+        "upload",
+        f.source,
+        {
+          ...provenance,
+          platform: platform === "linux/amd64" ? "linux/arm64" : "linux/amd64",
+        },
+        {
+          environment,
+          remote: () => assert.fail("Cross-architecture receipt reached SSH"),
+        },
+      ),
+      /provenance/,
+    );
+  }
+  assert.notEqual(transfers[0], transfers[1]);
+  assert.equal(
+    readdirSync(f.receiver).filter((name) => !name.startsWith(".")).length,
+    2,
+  );
+  const provenance = {
+    ...f.provenance,
+    version: 2,
+    ...platformContext(context(f.environment), "linux/arm64"),
+  };
+  const metadata = join(f.directory, "arm-provenance.json");
+  writeFileSync(metadata, JSON.stringify(provenance));
+  await main(
+    [
+      "upload",
+      f.source,
+      "--provenance",
+      metadata,
+      "--platform",
+      "linux/arm64",
+      "--repository-id",
+      "123",
+      "--run-id",
+      "42",
+      "--attempt",
+      "2",
+      "--workflow-sha",
+      "b".repeat(40),
+      "--source",
+      "a".repeat(40),
+      "--host",
+      f.environment.CI_IMAGE_TRANSFER_HOST,
+      "--identity",
+      f.environment.CI_IMAGE_TRANSFER_SSH_IDENTITY,
+      "--known-hosts",
+      f.environment.CI_IMAGE_TRANSFER_KNOWN_HOSTS,
+    ],
+    {},
+    { remote: f.remote },
+  );
+});
+
+test("receiver rejects unknown platforms and mismatched architecture tags", (t) => {
+  const f = fixture(t);
+  const value = {
+    ...f.provenance,
+    version: 2,
+    ...platformContext(context(f.environment), "linux/arm64"),
+  };
+  for (const provenance of [
+    { ...value, platform: "linux/s390x" },
+    { ...value, platform: undefined },
+    { ...value, localTag: f.provenance.localTag },
+    { ...value, publishTag: f.provenance.publishTag },
+  ]) {
+    const result = spawnSync(
+      "python3",
+      [
+        "-B",
+        "-c",
+        f.program,
+        "upload",
+        transferIdentity(provenance),
+        f.receiver,
+      ],
+      {
+        input: Buffer.concat([
+          Buffer.from(`${JSON.stringify(provenance)}\n`),
+          f.archive,
+        ]),
+      },
+    );
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(readdirSync(f.receiver), []);
+  }
+});
+
 test("receiver rejects truncated/oversized/mismatched frames and leaves no finalized data", (t) => {
   const f = fixture(t);
   const id = transferIdentity(f.provenance);

@@ -223,7 +223,7 @@ def build_slots():
     return int(value)
 
 
-def acquire(resource, directory, base=None, child=None):
+def acquire(resource, directory, base=None, child=None, pending=None):
     # App fixtures override TMPDIR; the desktop lease must still be machine-local.
     if base is None:
         base = Path("/tmp").resolve() / ("situate-coordination-" + str(os.getuid()))
@@ -247,7 +247,8 @@ def acquire(resource, directory, base=None, child=None):
             os.close(fd)
         raise
     waiting = False
-    while not caller_closed() and (child is None or child.poll() is None):
+    while (not caller_closed() and (child is None or child.poll() is None)
+           and (pending is None or pending())):
         for fd in descriptors:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -290,8 +291,10 @@ def read_docker_lease(path):
     value = json.loads(data)
     uuid = r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}'
     if (not isinstance(value, dict) or not {'name', 'token'} <= set(value)
-            or set(value) - {'name', 'token', 'creationPending', 'dockerEnvironment', 'buildPending'}
+            or set(value) - {'name', 'token', 'creationPending', 'dockerEnvironment', 'buildPending', 'phaseAdmission'}
             or type(value.get('creationPending', False)) is not bool
+            or type(value.get('phaseAdmission', False)) is not bool
+            or (value.get('phaseAdmission') and value.get('buildPending'))
             or type(value.get('buildPending', False)) is not bool
             or (value.get('buildPending') and not value.get('creationPending'))
             or not isinstance(value['name'], str) or not re.fullmatch('situate-pipeline-' + uuid, value['name'])
@@ -330,6 +333,7 @@ class DockerBuildAdmission:
         self.base = base
         self.fd = None
         self.identity = None
+        self.phase_token = None
 
     def release(self):
         if self.fd is not None:
@@ -344,6 +348,11 @@ class DockerBuildAdmission:
             report('Cannot inspect Docker build admission; retaining the resource lease.')
             return True
         value = lease[0] if lease else None
+        if value is None and self.phase_token is not None:
+            self.release()
+            self.phase_token = None
+        if value and value.get('phaseAdmission'):
+            return self.poll_phase(path, lease, child)
         identity = (value['name'], value['token']) if value and value.get('buildPending') else None
         if identity == self.identity:
             return True
@@ -377,6 +386,100 @@ class DockerBuildAdmission:
         finally:
             os.close(directory_fd)
         return True
+
+
+    def poll_phase(self, path, lease, child):
+        root = Path(str(path) + '.' + lease[0]['token'] + '.admission')
+        request = root / 'request.json'
+        grant = root / 'grant.json'
+        try:
+            token = read_phase_request(root, request)
+            withdrawn = read_phase_request(root, root / 'release.json')
+        except (OSError, ValueError, TypeError):
+            report('Cannot inspect container phase admission; retaining the resource lease.')
+            return True
+        if token is not None and withdrawn == token:
+            if self.phase_token is not None and self.phase_token != token:
+                report('Container phase withdrawal differs; retaining the resource lease.')
+                return True
+            self.release()
+            self.phase_token = None
+            grant.unlink(missing_ok=True)
+            publish_phase(root, 'released.json', token)
+            return True
+        if self.phase_token is not None and token not in (None, self.phase_token):
+            report('Container phase changed without release; retaining the resource lease.')
+            return True
+        if self.phase_token is not None and token is None:
+            report('Container phase disappeared without withdrawal; retaining the resource lease.')
+            return True
+        if token is None or token == self.phase_token:
+            return True
+        self.fd = acquire('build', self.directory, self.base, child=child, pending=lambda:
+                          read_phase_request(root, request) == token
+                          and read_phase_request(root, root / 'release.json') != token)
+        if self.fd is None:
+            return not caller_closed() and child.poll() is None
+        if caller_closed() or child.poll() is not None:
+            return False
+        if read_docker_lease(path) != lease or read_phase_request(root, request) != token:
+            self.release()
+            return True
+        publish_phase(root, 'grant.json', token)
+        self.phase_token = token
+        return True
+
+
+def publish_phase(root, name, token):
+    temporary = root / (name + '.publishing')
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        json.dump({'token': token}, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, root / name)
+
+
+def read_phase_request(root, path):
+    parent = root.lstat()
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
+        raise ValueError('Container phase admission directory must be private and owned.')
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > 256):
+            raise ValueError('Invalid container phase request.')
+        data = json.loads(stream.read(257))
+    current = path.lstat()
+    if (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino):
+        raise ValueError('Container phase changed during inspection.')
+    if (not isinstance(data, dict) or set(data) != {'token'} or not isinstance(data['token'], str)
+            or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', data['token'])):
+        raise ValueError('Invalid container phase identity.')
+    return data['token']
+
+
+def cleanup_phase_directory(root):
+    # Docker absence has been verified; remove only the finite protocol files.
+    try:
+        for path in (root / 'request.json', root / 'grant.json', root / 'release.json', root / 'released.json',
+                     root / 'grant.json.publishing', root / 'released.json.publishing', root / 'phase/request.json', root / 'phase/release.json'):
+            try:
+                read_phase_request(path.parent, path)
+                path.unlink(missing_ok=True)
+            except (OSError, ValueError, TypeError):
+                pass
+        try:
+            (root / 'phase').rmdir()
+        except OSError:
+            pass
+        root.rmdir()
+    except OSError:
+        pass
 
 
 def docker_build_unstarted(path):
@@ -487,6 +590,8 @@ def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
                     if (info.st_dev, info.st_ino) != ack:
                         raise ValueError('Docker build acknowledgement changed during cleanup.')
                 path.unlink()
+                if value.get('phaseAdmission'):
+                    cleanup_phase_directory(Path(str(path) + '.' + value['token'] + '.admission'))
                 if ack is not None:
                     try:
                         acknowledged_build.unlink()
