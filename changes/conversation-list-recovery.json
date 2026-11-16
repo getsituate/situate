@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "conversation-list-recovery",
-  "behaviorDigest": "bea9e25bcf0bbf0a29fd6bfa72d7db4de333a077d519a30beedec49793305dcc",
+  "behaviorDigest": "cd55c232a8eaf2f0e20bb9aa2af80a89e0180b3b855da829ce1a43fde1b015af",
   "locales": {
     "en": {
       "title": "Changes",
@@ -34,12 +34,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "98f20a289f114c8c8fc2713b4299681d7c477bd9a4d5478444f7f2de6396660d",
-      "translationHash": "d9e47bca914e4a4ae89f590153335f3d10b2324ebdc9d26c5d62145f49fca554"
+      "sourceHash": "9909762de84fcb20f599da0e8e37765ee1ce18952ce59735e21601175f045759",
+      "translationHash": "b9ad1056f97823a7b102bc729c6e4651067eb355ba9a6184ee7ec3a13922fd45"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "98f20a289f114c8c8fc2713b4299681d7c477bd9a4d5478444f7f2de6396660d"
+    "sourceHash": "9909762de84fcb20f599da0e8e37765ee1ce18952ce59735e21601175f045759"
   }
 }
