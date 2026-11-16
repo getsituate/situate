@@ -593,6 +593,62 @@ test("signing diagnostics forward only signing inputs after trusted-main authori
   assert.equal(calls.length, 1);
 });
 
+test("qualification route diagnostics authorize trusted hosted dispatch before forwarding scoped inputs", async () => {
+  const scoped = {
+    PATH: "/synthetic/bin",
+    HOME: "/synthetic/home",
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    SITUATE_RELEASE_CONFIG_JSON: "synthetic-config",
+    SITUATE_RELEASE_CONFIG_SHA256: "a".repeat(64),
+    SITUATE_UPDATER_ENDPOINT: "https://updates.example.test/update.json",
+    WEBSITE_DEPLOY_HOST: "synthetic.example.test",
+    SITUATE_RELEASE_SSH_PRIVATE_KEY: "synthetic-ssh-key",
+    SITUATE_RELEASE_SSH_KNOWN_HOSTS: "synthetic-host-key",
+  };
+  const env = {
+    ...environment,
+    ...scoped,
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    DIAGNOSTIC_TARGET: "native",
+    APPLE_API_PRIVATE_KEY: "unrelated-secret",
+    TAURI_SIGNING_PRIVATE_KEY: "unrelated-secret",
+    APPLE_DEVELOPER_ID_P12_BASE64: "unrelated-secret",
+    GH_TOKEN: "unrelated-secret",
+    SSH_AUTH_SOCK: "unrelated-secret",
+  };
+  const calls = [];
+  const execute = (command, args, options) =>
+    calls.push({ command, args, options });
+  await main(["diagnostics", "--lane", "qualification-route"], env, execute);
+  assert.deepEqual(calls, [
+    {
+      command: process.execPath,
+      args: ["tools/qualification-route-check.mjs"],
+      options: { stdio: "inherit", env: scoped },
+    },
+  ]);
+  for (const changed of [
+    { GITHUB_REPOSITORY: "other/repository" },
+    { GITHUB_REF: "refs/heads/feature" },
+    { GITHUB_EVENT_NAME: "push" },
+    { DIAGNOSTIC_TARGET: "portable" },
+    { CI: "false" },
+    { GITHUB_ACTIONS: "false" },
+    { RUNNER_ENVIRONMENT: "self-hosted" },
+  ])
+    await assert.rejects(
+      main(
+        ["diagnostics", "--lane", "qualification-route"],
+        { ...env, ...changed },
+        execute,
+      ),
+      /trusted main|GitHub-hosted/,
+    );
+  assert.equal(calls.length, 1);
+});
+
 test("unprovisioned remote operations and paid diagnostics fail visibly before executing commands", async () => {
   const execute = () => {
     throw new Error("Unexpected external command");

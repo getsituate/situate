@@ -384,13 +384,15 @@ Coverage is opt-in and does not gate PRs or releases. On macOS, `node tools/test
 
 Reports live under `client/target/coverage/`: Vue HTML/LCOV in `vue/` and Rust LCOV in `rust.lcov`. Coverage does not execute signed-installation/update journeys or impose a universal percentage threshold. Inspect uncovered behavior rather than treating aggregate percentages as acceptance evidence.
 
-The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides explicit `coverage`, `design`, `visual`, `provider` and `signing` selections on trusted main. These do not feed required verification or release results. Paid provider diagnostics additionally require protected authorization and the dedicated test credential; ordinary fixtures make no paid calls. No coverage-commenting workflow is active.
+The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides explicit `coverage`, `design`, `visual`, `provider`, `signing` and `qualification-route` selections on trusted main. These do not feed required verification or release results. Paid provider diagnostics additionally require protected authorization and the dedicated test credential; ordinary fixtures make no paid calls. No coverage-commenting workflow is active.
 
 The `signing` selection tests Developer ID signing access in a temporary Keychain on macOS, using the protected `macos-release` environment. It does not build, notarize or publish an application or reserve a version. Run `node tools/signing-check.mjs` locally with the [Apple signing inputs](../../client/README.md#apple-distribution) to perform the baseline check.
 
 On the disposable GitHub-hosted runner, the workflow uses the same temporary Keychain registration as release builds. It removes only its owned entry afterward, preserving other entries and their order. Local and self-hosted defaults do not change the search list.
 
 The optional `--probe-search-list` comparison is restricted to disposable GitHub-hosted execution: it retains the unregistered baseline, appends its own Keychain and repeats both attempts, then confirms cleanup. Baseline failures remain nonpassing even if registered signing succeeds.
+
+The `qualification-route` selection uses the protected `macos-release` environment with only its configuration and SSH inputs. It stages a synthetic feed under a fresh diagnostic identity, exercises the production route guardian and credential-free routing inspector, and checks normal TLS, private identity/feed hashes, public isolation and unchanged public feed. Cleanup failures remain blocking. It does not read retained candidates, reserve versions, build, notarize, publish or qualify application installation/update behavior. Route errors report bounded startup/callback/cleanup facts and allowlisted failure codes; they do not print SSH arguments or raw child errors.
 
 ## CI gates
 

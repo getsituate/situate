@@ -595,7 +595,7 @@ test("coverage and visual diagnostics use a separate explicitly selected workflo
   assert.match(source, /workflow_dispatch:/);
   assert.match(
     source,
-    /options: \[coverage, design, visual, provider, signing\]/,
+    /options:\s+\[coverage, design, visual, provider, signing, qualification-route\]/,
   );
   assert.match(source, /run: node tools\/actions-adapter\.mjs diagnostics\n/);
   assert.match(source, /DIAGNOSTIC_SELECTION: \$\{\{ inputs.selection \}\}/);

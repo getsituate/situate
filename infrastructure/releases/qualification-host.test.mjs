@@ -486,7 +486,11 @@ test("runner preserves concurrent hosts edits and refuses preexisting hostname o
   }
 });
 
-function controllerFixture({ ready = true, cleaned = true } = {}) {
+function controllerFixture({
+  ready = true,
+  cleaned = true,
+  failure = null,
+} = {}) {
   const calls = [],
     spawns = [];
   const facts = {
@@ -521,6 +525,7 @@ function controllerFixture({ ready = true, cleaned = true } = {}) {
         JSON.stringify({
           closed: true,
           cleaned,
+          failure,
           uncertain: !cleaned,
           operationNonce: operation.operationNonce,
         }) + "\n",
@@ -679,6 +684,54 @@ test("controller rejects untrusted runners and invalid input without remote effe
     () => createQualificationHost({ ...config, host: "-oProxyCommand=bad" }),
     /WEBSITE_DEPLOY_HOST/,
   );
+});
+
+test("route errors report startup, callback and teardown separately without exposing raw failures", async () => {
+  for (const [options, expectedPhase, expectedFailure] of [
+    [
+      { ready: false, cleaned: true, failure: "ssh-start" },
+      "guardian-startup",
+      "ssh-start",
+    ],
+    [{ ready: true, cleaned: true }, "callback", null],
+    [
+      { ready: true, cleaned: false, failure: "teardown" },
+      "guardian-cleanup",
+      "teardown",
+    ],
+    [
+      { ready: false, cleaned: false, failure: "synthetic-private-identity" },
+      "guardian-startup",
+      "unknown",
+    ],
+  ]) {
+    const f = controllerFixture(options);
+    await assert.rejects(
+      withQualificationRoute(
+        f.route,
+        () => {
+          if (expectedPhase === "callback")
+            throw new Error("synthetic-private-identity");
+        },
+        { spawnProcess: f.spawnProcess, platform: "darwin" },
+      ),
+      (error) => {
+        assert.deepEqual(error.diagnostic, {
+          phase: expectedPhase,
+          ready: options.ready,
+          guardianExitCode: options.cleaned && options.ready ? 0 : 1,
+          controllerFailure:
+            options.cleaned && options.ready ? null : "guardian-exit",
+          guardianFailure: expectedFailure,
+          cleaned: options.cleaned,
+          uncertain: !options.cleaned,
+        });
+        assert(error.message.includes(JSON.stringify(error.diagnostic)));
+        assert(!error.message.includes("synthetic-private-identity"));
+        return true;
+      },
+    );
+  }
 });
 
 test("staging verifies local files before SSH and preserves exact inventory in the helper request", (t) => {

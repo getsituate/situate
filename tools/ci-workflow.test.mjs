@@ -252,7 +252,7 @@ test("signing diagnostics use a separate trusted-main job with certificate-only 
   const workflow = read("diagnostics");
   assert.match(
     workflow,
-    /options: \[coverage, design, visual, provider, signing\]/,
+    /options:\s+\[coverage, design, visual, provider, signing, qualification-route\]/,
   );
   assert.match(job(workflow, "native"), /inputs\.selection != 'signing'/);
   const signing = job(workflow, "signing");
@@ -288,6 +288,37 @@ test("signing diagnostics use a separate trusted-main job with certificate-only 
   assert.doesNotMatch(
     signing,
     /APPLE_API_|TAURI_SIGNING|GH_TOKEN|SSH|PAID_|contents: write|packages: write|create-stage|publish-run/,
+  );
+});
+
+test("qualification route diagnostics use protected hosted dispatch and only SSH/configuration credentials", () => {
+  const workflow = read("diagnostics");
+  const route = job(workflow, "qualification-route");
+  for (const guard of [
+    "github.repository == 'getsituate/situate'",
+    "github.ref == 'refs/heads/main'",
+    "github.event_name == 'workflow_dispatch'",
+    "inputs.selection == 'qualification-route'",
+  ])
+    assert(route.includes(guard));
+  assert.match(
+    job(workflow, "native"),
+    /inputs\.selection != 'qualification-route'/,
+  );
+  assert.match(route, /runs-on: macos-latest/);
+  assert.match(route, /environment: macos-release/);
+  assert.match(route, /timeout-minutes: 10/);
+  assert.match(route, /ref:.*github\.sha/);
+  assert.match(route, /diagnostics --lane qualification-route/);
+  for (const name of [
+    "SITUATE_RELEASE_CONFIG_JSON",
+    "SITUATE_RELEASE_SSH_PRIVATE_KEY",
+    "SITUATE_RELEASE_SSH_KNOWN_HOSTS",
+  ])
+    assert(route.includes(`secrets.${name}`));
+  assert.doesNotMatch(
+    route,
+    /APPLE_|TAURI_SIGNING|GH_TOKEN|PAID_|contents: write|packages: write|create-stage|publish-run/,
   );
 });
 
