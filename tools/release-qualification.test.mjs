@@ -1,14 +1,71 @@
 import assert from "node:assert/strict";
-import { writeFileSync, readFileSync, symlinkSync, renameSync } from "node:fs";
+import {
+  writeFileSync,
+  readFileSync,
+  symlinkSync,
+  renameSync,
+  existsSync,
+} from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { qualificationFixture } from "./release-qualification-fixture.mjs";
+import { createQualificationProcess } from "../client/scripts/final-artifact-process.mjs";
 import {
   verifyQualificationReceipt,
   qualifyRelease,
   writeQualificationReceipt,
   verifySourceEvidence,
 } from "./release-qualification.mjs";
+
+test("failed telemetry cannot prevent owned cleanup or authorize a receipt", async (t) => {
+  const { directory, manifest } = qualificationFixture(t);
+  const primary = new Error("Synthetic preparation failure");
+  const reporting = new Error("Synthetic progress failure");
+  const commands = [];
+  const execute = createQualificationProcess({
+    getPhase: () => "cleanup",
+    progress: () => {
+      throw reporting;
+    },
+    execute: async (command) => {
+      commands.push(command);
+      return "";
+    },
+  });
+  let cleanups = 0;
+  const host = Object.fromEntries(
+    ["prepare", "install", "journeys", "update", "inspect", "cleanup"].map(
+      (name) => [name, async () => {}],
+    ),
+  );
+  host.prepare = async () => {
+    throw primary;
+  };
+  host.cleanup = async () => {
+    cleanups++;
+    await execute("ps", []);
+    await execute("hdiutil", ["detach", "/synthetic/mount"]);
+  };
+  await assert.rejects(
+    writeQualificationReceipt({
+      directory,
+      manifest,
+      qualificationHost: host,
+      execute,
+      verifyPayloads: async () => {},
+      progress: (phase) => {
+        if (phase === "cleanup") throw reporting;
+      },
+    }),
+    (error) => error.cause === primary && error.errors.includes(reporting),
+  );
+  assert.equal(cleanups, 1);
+  assert.deepEqual(commands, ["ps", "hdiutil"]);
+  assert.equal(
+    existsSync(join(directory, "release-qualification.json")),
+    false,
+  );
+});
 
 test("final receipt binds exact source, generated inputs, package signatures and manifest bytes", (t) => {
   const { directory, manifest, receipt } = qualificationFixture(t);
@@ -110,9 +167,11 @@ test("receipt rejects package, input or signature mutation and asset links", (t)
 test("qualification blocks missing infrastructure before commands or receipt creation", async (t) => {
   const fixture = qualificationFixture(t);
   let calls = 0;
+  const progress = [];
   await assert.rejects(
     qualifyRelease({
       ...fixture,
+      progress: (...event) => progress.push(event),
       execute: async () => {
         calls++;
       },
@@ -121,4 +180,12 @@ test("qualification blocks missing infrastructure before commands or receipt cre
   );
   await assert.rejects(writeQualificationReceipt({ ...fixture }), /Blocked/);
   assert.equal(calls, 0);
+  assert.deepEqual(progress, [
+    ["candidate_payload", "started"],
+    ["candidate_payload", "failed"],
+  ]);
+  assert.equal(
+    existsSync(join(fixture.directory, "release-qualification.json")),
+    false,
+  );
 });

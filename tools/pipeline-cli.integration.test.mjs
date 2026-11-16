@@ -27,6 +27,7 @@ test("the pipeline CLI loads host-Docker and portable lane dependencies without 
   for (const name of [
     "pipeline.mjs",
     "pipeline-state.mjs",
+    "source-verification-evidence.mjs",
     "pipeline-environment.mjs",
     "pipeline-container.mjs",
     "run-coordinated.mjs",
@@ -139,12 +140,17 @@ for (const inheritedDesktop of [true, false])
       mkdirSync(join(root, "client/scripts"), { recursive: true });
       for (const name of [
         "release-qualification-worker.mjs",
+        "qualification-progress.mjs",
         "run-coordinated.mjs",
       ])
         copyFileSync(
           new URL(`./${name}`, import.meta.url),
           join(root, "tools", name),
         );
+      writeFileSync(
+        join(root, "client/scripts/final-artifact-process.mjs"),
+        'export const createQualificationProcess = () => async () => "";',
+      );
       const coordination = join(root, "coordination");
       writeFileSync(
         join(root, "tools/worktree-supervisor.py"),

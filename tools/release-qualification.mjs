@@ -4,6 +4,12 @@ import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { verifyReleaseInputs } from "./release-inputs.mjs";
+import {
+  qualificationPhase,
+  qualificationProgressReporter,
+} from "./qualification-progress.mjs";
+import { validateSourceVerification } from "./source-verification.mjs";
+import { createQualificationProcess } from "../client/scripts/final-artifact-process.mjs";
 import { verifyUpdaterSignature } from "../client/scripts/updater-signing.mjs";
 import { verifyDirectPayloads } from "../client/scripts/direct-release-verification.mjs";
 
@@ -127,7 +133,7 @@ export function verifySourceEvidence(
 ) {
   const verification = manifest.sourceVerification;
   assert(
-    verification?.schemaVersion === 1 &&
+    [1, 2].includes(verification?.schemaVersion) &&
       verification.status === "passed" &&
       verification.source === manifest.revision &&
       verification.releaseInputsSha256 === manifest.releaseInputs?.sha256 &&
@@ -150,6 +156,10 @@ export function verifySourceEvidence(
       ),
     "Source verification contains missing or unsuccessful gates",
   );
+  validateSourceVerification(verification, {
+    source: manifest.revision,
+    releaseInputsSha256: manifest.releaseInputs?.sha256,
+  });
   const compatibility = manifest.publicCompatibility;
   assert(
     compatibility?.schemaVersion === 1 &&
@@ -192,6 +202,11 @@ export function verifyQualificationReceipt(directory, manifest, receipt) {
       isDeepStrictEqual(receipt.artifact, artifactIdentity(artifact)),
     "Qualification receipt does not bind final package inputs",
   );
+  assert(
+    receipt.runtimeAuthorizationDigest === undefined ||
+      sha.test(receipt.runtimeAuthorizationDigest),
+    "Invalid qualification runtime authorization identity",
+  );
   for (const name of [
     "payloadEquality",
     "installation",
@@ -233,20 +248,73 @@ export async function qualifyRelease({
   execute,
   env,
   signal,
+  progress = () => {},
+  runtimeAuthorizationDigest,
+  verifyPayloads = verifyDirectPayloads,
 }) {
-  const artifact = verifyPackages(directory, manifest);
-  // A source-built smoke harness cannot install or exercise these signed bytes.
   assert(
-    qualificationHost &&
-      ["prepare", "install", "journeys", "update", "inspect", "cleanup"].every(
-        (name) => typeof qualificationHost[name] === "function",
-      ),
-    "Blocked: provisioned isolated production-HTTPS routing and an exact-artifact native install/update journey driver are required",
+    runtimeAuthorizationDigest === undefined ||
+      sha.test(runtimeAuthorizationDigest),
+    "Invalid qualification runtime authorization digest",
   );
-  await verifyDirectPayloads(directory, artifact, { execute, env, signal });
-  let session;
+  let phase = "candidate_payload";
+  const reporter = qualificationProgressReporter(progress);
+  const report = (name, ...args) => {
+    phase = name;
+    reporter.emit(name, ...args);
+  };
+  execute ??= createQualificationProcess({
+    progress: reporter.emit,
+    getPhase: () => phase,
+  });
+  const checkProgress = (failure, secondary = []) => {
+    try {
+      execute.assertProgress?.();
+    } catch (error) {
+      secondary.push(error);
+    }
+    reporter.check(failure, secondary);
+  };
+  let artifact;
   try {
-    session = await qualificationHost.prepare({ directory, manifest, signal });
+    artifact = await qualificationPhase(
+      report,
+      "candidate_payload",
+      async () => {
+        const artifact = verifyPackages(directory, manifest);
+        assert(
+          qualificationHost &&
+            [
+              "prepare",
+              "install",
+              "journeys",
+              "update",
+              "inspect",
+              "cleanup",
+            ].every((name) => typeof qualificationHost[name] === "function"),
+          "Blocked: provisioned isolated production-HTTPS routing and an exact-artifact native install/update journey driver are required",
+        );
+        await verifyPayloads(directory, artifact, { execute, env, signal });
+        return artifact;
+      },
+      signal,
+    );
+  } catch (error) {
+    checkProgress(error);
+  }
+  const callHost = (name, options) =>
+    qualificationPhase(
+      report,
+      name,
+      () => qualificationHost[name](options),
+      name === "cleanup" ? undefined : signal,
+    );
+  let session;
+  let failure;
+  let cleanupFailure;
+  let result;
+  try {
+    session = await callHost("prepare", { directory, manifest, signal });
     assert(
       session?.productionEndpoint === artifact.buildConfiguration.endpoint &&
         new URL(session.productionEndpoint).protocol === "https:" &&
@@ -262,7 +330,7 @@ export async function qualifyRelease({
       predecessor?.version && sha.test(predecessor.manifestSha256),
       "Blocked: verified host-channel predecessor is required",
     );
-    const installed = await qualificationHost.install({
+    const installed = await callHost("install", {
       session,
       directory,
       artifact,
@@ -275,7 +343,7 @@ export async function qualifyRelease({
         installed.launched === true,
       "Exact DMG installation was not verified",
     );
-    const journeys = await qualificationHost.journeys({
+    const journeys = await callHost("journeys", {
       session,
       artifact,
       signal,
@@ -288,7 +356,7 @@ export async function qualifyRelease({
         ),
       "Exact installed app synthetic journeys did not pass",
     );
-    const updated = await qualificationHost.update({
+    const updated = await callHost("update", {
       session,
       directory,
       artifact,
@@ -305,7 +373,7 @@ export async function qualifyRelease({
         updated.relaunched === true,
       "Exact archive production updater journey did not pass",
     );
-    const final = await qualificationHost.inspect({ session, signal });
+    const final = await callHost("inspect", { session, signal });
     assert(
       final?.publicPointerUnchanged === true &&
         final.normalTls === true &&
@@ -315,6 +383,7 @@ export async function qualifyRelease({
     const receipt = {
       schemaVersion: 1,
       kind: "macos-direct-exact-artifact",
+      ...(runtimeAuthorizationDigest ? { runtimeAuthorizationDigest } : {}),
       sourceRevision: manifest.revision,
       version: manifest.version,
       releaseInputsSha256: manifest.releaseInputs.sha256,
@@ -335,14 +404,24 @@ export async function qualifyRelease({
       ],
     };
     verifyQualificationReceipt(directory, manifest, receipt);
-    return receipt;
+    result = receipt;
+  } catch (error) {
+    failure = error;
+    report(phase, signal?.aborted ? "cancelled" : "failed");
   } finally {
-    await qualificationHost.cleanup({ session, signal: undefined });
+    try {
+      await callHost("cleanup", { session, signal: undefined });
+    } catch (error) {
+      cleanupFailure = error;
+    }
   }
+  checkProgress(failure, cleanupFailure ? [cleanupFailure] : []);
+  return result;
 }
 
 export async function writeQualificationReceipt(options) {
   const receipt = await qualifyRelease(options);
+  options.signal?.throwIfAborted();
   const path = join(options.directory, qualificationAsset);
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`, { flag: "wx" });
   return { path, receipt };

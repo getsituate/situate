@@ -180,18 +180,65 @@ def owned_container(state):
     return item
 
 
+def sync_private_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def inspect_family(operation_id):
+    entries = list(ROOT.iterdir())
+    require(len(entries) <= 129, 'Qualification resource inventory exceeds its bound')
+    operations = []
+    for path in sorted(entries):
+        if path.name == 'lock':
+            regular(path)
+            continue
+        require(re.fullmatch(r'[a-f0-9]{64}', path.name), 'Unexpected qualification resource directory')
+        directory(path)
+        info = path.lstat()
+        require(info.st_uid == os.getuid() and info.st_mode & 0o077 == 0, 'Qualification resource ownership differs')
+        state_path = path / 'state.json'
+        info = regular(state_path)
+        require(info.st_uid == os.getuid() and info.st_mode & 0o077 == 0 and info.st_size <= 65536,
+                'Qualification state must be owned bounded private data')
+        require(not (path / 'state.tmp').exists() and not (path / 'state.tmp').is_symlink(),
+                'Interrupted qualification state requires inspection')
+        state = json.loads(read(state_path))
+        validate({'operationId': state['operationId'], 'operationNonce': state['operationNonce'], 'config': state['config']})
+        token = sha(state['operationNonce'].encode())
+        require(token == path.name and state['identityPath'] == '/releases/.qualification/' + token + '/identity.json'
+                and state['containerName'] == 'situate-qualification-' + token[:32]
+                and re.fullmatch(r'[a-f0-9]{64}', state['identitySha256']), 'Qualification state identity differs')
+        require(state['status'] in ('prepare-pending', 'prepare-failed', 'prepared', 'stage-pending', 'stage-failed',
+                'staged', 'serve-pending', 'serve-failed', 'serving', 'cleanup-pending', 'cleanup-failed',
+                'cleaned', 'cleaned-retained'), 'Unknown qualification state')
+        if state['operationId'] == operation_id:
+            result = facts(state)
+            item = owned_container(state)
+            result['containerRunning'] = item is not None and item['State']['Running'] is True
+            operations.append(result)
+    return {'operations': operations}
+
+
 def perform(action, request, source=None):
     nonce, config = validate(request)
     require(os.getuid() == HOST_UID, 'Qualification host requires uid 1000')
     token = sha(nonce.encode())
     operation = ROOT / token
+    require(not ROOT.is_symlink(), 'Qualification resource root must not be a symlink')
     require(config['caddyContainer'] != 'situate-qualification-' + token[:32], 'Production and private listener names must differ')
+    if action == 'inspect-family' and not ROOT.exists():
+        return {'operations': []}
     if action == 'inspect' and not ROOT.exists():
         return {'status': 'absent', **discover(config)}
     if not ROOT.exists():
         require(action == 'prepare', 'Operation is not prepared')
         ancestors(ROOT.parent)
         ROOT.mkdir(mode=0o700)
+        sync_private_directory(ROOT.parent)
     ancestors(ROOT)
     require(ROOT.stat().st_uid == os.getuid() and ROOT.stat().st_mode & 0o077 == 0, 'Private resource root has unsafe ownership or permissions')
     lock_path = ROOT / 'lock'
@@ -199,12 +246,19 @@ def perform(action, request, source=None):
     try:
         regular(lock_path)
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if action == 'inspect-family':
+            return inspect_family(request['operationId'])
         if not operation.exists():
             if action == 'inspect':
                 return {'status': 'absent', **discover(config)}
             require(action == 'prepare', 'Operation is not prepared')
+            family = inspect_family(request['operationId'])
+            require(all(member['status'] in ('cleaned', 'cleaned-retained') and not member.get('uncertain', False)
+                        and not member['containerRunning'] for member in family['operations']),
+                    'An active or uncertain qualification family member requires inspection')
             discovered = discover(config)
             operation.mkdir(mode=0o700)
+            sync_private_directory(ROOT)
             identity = encoded({'schemaVersion': 1, 'operationId': request['operationId'], 'operationNonce': nonce, 'hostname': config['hostname'], **discovered})
             state = {'operationId': request['operationId'], 'operationNonce': nonce, 'config': config, 'status': 'prepared', **discovered,
                      'identityPath': '/releases/.qualification/' + token + '/identity.json',

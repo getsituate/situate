@@ -11,14 +11,50 @@ import { syncBuiltinESMExports } from "node:module";
 import { Readable } from "node:stream";
 import { test } from "node:test";
 import { qualificationFixture } from "../../tools/release-qualification-fixture.mjs";
+import { createQualificationProcess } from "./final-artifact-process.mjs";
 import {
   accessibilityScript,
+  checkAccessibilityAction,
   captureQualificationDeviceState,
   qualifyPredecessorUpdate,
   createFinalArtifactQualificationHost,
   validateFinalArtifactConfiguration,
   verifyQualificationFeed,
 } from "./final-artifact-qualification.mjs";
+
+test("accessibility assertions can remain pending but native deadlines stop polling", async () => {
+  let calls = 0;
+  const execute = createQualificationProcess({
+    execute: async () => {
+      if (++calls === 1) throw new Error("Synthetic window not present");
+      return "";
+    },
+  });
+  const action = { windows: 1 };
+  assert.equal(await checkAccessibilityAction(123, action, { execute }), false);
+  assert.equal(await checkAccessibilityAction(123, action, { execute }), true);
+  const timed = createQualificationProcess({
+    execute: async () => "",
+    deadline: () => AbortSignal.abort(),
+  });
+  await assert.rejects(
+    checkAccessibilityAction(123, action, { execute: timed }),
+    (error) => error.qualificationStatus === "timeout",
+  );
+  const failed = createQualificationProcess({
+    execute: async () => {
+      throw new Error("Synthetic command failure");
+    },
+  });
+  await assert.rejects(
+    checkAccessibilityAction(
+      123,
+      { focus: { role: "AXTextArea", name: "Message" } },
+      { execute: failed },
+    ),
+    (error) => error.qualificationStatus === "nonzero",
+  );
+});
 
 export function responseRequest(responses, calls = []) {
   return (url, options, callback) => {

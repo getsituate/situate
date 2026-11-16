@@ -180,6 +180,16 @@ export function createQualificationHost(
     }
   };
   const controller = {
+    inspectFamily: ({ operationId }) => {
+      assert(
+        typeof operationId === "string" && noncePattern.test(operationId),
+        "Invalid qualification operation identity",
+      );
+      return invoke("inspect-family", {
+        operationId,
+        operationNonce: operationId,
+      });
+    },
     inspect: (request) => invoke("inspect", request),
     prepare: (request) => invoke("prepare", request),
     serve: (request) => invoke("serve", request),

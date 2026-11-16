@@ -244,7 +244,7 @@ export function notesForCatalog(catalog) {
     .join("\n\n");
 }
 
-async function verifiedBuilds(
+export async function verifiedBuilds(
   root,
   plan,
   { hostSnapshot: history },
@@ -319,10 +319,56 @@ function publish(root, args, environment = process.env) {
   );
 }
 
+export async function assertLatestMain(
+  plan,
+  { environment = process.env, execute = execFileSync } = {},
+) {
+  assert.equal(
+    plan.repository,
+    "getsituate/situate",
+    "Unexpected release repository",
+  );
+  const ref = JSON.parse(
+    execute(
+      "gh",
+      [
+        "api",
+        "--hostname",
+        "github.com",
+        "--method",
+        "GET",
+        "repos/getsituate/situate/git/ref/heads/main",
+      ],
+      {
+        env: publicationEnvironment(environment),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        maxBuffer: 65536,
+      },
+    ),
+  );
+  assert(
+    ref.ref === "refs/heads/main" &&
+      ref.object?.type === "commit" &&
+      sha.test(ref.object.sha),
+    "Current main identity is unavailable",
+  );
+  if (ref.object.sha !== plan.source) {
+    const error = new Error("Superseded unclaimed release source");
+    error.code = "RELEASE_SOURCE_SUPERSEDED";
+    throw error;
+  }
+}
+
 export async function productionStages(
   root,
   plan,
-  { environment = process.env } = {},
+  {
+    environment = process.env,
+    assertCurrentSource = assertLatestMain,
+    checkpointStore,
+    publicationAdapter,
+  } = {},
 ) {
   const configRecord = readConfiguration(root, plan.configurationFile, {
     environment,
@@ -351,6 +397,34 @@ export async function productionStages(
   const outputRoot =
     config.artifactRoot ?? join(tmpdir(), "situate-release-artifacts");
   const directory = join(resolve(outputRoot), plan.operation);
+  const { createHostCheckpointStore } =
+    await import("../infrastructure/releases/checkpoint.mjs");
+  const checkpoints =
+    checkpointStore ?? createHostCheckpointStore(host, { environment });
+  const {
+    createCheckpoint,
+    checkpointGitHubWrites,
+    completeCheckpointedPublication,
+  } = await import("./release-checkpoint.mjs");
+  const checkpoint = async (operation, kind, builtDirectory) => {
+    const planBytes = readFileSync(
+      join(operationDirectory(root, plan.operation), "sealed-plan.json"),
+    );
+    const value = createCheckpoint({
+      kind,
+      operation,
+      planBytes,
+      configurationBytes: configRecord.bytes,
+      directory: builtDirectory,
+    });
+    const acknowledgement = await checkpoints.commit(value);
+    assert(
+      acknowledgement?.durable === true &&
+        acknowledgement.checkpointId === value.descriptor.checkpointId,
+      "Checkpoint has no durable acknowledgement",
+    );
+    return acknowledgement;
+  };
   const stageDirectory = `${directory}-publication`;
   const preparedInputs = async (operation, identity) => {
     const { assembleReleaseInputs, verifyReleaseInputs } =
@@ -426,6 +500,7 @@ export async function productionStages(
     };
   };
   const coordinator = async () => {
+    if (publicationAdapter?.coordinator) return publicationAdapter.coordinator;
     const { createHostReleaseCoordinator } =
       await import("../infrastructure/releases/allocator.mjs");
     assert.equal(
@@ -451,9 +526,57 @@ export async function productionStages(
       verifiedBuilds(root, plan, snapshot, environment),
   });
   const stages = {
+    persistIntent:
+      plan.workflow === "create"
+        ? async ({ operation }) => checkpoint(operation, "intent")
+        : undefined,
+    persistOutcome:
+      plan.workflow === "create"
+        ? async ({ operation, stage }) => {
+            if (stage !== "github") await checkpoint(operation, "intent");
+          }
+        : undefined,
+    restore: async ({ observation, checkpointId, destination }) => {
+      assert.equal(
+        plan.workflow,
+        "create",
+        "Only creation checkpoints may be restored",
+      );
+      assert.equal(
+        observation.remote.reservation?.status,
+        "reserved",
+        "Restore requires an immutable reserved tag",
+      );
+      assert.equal(
+        observation.remote.githubRelease,
+        null,
+        "Publication requires separate reconciliation",
+      );
+      const restored = await checkpoints.restore({
+        plan,
+        checkpointId,
+        inspectionDigest: observation.remote.checkpoints.inspectionDigest,
+        destination,
+      });
+      const { validateRestoredCheckpoint } =
+        await import("./release-checkpoint.mjs");
+      const retained = validateRestoredCheckpoint(
+        restored.descriptor,
+        destination,
+        plan,
+      );
+      assert.deepEqual(
+        retained.operation.reservation,
+        observation.remote.reservation.reservation,
+        "Restored reservation differs from inspected tag",
+      );
+      return { ...restored, manifestSha256: digest(retained.manifestBytes) };
+    },
     compatibility: async ({ operation, resume = false }) => {
       const claim = await coordinator();
       if (resume) await claim.inspect();
+      if (!resume && environment.PIPELINE_REQUIRE_LATEST_MAIN === "true")
+        await assertCurrentSource(plan, { environment });
       await claim.claim({ resume });
       const fresh = await readBaseline(root, {
         repository: plan.repository,
@@ -581,9 +704,11 @@ export async function productionStages(
         signal,
       });
       assert(typeof built === "string", "Builder returned no final artifacts");
+      const retained = await checkpoint(operation, "build", built);
       return {
         directory: built,
         manifestSha256: digest(readFileSync(join(built, "manifest.json"))),
+        checkpointId: retained.checkpointId,
       };
     },
     qualify: async ({ operation, signal }) => {
@@ -611,9 +736,13 @@ export async function productionStages(
         directory: built.directory,
         notes,
       };
-      const result = await createGitHubRelease(
+      const result = await (
+        publicationAdapter?.createRelease ?? createGitHubRelease
+      )(
         {
-          ...createEvidenceFromDirectory(request),
+          ...(publicationAdapter?.evidence ?? createEvidenceFromDirectory)(
+            request,
+          ),
           identity: request.identity,
           notes,
           journalPath: join(
@@ -622,18 +751,33 @@ export async function productionStages(
           ),
         },
         {
-          github: githubAdapter({ environment }),
+          github: checkpointGitHubWrites(
+            publicationAdapter?.github ?? githubAdapter({ environment }),
+            async () => {
+              const publicationJournal = json(
+                join(
+                  operationDirectory(root, plan.operation),
+                  "github-journal.json",
+                ),
+              );
+              await checkpoint({ ...operation, publicationJournal }, "intent");
+            },
+          ),
           authorize: async (expected) =>
             assert.deepEqual(expected.identity, request.identity),
           reconcile,
         },
       );
-      await (await coordinator()).complete();
-      return {
-        identity: result.identity,
-        releaseId: result.release?.id,
-        evidenceSha256: result.evidenceSha256,
-      };
+      return completeCheckpointedPublication({
+        operation,
+        result,
+        journalPath: join(
+          operationDirectory(root, plan.operation),
+          "github-journal.json",
+        ),
+        persist: (snapshot) => checkpoint(snapshot, "intent"),
+        coordinator: await coordinator(),
+      });
     },
     download: async () => {
       const { downloadGitHubRelease } = await import("./github-release.mjs");
@@ -749,6 +893,7 @@ export async function productionStages(
         );
       }
       return {
+        checkpoints: await checkpoints.inspect({ plan }),
         githubRelease,
         coordination: await (await coordinator()).inspect(),
         reservation,

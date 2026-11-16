@@ -9,10 +9,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import {
+  encodeActionsReceipt,
+  decodeActionsReceipt,
+} from "./actions-receipts.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sha = /^[a-f0-9]{40}$/;
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
@@ -314,6 +318,25 @@ export async function main(
       }),
     );
   }
+  if (command === "release-selection") {
+    if (
+      workflow !== "create" ||
+      env.GITHUB_REPOSITORY !== repository ||
+      env.GITHUB_REF !== "refs/heads/main" ||
+      env.GITHUB_EVENT_NAME !== "push" ||
+      env.GITHUB_REF_PROTECTED !== "true" ||
+      env.GITHUB_WORKFLOW_REF !==
+        `${repository}/.github/workflows/release-macos.yml@refs/heads/main`
+    )
+      throw new Error(
+        "Release selection requires the protected main workflow.",
+      );
+    if (!["true", "false"].includes(env.PIPELINE_RELEASE_ENABLED))
+      throw new Error("Select an explicit release automation state.");
+    const enabled = env.PIPELINE_RELEASE_ENABLED === "true";
+    output({ enabled: String(enabled) }, env);
+    return { enabled, reason: enabled ? "enabled" : "paused" };
+  }
   if (command === "release-gate") {
     const { requireProvisioned } = await import("./actions-release.mjs");
     requireProvisioned(env, workflow);
@@ -325,7 +348,7 @@ export async function main(
       if (digest(plan) !== env.PIPELINE_PLAN_DIGEST)
         throw new Error("Workflow plan digest mismatch.");
       const receipts = plan.lanes.map(({ id }) =>
-        JSON.parse(needs[id]?.outputs?.receipt || "null"),
+        decodeActionsReceipt(needs[id]?.outputs?.receipt || "null"),
       );
       aggregate(plan, receipts.filter(Boolean), needs);
       const { aggregateReceipts } = await import("./pipeline-state.mjs");
@@ -333,10 +356,12 @@ export async function main(
       return receipts;
     });
   }
-  if (command === "prepare-release") {
+  if (["prepare-release", "prepare-release-toolchain"].includes(command)) {
     const { prepareReleaseDependencies } =
       await import("./actions-release.mjs");
-    return prepareReleaseDependencies(root, execute);
+    return prepareReleaseDependencies(root, execute, {
+      toolchainOnly: command === "prepare-release-toolchain",
+    });
   }
   if (command === "create-stage" || command === "publish-run") {
     const { runReleaseStage } = await import("./actions-release.mjs");
@@ -699,9 +724,16 @@ export async function main(
       !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(env.RECOVERY_OPERATION ?? "")
     )
       throw new Error("Invalid recovery operation identity.");
+    if (
+      env.RECOVERY_WORKFLOW === "create" &&
+      ["inspect", "qualify", "continue"].includes(env.RECOVERY_ACTION)
+    ) {
+      const { runCheckpointRecovery } = await import("./actions-recovery.mjs");
+      return runCheckpointRecovery(root, env);
+    }
     if (env.RECOVERY_ACTION !== "inspect")
       throw new Error(
-        "Reconciliation is disabled pending gate provisioning; inspect the exact operation first.",
+        "Use the local pipeline CLI with the original operation journal for reconciliation.",
       );
     execute(
       process.execPath,
@@ -772,6 +804,118 @@ export async function main(
   );
   if (digest(plan) !== env.PIPELINE_PLAN_DIGEST)
     throw new Error("Workflow plan digest mismatch.");
+  if (command === "source-reuse") {
+    const { selectActionsSourceEvidence, createSourceVerificationApi } =
+      await import("./source-verification-actions.mjs");
+    const selection = await selectActionsSourceEvidence(root, {
+      plan,
+      lane: values.lane,
+      environment: env,
+      api: createSourceVerificationApi({ token: env.GH_TOKEN }),
+    });
+    if (selection.action !== "reuse") {
+      output({ reused: "false" }, env);
+      return { reused: false, reason: selection.reason };
+    }
+    const { createSourceVerificationReuseReceipt } =
+      await import("./source-verification-evidence.mjs");
+    const receipt = createSourceVerificationReuseReceipt(plan, selection);
+    if (Buffer.byteLength(JSON.stringify(receipt)) > 256 * 1024)
+      throw new Error("Reused lane receipt exceeds its job output limit");
+    let encoded;
+    try {
+      encoded = encodeActionsReceipt(receipt);
+    } catch {
+      output({ reused: "false" }, env);
+      return { reused: false, reason: "receipt-output-limit" };
+    }
+    output({ reused: "true", receipt: encoded }, env);
+    return { reused: true, testedSHA: selection.evidence.testedSHA };
+  }
+  if (command === "source-evidence") {
+    const { publishSourceVerificationEvidence, createSourceVerificationApi } =
+      await import("./source-verification-actions.mjs");
+    const needs = JSON.parse(env.PIPELINE_NEEDS);
+    const receipts = plan.lanes.map(({ id }) =>
+      decodeActionsReceipt(needs[id]?.outputs?.receipt || "null"),
+    );
+    aggregate(plan, receipts.filter(Boolean), needs);
+    for (const { id } of plan.lanes) {
+      const metadata = needs[id]?.outputs?.evidence;
+      if (metadata)
+        needs[id].outputs.evidence = JSON.stringify(
+          decodeActionsReceipt(metadata),
+        );
+    }
+    const path = await publishSourceVerificationEvidence(root, {
+      plan,
+      receipts,
+      needs,
+      environment: env,
+      api: createSourceVerificationApi({ token: env.GH_TOKEN }),
+    });
+    output(
+      {
+        created: String(Boolean(path)),
+        ...(path
+          ? {
+              path: relative(root, path),
+              sha256: createHash("sha256")
+                .update(readFileSync(path))
+                .digest("hex"),
+            }
+          : {}),
+      },
+      env,
+    );
+    return { created: Boolean(path) };
+  }
+  if (command === "source-evidence-check") {
+    if (
+      !/^[1-9][0-9]*$/.test(env.PIPELINE_SOURCE_ARTIFACT_ID ?? "") ||
+      !/^[a-f0-9]{64}$/.test(env.PIPELINE_SOURCE_ARTIFACT_SHA256 ?? "")
+    )
+      throw new Error("Select the exact uploaded source evidence artifact");
+    const { createSourceVerificationApi, readSourceVerificationArchiveMember } =
+      await import("./source-verification-actions.mjs");
+    const api = createSourceVerificationApi({ token: env.GH_TOKEN });
+    const bytes = await api(
+      `/actions/artifacts/${env.PIPELINE_SOURCE_ARTIFACT_ID}/zip`,
+      { raw: true, maxBytes: 1280 * 1024 },
+    );
+    const { digest: canonicalDigest } = await import("./pipeline-state.mjs");
+    const { evidence, jsonBytes } = readSourceVerificationArchiveMember(bytes);
+    if (
+      canonicalDigest(bytes) !== env.PIPELINE_SOURCE_ARTIFACT_SHA256 ||
+      !jsonBytes.equals(readFileSync(env.PIPELINE_SOURCE_EVIDENCE_FILE))
+    )
+      throw new Error(
+        "Uploaded source evidence differs from its verified bytes",
+      );
+    const { verifySourceVerificationAttestation } =
+      await import("./source-verification-attestation.mjs");
+    const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
+    const proof = verifySourceVerificationAttestation(jsonBytes, {
+      runId: env.GITHUB_RUN_ID,
+      runAttempt: env.GITHUB_RUN_ATTEMPT,
+      pullNumber: event.pull_request?.number,
+      environment: env,
+    });
+    if (
+      !proof ||
+      proof.checkedSHA !== plan.source ||
+      canonicalDigest(
+        execute("git", [
+          "show",
+          `${proof.workflowSHA}:.github/workflows/verify.yml`,
+        ]),
+      ) !== evidence.origin.workflowDefinitionDigest
+    )
+      throw new Error(
+        "Uploaded source evidence has no verified execution attestation",
+      );
+    return { status: "passed" };
+  }
   if (command === "setup") {
     const lane = plan.lanes.find(({ id }) => id === values.lane);
     if (!lane) throw new Error("Lane was not selected.");
@@ -813,13 +957,42 @@ export async function main(
         throw new Error("Runner receipt does not match selected lane.");
       if (Buffer.byteLength(JSON.stringify(result)) > 32 * 1024)
         throw new Error("Lane receipt exceeds job output limit.");
-      output({ receipt: result }, env);
+      let evidence;
+      if (
+        ["frontend", "rust", "browser", "macos-code", "macos-native"].includes(
+          values.lane,
+        )
+      ) {
+        const { captureLaneEvidence } =
+          await import("./source-verification-actions.mjs");
+        evidence = captureLaneEvidence(root, {
+          plan,
+          lane: values.lane,
+          environment: env,
+          execute,
+        });
+      }
+      let metadata;
+      if (evidence) {
+        try {
+          metadata = encodeActionsReceipt(evidence);
+        } catch {
+          /* Metadata is optional; execution receipts remain required. */
+        }
+      }
+      output(
+        {
+          receipt: encodeActionsReceipt(result),
+          ...(metadata ? { evidence: metadata } : {}),
+        },
+        env,
+      );
       return result;
     }
     if (command === "aggregate") {
       const needs = JSON.parse(env.PIPELINE_NEEDS);
       const receipts = plan.lanes.map(({ id }) =>
-        JSON.parse(needs[id]?.outputs?.receipt || "null"),
+        decodeActionsReceipt(needs[id]?.outputs?.receipt || "null"),
       );
       aggregate(plan, receipts.filter(Boolean), needs);
       const { aggregateReceipts } = await import("./pipeline-state.mjs");

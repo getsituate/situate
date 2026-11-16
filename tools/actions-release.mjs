@@ -3,6 +3,10 @@ import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { withSigningCertificate } from "../client/scripts/apple-credentials.mjs";
+import {
+  trustedReleaseCacheHost,
+  releaseCachePaths,
+} from "./release-build-cache.mjs";
 
 const repository = "getsituate/situate";
 const positive = /^[1-9][0-9]*$/;
@@ -197,11 +201,28 @@ export function stageEnvironment(env, workflow, stage) {
       "TAURI_SIGNING_PRIVATE_KEY",
       "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
     );
-  return Object.fromEntries(
+  const cacheEnabled =
+    workflow === "create" &&
+    stage === "build" &&
+    env.SITUATE_RELEASE_BUILD_CACHE === "1" &&
+    trustedReleaseCacheHost(env);
+  if (workflow === "create" && stage === "inputs")
+    names.push("PIPELINE_REQUIRE_LATEST_MAIN");
+  if (cacheEnabled)
+    names.push(
+      "SITUATE_RELEASE_BUILD_CACHE",
+      "SITUATE_RELEASE_CACHE_SOCKET",
+      "GITHUB_REF_PROTECTED",
+      "GITHUB_EVENT_NAME",
+      "GITHUB_WORKFLOW_REF",
+    );
+  const environment = Object.fromEntries(
     names
       .filter((name) => Object.hasOwn(env, name))
       .map((name) => [name, env[name]]),
   );
+  if (cacheEnabled) environment.CARGO_HOME = releaseCachePaths(env).cargoHome;
+  return environment;
 }
 export async function runReleaseStage(env, workflow, stage, execute) {
   requireProvisioned(env, workflow);
@@ -256,8 +277,12 @@ export async function runReleaseStage(env, workflow, stage, execute) {
     );
   return launch(environment);
 }
-export async function prepareReleaseDependencies(directory, execute) {
-  for (const target of [undefined, "client"])
+export async function prepareReleaseDependencies(
+  directory,
+  execute,
+  { toolchainOnly = false } = {},
+) {
+  for (const target of toolchainOnly ? [] : [undefined, "client"])
     execute(
       process.execPath,
       ["tools/npm-ci.mjs", ...(target ? [target] : [])],
@@ -295,19 +320,23 @@ export async function prepareReleaseDependencies(directory, execute) {
         "x86_64-apple-darwin",
       ],
     ],
-    [
-      "rustup",
-      [
-        "run",
-        channel,
-        "cargo",
-        "fetch",
-        "--locked",
-        "--manifest-path",
-        "client/Cargo.toml",
-      ],
-    ],
-    ["xcodebuild", ["-version"]],
+    ...(!toolchainOnly
+      ? [
+          [
+            "rustup",
+            [
+              "run",
+              channel,
+              "cargo",
+              "fetch",
+              "--locked",
+              "--manifest-path",
+              "client/Cargo.toml",
+            ],
+          ],
+          ["xcodebuild", ["-version"]],
+        ]
+      : []),
   ])
     execute(
       process.execPath,

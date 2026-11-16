@@ -25,7 +25,7 @@ function job(workflow, id) {
   return body;
 }
 
-test("only replacement workflows remain and pinned checkout is the sole action", () => {
+test("workflows use the shared CLI and pinned checkout, cache and evidence actions", () => {
   assert.deepEqual(
     readdirSync(new URL("../.github/workflows/", import.meta.url)).sort(),
     names.map((name) => `${name}.yml`).sort(),
@@ -40,12 +40,27 @@ test("only replacement workflows remain and pinned checkout is the sole action",
   );
   for (const name of names) {
     const workflow = read(name);
+    const allowed = new Set([
+      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      ...(name === "release-macos"
+        ? [
+            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+            "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          ]
+        : []),
+      ...(name === "verify"
+        ? [
+            "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+            "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
+          ]
+        : []),
+    ]);
     for (const match of workflow.matchAll(/uses: (\S+)/g))
-      assert.match(match[1], /^actions\/checkout@[a-f0-9]{40}$/);
-    assert.doesNotMatch(
-      workflow,
-      /run: \||run: >|continue-on-error|pull_request_target/,
-    );
+      assert(allowed.has(match[1]), match[1]);
+    for (const step of workflow.split(/\n {6}- /).slice(1))
+      if (step.includes("continue-on-error: true"))
+        assert.match(step, /release-build-cache\.mjs|actions\/cache\//);
+    assert.doesNotMatch(workflow, /run: \||run: >|pull_request_target/);
     for (const match of workflow.matchAll(/run: ([^\n]+)/g))
       assert.match(
         match[1],
@@ -114,12 +129,41 @@ test("fixed independent families depend on planning and aggregate every selected
       }
     }
     const aggregate = job(workflow, "required");
-    assert.match(aggregate, /if: always\(\)/);
+    assert.match(
+      aggregate,
+      name === "verify"
+        ? /if: always\(\)/
+        : /needs\.plan\.outputs\.enabled == 'true'/,
+    );
     for (const id of Object.keys(laneHosts))
       assert.ok(aggregate.split("    if:")[0].includes(id));
-    assert.match(aggregate, /PIPELINE_NEEDS:.*toJSON\(needs\)/);
+    assert.match(aggregate, /PIPELINE_NEEDS:.*format\(/);
+    assert.match(aggregate, /toJSON\(needs\.plan\.result\)/);
+    assert.doesNotMatch(aggregate, /toJSON\(needs\)/);
     assert.match(aggregate, /pipeline-container\.py actions aggregate/);
   }
+});
+
+test("source attestation binds the exact digest without interpreting an external relative path as a glob", () => {
+  const required = job(read("verify"), "required");
+  assert.match(
+    required,
+    /subject-digest: sha256:\$\{\{ steps\.evidence\.outputs\.sha256 \}\}/,
+  );
+  assert.match(required, /subject-name: evidence\.json/);
+  assert.doesNotMatch(required, /subject-path:/);
+  assert.match(
+    required,
+    /path: \$\{\{ runner\.temp \}\}\/source-verification-\$\{\{ github\.run_attempt \}\}\/evidence\.json/,
+  );
+  assert.ok(
+    required.indexOf("source-evidence --workflow") <
+      required.indexOf("actions/attest-build-provenance"),
+  );
+  assert.ok(
+    required.indexOf("actions/upload-artifact") <
+      required.indexOf("source-evidence-check --workflow"),
+  );
 });
 
 test("PR check covers draft, ready, fork and merge-queue events without path filtering or secrets", () => {
@@ -137,8 +181,27 @@ test("creator can follow a successful aggregate when unselected lanes were skipp
   const creator = job(read("release-macos"), "create");
   assert.match(
     creator,
-    /if: \$\{\{ !cancelled\(\) && needs\.required\.result == 'success' && needs\.plan\.outputs\.app_impact == 'true' \}\}/,
+    /if: \$\{\{ !cancelled\(\) && needs\.plan\.outputs\.enabled == 'true' && needs\.required\.result == 'success' && needs\.plan\.outputs\.app_impact == 'true' \}\}/,
   );
+});
+
+test("paused release skips planning and source work while only effect jobs share serialization", () => {
+  const workflow = read("release-macos"),
+    publisher = read("publish-macos");
+  assert.doesNotMatch(workflow.split("jobs:")[0], /concurrency:/);
+  const plan = job(workflow, "plan");
+  assert.match(plan, /environment: macos-release/);
+  assert.match(plan, /release-selection --workflow create/);
+  assert.match(plan, /PIPELINE_RELEASE_ENABLED:.*vars\.MACOS_RELEASE_ENABLED/);
+  assert.match(plan, /if: steps\.selection\.outputs\.enabled == 'true'/);
+  for (const id of Object.keys(laneHosts)) {
+    assert.match(job(workflow, id), /needs\.plan\.outputs\.enabled == 'true'/);
+    assert.doesNotMatch(job(workflow, id), /concurrency:/);
+  }
+  for (const effect of [job(workflow, "create"), job(publisher, "publish")]) {
+    assert.match(effect, /group: situate-release-effects/);
+    assert.match(effect, /cancel-in-progress: false/);
+  }
 });
 
 test("creator and publisher have gated execution paths with signing scoped to build only", () => {
@@ -153,9 +216,7 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   for (const stage of ["inputs", "build", "qualify", "github"])
     assert.ok(creator.includes(`create-stage --stage ${stage}`));
   const build = creator
-    .split(
-      "      - run: node tools/actions-adapter.mjs create-stage --stage build",
-    )[1]
+    .split("run: node tools/actions-adapter.mjs create-stage --stage build")[1]
     .split("      - run:")[0];
   assert.match(build, /APPLE_DEVELOPER_ID_P12_BASE64/);
   assert.doesNotMatch(

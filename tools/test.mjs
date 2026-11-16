@@ -221,7 +221,7 @@ export function suiteInventory(files, host = process.platform) {
   if (migrationTests.length)
     nodeTests("delivery-migrations", "runner", "unit", migrationTests);
   const deliveryTests = matching(
-    /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery|qualification-(?:host|route-guardian)))\.test\.mjs$/,
+    /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime(?:-authorization|-recovery)?|release-checkpoint(?:-[a-z-]+)?|qualification-runtime-envelope|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery|checkpoint|qualification-(?:host|route-guardian)))\.test\.mjs$/,
   );
   if (deliveryTests.length)
     nodeTests("delivery-unit", "runner", "unit", deliveryTests);

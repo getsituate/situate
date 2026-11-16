@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { qualificationProgressWriter } from "./qualification-progress.mjs";
 import {
   automaticQualification,
   downloadPredecessorAsset,
@@ -76,6 +77,7 @@ function fixture(t) {
   const calls = [];
   const facts = {
     operationId: "actions-42-1",
+    operationNonce: "actions-42-1",
     status: "prepared",
     identityPath: "/releases/.qualification/synthetic/identity.json",
     identitySha256: "a".repeat(64),
@@ -421,6 +423,99 @@ test("qualification cancellation permits cleanup beyond the ordinary process gra
     abort.abort(reason);
     await rejected;
   }
+});
+
+test("live progress survives worker capture and cancellation without private output", async (t) => {
+  const root = temporary(t);
+  const configuration = join(root, "configuration.json");
+  writeFileSync(configuration, "{}", { mode: 0o600 });
+  const abort = new AbortController();
+  const reason = new Error("private original cancellation");
+  const lines = [];
+  let observed;
+  const live = new Promise((resolve) => {
+    observed = resolve;
+  });
+  const startup = setTimeout(() => {
+    abort.abort(reason);
+    observed();
+  }, 5000);
+  t.after(() => clearTimeout(startup));
+  let progressPath;
+  const pending = runPreparedQualification(root, {
+    plan: {},
+    record: { file: configuration, sha256: "a".repeat(64) },
+    configuration: {},
+    directory: root,
+    signal: abort.signal,
+    progressOutput: {
+      write(line) {
+        lines.push(line);
+        if (line.includes('"command":"accessibility"')) observed();
+      },
+    },
+    executeWorker: async (_command, args, { signal, capture }) => {
+      assert.equal(capture, true);
+      progressPath = args[args.indexOf("--progress-file") + 1];
+      const emit = qualificationProgressWriter(progressPath);
+      emit("desktop", "queued");
+      emit("desktop", "acquired");
+      emit("journeys", "started");
+      emit("journeys", "started", "accessibility");
+      await new Promise((resolve) => {
+        signal.addEventListener("abort", resolve, { once: true });
+      });
+      emit("journeys", "cancelled", "accessibility");
+      emit("cleanup", "started");
+      emit("cleanup", "completed");
+      emit("desktop", "released");
+      throw reason;
+    },
+  });
+  const rejected = assert.rejects(pending, (error) => {
+    assert.equal(error, reason);
+    assert.equal(error.uncertain, true);
+    assert.equal(error.qualificationProgress.failure.command, "accessibility");
+    assert.equal(error.qualificationProgress.failure.status, "cancelled");
+    assert.equal(error.qualificationProgress.phase.phase, "cleanup");
+    return true;
+  });
+  await live;
+  assert.match(lines.join(""), /accessibility/);
+  assert.equal(abort.signal.aborted, false);
+  abort.abort(reason);
+  await rejected;
+  assert.doesNotMatch(
+    lines.join(""),
+    /private original|configuration.json|configuration-sha256/,
+  );
+  assert.equal(existsSync(progressPath), false);
+  assert.equal(existsSync(join(root, "release-qualification.json")), false);
+});
+
+test("invalid worker progress blocks even a syntactically valid final response", async (t) => {
+  const root = temporary(t);
+  const file = join(root, "configuration.json");
+  writeFileSync(file, "{}", { mode: 0o600 });
+  const lines = [];
+  await assert.rejects(
+    runPreparedQualification(root, {
+      plan: {},
+      record: { file, sha256: "a".repeat(64) },
+      configuration: {},
+      directory: root,
+      progressOutput: { write: (line) => lines.push(line) },
+      executeWorker: async (_command, args) => {
+        writeFileSync(
+          args[args.indexOf("--progress-file") + 1],
+          '{"secret":"private native stderr"}\n',
+        );
+        return '{"status":"passed"}';
+      },
+    }),
+    /progress protocol/,
+  );
+  assert.doesNotMatch(lines.join(""), /private native/);
 });
 
 test("worker environment retains only desktop inputs", () => {

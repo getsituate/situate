@@ -7,11 +7,17 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
+  rmSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { open, rename, rm } from "node:fs/promises";
-import { userInfo } from "node:os";
+import { userInfo, tmpdir } from "node:os";
+import {
+  createQualificationProgressFile,
+  observeQualificationProgress,
+} from "./qualification-progress.mjs";
 import { basename, join } from "node:path";
 import { withReleaseSSH } from "./release-environment.mjs";
 import { ordinaryEnvironment } from "./pipeline-environment.mjs";
@@ -22,6 +28,7 @@ import {
 } from "../infrastructure/releases/transport.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+export const qualificationRuntimeAuthorizationVersion = 1;
 const endpoint = "https://getsituate.com/releases/current/update.json";
 const hashPattern = /^[a-f0-9]{64}$/;
 const versionPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
@@ -406,9 +413,55 @@ export async function runPreparedQualification(
     executeWorker,
     createHost,
     withRoute,
+    progressOutput = process.stderr,
+    qualificationRuntime,
+    runtimeAuthorization,
+    inspection,
+    recoveryAuthorization,
   },
 ) {
-  const runtime = configuration.qualificationResources;
+  let activeConfiguration = configuration;
+  if (
+    qualificationRuntime ||
+    runtimeAuthorization ||
+    inspection ||
+    recoveryAuthorization
+  ) {
+    assert(
+      qualificationRuntime &&
+        runtimeAuthorization &&
+        inspection &&
+        recoveryAuthorization,
+      "Qualification recovery requires complete runtime authorization",
+    );
+    const { validateQualificationRuntimeAuthorization } =
+      await import("./release-runtime-authorization.mjs");
+    const { isDeepStrictEqual } = await import("node:util");
+    let validated;
+    try {
+      validated = validateQualificationRuntimeAuthorization(
+        runtimeAuthorization,
+        {
+          plan,
+          configuration,
+          configurationBytes: record.bytes,
+          manifestBytes: readFileSync(join(directory, "manifest.json")),
+          inspection,
+          recoveryAuthorization,
+        },
+      );
+    } catch (cause) {
+      throw new Error("Qualification recovery runtime authorization failed", {
+        cause,
+      });
+    }
+    assert(
+      isDeepStrictEqual(validated, qualificationRuntime),
+      "Qualification runtime differs from its authorization",
+    );
+    activeConfiguration = { ...configuration, ...validated };
+  }
+  const runtime = activeConfiguration.qualificationResources;
   let file = record.file;
   if (!file) {
     file = join(
@@ -430,10 +483,45 @@ export async function runPreparedQualification(
   const execute =
     executeWorker ?? (await import("../client/scripts/ios-xcode.mjs")).run;
   const worker = async (_route, routeSignal) => {
-    const signals = [signal, routeSignal, AbortSignal.timeout(1800_000)].filter(
-      Boolean,
+    const timeout = AbortSignal.timeout(1800_000);
+    const signals = [signal, routeSignal, timeout].filter(Boolean);
+    const workerSignal = AbortSignal.any(signals);
+    const progressDirectory = mkdtempSync(
+      join(tmpdir(), "situate-qualification-progress-"),
     );
+    const progressFile = join(progressDirectory, "progress.jsonl");
+    const runtimeArgs = [];
+    let progress;
+    try {
+      if (runtimeAuthorization) {
+        const { writeQualificationRuntimeEnvelope } =
+          await import("./qualification-runtime-envelope.mjs");
+        const authorizationFile = join(
+          progressDirectory,
+          "runtime-authorization.json",
+        );
+        const authorizationSha256 = writeQualificationRuntimeEnvelope(
+          authorizationFile,
+          { plan, runtimeAuthorization, inspection, recoveryAuthorization },
+        );
+        runtimeArgs.push(
+          "--runtime-authorization",
+          authorizationFile,
+          "--runtime-authorization-sha256",
+          authorizationSha256,
+        );
+      }
+      createQualificationProgressFile(progressFile);
+      progress = observeQualificationProgress(progressFile, {
+        output: progressOutput,
+      });
+    } catch (cause) {
+      rmSync(progressDirectory, { recursive: true, force: true });
+      throw cause;
+    }
     let output;
+    let failure;
+    let progressFailure;
     try {
       output = await execute(
         process.execPath,
@@ -445,24 +533,57 @@ export async function runPreparedQualification(
           file,
           "--configuration-sha256",
           record.sha256,
+          "--progress-file",
+          progressFile,
+          ...runtimeArgs,
         ],
         {
           cwd: root,
           env: qualificationEnvironment(environment),
-          signal: AbortSignal.any(signals),
+          signal: workerSignal,
           capture: true,
           terminationGraceMs: 75_000,
         },
       );
     } catch (cause) {
-      const error =
+      const status = timeout.aborted
+        ? "timeout"
+        : workerSignal.aborted
+          ? "cancelled"
+          : "failed";
+      const summary = progress.summary(status);
+      failure =
         cause instanceof Error
           ? cause
           : new Error("Qualification worker did not finish", { cause });
+      failure.qualificationProgress = summary;
+      failure.uncertain = true;
+    } finally {
+      try {
+        progress.close();
+      } catch (cause) {
+        progressFailure = new Error("Qualification progress protocol failed", {
+          cause,
+        });
+        progressFailure.uncertain = true;
+      } finally {
+        rmSync(progressDirectory, { recursive: true, force: true });
+      }
+    }
+    if (failure && progressFailure) {
+      const error = new AggregateError(
+        [failure, progressFailure],
+        "Qualification worker and progress protocol failed",
+        { cause: failure },
+      );
       error.uncertain = true;
+      error.qualificationProgress = failure.qualificationProgress;
       throw error;
     }
+    if (failure) throw failure;
+    if (progressFailure) throw progressFailure;
     try {
+      workerSignal.throwIfAborted();
       return JSON.parse(output);
     } catch {
       const error = new Error(
@@ -474,7 +595,8 @@ export async function runPreparedQualification(
   };
   if (!runtime) return worker();
   assert(
-    runtime.operation === plan.operation &&
+    runtime.operation ===
+      (runtimeAuthorization?.routeNonce ?? plan.operation) &&
       runtime.destination === plan.destination,
     "Private qualification resources belong to another authorized operation",
   );
@@ -493,7 +615,7 @@ export async function runPreparedQualification(
     { environment },
   );
   const operation = {
-    operationNonce: plan.operation,
+    operationNonce: runtime.operation,
     operationId: plan.operation,
   };
   let knownOwner = false;
@@ -504,6 +626,7 @@ export async function runPreparedQualification(
     const state = await host.inspect(operation);
     assert(
       state.operationId === plan.operation &&
+        state.operationNonce === runtime.operation &&
         state.status === "prepared" &&
         !state.uncertain,
       "Private listener requires its exact fresh prepared operation",
@@ -531,7 +654,9 @@ export async function runPreparedQualification(
     const { metadata } = await import("../infrastructure/releases/publish.mjs");
     const feed = join(
       operationDirectory(root, plan.operation),
-      "qualification-feed.json",
+      runtimeAuthorization
+        ? `qualification-feed-${runtime.operation}.json`
+        : "qualification-feed.json",
     );
     atomicJson(feed, metadata(manifest, artifact)["update.json"]);
     const files = [
@@ -570,7 +695,8 @@ export async function runPreparedQualification(
         host,
         ...operation,
         hostname: new URL(endpoint).hostname,
-        privateAddress: configuration.qualification.routing.privateAddress,
+        privateAddress:
+          activeConfiguration.qualification.routing.privateAddress,
         localPort: 443,
         trustedEphemeralRunner: true,
       },

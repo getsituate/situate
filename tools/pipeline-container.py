@@ -20,7 +20,7 @@ IMAGE = re.compile(r"ghcr\.io/getsituate/situate-ci-linux@sha256:[a-f0-9]{64}\Z"
 CONTEXT = (
     "GITHUB_ACTIONS", "GITHUB_EVENT_NAME", "GITHUB_REPOSITORY", "GITHUB_REPOSITORY_ID",
     "GITHUB_REF", "GITHUB_SHA", "GITHUB_WORKFLOW_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT",
-    "GITHUB_HEAD_REF", "GITHUB_BASE_REF", "PIPELINE_PLAN", "PIPELINE_PLAN_DIGEST", "PIPELINE_NEEDS",
+    "GITHUB_HEAD_REF", "GITHUB_BASE_REF", "GITHUB_JOB", "RUNNER_ENVIRONMENT", "GITHUB_REF_PROTECTED", "GITHUB_WORKFLOW_REF", "ImageOS", "ImageVersion", "PIPELINE_PLAN", "PIPELINE_PLAN_DIGEST", "PIPELINE_NEEDS",
     "MONITORING_WEEKLY", "DIAGNOSTIC_SELECTION", "DIAGNOSTIC_TARGET",
 )
 
@@ -196,7 +196,7 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
     if admission is not None:
         env['SITUATE_HOST_ADMISSION'] = '/situate-admission'
     env.update({key: environment[key] for key in (*CONTEXT, "CARGO_NET_OFFLINE") if key in environment})
-    if command[:2] == ["actions", "plan"] and environment.get("GH_TOKEN"):
+    if command[:2] in (["actions", "plan"], ["actions", "source-reuse"]) and environment.get("GH_TOKEN"):
         args += ["--env", "GH_TOKEN"]
     for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"):
         args += ["--env", f"{key}="]
@@ -290,7 +290,7 @@ def docker_client(lease, token, arguments, environment):
 
 def host_environment(environment, command):
     names = {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "TMPDIR", "TMP", "TEMP", "VOLTA_HOME", "CI", "SITUATE_COORDINATED_WORKTREE", "SITUATE_DOCKER_LEASE", "SITUATE_CONTAINER_CACHE", "SITUATE_CONTAINER_CACHE_DIR", "XDG_CACHE_HOME", "BUILD_ID", "TF_BUILD", "CARGO_HOME", "CARGO_NET_OFFLINE", "GITHUB_EVENT_PATH", "GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY", *CONTEXT, *container_owner().DOCKER_ENVIRONMENT}
-    if command[:2] == ["actions", "plan"] or command[:1] == ["_docker-client"]:
+    if command[:2] in (["actions", "plan"], ["actions", "source-reuse"]) or command[:1] == ["_docker-client"]:
         names.add("GH_TOKEN")
     return {key: value for key, value in environment.items() if key in names}
 

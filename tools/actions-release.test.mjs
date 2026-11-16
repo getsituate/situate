@@ -223,6 +223,71 @@ test("build stages retain hosted runner context without forwarding unrelated cre
   });
 });
 
+test("compiler cache opt-in reaches only trusted hosted creation builds", () => {
+  const env = {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    RUNNER_OS: "macOS",
+    RUNNER_ARCH: "ARM64",
+    HOME: "/Users/runner",
+    GITHUB_REPOSITORY: "getsituate/situate",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REF_PROTECTED: "true",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_WORKFLOW_REF:
+      "getsituate/situate/.github/workflows/release-macos.yml@refs/heads/main",
+    GITHUB_SHA: "a".repeat(40),
+    SITUATE_RELEASE_BUILD_CACHE: "1",
+    SITUATE_RELEASE_CACHE_SOCKET: "/runner-temp/situate-rc-21-1/s",
+    RUNNER_TEMP: "/runner-temp",
+    GITHUB_RUN_ID: "21",
+    GITHUB_RUN_ATTEMPT: "1",
+    CARGO_HOME: "/foreign/cargo",
+    RUSTC_WRAPPER: "/foreign/wrapper",
+    SCCACHE_DIR: "/foreign/cache",
+    SCCACHE_BUCKET: "private",
+    SCCACHE_S3_KEY_PREFIX: "private",
+    AWS_SECRET_ACCESS_KEY: "synthetic",
+  };
+  const build = stageEnvironment(env, "create", "build");
+  assert.equal(build.SITUATE_RELEASE_BUILD_CACHE, "1");
+  assert.equal(
+    build.SITUATE_RELEASE_CACHE_SOCKET,
+    env.SITUATE_RELEASE_CACHE_SOCKET,
+  );
+  assert.equal(build.GITHUB_WORKFLOW_REF, env.GITHUB_WORKFLOW_REF);
+  assert.equal(
+    build.CARGO_HOME,
+    "/Users/runner/Library/Caches/situate/release-build-v1/cargo",
+  );
+  for (const name of [
+    "RUSTC_WRAPPER",
+    "SCCACHE_DIR",
+    "SCCACHE_BUCKET",
+    "SCCACHE_S3_KEY_PREFIX",
+    "AWS_SECRET_ACCESS_KEY",
+  ])
+    assert.equal(build[name], undefined);
+  for (const stage of ["inputs", "qualify", "github", undefined]) {
+    const child = stageEnvironment(env, "create", stage);
+    assert.equal(child.SITUATE_RELEASE_BUILD_CACHE, undefined);
+    assert.equal(child.SITUATE_RELEASE_CACHE_SOCKET, undefined);
+  }
+  assert.equal(
+    stageEnvironment(env, "publish").SITUATE_RELEASE_BUILD_CACHE,
+    undefined,
+  );
+  assert.equal(
+    stageEnvironment(
+      { ...env, RUNNER_ENVIRONMENT: "self-hosted" },
+      "create",
+      "build",
+    ).SITUATE_RELEASE_BUILD_CACHE,
+    undefined,
+  );
+});
+
 test("hosted stages forward shared SSH inputs only to operations that need the host", async (t) => {
   for (const workflow of ["create", "publish"]) {
     const env = {

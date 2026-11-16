@@ -21,7 +21,7 @@ import {
   bundleDigest,
   verifyDirectPayloads,
 } from "./direct-release-verification.mjs";
-import { run } from "./ios-xcode.mjs";
+import { createQualificationProcess } from "./final-artifact-process.mjs";
 import { requireNativeDesktop } from "./native-desktop-session.mjs";
 import {
   createQualificationRouting,
@@ -408,9 +408,35 @@ export function accessibilityScript(pid, action) {
   return `${prefix}${selectWindow}set matches to {}\nrepeat with elementRef in ${contents}\ntry\nif role of elementRef is ${quote(target.role)} and (name of elementRef is ${quote(target.name)} or description of elementRef is ${quote(target.name)}) then set end of matches to elementRef\nend try\nend repeat\nif count of matches is not 1 then error "Accessibility target must be unique"\n${target.role === "AXButton" ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
 }
 
+export async function checkAccessibilityAction(
+  pid,
+  action,
+  { execute, options },
+) {
+  try {
+    await execute(
+      "osascript",
+      ["-e", accessibilityScript(pid, action)],
+      options,
+    );
+    return true;
+  } catch (error) {
+    if (
+      ["timeout", "cancelled"].includes(error.qualificationStatus) ||
+      (!action.assert && action.windows === undefined)
+    )
+      throw error;
+    return false;
+  }
+}
+
 export function createFinalArtifactQualificationHost(
   configuration,
-  { execute = run, environment = process.env, signal } = {},
+  {
+    execute = createQualificationProcess(),
+    environment = process.env,
+    signal,
+  } = {},
 ) {
   validateFinalArtifactConfiguration(configuration);
   const safeEnv = Object.fromEntries(
@@ -434,6 +460,7 @@ export function createFinalArtifactQualificationHost(
   let productJourneys;
   let archiveCandidateDeviceState;
   let deviceStateIsolationPending = false;
+  let mountUncertain = false;
   const defaultProfile = !configuration.journeys;
   async function processPath(id) {
     return (
@@ -530,6 +557,7 @@ export function createFinalArtifactQualificationHost(
         hash(join(directory, artifact.path)) === artifact.sha256,
         "DMG changed before installation",
       );
+      mountUncertain = true;
       await execute(
         "hdiutil",
         [
@@ -543,17 +571,21 @@ export function createFinalArtifactQualificationHost(
         options,
       );
       mounted = true;
+      mountUncertain = false;
       assert(
         bundleDigest(join(image, "Situate.app")) === artifact.bundleSha256,
         "Mounted installation bundle changed",
       );
       await execute("ditto", [join(image, "Situate.app"), app], options);
     } finally {
-      if (mounted)
+      if (mounted) {
+        mountUncertain = true;
         await execute("hdiutil", ["detach", image], {
           ...options,
           signal: undefined,
         });
+        mountUncertain = false;
+      }
     }
     assert(
       bundleDigest(app) === artifact.bundleSha256,
@@ -582,19 +614,10 @@ export function createFinalArtifactQualificationHost(
           .replaceAll("{{fixture.baseUrl}}", provider.baseUrl)
           .replaceAll("{{fixture.token}}", provider.token)
           .replaceAll("{{fixture.model}}", PINNED_AGENT_MODEL);
-      await waitFor(async () => {
-        try {
-          await execute(
-            "osascript",
-            ["-e", accessibilityScript(pid, action)],
-            options,
-          );
-          return true;
-        } catch (error) {
-          if (!action.assert && action.windows === undefined) throw error;
-          return false;
-        }
-      }, "accessibility assertion");
+      await waitFor(
+        () => checkAccessibilityAction(pid, action, { execute, options }),
+        "accessibility assertion",
+      );
     }
   }
   function retainedFiles() {
@@ -817,6 +840,10 @@ export function createFinalArtifactQualificationHost(
       assert(
         !deviceStateIsolationPending,
         "Device-state isolation did not finish; retain the disposable account and archive for inspection",
+      );
+      assert(
+        !mountUncertain,
+        "Mount outcome is unknown; retain the isolated account and package for inspection",
       );
       if (owned) rmSync(owned, { recursive: true });
     },

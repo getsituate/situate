@@ -15,12 +15,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: publish-macos
-  cancel-in-progress: false
-
 jobs:
   publish:
+    concurrency:
+      group: situate-release-effects
+      cancel-in-progress: false
     if: github.repository == 'getsituate/situate' && (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' || github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == 'getsituate/situate' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push')
     runs-on: macos-latest
     environment: macos-publication
