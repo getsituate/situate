@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "qualification-route-diagnostics",
+  "behaviorDigest": "788af22f3ceb04100fbff3adecdd4eb971675d3ee649be07395551b5b9e4ef78",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Adds isolated hosted routing diagnostics and bounded failure details for macOS package qualification.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "d69c388b30811742a9d6a44c7ac9166c9bdfb3fb322e6580cefdf420e89ae18e",
+      "translationHash": "eb44c0bbe7be1dea3d1fdb4fc16986c67a6b368869601a279790e5808374d6f6"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "d69c388b30811742a9d6a44c7ac9166c9bdfb3fb322e6580cefdf420e89ae18e"
+  }
+}

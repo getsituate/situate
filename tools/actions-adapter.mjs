@@ -410,6 +410,24 @@ export async function main(
     )
       throw new Error("Diagnostics require an explicit trusted main dispatch.");
     const selection = values.lane ?? env.DIAGNOSTIC_SELECTION;
+    if (selection === "qualification-route") {
+      if (
+        env.DIAGNOSTIC_TARGET !== "native" ||
+        env.CI !== "true" ||
+        env.GITHUB_ACTIONS !== "true" ||
+        env.RUNNER_ENVIRONMENT !== "github-hosted"
+      )
+        throw new Error(
+          "Qualification route diagnostics require a GitHub-hosted macOS runner.",
+        );
+      const { routeCheckEnvironment } =
+        await import("./qualification-route-check.mjs");
+      execute(process.execPath, ["tools/qualification-route-check.mjs"], {
+        stdio: "inherit",
+        env: routeCheckEnvironment(env),
+      });
+      return;
+    }
     if (selection === "signing") {
       if (env.DIAGNOSTIC_TARGET !== "native")
         throw new Error("Signing diagnostics require macOS execution.");
