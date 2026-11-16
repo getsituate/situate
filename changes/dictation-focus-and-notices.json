@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "dictation-focus-and-notices",
+  "behaviorDigest": "9bbb764ecc463bd5448cbfe5cb21c0980847ffdb733a511fb8c51654d5aa9418",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "dictation-focus-and-notices",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Dictation continues across app switches",
+          "paragraphs": [
+            "Recording continues when you switch to another app. Locking your Mac or putting it to sleep still interrupts recording.",
+            "Starting dictation no longer briefly opens an extra permission dialog. If no speech is recognized, dictation finishes without a notice and leaves your draft unchanged."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "dictation-focus-and-notices",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Diktieren läuft beim App-Wechsel weiter",
+          "paragraphs": [
+            "Die Aufnahme läuft weiter, wenn du zu einer anderen App wechselst. Das Sperren deines Macs oder der Ruhezustand unterbricht die Aufnahme weiterhin.",
+            "Beim Start des Diktierens erscheint kein zusätzlicher Berechtigungsdialog mehr kurzzeitig. Wird keine Sprache erkannt, endet das Diktieren ohne Hinweis und dein Entwurf bleibt unverändert."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "1285c23074ce4e669a0d786cde81f71481824b956d2ee1073908cee2e8091812",
+      "translationHash": "65e90b4b230bc0c381e3e5dc8ebd3cd38a6edb99bed009d2ea3e9262c6496ce0"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "1285c23074ce4e669a0d786cde81f71481824b956d2ee1073908cee2e8091812"
+  }
+}
