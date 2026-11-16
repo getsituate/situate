@@ -263,7 +263,8 @@ jobs:
       - if: steps.evidence.outputs.created == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
-          subject-path: ${{ steps.evidence.outputs.path }}
+          subject-digest: sha256:${{ steps.evidence.outputs.sha256 }}
+          subject-name: evidence.json
           create-storage-record: false
       - id: evidence_artifact
         if: steps.evidence.outputs.created == 'true'

@@ -144,6 +144,24 @@ test("fixed independent families depend on planning and aggregate every selected
   }
 });
 
+test("source attestation binds the exact digest without interpreting an external relative path as a glob", () => {
+  const required = job(read("verify"), "required");
+  assert.match(
+    required,
+    /subject-digest: sha256:\$\{\{ steps\.evidence\.outputs\.sha256 \}\}/,
+  );
+  assert.match(required, /subject-name: evidence\.json/);
+  assert.doesNotMatch(required, /subject-path:/);
+  assert.ok(
+    required.indexOf("source-evidence --workflow") <
+      required.indexOf("actions/attest-build-provenance"),
+  );
+  assert.ok(
+    required.indexOf("actions/upload-artifact") <
+      required.indexOf("source-evidence-check --workflow"),
+  );
+});
+
 test("PR check covers draft, ready, fork and merge-queue events without path filtering or secrets", () => {
   const workflow = read("verify");
   assert.match(workflow, /ready_for_review, converted_to_draft/);

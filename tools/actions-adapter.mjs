@@ -857,7 +857,14 @@ export async function main(
     output(
       {
         created: String(Boolean(path)),
-        ...(path ? { path: relative(root, path) } : {}),
+        ...(path
+          ? {
+              path: relative(root, path),
+              sha256: createHash("sha256")
+                .update(readFileSync(path))
+                .digest("hex"),
+            }
+          : {}),
       },
       env,
     );
