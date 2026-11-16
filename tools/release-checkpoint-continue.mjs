@@ -13,6 +13,7 @@ import {
   checkpointFile,
   checkpointIdentity,
   checkpointGitHubWrites,
+  completeCheckpointedPublication,
   createCheckpoint,
   validateRestoredCheckpoint,
 } from "./release-checkpoint.mjs";
@@ -258,24 +259,26 @@ export async function continueQualifiedCheckpoint(
           },
         },
       );
-      operation.stages.at(-1).status = "passed";
-      operation.stages.at(-1).output = {
-        identity: result.identity,
-        evidenceSha256: result.evidenceSha256,
-      };
-      const outcome = createCheckpoint({
-        kind: "intent",
+      await completeCheckpointedPublication({
         operation,
-        planBytes,
-        configurationBytes: retained.configurationBytes,
+        result,
+        journalPath,
+        coordinator,
+        persist: async (snapshot) => {
+          const outcome = createCheckpoint({
+            kind: "intent",
+            operation: snapshot,
+            planBytes,
+            configurationBytes: retained.configurationBytes,
+          });
+          const durable = await store.commit(outcome);
+          assert(
+            durable?.durable === true &&
+              durable.checkpointId === outcome.descriptor.checkpointId,
+            "Publication outcome has no durable acknowledgement",
+          );
+        },
       });
-      const durable = await store.commit(outcome);
-      assert(
-        durable?.durable === true &&
-          durable.checkpointId === outcome.descriptor.checkpointId,
-        "Publication outcome has no durable acknowledgement",
-      );
-      await coordinator.complete();
       const completion = {
         status: "created",
         identity: result.identity,

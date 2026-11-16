@@ -6,6 +6,7 @@ import {
   mkdirSync,
   rmSync,
   writeFileSync,
+  readFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +19,121 @@ import {
   productionStages,
   assertLatestMain,
 } from "./pipeline-operations.mjs";
-import { digest } from "./pipeline-state.mjs";
+import { digest, sealPlan, operationDirectory } from "./pipeline-state.mjs";
+import { checkpointFixture } from "./release-checkpoint-fixtures.mjs";
+
+test("production publication and reconciliation acknowledge complete journal checkpoints before releasing their claim", async (t) => {
+  for (const path of ["ordinary", "reconcile"])
+    for (const failure of ["before-commit", "lost-ack", "none"]) {
+      const f = checkpointFixture(t);
+      const configurationBytes = JSON.stringify({
+        ...f.configuration,
+        artifactRoot: f.root,
+      });
+      const plan = sealPlan({
+        ...f.plan,
+        configurationDigest: digest(configurationBytes),
+      });
+      const directory = operationDirectory(f.root, plan.operation);
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      writeFileSync(join(directory, "sealed-plan.json"), JSON.stringify(plan), {
+        mode: 0o600,
+      });
+      const inputs = join(f.root, `${plan.operation}-inputs`);
+      mkdirSync(inputs, { mode: 0o700 });
+      for (const name of [
+        "release-inputs.json",
+        "situate-release-history.json",
+      ])
+        writeFileSync(
+          join(inputs, name),
+          readFileSync(join(f.directory, name)),
+        );
+      const operation = {
+        ...f.operation,
+        plan,
+        stages: [
+          {
+            name: "build",
+            status: "passed",
+            output: { directory: f.directory },
+          },
+          {
+            name: "qualify",
+            status: "passed",
+            output: { receipt: "synthetic" },
+          },
+          {
+            name: "github",
+            status: path === "reconcile" ? "unknown" : "running",
+          },
+        ],
+      };
+      const calls = [];
+      const retained = [];
+      const stages = await productionStages(f.root, plan, {
+        environment: { SITUATE_RELEASE_CONFIG_JSON: configurationBytes },
+        checkpointStore: {
+          commit: async (value) => {
+            const snapshot = JSON.parse(
+              value.files.find((file) => file.name === "operation.json").bytes,
+            );
+            assert.equal(snapshot.publicationJournal.state, "complete");
+            assert.equal(snapshot.stages.at(-1).status, "passed");
+            calls.push("checkpoint");
+            if (failure === "before-commit")
+              throw new Error("terminal checkpoint failed");
+            retained.push(snapshot);
+            if (failure === "lost-ack")
+              throw new Error("terminal acknowledgement lost");
+            return {
+              durable: true,
+              checkpointId: value.descriptor.checkpointId,
+            };
+          },
+        },
+        publicationAdapter: {
+          coordinator: { complete: async () => calls.push("complete") },
+          evidence: () => ({ files: {}, evidence: {} }),
+          createRelease: async (request, options) => {
+            assert.equal(options.reconcile, path === "reconcile");
+            calls.push("publish");
+            writeFileSync(
+              request.journalPath,
+              JSON.stringify({
+                schemaVersion: 1,
+                state: "complete",
+                identity: request.identity,
+                releaseId: 42,
+                evidenceSha256: "f".repeat(64),
+              }),
+              { mode: 0o600 },
+            );
+            return {
+              identity: { ...request.identity, releaseId: 42 },
+              release: { id: 42 },
+              evidenceSha256: "f".repeat(64),
+            };
+          },
+        },
+      });
+      const invoke = () =>
+        path === "reconcile"
+          ? stages.reconcile({ operation, observation: {} })
+          : stages.github({ operation });
+      if (failure !== "none") {
+        await assert.rejects(invoke(), /terminal/);
+        assert.deepEqual(calls, ["publish", "checkpoint"]);
+        assert.equal(retained.length, failure === "lost-ack" ? 1 : 0);
+        assert.notEqual(operation.stages.at(-1).status, "passed");
+      } else {
+        await invoke();
+        await stages.persistOutcome({ operation, stage: "github" });
+        assert.deepEqual(calls, ["publish", "checkpoint", "complete"]);
+        assert.equal(retained.length, 1);
+      }
+    }
+});
 
 test("latest-main observation uses exact read-only repository identity and stops superseded sources", async () => {
   const plan = { repository: "getsituate/situate", source: "a".repeat(40) };

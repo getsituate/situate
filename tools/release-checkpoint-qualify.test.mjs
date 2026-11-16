@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { runtimeFixture } from "./release-checkpoint-fixtures.mjs";
@@ -11,7 +11,7 @@ import {
 import { createQualificationRuntimeAuthorization } from "./release-runtime-authorization.mjs";
 import { requalifyCheckpoint } from "./release-checkpoint-qualify.mjs";
 import { continueQualifiedCheckpoint } from "./release-checkpoint-continue.mjs";
-import { digest } from "./pipeline-state.mjs";
+import { digest, operationDirectory } from "./pipeline-state.mjs";
 
 test("restored qualification executes only a distinct authorized attempt without rewriting original stage evidence", async (t) => {
   const f = runtimeFixture(t);
@@ -134,6 +134,17 @@ test("restored qualification executes only a distinct authorized attempt without
       assert.equal(calls.at(-1), "intent");
       await authorize({ identity: request.identity });
       calls.push("create");
+      writeFileSync(
+        request.journalPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          state: "complete",
+          identity: request.identity,
+          releaseId: 1,
+          evidenceSha256: "a".repeat(64),
+        }),
+        { mode: 0o600 },
+      );
       return {
         identity: { ...request.identity, releaseId: 1 },
         evidenceSha256: "a".repeat(64),
@@ -155,6 +166,68 @@ test("restored qualification executes only a distinct authorized attempt without
     }),
     /Confirm/,
   );
+  for (const failure of ["before-commit", "lost-ack"]) {
+    const trialRoot = join(f.root, failure);
+    const operationDir = operationDirectory(trialRoot, f.plan.operation);
+    mkdirSync(operationDir, { recursive: true, mode: 0o700 });
+    const attemptName = `qualification-${runtimeAuthorization.routeNonce}.json`;
+    writeFileSync(
+      join(operationDir, attemptName),
+      readFileSync(
+        join(operationDirectory(f.root, f.plan.operation), attemptName),
+      ),
+      { mode: 0o600 },
+    );
+    let completed = false;
+    const committed = [];
+    const trialAdapters = {
+      ...publicationAdapters,
+      coordinator: {
+        ...publicationAdapters.coordinator,
+        complete: async () => {
+          completed = true;
+        },
+      },
+      store: {
+        commit: async (value) => {
+          const snapshot = JSON.parse(
+            value.files.find((item) => item.name === "operation.json").bytes,
+          );
+          if (snapshot.publicationJournal?.state === "complete") {
+            if (failure === "lost-ack") committed.push(snapshot);
+            throw new Error("terminal checkpoint acknowledgement lost");
+          }
+          return { durable: true, checkpointId: value.descriptor.checkpointId };
+        },
+      },
+      createRelease: async (request) => {
+        writeFileSync(
+          request.journalPath,
+          JSON.stringify({
+            schemaVersion: 1,
+            state: "complete",
+            identity: request.identity,
+            releaseId: 1,
+            evidenceSha256: "a".repeat(64),
+          }),
+          { mode: 0o600 },
+        );
+        return {
+          identity: { ...request.identity, releaseId: 1 },
+          evidenceSha256: "a".repeat(64),
+        };
+      },
+    };
+    await assert.rejects(
+      continueQualifiedCheckpoint(trialRoot, {
+        ...continuation,
+        adapters: trialAdapters,
+      }),
+      /terminal checkpoint/,
+    );
+    assert.equal(completed, false);
+    assert.equal(committed.length, failure === "lost-ack" ? 1 : 0);
+  }
   const publication = await continueQualifiedCheckpoint(f.root, continuation);
   assert.equal(publication.status, "created");
   assert.deepEqual(calls, ["intent", "create", "outcome", "complete"]);

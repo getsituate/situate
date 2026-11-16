@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   constants,
   closeSync,
   fstatSync,
   fsyncSync,
+  lstatSync,
   openSync,
   readFileSync,
   writeSync,
 } from "node:fs";
-import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
 import { sshArguments } from "./transport.mjs";
@@ -51,6 +53,28 @@ export function createHostCheckpointStore(
         `python3 -u -c 'import base64;exec(base64.b64decode("${code}"))'`,
       ],
       { env, stdio: ["pipe", "pipe", "pipe"] },
+    );
+  const stagingDirectory = (destination) => {
+    assert(
+      !lstatSync(destination, { throwIfNoEntry: false }),
+      "Restore destination already exists",
+    );
+    const staging = join(
+      dirname(destination),
+      `.release-restore-incomplete-${randomUUID()}`,
+    );
+    createRestoreDirectory(staging);
+    return staging;
+  };
+  const commitRestore = (staging, destination) =>
+    execFileSync(
+      "python3",
+      [
+        fileURLToPath(new URL("./checkpoint-commit.py", import.meta.url)),
+        staging,
+        destination,
+      ],
+      { env, stdio: ["ignore", "pipe", "pipe"] },
     );
   async function exchange(request, files = [], receive) {
     const child = start();
@@ -140,7 +164,7 @@ export function createHostCheckpointStore(
         identity: { operationId },
       });
       assert.equal(result.descriptor.identity.operationId, operationId);
-      createRestoreDirectory(destination);
+      const staging = stagingDirectory(destination);
       for (const name of [
         "plan.json",
         "configuration.json",
@@ -149,26 +173,27 @@ export function createHostCheckpointStore(
         const item = result.descriptor.files.find((item) => item.name === name);
         assert(item, "Missing bootstrap metadata");
         writeRestoredFile(
-          destination,
+          staging,
           item,
           Buffer.from(result.metadata[name], "base64"),
         );
       }
-      const parent = openSync(destination, "r");
+      const parent = openSync(staging, "r");
       try {
         fsyncSync(parent);
       } finally {
         closeSync(parent);
       }
-      const plan = JSON.parse(readFileSync(`${destination}/plan.json`, "utf8"));
+      const plan = JSON.parse(readFileSync(`${staging}/plan.json`, "utf8"));
       const { validatePlan, digest } =
         await import("../../tools/pipeline-state.mjs");
       validatePlan(plan);
       assert.deepEqual(checkpointIdentity(plan), result.descriptor.identity);
       assert.equal(
-        digest(readFileSync(`${destination}/configuration.json`)),
+        digest(readFileSync(`${staging}/configuration.json`)),
         plan.configurationDigest,
       );
+      commitRestore(staging, destination);
       return {
         directory: destination,
         planFile: `${destination}/plan.json`,
@@ -178,7 +203,7 @@ export function createHostCheckpointStore(
     inspect: ({ plan }) =>
       exchange({ action: "inspect", identity: checkpointIdentity(plan) }),
     async restore({ plan, checkpointId, inspectionDigest, destination }) {
-      createRestoreDirectory(destination);
+      const staging = stagingDirectory(destination);
       const descriptor = await exchange(
         {
           action: "restore",
@@ -224,7 +249,7 @@ export function createHostCheckpointStore(
                       item.size <= 16 * 1024 ** 3,
                     "Invalid checkpoint inventory",
                   );
-                  fd = openSync(join(destination, item.name), "wx", 0o600);
+                  fd = openSync(join(staging, item.name), "wx", 0o600);
                   size = 0;
                   hash = createHash("sha256");
                 }
@@ -253,7 +278,7 @@ export function createHostCheckpointStore(
                 buffer.length === 0,
               "Incomplete checkpoint download",
             );
-            const parent = openSync(destination, "r");
+            const parent = openSync(staging, "r");
             try {
               fsyncSync(parent);
             } finally {
@@ -265,7 +290,8 @@ export function createHostCheckpointStore(
           }
         },
       );
-      validateRestoredCheckpoint(descriptor, destination, plan);
+      validateRestoredCheckpoint(descriptor, staging, plan);
+      commitRestore(staging, destination);
       return { descriptor, directory: destination };
     },
   };

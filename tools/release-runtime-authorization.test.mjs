@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runtimeFixture } from "./release-checkpoint-fixtures.mjs";
-import { digest } from "./pipeline-state.mjs";
+import { digest, sealPlan } from "./pipeline-state.mjs";
+import { createCheckpoint, checkpointIdentity } from "./release-checkpoint.mjs";
+import { validateFinalArtifactConfiguration } from "../client/scripts/final-artifact-qualification.mjs";
 import {
   createQualificationRuntimeAuthorization,
   validateQualificationRuntimeAuthorization,
@@ -19,6 +21,81 @@ test("fresh route authorization allows the same disposable VM account tuple with
   assert.equal(JSON.stringify(input.configuration), before);
   assert.equal(auth.runtime.qualification.account.uid, 501);
 });
+test("unchanged custom qualification behavior remains valid but runtime overlays cannot alter it", (t) => {
+  const input = runtimeFixture(t);
+  const assertion = {
+    assert: { role: "AXStaticText", name: "Synthetic workspace" },
+  };
+  const extras = {
+    journeys: Object.fromEntries(
+      ["workspace", "onboarding", "plugins"].map((name) => [
+        name,
+        {
+          actions: [assertion],
+          reopen: [assertion],
+          files: [{ path: "synthetic.md", sha256: "a".repeat(64) }],
+        },
+      ]),
+    ),
+    lifecycle: Object.fromEntries(
+      [
+        "multiwindow",
+        "unsavedCancellation",
+        "replacement",
+        "relaunch",
+        "recovery",
+      ].map((name) => [
+        name,
+        { before: [assertion], actions: [assertion], after: [assertion] },
+      ]),
+    ),
+    updateActions: [
+      { click: { role: "AXButton", name: "Install and restart" } },
+    ],
+    fixtureFiles: [{ path: "synthetic.md", contents: "Synthetic answer" }],
+  };
+  Object.assign(input.configuration.qualification, structuredClone(extras));
+  Object.assign(input.runtime.qualification, structuredClone(extras));
+  input.configurationBytes = JSON.stringify(input.configuration);
+  input.plan = sealPlan({
+    ...input.plan,
+    configurationDigest: digest(input.configurationBytes),
+  });
+  input.operation = { ...input.operation, plan: input.plan };
+  const descriptor = createCheckpoint({ ...input, kind: "build" }).descriptor;
+  const { reconciliationDigest: _oldDigest, ...observation } = input.inspection;
+  observation.planDigest = input.plan.authorizationDigest;
+  observation.remote.checkpoints.coordination.active = checkpointIdentity(
+    input.plan,
+  );
+  observation.remote.checkpoints.checkpoints = [descriptor];
+  input.inspection = {
+    ...observation,
+    reconciliationDigest: digest(observation),
+  };
+  input.recoveryAuthorization = {
+    ...input.recoveryAuthorization,
+    planDigest: input.plan.authorizationDigest,
+    descriptor,
+    checkpointId: descriptor.checkpointId,
+    inspectionDigest: input.inspection.reconciliationDigest,
+  };
+  validateFinalArtifactConfiguration(input.configuration.qualification);
+  const authorized = createQualificationRuntimeAuthorization(input);
+  assert.deepEqual(
+    validateQualificationRuntimeAuthorization(authorized, input),
+    input.runtime,
+  );
+  for (const key of Object.keys(extras)) {
+    const runtime = structuredClone(input.runtime);
+    runtime.qualification[key] = { altered: true };
+    assert.throws(
+      () => createQualificationRuntimeAuthorization({ ...input, runtime }),
+      new RegExp(`Qualification field changed: ${key}`),
+    );
+  }
+});
+
 test("runtime overlays reject changed product, packages, baseline, inspection and reused nonce", (t) => {
   const input = runtimeFixture(t);
   for (const mutate of [

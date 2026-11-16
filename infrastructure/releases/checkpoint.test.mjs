@@ -5,6 +5,7 @@ import {
   linkSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -16,6 +17,7 @@ import {
 } from "../../tools/release-checkpoint-fixtures.mjs";
 import { createQualificationRuntimeAuthorization } from "../../tools/release-runtime-authorization.mjs";
 import { digest } from "../../tools/pipeline-state.mjs";
+import { inspectWorkflow, restoreWorkflow } from "../../tools/pipeline.mjs";
 import {
   createCheckpoint,
   checkpointIdentity,
@@ -111,6 +113,132 @@ test("committed packages restore exactly without a builder, and lost acknowledge
   });
   assert.deepEqual(JSON.parse(readFileSync(bootstrap.planFile)), f.plan);
 });
+test("restore commits only a complete validated successful transfer and never replaces a destination", async (t) => {
+  for (const failure of [
+    "metadata-only",
+    "mid-asset",
+    "bad-hash",
+    "bad-manifest",
+    "nonzero-exit",
+    "existing",
+    "concurrent",
+    "none",
+  ]) {
+    const f = checkpointFixture(t);
+    const checkpoint = createCheckpoint({ ...f, kind: "build" });
+    const descriptor = structuredClone(checkpoint.descriptor);
+    const payloads = checkpoint.files.map(
+      (file) => file.bytes ?? readFileSync(file.file),
+    );
+    if (failure === "bad-manifest") {
+      const index = descriptor.files.findIndex(
+        (file) => file.name === "manifest.json",
+      );
+      const manifest = JSON.parse(payloads[index]);
+      manifest.revision = "0".repeat(40);
+      payloads[index] = Buffer.from(JSON.stringify(manifest));
+      descriptor.files[index].size = payloads[index].length;
+      descriptor.files[index].sha256 = digest(payloads[index]);
+    }
+    const header = Buffer.from(`${JSON.stringify(descriptor)}\n`);
+    let payload = Buffer.concat([header, ...payloads]);
+    if (failure === "metadata-only") payload = header;
+    if (failure === "mid-asset") {
+      const index = descriptor.files.findIndex(
+        (file) => file.name === "Situate.dmg",
+      );
+      payload = payload.subarray(
+        0,
+        header.length +
+          descriptor.files
+            .slice(0, index)
+            .reduce((size, file) => size + file.size, 0) +
+          1,
+      );
+    }
+    if (failure === "bad-hash") {
+      payload = Buffer.from(payload);
+      payload[payload.length - 1] ^= 1;
+    }
+    const destination = join(f.root, "restored");
+    if (failure === "existing") mkdirSync(destination, { mode: 0o700 });
+    let transfers = 0;
+    const store = createHostCheckpointStore(
+      {},
+      {
+        start: () => {
+          transfers++;
+          const code = `process.stdin.resume();process.stdin.on('end',()=>{process.stdout.write(Buffer.from(${JSON.stringify(payload.toString("base64"))},'base64'));${failure === "concurrent" ? `require('node:fs').mkdirSync(${JSON.stringify(destination)},{mode:0o700});` : ""}process.exitCode=${failure === "nonzero-exit" ? 1 : 0};});`;
+          return spawn(process.execPath, ["-e", code], {
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+        },
+      },
+    );
+    const adapters = {
+      inspect: async () => ({ checkpoints: { inspectionDigest: "synthetic" } }),
+      restore: async ({ checkpointId, destination }) => ({
+        ...(await store.restore({
+          plan: f.plan,
+          checkpointId,
+          destination,
+          inspectionDigest: "synthetic",
+        })),
+        manifestSha256: descriptor.files.find(
+          (file) => file.name === "manifest.json",
+        ).sha256,
+      }),
+    };
+    const inspection = await inspectWorkflow(f.root, f.plan.operation, {
+      plan: f.plan,
+      adapters,
+    });
+    const invoke = () =>
+      restoreWorkflow(
+        f.root,
+        f.plan.operation,
+        inspection.reconciliationDigest,
+        {
+          plan: f.plan,
+          checkpointId: descriptor.checkpointId,
+          destination,
+          adapters,
+        },
+      );
+    const authorization = join(
+      f.root,
+      ".release-operations",
+      f.plan.operation,
+      `restore-${descriptor.checkpointId}.json`,
+    );
+    if (failure === "none") {
+      assert.equal((await invoke()).status, "restored");
+      assert.equal(existsSync(join(destination, "manifest.json")), true);
+      assert.equal(existsSync(authorization), true);
+      assert.deepEqual(
+        readdirSync(f.root).filter((name) =>
+          name.startsWith(".release-restore-incomplete-"),
+        ),
+        [],
+      );
+    } else {
+      await assert.rejects(invoke());
+      assert.equal(existsSync(authorization), false);
+      if (["existing", "concurrent"].includes(failure))
+        assert.deepEqual(readdirSync(destination), []);
+      else assert.equal(existsSync(destination), false);
+      assert.equal(transfers, failure === "existing" ? 0 : 1);
+      if (failure !== "existing")
+        assert.equal(
+          readdirSync(f.root).filter((name) =>
+            name.startsWith(".release-restore-incomplete-"),
+          ).length,
+          1,
+        );
+    }
+  }
+});
+
 test("runtime authorizations persist one immutable intent and outcome per fresh route nonce", async (t) => {
   const input = runtimeFixture(t);
   const f = host(t, input);

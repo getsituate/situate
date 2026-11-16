@@ -26,7 +26,19 @@ function validateRuntime(configuration, runtime, operation) {
   const original = configuration.qualification;
   const next = runtime.qualification;
   exactKeys(next, Object.keys(original), "Qualification fields differ");
-  assert.equal(next.profile, original.profile);
+  const runtimeFields = new Set([
+    "account",
+    "runnerImage",
+    "predecessor",
+    "routing",
+  ]);
+  for (const key of Object.keys(original))
+    if (!runtimeFields.has(key))
+      assert.deepEqual(
+        next[key],
+        original[key],
+        `Qualification field changed: ${key}`,
+      );
   exactKeys(next.account, ["mode", "uid", "name", "home"]);
   assert.equal(original.account.mode, "ephemeral-host");
   assert.equal(next.account.mode, "ephemeral-host");

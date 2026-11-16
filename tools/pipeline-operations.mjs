@@ -367,6 +367,7 @@ export async function productionStages(
     environment = process.env,
     assertCurrentSource = assertLatestMain,
     checkpointStore,
+    publicationAdapter,
   } = {},
 ) {
   const configRecord = readConfiguration(root, plan.configurationFile, {
@@ -400,8 +401,11 @@ export async function productionStages(
     await import("../infrastructure/releases/checkpoint.mjs");
   const checkpoints =
     checkpointStore ?? createHostCheckpointStore(host, { environment });
-  const { createCheckpoint, checkpointGitHubWrites } =
-    await import("./release-checkpoint.mjs");
+  const {
+    createCheckpoint,
+    checkpointGitHubWrites,
+    completeCheckpointedPublication,
+  } = await import("./release-checkpoint.mjs");
   const checkpoint = async (operation, kind, builtDirectory) => {
     const planBytes = readFileSync(
       join(operationDirectory(root, plan.operation), "sealed-plan.json"),
@@ -496,6 +500,7 @@ export async function productionStages(
     };
   };
   const coordinator = async () => {
+    if (publicationAdapter?.coordinator) return publicationAdapter.coordinator;
     const { createHostReleaseCoordinator } =
       await import("../infrastructure/releases/allocator.mjs");
     assert.equal(
@@ -527,7 +532,9 @@ export async function productionStages(
         : undefined,
     persistOutcome:
       plan.workflow === "create"
-        ? async ({ operation }) => checkpoint(operation, "intent")
+        ? async ({ operation, stage }) => {
+            if (stage !== "github") await checkpoint(operation, "intent");
+          }
         : undefined,
     restore: async ({ observation, checkpointId, destination }) => {
       assert.equal(
@@ -729,9 +736,13 @@ export async function productionStages(
         directory: built.directory,
         notes,
       };
-      const result = await createGitHubRelease(
+      const result = await (
+        publicationAdapter?.createRelease ?? createGitHubRelease
+      )(
         {
-          ...createEvidenceFromDirectory(request),
+          ...(publicationAdapter?.evidence ?? createEvidenceFromDirectory)(
+            request,
+          ),
           identity: request.identity,
           notes,
           journalPath: join(
@@ -741,7 +752,7 @@ export async function productionStages(
         },
         {
           github: checkpointGitHubWrites(
-            githubAdapter({ environment }),
+            publicationAdapter?.github ?? githubAdapter({ environment }),
             async () => {
               const publicationJournal = json(
                 join(
@@ -757,12 +768,16 @@ export async function productionStages(
           reconcile,
         },
       );
-      await (await coordinator()).complete();
-      return {
-        identity: result.identity,
-        releaseId: result.release?.id,
-        evidenceSha256: result.evidenceSha256,
-      };
+      return completeCheckpointedPublication({
+        operation,
+        result,
+        journalPath: join(
+          operationDirectory(root, plan.operation),
+          "github-journal.json",
+        ),
+        persist: (snapshot) => checkpoint(snapshot, "intent"),
+        coordinator: await coordinator(),
+      });
     },
     download: async () => {
       const { downloadGitHubRelease } = await import("./github-release.mjs");

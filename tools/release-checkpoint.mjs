@@ -17,6 +17,46 @@ import { digest, validatePlan } from "./pipeline-state.mjs";
 import { verifyReleaseInputs } from "./release-inputs.mjs";
 import { validateReservation } from "./release-reservation.mjs";
 
+export async function completeCheckpointedPublication({
+  operation,
+  result,
+  journalPath,
+  persist,
+  coordinator,
+}) {
+  const publicationJournal = JSON.parse(checkpointFile(journalPath));
+  assert(
+    publicationJournal.schemaVersion === 1 &&
+      publicationJournal.state === "complete",
+    "Publication requires its complete verified journal",
+  );
+  assert.equal(publicationJournal.identity.operationId, operation.operationId);
+  assert.equal(
+    publicationJournal.identity.sourceRevision,
+    operation.plan.source,
+  );
+  assert.equal(publicationJournal.evidenceSha256, result.evidenceSha256);
+  assert.equal(publicationJournal.releaseId, result.identity.releaseId);
+  const output = {
+    identity: result.identity,
+    releaseId: result.release?.id ?? result.identity.releaseId,
+    evidenceSha256: result.evidenceSha256,
+  };
+  const snapshot = structuredClone(operation);
+  const stage = snapshot.stages.at(-1);
+  assert.equal(
+    stage?.name,
+    "github",
+    "Publication outcome requires its exact stage intent",
+  );
+  stage.status = "passed";
+  stage.output = output;
+  snapshot.publicationJournal = publicationJournal;
+  await persist(snapshot);
+  await coordinator.complete();
+  return output;
+}
+
 export function checkpointGitHubWrites(adapter, persist) {
   const writes = new Set(["createDraft", "uploadAsset", "finalize"]);
   return Object.fromEntries(
