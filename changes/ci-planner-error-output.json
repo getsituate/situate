@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "ci-planner-error-output",
+  "behaviorDigest": "3722b87b1b5745010a0df0ebfc652b05ca9223e313b0c252fc5a8276ef4aadc5",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Exposes workflow planner diagnostics in CI logs without changing verification policy or application behavior.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "19f90b221523546362b0a2d3167edd6919fc123aa58eaef11c6041e38abf33a1",
+      "translationHash": "cb2514f9064bad6202e77cb459e25d45ceefab43abaf86a1f544c4e41e45bd06"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "19f90b221523546362b0a2d3167edd6919fc123aa58eaef11c6041e38abf33a1"
+  }
+}
