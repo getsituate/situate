@@ -28,10 +28,10 @@ No latency, availability or universal coverage target is established here.
 |link:{architecture-repository-root}/client/crates/situate-core/src/conversation_store.rs[Conversation storage tests] check corrupt records and preservation after failed saves; link:{architecture-repository-root}/client/crates/situate-core/src/conversation.rs[format validation] defines accepted records. See <<conversation-format-safety>>. Rejecting unsupported data does not establish mixed-version compatibility.
 |A conversation append stops midway through its final entry, or metadata publication fails after a history append. <<adr-0016,ADR-0016>>.
 |Complete preceding history remains available. Preserve an incomplete suffix before repairing the append boundary; keep additional complete entries if metadata still selects the old entry. No silent reset or automatic tool replay occurs.
-|The link:{architecture-docs-root}/development/conversation-storage-implementation-plan.md[storage plan] requires short-write, partial-tail and metadata-ordering fixtures; existing v2 round-trip tests do not establish the append protocol.
+|Verification requires short-write, partial-tail and metadata-ordering fixtures; existing v2 round-trip tests do not establish the append protocol.
 |A conversation grows beyond the former 16 MiB ceiling and is continued after compaction or a branch change. <<adr-0016,ADR-0016>>.
 |The conversation remains continuable without rewriting original history, copying shared ancestors or loading the entire tree. Only the selected ancestry contributes context; older UI history loads on demand.
-|Synthetic large-history, branch/compaction and resource measurements in the storage plan; no latency threshold or native qualification is inferred from a format choice.
+|Verification requires synthetic large-history, branch/compaction and resource measurements; no latency threshold or native qualification is inferred from a format choice.
 |The application terminates with saved waiting input or a tool call lacking its result. link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005].
 |Reopening preserves saved input and available outcomes without starting work. A missing result is unknown, not proof of no effects. Unsaved response text and drafts may be lost; execution handles are not reconstructed.
 |Owner and native restart scenarios in the storage plan; external effects and history are not one transaction and missing outcomes need not be reconstructible.

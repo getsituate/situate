@@ -69,7 +69,7 @@ Documentation/tooling-only changes need not publish an app, but an empty changel
 Test app-impact selection independently of changelog contents.
 
 Workshop/design sweeps, screenshot comparisons, coverage and paid live-provider tests retain their explicit scope.
-The link:{architecture-repository-root}/docs/development/ci-cd-replacement-plan.md[implementation plan] defines an initial parallel job partition based on dependencies, without comparative runtime experiments.
+The link:{architecture-repository-root}/docs/development/testing.md#ci-gates[CI guide] describes the verification lanes and their execution hosts.
 Externally changing vulnerability monitoring runs independently against main, not as a required PR or release status; upstream advisories are addressed in separate fix PRs.
 Secret scanning and source-bound dependency/license policy remain required.
 Scheduled npm monitoring alongside Dependabot is proposed; cadence and runner-budget limits remain to be finalized.

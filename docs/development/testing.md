@@ -1,6 +1,10 @@
 # Repository test suite
 
-Run the suite from the repository root with [Volta](README.md#install-volta) selecting the root `package.json` Node.js and npm pins:
+For local development, run new or modified tests, nearby regression tests, and the lint, type or build checks relevant to the change. Broader PR verification runs in the [Verify CI workflow](../../.github/workflows/verify.yml); no local full-suite or all-affected-suite run is required before opening a PR. Include committed branch changes when choosing local checks, and report checks actually run and any gaps.
+
+Use profiles, explicit suites (`--suite <id>`, repeatable), or focused project commands to limit local work. `--changed` selects whole suites, not individual tests; inspect its plan with `--changed --base origin/main --list` against an up-to-date base before choosing checks when useful.
+
+To run the full supported host suite explicitly, use the repository root with [Volta](README.md#install-volta) selecting the root `package.json` Node.js and npm pins:
 
 ```sh
 node tools/test.mjs
@@ -492,7 +496,7 @@ Use Pi's interrupt key (normally Escape) to cancel a running check in the TUI, o
 
 Set `SITUATE_AUTO_TESTS=0` before starting Pi to disable automatic checks. Workers marked with `PI_SUBAGENT_WORKER=1` also leave testing to their caller. Neither setting disables explicit runner commands.
 
-Before creating a pull request, run `node tools/test.mjs --changed --base origin/main` with an up-to-date base reference, as described in [`AGENTS.md`](../../AGENTS.md). The unfiltered command runs supported suites available on the host. A release additionally requires the complete integrated macOS plan and exact-artifact qualification. Deferred suites are run explicitly when relevant, not as an unconditional PR gate. There is no test commit hook or interception of Git commands.
+Before creating a pull request, run focused tests and checks for the changed behavior, as described in [`AGENTS.md`](../../AGENTS.md). The broader PR verification plan runs in CI, without a mandatory duplicate local run. The unfiltered command remains available for explicit full-host verification. A release additionally requires the complete integrated macOS plan and exact-artifact qualification. Deferred suites are run explicitly when relevant, not as an unconditional PR gate. There is no test commit hook or interception of Git commands.
 
 ## Results and automation
 

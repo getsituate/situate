@@ -169,15 +169,15 @@ After changing repository skills, roles, or extensions, run `/reload` inside Pi.
 From the repository root:
 
 ```sh
-node tools/test.mjs
-node tools/test.mjs --unit
-node tools/test.mjs --quick
-node tools/test.mjs --checks
-node tools/test.mjs --changed --base origin/main
 node tools/test.mjs --quick --changed
+node tools/test.mjs --feedback --changed
+# Inspect affected suites, including committed branch changes, without running them
+node tools/test.mjs --changed --base origin/main --list
+# Run a selected suite from that plan
+node tools/test.mjs --suite <id>
 ```
 
-The default runs supported suites available on the current host. Portable suites use the same pinned Linux tool image locally and in CI; start a Linux Docker engine first. Only native macOS suites need host Apple/Rust tools. Quick checks and selection previews do not start Docker. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
+Run new or modified tests and the regression, lint, type or build checks relevant to the task. Profiles and `--changed` select whole suites; use narrower project commands when appropriate. CI runs the broader PR verification plan; a full local run is not required before a PR. The unfiltered `node tools/test.mjs` remains available for explicit full-host verification and runs supported suites available on the current host. Portable suites use the same pinned Linux tool image locally and in CI; start a Linux Docker engine first. Only native macOS suites need host Apple/Rust tools. Quick checks and selection previews do not start Docker. Use `node tools/test.mjs --extended` for the complete current-host inventory, including deferred sweeps. The [test suite guide](testing.md) describes prerequisites, fast and long-running categories, affected-suite selection, and machine-readable results. Project-specific commands below remain available for targeted work.
 
 ## Development terminal
 
@@ -291,7 +291,7 @@ The client has its own npm and Cargo workspaces under `client/`. Follow the [cli
 
 The architecture's [conversation tool matrix](../architecture/05-building-block-view/level-3/application/agent-integration/conversation-tools.adoc) lists model-callable tools, their purposes and their availability in normal chat and plugin development, including platform and recovery conditions.
 
-The [architecture documentation](../architecture/index.adoc) describes workspace ownership, file/history storage, conversation execution and UI coordination. The [workspace view API](workspace-views.md) covers registration, navigation lifetimes and file-reference capture for client integrations. The [Git-derived file-reference development plan](git-derived-file-references-plan.md) sequences the accepted replacement of the independent move journal, including interruption behavior. Its original no-migration exception covers unpublished development formats only; changes to published formats require [release compatibility verification](testing.md#release-compatibility-verification).
+The [architecture documentation](../architecture/index.adoc) describes workspace ownership, file/history storage, conversation execution and UI coordination. The [workspace view API](workspace-views.md) covers registration, navigation lifetimes and file-reference capture for client integrations. The [Git-derived file-reference concept](../architecture/08-cross-cutting-concepts/git-derived-file-references.adoc) describes identity and interruption behavior. Changes to published formats require [release compatibility verification](testing.md#release-compatibility-verification).
 
 ## Run the requirements viewer
 

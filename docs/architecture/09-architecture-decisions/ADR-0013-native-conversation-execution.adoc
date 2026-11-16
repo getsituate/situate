@@ -13,7 +13,6 @@ Status:: accepted; native conversation ownership and complete product replacemen
 Date:: 2026-11-03
 Current platform scope:: macOS only under link:{architecture-repository-root}/requirements/data/requirements/REQ-0012-platform-availability.md[REQ-0012]; iOS statements below retain earlier design context or evidence, not current delivery gates
 Implementation:: native owner, provider/tool adapters and frontend projections integrated; native application fixtures cover macOS and iOS Simulator paths; aggregate and release qualification remain open
-Implementation plan:: link:{architecture-repository-root}/docs/development/rig-implementation-plan.md[Rig replacement implementation plan]
 Storage refinement:: <<adr-0016,ADR-0016>> replaces the full-record v2 persistence representation with append-only conversation history; native execution ownership remains unchanged.
 Related decisions:: link:{architecture-docs-root}/09-architecture-decisions/0002-portable-workspace-credentials.adoc[ADR-0002], link:{architecture-docs-root}/09-architecture-decisions/ADR-0001-ui-orchestration.adoc[ADR-0001] and link:{architecture-docs-root}/09-architecture-decisions/ADR-0008-device-local-diagnostics.adoc[ADR-0008]
 
