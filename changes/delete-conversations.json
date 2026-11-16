@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "delete-conversations",
+  "behaviorDigest": "f1f3c0f6003696c2bbcd1bfef348dcb7e0cdb2b2b4b92fe8ececf5a07443af5f",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "delete-conversations",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Delete conversations",
+          "paragraphs": [
+            "Delete conversations from their options menu after a confirmation. Deleting a conversation stops any running reply or recording; referenced notes and files remain unchanged."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "delete-conversations",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Gespräche löschen",
+          "paragraphs": [
+            "Gespräche lassen sich nach einer Bestätigung über ihr Optionsmenü löschen. Dabei werden laufende Antworten oder Aufnahmen abgebrochen; referenzierte Notizen und Dateien bleiben unverändert."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "37f4f66cf41afadaf13951dcbc987db576b3c9ce396293f68d1eb2a22e8a198a",
+      "translationHash": "5d7d9c5af69c29b994d2971a3a0a3f40bb5c78c72bde51f4a445eec85f7adab3"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "37f4f66cf41afadaf13951dcbc987db576b3c9ce396293f68d1eb2a22e8a198a"
+  }
+}
