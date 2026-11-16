@@ -1,6 +1,7 @@
 import { t } from "@situate/localization";
 import { isTauri } from "@tauri-apps/api/core";
-import { defineAsyncComponent, watchEffect } from "vue";
+import { defineAsyncComponent, shallowRef, watchEffect } from "vue";
+import type { PluginRuntime } from "../plugins/runtime";
 
 const FileEditor = defineAsyncComponent(
   () => import("../files/FileEditor.vue"),
@@ -103,6 +104,7 @@ function createWorkspaceUi(workspaceId: string) {
     });
   });
   let current = true;
+  const pluginRuntime = shallowRef<PluginRuntime>();
   let inventoryTimer: ReturnType<typeof setInterval> | undefined;
   let stopPluginLayout: (() => void) | undefined;
   const plugins = isTauri()
@@ -114,6 +116,7 @@ function createWorkspaceUi(workspaceId: string) {
           coordinator,
           isCurrent: () => current,
         });
+        pluginRuntime.value = runtime;
         inventoryTimer = setInterval(() => {
           void runtime.synchronizeInventory().catch(() => undefined);
         }, 2000);
@@ -147,7 +150,8 @@ function createWorkspaceUi(workspaceId: string) {
   function titleFor(target: ViewTarget): string {
     if (
       target.kind === "empty" ||
-      resolveViewTarget(target, registry).status === "missing"
+      resolveViewTarget(target, registry, pluginRuntime.value?.state.plugins)
+        .status === "missing"
     )
       return t("layoutHost.newTab");
     if (target.kind === "new-conversation") return t("navigation.newChat");

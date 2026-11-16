@@ -100,6 +100,21 @@ describe("registered workspace navigation", () => {
     ).toEqual({ status: "missing" });
   });
 
+  it("keeps installed plugin owners unavailable while a registration is absent", () => {
+    const registry = createViewRegistry();
+    const target = { kind: "view", viewId: "demo:board" } as const;
+    expect(resolveViewTarget(target, registry, [{ id: "demo" }])).toEqual({
+      status: "unavailable",
+    });
+    expect(resolveViewTarget(target, registry, [{ id: "other" }])).toEqual({
+      status: "missing",
+    });
+    registry.register(definition("demo:board"));
+    expect(resolveViewTarget(target, registry, [{ id: "demo" }])).toEqual({
+      status: "ready",
+    });
+  });
+
   it("respects content availability without treating loading or access failures as missing", () => {
     const registry = createViewRegistry();
     let availability: ViewAvailability = { status: "loading" };

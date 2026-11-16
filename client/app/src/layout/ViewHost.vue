@@ -38,13 +38,17 @@ const ticket = props.ui.session.capture({
   paneId: props.pane.id,
 });
 const entry = computed(() => currentEntry(props.pane.navigation));
+const plugins = shallowRef<Awaited<WorkspaceUi["plugins"]>>();
 const availability = computed(() =>
-  resolveViewTarget(entry.value.target, props.ui.registry),
+  resolveViewTarget(
+    entry.value.target,
+    props.ui.registry,
+    plugins.value?.state.plugins,
+  ),
 );
 const definition = computed(() =>
   props.ui.registry.definitions.get(viewType(entry.value.target)),
 );
-const plugins = shallowRef<Awaited<WorkspaceUi["plugins"]>>();
 void props.ui.plugins
   ?.then((runtime) => {
     plugins.value = runtime;
@@ -153,10 +157,7 @@ const viewProps = computed(() => {
 
 <template>
   <section
-    v-if="
-      entry.target.kind === 'empty' ||
-      (availability.status === 'missing' && !suspendedPlugin)
-    "
+    v-if="entry.target.kind === 'empty' || availability.status === 'missing'"
     ref="chooser"
     class="view-chooser"
     :aria-label="t('layoutHost.chooseView')"
@@ -266,7 +267,11 @@ const viewProps = computed(() => {
       t("pluginManagement.inspect")
     }}</SituateButton>
   </section>
-  <section v-else-if="!definition || failed" class="view-message" role="status">
+  <section
+    v-else-if="!definition || failed || availability.status === 'unavailable'"
+    class="view-message"
+    role="status"
+  >
     <h2>
       {{
         failed ? t("layoutHost.viewFailed") : t("layoutHost.viewUnavailable")

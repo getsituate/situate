@@ -12,7 +12,7 @@ import type { LayoutIntent } from "./model";
 import { dictation, guardDictation } from "../dictation/runtime";
 
 export type ViewAvailability =
-  | { readonly status: "ready" | "loading" | "missing" }
+  | { readonly status: "ready" | "loading" | "missing" | "unavailable" }
   | {
       readonly status: "error";
       readonly error: unknown;
@@ -147,10 +147,21 @@ export type ViewRegistry = ReturnType<typeof createViewRegistry>;
 export function resolveViewTarget(
   target: ViewTarget,
   registry: Pick<ViewRegistry, "definitions">,
+  installedPlugins: readonly { readonly id: string }[] = [],
 ): ViewAvailability {
   if (target.kind === "empty") return { status: "ready" };
   const definition = registry.definitions.get(viewType(target));
-  if (!definition) return { status: "missing" };
+  if (!definition) {
+    const owner =
+      target.kind === "view" && target.viewId.includes(":")
+        ? target.viewId.split(":")[0]
+        : undefined;
+    return {
+      status: installedPlugins.some((plugin) => plugin.id === owner)
+        ? "unavailable"
+        : "missing",
+    };
+  }
   try {
     return definition.availability?.(target) ?? { status: "ready" };
   } catch (error) {
