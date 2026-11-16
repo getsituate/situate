@@ -44,7 +44,7 @@ fn direct_import_preserves_sources_metadata_links_and_history_without_staging() 
                 source_entry("Notes/assets/paper.pdf", &source_root.join("paper.pdf")),
                 text_entry("Notes/inline.md", "# Converted text\n"),
             ],
-            true,
+            false,
             || Ok(()),
         )
         .unwrap();

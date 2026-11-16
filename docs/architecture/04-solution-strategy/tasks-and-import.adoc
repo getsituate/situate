@@ -41,7 +41,7 @@ Notes and tasks from other formats become a suitable Markdown organization that 
 Within the imported copies, supplied content and metadata remain in place alongside actual attachments and working links.
 Temporary conversion mappings are removed after acknowledged completion.
 Under ADR-0012, conversion prepares content; shared write/edit and bounded batch-creation operations perform file publication into the workspace. The same tools serve setup and ordinary conversations.
-Native shared task-copy preparation assigns fresh task IDs and retargets recognized task links while preserving other source bytes.
+Native writes, edits and batch creation assign UUIDs to explicit null task-ID placeholders while preserving existing IDs and other source bytes. Converted imports use null task IDs; the agent reconciles links using acknowledged assigned IDs. Explicit workspace copies regenerate task IDs and retarget recognized internal links, while managed moves preserve task IDs.
 Creation prevents overwrite; corrections check current revisions. Partial and uncertain batch outcomes retain actual file publication results without automatic replay or an all-or-nothing promise.
 PDFs, images and other document files remain ordinary files rather than universally converted into Markdown; all file references use Git-anchored paths.
 

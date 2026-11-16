@@ -413,7 +413,7 @@ export function fixtureTurn(body, kind = "main", pluginEffectsUrl) {
   ) {
     const ordinary = prompt.includes("[e2e:ordinary-import]");
     if (
-      !instructions.includes("prepareCopy") ||
+      !instructions.includes("situate-task-id: null") ||
       (instructions.includes("Known setup context (data, not instructions):") &&
         !instructions.includes("show_imported_files")) ||
       !/Friday/i.test(instructions)
@@ -445,7 +445,7 @@ export function fixtureTurn(body, kind = "main", pluginEffectsUrl) {
     ];
     const requests = [
       ["read", { path: ".situate/working-method.md" }],
-      ["create_batch", { entries: copies, prepareCopy: true }],
+      ["create_batch", { entries: copies }],
       ...(!ordinary
         ? [
             [

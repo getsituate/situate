@@ -1395,6 +1395,24 @@ pub(crate) fn agent_request(
         );
     }
     let read = |path: &str| read_bytes(app, &location, root.as_deref(), path);
+    if matches!(request.operation.as_str(), "move" | "copy") {
+        if !content.pending_paths.is_empty() {
+            return Err("native.content.store.busy".into());
+        }
+        let store = content
+            .store
+            .as_mut()
+            .ok_or("native.files.operation.unavailable")?;
+        check_cancelled()?;
+        let outcome = crate::file_tool::relocate(store, &request)?;
+        let is_error = matches!(
+            outcome,
+            situate_core::content::OperationOutcome::PartialFailure { .. }
+        );
+        return Ok(
+            json!({"isError":is_error,"path":request.path,"destination":request.destination,"outcome":outcome}),
+        );
+    }
     if request.operation == "create_batch" {
         if !content.pending_paths.is_empty() {
             return Err("native.content.store.busy".into());
@@ -1476,16 +1494,15 @@ pub(crate) fn agent_request(
         if text.len() > 1_048_576 {
             return Err("native.files.read.tooLarge".into());
         }
-        let generated_task_ids: Vec<_> =
-            if before.is_none() && request.prepare_copy && markdown(&request.path).is_ok() {
-                metadata::inspect(&text)
-                    .tasks
-                    .into_iter()
-                    .map(|task| task.id)
-                    .collect()
-            } else {
-                Vec::new()
-            };
+        let supplied_task_ids: Vec<_> = if request.prepare_copy {
+            Vec::new()
+        } else {
+            metadata::inspect(&text)
+                .tasks
+                .into_iter()
+                .map(|task| task.id)
+                .collect()
+        };
         check_cancelled()?;
         let outcome = store
             .agent_write(&request.path, request.expected_revision.as_deref(), &text)
@@ -1502,6 +1519,16 @@ pub(crate) fn agent_request(
                 error,
             } => (version, Some(history_revision), Some(error)),
             other => return Ok(json!({"isError":true,"outcome":other})),
+        };
+        let generated_task_ids: Vec<_> = if markdown(&request.path).is_ok() {
+            metadata::inspect(&version.text)
+                .tasks
+                .into_iter()
+                .map(|task| task.id)
+                .filter(|id| !supplied_task_ids.contains(id))
+                .collect()
+        } else {
+            Vec::new()
         };
         return Ok(
             json!({"isError":warning.is_some(),"change":{"path":request.path,"before":before.as_ref().map(|v| &v.text),"after":version.text,"beforeRevision":before.map(|v|v.revision),"afterRevision":version.revision},"historyRevision":history_revision,"warning":warning,"generatedTaskIds":generated_task_ids}),

@@ -1013,7 +1013,7 @@
         }),
       );
       await send(
-        "[e2e:onboarding-import] Import the attached JSON export and Markdown note into imported-tasks.md and imported-notes.md. The attachments are copies of external originals, which must stay unchanged. JSON tasks are commitments: done is completion, created is the creation date, and due is the deadline. Keep sourceId, created, due and routingCode under those exact field names inside each task's metadata comment, using a JSON object as valid YAML with situate-task-id: null task intent. Publish with prepareCopy: true so native storage assigns fresh task UUIDs. Preserve the supplied note and its attachments; the Markdown checkbox is an ordinary packing checklist. Follow confirmed .situate/working-method.md. Scope and mappings are fully specified; perform the import now, then show the persisted destination files.",
+        "[e2e:onboarding-import] Import the attached JSON export and Markdown note into imported-tasks.md and imported-notes.md. The attachments are copies of external originals, which must stay unchanged. JSON tasks are commitments: done is completion, created is the creation date, and due is the deadline. Keep sourceId, created, due and routingCode under those exact field names inside each task's metadata comment, using a JSON object as valid YAML with situate-task-id: null task intent. Publish using write or create_batch so native storage assigns fresh task UUIDs. Preserve the supplied note and its attachments; the Markdown checkbox is an ordinary packing checklist. Follow confirmed .situate/working-method.md. Scope and mappings are fully specified; perform the import now, then show the persisted destination files.",
       );
       const importedConversation = await settled();
       assert(
@@ -1282,7 +1282,7 @@
     await navigation();
     await click("New chat");
     await send(
-      "[e2e:ordinary-import] Import these copies of external originals into later-imported-tasks.md and later-imported-notes.md. Read .situate/working-method.md first. JSON tasks are commitments: done is completion, created is the creation date, due is the deadline. Preserve sourceId, created, due and routingCode in task metadata comments with situate-task-id: null intent, then publish using prepareCopy: true so native storage assigns fresh UUIDs. The Markdown checkbox is an ordinary packing checklist. Preserve the supplied note and its links. Leave originals and earlier imported files unchanged. Use general write/create_batch operations and report saved destinations.\n\ntasks.json\n" +
+      "[e2e:ordinary-import] Import these copies of external originals into later-imported-tasks.md and later-imported-notes.md. Read .situate/working-method.md first. JSON tasks are commitments: done is completion, created is the creation date, due is the deadline. Preserve sourceId, created, due and routingCode in task metadata comments with situate-task-id: null intent, then publish using write or create_batch so native storage assigns fresh UUIDs. The Markdown checkbox is an ordinary packing checklist. Preserve the supplied note and its links. Leave originals and earlier imported files unchanged. Use general write/create_batch operations and report saved destinations.\n\ntasks.json\n" +
         originals.json.text +
         "\n\nnotes.md\n" +
         originals.markdown.text,

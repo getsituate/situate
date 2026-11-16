@@ -73,23 +73,35 @@ pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value
         ),
         tool(
             "write",
-            "Create or replace complete UTF-8 workspace text through versioned storage. expectedRevision null creates only; an existing file requires its current revision. Maximum 1 MiB. prepareCopy true prepares a new imported copy with fresh task identities; sources remain unchanged. Do not replay uncertain publication.",
-            json!({"path":path,"text":{"type":"string","maxLength":1048576},"expectedRevision":{"type":["string","null"]},"prepareCopy":{"type":"boolean"}}),
+            "Create or replace complete UTF-8 workspace text through versioned storage. expectedRevision null creates only; an existing file requires its current revision. Maximum 1 MiB. Mark new tasks with <!-- situate-task-id: null -->; storage assigns UUIDs and returns the saved text and generatedTaskIds. Preserve existing task IDs. Use move or copy for whole files or folders. Do not replay uncertain publication.",
+            json!({"path":path,"text":{"type":"string","maxLength":1048576},"expectedRevision":{"type":["string","null"]}}),
             &["path", "text", "expectedRevision"],
         ),
         tool(
             "edit",
-            "Apply at most 100 exact, uniquely matching and non-overlapping text replacements against expectedRevision. Preserve unrelated content; stale revisions fail without overwrite.",
+            "Apply at most 100 exact, uniquely matching and non-overlapping text replacements against expectedRevision. Preserve unrelated content and existing task IDs; stale revisions fail without overwrite. Mark new tasks with <!-- situate-task-id: null -->; storage assigns UUIDs and returns the saved text and generatedTaskIds.",
             json!({"path":path,"expectedRevision":{"type":"string","minLength":1},"edits":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"object","additionalProperties":false,"required":["oldText","newText"],"properties":{"oldText":{"type":"string","minLength":1},"newText":{"type":"string"}}}}}),
             &["path", "expectedRevision", "edits"],
         ),
         tool(
+            "move",
+            "Move or rename a workspace file or folder to an unoccupied destination through versioned storage. Preserves task IDs and file-reference continuity. Use this instead of writing a duplicate and deleting the source. Does not move individual task lines between existing files. Do not replay uncertain outcomes.",
+            json!({"path":path,"destination":path}),
+            &["path", "destination"],
+        ),
+        tool(
+            "copy",
+            "Copy a workspace file or folder to an unoccupied destination through versioned storage. Leaves the source unchanged, assigns fresh task IDs and retargets recognized internal links within the copy. Does not copy individual task lines between existing files. Do not replay uncertain outcomes.",
+            json!({"path":path,"destination":path}),
+            &["path", "destination"],
+        ),
+        tool(
             "create_batch",
-            "Publish new files from an entries array without staging files. Each entry is {path,text} or {path,sourcePath}; sourcePath is an absolute path to a regular source file readable with the application's existing OS access. Use only sources within the user's requested scope. Sources remain unchanged; no symlinks or overwrite, and destination parents must exist. Use sourcePath for binary documents and attachments, never base64 text or shell copies to destinations. Preserve relative paths and attachment links. Limits: 256 destinations, 32 MiB encoded entries, 1 MiB per inline text entry, 64 MiB total prepared content, 60 KiB encoded destination path list, 4096 task identities. Split inputs to fit tool transport limits. prepareCopy creates fresh task-copy IDs in Markdown only. Only returned files are verified publications; identityMap can include unpublished plans. Inspect partial or uncertain results before any retry; never replay a whole uncertain batch.",
+            "Publish new files from an entries array without staging files. Each entry is {path,text} or {path,sourcePath}; sourcePath is an absolute path to a regular source file readable with the application's existing OS access. Use only sources within the user's requested scope. Sources remain unchanged; no symlinks or overwrite, and destination parents must exist. Use sourcePath for binary documents and attachments, never base64 text or shell copies to destinations. Preserve relative paths and attachment links. Limits: 256 destinations, 32 MiB encoded entries, 1 MiB per inline text entry, 64 MiB total prepared content, 60 KiB encoded destination path list, 4096 task identities. Split inputs to fit tool transport limits. In Markdown, explicit situate-task-id: null placeholders receive fresh UUIDs; existing IDs remain unchanged. Use null for new imported tasks. Read published Markdown to obtain assigned IDs before creating task links. Only returned files are verified publications; identityMap can include unpublished plans. Inspect partial or uncertain results before any retry; never replay a whole uncertain batch.",
             json!({"entries":{"type":"array","minItems":1,"maxItems":256,"items":{"oneOf":[
                 {"type":"object","additionalProperties":false,"required":["path","text"],"properties":{"path":path,"text":{"type":"string","maxLength":1048576}}},
                 {"type":"object","additionalProperties":false,"required":["path","sourcePath"],"properties":{"path":path,"sourcePath":{"type":"string","minLength":1,"maxLength":4096}}}
-            ]}},"prepareCopy":{"type":"boolean"}}),
+            ]}}}),
             &["entries"],
         ),
         tool(
@@ -122,7 +134,8 @@ pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value
     }
     tools.retain(|tool| {
         let name = tool["name"].as_str().unwrap_or_default();
-        (capabilities["writable"] == true || !matches!(name, "write" | "edit" | "create_batch"))
+        (capabilities["writable"] == true
+            || !matches!(name, "write" | "edit" | "create_batch" | "move" | "copy"))
             && (capabilities["history"] == true || !matches!(name, "history" | "read_revision"))
             && (capabilities["conversations"] == true
                 || !matches!(name, "list_conversations" | "read_conversation"))
@@ -174,6 +187,8 @@ pub(crate) fn is_file(name: &str) -> bool {
             | "write"
             | "edit"
             | "create_batch"
+            | "move"
+            | "copy"
             | "shell"
     )
 }
@@ -196,6 +211,37 @@ mod tests {
             for role in ["check", "inspect", "method", "support"] {
                 assert!(!allowed(Some(role), name));
             }
+        }
+    }
+
+    #[test]
+    fn agent_schemas_separate_copying_from_task_creation() {
+        let writable = definitions(&json!({"writable":true}), None);
+        for name in ["write", "create_batch"] {
+            let tool = writable.iter().find(|tool| tool["name"] == name).unwrap();
+            assert!(
+                tool["parameters"]["properties"]
+                    .get("prepareCopy")
+                    .is_none()
+            );
+        }
+        for name in ["move", "copy"] {
+            let tool = writable.iter().find(|tool| tool["name"] == name).unwrap();
+            assert_eq!(
+                tool["parameters"]["required"],
+                json!(["path", "destination"])
+            );
+            assert_eq!(tool["parameters"]["additionalProperties"], false);
+            assert!(is_file(name));
+            assert!(allowed(None, name));
+            for role in ["inspect", "method", "support", "check"] {
+                assert!(!allowed(Some(role), name));
+            }
+            assert!(
+                !definitions(&json!({}), None)
+                    .iter()
+                    .any(|tool| tool["name"] == name)
+            );
         }
     }
 

@@ -53,6 +53,16 @@ impl ContentStore {
         if text.len() > 1_048_576 {
             return Err(io::Error::other("native.files.read.tooLarge").into());
         }
+        let prepared;
+        let text = if is_markdown(path) {
+            prepared = crate::metadata::allocate_task_ids(text).map_err(ContentError::History)?;
+            prepared.as_str()
+        } else {
+            text
+        };
+        if text.len() > 1_048_576 {
+            return Err(io::Error::other("native.files.read.tooLarge").into());
+        }
         if self.drafts()?.iter().any(|draft| draft.path == path) {
             return Err(ContentError::Busy);
         }
@@ -100,12 +110,78 @@ mod tests {
         }
     }
     #[test]
+    fn writes_and_edits_allocate_new_tasks_without_changing_existing_ids() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(temp.path().join(".situate")).unwrap();
+        let mut store = ContentStore::open(temp.path()).unwrap();
+        let source =
+            "---\ncustom: kept\n---\n- [ ] New <!-- situate-task-id: null -->\n- [ ] Checklist\n";
+        let SaveOutcome::Saved {
+            version: first,
+            history_revision,
+        } = store.agent_write("project.md", None, source).unwrap()
+        else {
+            panic!("write failed")
+        };
+        let tasks = crate::metadata::inspect_tasks(&first.text).unwrap();
+        assert_eq!(tasks.len(), 1);
+        let id = &tasks[0].id;
+        assert_eq!(first.text.replace(&format!("\"{id}\""), "null"), source);
+        assert_eq!(
+            store
+                .read_revision("project.md", &history_revision)
+                .unwrap(),
+            first.text.as_bytes()
+        );
+        let edited = apply_exact_edits(
+            &first.text,
+            &[edit(
+                "- [ ] Checklist",
+                "- [ ] Added <!-- situate-task-id: null -->\n- [ ] Checklist",
+            )],
+        )
+        .unwrap();
+        store
+            .agent_write("project.md", Some(&first.revision), &edited)
+            .unwrap();
+        let second = store.read_text("project.md").unwrap();
+        let tasks = crate::metadata::inspect_tasks(&second.text).unwrap();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(&tasks[0].id, id);
+        assert_ne!(tasks[0].id, tasks[1].id);
+        assert!(
+            store
+                .agent_write("project.md", Some(&first.revision), source)
+                .is_err()
+        );
+        assert_eq!(store.read_text("project.md").unwrap().text, second.text);
+        store
+            .agent_write("destination.md", None, &second.text)
+            .unwrap();
+        assert_eq!(store.read_text("destination.md").unwrap().text, second.text);
+        store.agent_write("data.txt", None, source).unwrap();
+        assert_eq!(store.read_text("data.txt").unwrap().text, source);
+        drop(store);
+        assert_eq!(
+            ContentStore::open(temp.path())
+                .unwrap()
+                .read_text("project.md")
+                .unwrap()
+                .text,
+            second.text
+        );
+    }
+
+    #[test]
     fn oversized_mutations_do_not_create_files_or_drafts() {
         let temp = tempfile::tempdir().unwrap();
         std::fs::create_dir(temp.path().join(".situate")).unwrap();
         let mut store = ContentStore::open(temp.path()).unwrap();
         let text = "x".repeat(1_048_577);
         assert!(store.agent_write("large.md", None, &text).is_err());
+        let task = "- [ ] New <!-- situate-task-id: null -->\n";
+        let expanding = format!("{task}{}", "x".repeat(1_048_576 - task.len()));
+        assert!(store.agent_write("large.md", None, &expanding).is_err());
         assert!(!temp.path().join("large.md").exists());
         assert!(store.drafts().unwrap().is_empty());
     }

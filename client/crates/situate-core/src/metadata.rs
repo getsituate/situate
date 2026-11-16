@@ -452,6 +452,27 @@ fn scalar_range(text: &str, key: &str) -> Option<std::ops::Range<usize>> {
     None
 }
 
+/// Allocate explicit null task placeholders without changing existing identities or other bytes.
+pub fn allocate_task_ids(source: &str) -> Result<String, String> {
+    let analysis = analyze_identities(source, true);
+    let expected_tasks = analysis.metadata.tasks.len()
+        + analysis
+            .scalars
+            .iter()
+            .filter(|(id, _)| id.is_empty())
+            .count();
+    let mut scalars = analysis.scalars;
+    scalars.sort_by_key(|(_, span)| span.start);
+    let mut output = source.to_owned();
+    for (_, span) in scalars.into_iter().rev().filter(|(id, _)| id.is_empty()) {
+        output.replace_range(span, &format!("\"{}\"", Uuid::new_v4()));
+    }
+    if inspect(&output).tasks.len() != expected_tasks {
+        return Err("native.metadata.identityRegenerationUnsafe".into());
+    }
+    Ok(output)
+}
+
 pub(crate) fn copy_identities(source: &str) -> Result<IdentityCopy, String> {
     let analysis = analyze_identities(source, true);
     // Malformed unrelated metadata is retained. Only protected identities whose
@@ -767,6 +788,39 @@ mod tests {
         let metadata: serde_json::Value = serde_json::from_str(comment).unwrap();
         assert_eq!(metadata["situate-task-id"], task.id);
         assert_eq!(metadata["due"], "tomorrow");
+    }
+
+    #[test]
+    fn ordinary_allocation_preserves_existing_ids_metadata_and_unmarked_content() {
+        let source = format!(
+            "---\ncustom: kept\n---\n- [ ] Existing <!-- situate-task-id: {TASK} -->\n- [ ] New <!-- {{situate-task-id: null, due: tomorrow, custom: kept}} -->\n- [ ] Checklist\n\n```md\n- [ ] Example <!-- situate-task-id: null -->\n```\n"
+        );
+        let allocated = allocate_task_ids(&source).unwrap();
+        let tasks = inspect_tasks(&allocated).unwrap();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].id, TASK);
+        assert_ne!(tasks[1].id, TASK);
+        assert_eq!(Uuid::parse_str(&tasks[1].id).unwrap().get_version_num(), 4);
+        assert_eq!(
+            allocated.replace(&format!("\"{}\"", tasks[1].id), "null"),
+            source
+        );
+        assert_eq!(allocate_task_ids(&allocated).unwrap(), allocated);
+        let duplicate = format!(
+            "- [ ] One <!-- situate-task-id: {TASK} -->\n- [ ] Two <!-- situate-task-id: {TASK} -->\n"
+        );
+        assert_eq!(allocate_task_ids(&duplicate).unwrap(), duplicate);
+        for source in [
+            "- [ ] Invalid <!-- situate-task-id: broken -->",
+            "- [ ] Empty <!-- situate-task-id: -->",
+            "- [ ] String <!-- situate-task-id: 'null' -->",
+        ] {
+            assert_eq!(allocate_task_ids(source).unwrap(), source);
+        }
+        let tagged =
+            allocate_task_ids("- [ ] Tagged <!-- situate-task-id: !!null null -->").unwrap();
+        assert_eq!(inspect_tasks(&tagged).unwrap().len(), 1);
+        assert!(inspect(&tagged).issues.is_empty());
     }
 
     #[test]

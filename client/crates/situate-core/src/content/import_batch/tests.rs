@@ -230,7 +230,7 @@ fn general_creation_preserves_nested_metadata_attachments_links_and_cancelled_en
 }
 
 #[test]
-fn ordinary_batches_preserve_bytes_and_prepared_batches_allocate_task_intents() {
+fn ordinary_and_legacy_prepared_batches_allocate_task_intents() {
     let (temp, mut store) = workspace();
     let original = "---\nsituate-id: ordinary-value\ncustom: kept\n---\n- [ ] First <!-- situate-task-id: null -->\n- [x] Second <!-- situate-task-id: null -->\n- [ ] Checklist\n";
     manifest(
@@ -244,7 +244,20 @@ fn ordinary_batches_preserve_bytes_and_prepared_batches_allocate_task_intents() 
         .create_batch(".situate/batch-batch.jsonl", false, || Ok(()))
         .unwrap();
     assert!(ordinary.identity_map.is_empty());
-    assert_eq!(store.read_text("Notes/original.md").unwrap().text, original);
+    let allocated = store.read_text("Notes/original.md").unwrap().text;
+    let original_tasks = crate::metadata::inspect_tasks(&allocated).unwrap();
+    assert_eq!(original_tasks.len(), 2);
+    assert_ne!(original_tasks[0].id, original_tasks[1].id);
+    assert_eq!(
+        ordinary.files[0].revision,
+        revision_for_text(&allocated).unwrap()
+    );
+    assert_eq!(
+        allocated
+            .replace(&format!("\"{}\"", original_tasks[0].id), "null")
+            .replace(&format!("\"{}\"", original_tasks[1].id), "null"),
+        original
+    );
     assert_eq!(
         store.read_text("Notes/data.json").unwrap().text,
         "{\"value\":1}\r\n"
@@ -265,7 +278,10 @@ fn ordinary_batches_preserve_bytes_and_prepared_batches_allocate_task_intents() 
     assert_ne!(tasks[0].id, tasks[1].id);
     assert!(!tasks[0].completed);
     assert!(tasks[1].completed);
-    assert_eq!(store.read_text("Notes/original.md").unwrap().text, original);
+    assert_eq!(
+        store.read_text("Notes/original.md").unwrap().text,
+        allocated
+    );
 }
 
 #[test]
@@ -273,14 +289,16 @@ fn task_intents_share_the_identity_bound_and_cannot_publish_oversized_preparatio
     let (temp, mut store) = workspace();
     let tasks = "- [ ] Task <!-- situate-task-id: null -->\n".repeat(MAX_IDENTITIES + 1);
     manifest(temp.path(), &[("Notes/tasks.md", &tasks)]);
-    assert_eq!(
-        store
-            .create_batch(".situate/batch-batch.jsonl", true, || Ok(()))
-            .unwrap_err()
-            .to_string(),
-        "native.content.operation.tooLarge"
-    );
-    assert!(!temp.path().join("Notes/tasks.md").exists());
+    for prepare_copy in [false, true] {
+        assert_eq!(
+            store
+                .create_batch(".situate/batch-batch.jsonl", prepare_copy, || Ok(()))
+                .unwrap_err()
+                .to_string(),
+            "native.content.operation.tooLarge"
+        );
+        assert!(!temp.path().join("Notes/tasks.md").exists());
+    }
 }
 
 #[test]

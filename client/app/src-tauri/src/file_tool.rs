@@ -8,10 +8,12 @@ mod conversation_history_tool;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ToolRequest {
     pub operation: String,
+    // Retained for existing callers; new agent schemas use explicit copy operations.
     #[serde(default)]
     pub prepare_copy: bool,
     #[serde(default)]
     pub path: String,
+    pub destination: Option<String>,
     pub text: Option<String>,
     pub entries: Option<Vec<situate_core::content::PreparedFile>>,
     pub expected_revision: Option<String>,
@@ -54,6 +56,7 @@ impl Arguments {
             "read_conversation" => &["conversationId", "recordRevision", "offset", "limit"],
             "ls" => &["path", "offset", "limit"],
             "find" | "grep" => &["path", "query", "offset", "limit"],
+            "move" | "copy" => &["path", "destination"],
             "write" => &["path", "text", "expectedRevision", "prepareCopy"],
             "create_batch" => &["entries", "manifestPath", "prepareCopy"],
             "edit" => &["path", "expectedRevision", "edits"],
@@ -94,6 +97,10 @@ impl ToolRequest {
     fn validate(&self) -> Result<(), String> {
         if self.entries.is_some() && self.operation != "create_batch"
             || self.path.len() > 4096
+            || self
+                .destination
+                .as_ref()
+                .is_some_and(|path| path.len() > 4096)
             || self.query.len() > 1024
             || self.edits.len() > 100
             || self
@@ -130,6 +137,13 @@ impl ToolRequest {
         let valid = match self.operation.as_str() {
             "capabilities" | "instructions" | "ls" | "find" => true,
             "read" | "history" => !self.path.is_empty(),
+            "move" | "copy" => {
+                !self.path.is_empty()
+                    && self
+                        .destination
+                        .as_ref()
+                        .is_some_and(|path| !path.is_empty())
+            }
             "create_batch" => match &self.entries {
                 Some(entries) => {
                     self.path.is_empty() && !entries.is_empty() && entries.len() <= 256
@@ -161,6 +175,22 @@ impl ToolRequest {
             Err("native.content.base.mismatch".into())
         }
     }
+}
+
+pub(crate) fn relocate(
+    store: &mut situate_core::content::ContentStore,
+    request: &ToolRequest,
+) -> Result<situate_core::content::OperationOutcome, String> {
+    let destination = request
+        .destination
+        .as_deref()
+        .ok_or("native.content.base.mismatch")?;
+    match request.operation.as_str() {
+        "move" => store.move_entry(&request.path, destination),
+        "copy" => store.copy_entry(&request.path, destination),
+        _ => return Err("native.files.operation.unavailable".into()),
+    }
+    .map_err(|error| error.to_string())
 }
 
 pub(crate) fn entries_page(
@@ -340,7 +370,63 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn copy_preparation_is_explicit_and_only_for_new_publication() {
+    fn move_and_copy_use_managed_operations_and_preserve_sources_on_failure() {
+        use situate_core::{content::ContentStore, metadata};
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(temp.path().join(".situate")).unwrap();
+        let mut store = ContentStore::open(temp.path()).unwrap();
+        store
+            .agent_write(
+                "source.md",
+                None,
+                "- [ ] Work <!-- situate-task-id: null -->\n",
+            )
+            .unwrap();
+        let original = store.read_text("source.md").unwrap();
+        let reference = store
+            .capture_reference("workspace", "source.md", None)
+            .unwrap();
+        let request =
+            super::parse_native("move", json!({"path":"source.md","destination":"moved.md"}))
+                .unwrap();
+        super::relocate(&mut store, &request).unwrap();
+        assert!(!temp.path().join("source.md").exists());
+        assert_eq!(store.read_text("moved.md").unwrap().text, original.text);
+        assert_eq!(
+            store.resolve_reference(&reference).unwrap().unwrap().1,
+            "moved.md"
+        );
+        let request =
+            super::parse_native("copy", json!({"path":"moved.md","destination":"copy.md"}))
+                .unwrap();
+        super::relocate(&mut store, &request).unwrap();
+        let copied = store.read_text("copy.md").unwrap();
+        assert_ne!(
+            metadata::inspect(&copied.text).tasks[0].id,
+            metadata::inspect(&original.text).tasks[0].id
+        );
+        assert_eq!(store.read_text("moved.md").unwrap().text, original.text);
+        assert!(super::relocate(&mut store, &request).is_err());
+        for operation in ["move", "copy"] {
+            for destination in ["../outside.md", ".situate/state.md"] {
+                let request = super::parse_native(
+                    operation,
+                    json!({"path":"moved.md","destination":destination}),
+                )
+                .unwrap();
+                assert!(super::relocate(&mut store, &request).is_err());
+            }
+            assert!(super::parse_native(operation, json!({"path":"moved.md"})).is_err());
+            assert!(
+                super::parse_native(operation, json!({"path":"moved.md","destination":""}))
+                    .is_err()
+            );
+        }
+        assert_eq!(store.read_text("moved.md").unwrap().text, original.text);
+    }
+
+    #[test]
+    fn legacy_copy_preparation_is_explicit_and_only_for_new_publication() {
         let value = json!({"operation":"write", "arguments":{"path":"created.md","text":"# Note","expectedRevision":null,"prepareCopy":true}});
         let request: super::Arguments = serde_json::from_value(value.clone()).unwrap();
         let parsed = request.parse().unwrap();
