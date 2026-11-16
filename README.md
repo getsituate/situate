@@ -21,7 +21,7 @@ Install Pi and Herdr for agent-assisted development and parallel work. See [Deve
 
 ## Tests
 
-Run `node tools/test.mjs` for the active macOS MVP scope, or `node tools/test.mjs --unit --changed` for fast tests in affected projects. Expensive workshop, design-browser and visual sweeps are opt-in with `node tools/test.mjs --extended` or their dedicated commands. See the [test suite guide](docs/development/testing.md) for profiles, Git comparison bases, prerequisites, and JSON output.
+Run focused tests and checks for the changed behavior locally; CI runs the broader PR verification plan. Use `node tools/test.mjs --unit --changed` for tests in affected projects, or narrower project commands. The unfiltered `node tools/test.mjs` remains available for full macOS MVP verification. Expensive workshop, design-browser and visual sweeps are opt-in with `node tools/test.mjs --extended` or their dedicated commands. See the [test suite guide](docs/development/testing.md) for profiles, Git comparison bases, prerequisites, and JSON output.
 
 ## Requirements viewer
 
