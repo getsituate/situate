@@ -9,9 +9,7 @@
         {
           "id": "conversation-list-recovery",
           "type": "fixed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Keep the conversation list usable",
           "paragraphs": [
             "Unrelated files and unreadable conversations no longer block the conversation list. Unreadable conversations are hidden without deleting their files. If the list cannot be loaded, the recovery dialog offers reporting and recovery options."
@@ -25,9 +23,7 @@
         {
           "id": "conversation-list-recovery",
           "type": "fixed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Die Gesprächsliste bleibt nutzbar",
           "paragraphs": [
             "Fremde Dateien und nicht lesbare Gespräche blockieren die Gesprächsliste nicht mehr. Nicht lesbare Gespräche werden ausgeblendet, ohne ihre Dateien zu löschen. Wenn sich die Liste nicht laden lässt, bietet der Fehlerdialog Möglichkeiten zum Melden des Fehlers und zur Wiederherstellung."
