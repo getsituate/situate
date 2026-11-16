@@ -92,6 +92,45 @@ test("tool containers isolate dependencies and credentials and retain their owne
   );
 });
 
+test("macOS disposable caches and Rust targets stay inside the Linux VM", (t) => {
+  const root = fixture(t);
+  const result = python(
+    `root=pathlib.Path(${JSON.stringify(root)}); state=root/'state'
+m.sys.platform='darwin'
+mac=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,['suites'],{},'fixture','fixture')
+m.sys.platform='linux'
+linux=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,['suites'],{},'fixture','fixture')
+print(json.dumps({'mac':mac,'linux':linux}))`,
+  );
+  for (const target of [
+    "/ci-cache",
+    `${root}/client/target`,
+    `${root}/tools/dev-tui/target`,
+  ]) {
+    assert(result.mac.includes(`${target}:exec,mode=1777`));
+    assert(!result.mac.some((arg) => arg.endsWith(`dst=${target}`)));
+    assert(result.linux.some((arg) => arg.endsWith(`dst=${target}`)));
+  }
+  assert(
+    !result.mac.some((arg) =>
+      arg.startsWith(`type=bind,src=${root}/state/cache`),
+    ),
+  );
+});
+
+test("private startup directories do not change the test process file-creation mask", (t) => {
+  const root = fixture(t);
+  const value = python(`import subprocess,stat
+root=pathlib.Path(${JSON.stringify(root)})
+args=m.arguments(root,root/'state','ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],{},'fixture','fixture')
+prefix=args[args.index('-c')+1].split('source /opt/ci-tools/ci-user.sh')[0]
+environment={**os.environ,**{key:str(root/key) for key in ('HOME','CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')}}
+result=subprocess.run(['bash','-c',prefix+'umask'],env=environment,capture_output=True,text=True,check=True)
+print(json.dumps({'mask':result.stdout.strip(),'modes':[(root/key).stat().st_mode&0o777 for key in ('HOME','CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')]}))`);
+  assert.equal(value.mask, "0022");
+  assert.deepEqual(value.modes, [0o700, 0o700, 0o700, 0o700]);
+});
+
 test("Git mounts expose an anonymous origin without host credentials or hooks", (t) => {
   const root = fixture(t);
   for (const args of [

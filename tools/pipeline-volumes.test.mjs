@@ -83,6 +83,30 @@ test("owned local volumes initialize once and warm reuse never changes ownership
 `);
 });
 
+test("Docker local-driver missing-volume errors are distinct from unavailable inspection", () => {
+  python(`with tempfile.TemporaryDirectory() as temporary:
+    paths=paths_at(Path(temporary).resolve())
+    original=docker.run
+    def local_driver(args,**kwargs):
+        result=original(args,**kwargs)
+        if args[1:3]==['volume','inspect'] and result.returncode:
+            result.stderr='Error response from daemon: get '+args[3]+': no such volume'
+        return result
+    v.subprocess.run=local_driver
+    names=v.prepare_volumes(paths,'linux/amd64',image,environment)
+    assert len(names)==6 and len(docker.inits())==6
+    def unavailable(args,**kwargs):
+        if args[1:3]==['volume','inspect']:
+            return types.SimpleNamespace(returncode=1,stdout='',stderr='Docker daemon unavailable')
+        return original(args,**kwargs)
+    v.subprocess.run=unavailable
+    try:v.prepare_volumes(paths,'linux/amd64',image,environment)
+    except RuntimeError:pass
+    else:raise AssertionError('uncertain daemon state treated as an absent volume')
+    assert len(docker.inits())==6
+`);
+});
+
 test("concurrent preparations share host locks and never reinitialize warm shared caches", () => {
   python(`import concurrent.futures,threading,time
 with tempfile.TemporaryDirectory() as temporary:

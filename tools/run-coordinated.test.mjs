@@ -222,7 +222,10 @@ with tempfile.TemporaryDirectory() as temporary:
         assert guardian.fd is None
     finally:guardian.release()
 `;
-  const result = spawnSync("python3", ["-B", "-c", source], { encoding: "utf8", timeout: 5000 });
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
   assert.equal(result.status, 0, result.stderr);
 });
 

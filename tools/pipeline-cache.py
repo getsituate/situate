@@ -43,10 +43,12 @@ def cache_root(environment, checkout):
         if not base.is_absolute():
             raise ValueError('Cache base must be absolute.')
         root = base / 'situate/container-v1'
+    if '..' in root.parts:
+        raise ValueError('Container cache paths cannot contain parent traversal.')
     checkout = Path(checkout).resolve(strict=True)
     if environment.get('HOME'):
         home = Path(environment['HOME']).resolve(strict=True)
-        cargo = Path(environment.get('CARGO_HOME', str(home / '.cargo'))).absolute()
+        cargo = Path(environment.get('CARGO_HOME', str(home / '.cargo'))).resolve()
         if root == home or root.is_relative_to(cargo):
             raise ValueError('Container caches cannot reuse a host home or Cargo home.')
     if root == Path('/') or root.is_relative_to(checkout) or checkout.is_relative_to(root):

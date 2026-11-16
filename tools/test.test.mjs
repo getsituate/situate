@@ -1786,6 +1786,33 @@ test("dependency setup commands execute without suite identity", async () => {
   assert.equal(result.exitCode, 0);
 });
 
+test("container transport preserves the host CI policy instead of adding a CI marker", async () => {
+  for (const ci of [undefined, "", "true"]) {
+    const environment = { ...process.env };
+    if (ci === undefined) delete environment.CI;
+    else environment.CI = ci;
+    const expected = ci === undefined ? "undefined" : JSON.stringify(ci);
+    const suite = {
+      ...command(
+        "tool-container",
+        `if(process.env.CI!==${expected})process.exit(9)`,
+      ),
+      kind: "container",
+    };
+    const result = await executeSuite(suite, { environment, output: silent() });
+    assert.equal(result.status, "passed", result.error);
+    assert.equal(result.exitCode, 0);
+  }
+  const ordinary = await executeSuite(
+    command("ordinary", "if(process.env.CI!=='true')process.exit(9)"),
+    {
+      environment: { PATH: process.env.PATH },
+      output: silent(),
+    },
+  );
+  assert.equal(ordinary.status, "passed", ordinary.error);
+});
+
 test("subprocess failures and missing executables return failure results", async () => {
   const result = await executeSuite(command("exit", "process.exit(7)"), {
     output: silent(),
@@ -1959,6 +1986,7 @@ test("fresh npm workspace installs once before tests; prepared runs reuse it", a
         ...options,
         install: async (installation) => {
           events.push("install");
+          assert.equal(installation.id, "npm-dependencies");
           assert.equal(installation.cwd, "client");
           assert.equal(
             installation.command,

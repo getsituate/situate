@@ -1,4 +1,4 @@
-"""Initialize private Docker-managed caches without host filesystem I/O."""
+"""Keep compiler and download caches in private Docker-managed volumes."""
 
 import fcntl
 import hashlib
@@ -91,7 +91,8 @@ def command(arguments, environment):
 def inspect_volume(name, labels, environment):
     result = command(['volume', 'inspect', name], environment)
     if result.returncode:
-        missing = re.fullmatch(r'(?:Error response from daemon: |Error: )?No such volume: ' + re.escape(name), result.stderr.strip())
+        missing = re.fullmatch(r'(?:(?:Error response from daemon: |Error: )?No such volume: ' + re.escape(name)
+                               + r'|Error response from daemon: get ' + re.escape(name) + r': no such volume)', result.stderr.strip())
         if result.returncode == 1 and missing:
             return None
         raise RuntimeError('Docker volume inspection is unavailable or uncertain.')
@@ -104,7 +105,7 @@ def inspect_volume(name, labels, environment):
             or not isinstance(value.get('CreatedAt'), str) or not value['CreatedAt']
             or not isinstance(value.get('Mountpoint'), str) or not value['Mountpoint'].startswith('/')):
         raise ValueError('Docker volume ownership or storage configuration differs.')
-    # Include the complete daemon identity so recreation or storage changes invalidate initialization.
+    # Recreated volumes must not reuse an earlier initialization receipt.
     return value
 
 

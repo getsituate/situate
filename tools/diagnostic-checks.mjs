@@ -20,7 +20,7 @@ export async function main([selection, target] = process.argv.slice(2)) {
       "1",
       "Use the tool-container launcher",
     );
-    prepareContainerLane(directory, plan.suites);
+    await prepareContainerLane(directory, plan.suites);
   }
   if (target === "native")
     assert.equal(

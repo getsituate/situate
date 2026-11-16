@@ -15,7 +15,7 @@ import { homedir } from "node:os";
 import { resolve, relative, isAbsolute, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
-import { readImageLock, root } from "./ci-image.mjs";
+import { readImageLock, root, selectImagePlatform } from "./ci-image.mjs";
 import { browserShards, linuxShards } from "./ci-shard.mjs";
 
 const shardNames = ["quick", ...linuxShards, "history"];
@@ -64,6 +64,7 @@ export function containerArguments({
   project,
   grep,
   dependencyPaths = ["client/node_modules"],
+  arch = process.arch,
 }) {
   if (!shardNames.includes(shard) && !["coverage", "visual"].includes(shard))
     throw new Error("Unknown container test shard.");
@@ -83,7 +84,7 @@ export function containerArguments({
     "--label",
     `dev.situate.ci-run=${token}`,
     "--platform",
-    lock.platform,
+    selectImagePlatform(lock, { arch, visual: shard === "visual" }),
     "--user",
     `${uid}:${gid}`,
     "--shm-size=2g",

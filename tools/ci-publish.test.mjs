@@ -611,7 +611,7 @@ test("workflow separates read-only candidate building from privileged data-only 
   ]) {
     const job = build
       .split(`  build-${architecture}:\n`)[1]
-      .split(/\n  [a-z]+-/)[0];
+      .split(/\n {2}[a-z]+-/)[0];
     assert.ok(job.includes(`runs-on: ${runner}\n`));
     assert.ok(job.includes(`CI_IMAGE_PLATFORM: linux/${architecture}`));
     const [buildSteps, transferStep] = job.split(

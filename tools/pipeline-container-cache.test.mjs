@@ -3,9 +3,19 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const launcher = fileURLToPath(new URL("./pipeline-container.py", import.meta.url));
+const launcher = fileURLToPath(
+  new URL("./pipeline-container.py", import.meta.url),
+);
 function python(source) {
-  const result = spawnSync("python3", ["-B", "-c", `import importlib.util, json, os, tempfile\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('launcher',${JSON.stringify(launcher)})\nm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n${source}`], { encoding: "utf8", timeout: 5000 });
+  const result = spawnSync(
+    "python3",
+    [
+      "-B",
+      "-c",
+      `import importlib.util, json, os, tempfile\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('launcher',${JSON.stringify(launcher)})\nm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n${source}`,
+    ],
+    { encoding: "utf8", timeout: 5000 },
+  );
   assert.equal(result.status, 0, result.stderr);
 }
 
@@ -81,6 +91,9 @@ with tempfile.TemporaryDirectory() as temporary:
     rejected(checkout/'cache')
     rejected(base)
     rejected(Path('relative'))
+    scratch=base/'scratch';scratch.mkdir()
+    rejected(scratch/'..'/'checkout'/'cache')
+    assert not (checkout/'cache').exists()
     root=base/'unmarked';root.mkdir(mode=0o700);(root/'unknown').write_text('retain')
     rejected(root);assert (root/'unknown').read_text()=='retain'
     root=base/'public';root.mkdir(mode=0o755);rejected(root)
@@ -147,6 +160,7 @@ test("container arguments mount only dedicated caches and keep Cargo home dispos
     (root/'client/rust-toolchain.toml').write_text('channel = "1.98.1"')
     state=base/'state';state.mkdir()
     env={'SITUATE_CONTAINER_CACHE_DIR':str(base/'cache')}
+    m.sys.platform='linux'
     args=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',platform='linux/arm64')
     mounts=[item for item in args if item.startswith('type=bind')]
     assert 'linux/arm64' in args
@@ -156,5 +170,19 @@ test("container arguments mount only dedicated caches and keep Cargo home dispos
     assert any('worktrees/' in item and 'dst='+str(root/'client/target') in item for item in mounts)
     assert not any('node_modules' in item or '/.cargo' in item for item in mounts)
     disposable=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],{**env,'GITHUB_ACTIONS':'true'},'fixture','fixture')
-    assert not any(str(base/'cache') in item for item in disposable)`);
+    assert not any(str(base/'cache') in item for item in disposable)
+    paths=m.retained_cache_paths(root,'linux/arm64','ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,env)
+    import hashlib
+    volumes={key:'situate-cache-'+str(os.getuid())+'-'+hashlib.sha256(key.encode()).hexdigest() for key in paths}
+    m.sys.platform='darwin'
+    managed=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',platform='linux/arm64',cache_paths=paths,cache_volumes=volumes)
+    assert '/ci-cache:exec,mode=1777' in managed
+    assert '/ci-cache/cargo:exec,mode=0700,uid='+str(os.getuid())+',gid='+str(os.getgid()) in managed
+    assert sum(item.startswith('type=volume,') for item in managed)==6
+    assert not any(str(base/'cache') in item for item in managed)
+    for destination in ('/ci-cache/npm','/ci-cache/browsers','/ci-cache/cargo/registry','/ci-cache/cargo/git',str(root/'client/target'),str(root/'tools/dev-tui/target')):
+        assert any('dst='+destination+',volume-nocopy' in item for item in managed)
+    try:m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',cache_paths=paths)
+    except ValueError:pass
+    else:raise AssertionError('macOS retained caches silently used host binds')`);
 });

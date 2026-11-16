@@ -106,7 +106,20 @@ def image_platform(lock, machine=None):
     raise ValueError('Invalid CI tool image lock.')
 
 
-def arguments(root, state, image, command, environment, name, token, lease=None, platform='linux/amd64', admission=None):
+def retained_cache_paths(root, platform, image, environment):
+    caches = cache_module()
+    retained = caches.cache_root(environment, root)
+    return caches.layout(retained, platform, image, root) if retained is not None else {}
+
+
+def volume_module():
+    spec = importlib.util.spec_from_file_location('pipeline_volumes', ROOT / 'tools/pipeline-volumes.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def arguments(root, state, image, command, environment, name, token, lease=None, platform='linux/amd64', admission=None, cache_paths=None, cache_volumes=None):
     root = Path(root).resolve(strict=True)
     state = Path(state).resolve(strict=True)
     if not isinstance(image, str) or not IMAGE.fullmatch(image):
@@ -122,18 +135,29 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
     args += mount(root) + mount(state)
     cache = state / "cache"
-    cache.mkdir(exist_ok=True)
-    (cache / 'cargo').mkdir(exist_ok=True)
-    args += mount(cache, "/ci-cache")
-    caches = cache_module()
-    retained = caches.cache_root(environment, root)
-    if retained is not None:
-        paths = caches.layout(retained, platform, image, root)
-        for key, destination in (('npm', '/ci-cache/npm'), ('browsers', '/ci-cache/browsers'),
-                                 ('cargo-registry', '/ci-cache/cargo/registry'), ('cargo-git', '/ci-cache/cargo/git')):
-            args += mount(paths[key], destination)
+    guest_caches = sys.platform == 'darwin'
+    if guest_caches:
+        args += ['--tmpfs', '/ci-cache:exec,mode=1777',
+                 '--tmpfs', f'/ci-cache/cargo:exec,mode=0700,uid={os.getuid()},gid={os.getgid()}']
     else:
-        paths = {}
+        cache.mkdir(exist_ok=True)
+        (cache / 'cargo').mkdir(exist_ok=True)
+        args += mount(cache, '/ci-cache')
+    paths = retained_cache_paths(root, platform, image, environment) if cache_paths is None else cache_paths
+    volumes = cache_volumes or {}
+    if guest_caches and paths and set(volumes) != set(paths):
+        raise ValueError('macOS retained caches require prepared Docker volumes.')
+    def cache_mount(key, destination):
+        if guest_caches:
+            volume = volumes[key]
+            if not isinstance(volume, str) or not re.fullmatch(r'situate-cache-' + str(os.getuid()) + r'-[a-f0-9]{64}', volume):
+                raise ValueError('Invalid Docker cache volume identity.')
+            return ['--mount', f'type=volume,src={volume},dst={destination},volume-nocopy']
+        return mount(paths[key], destination)
+    for key, destination in (('npm', '/ci-cache/npm'), ('browsers', '/ci-cache/browsers'),
+                             ('cargo-registry', '/ci-cache/cargo/registry'), ('cargo-git', '/ci-cache/cargo/git')):
+        if paths:
+            args += cache_mount(key, destination)
     if admission is not None:
         args += mount(admission, '/situate-admission')
     for path in dependency_paths(root):
@@ -141,9 +165,15 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
             raise ValueError("Docker mount paths cannot contain commas.")
         args += ["--tmpfs", f"{path}:exec,mode=1777"]
     for relative in ("client/target", "tools/dev-tui/target"):
-        target = paths.get(relative.replace('/', '-'), cache / relative.replace('/', '-'))
-        target.mkdir(exist_ok=True)
-        args += mount(target, root / relative)
+        if paths:
+            args += cache_mount(relative.replace('/', '-'), root / relative)
+        elif guest_caches:
+            # Keep disposable compiler files off the macOS shared filesystem.
+            args += ['--tmpfs', f'{root / relative}:exec,mode=1777']
+        else:
+            target = cache / relative.replace('/', '-')
+            target.mkdir(exist_ok=True)
+            args += mount(target, root / relative)
     empty = state / "empty-env"
     empty.write_text("")
     empty.chmod(0o600)
@@ -178,7 +208,7 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
             env[key] = str(path)
     for key, value in env.items():
         args += ["--env", f"{key}={value}"]
-    script = ('set -eu; umask 077; mkdir -p "$HOME" "$CARGO_HOME" "$npm_config_cache" "$PLAYWRIGHT_BROWSERS_PATH"; '
+    script = ('set -eu; umask 077; mkdir -p "$HOME" "$CARGO_HOME" "$npm_config_cache" "$PLAYWRIGHT_BROWSERS_PATH"; umask 022; '
               'source /opt/ci-tools/ci-user.sh; git config --global --add safe.directory "$PWD"; '
               'exec /opt/volta/bin/node tools/pipeline-container-entry.mjs "$@"')
     args += ["--workdir", str(root), image, "bash", "-c", script, "pipeline", *command]
@@ -277,7 +307,8 @@ def main(argv=None, environment=None):
     lock = json.loads((ROOT / "tools/ci-image.lock.json").read_text())
     platform = image_platform(lock)
     subprocess.run(["docker", "info"], check=True, stdout=subprocess.DEVNULL, env=environment)
-    present = subprocess.run(["docker", "image", "inspect", "--platform", platform, lock["image"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
+    inspection = ["docker", "image", "inspect", *(["--platform", platform] if lock["version"] == 2 else []), lock["image"]]
+    present = subprocess.run(inspection, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
     if present.returncode != 0:
         subprocess.run(["docker", "pull", "--platform", platform, lock["image"]], check=True, stdout=sys.stderr, env=environment)
     common = git_common_dir(ROOT)
@@ -312,9 +343,15 @@ def main(argv=None, environment=None):
             raise ValueError("Docker control leases must remain outside the checkout.")
         if coordinated and lease.exists():
             raise ValueError("An earlier container requires owner cleanup before another launch.")
+        paths = retained_cache_paths(ROOT, platform, lock['image'], environment)
+        volumes = volume_module().prepare_volumes(paths, platform, lock['image'], environment) if sys.platform == 'darwin' and paths else {}
         admission = Path(str(lease) + '.' + token + '.admission')
         admission.mkdir(mode=0o700)
-        docker_args = arguments(ROOT, state, lock["image"], command, environment, name, token, lease, platform, admission)
+        try:
+            docker_args = arguments(ROOT, state, lock["image"], command, environment, name, token, lease, platform, admission, paths, volumes)
+        except Exception:
+            admission.rmdir()
+            raise
         owner = container_owner()
         docker_environment = {key: environment[key] for key in owner.DOCKER_ENVIRONMENT if key in environment}
         command_line = [sys.executable, "-B", str(ROOT / "tools/pipeline-container.py"), "_docker-client", str(lease), token, *docker_args]
@@ -370,6 +407,6 @@ def main(argv=None, environment=None):
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (OSError, ValueError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)
