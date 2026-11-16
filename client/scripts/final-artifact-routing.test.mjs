@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { Agent, createServer, get } from "node:https";
 import { test } from "node:test";
 import { createQualificationRouting } from "./final-artifact-routing.mjs";
 
@@ -64,6 +69,115 @@ function fixture() {
   };
 }
 
+test("TLS probes do not reuse a private connection for the public reference address", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-routing-tls-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const key = join(directory, "key.pem"),
+    certificate = join(directory, "cert.pem");
+  const generated = spawnSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      key,
+      "-out",
+      certificate,
+      "-days",
+      "1",
+      "-subj",
+      "/CN=localhost",
+      "-addext",
+      "subjectAltName=DNS:localhost",
+    ],
+    { stdio: "ignore", timeout: 10000, env: { PATH: process.env.PATH } },
+  );
+  assert.equal(
+    generated.status,
+    0,
+    "Synthetic TLS certificate generation failed",
+  );
+  const cert = readFileSync(certificate);
+  const fixtureData = fixture();
+  const identity = fixtureData.replies[0].bytes;
+  const feed = fixtureData.replies[2].bytes;
+  const references = new WeakMap();
+  let publicDestination = false,
+    publicLookups = 0;
+  const server = createServer(
+    { key: readFileSync(key), cert },
+    (request, response) => {
+      const isPublic = references.get(request.socket);
+      if (request.url === fixtureData.config.identityPath) {
+        response.writeHead(isPublic ? 404 : 200);
+        response.end(isPublic ? "" : identity);
+      } else {
+        response.writeHead(200);
+        response.end(feed);
+      }
+    },
+  );
+  server.on("secureConnection", (socket) =>
+    references.set(socket, publicDestination),
+  );
+  const agent = new Agent({ keepAlive: true });
+  t.after(async () => {
+    agent.destroy();
+    server.closeAllConnections();
+    await new Promise((resolve) => {
+      server.close(resolve);
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const config = {
+    ...fixtureData.config,
+    endpoint: `https://localhost:${server.address().port}/releases/current/update.json`,
+    publicAddress: "192.0.2.1",
+  };
+  const adapter = createQualificationRouting(config, {
+    resolve: async () => [{ address: config.privateAddress }],
+    execute: async () => "interface: lo0\n",
+    request: (url, options, callback) =>
+      get(
+        url,
+        {
+          ...options,
+          ca: cert,
+          agent: options.agent === false ? false : agent,
+          lookup: (name, lookupOptions, done) => {
+            publicDestination = Boolean(options.lookup);
+            if (options.lookup) {
+              publicLookups++;
+              options.lookup(name, lookupOptions, (_error, result) => {
+                assert.equal(
+                  lookupOptions.all ? result[0].address : result,
+                  config.publicAddress,
+                );
+              });
+            }
+            // Both logical destinations use this listener; each socket retains its resolved role.
+            done(
+              null,
+              lookupOptions.all
+                ? [{ address: "127.0.0.1", family: 4 }]
+                : "127.0.0.1",
+              4,
+            );
+          },
+        },
+        callback,
+      ),
+  });
+  assert.equal((await adapter.inspect()).publicPointerUnchanged, true);
+  assert.equal(publicLookups, 2);
+});
+
 test("routing inspects OS resolution/interface, private TLS identity and unchanged public feed", async () => {
   const { adapter, calls, config } = fixture();
   assert.deepEqual(await adapter.inspect(), {
@@ -82,6 +196,7 @@ test("routing inspects OS resolution/interface, private TLS identity and unchang
     calls.every(
       (call) =>
         call.options.rejectUnauthorized === true &&
+        call.options.agent === false &&
         call.url.hostname === "example.com",
     ),
   );

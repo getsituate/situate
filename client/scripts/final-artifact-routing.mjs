@@ -56,6 +56,8 @@ export function createQualificationRouting(
         url,
         {
           signal,
+          // Reference-address probes must not reuse a socket opened through the private route.
+          agent: false,
           rejectUnauthorized: true,
           timeout: 30_000,
           ...(address

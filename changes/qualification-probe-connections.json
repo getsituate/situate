@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "qualification-probe-connections",
+  "behaviorDigest": "0cbeed4c8e1be1944b3ef3c5f4fd4080bf5fcef439a06f0b79fab4872a1b68b9",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Uses separate TLS connections for private and public qualification probes so address checks cannot reuse the wrong route.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "b68d2326d0293a5ce221032e44baf1311763bd0ff22c5f222bb93e8d1a2931c4",
+      "translationHash": "21fd4c20d1c9971cc03217206b1e55a1f1ffe6dce28ae63ed7fc2a7c9e6f08c6"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "b68d2326d0293a5ce221032e44baf1311763bd0ff22c5f222bb93e8d1a2931c4"
+  }
+}
