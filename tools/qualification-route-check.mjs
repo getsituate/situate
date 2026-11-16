@@ -47,6 +47,31 @@ export function routeCheckEnvironment(environment) {
   );
 }
 
+const routingPhases = [
+  "routing",
+  "dns",
+  "interface",
+  "private-identity",
+  "public-isolation",
+  "public-feed",
+  "feed-https",
+];
+const routingFailureCodes = [
+  "ERR_ASSERTION",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "CERT_HAS_EXPIRED",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "probe-timeout",
+  "deadline-exceeded",
+];
+
 // This child receives only public expected hashes and a credential-free environment.
 export const workerProgram = `
 import assert from 'node:assert/strict';
@@ -66,8 +91,13 @@ try {
   ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000, maxBuffer: 1048576 });
   assert.equal(createHash('sha256').update(data).digest('hex'), expected.feedSha256);
   console.log(JSON.stringify({ status: 'passed', phase: 'complete' }));
-} catch {
-  console.log(JSON.stringify({ status: 'failed', phase }));
+} catch (error) {
+  if (${JSON.stringify(routingPhases)}.includes(error?.qualificationRoutingPhase))
+    phase = error.qualificationRoutingPhase;
+  const failureCode = ${JSON.stringify(routingFailureCodes)}.includes(error?.code) ? error.code
+    : error?.message === 'Qualification route probe timed out' ? 'probe-timeout'
+    : error?.name === 'TimeoutError' ? 'deadline-exceeded' : 'unknown';
+  console.log(JSON.stringify({ status: 'failed', phase, failureCode }));
 }
 `;
 
@@ -93,6 +123,7 @@ export async function checkQualificationRoute({
   let phase = "configuration";
   const operation = { operationNonce: `route-probe-${randomUUID()}` };
   let diagnostic;
+  let workerFailureCode;
   let cleanup = "not-needed";
   let failed = false;
   const temporary = mkdtempSync(join(tmpdir(), "situate-route-check-"));
@@ -226,8 +257,13 @@ export async function checkQualificationRoute({
                 },
               );
               const report = JSON.parse(output);
-              if (["routing", "feed-https"].includes(report.phase))
-                phase = report.phase;
+              if (routingPhases.includes(report.phase)) phase = report.phase;
+              if (report.status !== "passed")
+                workerFailureCode = routingFailureCodes.includes(
+                  report.failureCode,
+                )
+                  ? report.failureCode
+                  : "unknown";
               assert.deepEqual(report, { status: "passed", phase: "complete" });
             },
             { signal },
@@ -261,6 +297,7 @@ export async function checkQualificationRoute({
     cleanup,
     ...operation,
     ...(diagnostic ? { route: diagnostic } : {}),
+    ...(workerFailureCode ? { workerFailureCode } : {}),
   };
 }
 

@@ -109,63 +109,74 @@ export function createQualificationRouting(
   }
   return {
     async inspect() {
-      const resolved = await resolve(endpoint.hostname, { all: true });
-      assert(
-        resolved.length > 0 &&
-          resolved.every((entry) => entry.address === config.privateAddress),
-        "Production hostname is not restricted to the private route",
-      );
-      const route = await execute(
-        "route",
-        ["-n", "get", config.privateAddress],
-        { capture: true, signal, env: { PATH: environment.PATH } },
-      );
-      const actualInterface = /^\s*interface:\s*(\S+)\s*$/m.exec(route)?.[1];
-      assert(
-        actualInterface === config.interface,
-        "Production hostname is not routed through the configured restricted interface",
-      );
-      const identityUrl = new URL(config.identityPath, endpoint.origin);
-      const identity = await probe(identityUrl, undefined, 200);
-      assert(
-        identity.sha256 === config.identitySha256 &&
-          JSON.parse(identity.bytes).operationId === config.operationId,
-        "Private TLS listener identity differs from the reserved operation",
-      );
-      await probe(identityUrl, config.publicAddress, 404);
-      const publicFeed = await probe(endpoint, config.publicAddress, 200);
-      assert(
-        publicFeed.sha256 === config.publicFeedSha256,
-        "Public production feed changed during isolated qualification",
-      );
-      const feed = JSON.parse(publicFeed.bytes);
-      const publicSignatures = Object.fromEntries(
-        ["darwin-aarch64", "darwin-x86_64"].map((target) => [
-          target,
-          feed.platforms?.[target]?.signature,
-        ]),
-      );
-      assert(
-        typeof feed.version === "string" &&
-          /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(
-            feed.version,
-          ) &&
-          Object.values(publicSignatures).every(
-            (signature) =>
-              typeof signature === "string" &&
-              signature.length <= 16384 &&
-              /^[A-Za-z0-9+/]+={0,2}$/.test(signature),
-          ),
-        "Public production feed is missing a valid version or macOS updater signature",
-      );
-      return {
-        endpoint: config.endpoint,
-        publicVersion: feed.version,
-        publicSignatures,
-        isolatedRouting: true,
-        normalTls: true,
-        publicPointerUnchanged: true,
-      };
+      let phase = "dns";
+      try {
+        const resolved = await resolve(endpoint.hostname, { all: true });
+        assert(
+          resolved.length > 0 &&
+            resolved.every((entry) => entry.address === config.privateAddress),
+          "Production hostname is not restricted to the private route",
+        );
+        phase = "interface";
+        const route = await execute(
+          "route",
+          ["-n", "get", config.privateAddress],
+          { capture: true, signal, env: { PATH: environment.PATH } },
+        );
+        const actualInterface = /^\s*interface:\s*(\S+)\s*$/m.exec(route)?.[1];
+        assert(
+          actualInterface === config.interface,
+          "Production hostname is not routed through the configured restricted interface",
+        );
+        phase = "private-identity";
+        const identityUrl = new URL(config.identityPath, endpoint.origin);
+        const identity = await probe(identityUrl, undefined, 200);
+        assert(
+          identity.sha256 === config.identitySha256 &&
+            JSON.parse(identity.bytes).operationId === config.operationId,
+          "Private TLS listener identity differs from the reserved operation",
+        );
+        phase = "public-isolation";
+        await probe(identityUrl, config.publicAddress, 404);
+        phase = "public-feed";
+        const publicFeed = await probe(endpoint, config.publicAddress, 200);
+        assert(
+          publicFeed.sha256 === config.publicFeedSha256,
+          "Public production feed changed during isolated qualification",
+        );
+        const feed = JSON.parse(publicFeed.bytes);
+        const publicSignatures = Object.fromEntries(
+          ["darwin-aarch64", "darwin-x86_64"].map((target) => [
+            target,
+            feed.platforms?.[target]?.signature,
+          ]),
+        );
+        assert(
+          typeof feed.version === "string" &&
+            /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(
+              feed.version,
+            ) &&
+            Object.values(publicSignatures).every(
+              (signature) =>
+                typeof signature === "string" &&
+                signature.length <= 16384 &&
+                /^[A-Za-z0-9+/]+={0,2}$/.test(signature),
+            ),
+          "Public production feed is missing a valid version or macOS updater signature",
+        );
+        return {
+          endpoint: config.endpoint,
+          publicVersion: feed.version,
+          publicSignatures,
+          isolatedRouting: true,
+          normalTls: true,
+          publicPointerUnchanged: true,
+        };
+      } catch (error) {
+        if (error instanceof Error && Object.isExtensible(error))
+          error.qualificationRoutingPhase = phase;
+        throw error;
+      }
     },
   };
 }
