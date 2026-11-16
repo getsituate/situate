@@ -8,6 +8,22 @@ import {
   qualificationCommandTimeouts,
 } from "./final-artifact-process.mjs";
 import { run } from "./ios-xcode.mjs";
+import { spawnSync } from "node:child_process";
+
+function assertStopped(pid) {
+  const result = spawnSync("ps", ["-p", String(pid), "-o", "stat="], {
+    encoding: "utf8",
+  });
+  assert.ifError(result.error);
+  if (result.status === 1 && !result.stdout.trim() && !result.stderr.trim())
+    return;
+  assert.equal(result.status, 0, "Cannot inspect owned native process");
+  assert.match(result.stdout.trim(), /^Z/, "Owned native process remains live");
+}
+
+test("process cleanup assertions reject a live process", () => {
+  assert.throws(() => assertStopped(process.pid), /remains live/);
+});
 
 test("progress failures cannot prevent cleanup commands and remain observable afterward", async () => {
   const progressFailure = new Error("Synthetic progress failure");
@@ -114,7 +130,7 @@ test("timeouts drain a synthetic owned process before reporting its command", as
     },
   );
   const pid = Number(readFileSync(pidFile, "utf8"));
-  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  assertStopped(pid);
   assert.equal(events.at(-1)[1], "timeout");
 });
 
@@ -157,7 +173,7 @@ test("cancellation drains a synthetic owned native call", async (t) => {
   abort.abort(new Error("private cancellation"));
   await pending;
   const pid = Number(readFileSync(pidFile, "utf8"));
-  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  assertStopped(pid);
 });
 
 test("cleanup commands retain independent deadlines after global cancellation", async () => {
