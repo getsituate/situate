@@ -191,9 +191,12 @@ pub async fn onboarding_development_prepare(
     scope: String,
     development_id: String,
 ) -> Result<crate::plugin_development::Status, String> {
+    let admission =
+        crate::ai_conversations::retain_conversation(&app, &window, &scope, &development_id)?;
     let label = window.label().to_owned();
     let authorization = crate::workspaces::authorization_session(&app, &label, &scope)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _admission = admission;
         crate::workspaces::with_authorization_session(&app, &label, &authorization, |location| {
             let _access = crate::ai::local_storage(&app, location)?;
             let root =

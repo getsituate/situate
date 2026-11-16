@@ -207,6 +207,10 @@ async function native(
       mimeType: args.mimeType,
     };
   if (command === "ai_conversation_ack") return;
+  if (command === "ai_conversation_delete") {
+    snapshots.delete(key(scope, conversation));
+    return;
+  }
   if (command === "ai_conversations_abort") {
     for (const [id, snapshot] of snapshots)
       if (id.startsWith(`${scope}/`)) {
@@ -354,6 +358,128 @@ async function started(task: Promise<void>) {
   return { task };
 }
 
+test("deletion stops observing running work and removes only the selected conversation", async () => {
+  const chat = await ready();
+  await ready("scope", "other");
+  const inventory = workspaceConversations("scope");
+  await inventory.refresh();
+  chat.state.draft = "Read the garden notes";
+  const send = chat.send();
+  await started(send);
+  const late = copy(ensure());
+  await chat.deleteConversation();
+  await send;
+  expect(mock.invoke).toHaveBeenCalledWith("ai_conversation_delete", {
+    scope: "scope",
+    conversation: "chat",
+  });
+  expect(inventory.state.conversations.map((item) => item.id)).toEqual([
+    "other",
+  ]);
+  publish(late);
+  chat.state.draft = "A late edit";
+  const before = actionCalls("draft").length;
+  await chat.saveDraft();
+  await chat.send();
+  expect(actionCalls("draft")).toHaveLength(before);
+  await inventory.refresh();
+  expect(inventory.state.conversations.map((item) => item.id)).toEqual([
+    "other",
+  ]);
+});
+test("deletion is shared across callers and blocks new work while storage is pending", async () => {
+  const chat = await ready();
+  let complete!: () => void;
+  mock.invoke.mockImplementation((command, args) =>
+    command === "ai_conversation_delete"
+      ? new Promise<void>((resolve) => {
+          complete = resolve;
+        })
+      : native(command, args),
+  );
+  const deletion = chat.deleteConversation();
+  expect(workspaceChat("scope", "chat").deleteConversation()).toBe(deletion);
+  await flushPromises();
+  chat.state.draft = "Do not submit";
+  await chat.send();
+  expect(actionCalls("submit")).toHaveLength(0);
+  expect(
+    mock.invoke.mock.calls.filter(
+      ([command]) => command === "ai_conversation_delete",
+    ),
+  ).toHaveLength(1);
+  complete();
+  await deletion;
+});
+test("failed deletion retains the conversation, refreshes stopped work and permits retry", async () => {
+  const chat = await ready();
+  const inventory = workspaceConversations("scope");
+  await inventory.refresh();
+  const snapshot = ensure();
+  snapshot.taskActive = true;
+  publish(snapshot);
+  expect(chat.state.running).toBe(true);
+  mock.invoke.mockImplementationOnce((command) => {
+    expect(command).toBe("ai_conversation_delete");
+    snapshot.taskActive = false;
+    publish(snapshot);
+    return Promise.reject(new Error("Storage unavailable"));
+  });
+  await expect(chat.deleteConversation()).rejects.toThrow(
+    "Storage unavailable",
+  );
+  expect(inventory.state.conversations.map((item) => item.id)).toEqual([
+    "chat",
+  ]);
+  expect(chat.state.running).toBe(false);
+  await chat.deleteConversation();
+  expect(inventory.state.conversations).toEqual([]);
+});
+test("failure readback remains part of the shared deletion before another caller can retry", async () => {
+  const chat = await ready();
+  let complete!: () => void;
+  mock.invoke.mockImplementation((command, args) => {
+    if (command === "ai_conversation_delete")
+      return Promise.reject(new Error("Storage unavailable"));
+    if (command === "ai_conversation_subscribe")
+      return new Promise((resolve) => {
+        complete = () => {
+          void native(command, args).then(resolve);
+        };
+      });
+    return native(command, args);
+  });
+  const deletion = chat.deleteConversation();
+  const failed = expect(deletion).rejects.toThrow("Storage unavailable");
+  await flushPromises();
+  expect(chat.deleteConversation()).toBe(deletion);
+  complete();
+  await failed;
+  expect(
+    mock.invoke.mock.calls.filter(
+      ([command]) => command === "ai_conversation_delete",
+    ),
+  ).toHaveLength(1);
+});
+test("a stale listing cannot restore a deleted conversation", async () => {
+  const chat = await ready();
+  const inventory = workspaceConversations("scope");
+  await inventory.refresh();
+  let complete!: (value: unknown) => void;
+  const stale = copy(inventory.state.conversations);
+  mock.invoke.mockImplementation((command, args) =>
+    command === "ai_conversations"
+      ? new Promise((resolve) => {
+          complete = resolve;
+        })
+      : native(command, args),
+  );
+  const refresh = inventory.refresh();
+  await chat.deleteConversation();
+  complete(stale);
+  await refresh;
+  expect(inventory.state.conversations).toEqual([]);
+});
 test("send submits a captured action and renders native partial/final projections without frontend leases or saves", async () => {
   const chat = await ready();
   chat.state.draft = "Read my notes";

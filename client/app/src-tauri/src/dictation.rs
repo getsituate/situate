@@ -195,6 +195,54 @@ pub(crate) fn forget_window(app: &tauri::AppHandle, window: &str) {
     }
 }
 
+pub(crate) async fn discard_conversation(
+    app: &tauri::AppHandle,
+    scope: &str,
+    conversation: &str,
+) -> Result<(), String> {
+    discard_target(&app.state::<Dictation>(), scope, conversation, |id| {
+        command("discard", id)
+    })
+    .await
+}
+
+async fn discard_target(
+    state: &Dictation,
+    scope: &str,
+    conversation: &str,
+    discard: impl FnOnce(&str),
+) -> Result<(), String> {
+    let id = state
+        .0
+        .lock()
+        .map_err(|_| "dictation.failed")?
+        .owner
+        .as_ref()
+        .filter(|owner| owner.scope == scope && owner.conversation == conversation)
+        .map(|owner| owner.id.clone());
+    let Some(id) = id else {
+        return Ok(());
+    };
+    discard(&id);
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            let finished = state
+                .0
+                .lock()
+                .map_err(|_| "dictation.failed")?
+                .owner
+                .as_ref()
+                .is_none_or(|owner| owner.id != id);
+            if finished {
+                return Ok(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .map_err(|_| "dictation.failed")?
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) async fn stop_for_update(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<Dictation>();
@@ -261,6 +309,8 @@ pub(crate) fn dictation_start(
     if crate::lifecycle::quit_pending(&app) {
         return Err("dictation.failed".into());
     }
+    let _admission =
+        crate::ai_conversations::retain_conversation(&app, &window, &scope, &conversation)?;
     crate::workspaces::with_open_storage(&app, window.label(), &scope, |_| Ok(()))?;
     let capability = app.state::<Dictation>();
     let mut state = capability.0.lock().map_err(|_| "dictation.failed")?;
@@ -358,6 +408,54 @@ mod tests {
         assert_eq!(
             wait_until_idle(&state).await,
             Err("native.updates.stopFailed".into())
+        );
+        assert!(state.0.lock().unwrap().owner.is_some());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn conversation_deletion_discards_and_waits_only_for_its_dictation() {
+        for phase in ["permission", "recording", "transcribing"] {
+            let state = Dictation(Mutex::new(State {
+                owner: Some(Owner {
+                    phase: phase.into(),
+                    ..owner("first", "current")
+                }),
+                ..State::default()
+            }));
+            discard_target(&state, "other-workspace", "chat", |_| {
+                panic!("other workspace")
+            })
+            .await
+            .unwrap();
+            discard_target(&state, "workspace", "other-chat", |_| {
+                panic!("other conversation")
+            })
+            .await
+            .unwrap();
+            let mut waiting = Box::pin(discard_target(&state, "workspace", "chat", |id| {
+                assert_eq!(id, "current")
+            }));
+            std::future::poll_fn(|cx| {
+                assert!(waiting.as_mut().poll(cx).is_pending());
+                std::task::Poll::Ready(())
+            })
+            .await;
+            state.0.lock().unwrap().owner = Some(owner("second", "next"));
+            tokio::time::advance(std::time::Duration::from_millis(50)).await;
+            waiting.await.unwrap();
+            assert_eq!(state.0.lock().unwrap().owner.as_ref().unwrap().id, "next");
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn conversation_deletion_retains_dictation_when_native_discard_never_finishes() {
+        let state = Dictation(Mutex::new(State {
+            owner: Some(owner("first", "current")),
+            ..State::default()
+        }));
+        assert_eq!(
+            discard_target(&state, "workspace", "chat", |_| {}).await,
+            Err("dictation.failed".into())
         );
         assert!(state.0.lock().unwrap().owner.is_some());
     }

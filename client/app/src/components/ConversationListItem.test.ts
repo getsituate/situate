@@ -2,14 +2,20 @@ import "../ui/popover-test-environment";
 import { afterEach, expect, test, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import ConversationListItem from "./ConversationListItem.vue";
-const renameTitle = vi.hoisted(() => vi.fn(async () => {}));
+import { dictation } from "../dictation/runtime";
+const { renameTitle, deleteConversation } = vi.hoisted(() => ({
+  renameTitle: vi.fn(async () => {}),
+  deleteConversation: vi.fn(async () => {}),
+}));
 vi.mock("../ai/chat", () => ({
-  workspaceChat: vi.fn(() => ({ renameTitle })),
+  workspaceChat: vi.fn(() => ({ renameTitle, deleteConversation })),
 }));
 enableAutoUnmount(afterEach);
 afterEach(() => {
   vi.restoreAllMocks();
   renameTitle.mockReset().mockResolvedValue(undefined);
+  deleteConversation.mockReset().mockResolvedValue(undefined);
+  dictation.owner = null;
   document.body.replaceChildren();
 });
 function render() {
@@ -35,6 +41,95 @@ async function edit(wrapper: ReturnType<typeof render>) {
   menu.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
   await flushPromises();
 }
+async function confirmDeletion(wrapper: ReturnType<typeof render>) {
+  await wrapper.get(".conversation-actions").trigger("click");
+  await flushPromises();
+  const items =
+    document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+  items[1]!.click();
+  await flushPromises();
+  return wrapper.get("dialog");
+}
+test("confirms deletion with standard dialog actions and updates the running-work warning", async () => {
+  const wrapper = render();
+  await wrapper.setProps({ running: false });
+  const dialog = await confirmDeletion(wrapper);
+  expect(dialog.element.open).toBe(true);
+  expect(dialog.text()).toContain(wrapper.props("item").title);
+  expect(dialog.text()).toContain("⟦chat.deleteConfirmation⟧");
+  expect(dialog.element.contains(document.activeElement)).toBe(true);
+  expect(document.activeElement?.textContent).toContain("⟦navigation.cancel⟧");
+  expect(deleteConversation).not.toHaveBeenCalled();
+  await wrapper.setProps({ running: true });
+  expect(dialog.text()).toContain("⟦chat.deleteRunningConfirmation⟧");
+  await dialog.get(".situate-button--danger").trigger("click");
+  await flushPromises();
+  expect(deleteConversation).toHaveBeenCalledOnce();
+  expect(dialog.element.open).toBe(false);
+});
+test("warns about owned recording without stopping it when deletion is cancelled", async () => {
+  dictation.owner = {
+    id: "recording",
+    scope: "workspace",
+    conversation: "garden",
+    phase: "recording",
+  };
+  const wrapper = render();
+  await wrapper.setProps({ running: false });
+  const dialog = await confirmDeletion(wrapper);
+  expect(dialog.text()).toContain("⟦chat.deleteRunningConfirmation⟧");
+  await dialog.trigger("cancel");
+  expect(dictation.owner?.id).toBe("recording");
+  expect(deleteConversation).not.toHaveBeenCalled();
+});
+test("cancels deletion with Escape or the safe action and restores focus", async () => {
+  const wrapper = render();
+  let dialog = await confirmDeletion(wrapper);
+  await dialog.trigger("cancel");
+  await flushPromises();
+  expect(dialog.element.open).toBe(false);
+  expect(document.activeElement).toBe(
+    wrapper.get(".conversation-actions").element,
+  );
+  dialog = await confirmDeletion(wrapper);
+  await dialog.get(".situate-button--secondary").trigger("click");
+  await flushPromises();
+  expect(dialog.element.open).toBe(false);
+  expect(deleteConversation).not.toHaveBeenCalled();
+});
+test("prevents duplicate deletion and dismissal until persistence settles", async () => {
+  let complete!: () => void;
+  deleteConversation.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      }),
+  );
+  const wrapper = render();
+  const dialog = await confirmDeletion(wrapper);
+  await dialog.get(".situate-button--danger").trigger("click");
+  expect(dialog.attributes("aria-busy")).toBe("true");
+  await dialog.get(".situate-button--danger").trigger("click");
+  await dialog.trigger("cancel");
+  expect(dialog.element.open).toBe(true);
+  expect(deleteConversation).toHaveBeenCalledOnce();
+  complete();
+  await flushPromises();
+  expect(dialog.element.open).toBe(false);
+});
+test("keeps deletion failures in the dialog and allows retry", async () => {
+  deleteConversation.mockRejectedValueOnce(new Error("Storage unavailable"));
+  const wrapper = render();
+  const dialog = await confirmDeletion(wrapper);
+  await dialog.get(".situate-button--danger").trigger("click");
+  await flushPromises();
+  expect(dialog.element.open).toBe(true);
+  expect(dialog.get('[role="alert"]').text()).toBe("⟦chat.deleteFailed⟧");
+  await dialog.get(".situate-button--danger").trigger("click");
+  await flushPromises();
+  expect(deleteConversation).toHaveBeenCalledTimes(2);
+  expect(dialog.element.open).toBe(false);
+});
 test("keeps the complete accessible title and a separate working indicator", async () => {
   const wrapper = render();
   expect(wrapper.get(".conversation-title").text()).toBe(

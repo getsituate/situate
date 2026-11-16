@@ -455,6 +455,43 @@ impl Storage {
         replace_metadata(&dir, &stored)?;
         Ok(value.clone())
     }
+    /// Removes the current conversation only. Callers must first stop its owner and
+    /// drain admitted writes; attachments, workspace content and Git history are retained.
+    pub fn delete_conversation(&self, id: &str) -> Result<(), String> {
+        validate_id(id)?;
+        let _lock = self.lock_named("conversations.lock")?;
+        let Some(root) = self.conversations_directory(false)? else {
+            return Ok(());
+        };
+        if self.conversation_dir(id, false)?.is_none() {
+            crate::durable_storage::sync_directory(&root).map_err(|_| DURABILITY)?;
+            return Ok(());
+        }
+        let retired = format!("conversation-delete-{}", uuid::Uuid::new_v4());
+        root.rename(id, &self.dir, &retired).map_err(|_| STORAGE)?;
+        let durable = (|| {
+            #[cfg(test)]
+            fail_if(|fault| matches!(fault, Fault::DirectorySync))?;
+            crate::durable_storage::sync_directory(&root).map_err(|_| DURABILITY)?;
+            crate::durable_storage::sync_directory(&self.dir).map_err(|_| DURABILITY)
+        })();
+        if let Err(error) = durable {
+            self.dir
+                .rename(&retired, &root, id)
+                .map_err(|_| DURABILITY)?;
+            crate::durable_storage::sync_directory(&root).map_err(|_| DURABILITY)?;
+            crate::durable_storage::sync_directory(&self.dir).map_err(|_| DURABILITY)?;
+            return Err(error.into());
+        }
+        // Cleanup cannot undo the durable removal. A failed cleanup leaves an
+        // unlisted recovery copy rather than a partially readable conversation.
+        let _ = self.dir.remove_dir_all(&retired);
+        if let Ok(mut indexes) = self.conversation_indexes.lock() {
+            indexes.remove(id);
+        }
+        Ok(())
+    }
+
     pub fn read_conversation_metadata(
         &self,
         id: &str,

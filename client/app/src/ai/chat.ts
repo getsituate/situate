@@ -129,6 +129,7 @@ interface Session {
   submissionVersion?: number;
   preparation?: AbortController;
   disposed: boolean;
+  deletion?: Promise<void>;
   statusVersion: number;
   draftModel?: string | null;
   draftThinking?: string | null;
@@ -155,6 +156,7 @@ interface WorkspaceChats {
     selected: string;
     loading: boolean;
     creating: boolean;
+    loaded: boolean;
     error: unknown;
   };
   sessions: Map<string, Session>;
@@ -170,6 +172,7 @@ function workspace(scope: string): WorkspaceChats {
         selected: "legacy",
         loading: false,
         creating: false,
+        loaded: false,
         error: "",
       }),
       sessions: shallowReactive(new Map()),
@@ -235,6 +238,7 @@ export function workspaceConversations(scope: string) {
               : item;
           })
           .sort(compareConversations);
+        owner.state.loaded = true;
         owner.state.error = "";
       } catch {
         if (version === owner.listVersion)
@@ -270,7 +274,8 @@ export function workspaceConversations(scope: string) {
         owner.state.selected = id;
     },
     running(id: string): boolean {
-      return owner.sessions.get(id)?.state.running ?? false;
+      const state = owner.sessions.get(id)?.state;
+      return !!(state?.running || state?.questionBusy);
     },
   };
 }
@@ -357,7 +362,8 @@ export function workspaceChat(
     owner.sessions.set(conversation, session);
   }
   const current = session;
-  const live = () => !current.disposed && workspaces.get(scope) === owner;
+  const live = () =>
+    !current.disposed && !current.deletion && workspaces.get(scope) === owner;
   const input = (): ConversationInput => ({
     text: current.state.draft,
     attachments: [...current.state.draftAttachments],
@@ -952,6 +958,7 @@ export function workspaceChat(
   async function action(value: ConversationAction): Promise<void> {
     current.actionError = undefined;
     await load();
+    if (!live()) throw new Error("plugins.workspaceUnavailable");
     await current.client.action(value);
   }
   function runId(): string | undefined {
@@ -1111,6 +1118,42 @@ export function workspaceChat(
       await refresh(true);
     },
     saveDraft,
+    deleteConversation(): Promise<void> {
+      if (current.deletion) return current.deletion;
+      if (current.disposed) return Promise.resolve();
+      current.preparation?.abort();
+      clearTimeout(current.draftTimer);
+      ++owner.listVersion;
+      owner.state.loading = false;
+      const deletion = (async () => {
+        await Promise.allSettled([
+          current.draftWrites,
+          current.attachmentWrites,
+          current.selectionCompletion,
+        ]);
+        await invoke("ai_conversation_delete", { scope, conversation });
+        current.disposed = true;
+        current.client.dispose();
+        current.stopWatching?.();
+        current.temporaryAttachments?.clear();
+        owner.sessions.delete(conversation);
+        ++owner.listVersion;
+        owner.state.loading = false;
+        owner.state.conversations = owner.state.conversations.filter(
+          (item) => item.id !== conversation,
+        );
+      })()
+        .catch(async (error) => {
+          await current.client.refresh().catch(() => {});
+          throw error;
+        })
+        .finally(() => {
+          current.deletion = undefined;
+          if (current.client.snapshot) project(current.client.snapshot);
+        });
+      current.deletion = deletion;
+      return deletion;
+    },
     async persistPreparedAssignment(canStart: () => boolean): Promise<void> {
       if (!live() || !canStart())
         throw new Error("plugins.workspaceUnavailable");

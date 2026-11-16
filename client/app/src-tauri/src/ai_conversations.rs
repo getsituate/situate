@@ -26,7 +26,7 @@ pub(super) struct Operations {
     active: AtomicUsize,
     changed: Notify,
 }
-pub(super) struct OperationGuard(Arc<Operations>);
+pub(crate) struct OperationGuard(Arc<Operations>);
 impl Drop for OperationGuard {
     fn drop(&mut self) {
         self.0.active.fetch_sub(1, Ordering::SeqCst);
@@ -1286,6 +1286,71 @@ fn read_tool_result(value: Value) -> Result<ToolResult, String> {
     })
 }
 
+#[derive(Default, PartialEq)]
+enum ConversationStatus {
+    #[default]
+    Open,
+    Deleting,
+    Deleted,
+}
+#[derive(Default)]
+struct ConversationLifecycle {
+    status: Mutex<ConversationStatus>,
+    actions: Arc<Operations>,
+}
+struct Deletion {
+    lifecycle: Arc<ConversationLifecycle>,
+}
+impl ConversationLifecycle {
+    fn ensure_open(&self) -> Result<(), String> {
+        if *self.status.lock().map_err(|_| NETWORK_ERROR)? != ConversationStatus::Open {
+            return Err("native.ai.conversation.invalidId".into());
+        }
+        Ok(())
+    }
+    fn admit(&self) -> Result<OperationGuard, String> {
+        let status = self.status.lock().map_err(|_| NETWORK_ERROR)?;
+        if *status != ConversationStatus::Open {
+            return Err("native.ai.conversation.invalidId".into());
+        }
+        Ok(self.actions.retain())
+    }
+    fn delete(self: &Arc<Self>) -> Result<Option<Deletion>, String> {
+        let mut status = self.status.lock().map_err(|_| NETWORK_ERROR)?;
+        match *status {
+            ConversationStatus::Deleted => Ok(None),
+            ConversationStatus::Deleting => Err("native.ai.conversation.conflict".into()),
+            ConversationStatus::Open => {
+                *status = ConversationStatus::Deleting;
+                Ok(Some(Deletion {
+                    lifecycle: self.clone(),
+                }))
+            }
+        }
+    }
+}
+impl Deletion {
+    fn commit(&self) {
+        *self
+            .lifecycle
+            .status
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = ConversationStatus::Deleted;
+    }
+}
+impl Drop for Deletion {
+    fn drop(&mut self) {
+        let mut status = self
+            .lifecycle
+            .status
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if *status == ConversationStatus::Deleting {
+            *status = ConversationStatus::Open;
+        }
+    }
+}
+
 #[derive(Clone, Hash, PartialEq, Eq)]
 struct OwnerKey {
     session: usize,
@@ -1301,10 +1366,12 @@ struct Entry {
     admissions: Mutex<CancellationToken>,
     action_tokens: Mutex<HashMap<String, (String, CancellationToken)>>,
     start: tokio::sync::Mutex<()>,
+    lifecycle: Arc<ConversationLifecycle>,
 }
 #[derive(Default)]
 pub(crate) struct Conversations {
     entries: Mutex<HashMap<OwnerKey, Arc<Entry>>>,
+    lifecycles: Mutex<HashMap<OwnerKey, (String, Arc<ConversationLifecycle>)>>,
     subscribers: Mutex<HashMap<(String, OwnerKey), Arc<Attachment>>>,
     checks: Mutex<HashMap<(usize, String), Check>>,
     presentations: Mutex<HashMap<String, Presentation>>,
@@ -1431,7 +1498,15 @@ impl Drop for CheckGuard {
         state.changed.notify_waiters();
     }
 }
+struct PendingDeletion(Arc<Entry>);
+impl Drop for PendingDeletion {
+    fn drop(&mut self) {
+        self.0.pending.fetch_sub(1, Ordering::SeqCst);
+        self.0.ready.notify_waiters();
+    }
+}
 struct Admission {
+    _lease: OperationGuard,
     entry: Arc<Entry>,
     cancel: CancellationToken,
     token_id: String,
@@ -1446,6 +1521,24 @@ impl Drop for Admission {
     }
 }
 impl Conversations {
+    fn lifecycle(
+        &self,
+        context: &Context,
+        conversation: &str,
+    ) -> Result<Arc<ConversationLifecycle>, String> {
+        let key = OwnerKey {
+            session: context.authorization.identity(),
+            conversation: conversation.into(),
+        };
+        Ok(self
+            .lifecycles
+            .lock()
+            .map_err(|_| NETWORK_ERROR)?
+            .entry(key)
+            .or_insert_with(|| (context.scope.clone(), Arc::default()))
+            .1
+            .clone())
+    }
     fn admit(
         &self,
         context: Context,
@@ -1471,8 +1564,10 @@ impl Conversations {
             if generation.is_some_and(|generation| generation != entry.generation) {
                 return Err("native.ai.conversation.conflict".into());
             }
+            let lease = entry.lifecycle.admit()?;
             entry.pending.fetch_add(1, Ordering::SeqCst);
             let mut admission = Admission {
+                _lease: lease,
                 entry,
                 cancel: CancellationToken::new(),
                 token_id: uuid::Uuid::new_v4().to_string(),
@@ -1521,7 +1616,11 @@ impl Conversations {
             &context.app,
             &context.window,
             &context.authorization,
-            || self.resolve_captured(context.clone(), conversation),
+            || {
+                let entry = self.resolve_captured(context.clone(), conversation)?;
+                entry.lifecycle.ensure_open()?;
+                Ok(entry)
+            },
         )
     }
     fn resolve_captured(
@@ -1534,6 +1633,7 @@ impl Conversations {
             conversation: conversation.clone(),
         };
         let app = context.app.clone();
+        let lifecycle = self.lifecycle(&context, &conversation)?;
         self.resolve_entry(&app, key, || {
             let host = Arc::new(NativeHost {
                 context,
@@ -1551,6 +1651,7 @@ impl Conversations {
                 admissions: Mutex::new(CancellationToken::new()),
                 action_tokens: Mutex::default(),
                 start: tokio::sync::Mutex::new(()),
+                lifecycle,
             });
             let initializing = entry.clone();
             tokio::spawn(async move {
@@ -1787,6 +1888,9 @@ impl Conversations {
         if let Ok(mut entries) = self.entries.lock() {
             entries.retain(|_, entry| entry.host.context.scope != scope);
         }
+        if let Ok(mut lifecycles) = self.lifecycles.lock() {
+            lifecycles.retain(|_, (entry_scope, _)| entry_scope != scope);
+        }
     }
 }
 impl Entry {
@@ -1843,6 +1947,47 @@ fn conversation_context(
         ));
     }
     authorized(app, window, scope)
+}
+pub(crate) fn retain_conversation(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    scope: &str,
+    conversation: &str,
+) -> Result<OperationGuard, String> {
+    let context = authorized(app.clone(), window, scope.into())?;
+    retain_captured_conversation(&context, conversation)
+}
+pub(super) fn retain_stored_conversation(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    scope: &str,
+    authorization: &crate::workspaces::AuthorizationSession,
+    conversation: &str,
+) -> Result<OperationGuard, String> {
+    let context = Context::new(
+        app.clone(),
+        window.label().into(),
+        scope.into(),
+        authorization.clone(),
+    );
+    crate::workspaces::with_retained_control(app, window.label(), authorization, || {
+        app.state::<Conversations>()
+            .lifecycle(&context, conversation)?
+            .admit()
+    })
+}
+fn retain_captured_conversation(
+    context: &Context,
+    conversation: &str,
+) -> Result<OperationGuard, String> {
+    context.control(|| {
+        crate::updates::ensure_mutation_admitted(&context.app)?;
+        context
+            .app
+            .state::<Conversations>()
+            .lifecycle(context, conversation)?
+            .admit()
+    })
 }
 fn authorized(
     app: tauri::AppHandle,
@@ -2052,6 +2197,77 @@ fn cancel_id(action: &Value) -> Option<&str> {
     .filter(|id| situate_core::conversation_runtime::identity(id))
 }
 #[tauri::command]
+pub(crate) async fn ai_conversation_delete(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    scope: String,
+    conversation: String,
+) -> Result<(), String> {
+    let context = authorized(app.clone(), &window, scope)?;
+    let (entry, deletion, pending) = context.control(|| {
+        crate::updates::ensure_mutation_admitted(&app)?;
+        let entry = app
+            .state::<Conversations>()
+            .resolve_captured(context.clone(), conversation)?;
+        let deletion = entry.lifecycle.delete()?;
+        let pending = deletion.as_ref().map(|_| {
+            entry.pending.fetch_add(1, Ordering::SeqCst);
+            PendingDeletion(entry.clone())
+        });
+        Ok((entry, deletion, pending))
+    })?;
+    let Some(deletion) = deletion else {
+        return Ok(());
+    };
+    tokio::spawn(async move {
+        let _pending = pending;
+        entry.admissions.lock().map_err(|_| NETWORK_ERROR)?.cancel();
+        let owner = entry.owner().await;
+        if let Ok(owner) = &owner {
+            owner.cancel_retained();
+        }
+        entry.lifecycle.actions.settled().await;
+        let dictation = crate::dictation::discard_conversation(
+            &app,
+            &entry.host.context.scope,
+            &entry.host.conversation,
+        )
+        .await;
+        let result = match owner {
+            Ok(owner) => owner.stop_and_wait_idle().await,
+            Err(_) => Ok(()),
+        };
+        entry.host.context.operations.settled().await;
+        *entry.admissions.lock().map_err(|_| NETWORK_ERROR)? = CancellationToken::new();
+        result?;
+        dictation?;
+        let conversation = entry.host.conversation.clone();
+        entry
+            .host
+            .with_storage(move |storage| storage.delete_conversation(&conversation))
+            .await?;
+        deletion.commit();
+        let key = OwnerKey {
+            session: entry.host.context.authorization.identity(),
+            conversation: entry.host.conversation.clone(),
+        };
+        if let Ok(mut subscribers) = app.state::<Conversations>().subscribers.lock() {
+            subscribers.retain(|(_, candidate), attachment| {
+                if candidate == &key {
+                    attachment.cancel.cancel();
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| NETWORK_ERROR.to_owned())?
+}
+
+#[tauri::command]
 pub(crate) async fn ai_conversation_action(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
@@ -2154,6 +2370,7 @@ pub(crate) async fn start_setup_developments(
             authorization.clone(),
         );
         let idea = idea.clone();
+        let _preparation = retain_captured_conversation(&context, &idea.development_id)?;
         let child = context
             .clone()
             .blocking(move || {

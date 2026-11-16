@@ -128,12 +128,20 @@ function createWorkspaceUi(workspaceId: string) {
   function titleFor(target: ViewTarget): string {
     if (target.kind === "empty") return t("layoutHost.newTab");
     if (target.kind === "new-conversation") return t("navigation.newChat");
-    if (target.kind === "conversation")
-      return (
-        workspaceConversations(workspaceId).state.conversations.find(
-          (item) => item.id === target.conversationId,
-        )?.title || t("navigation.newChat")
+    if (target.kind === "conversation") {
+      const inventory = workspaceConversations(workspaceId).state;
+      const conversation = inventory.conversations.find(
+        (item) => item.id === target.conversationId,
       );
+      return (
+        conversation?.title ||
+        t(
+          inventory.loaded && !conversation
+            ? "chat.unavailableTitle"
+            : "navigation.newChat",
+        )
+      );
+    }
     if (target.viewId === "files" && target.contentId)
       return target.contentId.split("/").at(-1)!;
     return (

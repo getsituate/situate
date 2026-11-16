@@ -7,8 +7,14 @@ import {
   shallowRef,
   watch,
 } from "vue";
-import { t } from "@situate/localization";
-import { SituateButton, SituateIcon, SituateIconButton } from "@situate/ui";
+import { t, localizeError } from "@situate/localization";
+import {
+  SituateButton,
+  SituateIcon,
+  SituateIconButton,
+  SituateEmptyState,
+} from "@situate/ui";
+import { workspaceConversations } from "../ai/chat";
 import {
   currentEntry,
   type PresentationValue,
@@ -38,6 +44,17 @@ const ticket = props.ui.session.capture({
   paneId: props.pane.id,
 });
 const entry = computed(() => currentEntry(props.pane.navigation));
+const conversationInventory = computed(() =>
+  workspaceConversations(props.ui.session.workspaceId),
+);
+const conversationAvailability = computed(() => {
+  const target = entry.value.target;
+  if (target.kind !== "conversation") return "ready";
+  const inventory = conversationInventory.value.state;
+  if (inventory.conversations.some((item) => item.id === target.conversationId))
+    return "ready";
+  return inventory.loaded ? "missing" : "loading";
+});
 const definition = computed(() =>
   props.ui.registry.definitions.get(viewType(entry.value.target)),
 );
@@ -226,6 +243,37 @@ const viewProps = computed(() => {
       </SituateButton>
     </div>
   </section>
+  <section
+    v-else-if="conversationAvailability === 'loading'"
+    class="view-message"
+    role="status"
+  >
+    <p>
+      {{
+        conversationInventory.state.error
+          ? localizeError(conversationInventory.state.error)
+          : t("layoutHost.loading")
+      }}
+    </p>
+    <SituateButton
+      v-if="conversationInventory.state.error"
+      variant="secondary"
+      @click="conversationInventory.refresh()"
+      >{{ t("layoutHost.retry") }}</SituateButton
+    >
+  </section>
+  <SituateEmptyState
+    v-else-if="conversationAvailability === 'missing'"
+    role="status"
+    :title="t('chat.unavailableTitle')"
+    :description="t('chat.unavailableDescription')"
+  >
+    <template #actions>
+      <SituateButton variant="secondary" @click="open({ kind: 'empty' })">
+        {{ t("layoutHost.chooseView") }}
+      </SituateButton>
+    </template>
+  </SituateEmptyState>
   <section v-else-if="suspendedPlugin" class="view-message" role="status">
     <h2>{{ t("recovery.pausedView") }}</h2>
     <p>{{ t("recovery.risk") }}</p>

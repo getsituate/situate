@@ -124,6 +124,7 @@ macro_rules! application_handler {
             crate::ai_conversations::ai_conversation_ack,
             crate::ai_conversations::ai_conversations_abort,
             crate::ai_conversations::ai_conversation_action,
+            crate::ai_conversations::ai_conversation_delete,
             crate::ai_conversations::ai_presentation_take,
             crate::ai_conversations::ai_presentation_ack,
             crate::ai_conversations::ai_model_check,

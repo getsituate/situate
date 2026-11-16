@@ -50,9 +50,16 @@ pub async fn plugin_development_create(
 ) -> Result<Status, String> {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
+        let admission = crate::ai_conversations::retain_conversation(
+            &app,
+            &window,
+            &scope,
+            &request.development_id,
+        )?;
         let label = window.label().to_owned();
         let authorization = crate::workspaces::authorization_session(&app, &label, &scope)?;
         tauri::async_runtime::spawn_blocking(move || {
+            let _admission = admission;
             crate::workspaces::with_retained_session(&app, &label, &authorization, |location| {
                 let root = crate::files::local_root(&app, location)?
                     .ok_or("native.plugins.unavailable")?;

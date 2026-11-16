@@ -19,6 +19,104 @@ fn message(id: &str, parent: Option<&str>) -> HistoryEntry {
     )
 }
 #[test]
+fn deletion_removes_only_the_current_conversation_and_reopens_without_it() {
+    let (temp, storage) = workspace();
+    storage.create_conversation("other", "Other").unwrap();
+    fs::write(temp.path().join("note.md"), "Keep this note").unwrap();
+    let attachment = storage
+        .put_attachment("text/plain", "note.txt", b"Keep attachment")
+        .unwrap();
+    storage
+        .append_conversation_entries("one", 0, &[message("m", None)], Some("m"))
+        .unwrap();
+    let stale = storage.read_conversation_metadata("one").unwrap().unwrap();
+    let other = storage.read_conversation("other").unwrap().unwrap();
+    fs::create_dir(temp.path().join(".git")).unwrap();
+    fs::write(temp.path().join(".git/retained"), "History").unwrap();
+    storage.delete_conversation("one").unwrap();
+    storage.delete_conversation("one").unwrap();
+    assert!(
+        storage
+            .update_conversation_metadata(&stale, stale.revision)
+            .is_err()
+    );
+    assert!(
+        storage
+            .append_conversation_entries(
+                "one",
+                stale.revision,
+                &[message("late", Some("m"))],
+                Some("late")
+            )
+            .is_err()
+    );
+    let reopened = Storage::open(&temp.path().canonicalize().unwrap(), "test").unwrap();
+    assert!(reopened.read_conversation("one").unwrap().is_none());
+    assert_eq!(
+        reopened
+            .list_conversations()
+            .unwrap()
+            .iter()
+            .map(|c| c.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["other"]
+    );
+    assert_eq!(reopened.read_conversation("other").unwrap().unwrap(), other);
+    assert_eq!(
+        fs::read_to_string(temp.path().join("note.md")).unwrap(),
+        "Keep this note"
+    );
+    assert_eq!(
+        reopened.read_attachment(&attachment.id).unwrap().1,
+        b"Keep attachment"
+    );
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".git/retained")).unwrap(),
+        "History"
+    );
+}
+
+#[test]
+fn deletion_sync_failure_restores_the_original_for_retry() {
+    let (temp, storage) = workspace();
+    storage
+        .append_conversation_entries("one", 0, &[message("m", None)], Some("m"))
+        .unwrap();
+    let path = temp.path().join(".situate/conversations/one/history.jsonl");
+    let before = fs::read(&path).unwrap();
+    FAULT.set(Some(Fault::DirectorySync));
+    assert_eq!(storage.delete_conversation("one"), Err(DURABILITY.into()));
+    assert_eq!(fs::read(path).unwrap(), before);
+    assert_eq!(storage.list_conversations().unwrap().len(), 1);
+    storage.delete_conversation("one").unwrap();
+    assert!(storage.list_conversations().unwrap().is_empty());
+}
+
+#[test]
+fn deletion_rejects_invalid_paths_and_symlinked_conversations() {
+    let (temp, storage) = workspace();
+    for id in ["", ".", "..", "../one", "a/b", "UPPER"] {
+        assert!(storage.delete_conversation(id).is_err());
+    }
+    #[cfg(unix)]
+    {
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("metadata.json"), "Unchanged").unwrap();
+        std::os::unix::fs::symlink(
+            outside.path(),
+            temp.path().join(".situate/conversations/link"),
+        )
+        .unwrap();
+        assert!(storage.delete_conversation("link").is_err());
+        assert_eq!(
+            fs::read_to_string(outside.path().join("metadata.json")).unwrap(),
+            "Unchanged"
+        );
+    }
+    assert!(storage.read_conversation("one").unwrap().is_some());
+}
+
+#[test]
 fn projections_keep_cross_run_order_and_rehydrate_results_outside_active_window() {
     let (_temp, storage) = workspace();
     let result = HistoryEntry::new(

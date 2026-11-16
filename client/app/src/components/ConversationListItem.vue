@@ -7,9 +7,11 @@ import {
   SituateMenu,
   SituateInput,
   SituateTooltip,
+  SituateDialog,
 } from "@situate/ui";
 import WorkingIndicator from "./WorkingIndicator.vue";
 import { workspaceChat } from "../ai/chat";
+import { ownsDictation } from "../dictation/runtime";
 import type { ConversationSummary } from "../ai/conversation-record";
 
 const props = defineProps<{
@@ -20,8 +22,17 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ open: [] }>();
 const title = computed(() => props.item.title || t("navigation.newChat"));
+const interruptsWork = computed(
+  () => props.running || ownsDictation(props.scope, props.item.id),
+);
 const menuId = useId();
 const inputId = useId();
+const deleteId = useId();
+const confirmingDelete = ref(false);
+const deleting = ref(false);
+const deleteError = ref(false);
+const cancelDeleteButton =
+  useTemplateRef<InstanceType<typeof SituateButton>>("cancelDeleteButton");
 const menuOpen = ref(false);
 const editing = ref(false);
 const saving = ref(false);
@@ -31,6 +42,37 @@ const trigger =
   useTemplateRef<InstanceType<typeof SituateIconButton>>("trigger");
 const anchor = computed(() => trigger.value?.element);
 const input = useTemplateRef<InstanceType<typeof SituateInput>>("input");
+async function confirmDelete() {
+  menuOpen.value = false;
+  deleteError.value = false;
+  confirmingDelete.value = true;
+  await nextTick();
+  cancelDeleteButton.value?.focus();
+}
+async function cancelDelete() {
+  if (deleting.value) return;
+  confirmingDelete.value = false;
+  await nextTick();
+  trigger.value?.element?.focus();
+}
+async function remove() {
+  if (deleting.value) return;
+  const section = trigger.value?.element?.closest(".conversations");
+  deleting.value = true;
+  deleteError.value = false;
+  try {
+    await workspaceChat(props.scope, props.item.id).deleteConversation();
+    confirmingDelete.value = false;
+    await nextTick();
+    section
+      ?.querySelector<HTMLButtonElement>(".section-heading button")
+      ?.focus();
+  } catch {
+    deleteError.value = true;
+  } finally {
+    deleting.value = false;
+  }
+}
 async function rename() {
   menuOpen.value = false;
   draft.value = props.item.title.replace(/[\r\n\u2028\u2029]+/g, " ");
@@ -188,7 +230,7 @@ async function save() {
         :id="menuId"
         :open="menuOpen"
         :anchor="anchor"
-        :label="t('chat.renameConversation')"
+        :label="t('chat.conversationActions', { title })"
         @close="menuOpen = false"
       >
         <SituateButton
@@ -198,8 +240,50 @@ async function save() {
           @click="rename"
           >{{ t("chat.renameConversation") }}</SituateButton
         >
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="confirmDelete"
+          >{{ t("chat.deleteConversation") }}</SituateButton
+        >
       </SituateMenu>
     </template>
+    <SituateDialog
+      :open="confirmingDelete"
+      :aria-labelledby="`${deleteId}-title`"
+      :aria-describedby="`${deleteId}-description`"
+      :aria-busy="deleting"
+      @cancel.prevent="cancelDelete"
+    >
+      <h2 :id="`${deleteId}-title`">{{ t("chat.deleteTitle") }}</h2>
+      <p :data-localization-content="item.title ? 'user' : undefined">
+        {{ title }}
+      </p>
+      <p :id="`${deleteId}-description`" aria-live="polite">
+        {{
+          t(
+            interruptsWork
+              ? "chat.deleteRunningConfirmation"
+              : "chat.deleteConfirmation",
+          )
+        }}
+      </p>
+      <p v-if="deleteError" role="alert">{{ t("chat.deleteFailed") }}</p>
+      <template #actions>
+        <SituateButton
+          ref="cancelDeleteButton"
+          variant="secondary"
+          :disabled="deleting"
+          :unavailable-reason="t('chat.deleting')"
+          @click="cancelDelete"
+          >{{ t("navigation.cancel") }}</SituateButton
+        >
+        <SituateButton variant="danger" :busy="deleting" @click="remove">
+          {{ t(deleting ? "chat.deleting" : "chat.confirmDelete") }}
+        </SituateButton>
+      </template>
+    </SituateDialog>
   </div>
 </template>
 
