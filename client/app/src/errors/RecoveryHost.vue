@@ -40,6 +40,9 @@ const mailOpened = ref(false);
 const assignment = ref("");
 const assignmentDurable = ref(false);
 const incident = computed(() => state.active);
+const pendingIncidents = computed(() =>
+  state.incidents.filter((item) => !item.dismissed),
+);
 const title = computed(() =>
   t(
     state.page === "report"
@@ -182,13 +185,13 @@ async function repair() {
 </script>
 <template>
   <aside
-    v-if="state.incidents.length && !state.page"
+    v-if="pendingIncidents.length && !state.page"
     ref="entry"
     class="recovery-entry"
     :aria-label="t('errorRecovery.review')"
   >
     <SituateButton
-      v-for="item in state.incidents"
+      v-for="item in pendingIncidents"
       :key="item.id"
       variant="secondary"
       size="small"

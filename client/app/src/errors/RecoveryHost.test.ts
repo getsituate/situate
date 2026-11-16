@@ -45,7 +45,7 @@ afterEach(() => {
 });
 const button = (name: string) =>
   wrapper.findAll("button").find((item) => item.text() === name)!;
-test("dismisses without erasing the incident and retains report description through mail fallback", async () => {
+test("dismisses the review entry and retains report description through mail fallback", async () => {
   captureIncident("view", undefined, "scope");
   wrapper = mount(RecoveryHost, { attachTo: document.body });
   await flushPromises();
@@ -71,8 +71,27 @@ test("dismisses without erasing the incident and retains report description thro
   captureIncident("view", undefined, "scope");
   await flushPromises();
   expect(recoveryState.page).toBeNull();
+  expect(wrapper.find(".recovery-entry").exists()).toBe(false);
+});
+test("closing an error hides only its review entry and allows new errors", async () => {
+  const first = captureIncident("view", undefined, "scope");
+  const pending = captureIncident("files", undefined, "other");
+  wrapper = mount(RecoveryHost, { attachTo: document.body });
+  await flushPromises();
+  await wrapper.get('button[aria-label="Dismiss"]').trigger("click");
+  await flushPromises();
+  expect(recoveryState.page).toBeNull();
+  expect(first.dismissed).toBe(true);
+  expect(wrapper.findAll(".recovery-entry button")).toHaveLength(1);
   await button("Review error").trigger("click");
   await flushPromises();
+  expect(recoveryState.active).toBe(pending);
+  await wrapper.get("dialog").trigger("cancel");
+  await flushPromises();
+  expect(wrapper.find(".recovery-entry").exists()).toBe(false);
+  const next = captureIncident("conversation", undefined, "scope");
+  await flushPromises();
+  expect(recoveryState.active).toBe(next);
   expect(recoveryState.page).toBe("unexpected");
 });
 test("failed workspace recovery remains visible and never restarts the app", async () => {
