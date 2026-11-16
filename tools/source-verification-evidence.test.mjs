@@ -5,6 +5,7 @@ import { planWorkflow, runLane } from "./pipeline.mjs";
 import { executeSuite, root, sourceFiles, suiteInventory } from "./test.mjs";
 import {
   createSourceVerificationEvidence,
+  createSourceVerificationReuseReceipt,
   MAX_SOURCE_EVIDENCE_BYTES,
   MAX_SOURCE_EVIDENCE_CANDIDATES,
   selectSourceVerificationEvidence,
@@ -303,33 +304,105 @@ test("real runLane/runPlan result fields survive public receipt sanitization", a
 test("offline reuse receipts preserve the original execution and validate full coverage bindings", () => {
   const input = fixture();
   const selected = selectSourceVerificationEvidence(input);
-  const receipt = {
+  const selection = {
+    ...selected,
+    observation: input.candidates[0].observation,
+    host: input.host,
+    contract: input.contract,
+    source: input.source,
+    reviewedWorkflowDigest: input.reviewedWorkflowDigest,
+  };
+  const receipt = createSourceVerificationReuseReceipt(input.plan, selection);
+  assert.deepEqual(receipt, {
     schemaVersion: 1,
+    kind: "source-verification-reuse",
+    coverage: "reused",
     source: mainSHA,
     planDigest: input.plan.authorizationDigest,
     lane: input.lane,
     host: "macos",
     executionHost: "macos",
     status: "passed",
-    coverage: "reused",
-    originalReceipt: structuredClone(selected.binding.originalReceipt),
+    results: [
+      {
+        id: "client-native",
+        status: "passed",
+        exitCode: 0,
+        coverage: "reused",
+        testedSHA,
+      },
+      {
+        id: "client-agent-e2e",
+        status: "passed",
+        exitCode: 0,
+        coverage: "reused",
+        testedSHA,
+      },
+    ],
     reuse: {
-      ...selected,
-      observation: input.candidates[0].observation,
+      binding: selected.binding,
+      evidence: selected.evidence,
+      observation: selection.observation,
       host: input.host,
       contract: input.contract,
       source: input.source,
       reviewedWorkflowDigest: input.reviewedWorkflowDigest,
     },
-  };
+  });
   const original = structuredClone(receipt);
   assert.equal(validateSourceVerificationReuse(input.plan, receipt), receipt);
   assert.deepEqual(receipt, original);
-  assert.equal(receipt.originalReceipt.source, testedSHA);
-  assert.notEqual(receipt.originalReceipt.planDigest, receipt.planDigest);
+  assert.equal(receipt.reuse.binding.originalReceipt.source, testedSHA);
+  assert.notEqual(
+    receipt.reuse.binding.originalReceipt.planDigest,
+    receipt.planDigest,
+  );
+  assert.deepEqual(
+    receipt.reuse.binding.originalReceipt,
+    input.candidates[0].evidence.receipts[0],
+  );
+  assert.throws(() =>
+    createSourceVerificationReuseReceipt(input.plan, { action: "execute" }),
+  );
+  assert.throws(
+    () =>
+      createSourceVerificationEvidence({
+        ...selected.evidence,
+        receipts: [
+          {
+            ...receipt,
+            source: testedSHA,
+            planDigest: selected.evidence.plan.authorizationDigest,
+          },
+        ],
+      }),
+    /Unexpected evidence field/,
+  );
+  assert.throws(
+    () =>
+      sanitizeSourceVerificationReceipts(selected.evidence.plan, [
+        {
+          ...selected.binding.originalReceipt,
+          results: receipt.results,
+        },
+      ]),
+    /Unexpected evidence field/,
+  );
   for (const mutate of [
     (v) => {
       v.coverage = "executed";
+    },
+    (v) => {
+      v.kind = "lane-receipt";
+    },
+    (v) => {
+      v.results[0].testedSHA = mainSHA;
+    },
+    (v) => {
+      v.results[0].coverage = "executed";
+    },
+    (v) => {
+      v.results.pop();
     },
     (v) => {
       v.source = testedSHA;
@@ -347,10 +420,10 @@ test("offline reuse receipts preserve the original execution and validate full c
       v.status = "failed";
     },
     (v) => {
-      v.results = v.originalReceipt.results;
+      v.results = v.reuse.binding.originalReceipt.results;
     },
     (v) => {
-      v.originalReceipt.source = mainSHA;
+      v.reuse.binding.originalReceipt.source = mainSHA;
     },
     (v) => {
       v.reuse.binding.executedSuites = [];

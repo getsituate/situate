@@ -15,6 +15,7 @@ import { root, sourceFiles } from "./test.mjs";
 import { aggregateReceipts, digest, sealPlan } from "./pipeline-state.mjs";
 import {
   createSourceVerificationEvidence,
+  createSourceVerificationReuseReceipt,
   MAX_SOURCE_EVIDENCE_BYTES,
   validateSourceVerificationReuse,
 } from "./source-verification-evidence.mjs";
@@ -335,18 +336,18 @@ test("consumer retrieves an attempt-bound artifact and independently resolves so
   assert.deepEqual(result.observation.checkedParents, [baseSHA, headSHA]);
   assert.equal(result.source.tree, tree);
   assert.equal(result.contract.toolsDigest, f.measured.contract.toolsDigest);
-  const receipt = {
-    schemaVersion: 1,
-    source: mainSHA,
-    planDigest: f.options.plan.authorizationDigest,
-    lane: "macos-native",
-    host: "macos",
-    executionHost: "macos",
-    status: "passed",
-    coverage: "reused",
-    originalReceipt: result.binding.originalReceipt,
-    reuse: result,
-  };
+  const receipt = createSourceVerificationReuseReceipt(f.options.plan, result);
+  assert.equal(receipt.kind, "source-verification-reuse");
+  assert.deepEqual(receipt.results, [
+    {
+      id: "client-native",
+      status: "passed",
+      exitCode: 0,
+      coverage: "reused",
+      testedSHA,
+    },
+  ]);
+  assert.deepEqual(receipt.reuse.binding.originalReceipt, f.receipts[0]);
   assert.equal(
     validateSourceVerificationReuse(f.options.plan, receipt),
     receipt,

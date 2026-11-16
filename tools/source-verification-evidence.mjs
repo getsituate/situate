@@ -470,6 +470,43 @@ export function selectSourceVerificationEvidence({
   return miss("no-matching-evidence");
 }
 
+function reuseReceipt(plan, selection) {
+  assert.equal(selection?.action, "reuse");
+  const lane = plan.lanes.find(({ id }) => id === selection.binding.lane);
+  assert(lane);
+  return {
+    schemaVersion: 1,
+    kind: "source-verification-reuse",
+    coverage: "reused",
+    source: plan.source,
+    planDigest: plan.authorizationDigest,
+    lane: lane.id,
+    host: lane.host,
+    executionHost: lane.host,
+    status: "passed",
+    results: lane.suites.map((id) => ({
+      id,
+      status: "passed",
+      exitCode: 0,
+      coverage: "reused",
+      testedSHA: selection.binding.testedSHA,
+    })),
+    reuse: {
+      binding: selection.binding,
+      evidence: selection.evidence,
+      observation: selection.observation,
+      host: selection.host,
+      contract: selection.contract,
+      source: selection.source,
+      reviewedWorkflowDigest: selection.reviewedWorkflowDigest,
+    },
+  };
+}
+
+export function createSourceVerificationReuseReceipt(plan, selection) {
+  return validateSourceVerificationReuse(plan, reuseReceipt(plan, selection));
+}
+
 /**
  * Validate an offline receipt from the trusted main-lane controller. Its observation
  * must already have been independently resolved by selectActionsSourceEvidence;
@@ -477,7 +514,7 @@ export function selectSourceVerificationEvidence({
  */
 export function validateSourceVerificationReuse(plan, receipt) {
   const reuse = receipt?.reuse;
-  assert.equal(reuse?.action, "reuse");
+  assert(reuse);
   const selected = selectSourceVerificationEvidence({
     candidates: [{ evidence: reuse.evidence, observation: reuse.observation }],
     plan,
@@ -492,28 +529,16 @@ export function validateSourceVerificationReuse(plan, receipt) {
     "reuse",
     "Reuse no longer covers the selected lane",
   );
-  const lane = plan.lanes.find(({ id }) => id === receipt.lane);
   exact(
     receipt,
-    {
-      schemaVersion: 1,
-      source: plan.source,
-      planDigest: plan.authorizationDigest,
-      lane: lane.id,
-      host: lane.host,
-      executionHost: lane.host,
-      status: "passed",
-      coverage: "reused",
-      originalReceipt: selected.binding.originalReceipt,
-      reuse: {
-        ...selected,
-        observation: reuse.observation,
-        host: reuse.host,
-        contract: reuse.contract,
-        source: reuse.source,
-        reviewedWorkflowDigest: reuse.reviewedWorkflowDigest,
-      },
-    },
+    reuseReceipt(plan, {
+      ...selected,
+      observation: reuse.observation,
+      host: reuse.host,
+      contract: reuse.contract,
+      source: reuse.source,
+      reviewedWorkflowDigest: reuse.reviewedWorkflowDigest,
+    }),
     "Reuse receipt binding differs",
   );
   return receipt;
