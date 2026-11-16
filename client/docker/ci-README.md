@@ -21,11 +21,13 @@ Run `node tools/test.mjs` from the repository root for portable checks in this i
 
 The launcher mounts source at its original absolute path, including read-only common Git metadata for linked worktrees. Only a canonical anonymous GitHub `origin` URL is retained from Git configuration; host credentials, worktree configuration and hooks are hidden. Dependencies and selected browsers download at runtime into disposable Linux directories, without replacing host `node_modules` or Cargo output. Docker-steering integration tests run separately on the host.
 
+On macOS, the shared launcher and `tools/ci-container.mjs` use container-local tmpfs mounts for `/ci-cache`, `client/target`, and `tools/dev-tui/target`. Cargo downloads and build files therefore do not pass through VirtioFS, which can retain host file descriptors after temporary files are deleted. These caches consume the Docker VM's memory and swap and are discarded when the container is removed; allocate enough VM memory for the selected workload. Host Cargo output is not reused or changed. Source, control files, and result receipts remain mounted from the host. The diagnostic coverage launcher exports `report.json`, but its intermediate coverage files remain disposable. Linux hosts retain their existing bind-mounted caches.
+
 The host supervisor owns the worktree and build admission until Docker absence is verified. Private lease and acknowledgement files remain outside mounted directories; use an external `TMPDIR`. Docker connection settings stay with host client and cleanup processes, never the test workload. Interrupt the caller rather than killing its supervisor or deleting lock files. An unacknowledged creation or uncertain cleanup retains ownership; an exited Docker client alone does not prove that no container was created.
 
 ## Runtime contract
 
-For a direct image invocation, mount a checkout at `/workspace` and a writable cache at `/ci-cache`. Run with the desired
+For a direct image invocation, mount a checkout at `/workspace` and a writable cache at `/ci-cache`. On macOS, use `--tmpfs /ci-cache:exec,mode=1777` instead of a host cache directory, and mount disposable Rust target directories with tmpfs as well. The legacy diagnostic launcher's `CI_CACHE_DIR` is validated but not mounted on macOS; Linux continues to use it for downloads. Run with the desired
 numeric UID/GID. Set `CARGO_HOME=/ci-cache/cargo`, `npm_config_cache=/ci-cache/npm`, and
 `HOME` to a writable temporary directory. Set `RUSTUP_TOOLCHAIN` to the repository's
 pinned Rust version to prevent directory override discovery from initiating toolchain
