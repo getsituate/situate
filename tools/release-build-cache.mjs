@@ -1,12 +1,165 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  chmodSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compilerCacheEnvironment } from "./compiler-cache.mjs";
 
 const repository = "getsituate/situate";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
+
+// Published asset digests and matching .sha256 files: https://github.com/mozilla/sccache/releases/tag/v0.19.0
+export const sccacheRelease = Object.freeze({
+  version: "0.19.0",
+  checksums: Object.freeze({
+    ARM64: "a35a0b7d622618774bc1bb8102d72562dfb21e619f88b153b370d7f89bc286af",
+    X64: "2db7344bb96de350df79cd9f0124dd4e9baa47b3de2fac1e63e1346b66b20684",
+  }),
+});
+const maximumDownloadBytes = 64 * 1024 * 1024;
+
+export async function downloadReleaseTool(url, fetcher = fetch) {
+  const signal = AbortSignal.timeout(60000);
+  for (let redirects = 0; redirects <= 3; redirects++) {
+    const target = new URL(url);
+    if (
+      target.protocol !== "https:" ||
+      target.username ||
+      target.password ||
+      target.port ||
+      ![
+        "github.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com",
+      ].includes(target.hostname)
+    )
+      throw new Error("Unsupported release-tool download URL.");
+    const response = await fetcher(target, {
+      redirect: "manual",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      headers: { Accept: "application/octet-stream" },
+      signal,
+    });
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      await response.body?.cancel();
+      const location = response.headers.get("location");
+      if (!location) throw new Error("Missing release-tool redirect.");
+      url = new URL(location, target).href;
+      continue;
+    }
+    if (
+      !response.ok ||
+      !response.body ||
+      Number(response.headers.get("content-length")) > maximumDownloadBytes
+    ) {
+      await response.body?.cancel();
+      throw new Error("Release-tool download unavailable or too large.");
+    }
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.byteLength;
+      if (size > maximumDownloadBytes)
+        throw new Error("Release-tool download too large.");
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  throw new Error("Too many release-tool redirects.");
+}
+
+function runnerTemporaryDirectory(env) {
+  if (!isAbsolute(env.RUNNER_TEMP ?? "") || /[\r\n\0]/.test(env.RUNNER_TEMP))
+    throw new Error("An owned runner temporary directory is required.");
+  const stat = lstatSync(env.RUNNER_TEMP);
+  if (
+    !stat.isDirectory() ||
+    stat.isSymbolicLink() ||
+    stat.uid !== process.getuid()
+  )
+    throw new Error("An owned runner temporary directory is required.");
+  return env.RUNNER_TEMP;
+}
+
+export async function prepareReleaseCacheTool({
+  env = process.env,
+  platform = process.platform,
+  arch = process.arch,
+  download = downloadReleaseTool,
+  extract = execFileSync,
+  checksums = sccacheRelease.checksums,
+} = {}) {
+  if (
+    platform !== "darwin" ||
+    !trustedReleaseCacheHost(env) ||
+    { arm64: "ARM64", x64: "X64" }[arch] !== env.RUNNER_ARCH
+  )
+    throw new Error(
+      "Release cache preparation requires a trusted macOS runner with a known architecture.",
+    );
+  const directory = mkdtempSync(
+    join(runnerTemporaryDirectory(env), "situate-release-tool-"),
+  );
+  try {
+    const target = arch === "arm64" ? "aarch64" : "x86_64";
+    const stem = `sccache-v${sccacheRelease.version}-${target}-apple-darwin`;
+    const member = `${stem}/sccache`;
+    const url = `https://github.com/mozilla/sccache/releases/download/v${sccacheRelease.version}/${stem}.tar.gz`;
+    const bytes = await download(url);
+    if (
+      !bytes.length ||
+      bytes.length > maximumDownloadBytes ||
+      hash(bytes) !== checksums[env.RUNNER_ARCH]
+    )
+      throw new Error("Release-tool checksum verification failed.");
+    const archive = join(directory, "sccache.tar.gz");
+    writeFileSync(archive, bytes, { mode: 0o600, flag: "wx" });
+    const bin = join(directory, "bin");
+    mkdirSync(bin, { mode: 0o700 });
+    extract(
+      "/usr/bin/tar",
+      ["-xzf", archive, "-C", bin, "--strip-components", "1", member],
+      {
+        env: { PATH: "/usr/bin:/bin" },
+        timeout: 10000,
+        maxBuffer: 4096,
+        stdio: "ignore",
+      },
+    );
+    const executable = join(bin, "sccache");
+    const stat = lstatSync(executable);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.nlink !== 1 ||
+      stat.uid !== process.getuid() ||
+      stat.size === 0 ||
+      stat.size > 256 * 1024 * 1024
+    )
+      throw new Error("Invalid extracted release tool.");
+    chmodSync(executable, 0o700);
+    rmSync(archive);
+    return {
+      bin,
+      version: sccacheRelease.version,
+      sha256: checksums[env.RUNNER_ARCH],
+      url,
+    };
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
 
 export function trustedReleaseCacheHost(env) {
   return (
@@ -140,7 +293,8 @@ export function releaseBuildCachePlan({
       "client/Cargo.lock",
       "client/Cargo.toml",
     ].map((path) => hash(read(join(root, path))));
-    const prefix = `release-build-v1-main-macos-${env.RUNNER_ARCH}-universal-release-${hash(JSON.stringify({ runtime, inputs }))}-`;
+    const toolDigest = sccacheRelease.checksums[env.RUNNER_ARCH];
+    const prefix = `release-build-v1-main-macos-${env.RUNNER_ARCH}-universal-release-${hash(JSON.stringify({ runtime, inputs, toolDigest }))}-`;
     const paths = releaseCachePaths(env);
     return {
       enabled: true,
@@ -158,11 +312,119 @@ export function releaseBuildCachePlan({
   }
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+function measuredCounters(text) {
+  const { stats } = JSON.parse(text);
+  const total = (counts) => {
+    if (!counts || typeof counts !== "object" || Array.isArray(counts))
+      throw new Error("Unavailable compiler-cache statistics.");
+    const values = Object.values(counts);
+    if (values.some((value) => !Number.isSafeInteger(value) || value < 0))
+      throw new Error("Unavailable compiler-cache statistics.");
+    return values.reduce((sum, value) => sum + value, 0);
+  };
+  const counters = {
+    compileRequests: stats.compile_requests,
+    hits: total(stats.cache_hits.counts),
+    misses: total(stats.cache_misses.counts),
+  };
+  if (
+    Object.values(counters).some(
+      (value) => !Number.isSafeInteger(value) || value < 0,
+    )
+  )
+    throw new Error("Unavailable compiler-cache statistics.");
+  return counters;
+}
+
+export function releaseCacheMeasurement(
+  command,
+  {
+    env = process.env,
+    execute = probe,
+    now = () => Math.floor(Number(process.hrtime.bigint()) / 1e6),
+    compilerOptions,
+  } = {},
 ) {
-  const plan = releaseBuildCachePlan();
+  if (!["start", "report"].includes(command))
+    throw new Error("Unknown measurement command.");
+  const compiler = releaseCompilerCacheEnvironment(env, compilerOptions);
+  if (!compiler.RUSTC_WRAPPER) return { enabled: false };
+  if (
+    !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ID ?? "") ||
+    !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ATTEMPT ?? "")
+  )
+    throw new Error("Missing release-cache measurement identity.");
+  const path = join(
+    runnerTemporaryDirectory(env),
+    `situate-release-cache-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}.json`,
+  );
+  const options = { env: { PATH: env.PATH, HOME: env.HOME, ...compiler } };
+  const sample = () => {
+    try {
+      return measuredCounters(
+        execute(
+          compiler.RUSTC_WRAPPER,
+          ["--show-stats", "--stats-format=json"],
+          options,
+        ),
+      );
+    } catch {
+      return null;
+    }
+  };
+  if (command === "start") {
+    const counters = sample();
+    writeFileSync(path, JSON.stringify({ startedAt: now(), counters }), {
+      mode: 0o600,
+      flag: "wx",
+    });
+    return { enabled: true, statisticsAvailable: counters !== null };
+  }
+  const stat = lstatSync(path);
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.nlink !== 1 ||
+    stat.uid !== process.getuid() ||
+    (stat.mode & 0o077) !== 0 ||
+    stat.size > 4096
+  )
+    throw new Error("Invalid release-cache measurement file.");
+  const baseline = JSON.parse(readFileSync(path, "utf8"));
+  const elapsed = now() - baseline.startedAt;
+  if (
+    !Number.isSafeInteger(baseline.startedAt) ||
+    !Number.isSafeInteger(elapsed) ||
+    elapsed < 0
+  )
+    throw new Error("Invalid release-cache measurement interval.");
+  const counters = sample();
+  let delta;
+  if (counters && baseline.counters) {
+    const entries = Object.entries(counters).map(([key, value]) => [
+      key,
+      value - baseline.counters[key],
+    ]);
+    if (entries.every(([, value]) => Number.isSafeInteger(value) && value >= 0))
+      delta = Object.fromEntries(entries);
+  }
+  let flushed = false;
+  try {
+    execute(compiler.RUSTC_WRAPPER, ["--stop-server"], options);
+    flushed = true;
+  } catch {
+    // A missing server cannot provide a confirmed cache flush.
+  }
+  return {
+    enabled: true,
+    elapsedSeconds: elapsed / 1000,
+    statisticsAvailable: !!delta,
+    ...(delta ?? {}),
+    flushed,
+  };
+}
+
+function emitPlan(plan) {
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${plan.enabled}\n`);
     if (plan.enabled) {
@@ -179,5 +441,29 @@ if (
     }
   } else {
     console.log(JSON.stringify(plan));
+  }
+}
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    const command = process.argv[2] ?? "plan";
+    if (command === "prepare") {
+      const prepared = await prepareReleaseCacheTool();
+      if (process.env.GITHUB_PATH)
+        appendFileSync(process.env.GITHUB_PATH, `${prepared.bin}\n`);
+      console.log(JSON.stringify(prepared));
+    } else if (command === "plan") {
+      emitPlan(releaseBuildCachePlan());
+    } else if (["start", "report"].includes(command)) {
+      console.log(JSON.stringify(releaseCacheMeasurement(command)));
+    } else {
+      throw new Error("Unknown release-cache command.");
+    }
+  } catch {
+    console.error("Release cache command failed.");
+    process.exitCode = 1;
   }
 }
