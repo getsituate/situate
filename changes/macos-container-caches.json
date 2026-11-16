@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-container-caches",
+  "behaviorDigest": "7136bc028dec87274f1bb6db5152f58857beb69a8c23a54d7d85ca684c7c78f7",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Keeps macOS container download caches and Rust build output on guest-local tmpfs instead of host-shared directories. No product changes.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "19bb54bdf7c9e0a37046a29eee11e0b432cdde1fd575a3d0ad745c10348957bb",
+      "translationHash": "2b20525ca2e104cb8793e5b53d5c5b8547a02176a09b2766118c06cf250bf3b8"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "19bb54bdf7c9e0a37046a29eee11e0b432cdde1fd575a3d0ad745c10348957bb"
+  }
+}
