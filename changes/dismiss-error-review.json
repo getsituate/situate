@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "dismiss-error-review",
+  "behaviorDigest": "d230e49890fe41f45e92e22c7943af93d50a00c73187160e47c5569c952635c7",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "dismiss-error-review",
+          "type": "fixed",
+          "platforms": [
+            "macos"
+          ],
+          "title": "Dismiss error reminders",
+          "paragraphs": [
+            "Closing an error dialog now also hides its Review error button. Other pending errors remain available for review."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "dismiss-error-review",
+          "type": "fixed",
+          "platforms": [
+            "macos"
+          ],
+          "title": "Fehlerhinweise schließen",
+          "paragraphs": [
+            "Beim Schließen eines Fehlerdialogs verschwindet jetzt auch der zugehörige Button „Fehler ansehen“. Andere noch offene Fehler können weiterhin angesehen werden."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "942b41bb5030600ded5729521d7d9250f4fe7dfd5efa7a1f00f553b9084f804b",
+      "translationHash": "d80fd139f1f4ae41231fc81af66af442f3a3208d96de78b79444e9f4e8b430e4"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "942b41bb5030600ded5729521d7d9250f4fe7dfd5efa7a1f00f553b9084f804b"
+  }
+}
