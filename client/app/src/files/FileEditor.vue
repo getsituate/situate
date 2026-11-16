@@ -263,6 +263,9 @@ let pressPoint: { x: number; y: number } | undefined;
 let suppressClick = false;
 const entries = computed(() => {
   const stored = session.value.snapshot?.entries ?? [];
+  const directories = new Set(
+    stored.filter((entry) => entry.isDirectory).map((entry) => entry.path),
+  );
   const drafts = Object.values(session.value.files)
     .filter(
       (file) => file.dirty && !stored.some((entry) => entry.path === file.path),
@@ -275,13 +278,13 @@ const entries = computed(() => {
           .toLocaleLowerCase()
           .includes(query.value.toLocaleLowerCase());
       const parts = entry.path.split("/");
-      return parts
-        .slice(0, -1)
-        .every((_, index) =>
-          viewState.value.expandedFolders.includes(
-            parts.slice(0, index + 1).join("/"),
-          ),
+      return parts.slice(0, -1).every((_, index) => {
+        const parent = parts.slice(0, index + 1).join("/");
+        return (
+          !directories.has(parent) ||
+          viewState.value.expandedFolders.includes(parent)
         );
+      });
     })
     .sort(compareFileEntries);
 });

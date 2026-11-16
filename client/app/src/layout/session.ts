@@ -52,15 +52,20 @@ export function createLayoutSession(
   let loading: Promise<void> | undefined;
   let writing: Promise<void> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastSaveStarted: number | undefined;
   let failedWrite: LayoutDocument | undefined;
   const paneGenerations = new Map<string, number>();
 
   function schedule() {
-    if (timer || state.error || disposed) return;
+    if (timer || writing || state.error || disposed) return;
+    const delay =
+      lastSaveStarted === undefined
+        ? 1000
+        : Math.max(0, lastSaveStarted + 1000 - Date.now());
     timer = setTimeout(() => {
       timer = undefined;
-      void flush().catch(() => {});
-    }, 150);
+      void flush(false).catch(() => {});
+    }, delay);
   }
   async function load(): Promise<void> {
     if (disposed || state.document) return;
@@ -82,7 +87,8 @@ export function createLayoutSession(
                 pinnedViews: ["files"],
               }
             : decodeLayoutDocument(record.data);
-        state.dirty = record.data === null;
+        state.dirty =
+          !!record.needsSave || !sameDocument(record.data, state.document);
         if (inventory) synchronizePluginIncarnations(inventory);
         if (!state.document.layout.tabs.length) dispatch({ type: "new-tab" });
         if (state.dirty) schedule();
@@ -154,7 +160,7 @@ export function createLayoutSession(
     state.dirty = true;
     schedule();
   }
-  async function flush(): Promise<void> {
+  async function flush(immediate = true): Promise<void> {
     if (timer) {
       clearTimeout(timer);
       timer = undefined;
@@ -162,7 +168,10 @@ export function createLayoutSession(
     await loading;
     if (writing) {
       await writing;
-      if (state.dirty) return flush();
+      if (state.dirty) {
+        if (immediate) return flush();
+        schedule();
+      }
       return;
     }
     if (disposed || !state.dirty) return;
@@ -175,6 +184,7 @@ export function createLayoutSession(
         const document = state.document;
         const persisted = persistedLayoutDocument(document);
         try {
+          lastSaveStarted = Date.now();
           const record = await storage.save(workspaceId, revision, persisted, {
             ...pluginIncarnations,
           });
@@ -184,6 +194,7 @@ export function createLayoutSession(
           revision = record.revision;
           state.dirty = state.document !== document;
           failedWrite = undefined;
+          if (!immediate) break;
         } catch (error) {
           if (!disposed && generation === request) {
             state.error = error;
@@ -199,6 +210,7 @@ export function createLayoutSession(
       if (generation === request) {
         writing = undefined;
         state.saving = false;
+        if (state.dirty) schedule();
       }
     }
   }
@@ -288,25 +300,34 @@ export function createLayoutSession(
     if (disposed || !state.document) return;
     const rewrite = (tab: LayoutDocument["layout"]["tabs"][number]) => {
       const conversationIds = new Set(tab.conversationIds);
-      const panes = tab.panes.map((pane) => ({
-        ...pane,
-        navigation: {
-          ...pane.navigation,
-          entries: pane.navigation.entries.map((entry) => {
-            const target = map(entry.target);
-            if (target.kind === "conversation")
-              conversationIds.add(target.conversationId);
-            return {
-              ...entry,
-              target,
-              presentation:
-                entry.target.kind !== "empty" && target.kind === "empty"
-                  ? null
-                  : entry.presentation,
-            };
-          }),
-        },
-      }));
+      const panes = tab.panes.map((pane) => {
+        const remembered = pane.lastFiles;
+        const target = remembered && map(remembered.target);
+        const lastFiles =
+          remembered && target?.kind === "view" && target.viewId === "files"
+            ? { ...remembered, target: { ...target, viewId: "files" as const } }
+            : undefined;
+        return {
+          ...pane,
+          ...(remembered ? { lastFiles } : {}),
+          navigation: {
+            ...pane.navigation,
+            entries: pane.navigation.entries.map((entry) => {
+              const target = map(entry.target);
+              if (target.kind === "conversation")
+                conversationIds.add(target.conversationId);
+              return {
+                ...entry,
+                target,
+                presentation:
+                  entry.target.kind !== "empty" && target.kind === "empty"
+                    ? null
+                    : entry.presentation,
+              };
+            }),
+          },
+        };
+      });
       return { ...tab, panes, conversationIds: [...conversationIds] };
     };
     const layout = state.document.layout;

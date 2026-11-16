@@ -207,6 +207,44 @@ afterEach(() => {
 });
 
 describe("workspace layout rendering", () => {
+  it("disables adding tabs at capacity and shows how to make room", async () => {
+    let state = fixture(false);
+    let next = 0;
+    for (let i = 1; i < 20; i++)
+      state = reduceLayout(state, { type: "new-tab" }, () => `id-${++next}`);
+    const wrapper = render(state);
+    expect(wrapper.get(".new-tab").attributes()).toHaveProperty("disabled");
+    expect(wrapper.get(".layout-limit").text()).toContain("⟦layoutUi.tabLimit");
+    await wrapper.get(".new-tab").trigger("click");
+    expect(wrapper.emitted("intent")).toBeUndefined();
+  });
+
+  it("disables both split controls at six panes and explains the limit", async () => {
+    let state = fixture(false);
+    let next = 0;
+    for (let i = 1; i < 6; i++)
+      state = reduceLayout(
+        state,
+        { type: "split", tabId: "topic", paneId: "A", edge: "right" },
+        () => `id-${++next}`,
+      );
+    const wrapper = render(state);
+    await wrapper.findAll(".pane-title")[0]!.trigger("click");
+    expect(wrapper.get(".pane-actions .layout-limit").text()).toContain(
+      "⟦layoutUi.paneLimit",
+    );
+    for (const key of ["splitRight", "splitBelow"]) {
+      expect(button(wrapper, key).attributes()).toHaveProperty("disabled");
+      await button(wrapper, key).trigger("click");
+    }
+    expect(wrapper.props("state").tabs[0]?.panes).toHaveLength(6);
+    expect(
+      wrapper
+        .emitted("intent")
+        ?.some(([intent]) => (intent as LayoutIntent).type === "split") ??
+        false,
+    ).toBe(false);
+  });
   it("forwards real pane slots through recursive splits and selects only the focused pane", async () => {
     const wrapper = render();
     expect(

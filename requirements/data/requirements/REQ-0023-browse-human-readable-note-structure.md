@@ -14,6 +14,8 @@ Users must be able to browse and read their notes themselves within Situate, wit
 
 A file view must be available by default in each workspace. Users can browse its content files and folders, open files, and create, rename, move, copy and delete files and folders without using the assistant. File operations follow the [identity rules](REQ-0035-preserve-file-and-task-identity.md); deletion retains history under [content recovery](REQ-0022-explain-note-changes.md). Markdown editing and rendered reading follow [manual file editing](REQ-0042-edit-markdown-source-and-read-rendered-content.md).
 
+A new pane's file view starts with no selected file and all folders closed. Opening a file preserves the folder expansion state. Each pane retains its own last file target and presentation when another view replaces Files; selecting Files again restores that pane's last file and folder state, not another pane's or a closed tab's state. This remembered state survives history trimming and application restart. Back and forward retain the folder state belonging to each history entry. New panes do not inherit another pane's file selection or expanded folders.
+
 The file view opens text files internally, including source code, structured text and files without an extension. Markdown opens rendered with a source mode; other text opens as source. Binary files open in the operating system’s default application. File content determines whether it is text or binary; an extension alone is not sufficient. Read failures, size limits and unsupported text encodings are reported rather than treated as binary content. File operations and retained history still apply to binary files. Displaying an image embedded in Markdown is separate from opening that image as a standalone document. The [common document view](REQ-0058-browse-document-collection.md) adds cross-source discovery independently of this workspace file view. [Internal PDF and image previews](REQ-0059-preview-pdf-and-image-documents.md) are a should-have extension of the external-opening baseline; they do not require non-Markdown editing.
 
 The normal file view shows user content, not technical workspace internals such as Git repositories and internal application state. The explicitly editable `.situate/working-method.md` document is the narrow exception; it does not expose the rest of `.situate/`. The initial delivery has no advanced technical-file editing view. This UI boundary does not prevent external-tool access or complete directory transfer under [REQ-0038](REQ-0038-copy-portable-workspaces.md).
@@ -34,6 +36,8 @@ Private file-editor specification clarification, 2026-10-04; transcript not incl
 
 Private document-management elicitation and prioritization conversation; date not recorded, transcript not included. Internal PDF and image previews were confirmed as a should-have extension.
 
+Private file-navigation clarification; date not recorded, transcript not publicly available. Folders start closed in a fresh pane. Files restores its last target and presentation within the same pane, independently of other panes and bounded navigation history; each history entry retains its own folder state.
+
 ## Acceptance criteria
 
 - Users can browse the organization of their notes and open and read notes without asking the assistant to retrieve them.
@@ -41,6 +45,9 @@ Private document-management elicitation and prioritization conversation; date no
 - After Situate reorganizes notes, users can still browse and read them through the resulting structure.
 - A workspace provides a file-and-folder view without requiring the user to build a plugin or ask the assistant to retrieve content.
 - Users can create, rename, move, copy and delete content files and folders, and open files from that view.
+- A new pane's Files view has no selected file and closed folders. Opening a file does not expand unrelated folders.
+- Returning to Files through navigation restores the same pane's last file and folder state, including after restart and history trimming; other panes remain independent.
+- Back and forward restore the file and folder presentation retained with their respective history entry.
 - These operations preserve or create identities and update known references as specified in REQ-0035; deleting content does not discard its retained history.
 - Both workspace browsing and plugin source inspection use the same file explorer and opening behavior: Markdown is rendered internally, other text is displayed internally as source, and binary files use the default external application. Plugin inspection remains read-only.
 - Extensionless text and text with an unexpected extension open internally. Binary content with a text extension is not displayed or edited as text.

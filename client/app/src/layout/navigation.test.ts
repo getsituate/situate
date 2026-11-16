@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   currentEntry,
+  normalizeNavigation,
   retainPresentation,
   traverse,
   visit,
@@ -26,6 +27,42 @@ const chat: NavigationEntry = {
 const history: PaneNavigation = { entries: [file, chat], cursor: 1 };
 
 describe("pane navigation", () => {
+  it.each([
+    [0, 0, 49],
+    [10, 0, 49],
+    [49, 0, 49],
+    [60, 11, 60],
+    [69, 20, 69],
+  ])(
+    "bounds saved history at cursor %i while preferring nearby back entries",
+    (cursor, first, last) => {
+      const entries = Array.from({ length: 70 }, (_, index) => ({
+        ...chat,
+        id: `entry-${index}`,
+      }));
+      const bounded = normalizeNavigation({ entries, cursor });
+      expect(bounded.entries).toHaveLength(50);
+      expect(bounded.entries[0]?.id).toBe(`entry-${first}`);
+      expect(bounded.entries.at(-1)?.id).toBe(`entry-${last}`);
+      expect(currentEntry(bounded)).toBe(entries[cursor]);
+    },
+  );
+
+  it("bounds direct visits, traversal and presentation updates", () => {
+    const entries = Array.from({ length: 50 }, (_, index) => ({
+      ...chat,
+      id: `entry-${index}`,
+    }));
+    const navigation = visit({ entries, cursor: 49 }, file);
+    expect(navigation.entries).toHaveLength(50);
+    expect(navigation.entries[0]?.id).toBe("entry-1");
+    expect(currentEntry(navigation)).toBe(file);
+    const oversized = { entries: [...entries, file], cursor: 50 };
+    expect(traverse(oversized, -1).entries).toHaveLength(50);
+    expect(
+      retainPresentation(oversized, file.id, { folder: "notes" }).entries,
+    ).toHaveLength(50);
+  });
   it("restores the same entries and presentation state with local back and forward", () => {
     const back = traverse(history, -1);
     expect(back.cursor).toBe(0);

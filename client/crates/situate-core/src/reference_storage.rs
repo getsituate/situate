@@ -99,6 +99,19 @@ impl Projection {
     fn tab(self, tab: &mut Value, scope: &str) -> Result<(), ()> {
         let panes = tab.get_mut("panes").ok_or(())?;
         for pane in panes.as_array_mut().ok_or(())? {
+            if let Some(remembered) = pane.get_mut("lastFiles") {
+                remembered.as_object().ok_or(())?;
+                if remembered.pointer("/target/kind").and_then(Value::as_str) != Some("view")
+                    || remembered.pointer("/target/viewId").and_then(Value::as_str) != Some("files")
+                {
+                    return Err(());
+                }
+                if let Some(reference) = remembered.pointer_mut("/presentation/reference")
+                    && !reference.is_null()
+                {
+                    self.reference(reference, scope)?;
+                }
+            }
             let entries = pane.pointer_mut("/navigation/entries").ok_or(())?;
             for entry in entries.as_array_mut().ok_or(())? {
                 entry.as_object().ok_or(())?;

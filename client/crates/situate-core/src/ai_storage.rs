@@ -55,7 +55,7 @@ pub struct Storage {
         >,
     >,
     location: std::path::PathBuf,
-    device: Option<Box<Storage>>,
+    pub(crate) device: Option<Box<Storage>>,
     access_guard: Option<Box<dyn Send + Sync>>,
 }
 

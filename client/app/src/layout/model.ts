@@ -1,5 +1,6 @@
 import {
   currentEntry,
+  normalizeNavigation,
   retainPresentation,
   sameTarget,
   traverse,
@@ -18,9 +19,88 @@ import {
   type PaneEdge,
 } from "./tree";
 
+import {
+  MAX_CLOSED_TABS,
+  MAX_OPEN_TABS,
+  MAX_PANES_PER_TAB,
+  MAX_NAVIGATION_ENTRIES,
+} from "./limits";
+
+export interface FilesState {
+  readonly target: Extract<ViewTarget, { kind: "view" }> & {
+    readonly viewId: "files";
+  };
+  readonly presentation: PresentationValue;
+  readonly entryId?: string;
+}
+
 export interface Pane {
   readonly id: string;
   readonly navigation: PaneNavigation;
+  readonly lastFiles?: FilesState;
+}
+
+function filesState(entry: NavigationEntry): FilesState | undefined {
+  return entry.target.kind === "view" && entry.target.viewId === "files"
+    ? {
+        target: { ...entry.target, viewId: "files" },
+        presentation: entry.presentation,
+        entryId: entry.id,
+      }
+    : undefined;
+}
+
+function latestFilesEntry(
+  navigation: PaneNavigation,
+  target?: ViewTarget,
+): NavigationEntry | undefined {
+  return navigation.entries
+    .slice(0, navigation.cursor + 1)
+    .reverse()
+    .find(
+      (entry) =>
+        entry.target.kind === "view" &&
+        entry.target.viewId === "files" &&
+        (!target || sameTarget(entry.target, target)),
+    );
+}
+
+function normalizePane(pane: Pane): Pane {
+  let lastFiles = pane.lastFiles;
+  if (!lastFiles?.entryId) {
+    const latest = latestFilesEntry(pane.navigation, lastFiles?.target);
+    if (latest)
+      lastFiles = lastFiles
+        ? { ...lastFiles, entryId: latest.id }
+        : filesState(latest);
+  }
+  const navigation = normalizeNavigation(pane.navigation);
+  return navigation === pane.navigation && lastFiles === pane.lastFiles
+    ? pane
+    : { ...pane, navigation, ...(lastFiles ? { lastFiles } : {}) };
+}
+
+export function normalizeLayout(state: LayoutState): LayoutState {
+  const normalizeTab = (tab: TopicTab): TopicTab => {
+    const panes = tab.panes.map(normalizePane);
+    return panes.every((pane, index) => pane === tab.panes[index])
+      ? tab
+      : { ...tab, panes };
+  };
+  return {
+    ...state,
+    tabs: state.tabs.map(normalizeTab),
+    closedTabs: state.closedTabs.slice(-MAX_CLOSED_TABS).map((closed) => ({
+      ...closed,
+      tab: normalizeTab(closed.tab),
+    })),
+  };
+}
+
+function navigatePane(pane: Pane, navigation: PaneNavigation): Pane {
+  const retained = normalizePane(pane);
+  const lastFiles = filesState(currentEntry(navigation)) ?? retained.lastFiles;
+  return { ...retained, navigation, ...(lastFiles ? { lastFiles } : {}) };
 }
 
 export interface TopicTab {
@@ -211,6 +291,7 @@ function addTab(
   target: ViewTarget,
   nextId: () => string,
 ): LayoutState {
+  if (state.tabs.length >= MAX_OPEN_TABS) return state;
   const id = nextId();
   const pane = createPane(target, nextId);
   const tab: TopicTab = {
@@ -235,6 +316,16 @@ export function reduceLayout(
   intent: LayoutIntent,
   nextId: () => string,
 ): LayoutState {
+  if (
+    state.closedTabs.length > MAX_CLOSED_TABS ||
+    [...state.tabs, ...state.closedTabs.map((closed) => closed.tab)].some(
+      (tab) =>
+        tab.panes.some(
+          (pane) => pane.navigation.entries.length > MAX_NAVIGATION_ENTRIES,
+        ),
+    )
+  )
+    state = normalizeLayout(state);
   switch (intent.type) {
     case "new-tab":
       return addTab(state, { kind: "empty" }, nextId);
@@ -261,7 +352,9 @@ export function reduceLayout(
           state.activeTabId === tab.id
             ? (tabs[Math.min(index, tabs.length - 1)]?.id ?? null)
             : state.activeTabId,
-        closedTabs: [...state.closedTabs, { tab, index }],
+        closedTabs: [...state.closedTabs, { tab, index }].slice(
+          -MAX_CLOSED_TABS,
+        ),
       };
       return tabs.length ? closed : addTab(closed, { kind: "empty" }, nextId);
     }
@@ -288,7 +381,7 @@ export function reduceLayout(
     }
     case "reopen-tab": {
       const closed = state.closedTabs.at(-1);
-      if (!closed) return state;
+      if (!closed || state.tabs.length >= MAX_OPEN_TABS) return state;
       const tabs = [...state.tabs];
       tabs.splice(closed.index, 0, closed.tab);
       return {
@@ -320,21 +413,32 @@ export function reduceLayout(
       if (!tab) return addTab(state, intent.target, nextId);
       const paneId = intent.destination?.paneId ?? tab.activePaneId;
       const pane = tab.panes.find((item) => item.id === paneId)!;
-      const opened = sameTarget(
-        currentEntry(pane.navigation).target,
-        intent.target,
-      )
+      const current = currentEntry(pane.navigation);
+      const genericFiles =
+        intent.target.kind === "view" &&
+        intent.target.viewId === "files" &&
+        intent.target.contentId === undefined;
+      const remembered = normalizePane(pane).lastFiles;
+      const target = genericFiles
+        ? (filesState(current)?.target ?? remembered?.target ?? intent.target)
+        : intent.target;
+      const opened = sameTarget(current.target, target)
         ? state
         : updateTab(state, tab.id, (item) =>
             associateConversation(
-              updatePane(item, {
-                ...pane,
-                navigation: visit(
-                  pane.navigation,
-                  entry(intent.target, nextId),
+              updatePane(
+                item,
+                navigatePane(
+                  pane,
+                  visit(pane.navigation, {
+                    ...entry(target, nextId),
+                    presentation: genericFiles
+                      ? (remembered?.presentation ?? null)
+                      : null,
+                  }),
                 ),
-              }),
-              intent.target,
+              ),
+              target,
             ),
           );
       return activate(opened, { tabId: tab.id, paneId });
@@ -354,7 +458,7 @@ export function reduceLayout(
             return navigation === pane.navigation
               ? tab
               : associateConversation(
-                  updatePane(tab, { ...pane, navigation }),
+                  updatePane(tab, navigatePane(pane, navigation)),
                   currentEntry(navigation).target,
                 );
           }
@@ -364,11 +468,22 @@ export function reduceLayout(
               intent.entryId,
               intent.presentation,
             );
-            return navigation === pane.navigation
+            const retained = normalizePane(pane);
+            const lastFiles =
+              retained.lastFiles?.entryId === intent.entryId
+                ? { ...retained.lastFiles, presentation: intent.presentation }
+                : retained.lastFiles;
+            return navigation === pane.navigation &&
+              lastFiles === retained.lastFiles
               ? tab
-              : updatePane(tab, { ...pane, navigation });
+              : updatePane(tab, {
+                  ...retained,
+                  navigation,
+                  ...(lastFiles ? { lastFiles } : {}),
+                });
           }
           case "split": {
+            if (tab.panes.length >= MAX_PANES_PER_TAB) return tab;
             const added = createPane({ kind: "empty" }, nextId);
             return {
               ...tab,

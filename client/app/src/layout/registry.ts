@@ -199,7 +199,15 @@ export function createUiCoordinator(
       );
       const pane = tab?.panes.find((pane) => pane.id === destination.paneId);
       const entry = pane?.navigation.entries[pane.navigation.cursor];
-      if (entry && sameTarget(entry.target, target))
+      if (
+        entry &&
+        (sameTarget(entry.target, target) ||
+          (target.kind === "view" &&
+            target.viewId === "files" &&
+            target.contentId === undefined &&
+            entry.target.kind === "view" &&
+            entry.target.viewId === "files"))
+      )
         session.dispatch({
           type: "retain-presentation",
           ...destination,

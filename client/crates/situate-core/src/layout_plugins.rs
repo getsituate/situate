@@ -11,7 +11,7 @@ use std::{
 
 pub type Incarnations = BTreeMap<String, String>;
 
-fn child(dir: &Dir, name: &str) -> Result<Option<Dir>, String> {
+pub(super) fn child(dir: &Dir, name: &str) -> Result<Option<Dir>, String> {
     match dir.symlink_metadata(name) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => (),
@@ -25,7 +25,7 @@ fn child(dir: &Dir, name: &str) -> Result<Option<Dir>, String> {
     .map(Some)
     .map_err(|_| INVALID.into())
 }
-fn read(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, String> {
+pub(super) fn read(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, String> {
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
     #[cfg(unix)]
@@ -144,12 +144,16 @@ pub fn write_immutable(dir: &Dir, name: &str, payload: &[u8]) -> Result<(), Stri
         use cap_std::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    match dir.open_with(name, &options) {
-        Ok(mut file) => {
-            file.write_all(payload)
-                .and_then(|_| file.sync_all())
-                .map_err(|_| INVALID)?;
-        }
+    // Publish only complete immutable records; interrupted temporary files are never read.
+    let temporary = format!("layout-record-{}.tmp", uuid::Uuid::new_v4());
+    let mut file = dir.open_with(&temporary, &options).map_err(|_| INVALID)?;
+    let result = file
+        .write_all(payload)
+        .and_then(|_| file.sync_all())
+        .and_then(|_| dir.hard_link(&temporary, dir, name));
+    let _ = dir.remove_file(&temporary);
+    match result {
+        Ok(()) => (),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             let mut options = OpenOptions::new();
             options.read(true).follow(FollowSymlinks::No);
@@ -188,7 +192,12 @@ fn record_id(bytes: &[u8]) -> Result<String, String> {
     )
 }
 
-fn resolve(marker: &Dir, target: &Value, remaining: &mut u64) -> Result<Option<Value>, String> {
+fn resolve(
+    marker: &Dir,
+    records: Option<&Dir>,
+    target: &Value,
+    remaining: &mut u64,
+) -> Result<Option<Value>, String> {
     let id = target["pluginId"].as_str().ok_or(INVALID)?;
     let inc = target["incarnation"].as_str().ok_or(INVALID)?;
     let record = target["recordId"].as_str().ok_or(INVALID)?;
@@ -199,12 +208,15 @@ fn resolve(marker: &Dir, target: &Value, remaining: &mut u64) -> Result<Option<V
     let Some(runtime) = owner(marker, id, inc)? else {
         return Ok(None);
     };
-    let Some(dir) = child(&runtime, "presentation")? else {
-        return Ok(None);
+    let bytes = if let Some(records) = records {
+        Some(read(records, &format!("plugin-{inc}-{record}.json"), *remaining)?.ok_or(INVALID)?)
+    } else {
+        let Some(dir) = child(&runtime, "presentation")? else {
+            return Ok(None);
+        };
+        read(&dir, &format!("{record}.json"), *remaining)?
     };
-    let Some(bytes) = read(&dir, &format!("{record}.json"), *remaining)? else {
-        return Ok(None);
-    };
+    let Some(bytes) = bytes else { return Ok(None) };
     *remaining -= bytes.len() as u64;
     // Earlier random-ID records have no content digest; retain their readable payloads.
     if parsed.get_version() != Some(uuid::Version::Random) && record_id(&bytes)? != record {
@@ -219,7 +231,35 @@ fn resolve(marker: &Dir, target: &Value, remaining: &mut u64) -> Result<Option<V
     Ok(Some(payload))
 }
 
-pub fn store(marker: &Dir, data: &mut Value, expected: &Incarnations) -> Result<(), String> {
+pub(super) fn migrate_records(marker: &Dir, records: &Dir, data: &Value) -> Result<(), String> {
+    let mut remaining = MAX_LAYOUT_BYTES;
+    entries(&mut data.clone(), |entry| {
+        let target = &entry["target"];
+        if target["kind"] != "plugin" {
+            return Ok(());
+        }
+        let id = target["pluginId"].as_str().ok_or(INVALID)?;
+        let inc = target["incarnation"].as_str().ok_or(INVALID)?;
+        let record = target["recordId"].as_str().ok_or(INVALID)?;
+        uuid::Uuid::parse_str(record).map_err(|_| INVALID)?;
+        let Some(runtime) = owner(marker, id, inc)? else {
+            return Ok(());
+        };
+        let dir = child(&runtime, "presentation")?.ok_or(INVALID)?;
+        let bytes = read(&dir, &format!("{record}.json"), remaining)?.ok_or(INVALID)?;
+        remaining -= bytes.len() as u64;
+        let mut budget = MAX_LAYOUT_BYTES;
+        resolve(marker, None, target, &mut budget)?.ok_or(INVALID)?;
+        write_immutable(records, &format!("plugin-{inc}-{record}.json"), &bytes)
+    })
+}
+
+pub fn store(
+    marker: &Dir,
+    records: Option<&Dir>,
+    data: &mut Value,
+    expected: &Incarnations,
+) -> Result<(), String> {
     entries(data, |entry| {
         if entry["target"]["kind"] == "plugin" {
             return Err(INVALID.into());
@@ -240,19 +280,23 @@ pub fn store(marker: &Dir, data: &mut Value, expected: &Incarnations) -> Result<
             return Ok(());
         };
         let payload = json!({"target":entry["target"],"presentation":entry["presentation"]});
-        match runtime.create_dir("presentation") {
-            Ok(()) => crate::durable_storage::sync_directory(&runtime).map_err(|_| INVALID)?,
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
-            Err(_) => return Err(INVALID.into()),
-        }
-        let dir = child(&runtime, "presentation")?.ok_or(INVALID)?;
         let bytes = serde_json::to_vec(&payload).map_err(|_| INVALID)?;
         // Reuse identical payloads; an existing record must still match byte-for-byte.
         let record = record_id(&bytes)?;
         if bytes.len() as u64 > MAX_LAYOUT_BYTES {
             return Err(INVALID.into());
         }
-        write_immutable(&dir, &format!("{record}.json"), &bytes)?;
+        if let Some(records) = records {
+            write_immutable(records, &format!("plugin-{inc}-{record}.json"), &bytes)?;
+        } else {
+            match runtime.create_dir("presentation") {
+                Ok(()) => crate::durable_storage::sync_directory(&runtime).map_err(|_| INVALID)?,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+                Err(_) => return Err(INVALID.into()),
+            }
+            let dir = child(&runtime, "presentation")?.ok_or(INVALID)?;
+            write_immutable(&dir, &format!("{record}.json"), &bytes)?;
+        }
         // A deleted owner must never be recreated by a delayed layout write.
         owner(marker, &id, inc)?.ok_or(INVALID)?;
         let reference = json!({"kind":"plugin","pluginId":id,"incarnation":inc,"recordId":record});
@@ -278,7 +322,80 @@ pub fn store(marker: &Dir, data: &mut Value, expected: &Incarnations) -> Result<
     Ok(())
 }
 
-pub fn load(marker: &Dir, data: &mut Value) -> Result<Incarnations, String> {
+fn referenced_records(
+    data: &Value,
+    keep: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    fn tab(tab: &Value, keep: &mut std::collections::HashSet<String>) -> Result<(), String> {
+        for pane in tab["panes"].as_array().ok_or(INVALID)? {
+            for entry in pane["navigation"]["entries"].as_array().ok_or(INVALID)? {
+                let target = &entry["target"];
+                if target["kind"] == "plugin" {
+                    let incarnation = target["incarnation"].as_str().ok_or(INVALID)?;
+                    let record = target["recordId"].as_str().ok_or(INVALID)?;
+                    keep.insert(format!("plugin-{incarnation}-{record}.json"));
+                }
+            }
+        }
+        Ok(())
+    }
+    if let Some(tabs) = data.pointer("/layout/tabs") {
+        for item in tabs.as_array().ok_or(INVALID)? {
+            tab(item, keep)?;
+        }
+    }
+    if let Some(tabs) = data.pointer("/layout/closedTabs") {
+        for item in tabs.as_array().ok_or(INVALID)? {
+            tab(&item["tab"], keep)?;
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn prune(records: &Dir, data: &Value) -> Result<(), String> {
+    let mut keep = std::collections::HashSet::new();
+    referenced_records(data, &mut keep)?;
+    let mut candidates = vec![];
+    for entry in records.entries().map_err(|_| INVALID)? {
+        let entry = entry.map_err(|_| INVALID)?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        // Older local recovery snapshots can also retain immutable record references.
+        if name.starts_with("layout-legacy-recovery-") && name.ends_with(".json") {
+            let bytes = read(records, name, MAX_LAYOUT_BYTES)?.ok_or(INVALID)?;
+            let recovery: super::Envelope = serde_json::from_slice(&bytes).map_err(|_| INVALID)?;
+            referenced_records(&recovery.data, &mut keep)?;
+        }
+        let Some(stem) = name
+            .strip_prefix("plugin-")
+            .and_then(|name| name.strip_suffix(".json"))
+        else {
+            continue;
+        };
+        if stem.len() != 73 || !stem.is_ascii() || &stem[36..37] != "-" {
+            continue;
+        }
+        let valid = [&stem[..36], &stem[37..]]
+            .into_iter()
+            .all(|id| uuid::Uuid::parse_str(id).is_ok_and(|uuid| uuid.to_string() == id));
+        if valid
+            && records
+                .symlink_metadata(name)
+                .map_err(|_| INVALID)?
+                .is_file()
+        {
+            candidates.push(name.to_owned());
+        }
+    }
+    for name in candidates {
+        if !keep.contains(&name) {
+            records.remove_file(name).map_err(|_| INVALID)?;
+        }
+    }
+    crate::durable_storage::sync_directory(records).map_err(|_| INVALID.into())
+}
+
+pub fn load(marker: &Dir, records: Option<&Dir>, data: &mut Value) -> Result<Incarnations, String> {
     let pins = data
         .get("pinnedViews")
         .and_then(Value::as_array)
@@ -297,7 +414,7 @@ pub fn load(marker: &Dir, data: &mut Value) -> Result<Incarnations, String> {
     let mut remaining = MAX_LAYOUT_BYTES;
     entries(data, |entry| {
         if entry["target"]["kind"] == "plugin" {
-            if let Some(payload) = resolve(marker, &entry["target"], &mut remaining)? {
+            if let Some(payload) = resolve(marker, records, &entry["target"], &mut remaining)? {
                 incarnations.insert(
                     entry["target"]["pluginId"]
                         .as_str()

@@ -36,6 +36,7 @@ import {
   type Pane,
 } from "../model";
 import { currentEntry, type ViewTarget } from "../navigation";
+import { MAX_OPEN_TABS, MAX_PANES_PER_TAB } from "../limits";
 import { paneOrder, type PaneEdge } from "../tree";
 import { dimensions } from "./geometry";
 import { edges, edgeTitle } from "./edges";
@@ -67,6 +68,10 @@ const emit = defineEmits<{
   navigation: [event: MouseEvent];
 }>();
 const tab = computed(() => activeTab(props.state));
+const tabsLimited = computed(() => props.state.tabs.length >= MAX_OPEN_TABS);
+const panesLimited = computed(
+  () => (tab.value?.panes.length ?? 0) >= MAX_PANES_PER_TAB,
+);
 const surfaceMenu = ref<InstanceType<typeof TabActions>>();
 const maximizedHeader = ref<InstanceType<typeof MaximizedPaneHeader>>();
 const overviewMenus = ref<InstanceType<typeof TabActions>[]>([]);
@@ -581,6 +586,12 @@ defineExpose({ back, focusPaneHeader });
         icon="plus"
         :label="t('layoutUi.newTab')"
         class="new-tab"
+        :disabled="tabsLimited"
+        :title="
+          tabsLimited
+            ? t('layoutUi.tabLimit', { count: MAX_OPEN_TABS })
+            : undefined
+        "
         @click="createTab"
       />
       <TabActions
@@ -590,6 +601,7 @@ defineExpose({ back, focusPaneHeader });
         :can-close-others="multipleTabs"
         @close-all="act({ type: 'close-all-tabs' })"
         @close-others="act({ type: 'close-other-tabs', tabId: tab.id })"
+        :tabs-limited="tabsLimited"
         :can-reopen="state.closedTabs.length > 0"
         @reopen="act({ type: 'reopen-tab' })"
         :key="tab.id"
@@ -626,6 +638,7 @@ defineExpose({ back, focusPaneHeader });
         :can-close-others="multipleTabs"
         @close-all="act({ type: 'close-all-tabs' })"
         @close-others="act({ type: 'close-other-tabs', tabId: tab.id })"
+        :tabs-limited="tabsLimited"
         :can-reopen="state.closedTabs.length > 0"
         @reopen="act({ type: 'reopen-tab' })"
         :key="tab.id"
@@ -640,6 +653,9 @@ defineExpose({ back, focusPaneHeader });
         @close="closeTab(tab.id, 'surface')"
       />
     </header>
+    <p v-if="tabsLimited" class="layout-limit" role="status">
+      {{ t("layoutUi.tabLimit", { count: MAX_OPEN_TABS }) }}
+    </p>
     <div class="topic-workarea">
       <section
         v-for="item in state.tabs.filter(
@@ -801,6 +817,9 @@ defineExpose({ back, focusPaneHeader });
         </SituateDialogActions>
       </form>
       <div v-else-if="mode === 'pane' && tab" class="pane-actions">
+        <p v-if="panesLimited" class="layout-limit" role="status">
+          {{ t("layoutUi.paneLimit", { count: MAX_PANES_PER_TAB }) }}
+        </p>
         <SituateButton
           variant="ghost"
           @click="
@@ -811,6 +830,7 @@ defineExpose({ back, focusPaneHeader });
               edge: 'right',
             })
           "
+          :disabled="panesLimited"
         >
           <SituateIcon name="split" />{{ t("layoutUi.splitRight") }}
         </SituateButton>
@@ -824,6 +844,7 @@ defineExpose({ back, focusPaneHeader });
               edge: 'bottom',
             })
           "
+          :disabled="panesLimited"
         >
           <SituateIcon name="split" class="rotate-icon" />{{
             t("layoutUi.splitBelow")
@@ -963,11 +984,15 @@ defineExpose({ back, focusPaneHeader });
             @close="closeTab(item.id, 'all')"
           />
         </div>
+        <p v-if="tabsLimited" class="layout-limit">
+          {{ t("layoutUi.tabLimit", { count: MAX_OPEN_TABS }) }}
+        </p>
         <footer class="tab-overview-actions">
           <SituateButton
             v-if="state.closedTabs.length"
             variant="plain"
             class="sheet-reopen-tab"
+            :disabled="tabsLimited"
             @click="act({ type: 'reopen-tab' })"
           >
             <SituateIcon name="history" />{{ t("layoutUi.reopenTab") }}
@@ -976,6 +1001,7 @@ defineExpose({ back, focusPaneHeader });
             variant="secondary"
             size="small"
             class="sheet-new-tab"
+            :disabled="tabsLimited"
             @click="act({ type: 'new-tab' })"
           >
             <SituateIcon name="plus" />{{ t("layoutUi.newTab") }}
@@ -987,6 +1013,11 @@ defineExpose({ back, focusPaneHeader });
 </template>
 
 <style scoped>
+.layout-limit {
+  margin: 8px 16px;
+  color: var(--situate-muted);
+  font-size: 13px;
+}
 .topic-window {
   min-width: 0;
   min-height: 0;

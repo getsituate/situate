@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyLayout,
+  normalizeLayout,
   reduceLayout,
   selectedTab,
   tabHasActivity,
@@ -83,6 +84,225 @@ function driver(tabs: readonly TopicTab[] = []) {
     },
   };
 }
+
+describe("layout limits and Files memory", () => {
+  it("allows the final tab and pane, then rejects creation and reopening without consuming closed tabs", () => {
+    const app = driver();
+    for (let i = 0; i < 19; i++) app.send({ type: "new-tab" });
+    const closedId = app.active.id;
+    app.send({ type: "close-tab", tabId: closedId });
+    app.send({ type: "new-tab" });
+    app.send({ type: "new-tab" });
+    expect(app.state.tabs).toHaveLength(20);
+    const full = app.state;
+    expect(app.send({ type: "new-tab" })).toBe(full);
+    expect(app.send({ type: "reopen-tab" })).toBe(full);
+    expect(app.state.closedTabs[0]?.tab.id).toBe(closedId);
+    app.send({ type: "close-tab", tabId: app.active.id });
+    app.send({ type: "reopen-tab" });
+    expect(app.state.tabs).toHaveLength(20);
+    for (let i = 0; i < 5; i++)
+      app.send({
+        type: "split",
+        tabId: app.active.id,
+        paneId: app.active.activePaneId,
+        edge: "right",
+      });
+    expect(app.active.panes).toHaveLength(6);
+    const six = app.state;
+    expect(
+      app.send({
+        type: "split",
+        tabId: app.active.id,
+        paneId: app.active.activePaneId,
+        edge: "bottom",
+      }),
+    ).toBe(six);
+  });
+
+  it("keeps the 20 most recently closed tabs on mutation", () => {
+    const app = driver();
+    const closed: string[] = [];
+    for (let i = 0; i < 25; i++) {
+      app.send({ type: "new-tab" });
+      closed.push(app.active.id);
+      app.send({ type: "close-tab", tabId: app.active.id });
+    }
+    expect(app.state.closedTabs.map((item) => item.tab.id)).toEqual(
+      closed.slice(5),
+    );
+  });
+
+  it("normalizes histories and closed tabs without closing saved over-limit tabs or panes", () => {
+    const targets: ViewTarget[] = Array.from({ length: 70 }, (_, i) => ({
+      kind: "conversation",
+      conversationId: `chat-${i}`,
+    }));
+    const original = tab("topic", pane("A", targets, 60));
+    const tabs = Array.from({ length: 21 }, (_, i) => ({
+      ...original,
+      id: `tab-${i}`,
+      panes: Array.from({ length: 7 }, (_, j) =>
+        pane(`${i}-${j}`, targets, 60),
+      ),
+    }));
+    const state = normalizeLayout({
+      tabs,
+      activeTabId: "tab-20",
+      closedTabs: Array.from({ length: 25 }, (_, index) => ({
+        tab: { ...original, id: `closed-${index}` },
+        index,
+      })),
+    });
+    expect(state.tabs).toHaveLength(21);
+    expect(state.tabs[0]?.panes).toHaveLength(7);
+    expect(state.activeTabId).toBe("tab-20");
+    expect(state.closedTabs.map((item) => item.tab.id)).toEqual(
+      Array.from({ length: 20 }, (_, i) => `closed-${i + 5}`),
+    );
+    const history = state.tabs[0]!.panes[0]!.navigation;
+    expect(history.entries).toHaveLength(50);
+    expect(history.cursor).toBe(49);
+    expect(currentEntry(history).target).toEqual(targets[60]);
+    expect(history.entries[0]?.target).toEqual(targets[11]);
+    expect(state.closedTabs[0]?.tab.panes[0]?.navigation.entries).toHaveLength(
+      50,
+    );
+    expect(reduceLayout(state, { type: "new-tab" }, () => "unused")).toBe(
+      state,
+    );
+    expect(
+      reduceLayout(
+        state,
+        { type: "split", tabId: "tab-0", paneId: "0-0", edge: "right" },
+        () => "unused",
+      ),
+    ).toBe(state);
+  });
+
+  it("remembers Files independently in each pane after its history entry has been pruned", () => {
+    const app = driver([
+      tab("topic", pane("A", [file]), pane("B", [otherFile])),
+    ]);
+    for (const [paneId, scrollTop] of [
+      ["A", 12],
+      ["B", 34],
+    ] as const) {
+      app.send({
+        type: "retain-presentation",
+        tabId: "topic",
+        paneId,
+        entryId: `${paneId}-entry-0`,
+        presentation: { folder: paneId, scrollTop },
+      });
+      for (let i = 0; i < 55; i++)
+        app.send({
+          type: "open",
+          destination: { tabId: "topic", paneId },
+          target: { kind: "conversation", conversationId: `${paneId}-${i}` },
+        });
+    }
+    expect(
+      app.active.panes.every((p) => p.navigation.entries.length === 50),
+    ).toBe(true);
+    for (const [paneId, target, scrollTop] of [
+      ["A", file, 12],
+      ["B", otherFile, 34],
+    ] as const) {
+      app.send({
+        type: "open",
+        destination: { tabId: "topic", paneId },
+        target: { kind: "view", viewId: "files" },
+      });
+      const p = app.active.panes.find((p) => p.id === paneId)!;
+      expect(currentEntry(p.navigation)).toMatchObject({
+        target,
+        presentation: { folder: paneId, scrollTop },
+      });
+      const before = app.state;
+      expect(
+        app.send({ type: "open", target: { kind: "view", viewId: "files" } }),
+      ).toBe(before);
+    }
+    app.send({ type: "split", tabId: "topic", paneId: "B", edge: "right" });
+    app.send({ type: "open", target: { kind: "view", viewId: "files" } });
+    expect(currentEntry(app.active.panes.at(-1)!.navigation)).toMatchObject({
+      target: { kind: "view", viewId: "files" },
+      presentation: null,
+    });
+  });
+
+  it("updates only the originating Files visit, including late captures after pruning", () => {
+    const app = driver([tab("topic", pane("A", [file]))]);
+    app.send({ type: "open", target: conversation });
+    app.send({ type: "open", target: file });
+    const recentId = currentEntry(app.active.panes[0]!.navigation).id;
+    app.send({ type: "open", target: conversation });
+    const capture = (entryId: string, folder: string) =>
+      app.send({
+        type: "retain-presentation",
+        tabId: "topic",
+        paneId: "A",
+        entryId,
+        presentation: { folder },
+      });
+    capture("A-entry-0", "old");
+    expect(app.active.panes[0]?.lastFiles?.presentation).toBeNull();
+    for (let i = 0; i < 55; i++)
+      app.send({
+        type: "open",
+        target: { kind: "conversation", conversationId: `chat-${i}` },
+      });
+    capture(recentId, "recent");
+    expect(app.active.panes[0]?.lastFiles?.presentation).toEqual({
+      folder: "recent",
+    });
+    capture("A-entry-0", "stale");
+    app.send({ type: "open", target: { kind: "view", viewId: "files" } });
+    expect(currentEntry(app.active.panes[0]!.navigation).presentation).toEqual({
+      folder: "recent",
+    });
+  });
+
+  it("keeps historical folder states and ignores stale captures for older Files visits", () => {
+    const app = driver([tab("topic", pane("A", [file]))]);
+    const capture = (entryId: string, folder: string) =>
+      app.send({
+        type: "retain-presentation",
+        tabId: "topic",
+        paneId: "A",
+        entryId,
+        presentation: { folder },
+      });
+    capture("A-entry-0", "old");
+    app.send({ type: "open", target: conversation });
+    app.send({ type: "open", target: otherFile });
+    const recentId = currentEntry(app.active.panes[0]!.navigation).id;
+    capture(recentId, "recent");
+    app.send({ type: "open", target: conversation });
+    capture("A-entry-0", "late-old");
+    expect(app.active.panes[0]?.lastFiles).toEqual({
+      target: otherFile,
+      presentation: { folder: "recent" },
+      entryId: recentId,
+    });
+    capture(recentId, "outgoing");
+    expect(app.active.panes[0]?.lastFiles?.presentation).toEqual({
+      folder: "outgoing",
+    });
+    app.send({ type: "open", target: { kind: "view", viewId: "files" } });
+    expect(currentEntry(app.active.panes[0]!.navigation).presentation).toEqual({
+      folder: "outgoing",
+    });
+    app.send({ type: "open", target: file });
+    expect(
+      currentEntry(app.active.panes[0]!.navigation).presentation,
+    ).toBeNull();
+    expect(app.active.panes[0]?.navigation.entries[0]?.presentation).toEqual({
+      folder: "late-old",
+    });
+  });
+});
 
 describe("tab activity", () => {
   it("follows the current view through navigation and history", () => {

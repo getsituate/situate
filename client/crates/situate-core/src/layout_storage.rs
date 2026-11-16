@@ -12,7 +12,10 @@ const FILE: &str = "layout.json";
 const FAILED: &str = "native.layout.storage.failed";
 const INVALID: &str = "native.layout.storage.invalid";
 const CONFLICT: &str = "native.layout.storage.conflict";
-pub const MAX_LAYOUT_BYTES: u64 = 2 * 1024 * 1024;
+pub const MAX_LAYOUT_BYTES: u64 = 30 * 1024 * 1024;
+
+#[path = "layout_device.rs"]
+mod device;
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Snapshot {
@@ -23,11 +26,12 @@ pub struct Snapshot {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct Envelope {
     version: u64,
     generation: String,
     data: Value,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
 }
 
 pub struct LayoutStorage(Storage);
@@ -40,10 +44,18 @@ impl LayoutStorage {
     }
 
     pub fn load(&self) -> Result<Snapshot, String> {
+        let _lock = self
+            .0
+            .device
+            .as_ref()
+            .map(|_| self.0.lock_named("layout.lock"))
+            .transpose()
+            .map_err(|_| "native.layout.storage.busy")?;
         let _plugins = self
             .0
             .lock_named_shared("plugin-state.lock")
             .map_err(|_| "native.layout.storage.busy")?;
+        self.migrate()?;
         match self.read()? {
             None => Ok(Snapshot {
                 revision: None,
@@ -79,6 +91,7 @@ impl LayoutStorage {
             .0
             .lock_named_shared("plugin-state.lock")
             .map_err(|_| "native.layout.storage.busy")?;
+        self.migrate()?;
         let previous = self.read()?;
         let revision = previous
             .as_deref()
@@ -88,16 +101,24 @@ impl LayoutStorage {
         if revision.as_deref() != expected_revision {
             return Err(CONFLICT.into());
         }
-        plugins::store(&self.0.dir, &mut data, expected_plugins)?;
+        plugins::store(&self.0.dir, self.records(), &mut data, expected_plugins)?;
         crate::reference_storage::Projection::Store
             .layout(&mut data, &self.0.scope)
             .map_err(|_| INVALID)?;
-        let bytes = serde_json::to_vec(&Envelope {
+        let envelope = Envelope {
             version: 1,
             generation: uuid::Uuid::new_v4().to_string(),
             data,
-        })
-        .map_err(|_| INVALID)?;
+            extra: previous
+                .as_deref()
+                .map(|bytes| {
+                    serde_json::from_slice::<Envelope>(bytes).map(|envelope| envelope.extra)
+                })
+                .transpose()
+                .map_err(|_| INVALID)?
+                .unwrap_or_default(),
+        };
+        let bytes = serde_json::to_vec(&envelope).map_err(|_| INVALID)?;
         if bytes.len() as u64 > MAX_LAYOUT_BYTES {
             return Err("native.layout.storage.tooLarge".into());
         }
@@ -110,7 +131,7 @@ impl LayoutStorage {
                     "layout-legacy-recovery-{}.json",
                     revision.as_deref().ok_or(INVALID)?
                 );
-                plugins::write_immutable(&self.0.dir, &recovery, original)?;
+                plugins::write_immutable(&self.files().dir, &recovery, original)?;
             }
         }
         if self.read()? != previous {
@@ -118,26 +139,34 @@ impl LayoutStorage {
         }
         let temporary = format!("layout-{}.tmp", uuid::Uuid::new_v4());
         if !self
-            .0
+            .files()
             .replace(FILE, &temporary, &bytes)
             .map_err(|_| FAILED)?
         {
             return Err("native.layout.storage.durability".into());
         }
+        if let Some(records) = self.records() {
+            // A pruning failure must not turn a durably committed layout into a failed save.
+            let _ = plugins::prune(records, &envelope.data);
+        }
         Ok(saved)
     }
 
     fn read(&self) -> Result<Option<Vec<u8>>, String> {
-        match self.0.dir.symlink_metadata(FILE) {
-            Ok(metadata) if metadata.is_file() => {}
-            Ok(_) => return Err(FAILED.into()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(_) => return Err(FAILED.into()),
-        }
-        self.0
-            .read_named(FILE, MAX_LAYOUT_BYTES)
-            .map_err(|_| FAILED.into())
+        read_file(self.files())
     }
+}
+
+fn read_file(storage: &Storage) -> Result<Option<Vec<u8>>, String> {
+    match storage.dir.symlink_metadata(FILE) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Err(FAILED.into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(FAILED.into()),
+    }
+    storage
+        .read_named(FILE, MAX_LAYOUT_BYTES)
+        .map_err(|_| FAILED.into())
 }
 
 fn validate(data: &Value) -> Result<(), String> {
@@ -149,8 +178,7 @@ fn validate(data: &Value) -> Result<(), String> {
     if version != 1 {
         return Err("native.layout.storage.unsupported".into());
     }
-    if object.len() != 3
-        || !data["layout"].is_object()
+    if !data["layout"].is_object()
         || !data["pinnedViews"]
             .as_array()
             .is_some_and(|pins| pins.iter().all(Value::is_string))
@@ -161,6 +189,18 @@ fn validate(data: &Value) -> Result<(), String> {
 }
 
 fn decode(bytes: &[u8], storage: &Storage) -> Result<Snapshot, String> {
+    decode_with_records(
+        bytes,
+        storage,
+        storage.device.as_deref().map(|device| &device.dir),
+    )
+}
+
+fn decode_with_records(
+    bytes: &[u8],
+    storage: &Storage,
+    records: Option<&cap_std::fs::Dir>,
+) -> Result<Snapshot, String> {
     let raw = crate::reference_storage_json::decode_layout(bytes).map_err(|_| INVALID)?;
     if raw
         .get("version")
@@ -173,7 +213,7 @@ fn decode(bytes: &[u8], storage: &Storage) -> Result<Snapshot, String> {
     if envelope.version != 1 || uuid::Uuid::parse_str(&envelope.generation).is_err() {
         return Err(INVALID.into());
     }
-    let plugin_incarnations = plugins::load(&storage.dir, &mut envelope.data)?;
+    let plugin_incarnations = plugins::load(&storage.dir, records, &mut envelope.data)?;
     validate(&envelope.data)?;
     crate::reference_storage::Projection::Bind
         .layout(&mut envelope.data, &storage.scope)
@@ -188,6 +228,10 @@ fn decode(bytes: &[u8], storage: &Storage) -> Result<Snapshot, String> {
         plugin_incarnations,
     })
 }
+
+#[cfg(test)]
+#[path = "layout_device_tests.rs"]
+mod device_tests;
 
 #[cfg(test)]
 mod tests {
@@ -329,14 +373,14 @@ mod tests {
         assert!(path.is_dir());
     }
 
-    fn install(directory: &tempfile::TempDir) -> Incarnations {
+    pub(super) fn install(directory: &tempfile::TempDir) -> Incarnations {
         let runtime = directory.path().join(".situate/plugins/demo/.runtime");
         fs::create_dir_all(&runtime).unwrap();
         let incarnation = uuid::Uuid::new_v4().to_string();
         fs::write(runtime.join("identity"), &incarnation).unwrap();
         [("demo".into(), incarnation)].into()
     }
-    fn plugin_data() -> Value {
+    pub(super) fn plugin_data() -> Value {
         let tab = json!({"id":"tab","panes":[{"id":"pane","navigation":{"entries":[
             {"id":"plugin","target":{"kind":"view","viewId":"demo:board","contentId":"private-item"},"presentation":{"draft":"private-plugin-payload"}},
             {"id":"builtin","target":{"kind":"conversation","conversationId":"chat"},"presentation":{"scroll":21}}
@@ -694,6 +738,7 @@ mod tests {
             version: 1,
             generation: uuid::Uuid::new_v4().to_string(),
             data: plugin_data(),
+            extra: Default::default(),
         })
         .unwrap();
         fs::write(directory.path().join(".situate/layout.json"), &legacy).unwrap();
@@ -742,6 +787,7 @@ mod tests {
             version: 1,
             generation: uuid::Uuid::new_v4().to_string(),
             data: plugin_data(),
+            extra: Default::default(),
         })
         .unwrap();
         let path = directory.path().join(".situate/layout.json");

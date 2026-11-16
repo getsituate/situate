@@ -328,6 +328,17 @@ describe("file panes", () => {
     expect(button(editor, "Notes").attributes("aria-expanded")).toBe("false");
     expect(editor.findAll(".file-entry")).toHaveLength(0);
   });
+  it("keeps files with intentionally hidden parent directories accessible", async () => {
+    const { wrapper, session } = await setup(true, [
+      { path: ".situate/working-method.md", isDirectory: false },
+    ]);
+    wrapper.unmount();
+    const editor = await pane(session.id, "", { treeOpen: true });
+    expect(editor.findAll(".file-entry").map((entry) => entry.text())).toEqual([
+      "working-method.md",
+    ]);
+    expect(button(editor, "Notes").attributes("aria-expanded")).toBe("false");
+  });
   it("retains open and closed folders when a file click remounts the pane", async () => {
     const { wrapper, session } = await setup(true, [
       { path: "Archive", isDirectory: true },

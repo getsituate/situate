@@ -1254,6 +1254,90 @@ test(
   },
 );
 
+test("Files navigation restores each pane's own file and folder state after restart", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 920 });
+  await filesFixture(page);
+  await page.goto("/");
+  await (
+    await navigation(page)
+  )
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  const notes = page.getByRole("button", { name: "Notes", exact: true });
+  await expect(notes).toHaveAttribute("aria-expanded", "false");
+  await notes.click();
+  await page.getByRole("button", { name: "Garden.md", exact: true }).click();
+  await notes.click();
+  await (
+    await paneOptions(page)
+  )
+    .getByRole("button", { name: "Add pane to the right", exact: true })
+    .click();
+  const panes = page.locator(".pane-tile");
+  await panes
+    .last()
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  await panes
+    .last()
+    .getByRole("button", { name: "Notes", exact: true })
+    .click();
+  await panes
+    .last()
+    .getByRole("button", { name: "Reading.md", exact: true })
+    .click();
+  await (
+    await navigation(page)
+  )
+    .getByLabel("New chat", { exact: true })
+    .click();
+  await expect(panes.last().locator(".chat-pane")).toBeVisible();
+  await (
+    await navigation(page)
+  )
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  await expect(panes.last().locator(".document-location h3")).toHaveText(
+    "Reading.md",
+  );
+  await expect(panes.first().locator(".document-location h3")).toHaveText(
+    "Garden.md",
+  );
+  await expect(
+    panes.first().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    panes.last().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect
+    .poll(async () => {
+      const document = await stored(page);
+      const pane = document?.layout.tabs[0]?.panes.at(-1);
+      return pane?.navigation.entries[pane.navigation.cursor]?.target;
+    })
+    .toMatchObject({
+      kind: "view",
+      viewId: "files",
+      contentId: "Notes/Reading.md",
+    });
+  await page.reload();
+  await expect(panes).toHaveCount(2);
+  await expect(panes.first().locator(".document-location h3")).toHaveText(
+    "Garden.md",
+  );
+  await expect(panes.last().locator(".document-location h3")).toHaveText(
+    "Reading.md",
+  );
+  await expect(
+    panes.first().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    panes.last().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+});
+
 test("a live reference follows a managed move after its old path is reused", async ({
   page,
 }) => {
@@ -1399,8 +1483,8 @@ test("the tab overview button follows strip overflow rather than clipped titles"
   await closeTab(page);
   await expect(overview).toHaveCount(0);
   await expect
-    .poll(async () => (await stored(page))?.layout.tabs.length)
-    .toBe(1);
+    .poll(async () => (await stored(page))?.layout.tabs.map((tab) => tab.name))
+    .toEqual([longTitle]);
   await page.reload();
   await expect(
     page.getByRole("tab", { name: longTitle, exact: true }),

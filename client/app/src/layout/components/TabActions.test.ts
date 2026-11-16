@@ -14,6 +14,30 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+it("explains the tab limit and disables creating and reopening at capacity", async () => {
+  const wrapper = mount(TabActions, {
+    attachTo: document.body,
+    props: {
+      label: "Tab actions",
+      surface: true,
+      canReopen: true,
+      tabsLimited: true,
+    },
+  });
+  await wrapper.get(".tab-actions-trigger").trigger("click");
+  await flushPromises();
+  expect(wrapper.get(".limit-help").text()).toContain("⟦layoutUi.tabLimit");
+  for (const key of ["newTab", "reopenTab"]) {
+    const button = wrapper
+      .findAll("button")
+      .find((button) => button.text() === `⟦layoutUi.${key}⟧`)!;
+    expect(button.attributes()).toHaveProperty("disabled");
+    await button.trigger("click");
+  }
+  expect(wrapper.emitted("create")).toBeUndefined();
+  expect(wrapper.emitted("reopen")).toBeUndefined();
+});
+
 it("opens the last action with ArrowUp and passes the trigger to rename", async () => {
   const wrapper = mount(TabActions, {
     attachTo: document.body,

@@ -4,6 +4,7 @@ import {
   defineComponent,
   h,
   markRaw,
+  onBeforeUnmount,
   onMounted,
   onUnmounted,
   type Component,
@@ -254,6 +255,68 @@ it("shows the existing new-tab chooser for a deleted conversation while preservi
     wrapper.unmount();
   }
 });
+it("retains an unmounting view's presentation on its own history entry", async () => {
+  const dispatch = vi.fn();
+  const component = markRaw(
+    defineComponent({
+      emits: ["presentation"],
+      setup(_, { emit }) {
+        onBeforeUnmount(() => emit("presentation", { scrollTop: 25 }));
+        return () => h("div", "File");
+      },
+    }),
+  );
+  const pane: Pane = {
+    id: "pane",
+    navigation: {
+      cursor: 0,
+      entries: [
+        {
+          id: "first",
+          target: { kind: "view", viewId: "files", contentId: "first.md" },
+          presentation: null,
+        },
+        {
+          id: "second",
+          target: { kind: "view", viewId: "files", contentId: "second.md" },
+          presentation: null,
+        },
+      ],
+    },
+  };
+  const ui = {
+    session: {
+      workspaceId: "workspace",
+      capture: () => ({}),
+      current: () => true,
+      dispatch,
+      state: { document: null },
+    },
+    registry: { definitions: new Map([["files", { id: "files", component }]]) },
+  } as unknown as WorkspaceUi;
+  const wrapper = mount(ViewHost, {
+    props: {
+      ui,
+      pane,
+      tab: { id: "tab" } as TopicTab,
+      workspaceName: "Workspace",
+    },
+  });
+  await flushPromises();
+  await wrapper.setProps({
+    pane: { ...pane, navigation: { ...pane.navigation, cursor: 1 } },
+  });
+  await flushPromises();
+  expect(dispatch).toHaveBeenCalledWith({
+    type: "retain-presentation",
+    tabId: "tab",
+    paneId: "pane",
+    entryId: "first",
+    presentation: { scrollTop: 25 },
+  });
+  wrapper.unmount();
+});
+
 it("logs a consumed view failure in its workspace and retains the fallback", async () => {
   diagnostics.resolve.mockReturnValue({ emit: diagnostics.emit });
   const pane: Pane = {

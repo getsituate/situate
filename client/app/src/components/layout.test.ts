@@ -195,7 +195,10 @@ describe("workspace view host", () => {
                 writable: true,
                 reason: null,
                 drafts: [],
-                entries: [{ path: "Notes/Garden.md", isDirectory: false }],
+                entries: [
+                  { path: "Notes", isDirectory: true },
+                  { path: "Notes/Garden.md", isDirectory: false },
+                ],
               },
             };
           if (request.operation === "read")
@@ -479,6 +482,38 @@ describe("workspace view host", () => {
       wrapper.get<HTMLTextAreaElement>(".source-text").element.selectionEnd,
     ).toBe(6);
     expect(wrapper.emitted("closeWorkspace")).toBeUndefined();
+  });
+  it("restores the same pane's file and folder state through the Files sidebar", async () => {
+    const wrapper = await mountHost();
+    const source = wrapper.get<HTMLTextAreaElement>(".source-text");
+    source.element.setSelectionRange(4, 7);
+    await source.trigger("select");
+    await hostButton(wrapper, "⟦files.expandFileBrowser⟧").trigger("click");
+    await hostButton(wrapper, "Notes").trigger("click");
+    expect(hostButton(wrapper, "Notes").attributes("aria-expanded")).toBe(
+      "true",
+    );
+    await openNavigation(wrapper);
+    await hostButton(wrapper, "Garden chat").trigger("click");
+    await settleViews();
+    await openNavigation(wrapper);
+    await hostButton(wrapper, "⟦navigation.files⟧").trigger("click");
+    await settleViews();
+    expect(wrapper.get(".document-location h3").text()).toBe("Garden.md");
+    expect(
+      wrapper.get<HTMLTextAreaElement>(".source-text").element.selectionStart,
+    ).toBe(4);
+    expect(hostButton(wrapper, "Notes").attributes("aria-expanded")).toBe(
+      "true",
+    );
+    await workspaceUi("garden").session.flush();
+    wrapper.unmount();
+    retainWorkspaceUi([]);
+    const reopened = await mountHost();
+    expect(reopened.get(".document-location h3").text()).toBe("Garden.md");
+    expect(hostButton(reopened, "Notes").attributes("aria-expanded")).toBe(
+      "true",
+    );
   });
   it("closing panes and tabs retains shared running chat state and never closes the workspace", async () => {
     stored.delete("garden");

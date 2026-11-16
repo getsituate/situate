@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { LayoutState, TopicTab } from "./model";
+import {
+  normalizeLayout,
+  type FilesState,
+  type LayoutState,
+  type TopicTab,
+} from "./model";
 import type { LayoutNode } from "./tree";
 import type { PresentationValue, ViewTarget } from "./navigation";
 
@@ -12,6 +17,7 @@ export interface LayoutRecord {
   readonly revision: string | null;
   readonly data: LayoutDocument | null;
   readonly pluginIncarnations?: Readonly<Record<string, string>>;
+  readonly needsSave?: boolean;
 }
 export interface LayoutStorage {
   load(workspaceId: string): Promise<LayoutRecord>;
@@ -139,7 +145,22 @@ export function decodeLayoutDocument(value: unknown): LayoutDocument {
     const tabId = id(item.id);
     const panes = array(item.panes).map((value) => {
       const pane = object(value);
-      keys(pane, ["id", "navigation"]);
+      keys(pane, ["id", "navigation", "lastFiles"]);
+      let lastFiles: FilesState | undefined;
+      if (pane.lastFiles !== undefined) {
+        const remembered = object(pane.lastFiles);
+        keys(remembered, ["target", "presentation", "entryId"]);
+        const target = decodeTarget(remembered.target, false);
+        if (target.kind !== "view" || target.viewId !== "files")
+          return invalid();
+        lastFiles = {
+          target: { ...target, viewId: "files" },
+          presentation: presentation(remembered.presentation),
+          ...(remembered.entryId === undefined
+            ? {}
+            : { entryId: text(remembered.entryId) }),
+        };
+      }
       const paneId = id(pane.id);
       const navigation = object(pane.navigation);
       keys(navigation, ["entries", "cursor"]);
@@ -159,7 +180,11 @@ export function decodeLayoutDocument(value: unknown): LayoutDocument {
         (cursor as number) >= entries.length
       )
         return invalid();
-      return { id: paneId, navigation: { entries, cursor: cursor as number } };
+      return {
+        id: paneId,
+        navigation: { entries, cursor: cursor as number },
+        ...(lastFiles ? { lastFiles } : {}),
+      };
     });
     const remaining = new Set(panes.map((pane) => pane.id));
     function node(value: unknown, depth = 0): LayoutNode {
@@ -230,7 +255,7 @@ export function decodeLayoutDocument(value: unknown): LayoutDocument {
   });
   return {
     version: 1,
-    layout: { tabs, activeTabId, closedTabs },
+    layout: normalizeLayout({ tabs, activeTabId, closedTabs }),
     pinnedViews: uniqueStrings(document.pinnedViews),
   };
 }
@@ -285,9 +310,13 @@ function decodeRecord(value: unknown): LayoutRecord {
   if (record.revision !== null && typeof record.revision !== "string")
     return invalid();
   if ((record.data === null) !== (record.revision === null)) return invalid();
+  const data = record.data === null ? null : decodeLayoutDocument(record.data);
   return {
     revision: record.revision as string | null,
-    data: record.data === null ? null : decodeLayoutDocument(record.data),
+    data,
+    ...(data && !sameDocument(record.data as LayoutDocument, data)
+      ? { needsSave: true }
+      : {}),
     ...(record.pluginIncarnations === undefined
       ? {}
       : {

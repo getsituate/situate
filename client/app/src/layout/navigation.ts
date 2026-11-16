@@ -1,3 +1,5 @@
+import { MAX_NAVIGATION_ENTRIES } from "./limits";
+
 export type ViewTarget =
   | { readonly kind: "empty" }
   | { readonly kind: "conversation"; readonly conversationId: string }
@@ -28,6 +30,17 @@ export interface PaneNavigation {
   readonly cursor: number;
 }
 
+export function normalizeNavigation(
+  navigation: PaneNavigation,
+): PaneNavigation {
+  if (navigation.entries.length <= MAX_NAVIGATION_ENTRIES) return navigation;
+  const start = Math.max(0, navigation.cursor - MAX_NAVIGATION_ENTRIES + 1);
+  return {
+    entries: navigation.entries.slice(start, start + MAX_NAVIGATION_ENTRIES),
+    cursor: navigation.cursor - start,
+  };
+}
+
 export function currentEntry(navigation: PaneNavigation): NavigationEntry {
   return navigation.entries[navigation.cursor]!;
 }
@@ -53,19 +66,21 @@ export function visit(
   navigation: PaneNavigation,
   entry: NavigationEntry,
 ): PaneNavigation {
+  navigation = normalizeNavigation(navigation);
   if (sameTarget(currentEntry(navigation).target, entry.target))
     return navigation;
   const entries = [
     ...navigation.entries.slice(0, navigation.cursor + 1),
     entry,
   ];
-  return { entries, cursor: entries.length - 1 };
+  return normalizeNavigation({ entries, cursor: entries.length - 1 });
 }
 
 export function traverse(
   navigation: PaneNavigation,
   delta: -1 | 1,
 ): PaneNavigation {
+  navigation = normalizeNavigation(navigation);
   const cursor = navigation.cursor + delta;
   if (cursor < 0 || cursor >= navigation.entries.length) return navigation;
   return { ...navigation, cursor };
@@ -76,6 +91,7 @@ export function retainPresentation(
   entryId: string,
   presentation: PresentationValue,
 ): PaneNavigation {
+  navigation = normalizeNavigation(navigation);
   // Capture can complete after navigation; bind it to the retained entry, not the cursor.
   if (!navigation.entries.some((entry) => entry.id === entryId))
     return navigation;

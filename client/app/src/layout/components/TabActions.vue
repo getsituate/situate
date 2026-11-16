@@ -2,6 +2,7 @@
 import { computed, useTemplateRef, ref, useId } from "vue";
 import { SituateButton, SituateIcon, SituateMenu } from "@situate/ui";
 import { t } from "@situate/localization";
+import { MAX_OPEN_TABS } from "../limits";
 
 withDefaults(
   defineProps<{
@@ -9,6 +10,7 @@ withDefaults(
     surface?: boolean;
     includeLayout?: boolean;
     canReopen?: boolean;
+    tabsLimited?: boolean;
     bulk?: boolean;
     canCloseOthers?: boolean;
   }>(),
@@ -110,6 +112,7 @@ defineExpose({ back });
           type="button"
           role="menuitem"
           tabindex="-1"
+          :disabled="tabsLimited"
           @click="create"
         >
           {{ t("layoutUi.newTab") }}
@@ -164,6 +167,7 @@ defineExpose({ back });
       <SituateButton
         variant="plain"
         v-if="canReopen"
+        :disabled="tabsLimited"
         type="button"
         role="menuitem"
         tabindex="-1"
@@ -174,11 +178,19 @@ defineExpose({ back });
       >
         {{ t("layoutUi.reopenTab") }}
       </SituateButton>
+      <p v-if="tabsLimited" class="limit-help">
+        {{ t("layoutUi.tabLimit", { count: MAX_OPEN_TABS }) }}
+      </p>
     </SituateMenu>
   </div>
 </template>
 
 <style scoped>
+.limit-help {
+  margin: 8px;
+  color: var(--situate-muted);
+  font-size: 13px;
+}
 .tab-actions {
   position: relative;
   flex: 0 0 44px;

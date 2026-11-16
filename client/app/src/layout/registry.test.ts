@@ -210,6 +210,27 @@ describe("registered workspace navigation", () => {
       contentId: "new.md",
     });
   });
+  it("applies explicit initial presentation when generic Files opening restores a file", async () => {
+    const ui = await setup();
+    await ui.coordinator.open({
+      kind: "view",
+      viewId: "files",
+      contentId: "notes.md",
+    });
+    await ui.coordinator.open({ kind: "empty" });
+    await ui.coordinator.open(
+      { kind: "view", viewId: "files" },
+      undefined,
+      undefined,
+      { mode: "source" },
+    );
+    expect(entry(ui).target).toEqual({
+      kind: "view",
+      viewId: "files",
+      contentId: "notes.md",
+    });
+    expect(entry(ui).presentation).toEqual({ mode: "source" });
+  });
   it("shows loading until a registered asynchronous view is ready", async () => {
     const ui = await setup();
     const ready = deferred<Component>();

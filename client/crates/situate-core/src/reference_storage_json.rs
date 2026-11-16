@@ -38,6 +38,7 @@ impl Schema {
             (ClosedTab, "tab") => Tab,
             (Tab, "panes") => List(&Pane),
             (Pane, "navigation") => Navigation,
+            (Pane, "lastFiles") => Entry,
             (Navigation, "entries") => List(&Entry),
             (Entry, "target") => Target,
             (Entry, "presentation") => Presentation,
