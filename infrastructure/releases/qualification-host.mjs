@@ -318,6 +318,9 @@ export async function withQualificationRoute(
   const exited = Promise.withResolvers();
   const lifetime = new AbortController();
   const errors = [];
+  let phase = "guardian-startup";
+  let guardianExitCode = null;
+  let controllerFailure = null;
   let pending = "",
     size = 0,
     closed,
@@ -338,7 +341,8 @@ export async function withQualificationRoute(
     error.uncertain = true;
     return error;
   };
-  const fail = () => {
+  const fail = (reason) => {
+    controllerFailure ??= reason;
     const error = failure();
     lifetime.abort(error);
     if (!isReady) ready.reject(error);
@@ -347,7 +351,7 @@ export async function withQualificationRoute(
   child.stdout.on("data", (chunk) => {
     size += chunk.length;
     if (size > 64 * 1024) {
-      fail();
+      fail("protocol");
       return;
     }
     pending += chunk.toString("utf8");
@@ -365,28 +369,29 @@ export async function withQualificationRoute(
         } else if (value.closed === true && !closed) closed = value;
         else throw new Error();
       } catch {
-        fail();
+        fail("protocol");
       }
     }
   });
   child.stderr.resume();
-  child.stdin.on("error", fail);
+  child.stdin.on("error", () => fail("stdin"));
   child.once("error", () => {
-    fail();
+    fail("spawn");
     exited.resolve({ failed: true });
   });
   child.once("close", (status) => {
+    guardianExitCode = Number.isInteger(status) ? status : null;
     const okay =
       status === 0 && closed?.cleaned === true && closed?.uncertain === false;
-    if (!okay || !isReady) fail();
+    if (!okay || !isReady) fail("guardian-exit");
     lifetime.abort(failure());
     exited.resolve({ failed: !okay });
   });
-  const startup = setTimeout(fail, 35_000);
+  const startup = setTimeout(() => fail("startup-timeout"), 35_000);
   startup.unref();
   const cancel = () => {
     lifetime.abort(signal.reason);
-    fail();
+    fail("cancelled");
   };
   signal?.addEventListener("abort", cancel, { once: true });
   let result;
@@ -394,6 +399,7 @@ export async function withQualificationRoute(
     await ready.promise;
     clearTimeout(startup);
     lifetime.signal.throwIfAborted();
+    phase = "callback";
     result = await callback(
       Object.freeze({
         ...state,
@@ -403,6 +409,7 @@ export async function withQualificationRoute(
       }),
       lifetime.signal,
     );
+    phase = "guardian-cleanup";
   } catch (error) {
     errors.push(error);
   } finally {
@@ -417,13 +424,37 @@ export async function withQualificationRoute(
     });
     const outcome = await Promise.race([exited.promise, timeout]);
     clearTimeout(timer);
-    if (outcome.failed) errors.push(failure());
+    if (outcome.failed) {
+      controllerFailure ??= "cleanup-timeout";
+      errors.push(failure());
+    }
   }
   if (errors.length) {
+    const diagnostic = {
+      phase,
+      ready: isReady,
+      guardianExitCode,
+      controllerFailure,
+      guardianFailure: [
+        "prepare",
+        "ssh-start",
+        "ssh-lost",
+        "interrupted",
+        "guardian",
+        "teardown",
+      ].includes(closed?.failure)
+        ? closed.failure
+        : closed?.failure === null
+          ? null
+          : "unknown",
+      cleaned: closed?.cleaned === true,
+      uncertain: closed?.uncertain !== false,
+    };
     const error = new AggregateError(
       errors,
-      "Private qualification route failed; inspect retained operation evidence before recovery",
+      `Private qualification route failed: ${JSON.stringify(diagnostic)}; inspect retained operation evidence before recovery`,
     );
+    error.diagnostic = diagnostic;
     error.operationNonce = operation.operationNonce;
     error.uncertain = errors.some((item) => item?.uncertain === true);
     throw error;
