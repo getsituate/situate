@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "file-view-layout-retention",
-  "behaviorDigest": "60677067ae9f4edb0f8767a25cce73c414e93371262dea9eed08da28ba873d46",
+  "behaviorDigest": "694c1bf4efeea8b572bfe617ddae4802aa9ed666d96bc4b39e5ffca88802ec84",
   "locales": {
     "en": {
       "title": "Changes",
@@ -9,9 +9,7 @@
         {
           "id": "retain-file-view",
           "type": "fixed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Keep your place in Files",
           "paragraphs": [
             "Returning to Files restores the last file and folder state in that pane. Opening a file no longer opens unrelated folders. New file browsers start with folders closed."
@@ -20,9 +18,7 @@
         {
           "id": "bounded-device-local-layouts",
           "type": "changed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Device-local layouts and navigation limits",
           "paragraphs": [
             "Layouts stay on the current device and workspace location. Copying or moving a workspace does not transfer its layout. Existing layouts are retained at their current location.",
@@ -37,9 +33,7 @@
         {
           "id": "retain-file-view",
           "type": "fixed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Die Dateiansicht behält deinen Zustand",
           "paragraphs": [
             "Wenn du zur Dateiansicht zurückkehrst, werden die zuletzt geöffnete Datei und der Ordnerzustand dieses Bereichs wiederhergestellt. Beim Öffnen einer Datei werden keine anderen Ordner mehr aufgeklappt. Neue Dateiansichten starten mit geschlossenen Ordnern."
@@ -48,9 +42,7 @@
         {
           "id": "bounded-device-local-layouts",
           "type": "changed",
-          "platforms": [
-            "macos"
-          ],
+          "platforms": ["macos"],
           "title": "Gerätelokale Layouts und Navigationsgrenzen",
           "paragraphs": [
             "Layouts bleiben an dieses Gerät und den Speicherort des Arbeitsbereichs gebunden. Beim Kopieren oder Verschieben eines Arbeitsbereichs wird das Layout nicht übernommen. Vorhandene Layouts bleiben am bisherigen Speicherort erhalten.",
@@ -62,12 +54,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "5abbe5e129d9afc56c92f75d0cd914d9755051845f55fdfcefc63b368820f371",
-      "translationHash": "c944997dfbe7719656c4c42b27b28ae45c096bc06ae9cc306f1c22b2f092fa2b"
+      "sourceHash": "b51c00ebba96f7dc69297780dc858f9fce78709d748ca032e400e4197351f3a1",
+      "translationHash": "637cae0228cd540b6d73f2d4d92d5d8cd2e0e279db2cceb72332a30994193674"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "5abbe5e129d9afc56c92f75d0cd914d9755051845f55fdfcefc63b368820f371"
+    "sourceHash": "b51c00ebba96f7dc69297780dc858f9fce78709d748ca032e400e4197351f3a1"
   }
 }
