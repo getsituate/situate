@@ -1,54 +1,84 @@
-# Situate
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="design/brand/assets/wordmark-light.svg">
+    <img src="design/brand/assets/wordmark.svg" alt="Situate" width="220" height="59">
+  </picture>
+</h1>
 
-Situate is a personal organizational system project for organizing information and coordinating work with AI assistance.
+<p align="center">An open-source macOS app for organizing your notes and tasks with AI.</p>
 
-This repository contains the macOS client, retained code for deferred platforms, product documentation, a requirements catalog, and development tooling. See [Situate — Product Capability Catalog](docs/product-capability-catalog/README.md) for capability-level support, prerequisites, evidence and known gaps at a recorded product revision.
+<p align="center">Work with your own context, carry out organizational tasks, and build tools for the way you work.</p>
 
-The current MVP targets **macOS only**. iOS, Windows, Linux desktop and Android are deferred and are not currently supported; retained code or historical test results do not establish product support. See the [platform scope](requirements/data/foundations.md#mvp-platform-scope).
+<p align="center">
+  <a href="https://getsituate.com/#download">Download for macOS</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
-## Repository layout
+![Situate design preview showing a birthday planning note beside a conversation draft, with files and conversations in the sidebar.](website/media/workspace.webp)
 
-- `client/` — [Vue/Tauri client, Rust core, shared UI components, build commands and tests](client/README.md).
-- `docs/` — [product and business model](docs/product-concept.md), [positioning](docs/positioning.md), [capability catalog](docs/product-capability-catalog/README.md), [architecture documentation](docs/architecture/README.md), and the [historical prototype handover](docs/prototype-handover.md).
-- `requirements/` — goals, requirements, and a read-only web viewer.
-- `design/brand/` — [brand handbook](design/brand/README.md), [visual reference](design/brand/reference/index.html), reusable artwork, and the Bend character kit.
-- `.pi/` — agent extensions, roles, and skills used during development.
-- `AGENTS.md` — repository contribution guidelines for coding agents.
+_Design preview from the Vue workshop with synthetic content, not a live AI or connected-account workflow. See [capture details and credits](website/media/manifest.json)._
 
-## Developer setup
+## What you can do
 
-Install Pi and Herdr for agent-assisted development and parallel work. See [Developer setup](docs/development/README.md) for installation, authentication, delegation, and verification commands.
+### Work with your notes
 
-## Tests
+Develop ideas in conversation, find information in your workspace, and revise or combine notes. Save the result as text you can keep using, with file history available to review earlier changes.
 
-Run focused tests and checks for the changed behavior locally; CI runs the broader PR verification plan. Use `node tools/test.mjs --unit --changed` for tests in affected projects, or narrower project commands. The unfiltered `node tools/test.mjs` remains available for full macOS MVP verification. Expensive workshop, design-browser and visual sweeps are opt-in with `node tools/test.mjs --extended` or their dedicated commands. See the [test suite guide](docs/development/testing.md) for profiles, Git comparison bases, prerequisites, and JSON output.
+### Move tasks forward
 
-## Requirements viewer
+Capture commitments, update task files, and work through priorities using relevant notes and context. Situate supports your working method rather than requiring a particular organizational system.
 
-Install [Volta and the pinned Node.js/npm toolchain](docs/development/README.md#install-volta) before running these commands.
+### Create your own tools
+
+Describe a tool or workflow you need and ask Situate to develop a plugin. Plugins can add callable tools, custom views, working-method guidance and connections to external services. Their capabilities depend on the service interfaces, permissions and local tools available.
+
+The [Product Capability Catalog](docs/product-capability-catalog/README.md) records support, prerequisites, evidence and known gaps for individual workflows. Email and calendar workflows require separately configured, authenticated plugins; Situate does not bundle native email or calendar connectors.
+
+## Status and direction
+
+Situate is under active development. **macOS is the only active product platform.** iOS, Windows, Linux desktop and Android are deferred and are not currently supported.
+
+Notes and tasks live in local workspace files. AI features require configured access to a supported model provider; provider charges may apply, and workspace content used for AI requests can be sent to that provider. See [AI access and supported authentication](client/README.md#workspace-ai-access-and-chat).
+
+Plugins are trusted code, not sandboxed extensions. They can access files, run local programs and perform external actions without per-action confirmation. Review generated code and results, and only enable plugins you trust.
+
+Document management is not yet supported. The [product direction](docs/product-concept.md) also describes planned optional synchronization and managed AI services; these are not currently available offerings.
+
+## Build from source
+
+Development requires macOS, Git, Python 3, [Volta](https://volta.sh/), Rust through rustup, and Xcode with its Command Line Tools. Volta selects the repository-pinned Node.js and npm versions; the client pins its Rust toolchain. Follow the [setup guide](docs/development/README.md) and [native prerequisites](client/README.md#prerequisites) before running:
 
 ```sh
-cd requirements
-npm ci
-npm run dev
+git clone https://github.com/getsituate/situate.git
+cd situate
+node tools/npm-ci.mjs
+node tools/npm-ci.mjs client
+cd client
+npm run dev:client
 ```
 
-To validate the catalog and check the application:
+This starts the local development app. Pi, Herdr, an AI subscription and model credentials are not required to build or test it. Model access is needed to use AI features.
 
-```sh
-npm run validate
-npm test
-npm run build
-```
+## Contributing
 
-See [the requirements viewer documentation](requirements/README.md) for the data format and browser tests.
+Bug reports, usability feedback, documentation fixes and code contributions are welcome. [Open an issue](https://github.com/getsituate/situate/issues) with the app and macOS versions, steps to reproduce the problem, and what you expected to happen. Use synthetic examples and remove personal content, credentials and private paths from screenshots and logs.
 
-## Security
+For code changes, start with the [developer setup](docs/development/README.md), follow the [repository guidelines](AGENTS.md), and run focused checks for the behavior you change. The [test guide](docs/development/testing.md) explains test selection and prerequisites; CI runs the broader PR verification plan. Discuss substantial feature or architecture changes in an issue before implementation.
 
-See the [security policy](SECURITY.md) for confidential vulnerability reporting and versions receiving security fixes. Do not report vulnerability details in public issues.
+Report vulnerabilities confidentially through the [security policy](SECURITY.md), not in public issues.
+
+## Documentation
+
+- [Product capabilities](docs/product-capability-catalog/README.md) — workflows, prerequisites and current limits.
+- [Product direction](docs/product-concept.md) — intended scope and business model.
+- [Development and testing](docs/development/README.md) — setup, app commands and optional agent tooling.
+- [Architecture](docs/architecture/README.md) — system structure and technical decisions.
+- [Goals and requirements](requirements/README.md) — product decisions, acceptance criteria and catalog viewer.
+- [Brand handbook](design/brand/README.md) — visual identity, Bend artwork and voice.
 
 ## License
 
-Original software and documentation are licensed under the [MIT License](LICENSE). Original illustrations, Bend, wordmarks and app-icon artwork are licensed under [CC BY 4.0](LICENSES/CC-BY-4.0.txt). Third-party components retain their respective licenses and notices.
+Original software and documentation use the [MIT License](LICENSE). Original illustrations, Bend, wordmarks and app-icon artwork by Situate contributors use [CC BY 4.0](LICENSES/CC-BY-4.0.txt). Third-party material retains its own licenses and notices.
 
-See [Licensing and reuse](LICENSING.md) for the scope and attribution requirements and the [trademark policy](TRADEMARKS.md) for use of Situate's name and identity. The copyright licenses do not grant permission to impersonate the project or its official services.
+See [Licensing and reuse](LICENSING.md) for scope and attribution requirements, and the [trademark policy](TRADEMARKS.md) for use of Situate's name and identity. The copyright licenses do not grant permission to impersonate the project or its official services.

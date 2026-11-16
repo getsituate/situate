@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "open-source-readme",
+  "behaviorDigest": "29e46dd049550ff16c7dc71e09982b373d801fb14b6d56f958318f4b78d02122",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "README presentation and contributor guidance only; no application behavior changes.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "63fe6b926be4bd04377c13dc761876e05e183b22c230b5ba07c7cc7470e0b2f2",
+      "translationHash": "cdad40f073768d494c88f33a0686c83be6d7aba4328de15a7f109b9b33571dbb"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "63fe6b926be4bd04377c13dc761876e05e183b22c230b5ba07c7cc7470e0b2f2"
+  }
+}
