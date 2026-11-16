@@ -511,18 +511,30 @@ export async function main(
   if (
     ["image-transfer-gate", "image-upload", "image-download"].includes(command)
   ) {
+    const { context } = await import("./ci-publish.mjs");
+    const expected = context(env);
     const mode =
       command === "image-transfer-gate"
         ? "gate"
         : command === "image-upload"
           ? "upload"
           : "download";
+    const imageDirectory =
+      mode === "gate"
+        ? undefined
+        : join(
+            env.RUNNER_TEMP,
+            "ci-image",
+            ...(expected.platform ? [expected.platform.split("/")[1]] : []),
+          );
+    if (mode === "download" && expected.platform)
+      mkdirSync(dirname(imageDirectory), { recursive: true });
     execute(
       process.execPath,
       [
         "tools/ci-image-transport.mjs",
         mode,
-        ...(mode === "gate" ? [] : [join(env.RUNNER_TEMP, "ci-image")]),
+        ...(mode === "gate" ? [] : [imageDirectory]),
       ],
       { stdio: "inherit", env },
     );
@@ -536,7 +548,26 @@ export async function main(
     const revision = execute("git", ["rev-parse", "HEAD"]).trim();
     if (revision !== env.GITHUB_SHA)
       throw new Error("Image source differs from trusted run.");
-    const imageDirectory = join(env.RUNNER_TEMP, "ci-image");
+    const platform = expected.platform ?? "linux/amd64";
+    const architecture = platform.split("/")[1];
+    const host = execute("docker", [
+      "info",
+      "--format",
+      "{{.OSType}}/{{.Architecture}}",
+    ]).trim();
+    if (
+      ![
+        platform,
+        `linux/${architecture === "amd64" ? "x86_64" : "aarch64"}`,
+      ].includes(host)
+    )
+      throw new Error("Image builds require a matching native Docker host.");
+    const imageDirectory = join(
+      env.RUNNER_TEMP,
+      "ci-image",
+      ...(expected.platform ? [architecture] : []),
+    );
+    mkdirSync(dirname(imageDirectory), { recursive: true });
     mkdirSync(imageDirectory, { recursive: false });
     execute(
       "docker",
@@ -546,7 +577,7 @@ export async function main(
         "--target",
         "ci",
         "--platform",
-        "linux/amd64",
+        platform,
         "--label",
         `org.opencontainers.image.source=https://github.com/${repository}`,
         "--label",
@@ -565,7 +596,7 @@ export async function main(
         "run",
         "--rm",
         "--platform",
-        "linux/amd64",
+        platform,
         "--user",
         "1000:1000",
         "--network",
@@ -628,12 +659,13 @@ export async function main(
   }
   if (command === "image-publish") {
     const { context } = await import("./ci-publish.mjs");
+    const { inputDigest } = await import("./ci-image.mjs");
     context(env);
     const imageDirectory = join(env.RUNNER_TEMP, "ci-image");
     execute(
       process.execPath,
-      ["tools/ci-publish.mjs", "publish", imageDirectory],
-      { stdio: "inherit" },
+      ["tools/ci-publish.mjs", "publish-index", imageDirectory],
+      { stdio: "inherit", env: { ...env, INPUTS_SHA256: inputDigest(root) } },
     );
     return;
   }
