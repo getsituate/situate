@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   releaseBuildCachePlan,
+  releaseCacheEndpoint,
   releaseCompilerCacheEnvironment,
   downloadReleaseTool,
   prepareReleaseCacheTool,
@@ -40,6 +41,9 @@ const env = {
   ImageVersion: "20261113.1",
   HOME: "/Users/runner",
   PATH: "/tools:/usr/bin",
+  RUNNER_TEMP: "/runner-temp",
+  GITHUB_RUN_ID: "21",
+  GITHUB_RUN_ATTEMPT: "1",
 };
 const compilerOptions = {
   find: () => "/tools/sccache",
@@ -88,6 +92,7 @@ test("cache plan contains only bounded compiler and public Cargo download paths"
   assert.deepEqual(plan.environment, {
     SITUATE_RELEASE_BUILD_CACHE: "1",
     CARGO_HOME: "/Users/runner/Library/Caches/situate/release-build-v1/cargo",
+    SITUATE_RELEASE_CACHE_SOCKET: "/runner-temp/situate-rc-21-1/s",
   });
   assert.deepEqual(releaseBuildCachePlan(fixture()), plan);
   const nextSource = releaseBuildCachePlan(
@@ -95,6 +100,29 @@ test("cache plan contains only bounded compiler and public Cargo download paths"
   );
   assert.equal(nextSource.restoreKey, plan.restoreKey);
   assert.notEqual(nextSource.key, plan.key);
+  const nextRun = releaseBuildCachePlan(
+    fixture({ env: { ...env, GITHUB_RUN_ATTEMPT: "2" } }),
+  );
+  assert.equal(nextRun.key, plan.key);
+  assert.deepEqual(nextRun.paths, plan.paths);
+  assert.notEqual(
+    nextRun.environment.SITUATE_RELEASE_CACHE_SOCKET,
+    plan.environment.SITUATE_RELEASE_CACHE_SOCKET,
+  );
+  const compiler = releaseCompilerCacheEnvironment(
+    {
+      ...env,
+      ...plan.environment,
+      SCCACHE_SERVER_PORT: "4227",
+      SCCACHE_SERVER_UDS: "/foreign/socket",
+    },
+    compilerOptions,
+  );
+  assert.equal(
+    compiler.SCCACHE_SERVER_UDS,
+    plan.environment.SITUATE_RELEASE_CACHE_SOCKET,
+  );
+  assert.equal(compiler.SCCACHE_SERVER_PORT, undefined);
 });
 
 test("runtime, architecture, image, toolchain, manifest and lock changes invalidate restore scope", () => {
@@ -235,8 +263,8 @@ test("compiler configuration ignores ambient wrappers, remote secrets and unboun
   );
 });
 
-function temporary(t) {
-  const directory = mkdtempSync(join(tmpdir(), "release-cache-tool-test-"));
+function temporary(t, root = tmpdir(), prefix = "release-cache-tool-test-") {
+  const directory = mkdtempSync(join(root, prefix));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   return directory;
 }
@@ -463,28 +491,63 @@ function measurement(t, counters) {
   let milliseconds = 100000;
   const environment = {
     ...env,
-    RUNNER_TEMP: temporary(t),
+    RUNNER_TEMP: temporary(t, "/tmp", "rc-"),
     GITHUB_RUN_ID: "21",
     GITHUB_RUN_ATTEMPT: "1",
     SITUATE_RELEASE_BUILD_CACHE: "1",
     GH_TOKEN: "synthetic-private",
     SCCACHE_BUCKET: "private",
   };
+  const endpoint = releaseCacheEndpoint(environment);
+  environment.SITUATE_RELEASE_CACHE_SOCKET = endpoint;
+  const sockets = new Map();
+  const generation = { dev: "1", ino: "123", born: "1000000" };
   let index = 0;
   const commands = [];
   const options = {
     env: environment,
     compilerOptions,
     now: () => milliseconds,
+    identify: (path) => sockets.get(path) ?? null,
+    move: (from, to) => {
+      assert.ok(
+        existsSync(
+          join(
+            environment.RUNNER_TEMP,
+            "situate-release-cache-21-1.json.reported",
+          ),
+        ),
+      );
+      assert.equal(
+        existsSync(
+          join(environment.RUNNER_TEMP, "situate-release-cache-21-1.json"),
+        ),
+        false,
+      );
+      sockets.set(to, sockets.get(from));
+      sockets.delete(from);
+    },
     execute: (command, args, settings) => {
       assert.equal(command, "/tools/sccache");
       assert.equal(settings.env.GH_TOKEN, undefined);
       assert.equal(settings.env.SCCACHE_BUCKET, undefined);
       assert.equal(settings.env.SCCACHE_CONF, "/dev/null");
-      assert.equal(settings.env.SCCACHE_SERVER_PORT, "4228");
+      assert.equal(settings.env.SCCACHE_SERVER_PORT, undefined);
       assert.equal(settings.env.SCCACHE_CACHE_SIZE, "2G");
       commands.push(args);
-      if (args[0] === "--stop-server") return "stopped";
+      if (args[0] === "--stop-server") {
+        assert.notEqual(settings.env.SCCACHE_SERVER_UDS, endpoint);
+        assert.deepEqual(
+          sockets.get(settings.env.SCCACHE_SERVER_UDS),
+          generation,
+        );
+        return "stopped";
+      }
+      assert.equal(settings.env.SCCACHE_SERVER_UDS, endpoint);
+      if (args[0] === "--start-server") {
+        sockets.set(endpoint, generation);
+        return "started";
+      }
       assert.deepEqual(args, ["--show-stats", "--stats-format=json"]);
       const sample = counters[index++];
       if (sample instanceof Error) throw sample;
@@ -500,6 +563,10 @@ function measurement(t, counters) {
   return {
     options,
     commands,
+    sockets,
+    endpoint,
+    replace: () =>
+      sockets.set(endpoint, { dev: "1", ino: "124", born: "2000000" }),
     advance: (value) => {
       milliseconds += value;
     },
@@ -533,13 +600,13 @@ test("reports observed elapsed interval and counter deltas without paths or raw 
   assert.deepEqual(sample.commands.at(-1), ["--stop-server"]);
   const path = join(
     sample.options.env.RUNNER_TEMP,
-    "situate-release-cache-21-1.json",
+    "situate-release-cache-21-1.json.reported",
   );
   assert.equal(lstatSync(path).mode & 0o777, 0o600);
   assert.doesNotMatch(readFileSync(path, "utf8"), /private/);
   assert.throws(
     () => releaseCacheMeasurement("start", sample.options),
-    /EEXIST/,
+    /already been reported/,
   );
 });
 
@@ -565,8 +632,157 @@ test("unavailable, malformed or reset statistics never become invented hits or m
       enabled: true,
       elapsedSeconds: 1,
       statisticsAvailable: false,
-      flushed: true,
+      flushed: false,
     });
+    assert.ok(
+      !sample.commands.some(([command]) => command === "--stop-server"),
+    );
+  }
+});
+
+test("a retired report cannot contact or stop a replacement daemon or restart the claim", (t) => {
+  const sample = measurement(t, [stats(0, 0, 0), stats(2, 1, 1)]);
+  releaseCacheMeasurement("start", sample.options);
+  releaseCacheMeasurement("report", sample.options);
+  sample.replace();
+  const count = sample.commands.length;
+  assert.throws(
+    () => releaseCacheMeasurement("report", sample.options),
+    /ENOENT/,
+  );
+  assert.throws(
+    () => releaseCacheMeasurement("start", sample.options),
+    /already been reported/,
+  );
+  assert.equal(sample.commands.length, count);
+  assert.deepEqual(sample.sockets.get(sample.endpoint), {
+    dev: "1",
+    ino: "124",
+    born: "2000000",
+  });
+});
+
+test("changed socket generations and unresolved ownership cannot authorize a flush", (t) => {
+  for (const replace of [
+    (sample) => sample.replace(),
+    (sample) => sample.sockets.delete(sample.endpoint),
+    (sample) =>
+      sample.sockets.set(sample.endpoint, {
+        dev: "1",
+        ino: "123",
+        born: "2000000",
+      }),
+  ]) {
+    const sample = measurement(t, [stats(0, 0, 0), stats(2, 1, 1)]);
+    releaseCacheMeasurement("start", sample.options);
+    replace(sample);
+    const count = sample.commands.length;
+    assert.deepEqual(releaseCacheMeasurement("report", sample.options), {
+      enabled: true,
+      elapsedSeconds: 0,
+      statisticsAvailable: false,
+      flushed: false,
+    });
+    assert.equal(sample.commands.length, count);
+    assert.throws(
+      () => releaseCacheMeasurement("report", sample.options),
+      /ENOENT/,
+    );
+  }
+});
+
+test("the persisted endpoint and compiler endpoint must match the owned run", (t) => {
+  const sample = measurement(t, [stats(0, 0, 0), stats(2, 1, 1)]);
+  releaseCacheMeasurement("start", sample.options);
+  const count = sample.commands.length;
+  assert.throws(
+    () =>
+      releaseCacheMeasurement("report", {
+        ...sample.options,
+        env: {
+          ...sample.options.env,
+          SITUATE_RELEASE_CACHE_SOCKET: "/foreign/socket",
+        },
+      }),
+    /Invalid release-cache endpoint/,
+  );
+  const path = join(
+    sample.options.env.RUNNER_TEMP,
+    "situate-release-cache-21-1.json",
+  );
+  const baseline = JSON.parse(readFileSync(path, "utf8"));
+  baseline.endpoint = "/foreign/socket";
+  writeFileSync(path, JSON.stringify(baseline));
+  assert.equal(
+    releaseCacheMeasurement("report", sample.options).flushed,
+    false,
+  );
+  assert.equal(sample.commands.length, count);
+});
+
+test("replacement during sampling or socket relocation is never stopped", (t) => {
+  for (const during of ["sample", "relocation"]) {
+    const sample = measurement(t, [stats(0, 0, 0), stats(2, 1, 1)]);
+    releaseCacheMeasurement("start", sample.options);
+    const execute = sample.options.execute;
+    const move = sample.options.move;
+    const result = releaseCacheMeasurement("report", {
+      ...sample.options,
+      execute: (command, args, settings) => {
+        const value = execute(command, args, settings);
+        if (during === "sample" && args[0] === "--show-stats") sample.replace();
+        return value;
+      },
+      move: (from, to) => {
+        if (during === "relocation") sample.replace();
+        move(from, to);
+      },
+    });
+    assert.equal(result.flushed, false);
+    assert.ok(
+      !sample.commands.some(([command]) => command === "--stop-server"),
+    );
+  }
+});
+
+test("the relocated shutdown endpoint cannot stop a new daemon at the build endpoint", (t) => {
+  const sample = measurement(t, [stats(0, 0, 0), stats(2, 1, 1)]);
+  releaseCacheMeasurement("start", sample.options);
+  const move = sample.options.move;
+  const result = releaseCacheMeasurement("report", {
+    ...sample.options,
+    move: (from, to) => {
+      move(from, to);
+      sample.replace();
+    },
+  });
+  assert.equal(result.flushed, true);
+  assert.deepEqual(sample.sockets.get(sample.endpoint), {
+    dev: "1",
+    ino: "124",
+    born: "2000000",
+  });
+});
+
+test("failed startup or a non-socket endpoint never grants daemon ownership", (t) => {
+  for (const kind of ["failed", "regular-file"]) {
+    const sample = measurement(t, [stats(0, 0, 0)]);
+    const options = {
+      ...sample.options,
+      identify: undefined,
+      execute: (_command, args) => {
+        assert.deepEqual(args, ["--start-server"]);
+        if (kind === "failed")
+          throw new Error("synthetic private startup diagnostic");
+        writeFileSync(sample.endpoint, "not a socket");
+        return "started";
+      },
+    };
+    assert.deepEqual(releaseCacheMeasurement("start", options), {
+      enabled: true,
+      statisticsAvailable: false,
+    });
+    assert.equal(releaseCacheMeasurement("report", options).flushed, false);
   }
 });
 

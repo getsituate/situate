@@ -239,6 +239,10 @@ test("compiler cache opt-in reaches only trusted hosted creation builds", () => 
       "getsituate/situate/.github/workflows/release-macos.yml@refs/heads/main",
     GITHUB_SHA: "a".repeat(40),
     SITUATE_RELEASE_BUILD_CACHE: "1",
+    SITUATE_RELEASE_CACHE_SOCKET: "/runner-temp/situate-rc-21-1/s",
+    RUNNER_TEMP: "/runner-temp",
+    GITHUB_RUN_ID: "21",
+    GITHUB_RUN_ATTEMPT: "1",
     CARGO_HOME: "/foreign/cargo",
     RUSTC_WRAPPER: "/foreign/wrapper",
     SCCACHE_DIR: "/foreign/cache",
@@ -248,6 +252,10 @@ test("compiler cache opt-in reaches only trusted hosted creation builds", () => 
   };
   const build = stageEnvironment(env, "create", "build");
   assert.equal(build.SITUATE_RELEASE_BUILD_CACHE, "1");
+  assert.equal(
+    build.SITUATE_RELEASE_CACHE_SOCKET,
+    env.SITUATE_RELEASE_CACHE_SOCKET,
+  );
   assert.equal(build.GITHUB_WORKFLOW_REF, env.GITHUB_WORKFLOW_REF);
   assert.equal(
     build.CARGO_HOME,
@@ -261,11 +269,11 @@ test("compiler cache opt-in reaches only trusted hosted creation builds", () => 
     "AWS_SECRET_ACCESS_KEY",
   ])
     assert.equal(build[name], undefined);
-  for (const stage of ["inputs", "qualify", "github", undefined])
-    assert.equal(
-      stageEnvironment(env, "create", stage).SITUATE_RELEASE_BUILD_CACHE,
-      undefined,
-    );
+  for (const stage of ["inputs", "qualify", "github", undefined]) {
+    const child = stageEnvironment(env, "create", stage);
+    assert.equal(child.SITUATE_RELEASE_BUILD_CACHE, undefined);
+    assert.equal(child.SITUATE_RELEASE_CACHE_SOCKET, undefined);
+  }
   assert.equal(
     stageEnvironment(env, "publish").SITUATE_RELEASE_BUILD_CACHE,
     undefined,

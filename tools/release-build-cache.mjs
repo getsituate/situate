@@ -1,16 +1,21 @@
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   appendFileSync,
   chmodSync,
+  closeSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  renameSync,
   rmSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compilerCacheEnvironment } from "./compiler-cache.mjs";
 
@@ -192,6 +197,24 @@ export function releaseCachePaths(env) {
   };
 }
 
+export function releaseCacheEndpoint(env) {
+  if (
+    !isAbsolute(env.RUNNER_TEMP ?? "") ||
+    /[\r\n\0]/.test(env.RUNNER_TEMP) ||
+    !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ID ?? "") ||
+    !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ATTEMPT ?? "")
+  )
+    throw new Error("Missing release-cache endpoint identity.");
+  const endpoint = join(
+    env.RUNNER_TEMP,
+    `situate-rc-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
+    "s",
+  );
+  if (Buffer.byteLength(endpoint) > 90)
+    throw new Error("Release-cache socket path is too long.");
+  return endpoint;
+}
+
 export function releaseCompilerCacheEnvironment(env, options = {}) {
   if (env.SITUATE_RELEASE_BUILD_CACHE !== "1" || !trustedReleaseCacheHost(env))
     return {};
@@ -209,7 +232,14 @@ export function releaseCompilerCacheEnvironment(env, options = {}) {
     },
   );
   delete configured.PATH;
-  if (configured.RUSTC_WRAPPER) configured.SCCACHE_SERVER_PORT = "4228";
+  if (configured.RUSTC_WRAPPER) {
+    if (env.SITUATE_RELEASE_CACHE_SOCKET !== undefined) {
+      if (env.SITUATE_RELEASE_CACHE_SOCKET !== releaseCacheEndpoint(env))
+        throw new Error("Invalid release-cache endpoint.");
+      delete configured.SCCACHE_SERVER_PORT;
+      configured.SCCACHE_SERVER_UDS = env.SITUATE_RELEASE_CACHE_SOCKET;
+    } else configured.SCCACHE_SERVER_PORT = "4228";
+  }
   return configured;
 }
 
@@ -304,6 +334,7 @@ export function releaseBuildCachePlan({
       environment: {
         SITUATE_RELEASE_BUILD_CACHE: "1",
         CARGO_HOME: paths.cargoHome,
+        SITUATE_RELEASE_CACHE_SOCKET: releaseCacheEndpoint(env),
       },
     };
   } catch {
@@ -336,6 +367,44 @@ function measuredCounters(text) {
   return counters;
 }
 
+function socketIdentity(path) {
+  try {
+    const parent = lstatSync(dirname(path));
+    const stat = lstatSync(path, { bigint: true });
+    if (
+      !parent.isDirectory() ||
+      parent.isSymbolicLink() ||
+      parent.uid !== process.getuid() ||
+      (parent.mode & 0o077) !== 0 ||
+      !stat.isSocket() ||
+      stat.uid !== BigInt(process.getuid()) ||
+      stat.ino <= 0n ||
+      stat.birthtimeNs <= 0n
+    )
+      return null;
+    return {
+      dev: String(stat.dev),
+      ino: String(stat.ino),
+      born: String(stat.birthtimeNs),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function sameSocket(a, b) {
+  return (
+    a &&
+    b &&
+    ["dev", "ino", "born"].every(
+      (key) =>
+        typeof a[key] === "string" &&
+        /^[0-9]+$/.test(a[key]) &&
+        a[key] === b[key],
+    )
+  );
+}
+
 export function releaseCacheMeasurement(
   command,
   {
@@ -343,21 +412,21 @@ export function releaseCacheMeasurement(
     execute = probe,
     now = () => Math.floor(Number(process.hrtime.bigint()) / 1e6),
     compilerOptions,
+    identify = socketIdentity,
+    move = renameSync,
   } = {},
 ) {
   if (!["start", "report"].includes(command))
     throw new Error("Unknown measurement command.");
+  if (!env.SITUATE_RELEASE_CACHE_SOCKET) return { enabled: false };
   const compiler = releaseCompilerCacheEnvironment(env, compilerOptions);
   if (!compiler.RUSTC_WRAPPER) return { enabled: false };
-  if (
-    !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ID ?? "") ||
-    !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ATTEMPT ?? "")
-  )
-    throw new Error("Missing release-cache measurement identity.");
+  const endpoint = releaseCacheEndpoint(env);
   const path = join(
     runnerTemporaryDirectory(env),
     `situate-release-cache-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}.json`,
   );
+  const retired = `${path}.reported`;
   const options = { env: { PATH: env.PATH, HOME: env.HOME, ...compiler } };
   const sample = () => {
     try {
@@ -373,12 +442,36 @@ export function releaseCacheMeasurement(
     }
   };
   if (command === "start") {
-    const counters = sample();
-    writeFileSync(path, JSON.stringify({ startedAt: now(), counters }), {
-      mode: 0o600,
-      flag: "wx",
-    });
-    return { enabled: true, statisticsAvailable: counters !== null };
+    // A retired claim must also prevent a second start for the same run.
+    try {
+      lstatSync(retired);
+      throw new Error("Release-cache measurement has already been reported.");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    const file = openSync(path, "wx", 0o600);
+    const baseline = {
+      startedAt: now(),
+      endpoint,
+      generation: null,
+      counters: null,
+    };
+    try {
+      mkdirSync(dirname(endpoint), { mode: 0o700 });
+      execute(compiler.RUSTC_WRAPPER, ["--start-server"], options);
+      baseline.generation = identify(endpoint);
+      if (baseline.generation) {
+        baseline.counters = sample();
+        if (!sameSocket(baseline.generation, identify(endpoint)))
+          baseline.counters = null;
+      }
+    } catch {
+      // An unresolved startup never authorizes later daemon shutdown or cache save.
+    } finally {
+      writeFileSync(file, JSON.stringify(baseline));
+      closeSync(file);
+    }
+    return { enabled: true, statisticsAvailable: baseline.counters !== null };
   }
   const stat = lstatSync(path);
   if (
@@ -398,30 +491,50 @@ export function releaseCacheMeasurement(
     elapsed < 0
   )
     throw new Error("Invalid release-cache measurement interval.");
-  const counters = sample();
-  let delta;
-  if (counters && baseline.counters) {
-    const entries = Object.entries(counters).map(([key, value]) => [
-      key,
-      value - baseline.counters[key],
-    ]);
-    if (entries.every(([, value]) => Number.isSafeInteger(value) && value >= 0))
-      delta = Object.fromEntries(entries);
-  }
-  let flushed = false;
-  try {
-    execute(compiler.RUSTC_WRAPPER, ["--stop-server"], options);
-    flushed = true;
-  } catch {
-    // A missing server cannot provide a confirmed cache flush.
-  }
-  return {
+
+  // Exclusive hard-link creation consumes the claim even if reporting is interrupted.
+  linkSync(path, retired);
+  unlinkSync(path);
+  const result = {
     enabled: true,
     elapsedSeconds: elapsed / 1000,
-    statisticsAvailable: !!delta,
-    ...(delta ?? {}),
-    flushed,
+    statisticsAvailable: false,
+    flushed: false,
   };
+  if (
+    baseline.endpoint !== endpoint ||
+    !baseline.counters ||
+    !sameSocket(baseline.generation, identify(endpoint))
+  )
+    return result;
+  const counters = sample();
+  if (!counters || !sameSocket(baseline.generation, identify(endpoint)))
+    return result;
+  const entries = Object.entries(counters).map(([key, value]) => [
+    key,
+    value - baseline.counters[key],
+  ]);
+  if (!entries.every(([, value]) => Number.isSafeInteger(value) && value >= 0))
+    return result;
+  Object.assign(result, Object.fromEntries(entries), {
+    statisticsAvailable: true,
+  });
+  try {
+    // Move the verified socket to an unshared shutdown address before contacting it.
+    const shutdown = join(
+      dirname(endpoint),
+      `f-${randomBytes(6).toString("hex")}`,
+    );
+    move(endpoint, shutdown);
+    if (!sameSocket(baseline.generation, identify(shutdown))) return result;
+    execute(compiler.RUSTC_WRAPPER, ["--stop-server"], {
+      env: { ...options.env, SCCACHE_SERVER_UDS: shutdown },
+    });
+    result.flushed = true;
+  } catch {
+    // A failed ownership check or shutdown cannot authorize persistence.
+  }
+  return result;
 }
 
 function emitPlan(plan) {

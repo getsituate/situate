@@ -211,6 +211,7 @@ export function stageEnvironment(env, workflow, stage) {
   if (cacheEnabled)
     names.push(
       "SITUATE_RELEASE_BUILD_CACHE",
+      "SITUATE_RELEASE_CACHE_SOCKET",
       "GITHUB_REF_PROTECTED",
       "GITHUB_EVENT_NAME",
       "GITHUB_WORKFLOW_REF",
