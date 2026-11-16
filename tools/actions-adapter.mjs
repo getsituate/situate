@@ -711,19 +711,23 @@ export async function main(
         : undefined;
     const plan = validatePlan(
       JSON.parse(
-        execute(process.execPath, [
-          "tools/pipeline.mjs",
-          "plan",
-          workflow,
-          "--source",
-          source,
-          "--base",
-          base,
-          ...(declarationHead ? ["--declaration-head", declarationHead] : []),
-          ...(declarationHeads
-            ? ["--declaration-heads", JSON.stringify(declarationHeads)]
-            : []),
-        ]),
+        execute(
+          process.execPath,
+          [
+            "tools/pipeline.mjs",
+            "plan",
+            workflow,
+            "--source",
+            source,
+            "--base",
+            base,
+            ...(declarationHead ? ["--declaration-head", declarationHead] : []),
+            ...(declarationHeads
+              ? ["--declaration-heads", JSON.stringify(declarationHeads)]
+              : []),
+          ],
+          { stdio: ["ignore", "pipe", "inherit"] },
+        ),
       ),
     );
     if (plan.source !== source)
