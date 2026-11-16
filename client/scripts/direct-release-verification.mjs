@@ -89,6 +89,8 @@ export async function verifyDirectPayloads(
   mkdirSync(mount);
   const options = { env, signal, capture: true };
   let attached = false;
+  let mountUncertain = false;
+  let failure;
   try {
     await execute(
       "python3",
@@ -100,6 +102,7 @@ export async function verifyDirectPayloads(
       ],
       options,
     );
+    mountUncertain = true;
     await execute(
       "hdiutil",
       [
@@ -217,12 +220,32 @@ export async function verifyDirectPayloads(
       ],
       options,
     );
+  } catch (error) {
+    failure = error;
+    if (mountUncertain && !attached) error.uncertain = true;
+    throw error;
   } finally {
-    if (attached)
-      await execute("hdiutil", ["detach", mount], {
-        ...options,
-        signal: undefined,
-      });
-    rmSync(temporary, { recursive: true, force: true });
+    if (attached) {
+      try {
+        await execute("hdiutil", ["detach", mount], {
+          ...options,
+          signal: undefined,
+        });
+        mountUncertain = false;
+      } catch (cleanupError) {
+        cleanupError.uncertain = true;
+        if (failure) {
+          const error = new AggregateError(
+            [failure, cleanupError],
+            "Direct payload verification and mount cleanup failed",
+            { cause: failure },
+          );
+          error.uncertain = true;
+          throw error;
+        }
+        throw cleanupError;
+      }
+    }
+    if (!mountUncertain) rmSync(temporary, { recursive: true, force: true });
   }
 }
