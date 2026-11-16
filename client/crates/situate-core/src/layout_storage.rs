@@ -233,6 +233,41 @@ mod tests {
     }
 
     #[test]
+    fn layout_reopens_with_a_stale_conversation_target_without_rewriting_saved_state() {
+        let directory = workspace();
+        let store = open(&directory);
+        store.0.create_conversation("removed", "Topic").unwrap();
+        let document = json!({
+            "version": 1,
+            "pinnedViews": ["files"],
+            "layout": {
+                "activeTabId": "tab",
+                "closedTabs": [],
+                "tabs": [{
+                    "id": "tab", "name": "", "conversationIds": ["removed"],
+                    "layout": {"kind": "pane", "id": "pane"},
+                    "activePaneId": "pane", "maximizedPaneId": null,
+                    "panes": [{"id": "pane", "navigation": {
+                        "cursor": 0,
+                        "entries": [{"id": "entry", "target": {
+                            "kind": "conversation", "conversationId": "removed"
+                        }, "presentation": {"scrollTop": 42}}]
+                    }}]
+                }]
+            }
+        });
+        let saved = store.save(None, document).unwrap();
+        let path = directory.path().join(".situate/layout.json");
+        let bytes = fs::read(&path).unwrap();
+        store.0.delete_conversation("removed").unwrap();
+        drop(store);
+        let reopened = open(&directory);
+        assert_eq!(reopened.load().unwrap(), saved);
+        assert!(reopened.0.read_conversation("removed").unwrap().is_none());
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+
+    #[test]
     fn stale_creation_update_and_external_byte_changes_conflict() {
         let directory = workspace();
         let store = open(&directory);

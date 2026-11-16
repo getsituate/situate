@@ -6,8 +6,6 @@
   "chat.confirmDelete": "Löschen",
   "chat.deleting": "Wird gelöscht…",
   "chat.deleteFailed": "Das Löschen konnte nicht bestätigt werden. Laufende Arbeit wurde möglicherweise bereits abgebrochen. Versuche es erneut.",
-  "chat.unavailableTitle": "Gespräch nicht verfügbar",
-  "chat.unavailableDescription": "Dieses Gespräch wurde möglicherweise gelöscht. Wähle eine andere Ansicht, um fortzufahren.",
   "chat.conversationTitle": "Gesprächstitel",
   "chat.conversationActions": "Gesprächsoptionen: {title}",
   "chat.renameConversation": "Gespräch umbenennen",

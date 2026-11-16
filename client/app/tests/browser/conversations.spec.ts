@@ -10,54 +10,67 @@ import { emptyLayout, reduceLayout } from "../../src/layout/model";
 
 test.use({ localizationMode: "real" });
 
-test("a retained missing conversation waits for inventory without opening a native session", async ({
-  page,
-}) => {
-  let sequence = 0;
-  await workspaceFixture(page, shellState, {
-    aiHoldConversationList: true,
-    layout: {
-      records: {
-        garden: {
-          revision: "retained-layout",
-          data: {
-            version: 1,
-            pinnedViews: ["files"],
-            layout: reduceLayout(
-              emptyLayout(),
-              {
-                type: "open",
-                target: { kind: "conversation", conversationId: "deleted" },
-              },
-              () => `retained-${++sequence}`,
-            ),
+for (const target of [
+  { kind: "conversation", conversationId: "deleted" },
+  { kind: "view", viewId: "missing:board", contentId: "old-item" },
+] as const) {
+  test(`a retained missing ${target.kind} opens the new-tab chooser without a startup error`, async ({
+    page,
+  }) => {
+    let sequence = 0;
+    await workspaceFixture(page, shellState, {
+      aiHoldConversationList: target.kind === "conversation",
+      layout: {
+        records: {
+          garden: {
+            revision: "retained-layout",
+            data: {
+              version: 1,
+              pinnedViews: ["files"],
+              layout: reduceLayout(
+                emptyLayout(),
+                {
+                  type: "open",
+                  target,
+                },
+                () => `retained-${++sequence}`,
+              ),
+            },
           },
         },
       },
-    },
+    });
+    await page.goto("/");
+    if (target.kind === "conversation")
+      await expect(page.locator(".view-message")).toContainText(
+        "Opening your layout…",
+      );
+    const requestsForMissing = () =>
+      page.evaluate(() =>
+        (
+          Reflect.get(window, "__ipcCalls") as {
+            args: { conversation?: string };
+          }[]
+        ).filter(({ args }) => args.conversation === "deleted"),
+      );
+    expect(await requestsForMissing()).toEqual([]);
+    if (target.kind === "conversation")
+      await page.evaluate(() =>
+        Reflect.get(window, "__releaseConversationList")(),
+      );
+    await expect(
+      page.getByRole("heading", {
+        name: "What would you like here?",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(await requestsForMissing()).toEqual([]);
+    await page.locator(".view-chooser .new-conversation").click();
+    await expect(
+      page.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveValue("");
   });
-  await page.goto("/");
-  await expect(page.locator(".view-message")).toContainText(
-    "Opening your layout…",
-  );
-  const requestsForMissing = () =>
-    page.evaluate(() =>
-      (
-        Reflect.get(window, "__ipcCalls") as {
-          args: { conversation?: string };
-        }[]
-      ).filter(({ args }) => args.conversation === "deleted"),
-    );
-  expect(await requestsForMissing()).toEqual([]);
-  await page.evaluate(() => Reflect.get(window, "__releaseConversationList")());
-  await expect(
-    page.getByRole("heading", {
-      name: "Conversation unavailable",
-      exact: true,
-    }),
-  ).toBeVisible();
-  expect(await requestsForMissing()).toEqual([]);
-});
+}
 
 async function openNavigation(page: Page): Promise<void> {
   const navigation = page.getByRole("navigation", {
@@ -377,20 +390,18 @@ for (const viewport of [
         await page
           .getByRole("button", { name: "Close navigation", exact: true })
           .click();
-      await expect(
-        page.getByRole("heading", {
-          name: "Conversation unavailable",
-          exact: true,
-        }),
-      ).toBeVisible();
+      const chooser = page.getByRole("heading", {
+        name: "What would you like here?",
+        exact: true,
+      });
+      await expect(chooser).toBeVisible();
       await visual.capture("chat.conversations.deleted-view");
       await page.reload();
+      await expect(chooser).toBeVisible();
+      await page.locator(".view-chooser .new-conversation").click();
       await expect(
-        page.getByRole("heading", {
-          name: "Conversation unavailable",
-          exact: true,
-        }),
-      ).toBeVisible();
+        page.getByRole("textbox", { name: "Message", exact: true }),
+      ).toHaveValue("");
       await openNavigation(page);
       await expect(options).toHaveCount(0);
       await page

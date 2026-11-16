@@ -8,13 +8,7 @@ import {
   watch,
 } from "vue";
 import { t, localizeError } from "@situate/localization";
-import {
-  SituateButton,
-  SituateIcon,
-  SituateIconButton,
-  SituateEmptyState,
-} from "@situate/ui";
-import { workspaceConversations } from "../ai/chat";
+import { SituateButton, SituateIcon, SituateIconButton } from "@situate/ui";
 import {
   currentEntry,
   type PresentationValue,
@@ -22,7 +16,7 @@ import {
 } from "./navigation";
 import type { Pane, TopicTab } from "./model";
 import type { WorkspaceUi } from "./runtime";
-import { viewType } from "./registry";
+import { resolveViewTarget, viewType } from "./registry";
 import { reportFailure } from "../diagnostics/failures";
 import { recoveryMode, pluginMayExecute } from "../recovery";
 
@@ -44,17 +38,9 @@ const ticket = props.ui.session.capture({
   paneId: props.pane.id,
 });
 const entry = computed(() => currentEntry(props.pane.navigation));
-const conversationInventory = computed(() =>
-  workspaceConversations(props.ui.session.workspaceId),
+const availability = computed(() =>
+  resolveViewTarget(entry.value.target, props.ui.registry),
 );
-const conversationAvailability = computed(() => {
-  const target = entry.value.target;
-  if (target.kind !== "conversation") return "ready";
-  const inventory = conversationInventory.value.state;
-  if (inventory.conversations.some((item) => item.id === target.conversationId))
-    return "ready";
-  return inventory.loaded ? "missing" : "loading";
-});
 const definition = computed(() =>
   props.ui.registry.definitions.get(viewType(entry.value.target)),
 );
@@ -167,7 +153,10 @@ const viewProps = computed(() => {
 
 <template>
   <section
-    v-if="entry.target.kind === 'empty'"
+    v-if="
+      entry.target.kind === 'empty' ||
+      (availability.status === 'missing' && !suspendedPlugin)
+    "
     ref="chooser"
     class="view-chooser"
     :aria-label="t('layoutHost.chooseView')"
@@ -244,36 +233,26 @@ const viewProps = computed(() => {
     </div>
   </section>
   <section
-    v-else-if="conversationAvailability === 'loading'"
+    v-else-if="
+      availability.status === 'loading' || availability.status === 'error'
+    "
     class="view-message"
     role="status"
   >
     <p>
       {{
-        conversationInventory.state.error
-          ? localizeError(conversationInventory.state.error)
+        availability.status === "error"
+          ? localizeError(availability.error)
           : t("layoutHost.loading")
       }}
     </p>
     <SituateButton
-      v-if="conversationInventory.state.error"
+      v-if="availability.status === 'error' && availability.retry"
       variant="secondary"
-      @click="conversationInventory.refresh()"
+      @click="availability.status === 'error' && availability.retry?.()"
       >{{ t("layoutHost.retry") }}</SituateButton
     >
   </section>
-  <SituateEmptyState
-    v-else-if="conversationAvailability === 'missing'"
-    role="status"
-    :title="t('chat.unavailableTitle')"
-    :description="t('chat.unavailableDescription')"
-  >
-    <template #actions>
-      <SituateButton variant="secondary" @click="open({ kind: 'empty' })">
-        {{ t("layoutHost.chooseView") }}
-      </SituateButton>
-    </template>
-  </SituateEmptyState>
   <section v-else-if="suspendedPlugin" class="view-message" role="status">
     <h2>{{ t("recovery.pausedView") }}</h2>
     <p>{{ t("recovery.risk") }}</p>

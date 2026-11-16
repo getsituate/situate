@@ -1,9 +1,16 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h, markRaw, onMounted, onUnmounted } from "vue";
+import {
+  defineComponent,
+  h,
+  markRaw,
+  onMounted,
+  onUnmounted,
+  type Component,
+} from "vue";
 import ViewHost from "./ViewHost.vue";
 import { closeChats, saveChatDrafts, workspaceConversations } from "../ai/chat";
-import type { WorkspaceUi } from "./runtime";
+import { workspaceUi, retainWorkspaceUi, type WorkspaceUi } from "./runtime";
 import type { Pane, TopicTab } from "./model";
 
 const diagnostics = vi.hoisted(() => ({ emit: vi.fn(), resolve: vi.fn() }));
@@ -12,8 +19,15 @@ vi.mock("../diagnostics", () => ({
 }));
 afterEach(() => {
   vi.clearAllMocks();
+  retainWorkspaceUi([]);
   closeChats([]);
 });
+function conversationDefinition(component: Component) {
+  return {
+    ...workspaceUi("workspace").registry.definitions.get("conversation")!,
+    component,
+  };
+}
 
 it("renders temporary chats with conversation props and preserves the mounted pane on promotion", async () => {
   const mounted = vi.fn();
@@ -55,7 +69,7 @@ it("renders temporary chats with conversation props and preserves the mounted pa
     },
     registry: {
       definitions: new Map([
-        ["conversation", { id: "conversation", component }],
+        ["conversation", conversationDefinition(component)],
       ]),
     },
   } as unknown as WorkspaceUi;
@@ -134,7 +148,7 @@ it("waits for inventory before mounting a retained target and leaves no missing 
     },
     registry: {
       definitions: new Map([
-        ["conversation", { id: "conversation", component }],
+        ["conversation", conversationDefinition(component)],
       ]),
     },
   } as unknown as WorkspaceUi;
@@ -159,8 +173,8 @@ it("waits for inventory before mounting a retained target and leaves no missing 
     inventory.error = "";
     inventory.loaded = true;
     await flushPromises();
-    expect(wrapper.get('[role="status"]').text()).toContain(
-      "⟦chat.unavailableTitle⟧",
+    expect(wrapper.get(".view-chooser").text()).toContain(
+      "⟦layoutHost.chooserTitle⟧",
     );
     expect(mounted).not.toHaveBeenCalled();
     await expect(saveChatDrafts("workspace")).resolves.toBeUndefined();
@@ -168,7 +182,7 @@ it("waits for inventory before mounting a retained target and leaves no missing 
     wrapper.unmount();
   }
 });
-it("keeps a deleted conversation target in history and unmounts its view", async () => {
+it("shows the existing new-tab chooser for a deleted conversation while preserving its history target", async () => {
   const component = markRaw(
     defineComponent({ render: () => h("div", "Conversation content") }),
   );
@@ -185,7 +199,6 @@ it("keeps a deleted conversation target in history and unmounts its view", async
       ],
     },
   };
-  const open = vi.fn(async () => {});
   const inventory = workspaceConversations("workspace").state;
   inventory.conversations = [{ id: "garden", title: "Garden", revision: 1 }];
   inventory.loaded = true;
@@ -197,10 +210,9 @@ it("keeps a deleted conversation target in history and unmounts its view", async
     },
     registry: {
       definitions: new Map([
-        ["conversation", { id: "conversation", component }],
+        ["conversation", conversationDefinition(component)],
       ]),
     },
-    coordinator: { open },
   } as unknown as WorkspaceUi;
   const wrapper = mount(ViewHost, {
     props: {
@@ -216,20 +228,28 @@ it("keeps a deleted conversation target in history and unmounts its view", async
     inventory.conversations = [];
     await flushPromises();
     expect(wrapper.findComponent(component).exists()).toBe(false);
-    expect(wrapper.get('[role="status"]').text()).toContain(
-      "⟦chat.unavailableTitle⟧",
+    expect(wrapper.get(".view-chooser").text()).toContain(
+      "⟦layoutHost.chooserTitle⟧",
     );
     expect(pane.navigation.entries[0]!.target).toEqual({
       kind: "conversation",
       conversationId: "garden",
     });
-    await wrapper.get("button").trigger("click");
-    expect(open).toHaveBeenCalledWith(
-      { kind: "empty" },
-      expect.anything(),
-      undefined,
-      undefined,
-    );
+    await wrapper.get(".new-conversation").trigger("click");
+    expect(wrapper.emitted("newConversation")).toHaveLength(1);
+    const chooser = wrapper.get(".view-chooser").html();
+    await wrapper.setProps({
+      pane: {
+        ...pane,
+        navigation: {
+          cursor: 0,
+          entries: [
+            { id: "empty", target: { kind: "empty" }, presentation: null },
+          ],
+        },
+      },
+    });
+    expect(wrapper.get(".view-chooser").html()).toBe(chooser);
   } finally {
     wrapper.unmount();
   }

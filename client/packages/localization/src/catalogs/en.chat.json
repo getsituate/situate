@@ -6,8 +6,6 @@
   "chat.confirmDelete": "Delete",
   "chat.deleting": "Deleting…",
   "chat.deleteFailed": "Deletion could not be confirmed. Running work may already have stopped. Try again.",
-  "chat.unavailableTitle": "Conversation unavailable",
-  "chat.unavailableDescription": "This conversation may have been deleted. Choose another view to continue.",
   "chat.conversationTitle": "Conversation title",
   "chat.conversationActions": "Conversation options: {title}",
   "chat.renameConversation": "Rename conversation",

@@ -11,11 +11,20 @@ import { decodeTarget } from "./storage";
 import type { LayoutIntent } from "./model";
 import { dictation, guardDictation } from "../dictation/runtime";
 
+export type ViewAvailability =
+  | { readonly status: "ready" | "loading" | "missing" }
+  | {
+      readonly status: "error";
+      readonly error: unknown;
+      readonly retry?: () => Promise<void>;
+    };
+
 export interface ViewDefinition {
   readonly id: string;
   readonly title: () => string;
   readonly icon: IconName;
   readonly component: Component;
+  readonly availability?: (target: ViewTarget) => ViewAvailability;
   readonly reveal?: (
     contentId: string,
     revision?: string,
@@ -134,6 +143,20 @@ export function createViewRegistry(scope = "") {
   };
 }
 export type ViewRegistry = ReturnType<typeof createViewRegistry>;
+
+export function resolveViewTarget(
+  target: ViewTarget,
+  registry: Pick<ViewRegistry, "definitions">,
+): ViewAvailability {
+  if (target.kind === "empty") return { status: "ready" };
+  const definition = registry.definitions.get(viewType(target));
+  if (!definition) return { status: "missing" };
+  try {
+    return definition.availability?.(target) ?? { status: "ready" };
+  } catch (error) {
+    return { status: "error", error };
+  }
+}
 
 export interface NavigationGuard {
   readonly signal?: AbortSignal;

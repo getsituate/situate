@@ -8,7 +8,10 @@ const chats = vi.hoisted(() => ({
     string,
     { ephemeral: boolean; running: boolean; unsaved: boolean }
   >(),
-  summaries: { conversations: [] as { id: string; title: string }[] },
+  summaries: {
+    conversations: [] as { id: string; title: string }[],
+    loaded: false,
+  },
   discard: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -26,12 +29,12 @@ vi.mock("../ai/chat", () => ({
 afterEach(() => {
   retainWorkspaceUi([]);
   chats.sessions.clear();
-  chats.summaries = { conversations: [] };
+  chats.summaries = { conversations: [], loaded: false };
   vi.clearAllMocks();
 });
 
 async function setup() {
-  chats.summaries = reactive({ conversations: [] });
+  chats.summaries = reactive({ conversations: [], loaded: false });
   chats.discard.mockImplementation((_scope: string, id: string) => {
     const state = chats.sessions.get(id)!;
     if (!state.ephemeral || state.running || state.unsaved) return false;
@@ -50,6 +53,17 @@ function temporary(id: string) {
   return { kind: "new-conversation", conversationId: id } as const;
 }
 
+it("uses the new-tab title for a conversation confirmed missing from the inventory", async () => {
+  const ui = await setup();
+  const target = { kind: "conversation", conversationId: "deleted" } as const;
+  expect(ui.titleFor(target)).toBe("⟦navigation.newChat⟧");
+  chats.summaries.loaded = true;
+  expect(ui.titleFor(target)).toBe("⟦layoutHost.newTab⟧");
+  chats.summaries.conversations = [{ id: "deleted", title: "Garden" }];
+  expect(ui.titleFor(target)).toBe("Garden");
+  chats.summaries.conversations = [];
+  expect(ui.titleFor(target)).toBe("⟦layoutHost.newTab⟧");
+});
 it("retains temporary chats across hidden panes and inactive tabs, then clears abandoned histories and closed tabs", async () => {
   const ui = await setup();
   const target = temporary("temporary");

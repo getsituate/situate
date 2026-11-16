@@ -17,6 +17,7 @@ import {
   bindCoordinator,
   createUiCoordinator,
   createViewRegistry,
+  resolveViewTarget,
 } from "./registry";
 import { retainLayouts, workspaceLayout } from "./session";
 import { currentEntry, type ViewTarget } from "./navigation";
@@ -35,6 +36,24 @@ function createWorkspaceUi(workspaceId: string) {
     title: () => t("navigation.newChat"),
     icon: "chat",
     component: ChatPane,
+    availability(target) {
+      if (target.kind !== "conversation") return { status: "ready" };
+      const inventory = workspaceConversations(workspaceId);
+      if (
+        inventory.state.conversations.some(
+          (item) => item.id === target.conversationId,
+        )
+      )
+        return { status: "ready" };
+      if (inventory.state.loaded) return { status: "missing" };
+      if (inventory.state.error)
+        return {
+          status: "error",
+          error: inventory.state.error,
+          retry: () => inventory.refresh(),
+        };
+      return { status: "loading" };
+    },
   });
   const coordinator = createUiCoordinator(session, registry);
   const unbind = bindCoordinator(coordinator);
@@ -126,21 +145,18 @@ function createWorkspaceUi(workspaceId: string) {
     : undefined;
   void plugins?.catch(() => undefined);
   function titleFor(target: ViewTarget): string {
-    if (target.kind === "empty") return t("layoutHost.newTab");
+    if (
+      target.kind === "empty" ||
+      resolveViewTarget(target, registry).status === "missing"
+    )
+      return t("layoutHost.newTab");
     if (target.kind === "new-conversation") return t("navigation.newChat");
     if (target.kind === "conversation") {
       const inventory = workspaceConversations(workspaceId).state;
       const conversation = inventory.conversations.find(
         (item) => item.id === target.conversationId,
       );
-      return (
-        conversation?.title ||
-        t(
-          inventory.loaded && !conversation
-            ? "chat.unavailableTitle"
-            : "navigation.newChat",
-        )
-      );
+      return conversation?.title || t("navigation.newChat");
     }
     if (target.viewId === "files" && target.contentId)
       return target.contentId.split("/").at(-1)!;
