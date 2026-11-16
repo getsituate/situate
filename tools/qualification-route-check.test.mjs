@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
 import {
   checkQualificationRoute,
   routeCheckEnvironment,
+  workerProgram,
 } from "./qualification-route-check.mjs";
 
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -116,11 +121,13 @@ test("route diagnostic exercises the shared route with a credential-free worker 
 
 test("worker failure remains failed with its safe network phase and always cleans the listener", async () => {
   const f = fixture({
-    execute: async () => '{"status":"failed","phase":"routing"}',
+    execute: async () =>
+      '{"status":"failed","phase":"private-identity","failureCode":"ECONNRESET"}',
   });
   const report = await checkQualificationRoute(f.options);
   assert.equal(report.status, "failed");
-  assert.equal(report.phase, "routing");
+  assert.equal(report.phase, "private-identity");
+  assert.equal(report.workerFailureCode, "ECONNRESET");
   assert.equal(report.cleanup, "confirmed");
   assert(f.calls.includes("cleanup"));
 });
@@ -188,6 +195,47 @@ test("untrusted platforms and contexts are rejected before any boundary access",
     const f = fixture(changed);
     await assert.rejects(checkQualificationRoute(f.options), /GitHub-hosted/);
     assert.deepEqual(f.calls, []);
+  }
+});
+
+test("real worker reports only allowlisted routing phases and failure codes", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-routing-worker-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const [phase, code, expected] of [
+    [
+      "private-identity",
+      "ECONNRESET",
+      {
+        status: "failed",
+        phase: "private-identity",
+        failureCode: "ECONNRESET",
+      },
+    ],
+    [
+      "synthetic-private-value",
+      "synthetic-private-value",
+      { status: "failed", phase: "routing", failureCode: "unknown" },
+    ],
+  ]) {
+    const module = join(directory, "routing.mjs");
+    writeFileSync(
+      module,
+      `export const createQualificationRouting = () => ({inspect() { throw Object.assign(new Error('synthetic-private-value'), { qualificationRoutingPhase: ${JSON.stringify(phase)}, code: ${JSON.stringify(code)} }); }});`,
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        workerProgram,
+        JSON.stringify({ module: pathToFileURL(module).href, routing: {} }),
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH } },
+    );
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    assert.deepEqual(JSON.parse(result.stdout), expected);
+    assert(!result.stdout.includes("synthetic-private-value"));
   }
 });
 

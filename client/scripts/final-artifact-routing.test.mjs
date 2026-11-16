@@ -102,6 +102,36 @@ test("routing rejects public DNS leakage and unrestricted interface before HTTPS
   }
 });
 
+test("routing failures retain their exact check phase without changing failure messages", async () => {
+  for (const phase of [
+    "dns",
+    "interface",
+    "private-identity",
+    "public-isolation",
+    "public-feed",
+  ]) {
+    const f = fixture();
+    if (phase === "dns") f.state.address = f.config.publicAddress;
+    else if (phase === "interface") f.state.interface = "en0";
+    else {
+      const index = {
+        "private-identity": 0,
+        "public-isolation": 1,
+        "public-feed": 2,
+      }[phase];
+      f.replies[index] = { status: 200, bytes: "synthetic mismatched bytes" };
+    }
+    await assert.rejects(f.adapter.inspect(), (error) => {
+      assert.equal(error.qualificationRoutingPhase, phase);
+      assert.match(
+        error.message,
+        /restricted|routed|identity differs|probe failed|feed changed/,
+      );
+      return true;
+    });
+  }
+});
+
 test("routing rejects wrong private identity, publicly exposed listener and changed public pointer", async () => {
   for (const [index, replacement] of [
     [0, { status: 200, bytes: "different private identity" }],
