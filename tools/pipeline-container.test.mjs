@@ -326,7 +326,7 @@ test("browser downloads follow selected workspace metadata and share matching ve
   );
 });
 
-test("browser download output cannot corrupt the suite progress stream", (t) => {
+test("browser download output cannot corrupt the suite progress stream", async (t) => {
   const root = fixture(t);
   mkdirSync(join(root, "client/docker"));
   writeFileSync(
@@ -334,7 +334,7 @@ test("browser download output cannot corrupt the suite progress stream", (t) => 
     JSON.stringify({ requirements: { version: "1.63.0" } }),
   );
   const calls = [];
-  prepareContainerLane(
+  await prepareContainerLane(
     root,
     [{ npm: "requirements", browsers: ["chromium"] }],
     (_command, _args, options) => {
@@ -345,14 +345,14 @@ test("browser download output cannot corrupt the suite progress stream", (t) => 
   assert.deepEqual(calls, [["ignore", 2, 2]]);
 });
 
-test("a failed browser download blocks the selected lane", (t) => {
+test("a failed browser download blocks the selected lane", async (t) => {
   const root = fixture(t);
   mkdirSync(join(root, "client/docker"));
   writeFileSync(
     join(root, "client/docker/ci-browsers.json"),
     JSON.stringify({ requirements: { version: "1.63.0" } }),
   );
-  assert.throws(
+  await assert.rejects(
     () =>
       prepareContainerLane(
         root,

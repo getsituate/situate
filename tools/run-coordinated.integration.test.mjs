@@ -34,17 +34,18 @@ function fixture(t, inspection = () => "") {
   const directory = mkdtempSync(join(tmpdir(), "situate-coordination-test-"));
   const helperPath = join(directory, "run-coordinated.mjs");
   copyFileSync(helperSource, helperPath);
+  copyFileSync(new URL('./container-admission.mjs', import.meta.url), join(directory, 'container-admission.mjs'));
   const helper = pathToFileURL(helperPath).href;
   writeFileSync(
     join(directory, "worktree-supervisor.py"),
-    `import importlib.util, sys
+    `import importlib.util, os, sys
 from pathlib import Path
 spec = importlib.util.spec_from_file_location("supervisor", ${JSON.stringify(supervisorSource)})
 supervisor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(supervisor)
 ${inspection(directory)}
 try:
-    sys.exit(supervisor.main(Path(${JSON.stringify(join(directory, "coordination"))})))
+    sys.exit(supervisor.main(Path(${JSON.stringify(directory)}) / ('guest-coordination' if os.environ.get('SITUATE_TOOL_CONTAINER') == '1' else 'coordination')))
 except Exception as error:
     print(str(error), file=sys.stderr)
     sys.exit(2)
@@ -1084,6 +1085,135 @@ test("coordination fixtures do not share build or desktop slots", async (t) => {
     writeFileSync(join(occupied.directory, `${name}-release`), "");
   for (const child of owners) assert.equal(await child.done, 0, child.output);
 });
+
+function phaseWorker(directory, helper, tail) {
+  return `import {mkdirSync,writeFileSync} from 'node:fs';
+    const lease=process.env.SITUATE_DOCKER_LEASE;
+    const token=${JSON.stringify(dockerToken)};
+    const admission=lease+'.'+token+'.admission';
+    mkdirSync(admission,{mode:0o700});
+    writeFileSync(lease,JSON.stringify({name:${JSON.stringify(dockerName)},token,creationPending:true,phaseAdmission:true}),{mode:0o600});
+    writeFileSync(${JSON.stringify(join(directory, "docker-state.json"))},JSON.stringify(${JSON.stringify(dockerState())}));
+    writeFileSync(lease+'.'+token+'.cid',${JSON.stringify(dockerId)},{mode:0o600});
+    writeFileSync(${JSON.stringify(join(directory, "lease-path"))},lease);
+    const {runCoordinated}=await import(${JSON.stringify(helper)});
+    const guestEnvironment={...process.env,SITUATE_TOOL_CONTAINER:'1',SITUATE_TOOL_BUILD_SLOTS:'1',SITUATE_HOST_ADMISSION:admission};
+    const phase=source=>runCoordinated({directory:${JSON.stringify(directory)},resource:'build',command:process.execPath,args:['-e',source],environment:guestEnvironment});
+    ${tail}`;
+}
+
+test("live containers release host admission between phases while total heavy concurrency stays two", async (t) => {
+  const { directory, run, helper } = fixture(t);
+  const portable = join(directory, 'portable');
+  mkdirSync(portable);
+  const env = fakeDocker(portable);
+  const heavy = run(directory, gated(directory, 'host-heavy'), 'build');
+  let owner, short, blocked;
+  try {
+    await until(() => existsSync(join(directory, 'host-heavy')));
+    owner = run(portable, phaseWorker(portable, helper, `
+      if(await phase(${JSON.stringify(gated(portable, 'first-phase'))})!==0) throw new Error('first phase failed');
+      const {existsSync}=await import('node:fs');
+      writeFileSync(${JSON.stringify(join(portable, 'between-phases'))},'');
+      await new Promise(resolve=>{const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(portable, 'second-ready'))})){clearInterval(timer);resolve();}},10);});
+      if(await phase(${JSON.stringify(gated(portable, 'second-phase'))})!==0) throw new Error('second phase failed');
+    `), 'worktree', env);
+    await until(() => existsSync(join(portable, 'first-phase')));
+    short = run(directory, gated(directory, 'short-native'), 'build');
+    await until(() => short.output.includes('Waiting for the current build'));
+    assert.equal(existsSync(join(directory, 'short-native')), false);
+    writeFileSync(join(portable, 'first-phase-release'), '');
+    await until(() => existsSync(join(portable, 'between-phases')) && existsSync(join(directory, 'short-native')));
+    assert.equal(owner.exitCode, null);
+    assert.equal(existsSync(join(portable, 'docker-state.json')), true);
+    writeFileSync(join(portable, 'second-ready'), '');
+    blocked = run(directory, "console.log('following-native')", 'build');
+    await until(() => blocked.output.includes('Waiting for the current build'));
+    assert.equal(existsSync(join(portable, 'second-phase')), false);
+    writeFileSync(join(directory, 'short-native-release'), '');
+    assert.equal(await short.done, 0, short.output);
+    // Either waiter may acquire first; both must finish without a third slot.
+    await until(() => existsSync(join(portable, 'second-phase')));
+    writeFileSync(join(portable, 'second-phase-release'), '');
+    assert.equal(await owner.done, 0, owner.output);
+    assert.equal(await blocked.done, 0, blocked.output);
+    assert.equal(heavy.exitCode, null);
+  } finally {
+    for(const [root,names] of [[directory,['host-heavy-release','short-native-release']],[portable,['first-phase-release','second-ready','second-phase-release']]])
+      for(const name of names) writeFileSync(join(root,name),'');
+    if(owner && owner.exitCode===null && owner.signalCode===null) owner.kill();
+    await Promise.all([heavy.done,...[owner,short,blocked].filter(Boolean).map(child=>child.done)]);
+  }
+});
+
+test('queued container phase cancellation does not wait for occupied host slots', async (t) => {
+  const { directory, run, helper } = fixture(t);
+  const portable=join(directory,'portable');mkdirSync(portable);
+  const first=run(directory,gated(directory,'first-heavy'),'build');
+  const second=run(directory,gated(directory,'second-heavy'),'build');
+  let owner;
+  try {
+    await until(()=>existsSync(join(directory,'first-heavy')) && existsSync(join(directory,'second-heavy')));
+    owner=run(portable,phaseWorker(portable,helper,`
+      const {withHostBuildAdmission}=await import(${JSON.stringify(pathToFileURL(join(directory,'container-admission.mjs')).href)});
+      const {existsSync}=await import('node:fs');
+      const controller=new AbortController();
+      const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(portable,'cancel-phase'))}))controller.abort();},10);
+      try {
+        await withHostBuildAdmission(()=>{throw new Error('queued phase started');},{environment:guestEnvironment,signal:controller.signal});
+        throw new Error('cancellation not reported');
+      } catch(error) {if(error.name!=='AbortError')throw error;}
+      finally {clearInterval(timer);}
+    `),'worktree',fakeDocker(portable));
+    await until(()=>owner.output.includes('Waiting for the current build'));
+    writeFileSync(join(portable,'cancel-phase'),'');
+    await until(()=>owner.exitCode!==null);
+    assert.equal(await owner.done,0,owner.output);
+    assert.equal(first.exitCode,null);
+    assert.equal(second.exitCode,null);
+  } finally {
+    writeFileSync(join(directory,'first-heavy-release'),'');
+    writeFileSync(join(directory,'second-heavy-release'),'');
+    if(owner && owner.exitCode===null && owner.signalCode===null)owner.kill();
+    await Promise.all([first.done,second.done,...(owner?[owner.done]:[])]);
+  }
+});
+
+for (const outcome of ['failure', 'cancel']) {
+  test(`container phase ${outcome} releases admission only after guest descendants finish`, async (t) => {
+    const { directory, run, helper } = fixture(t);
+    const portable=join(directory,'portable');mkdirSync(portable);
+    const source=outcome==='failure' ? "process.exitCode=7" : `process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(${JSON.stringify(join(portable,'active'))},String(process.pid));setInterval(()=>{},1000)`;
+    const tail=outcome==='failure'
+      ? `if(await phase(${JSON.stringify(source)})!==7) throw new Error('exit status lost');`
+      : `await phase(${JSON.stringify(source)});`;
+    const heavy=run(directory,gated(directory,'host-heavy'),'build');
+    let owner,next;
+    try {
+      await until(()=>existsSync(join(directory,'host-heavy')));
+      owner=run(portable,phaseWorker(portable,helper,tail),'worktree',fakeDocker(portable));
+      if(outcome==='cancel') {
+        await until(()=>existsSync(join(portable,'active')));
+        const outage=join(portable,'docker-outage');writeFileSync(outage,'');
+        owner.kill('SIGTERM');
+        await until(()=>owner.output.includes('Docker cleanup is unverified'));
+        next=run(directory,"console.log('after-phase')",'build');
+        await until(()=>next.output.includes('Waiting for the current build'));
+        assert.equal(next.exitCode,null);
+        rmSync(outage);
+      }
+      assert.equal(await owner.done,outcome==='cancel'?143:0,owner.output);
+      next??=run(directory,"console.log('after-phase')",'build');
+      assert.equal(await next.done,0,next.output);
+      assert.equal(existsSync(join(portable,'docker-state.json')),false);
+    } finally {
+      rmSync(join(portable,'docker-outage'),{force:true});
+      writeFileSync(join(directory,'host-heavy-release'),'');
+      if(owner && owner.exitCode===null && owner.signalCode===null) owner.kill();
+      await Promise.all([heavy.done,...[owner,next].filter(Boolean).map(child=>child.done)]);
+    }
+  });
+}
 
 test("only two heavy jobs run across worktrees and cancellation releases a slot", async (t) => {
   const { directory, run } = fixture(t);

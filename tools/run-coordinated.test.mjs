@@ -170,6 +170,62 @@ with tempfile.TemporaryDirectory() as temporary:
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("phase withdrawal during host acquisition is acknowledged before the next generation", () => {
+  const source = `import importlib.util, json, os, tempfile
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(modulePath)})
+s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+s.caller_closed=lambda:False
+class Child:
+    def poll(self):return None
+with tempfile.TemporaryDirectory() as temporary:
+    root=Path(temporary)
+    path=root/'container.json'
+    token='11111111-1111-4111-8111-111111111111'
+    value={'name':'situate-pipeline-'+token,'token':token,'phaseAdmission':True}
+    path.write_text(json.dumps(value));path.chmod(0o600)
+    admission=Path(str(path)+'.'+token+'.admission');admission.mkdir(mode=0o700)
+    request=admission/'request.json'
+    request.write_text(json.dumps({'token':token}));request.chmod(0o600)
+    guardian=s.DockerBuildAdmission(root,root/'coordination')
+    original=s.acquire
+    def withdrawing(*args,**kwargs):
+        fd=original(*args,**kwargs)
+        s.publish_phase(admission,'release.json',token)
+        return fd
+    s.acquire=withdrawing
+    try:
+        assert guardian.poll(path,Child())
+        assert guardian.fd is not None
+        assert s.read_phase_request(admission,admission/'grant.json')==token
+        assert guardian.poll(path,Child())
+        assert guardian.fd is None
+        assert not (admission/'grant.json').exists()
+        assert s.read_phase_request(admission,admission/'released.json')==token
+        # Repeated host observations acknowledge the same withdrawal without reacquisition.
+        assert guardian.poll(path,Child())
+        assert guardian.fd is None
+        request.unlink();(admission/'release.json').unlink();(admission/'released.json').unlink()
+        second='22222222-2222-4222-8222-222222222222'
+        s.publish_phase(admission,'request.json',second)
+        s.acquire=original
+        assert guardian.poll(path,Child())
+        assert s.read_phase_request(admission,admission/'grant.json')==second
+        request.unlink()
+        assert guardian.poll(path,Child())
+        assert guardian.fd is not None
+        s.publish_phase(admission,'request.json',token)
+        assert guardian.poll(path,Child())
+        assert guardian.fd is not None
+        path.unlink()
+        assert guardian.poll(path,Child())
+        assert guardian.fd is None
+    finally:guardian.release()
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], { encoding: "utf8", timeout: 5000 });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("build slot settings retain two host slots and permit one guest slot", () => {
   const source = `import importlib.util, os
 spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})

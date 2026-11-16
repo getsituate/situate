@@ -45,6 +45,20 @@ export async function runCoordinated({
     );
   if (!["worktree", "desktop", "build"].includes(resource))
     throw new Error("Unknown coordinated resource.");
+  if (
+    resource === "build" &&
+    environment.SITUATE_HOST_ADMISSION &&
+    environment.SITUATE_HOST_ADMITTED !== "1"
+  ) {
+    const { withHostBuildAdmission } = await import("./container-admission.mjs");
+    return withHostBuildAdmission(
+      (admittedEnvironment) => runCoordinated({
+        directory, resource, command, args, environment: admittedEnvironment,
+        signal, output, cleanupGraceMs,
+      }),
+      { environment, signal, onTiming },
+    );
+  }
   const dockerLeaseDirectory =
     resource === "worktree" && !coordinated(directory, environment)
       ? mkdtempSync(join(tmpdir(), "situate-docker-lease-"))

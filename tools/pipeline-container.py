@@ -4,6 +4,7 @@ import glob
 import importlib.util
 import json
 import os
+import platform as host_platform
 from pathlib import Path
 import re
 import signal
@@ -82,28 +83,65 @@ def git_mounts(root, state, empty):
     return result
 
 
-def arguments(root, state, image, command, environment, name, token, lease=None):
+def cache_module():
+    spec = importlib.util.spec_from_file_location('pipeline_cache', ROOT / 'tools/pipeline-cache.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def image_platform(lock, machine=None):
+    if (not isinstance(lock, dict) or type(lock.get('version')) is not int
+            or not isinstance(lock.get('image'), str) or not IMAGE.fullmatch(lock['image'])
+            or not isinstance(lock.get('inputsSha256'), str)
+            or not re.fullmatch(r'[a-f0-9]{64}', lock['inputsSha256'])):
+        raise ValueError('Invalid CI tool image lock.')
+    if lock.get('version') == 1 and lock.get('platform') == 'linux/amd64' and set(lock) == {'version', 'platform', 'image', 'inputsSha256'}:
+        return lock['platform']
+    if lock.get('version') == 2 and lock.get('platforms') == ['linux/amd64', 'linux/arm64'] and set(lock) == {'version', 'platforms', 'image', 'inputsSha256'}:
+        architecture = {'x86_64': 'amd64', 'AMD64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(machine or host_platform.machine())
+        if architecture:
+            return 'linux/' + architecture
+        raise ValueError('Unsupported native tool-container architecture.')
+    raise ValueError('Invalid CI tool image lock.')
+
+
+def arguments(root, state, image, command, environment, name, token, lease=None, platform='linux/amd64', admission=None):
     root = Path(root).resolve(strict=True)
     state = Path(state).resolve(strict=True)
-    if not IMAGE.fullmatch(image):
+    if not isinstance(image, str) or not IMAGE.fullmatch(image):
         raise ValueError("Expected the pinned public CI tool image digest.")
+    if platform not in ('linux/amd64', 'linux/arm64'):
+        raise ValueError('Unsupported tool-container platform.')
     if os.getuid() == 0:
         raise ValueError("Run tool containers as a non-root host user.")
     cid = str(lease or state / "docker-lease.json") + "." + token + ".cid"
     args = ["run", "--rm", "--init", "--pull", "never", "--name", name, "--cidfile", cid,
-            "--label", f"dev.situate.ci-run={token}", "--platform", "linux/amd64",
+            "--label", f"dev.situate.ci-run={token}", "--platform", platform,
             "--user", f"{os.getuid()}:{os.getgid()}", "--shm-size", "2g",
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
     args += mount(root) + mount(state)
     cache = state / "cache"
     cache.mkdir(exist_ok=True)
+    (cache / 'cargo').mkdir(exist_ok=True)
     args += mount(cache, "/ci-cache")
+    caches = cache_module()
+    retained = caches.cache_root(environment, root)
+    if retained is not None:
+        paths = caches.layout(retained, platform, image, root)
+        for key, destination in (('npm', '/ci-cache/npm'), ('browsers', '/ci-cache/browsers'),
+                                 ('cargo-registry', '/ci-cache/cargo/registry'), ('cargo-git', '/ci-cache/cargo/git')):
+            args += mount(paths[key], destination)
+    else:
+        paths = {}
+    if admission is not None:
+        args += mount(admission, '/situate-admission')
     for path in dependency_paths(root):
         if ',' in str(path):
             raise ValueError("Docker mount paths cannot contain commas.")
         args += ["--tmpfs", f"{path}:exec,mode=1777"]
     for relative in ("client/target", "tools/dev-tui/target"):
-        target = cache / relative.replace('/', '-')
+        target = paths.get(relative.replace('/', '-'), cache / relative.replace('/', '-'))
         target.mkdir(exist_ok=True)
         args += mount(target, root / relative)
     empty = state / "empty-env"
@@ -125,6 +163,8 @@ def arguments(root, state, image, command, environment, name, token, lease=None)
         "WEBKIT_DISABLE_DMABUF_RENDERER": "1", "CARGO_INCREMENTAL": "0", "GIT_OPTIONAL_LOCKS": "0",
         "CARGO_PROFILE_DEV_DEBUG": "line-tables-only", "CARGO_PROFILE_TEST_DEBUG": "line-tables-only",
     }
+    if admission is not None:
+        env['SITUATE_HOST_ADMISSION'] = '/situate-admission'
     env.update({key: environment[key] for key in (*CONTEXT, "CARGO_NET_OFFLINE") if key in environment})
     if command[:2] == ["actions", "plan"] and environment.get("GH_TOKEN"):
         args += ["--env", "GH_TOKEN"]
@@ -138,7 +178,7 @@ def arguments(root, state, image, command, environment, name, token, lease=None)
             env[key] = str(path)
     for key, value in env.items():
         args += ["--env", f"{key}={value}"]
-    script = ('set -eu; mkdir -p "$HOME" "$CARGO_HOME" "$npm_config_cache" "$PLAYWRIGHT_BROWSERS_PATH"; '
+    script = ('set -eu; umask 077; mkdir -p "$HOME" "$CARGO_HOME" "$npm_config_cache" "$PLAYWRIGHT_BROWSERS_PATH"; '
               'source /opt/ci-tools/ci-user.sh; git config --global --add safe.directory "$PWD"; '
               'exec /opt/volta/bin/node tools/pipeline-container-entry.mjs "$@"')
     args += ["--workdir", str(root), image, "bash", "-c", script, "pipeline", *command]
@@ -152,12 +192,14 @@ def rust_version(root):
     return versions[0]
 
 
-def write_lease(path, name, token, *, environment=None, creation_pending=False, build_pending=False):
+def write_lease(path, name, token, *, environment=None, creation_pending=False, build_pending=False, phase_admission=False):
     path = Path(path)
     parent = path.parent.lstat()
     if not path.is_absolute() or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
         raise ValueError("Docker lease directory must be private and owned.")
     data = {"name": name, "token": token}
+    if phase_admission:
+        data['phaseAdmission'] = True
     if creation_pending:
         data["creationPending"] = True
     if build_pending:
@@ -217,7 +259,7 @@ def docker_client(lease, token, arguments, environment):
 
 
 def host_environment(environment, command):
-    names = {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "TMPDIR", "TMP", "TEMP", "VOLTA_HOME", "CI", "SITUATE_COORDINATED_WORKTREE", "SITUATE_DOCKER_LEASE", "CARGO_NET_OFFLINE", "GITHUB_EVENT_PATH", "GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY", *CONTEXT, *container_owner().DOCKER_ENVIRONMENT}
+    names = {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "TMPDIR", "TMP", "TEMP", "VOLTA_HOME", "CI", "SITUATE_COORDINATED_WORKTREE", "SITUATE_DOCKER_LEASE", "SITUATE_CONTAINER_CACHE", "SITUATE_CONTAINER_CACHE_DIR", "XDG_CACHE_HOME", "BUILD_ID", "TF_BUILD", "CARGO_HOME", "CARGO_NET_OFFLINE", "GITHUB_EVENT_PATH", "GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY", *CONTEXT, *container_owner().DOCKER_ENVIRONMENT}
     if command[:2] == ["actions", "plan"] or command[:1] == ["_docker-client"]:
         names.add("GH_TOKEN")
     return {key: value for key, value in environment.items() if key in names}
@@ -233,12 +275,11 @@ def main(argv=None, environment=None):
     if not args or args[0] not in ("actions", "lane", "suites", "monitoring"):
         raise ValueError("Usage: python3 tools/pipeline-container.py actions|lane|suites|monitoring ARGUMENTS")
     lock = json.loads((ROOT / "tools/ci-image.lock.json").read_text())
-    if lock.get("version") != 1 or lock.get("platform") != "linux/amd64" or not IMAGE.fullmatch(lock.get("image", "")):
-        raise ValueError("Invalid CI tool image lock.")
+    platform = image_platform(lock)
     subprocess.run(["docker", "info"], check=True, stdout=subprocess.DEVNULL, env=environment)
-    present = subprocess.run(["docker", "image", "inspect", lock["image"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
+    present = subprocess.run(["docker", "image", "inspect", "--platform", platform, lock["image"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
     if present.returncode != 0:
-        subprocess.run(["docker", "pull", "--platform", lock["platform"], lock["image"]], check=True, stdout=sys.stderr, env=environment)
+        subprocess.run(["docker", "pull", "--platform", platform, lock["image"]], check=True, stdout=sys.stderr, env=environment)
     common = git_common_dir(ROOT)
     mount_roots = [ROOT, *([common] if common else [])]
     with tempfile.TemporaryDirectory(prefix="situate-tool-container-") as temporary:
@@ -271,10 +312,11 @@ def main(argv=None, environment=None):
             raise ValueError("Docker control leases must remain outside the checkout.")
         if coordinated and lease.exists():
             raise ValueError("An earlier container requires owner cleanup before another launch.")
-        docker_args = arguments(ROOT, state, lock["image"], command, environment, name, token, lease)
+        admission = Path(str(lease) + '.' + token + '.admission')
+        admission.mkdir(mode=0o700)
+        docker_args = arguments(ROOT, state, lock["image"], command, environment, name, token, lease, platform, admission)
         owner = container_owner()
         docker_environment = {key: environment[key] for key in owner.DOCKER_ENVIRONMENT if key in environment}
-        build_pending = args[:2] not in (["actions", "plan"], ["actions", "aggregate"], ["actions", "monitoring-plan"])
         command_line = [sys.executable, "-B", str(ROOT / "tools/pipeline-container.py"), "_docker-client", str(lease), token, *docker_args]
         if not coordinated:
             command_line = [sys.executable, str(ROOT / "tools/worktree-supervisor.py"),
@@ -288,7 +330,7 @@ def main(argv=None, environment=None):
                 child.stdin.close()
         handlers = {kind: signal.signal(kind, cancel) for kind in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
         try:
-            write_lease(lease, name, token, environment=docker_environment, creation_pending=True, build_pending=build_pending)
+            write_lease(lease, name, token, environment=docker_environment, creation_pending=True, phase_admission=True)
             if cancelled:
                 owner.cleanup_docker_lease(lease, creation_started=False)
                 return 130
