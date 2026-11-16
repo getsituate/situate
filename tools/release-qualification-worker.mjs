@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { runCoordinated } from "./run-coordinated.mjs";
+import { qualificationProgressWriter } from "./qualification-progress.mjs";
+import { createQualificationProcess } from "../client/scripts/final-artifact-process.mjs";
 import { parseArgs } from "node:util";
 import { qualificationEnvironment } from "./release-runtime.mjs";
 import { writeQualificationReceipt } from "./release-qualification.mjs";
@@ -14,6 +16,7 @@ export async function qualifyFinalArtifacts({
   configuration,
   configurationSha256,
   signal,
+  progress = () => {},
   environment = process.env,
   createHost = createFinalArtifactQualificationHost,
   writeReceipt = writeQualificationReceipt,
@@ -40,19 +43,48 @@ export async function qualifyFinalArtifacts({
     throw new Error("Qualification configuration is not valid JSON");
   }
   const safeEnvironment = qualificationEnvironment(environment);
+  let phase = "candidate_payload";
+  const report = (name, status, command = "none", elapsedMs) => {
+    if (command === "none") phase = name;
+    progress(name, status, command, elapsedMs);
+  };
+  const execute = createQualificationProcess({
+    progress: report,
+    getPhase: () => phase,
+  });
   const host = createHost(parsed.qualification, {
     environment: safeEnvironment,
     signal,
+    execute,
   });
-  return writeReceipt({ directory, qualificationHost: host, signal });
+  return writeReceipt({
+    directory,
+    qualificationHost: host,
+    signal,
+    execute,
+    env: safeEnvironment,
+    progress: report,
+  });
 }
 
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
+  const { values } = parseArgs({
+    options: {
+      directory: { type: "string" },
+      configuration: { type: "string" },
+      "configuration-sha256": { type: "string" },
+      "progress-file": { type: "string" },
+    },
+  });
+  const progress = values["progress-file"]
+    ? qualificationProgressWriter(resolve(values["progress-file"]))
+    : () => {};
   if (process.env.SITUATE_COORDINATED_DESKTOP !== "1") {
     try {
+      progress("desktop", "queued");
       process.exitCode = await runCoordinated({
         directory: fileURLToPath(new URL("../", import.meta.url)),
         resource: "desktop",
@@ -60,6 +92,13 @@ if (
         args: process.argv.slice(1),
         environment: qualificationEnvironment(process.env),
         cleanupGraceMs: 75_000,
+        onTiming: (event) => {
+          if (
+            event.resource === "desktop" &&
+            ["acquired", "released"].includes(event.phase)
+          )
+            progress("desktop", event.phase);
+        },
       });
     } catch {
       process.stderr.write("Qualification desktop ownership failed\n");
@@ -71,13 +110,6 @@ if (
     process.on("SIGINT", cancel);
     process.on("SIGTERM", cancel);
     try {
-      const { values } = parseArgs({
-        options: {
-          directory: { type: "string" },
-          configuration: { type: "string" },
-          "configuration-sha256": { type: "string" },
-        },
-      });
       assert(
         values.directory &&
           values.configuration &&
@@ -89,10 +121,13 @@ if (
         configuration: resolve(values.configuration),
         configurationSha256: values["configuration-sha256"],
         signal: abort.signal,
+        progress,
       });
       process.stdout.write(`${JSON.stringify(result)}\n`);
-    } catch (error) {
-      process.stderr.write(`${error.message}\n`);
+    } catch {
+      process.stderr.write(
+        "Qualification failed; inspect fixed-code progress and retained operation\n",
+      );
       process.exitCode = 1;
     } finally {
       process.removeListener("SIGINT", cancel);

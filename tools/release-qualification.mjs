@@ -4,6 +4,8 @@ import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { verifyReleaseInputs } from "./release-inputs.mjs";
+import { qualificationPhase } from "./qualification-progress.mjs";
+import { createQualificationProcess } from "../client/scripts/final-artifact-process.mjs";
 import { verifyUpdaterSignature } from "../client/scripts/updater-signing.mjs";
 import { verifyDirectPayloads } from "../client/scripts/direct-release-verification.mjs";
 
@@ -233,20 +235,47 @@ export async function qualifyRelease({
   execute,
   env,
   signal,
+  progress = () => {},
 }) {
-  const artifact = verifyPackages(directory, manifest);
-  // A source-built smoke harness cannot install or exercise these signed bytes.
-  assert(
-    qualificationHost &&
-      ["prepare", "install", "journeys", "update", "inspect", "cleanup"].every(
-        (name) => typeof qualificationHost[name] === "function",
-      ),
-    "Blocked: provisioned isolated production-HTTPS routing and an exact-artifact native install/update journey driver are required",
+  let phase = "candidate_payload";
+  const report = (name, ...args) => {
+    phase = name;
+    progress(name, ...args);
+  };
+  execute ??= createQualificationProcess({ progress, getPhase: () => phase });
+  const artifact = await qualificationPhase(
+    report,
+    "candidate_payload",
+    async () => {
+      const artifact = verifyPackages(directory, manifest);
+      assert(
+        qualificationHost &&
+          [
+            "prepare",
+            "install",
+            "journeys",
+            "update",
+            "inspect",
+            "cleanup",
+          ].every((name) => typeof qualificationHost[name] === "function"),
+        "Blocked: provisioned isolated production-HTTPS routing and an exact-artifact native install/update journey driver are required",
+      );
+      await verifyDirectPayloads(directory, artifact, { execute, env, signal });
+      return artifact;
+    },
+    signal,
   );
-  await verifyDirectPayloads(directory, artifact, { execute, env, signal });
+  const callHost = (name, options) =>
+    qualificationPhase(
+      report,
+      name,
+      () => qualificationHost[name](options),
+      name === "cleanup" ? undefined : signal,
+    );
   let session;
+  let failure;
   try {
-    session = await qualificationHost.prepare({ directory, manifest, signal });
+    session = await callHost("prepare", { directory, manifest, signal });
     assert(
       session?.productionEndpoint === artifact.buildConfiguration.endpoint &&
         new URL(session.productionEndpoint).protocol === "https:" &&
@@ -262,7 +291,7 @@ export async function qualifyRelease({
       predecessor?.version && sha.test(predecessor.manifestSha256),
       "Blocked: verified host-channel predecessor is required",
     );
-    const installed = await qualificationHost.install({
+    const installed = await callHost("install", {
       session,
       directory,
       artifact,
@@ -275,7 +304,7 @@ export async function qualifyRelease({
         installed.launched === true,
       "Exact DMG installation was not verified",
     );
-    const journeys = await qualificationHost.journeys({
+    const journeys = await callHost("journeys", {
       session,
       artifact,
       signal,
@@ -288,7 +317,7 @@ export async function qualifyRelease({
         ),
       "Exact installed app synthetic journeys did not pass",
     );
-    const updated = await qualificationHost.update({
+    const updated = await callHost("update", {
       session,
       directory,
       artifact,
@@ -305,7 +334,7 @@ export async function qualifyRelease({
         updated.relaunched === true,
       "Exact archive production updater journey did not pass",
     );
-    const final = await qualificationHost.inspect({ session, signal });
+    const final = await callHost("inspect", { session, signal });
     assert(
       final?.publicPointerUnchanged === true &&
         final.normalTls === true &&
@@ -336,13 +365,28 @@ export async function qualifyRelease({
     };
     verifyQualificationReceipt(directory, manifest, receipt);
     return receipt;
+  } catch (error) {
+    failure = error;
+    report(phase, signal?.aborted ? "cancelled" : "failed");
+    throw error;
   } finally {
-    await qualificationHost.cleanup({ session, signal: undefined });
+    try {
+      await callHost("cleanup", { session, signal: undefined });
+    } catch (cleanupError) {
+      if (failure)
+        throw new AggregateError(
+          [failure, cleanupError],
+          "Qualification and cleanup failed",
+          { cause: failure },
+        );
+      throw cleanupError;
+    }
   }
 }
 
 export async function writeQualificationReceipt(options) {
   const receipt = await qualifyRelease(options);
+  options.signal?.throwIfAborted();
   const path = join(options.directory, qualificationAsset);
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`, { flag: "wx" });
   return { path, receipt };

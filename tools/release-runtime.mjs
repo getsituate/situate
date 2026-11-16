@@ -7,11 +7,17 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
+  rmSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { open, rename, rm } from "node:fs/promises";
-import { userInfo } from "node:os";
+import { userInfo, tmpdir } from "node:os";
+import {
+  createQualificationProgressFile,
+  observeQualificationProgress,
+} from "./qualification-progress.mjs";
 import { basename, join } from "node:path";
 import { withReleaseSSH } from "./release-environment.mjs";
 import { ordinaryEnvironment } from "./pipeline-environment.mjs";
@@ -406,6 +412,7 @@ export async function runPreparedQualification(
     executeWorker,
     createHost,
     withRoute,
+    progressOutput = process.stderr,
   },
 ) {
   const runtime = configuration.qualificationResources;
@@ -430,10 +437,19 @@ export async function runPreparedQualification(
   const execute =
     executeWorker ?? (await import("../client/scripts/ios-xcode.mjs")).run;
   const worker = async (_route, routeSignal) => {
-    const signals = [signal, routeSignal, AbortSignal.timeout(1800_000)].filter(
-      Boolean,
+    const timeout = AbortSignal.timeout(1800_000);
+    const signals = [signal, routeSignal, timeout].filter(Boolean);
+    const workerSignal = AbortSignal.any(signals);
+    const progressDirectory = mkdtempSync(
+      join(tmpdir(), "situate-qualification-progress-"),
     );
+    const progressFile = join(progressDirectory, "progress.jsonl");
+    createQualificationProgressFile(progressFile);
+    const progress = observeQualificationProgress(progressFile, {
+      output: progressOutput,
+    });
     let output;
+    let failure;
     try {
       output = await execute(
         process.execPath,
@@ -445,24 +461,48 @@ export async function runPreparedQualification(
           file,
           "--configuration-sha256",
           record.sha256,
+          "--progress-file",
+          progressFile,
         ],
         {
           cwd: root,
           env: qualificationEnvironment(environment),
-          signal: AbortSignal.any(signals),
+          signal: workerSignal,
           capture: true,
           terminationGraceMs: 75_000,
         },
       );
     } catch (cause) {
-      const error =
+      const status = timeout.aborted
+        ? "timeout"
+        : workerSignal.aborted
+          ? "cancelled"
+          : "failed";
+      const summary = progress.summary(status);
+      failure =
         cause instanceof Error
           ? cause
           : new Error("Qualification worker did not finish", { cause });
-      error.uncertain = true;
-      throw error;
+      failure.qualificationProgress = summary;
+      failure.uncertain = true;
+      throw failure;
+    } finally {
+      try {
+        progress.close();
+      } catch (cause) {
+        if (!failure) {
+          const error = new Error("Qualification progress protocol failed", {
+            cause,
+          });
+          error.uncertain = true;
+          throw error;
+        }
+      } finally {
+        rmSync(progressDirectory, { recursive: true, force: true });
+      }
     }
     try {
+      workerSignal.throwIfAborted();
       return JSON.parse(output);
     } catch {
       const error = new Error(

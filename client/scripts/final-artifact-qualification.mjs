@@ -21,7 +21,7 @@ import {
   bundleDigest,
   verifyDirectPayloads,
 } from "./direct-release-verification.mjs";
-import { run } from "./ios-xcode.mjs";
+import { createQualificationProcess } from "./final-artifact-process.mjs";
 import { requireNativeDesktop } from "./native-desktop-session.mjs";
 import {
   createQualificationRouting,
@@ -410,7 +410,11 @@ export function accessibilityScript(pid, action) {
 
 export function createFinalArtifactQualificationHost(
   configuration,
-  { execute = run, environment = process.env, signal } = {},
+  {
+    execute = createQualificationProcess(),
+    environment = process.env,
+    signal,
+  } = {},
 ) {
   validateFinalArtifactConfiguration(configuration);
   const safeEnv = Object.fromEntries(
@@ -434,6 +438,7 @@ export function createFinalArtifactQualificationHost(
   let productJourneys;
   let archiveCandidateDeviceState;
   let deviceStateIsolationPending = false;
+  let mountUncertain = false;
   const defaultProfile = !configuration.journeys;
   async function processPath(id) {
     return (
@@ -530,6 +535,7 @@ export function createFinalArtifactQualificationHost(
         hash(join(directory, artifact.path)) === artifact.sha256,
         "DMG changed before installation",
       );
+      mountUncertain = true;
       await execute(
         "hdiutil",
         [
@@ -543,17 +549,21 @@ export function createFinalArtifactQualificationHost(
         options,
       );
       mounted = true;
+      mountUncertain = false;
       assert(
         bundleDigest(join(image, "Situate.app")) === artifact.bundleSha256,
         "Mounted installation bundle changed",
       );
       await execute("ditto", [join(image, "Situate.app"), app], options);
     } finally {
-      if (mounted)
+      if (mounted) {
+        mountUncertain = true;
         await execute("hdiutil", ["detach", image], {
           ...options,
           signal: undefined,
         });
+        mountUncertain = false;
+      }
     }
     assert(
       bundleDigest(app) === artifact.bundleSha256,
@@ -591,7 +601,11 @@ export function createFinalArtifactQualificationHost(
           );
           return true;
         } catch (error) {
-          if (!action.assert && action.windows === undefined) throw error;
+          if (
+            error.qualificationStatus ||
+            (!action.assert && action.windows === undefined)
+          )
+            throw error;
           return false;
         }
       }, "accessibility assertion");
@@ -817,6 +831,10 @@ export function createFinalArtifactQualificationHost(
       assert(
         !deviceStateIsolationPending,
         "Device-state isolation did not finish; retain the disposable account and archive for inspection",
+      );
+      assert(
+        !mountUncertain,
+        "Mount outcome is unknown; retain the isolated account and package for inspection",
       );
       if (owned) rmSync(owned, { recursive: true });
     },

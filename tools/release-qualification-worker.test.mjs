@@ -22,8 +22,11 @@ function fixture(t) {
 test("qualification worker checks authorized bytes and passes only desktop inputs to the host", async (t) => {
   const values = fixture(t);
   const host = { synthetic: true };
+  const progress = [];
+  let nativeExecute;
   const result = await qualifyFinalArtifacts({
     ...values,
+    progress: (...event) => progress.push(event),
     environment: {
       PATH: "/bin",
       HOME: "/Users/runner",
@@ -33,6 +36,8 @@ test("qualification worker checks authorized bytes and passes only desktop input
     },
     createHost: (configuration, options) => {
       assert.deepEqual(configuration, { profile: "synthetic" });
+      assert.equal(typeof options.execute, "function");
+      nativeExecute = options.execute;
       assert.deepEqual(options.environment, {
         PATH: "/bin",
         HOME: "/Users/runner",
@@ -42,10 +47,18 @@ test("qualification worker checks authorized bytes and passes only desktop input
     writeReceipt: async (options) => {
       assert.equal(options.qualificationHost, host);
       assert.equal(options.directory, values.directory);
+      assert.equal(options.execute, nativeExecute);
+      assert.deepEqual(options.env, { PATH: "/bin", HOME: "/Users/runner" });
+      options.progress("prepare", "started");
+      options.progress("cleanup", "completed");
       return { receipt: "synthetic" };
     },
   });
   assert.deepEqual(result, { receipt: "synthetic" });
+  assert.deepEqual(progress, [
+    ["prepare", "started", "none", undefined],
+    ["cleanup", "completed", "none", undefined],
+  ]);
 });
 
 test("changed or linked configuration cannot launch qualification", async (t) => {
