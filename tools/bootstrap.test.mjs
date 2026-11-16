@@ -62,7 +62,32 @@ function checkWorkflowBootstrap(name, workflow) {
       (["verify.yml", "release-macos.yml"].includes(name) &&
         /^ {4}runs-on: ubuntu-24\.04$/m.test(block) &&
         id !== "docker-integration");
-    if (portable) {
+    const metadata =
+      (name === "release-macos.yml" && id === "plan") ||
+      (name === "verify.yml" && id === "required");
+    if (metadata) {
+      let bootstrapped = false;
+      for (const command of commands) {
+        if (command === "python3 tools/pipeline-bootstrap.py") {
+          bootstrapped = true;
+          continue;
+        }
+        if (command.startsWith("python3 tools/pipeline-container.py actions "))
+          assert.match(
+            command,
+            /^python3 tools\/pipeline-container\.py actions (?:plan|aggregate)(?: .*)?$/,
+            context,
+          );
+        else {
+          assert(bootstrapped, context);
+          assert.match(
+            command,
+            /^node tools\/actions-adapter\.mjs (?:release-selection|source-evidence|source-evidence-check)(?: .*)?$/,
+            context,
+          );
+        }
+      }
+    } else if (portable) {
       for (const command of commands)
         assert.match(
           command,
@@ -75,7 +100,9 @@ function checkWorkflowBootstrap(name, workflow) {
       for (const command of commands.slice(1))
         assert.match(
           command,
-          /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/,
+          name === "release-macos.yml" && id === "create"
+            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
+            : /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/,
           context,
         );
     }
@@ -94,6 +121,37 @@ test("CI bootstraps portable jobs in the container and host jobs through the sha
 function workflowJob(id, runner, commands) {
   return `jobs:\n  ${id}:\n    runs-on: ${runner}\n    steps:\n      - uses: actions/checkout@${"a".repeat(40)}\n        with:\n          persist-credentials: false\n${commands.map((command) => `      - run: ${command}\n`).join("")}`;
 }
+
+test("metadata controllers require bootstrap and cannot execute portable suites on the host", () => {
+  const bootstrap = "python3 tools/pipeline-bootstrap.py";
+  assert.doesNotThrow(() =>
+    checkWorkflowBootstrap(
+      "release-macos.yml",
+      workflowJob("plan", "ubuntu-24.04", [
+        bootstrap,
+        "node tools/actions-adapter.mjs release-selection --workflow create",
+        "python3 tools/pipeline-container.py actions plan --workflow create",
+      ]),
+    ),
+  );
+  assert.throws(() =>
+    checkWorkflowBootstrap(
+      "release-macos.yml",
+      workflowJob("plan", "ubuntu-24.04", [
+        bootstrap,
+        "node tools/actions-adapter.mjs lane --workflow create --lane rust",
+      ]),
+    ),
+  );
+  assert.throws(() =>
+    checkWorkflowBootstrap(
+      "verify.yml",
+      workflowJob("required", "ubuntu-24.04", [
+        "node tools/actions-adapter.mjs source-evidence --workflow verify",
+      ]),
+    ),
+  );
+});
 
 test("portable jobs reject host Node setup and unpinned checkout", () => {
   const wrapper =

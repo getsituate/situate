@@ -9,6 +9,45 @@ import {
 } from "./final-artifact-process.mjs";
 import { run } from "./ios-xcode.mjs";
 
+test("progress failures cannot prevent cleanup commands and remain observable afterward", async () => {
+  const progressFailure = new Error("Synthetic progress failure");
+  const commands = [];
+  const execute = createQualificationProcess({
+    getPhase: () => "cleanup",
+    progress: () => {
+      throw progressFailure;
+    },
+    execute: async (command) => {
+      commands.push(command);
+      return "";
+    },
+  });
+  await execute("ps", ["-p", "123"]);
+  await execute("hdiutil", ["detach", "/synthetic/mount"]);
+  assert.deepEqual(commands, ["ps", "hdiutil"]);
+  assert.throws(
+    () => execute.assertProgress(),
+    (error) => error === progressFailure,
+  );
+  const nativeFailure = new Error("Synthetic native failure");
+  const failed = createQualificationProcess({
+    progress: () => {
+      throw progressFailure;
+    },
+    execute: async () => {
+      throw nativeFailure;
+    },
+  });
+  await assert.rejects(
+    failed("ps", []),
+    (error) => error.cause === nativeFailure,
+  );
+  assert.throws(
+    () => failed.assertProgress(),
+    (error) => error === progressFailure,
+  );
+});
+
 test("fixed native policy reports categories, not arguments or stderr", async () => {
   const events = [];
   const budgets = [];

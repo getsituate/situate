@@ -224,16 +224,46 @@ export function observeQualificationProgress(
   };
 }
 
+export function qualificationProgressReporter(progress) {
+  const failures = [];
+  return {
+    emit(...args) {
+      try {
+        progress(...args);
+      } catch (error) {
+        if (failures.length < 16 && !failures.includes(error))
+          failures.push(error);
+      }
+    },
+    check(primary, secondary = []) {
+      const errors = [
+        ...new Set([...(primary ? [primary] : []), ...secondary, ...failures]),
+      ];
+      if (errors.length > 1)
+        throw new AggregateError(
+          errors,
+          "Qualification failed with additional errors",
+          { cause: primary ?? errors[0] },
+        );
+      if (errors.length === 1) throw errors[0];
+    },
+  };
+}
+
 export async function qualificationPhase(progress, phase, action, signal) {
-  progress(phase, "started");
+  const reporter = qualificationProgressReporter(progress);
+  reporter.emit(phase, "started");
+  let result;
+  let failure;
   try {
     signal?.throwIfAborted();
-    const result = await action();
+    result = await action();
     signal?.throwIfAborted();
-    progress(phase, "completed");
-    return result;
+    reporter.emit(phase, "completed");
   } catch (error) {
-    progress(phase, signal?.aborted ? "cancelled" : "failed");
-    throw error;
+    failure = error;
+    reporter.emit(phase, signal?.aborted ? "cancelled" : "failed");
   }
+  reporter.check(failure);
+  return result;
 }

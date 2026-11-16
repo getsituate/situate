@@ -113,7 +113,9 @@ Workflow chaining must account for event suppression by the default workflow tok
 
 Independent selected checks and preliminary builds may run in parallel after relevance planning, with isolated outputs and native-desktop ownership.
 There is no global fast-check barrier before unrelated native or browser jobs; all required results still gate publication.
-Initially serialize final migration-baseline qualification, macOS release builds and publication so a concurrent publication cannot silently invalidate a candidate's checked history.
+Serialize final migration-baseline qualification, macOS release creation and publication effects so a concurrent publication cannot silently invalidate a candidate's checked history; independent source verification does not hold that queue.
+Before a new automated claim, observe the latest main source. An existing claim retains its original source and reservation.
+Eligible source results may be reused only with independently verified producer execution/workflow identity, whole-tree equality, matching execution contracts and actual host identity. Retain original tested revisions and explicit reuse bindings; history-sensitive and unknown checks execute afresh.
 Read baselines from trusted immutable publication evidence, not a comparison revision chosen by the candidate change.
 Revalidate a candidate against current publication evidence before publication without changing its artifacts.
 Reject stale publication baselines and prevent an older completed candidate from replacing a newer public version.
@@ -129,6 +131,10 @@ Retain ordinary diagnostics for seven days and resolved unpublished candidates f
 Initially retain finalized release packages, generated inputs, symbols and release/recovery evidence without automatic deletion, with private material excluded from public assets.
 Independent backup, restore, signing-key and account-access recovery exercises are deferred operational work; their evidence is not required for release creation or publication.
 Legacy operational recovery metadata remains readable without gating delivery.
+Private immutable checkpoints retain original plans, configuration bytes, build inputs, package signatures and predecessor assets before qualification.
+A fresh qualification runtime requires a separate authorization bound to an inspected restoration; it does not reseal the original product configuration.
+Passed recovery attempts retain their exact receipts and original authorization context so a different runner can continue with an explicit new directory mapping.
+Commit checkpoints durably before acknowledging stage completion or releasing the operation claim. Unknown external effects and missing original evidence block automatic continuation.
 Do not treat artifact-storage presence or a successful upload as proof of public availability.
 
 Overtaken PR checks may be cancelled.

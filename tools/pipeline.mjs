@@ -652,14 +652,12 @@ export async function runWorkflow(
             signal,
             onEvent,
           }));
-        operation.verification = {
-          ...aggregateReceipts(plan.verificationPlan ?? plan, results),
-          results: results.map(({ lane, status }) => ({
-            id: lane,
-            status,
-            exitCode: 0,
-          })),
-        };
+        const { buildSourceVerification } =
+          await import("./source-verification.mjs");
+        operation.verification = buildSourceVerification(
+          plan.verificationPlan ?? plan,
+          results,
+        );
         saveOperation(root, operation);
       }
       const result = await executeStages(root, operation, adapters, {

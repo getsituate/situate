@@ -314,6 +314,9 @@ function fixture() {
     environment: {
       GITHUB_REPOSITORY: "getsituate/situate",
       GITHUB_REPOSITORY_ID: "1455575895",
+      CI: "true",
+      GITHUB_ACTIONS: "true",
+      RUNNER_ENVIRONMENT: "github-hosted",
       GITHUB_EVENT_NAME: "push",
       GITHUB_REF: "refs/heads/main",
       GITHUB_REF_PROTECTED: "true",

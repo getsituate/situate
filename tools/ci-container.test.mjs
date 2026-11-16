@@ -599,7 +599,7 @@ test("verification delegates selected lanes directly from planning without optio
       assert.match(block, /needs: plan\n/);
       assert.ok(
         block.includes(
-          `contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, '${lane}')`,
+          `contains(fromJSON(${name === "release-macos" ? `needs.plan.outputs.plan || '{"lanes":[]}'` : "needs.plan.outputs.plan"}).lanes.*.id, '${lane}')`,
         ),
       );
       const native = lane.startsWith("macos-") || lane === "tooling-macos";
@@ -644,7 +644,12 @@ test("verification delegates selected lanes directly from planning without optio
         "macos-native",
       ].sort(),
     );
-    assert.match(required, /if: always\(\)/);
+    assert.match(
+      required,
+      name === "verify"
+        ? /if: always\(\)/
+        : /!cancelled\(\) && needs\.plan\.outputs\.enabled == 'true'/,
+    );
     assert.ok(
       source.includes(
         `run: python3 tools/pipeline-container.py actions aggregate --workflow ${workflow}`,

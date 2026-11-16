@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import { run } from "./ios-xcode.mjs";
+import { qualificationProgressReporter } from "../../tools/qualification-progress.mjs";
 
 export const qualificationCommandTimeouts = Object.freeze({
   accessibility: 30_000,
@@ -64,7 +65,9 @@ export function createQualificationProcess({
   getPhase = () => "prepare",
   deadline = (ms) => AbortSignal.timeout(ms),
 } = {}) {
-  return async (command, args, options = {}) => {
+  const reporter = qualificationProgressReporter(progress);
+  // Telemetry must not prevent later termination or detach commands.
+  const executeCommand = async (command, args, options = {}) => {
     const code = category(command, args);
     const phase = getPhase();
     const started = performance.now();
@@ -72,7 +75,7 @@ export function createQualificationProcess({
     const signal = options.signal
       ? AbortSignal.any([options.signal, timeout])
       : timeout;
-    progress(phase, "started", code, 0);
+    reporter.emit(phase, "started", code, 0);
     try {
       const result = await execute(command, args, {
         ...options,
@@ -81,7 +84,7 @@ export function createQualificationProcess({
         terminationGraceMs: 2000,
       });
       signal.throwIfAborted();
-      progress(
+      reporter.emit(
         phase,
         "completed",
         code,
@@ -94,7 +97,12 @@ export function createQualificationProcess({
         : timeout.aborted
           ? "timeout"
           : "nonzero";
-      progress(phase, status, code, Math.round(performance.now() - started));
+      reporter.emit(
+        phase,
+        status,
+        code,
+        Math.round(performance.now() - started),
+      );
       const error = new Error(
         `Qualification native command ${code}: ${status}`,
         { cause },
@@ -105,4 +113,6 @@ export function createQualificationProcess({
       throw error;
     }
   };
+  executeCommand.assertProgress = () => reporter.check();
+  return executeCommand;
 }

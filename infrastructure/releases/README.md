@@ -27,6 +27,38 @@ Local and CI execution use the same gates. The publisher obtains `release-inputs
 
 `manifest.json` points to the sealed release inputs and qualification evidence. File SHA-256 values identify exact bytes, including generated catalog bytes; the signed app also retains its existing canonical catalog digest. Publication copies those assets without regenerating notes or modifying the app.
 
+## Recover a retained creation
+
+Creation checkpoints live privately under `/opt/situate/release-checkpoints`, outside public release routes. They retain the original sealed plan/configuration, build manifest, generated inputs, packages, signatures and predecessor assets. Runtime recovery records retain their original authorization and inspection; a completed recovery qualification also retains its exact receipt bytes. Checkpoint acknowledgements precede stage completion and claim release. Reservations and notarization journals are never replaced by restored local files.
+
+Use **Release recovery** on protected `main` for an existing creation operation:
+
+1. **inspect** reports checkpoint IDs and a confirmation digest without rebuilding or changing the operation.
+2. **qualify** takes a build checkpoint ID and that digest. It restores the original bytes, verifies a disposable macOS account and current routing/feed/predecessor facts, and authorizes a separate native qualification attempt. The original configuration and manifest remain unchanged.
+3. Inspect again before **continue**. Select the passed recovery-qualification checkpoint and the new confirmation digest. Continuation restores its retained receipt and original build on the new runner, then completes the original GitHub Release without building, signing, notarizing or qualifying again. Website promotion remains a separate **Publish macOS** dispatch using the returned release ID.
+
+The protected `release-recovery` environment needs `WEBSITE_DEPLOY_HOST` and the two SSH-content secrets listed above. Inspection and qualification receive read-only GitHub access; only continuation receives release-write access. Qualification workers receive neither SSH nor GitHub credentials. This workflow cannot abandon an operation or reconcile an uncertain publication.
+
+For the same script-owned operations from the CLI, bootstrap the original metadata into a new private directory and inspect first. Output destinations must be fresh absolute paths with an existing private parent:
+
+```sh
+node tools/release-checkpoint-cli.mjs bootstrap --operation "$OPERATION_ID" --destination "$WEBSITE_DEPLOY_HOST" --output "$RECOVERY_ROOT/original"
+node tools/pipeline.mjs inspect --plan "$RECOVERY_ROOT/original/plan.json" --operation "$OPERATION_ID"
+node tools/pipeline.mjs restore --plan "$RECOVERY_ROOT/original/plan.json" --operation "$OPERATION_ID" --checkpoint "$BUILD_CHECKPOINT_ID" --restore-directory "$RECOVERY_ROOT/candidate" --confirm "$INSPECTION_DIGEST"
+node tools/release-checkpoint-qualify.mjs --restore-authorization "$RESTORE_AUTHORIZATION_FILE" --prepare-runtime
+```
+
+`restore` returns the private restoration-authorization filename. Automatic runtime preparation requires a trusted disposable hosted runner or the explicitly configured disposable local account; it refuses personal accounts, retained app data, a running original hosted attempt, changed baselines and unresolved listener ownership. A separately prepared `--runtime-authorization FILE` can replace `--prepare-runtime`. Neither option authorizes rebuilding or changing the reserved source/version.
+
+After a passed recovery qualification, a different runner can bootstrap and inspect again, then restore that passed checkpoint and continue:
+
+```sh
+node tools/release-checkpoint-restore-qualified.mjs --plan "$RECOVERY_ROOT/original/plan.json" --checkpoint "$PASSED_CHECKPOINT_ID" --destination "$RECOVERY_ROOT/qualified" --inspection ".release-operations/$OPERATION_ID/inspection.json" --confirm "$INSPECTION_DIGEST"
+node tools/release-checkpoint-continue.mjs --restored-directory "$RECOVERY_ROOT/qualified" --publication-inspection ".release-operations/$OPERATION_ID/inspection.json" --confirm "$INSPECTION_DIGEST"
+```
+
+The new directory mapping does not rewrite paths inside the original authorization. Restore validates every file before atomically committing the destination without replacement. Interrupted transfers retain an explicitly incomplete sibling directory, not a completed destination. Missing original checkpoints, incomplete attempt records or unknown external outcomes block recovery; retained packages or notarization acceptance alone are insufficient. Do not reconstruct missing original plans or remove claims to force another attempt.
+
 ## Migration history
 
 Direct macOS builds automatically read publication history over verified SSH using the same destination settings as publication. Each immutable `releases/<version>/manifest.json` supplies its exact source commit; the current download pointer is not the history authority. The local checker reads the [published migration checkpoint](../../docs/development/release-preparation.md#published-migration-checkpoint) from the publication tool checkout's committed `HEAD`, resolved once independently of the artifact revision. The checkpoint pins an exact version, source revision and stored-manifest digest. Under the shared host lock, the history response projects qualification fields from the same immutable manifest bytes used to compute that digest. Every attested predecessor must remain present with its exact three-field tuple; only those predecessors can omit local Git objects. The checkpoint's migration count must match its source inventory. The checkpoint and all uncovered releases require local Git objects and ancestry against the candidate. Published migration files must remain byte-identical, including comments and formatting, and registry/module entries must preserve their published prefixes. New migrations may be appended. The build manifest and signed build configuration retain the comparison records.

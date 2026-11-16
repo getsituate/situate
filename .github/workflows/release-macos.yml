@@ -7,15 +7,13 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: release-macos
-  cancel-in-progress: false
-
 jobs:
   plan:
     if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    environment: macos-release
     outputs:
+      enabled: ${{ steps.selection.outputs.enabled }}
       plan: ${{ steps.plan.outputs.plan }}
       digest: ${{ steps.plan.outputs.digest }}
       app_impact: ${{ steps.plan.outputs.app_impact }}
@@ -25,14 +23,20 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - id: selection
+        run: node tools/actions-adapter.mjs release-selection --workflow create
+        env:
+          PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_RELEASE_ENABLED }}
       - id: plan
+        if: steps.selection.outputs.enabled == 'true'
         run: python3 tools/pipeline-container.py actions plan --workflow create
         env:
           GH_TOKEN: ${{ github.token }}
 
   policy:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'policy')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'policy')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -51,7 +55,7 @@ jobs:
 
   tooling:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'tooling')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -70,7 +74,7 @@ jobs:
 
   tooling-macos:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'tooling-macos')
     runs-on: macos-latest
     timeout-minutes: 120
     outputs:
@@ -91,7 +95,7 @@ jobs:
 
   docker-integration:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'docker-integration')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'docker-integration')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -112,11 +116,16 @@ jobs:
 
   frontend:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'frontend')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'frontend')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
     outputs:
-      receipt: ${{ steps.lane.outputs.receipt }}
+      receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
+      evidence: ${{ steps.lane.outputs.evidence }}
     env:
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
@@ -126,16 +135,26 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - id: reuse
+        run: python3 tools/pipeline-container.py actions source-reuse --workflow create --lane frontend
+        env:
+          GH_TOKEN: ${{ github.token }}
       - id: lane
+        if: steps.reuse.outputs.reused != 'true'
         run: python3 tools/pipeline-container.py actions lane --workflow create --lane frontend
 
   rust:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'rust')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'rust')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
     outputs:
-      receipt: ${{ steps.lane.outputs.receipt }}
+      receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
+      evidence: ${{ steps.lane.outputs.evidence }}
     env:
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
@@ -145,16 +164,26 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - id: reuse
+        run: python3 tools/pipeline-container.py actions source-reuse --workflow create --lane rust
+        env:
+          GH_TOKEN: ${{ github.token }}
       - id: lane
+        if: steps.reuse.outputs.reused != 'true'
         run: python3 tools/pipeline-container.py actions lane --workflow create --lane rust
 
   macos-code:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'macos-code')
     runs-on: macos-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
     outputs:
-      receipt: ${{ steps.lane.outputs.receipt }}
+      receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
+      evidence: ${{ steps.lane.outputs.evidence }}
     env:
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
@@ -165,17 +194,29 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-code
+      - run: node tools/actions-adapter.mjs prepare-release-toolchain
+      - id: reuse
+        run: node tools/actions-adapter.mjs source-reuse --workflow create --lane macos-code
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - if: steps.reuse.outputs.reused != 'true'
+        run: node tools/actions-adapter.mjs setup --workflow create --lane macos-code
       - id: lane
+        if: steps.reuse.outputs.reused != 'true'
         run: node tools/actions-adapter.mjs lane --workflow create --lane macos-code
 
   browser:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'browser')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'browser')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
     outputs:
-      receipt: ${{ steps.lane.outputs.receipt }}
+      receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
+      evidence: ${{ steps.lane.outputs.evidence }}
     env:
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
@@ -185,16 +226,26 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - id: reuse
+        run: python3 tools/pipeline-container.py actions source-reuse --workflow create --lane browser
+        env:
+          GH_TOKEN: ${{ github.token }}
       - id: lane
+        if: steps.reuse.outputs.reused != 'true'
         run: python3 tools/pipeline-container.py actions lane --workflow create --lane browser
 
   macos-native:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native')
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'macos-native')
     runs-on: macos-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
     outputs:
-      receipt: ${{ steps.lane.outputs.receipt }}
+      receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
+      evidence: ${{ steps.lane.outputs.evidence }}
     env:
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
@@ -205,9 +256,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-adapter.mjs desktop
-      - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-native
+      - run: node tools/actions-adapter.mjs prepare-release-toolchain
+      - id: reuse
+        run: node tools/actions-adapter.mjs source-reuse --workflow create --lane macos-native
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - if: steps.reuse.outputs.reused != 'true'
+        run: node tools/actions-adapter.mjs desktop
+      - if: steps.reuse.outputs.reused != 'true'
+        run: node tools/actions-adapter.mjs setup --workflow create --lane macos-native
       - id: lane
+        if: steps.reuse.outputs.reused != 'true'
         run: node tools/actions-adapter.mjs lane --workflow create --lane macos-native
 
   required:
@@ -225,7 +284,7 @@ jobs:
         browser,
         macos-native,
       ]
-    if: always()
+    if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -237,7 +296,7 @@ jobs:
         env:
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ toJSON(needs) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native)) }}
 
   create:
     name: Create GitHub Release
@@ -256,7 +315,10 @@ jobs:
         macos-native,
       ]
     # Implicit success() rejects skipped lanes; the aggregate verifies selected receipts.
-    if: ${{ !cancelled() && needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
+    if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' && needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
+    concurrency:
+      group: situate-release-effects
+      cancel-in-progress: false
     runs-on: macos-latest
     environment: macos-release
     timeout-minutes: 180
@@ -282,14 +344,35 @@ jobs:
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ toJSON(needs) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native)) }}
+      - run: node tools/actions-adapter.mjs prepare-release-toolchain
+      - id: cache_tool
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs prepare
+      - id: cache_plan
+        if: steps.cache_tool.outcome == 'success'
+        run: node tools/release-build-cache.mjs plan
+      - id: cache_restore
+        if: steps.cache_plan.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ steps.cache_plan.outputs.paths }}
+          key: ${{ steps.cache_plan.outputs.key }}
+          restore-keys: ${{ steps.cache_plan.outputs.restore-key }}
       - run: node tools/actions-adapter.mjs prepare-release
       - run: node tools/actions-adapter.mjs create-stage --stage inputs
         env:
+          PIPELINE_REQUIRE_LATEST_MAIN: "true"
           GH_TOKEN: ${{ github.token }}
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
-      - run: node tools/actions-adapter.mjs create-stage --stage build
+      - id: cache_start
+        if: steps.cache_plan.outputs.enabled == 'true'
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs start
+      - id: build
+        run: node tools/actions-adapter.mjs create-stage --stage build
         env:
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
@@ -304,6 +387,16 @@ jobs:
           SITUATE_UPDATER_ENDPOINT: ${{ vars.SITUATE_UPDATER_ENDPOINT }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - id: cache_report
+        if: always() && steps.cache_plan.outputs.enabled == 'true' && steps.cache_start.outcome == 'success'
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs report
+      - if: always() && steps.build.outcome == 'success' && steps.cache_report.outputs.flushed == 'true' && steps.cache_restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ steps.cache_plan.outputs.paths }}
+          key: ${{ steps.cache_plan.outputs.key }}
       - run: node tools/actions-adapter.mjs create-stage --stage qualify
         env:
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}

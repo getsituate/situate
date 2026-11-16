@@ -4,7 +4,11 @@ import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { verifyReleaseInputs } from "./release-inputs.mjs";
-import { qualificationPhase } from "./qualification-progress.mjs";
+import {
+  qualificationPhase,
+  qualificationProgressReporter,
+} from "./qualification-progress.mjs";
+import { validateSourceVerification } from "./source-verification.mjs";
 import { createQualificationProcess } from "../client/scripts/final-artifact-process.mjs";
 import { verifyUpdaterSignature } from "../client/scripts/updater-signing.mjs";
 import { verifyDirectPayloads } from "../client/scripts/direct-release-verification.mjs";
@@ -129,7 +133,7 @@ export function verifySourceEvidence(
 ) {
   const verification = manifest.sourceVerification;
   assert(
-    verification?.schemaVersion === 1 &&
+    [1, 2].includes(verification?.schemaVersion) &&
       verification.status === "passed" &&
       verification.source === manifest.revision &&
       verification.releaseInputsSha256 === manifest.releaseInputs?.sha256 &&
@@ -152,6 +156,10 @@ export function verifySourceEvidence(
       ),
     "Source verification contains missing or unsuccessful gates",
   );
+  validateSourceVerification(verification, {
+    source: manifest.revision,
+    releaseInputsSha256: manifest.releaseInputs?.sha256,
+  });
   const compatibility = manifest.publicCompatibility;
   assert(
     compatibility?.schemaVersion === 1 &&
@@ -193,6 +201,11 @@ export function verifyQualificationReceipt(directory, manifest, receipt) {
       receipt.releaseInputsSha256 === manifest.releaseInputs.sha256 &&
       isDeepStrictEqual(receipt.artifact, artifactIdentity(artifact)),
     "Qualification receipt does not bind final package inputs",
+  );
+  assert(
+    receipt.runtimeAuthorizationDigest === undefined ||
+      sha.test(receipt.runtimeAuthorizationDigest),
+    "Invalid qualification runtime authorization identity",
   );
   for (const name of [
     "payloadEquality",
@@ -236,35 +249,59 @@ export async function qualifyRelease({
   env,
   signal,
   progress = () => {},
+  runtimeAuthorizationDigest,
+  verifyPayloads = verifyDirectPayloads,
 }) {
+  assert(
+    runtimeAuthorizationDigest === undefined ||
+      sha.test(runtimeAuthorizationDigest),
+    "Invalid qualification runtime authorization digest",
+  );
   let phase = "candidate_payload";
+  const reporter = qualificationProgressReporter(progress);
   const report = (name, ...args) => {
     phase = name;
-    progress(name, ...args);
+    reporter.emit(name, ...args);
   };
-  execute ??= createQualificationProcess({ progress, getPhase: () => phase });
-  const artifact = await qualificationPhase(
-    report,
-    "candidate_payload",
-    async () => {
-      const artifact = verifyPackages(directory, manifest);
-      assert(
-        qualificationHost &&
-          [
-            "prepare",
-            "install",
-            "journeys",
-            "update",
-            "inspect",
-            "cleanup",
-          ].every((name) => typeof qualificationHost[name] === "function"),
-        "Blocked: provisioned isolated production-HTTPS routing and an exact-artifact native install/update journey driver are required",
-      );
-      await verifyDirectPayloads(directory, artifact, { execute, env, signal });
-      return artifact;
-    },
-    signal,
-  );
+  execute ??= createQualificationProcess({
+    progress: reporter.emit,
+    getPhase: () => phase,
+  });
+  const checkProgress = (failure, secondary = []) => {
+    try {
+      execute.assertProgress?.();
+    } catch (error) {
+      secondary.push(error);
+    }
+    reporter.check(failure, secondary);
+  };
+  let artifact;
+  try {
+    artifact = await qualificationPhase(
+      report,
+      "candidate_payload",
+      async () => {
+        const artifact = verifyPackages(directory, manifest);
+        assert(
+          qualificationHost &&
+            [
+              "prepare",
+              "install",
+              "journeys",
+              "update",
+              "inspect",
+              "cleanup",
+            ].every((name) => typeof qualificationHost[name] === "function"),
+          "Blocked: provisioned isolated production-HTTPS routing and an exact-artifact native install/update journey driver are required",
+        );
+        await verifyPayloads(directory, artifact, { execute, env, signal });
+        return artifact;
+      },
+      signal,
+    );
+  } catch (error) {
+    checkProgress(error);
+  }
   const callHost = (name, options) =>
     qualificationPhase(
       report,
@@ -274,6 +311,8 @@ export async function qualifyRelease({
     );
   let session;
   let failure;
+  let cleanupFailure;
+  let result;
   try {
     session = await callHost("prepare", { directory, manifest, signal });
     assert(
@@ -344,6 +383,7 @@ export async function qualifyRelease({
     const receipt = {
       schemaVersion: 1,
       kind: "macos-direct-exact-artifact",
+      ...(runtimeAuthorizationDigest ? { runtimeAuthorizationDigest } : {}),
       sourceRevision: manifest.revision,
       version: manifest.version,
       releaseInputsSha256: manifest.releaseInputs.sha256,
@@ -364,24 +404,19 @@ export async function qualifyRelease({
       ],
     };
     verifyQualificationReceipt(directory, manifest, receipt);
-    return receipt;
+    result = receipt;
   } catch (error) {
     failure = error;
     report(phase, signal?.aborted ? "cancelled" : "failed");
-    throw error;
   } finally {
     try {
       await callHost("cleanup", { session, signal: undefined });
-    } catch (cleanupError) {
-      if (failure)
-        throw new AggregateError(
-          [failure, cleanupError],
-          "Qualification and cleanup failed",
-          { cause: failure },
-        );
-      throw cleanupError;
+    } catch (error) {
+      cleanupFailure = error;
     }
   }
+  checkProgress(failure, cleanupFailure ? [cleanupFailure] : []);
+  return result;
 }
 
 export async function writeQualificationReceipt(options) {

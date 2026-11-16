@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { validateSourceVerificationReuse } from "./source-verification-evidence.mjs";
 
 export function digest(value) {
   const canonical = (entry) =>
@@ -122,6 +123,19 @@ export function aggregateReceipts(plan, receipts) {
       "Unexpected or duplicate lane receipt",
     );
     received.add(lane.id);
+    if (receipt.kind === "source-verification-reuse")
+      validateSourceVerificationReuse(plan, receipt);
+    else
+      assert(
+        receipt.kind === undefined &&
+          receipt.coverage === undefined &&
+          receipt.reuse === undefined &&
+          receipt.results?.every(
+            (result) =>
+              result.coverage === undefined && result.testedSHA === undefined,
+          ),
+        "Unexpected lane receipt coverage",
+      );
     assert.equal(receipt.schemaVersion, 1, "Unsupported lane receipt");
     assert.equal(
       receipt.planDigest,

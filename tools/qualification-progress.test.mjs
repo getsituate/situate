@@ -18,6 +18,7 @@ import {
   observeQualificationProgress,
   validateQualificationProgress,
   qualificationPhase,
+  qualificationProgressReporter,
 } from "./qualification-progress.mjs";
 
 function fixture(t) {
@@ -27,6 +28,35 @@ function fixture(t) {
   createQualificationProgressFile(path);
   return path;
 }
+
+test("progress failures do not skip cleanup or replace its primary failure", async () => {
+  const reporting = new Error("Synthetic reporting failure");
+  const primary = new Error("Synthetic native failure");
+  let cleanup = 0;
+  await assert.rejects(
+    qualificationPhase(
+      () => {
+        throw reporting;
+      },
+      "cleanup",
+      async () => {
+        cleanup++;
+        throw primary;
+      },
+    ),
+    (error) => error.cause === primary && error.errors.includes(reporting),
+  );
+  assert.equal(cleanup, 1);
+  const reporter = qualificationProgressReporter(() => {
+    throw reporting;
+  });
+  reporter.emit("cleanup", "started");
+  reporter.emit("cleanup", "completed");
+  assert.throws(
+    () => reporter.check(primary),
+    (error) => error.cause === primary && error.errors.length === 2,
+  );
+});
 
 test("private live progress distinguishes waiting, acquisition, native timeout and cleanup", async (t) => {
   const path = fixture(t);

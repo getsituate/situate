@@ -666,6 +666,12 @@ export async function selectActionsSourceEvidence(
   try {
     controller(environment);
     assert(
+      environment.CI === "true" &&
+        environment.GITHUB_ACTIONS === "true" &&
+        environment.RUNNER_ENVIRONMENT === "github-hosted",
+      "Source reuse requires the allocated hosted runner",
+    );
+    assert(
       environment.GITHUB_EVENT_NAME === "push" &&
         environment.GITHUB_REF === "refs/heads/main",
     );

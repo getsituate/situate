@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, lstatSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { runCoordinated } from "./run-coordinated.mjs";
 import { qualificationProgressWriter } from "./qualification-progress.mjs";
@@ -17,6 +17,8 @@ export async function qualifyFinalArtifacts({
   configurationSha256,
   signal,
   progress = () => {},
+  runtimeAuthorization,
+  runtimeAuthorizationSha256,
   environment = process.env,
   createHost = createFinalArtifactQualificationHost,
   writeReceipt = writeQualificationReceipt,
@@ -42,6 +44,27 @@ export async function qualifyFinalArtifacts({
   } catch {
     throw new Error("Qualification configuration is not valid JSON");
   }
+  let qualification = parsed.qualification;
+  let runtimeAuthorizationDigest;
+  if (runtimeAuthorization || runtimeAuthorizationSha256) {
+    assert(
+      runtimeAuthorization && runtimeAuthorizationSha256,
+      "Qualification recovery requires pinned runtime authorization",
+    );
+    const { readQualificationRuntimeEnvelope } =
+      await import("./qualification-runtime-envelope.mjs");
+    const recovered = await readQualificationRuntimeEnvelope(
+      runtimeAuthorization,
+      runtimeAuthorizationSha256,
+      {
+        configuration: parsed,
+        configurationBytes: bytes,
+        manifestBytes: readFileSync(join(directory, "manifest.json")),
+      },
+    );
+    qualification = recovered.qualificationRuntime.qualification;
+    runtimeAuthorizationDigest = recovered.runtimeAuthorizationDigest;
+  }
   const safeEnvironment = qualificationEnvironment(environment);
   let phase = "candidate_payload";
   const report = (name, status, command = "none", elapsedMs) => {
@@ -52,7 +75,7 @@ export async function qualifyFinalArtifacts({
     progress: report,
     getPhase: () => phase,
   });
-  const host = createHost(parsed.qualification, {
+  const host = createHost(qualification, {
     environment: safeEnvironment,
     signal,
     execute,
@@ -64,6 +87,7 @@ export async function qualifyFinalArtifacts({
     execute,
     env: safeEnvironment,
     progress: report,
+    ...(runtimeAuthorizationDigest ? { runtimeAuthorizationDigest } : {}),
   });
 }
 
@@ -77,6 +101,8 @@ if (
       configuration: { type: "string" },
       "configuration-sha256": { type: "string" },
       "progress-file": { type: "string" },
+      "runtime-authorization": { type: "string" },
+      "runtime-authorization-sha256": { type: "string" },
     },
   });
   const progress = values["progress-file"]
@@ -120,6 +146,8 @@ if (
         directory: resolve(values.directory),
         configuration: resolve(values.configuration),
         configurationSha256: values["configuration-sha256"],
+        runtimeAuthorization: values["runtime-authorization"],
+        runtimeAuthorizationSha256: values["runtime-authorization-sha256"],
         signal: abort.signal,
         progress,
       });

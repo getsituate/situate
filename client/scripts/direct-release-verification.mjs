@@ -91,6 +91,7 @@ export async function verifyDirectPayloads(
   let attached = false;
   let mountUncertain = false;
   let failure;
+  let cleanupFailure;
   try {
     await execute(
       "python3",
@@ -223,7 +224,6 @@ export async function verifyDirectPayloads(
   } catch (error) {
     failure = error;
     if (mountUncertain && !attached) error.uncertain = true;
-    throw error;
   } finally {
     if (attached) {
       try {
@@ -232,20 +232,22 @@ export async function verifyDirectPayloads(
           signal: undefined,
         });
         mountUncertain = false;
-      } catch (cleanupError) {
-        cleanupError.uncertain = true;
-        if (failure) {
-          const error = new AggregateError(
-            [failure, cleanupError],
-            "Direct payload verification and mount cleanup failed",
-            { cause: failure },
-          );
-          error.uncertain = true;
-          throw error;
-        }
-        throw cleanupError;
+      } catch (error) {
+        error.uncertain = true;
+        cleanupFailure = error;
       }
     }
     if (!mountUncertain) rmSync(temporary, { recursive: true, force: true });
   }
+  if (failure && cleanupFailure) {
+    const error = new AggregateError(
+      [failure, cleanupFailure],
+      "Direct payload verification and mount cleanup failed",
+      { cause: failure },
+    );
+    error.uncertain = true;
+    throw error;
+  }
+  if (failure) throw failure;
+  if (cleanupFailure) throw cleanupFailure;
 }

@@ -10,7 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonical, catalogDigest } from "./release-catalog.mjs";
 import { digest, sealPlan } from "./pipeline-state.mjs";
-import { createCheckpoint, checkpointIdentity } from "./release-checkpoint.mjs";
+import {
+  createCheckpoint,
+  checkpointIdentity,
+  createRestoreDirectory,
+  writeRestoredFile,
+} from "./release-checkpoint.mjs";
 
 export function checkpointFixture(t) {
   const root = realpathSync(
@@ -60,11 +65,17 @@ export function checkpointFixture(t) {
         {
           platform: "macos",
           architecture: "universal",
+          identifier: "com.getsituate.app",
+          buildConfiguration: {
+            endpoint: "https://getsituate.com/releases/current/update.json",
+            publicKey: "synthetic-public-key",
+          },
           notarized: true,
           path: "Situate.dmg",
           sha256: digest("dmg"),
           updater: {
             path: "Situate.app.tar.gz",
+            signature: "synthetic-signature",
             sha256: digest("archive"),
             signaturePath: "Situate.app.tar.gz.sig",
             signatureSha256: digest("signature"),
@@ -233,4 +244,30 @@ export function runtimeFixture(t) {
     inspectionDigest: inspection.reconciliationDigest,
   };
   return { ...f, runtime, inspection, manifestBytes, recoveryAuthorization };
+}
+
+export function restoredRuntimeFixture(t) {
+  const f = runtimeFixture(t);
+  const checkpoint = createCheckpoint({ kind: "build", ...f });
+  const directory = join(f.root, "restored");
+  createRestoreDirectory(directory);
+  for (let index = 0; index < checkpoint.files.length; index++) {
+    const file = checkpoint.files[index];
+    writeRestoredFile(
+      directory,
+      f.recoveryAuthorization.descriptor.files[index],
+      file.bytes ?? readFileSync(file.file),
+    );
+  }
+  f.recoveryAuthorization.directory = directory;
+  return {
+    ...f,
+    directory,
+    record: {
+      bytes: f.configurationBytes,
+      file: join(directory, "configuration.json"),
+      sha256: f.plan.configurationDigest,
+      configuration: f.configuration,
+    },
+  };
 }

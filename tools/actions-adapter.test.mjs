@@ -420,7 +420,7 @@ test("merge-group planning sends actual declaration heads separately from integr
   assert.equal(result.source, source);
 });
 
-test("merge-group source mismatches fail before membership lookup and its token stays in planning", () => {
+test("merge-group source mismatches fail before lookup and test workers receive no token", () => {
   for (const group of [
     { head_sha: "f".repeat(40), base_ref: "refs/heads/main", base_sha: base },
     { head_sha: source, base_ref: "refs/heads/other", base_sha: base },
@@ -444,7 +444,7 @@ test("merge-group source mismatches fail before membership lookup and its token 
       "GH_TOKEN: ${{ github.event_name == 'merge_group' && github.token || '' }}",
     ),
   );
-  assert.doesNotMatch(lanes, /GH_TOKEN|secrets\./);
+  assert.doesNotMatch(lanes.split("\n  required:")[0], /GH_TOKEN|secrets\./);
 });
 
 test("matrices contain only fixed lane IDs; unknown hosts and duplicate suites fail", () => {
@@ -495,6 +495,10 @@ test("adapter subprocess transports plan-bound receipts and reports planner fail
   const directory = mkdtempSync(join(tmpdir(), "situate-adapter-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, "tools"));
+  writeFileSync(
+    join(directory, "tools/actions-receipts.mjs"),
+    readFileSync(new URL("./actions-receipts.mjs", import.meta.url)),
+  );
   writeFileSync(
     join(directory, "tools/actions-adapter.mjs"),
     readFileSync(new URL("./actions-adapter.mjs", import.meta.url)),
@@ -553,7 +557,12 @@ test("adapter subprocess transports plan-bound receipts and reports planner fail
         ...statuses(),
         policy: {
           result: "success",
-          outputs: { receipt: JSON.stringify(actualReceipt) },
+          outputs: {
+            receipt: readFileSync(output, "utf8")
+              .split("\n")
+              .find((line) => line.startsWith("receipt="))
+              .slice("receipt=".length),
+          },
         },
       });
     const result = spawnSync(
@@ -707,6 +716,55 @@ test("qualification route diagnostics authorize trusted hosted dispatch before f
   assert.equal(calls.length, 1);
 });
 
+test("paused main release selection stops before planning or dependencies without claiming verification", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-release-selection-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const env = {
+    GITHUB_REPOSITORY: "getsituate/situate",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_EVENT_NAME: "push",
+    GITHUB_REF_PROTECTED: "true",
+    GITHUB_WORKFLOW_REF:
+      "getsituate/situate/.github/workflows/release-macos.yml@refs/heads/main",
+    GITHUB_OUTPUT: join(directory, "output"),
+    PIPELINE_RELEASE_ENABLED: "false",
+  };
+  const execute = () =>
+    assert.fail("Selection must not run planning, dependencies or effects");
+  assert.deepEqual(
+    await main(["release-selection", "--workflow", "create"], env, execute),
+    { enabled: false, reason: "paused" },
+  );
+  assert.equal(readFileSync(env.GITHUB_OUTPUT, "utf8"), "enabled=false\n");
+  assert.deepEqual(
+    await main(
+      ["release-selection", "--workflow", "create"],
+      { ...env, PIPELINE_RELEASE_ENABLED: "true" },
+      execute,
+    ),
+    { enabled: true, reason: "enabled" },
+  );
+  for (const changed of [
+    { GITHUB_REPOSITORY: "other/repository" },
+    { GITHUB_REF: "refs/heads/feature" },
+    { GITHUB_EVENT_NAME: "pull_request" },
+    { GITHUB_REF_PROTECTED: "false" },
+    {
+      GITHUB_WORKFLOW_REF:
+        "other/repository/.github/workflows/release-macos.yml@refs/heads/main",
+    },
+    { PIPELINE_RELEASE_ENABLED: "" },
+  ])
+    await assert.rejects(
+      main(
+        ["release-selection", "--workflow", "create"],
+        { ...env, ...changed },
+        execute,
+      ),
+      /protected main|explicit release automation/,
+    );
+});
+
 test("unprovisioned remote operations and paid diagnostics fail visibly before executing commands", async () => {
   const execute = () => {
     throw new Error("Unexpected external command");
@@ -731,7 +789,7 @@ test("unprovisioned remote operations and paid diagnostics fail visibly before e
   );
 });
 
-test("recovery inspects only an exact operation and rejects reconciliation without provisioning", async () => {
+test("legacy publication inspection is read-only and reconciliation requires the local journal", async () => {
   const env = {
     ...environment,
     GITHUB_EVENT_NAME: "workflow_dispatch",
@@ -750,7 +808,7 @@ test("recovery inspects only an exact operation and rejects reconciliation witho
   ]);
   await assert.rejects(
     main(["recovery"], { ...env, RECOVERY_ACTION: "reconcile" }),
-    /disabled pending/,
+    /local pipeline CLI with the original operation journal/,
   );
   await assert.rejects(
     main(["recovery"], { ...env, RECOVERY_OPERATION: "../other" }),

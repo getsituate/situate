@@ -52,6 +52,7 @@ import {
 import { verifyReleaseInputs } from "../../tools/release-inputs.mjs";
 import { qualifyPublishedMigrations } from "../../tools/published-migrations.mjs";
 import { releaseCompilerCacheEnvironment } from "../../tools/release-build-cache.mjs";
+import { validateSourceVerification } from "../../tools/source-verification.mjs";
 import { canonical } from "../../tools/release-catalog.mjs";
 import { assertNoDictationTtsResources } from "./dictation-resources.mjs";
 
@@ -1110,45 +1111,14 @@ async function buildResolvedAppleRelease({
     }
     if (sourceVerification !== undefined) {
       const verification = sourceVerification;
-      const lanes = verification?.lanes;
-      if (
-        !isDeepStrictEqual(Object.keys(verification ?? {}).sort(), [
-          "lanes",
-          "planDigest",
-          "results",
-          "schemaVersion",
-          "source",
-          "status",
-        ]) ||
-        verification.schemaVersion !== 1 ||
-        verification.status !== "passed" ||
-        verification.source !== manifest.revision ||
-        !/^[a-f0-9]{64}$/.test(verification.planDigest) ||
-        !Array.isArray(lanes) ||
-        !lanes.length ||
-        lanes.some(
-          (id) => typeof id !== "string" || !/^[a-z][a-z0-9-]{0,127}$/.test(id),
-        ) ||
-        new Set(lanes).size !== lanes.length ||
-        !Array.isArray(verification.results) ||
-        !isDeepStrictEqual(
-          verification.results.map((result) => result?.id).sort(),
-          [...lanes].sort(),
-        ) ||
-        verification.results.some(
-          (result) =>
-            !isDeepStrictEqual(Object.keys(result ?? {}).sort(), [
-              "exitCode",
-              "id",
-              "status",
-            ]) ||
-            result.status !== "passed" ||
-            result.exitCode !== 0,
-        )
-      )
+      try {
+        validateSourceVerification(verification, { source: manifest.revision });
+      } catch (cause) {
         throw new Error(
           "Source verification must contain successful sanitized results for every selected lane at the clean release source.",
+          { cause },
         );
+      }
       manifest.sourceVerification = {
         ...structuredClone(verification),
         releaseInputsSha256: manifest.releaseInputs.sha256,

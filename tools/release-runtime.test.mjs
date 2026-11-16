@@ -77,6 +77,7 @@ function fixture(t) {
   const calls = [];
   const facts = {
     operationId: "actions-42-1",
+    operationNonce: "actions-42-1",
     status: "prepared",
     identityPath: "/releases/.qualification/synthetic/identity.json",
     identitySha256: "a".repeat(64),
@@ -461,9 +462,9 @@ test("live progress survives worker capture and cancellation without private out
       emit("desktop", "acquired");
       emit("journeys", "started");
       emit("journeys", "started", "accessibility");
-      await new Promise((resolve) =>
-        signal.addEventListener("abort", resolve, { once: true }),
-      );
+      await new Promise((resolve) => {
+        signal.addEventListener("abort", resolve, { once: true });
+      });
       emit("journeys", "cancelled", "accessibility");
       emit("cleanup", "started");
       emit("cleanup", "completed");

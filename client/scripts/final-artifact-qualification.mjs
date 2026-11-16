@@ -408,6 +408,28 @@ export function accessibilityScript(pid, action) {
   return `${prefix}${selectWindow}set matches to {}\nrepeat with elementRef in ${contents}\ntry\nif role of elementRef is ${quote(target.role)} and (name of elementRef is ${quote(target.name)} or description of elementRef is ${quote(target.name)}) then set end of matches to elementRef\nend try\nend repeat\nif count of matches is not 1 then error "Accessibility target must be unique"\n${target.role === "AXButton" ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
 }
 
+export async function checkAccessibilityAction(
+  pid,
+  action,
+  { execute, options },
+) {
+  try {
+    await execute(
+      "osascript",
+      ["-e", accessibilityScript(pid, action)],
+      options,
+    );
+    return true;
+  } catch (error) {
+    if (
+      ["timeout", "cancelled"].includes(error.qualificationStatus) ||
+      (!action.assert && action.windows === undefined)
+    )
+      throw error;
+    return false;
+  }
+}
+
 export function createFinalArtifactQualificationHost(
   configuration,
   {
@@ -592,23 +614,10 @@ export function createFinalArtifactQualificationHost(
           .replaceAll("{{fixture.baseUrl}}", provider.baseUrl)
           .replaceAll("{{fixture.token}}", provider.token)
           .replaceAll("{{fixture.model}}", PINNED_AGENT_MODEL);
-      await waitFor(async () => {
-        try {
-          await execute(
-            "osascript",
-            ["-e", accessibilityScript(pid, action)],
-            options,
-          );
-          return true;
-        } catch (error) {
-          if (
-            error.qualificationStatus ||
-            (!action.assert && action.windows === undefined)
-          )
-            throw error;
-          return false;
-        }
-      }, "accessibility assertion");
+      await waitFor(
+        () => checkAccessibilityAction(pid, action, { execute, options }),
+        "accessibility assertion",
+      );
     }
   }
   function retainedFiles() {
