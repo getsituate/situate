@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { aggregateReceipts, sealPlan } from "./pipeline-state.mjs";
+import { planWorkflow, runLane } from "./pipeline.mjs";
+import { executeSuite, root, sourceFiles, suiteInventory } from "./test.mjs";
 import {
   createSourceVerificationEvidence,
   MAX_SOURCE_EVIDENCE_BYTES,
   MAX_SOURCE_EVIDENCE_CANDIDATES,
   selectSourceVerificationEvidence,
+  sanitizeSourceVerificationReceipts,
   validateSourceVerificationEvidence,
 } from "./source-verification-evidence.mjs";
 
@@ -155,6 +158,145 @@ test("same whole tree, real host and contract bind reuse without rebasing origin
   assert.equal(result.evidence.receipts[0].source, testedSHA);
   assert.deepEqual(result.evidence, original.candidates[0].evidence);
   assert.deepEqual(input, original);
+});
+
+test("actual Main create source plans accept reuse without effect authorization", async () => {
+  for (const baseline of [
+    { source: "0".repeat(40), legacy: true },
+    {
+      source: "0".repeat(40),
+      identity: {
+        repository: "getsituate/situate",
+        tag: "v1.0.0",
+        sourceRevision: "0".repeat(40),
+        version: "1.0.0",
+        operationId: "synthetic-release",
+        inputSha256: "2".repeat(64),
+        releaseId: 123,
+      },
+      catalogSha256: "3".repeat(64),
+    },
+  ]) {
+    const input = fixture();
+    const selection = input.plan;
+    input.plan = await planWorkflow(
+      root,
+      "create",
+      { source: mainSHA, base: selection.base },
+      {
+        readBaseline: async () => baseline,
+        createSourcePlan: async () => ({
+          schemaVersion: 1,
+          source: mainSHA,
+          base: selection.base,
+          appImpact: true,
+          lanes: selection.lanes,
+          reasons: [],
+        }),
+      },
+    );
+    assert.equal(input.plan.workflow, "create");
+    assert.deepEqual(input.plan.baseline, baseline);
+    const result = selectSourceVerificationEvidence(input);
+    assert.equal(result.action, "reuse");
+    assert.equal(result.binding.planDigest, input.plan.authorizationDigest);
+    assert.equal(result.evidence.plan.workflow, "verify");
+    for (const patch of [
+      { operation: "synthetic-release" },
+      { destination: "synthetic.invalid" },
+      { verificationPlan: selection },
+      { configurationFile: "synthetic-configuration.json" },
+      { configurationDigest: "4".repeat(64) },
+      { privateConfig: {} },
+    ])
+      execute(
+        { ...input, plan: sealPlan({ ...input.plan, ...patch }) },
+        "unresolved-target",
+      );
+  }
+});
+
+test("real runLane/runPlan result fields survive public receipt sanitization", async () => {
+  const input = fixture();
+  const previous = input.candidates[0].evidence;
+  const raw = await runLane(root, previous.plan, "macos-native", {
+    host: "darwin",
+    assertCheckout: (_root, source) => assert.equal(source, testedSHA),
+    environment: { PATH: process.env.PATH },
+    inventory: suiteInventory(sourceFiles(root), "darwin"),
+    prepare: async () => ({ release() {} }),
+    execute: (suite, options) =>
+      executeSuite(
+        {
+          ...suite,
+          command: process.execPath,
+          args: ["-e", ""],
+          cwd: ".",
+          kind: "unit",
+        },
+        { ...options, buildLease: false },
+      ),
+  });
+  const original = structuredClone(raw);
+  assert.equal(raw.status, "passed", JSON.stringify(raw.results));
+  for (const result of raw.results) {
+    assert.equal(result.project, "client");
+    assert.equal(result.kind, "native");
+    for (const key of [
+      "durationMs",
+      "preparationDurationMs",
+      "resourceQueueWaitMs",
+      "executionDurationMs",
+    ])
+      assert.equal(typeof result[key], "number");
+  }
+  const sanitized = sanitizeSourceVerificationReceipts(previous.plan, [raw]);
+  assert.deepEqual(sanitized, [original]);
+  assert.notEqual(sanitized[0], raw);
+  assert.deepEqual(raw, original);
+  assert.deepEqual(
+    aggregateReceipts(previous.plan, sanitized),
+    previous.aggregate,
+  );
+  input.candidates[0].evidence = createSourceVerificationEvidence({
+    ...previous,
+    receipts: [raw],
+  });
+  assert.equal(selectSourceVerificationEvidence(input).action, "reuse");
+  const receipt =
+    selectSourceVerificationEvidence(input).binding.originalReceipt;
+  assert.equal(receipt.source, testedSHA);
+  assert.equal(receipt.planDigest, previous.plan.authorizationDigest);
+  assert.equal(receipt.status, "passed");
+  for (const patch of [
+    { command: "synthetic-command" },
+    { cwd: "synthetic-directory" },
+    { environment: { TOKEN: "synthetic" } },
+    { stdout: "synthetic output" },
+    { error: "synthetic diagnostic" },
+    { reused: true },
+    { cache: { status: "hit" } },
+    { resourceQueueWaitMs: -1 },
+    { executionDurationMs: "synthetic" },
+    { cleanupIncomplete: true },
+    { status: "failed" },
+  ]) {
+    const unsafe = structuredClone(raw);
+    Object.assign(unsafe.results[0], patch);
+    assert.throws(() =>
+      sanitizeSourceVerificationReceipts(previous.plan, [unsafe]),
+    );
+  }
+  for (const patch of [
+    { source: mainSHA },
+    { planDigest: "0".repeat(64) },
+    { status: "cancelled" },
+    { results: [] },
+    { path: "synthetic-receipt.json" },
+  ])
+    assert.throws(() =>
+      sanitizeSourceVerificationReceipts(previous.plan, [{ ...raw, ...patch }]),
+    );
 });
 
 test("successful superset coverage can satisfy an explicitly selected nonempty subset", () => {

@@ -121,20 +121,22 @@ function contract(value, suites) {
   }
 }
 
+const sourcePlanFields = [
+  "schemaVersion",
+  "workflow",
+  "repository",
+  "source",
+  "base",
+  "appImpact",
+  "lanes",
+  "reasons",
+  "declaration",
+  "authorizationDigest",
+];
+
 function publicPlan(plan) {
   validatePlan(plan);
-  fields(plan, [
-    "schemaVersion",
-    "workflow",
-    "repository",
-    "source",
-    "base",
-    "appImpact",
-    "lanes",
-    "reasons",
-    "declaration",
-    "authorizationDigest",
-  ]);
+  fields(plan, sourcePlanFields);
   assert.equal(plan.workflow, "verify");
   assert.equal(plan.repository, "getsituate/situate");
   assert.equal(typeof plan.appImpact, "boolean");
@@ -205,11 +207,18 @@ function publicReceipt(receipt) {
       "signal",
       "durationMs",
       "preparationDurationMs",
+      "resourceQueueWaitMs",
+      "executionDurationMs",
       "cleanupIncomplete",
     ]);
     for (const key of ["project", "kind"])
       if (result[key] !== undefined) identifier(result[key]);
-    for (const key of ["durationMs", "preparationDurationMs"])
+    for (const key of [
+      "durationMs",
+      "preparationDurationMs",
+      "resourceQueueWaitMs",
+      "executionDurationMs",
+    ])
       if (result[key] !== undefined)
         assert(Number.isFinite(result[key]) && result[key] >= 0);
     assert(result.signal === undefined || result.signal === null);
@@ -279,8 +288,54 @@ export function validateSourceVerificationEvidence(input) {
   return value;
 }
 
+/** Reject non-public payloads rather than silently discarding execution evidence. */
+export function sanitizeSourceVerificationReceipts(plan, receipts) {
+  publicPlan(plan);
+  const sanitized = boundedCopy(receipts);
+  assert(Array.isArray(sanitized));
+  sanitized.forEach(publicReceipt);
+  aggregateReceipts(plan, sanitized);
+  return sanitized;
+}
+
 export function createSourceVerificationEvidence(inputs) {
-  return validateSourceVerificationEvidence({ ...inputs, schemaVersion: 1 });
+  const receipts = sanitizeSourceVerificationReceipts(
+    inputs.plan,
+    inputs.receipts,
+  );
+  return validateSourceVerificationEvidence({
+    ...inputs,
+    receipts,
+    schemaVersion: 1,
+  });
+}
+
+function verificationTargetPlan(plan) {
+  validatePlan(plan);
+  assert(["verify", "create"].includes(plan.workflow));
+  fields(plan, [
+    ...sourcePlanFields,
+    ...(plan.workflow === "create" ? ["baseline"] : []),
+  ]);
+  assert.equal(plan.repository, "getsituate/situate");
+  if (plan.workflow === "create") {
+    fields(plan.baseline, ["source", "legacy", "identity", "catalogSha256"]);
+    assert(sha.test(plan.baseline.source));
+    if (plan.baseline.legacy !== undefined)
+      assert.equal(plan.baseline.legacy, true);
+    if (plan.baseline.catalogSha256 !== undefined)
+      assert(hash.test(plan.baseline.catalogSha256));
+    if (plan.baseline.identity !== undefined)
+      fields(plan.baseline.identity, [
+        "repository",
+        "tag",
+        "sourceRevision",
+        "version",
+        "operationId",
+        "inputSha256",
+        "releaseId",
+      ]);
+  }
 }
 
 /**
@@ -309,9 +364,7 @@ export function selectSourceVerificationEvidence({
     return miss("evidence-limit");
   let lane;
   try {
-    validatePlan(plan);
-    assert.equal(plan.workflow, "verify");
-    assert.equal(plan.repository, "getsituate/situate");
+    verificationTargetPlan(plan);
     lane = plan.lanes.find(({ id }) => id === laneId);
     if (
       !lane ||
