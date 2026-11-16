@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "assign-task-identifiers-on-save",
+  "behaviorDigest": "39fc2358daa06d4b48a6d4414d71d898c9091babc506b662081982984320a384",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "assign-task-identifiers-on-save",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Task identifiers in chat",
+          "paragraphs": [
+            "Task identifiers are now assigned when saving tasks created in chat, including tasks added to existing notes."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "assign-task-identifiers-on-save",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Aufgabenkennungen im Chat",
+          "paragraphs": [
+            "Aufgaben, die im Chat erstellt werden, erhalten ihre Kennung jetzt beim Speichern, auch wenn sie zu bestehenden Notizen hinzugefügt werden."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "26af9e2008e93cf860282f658201f2f6793894a7f5222ae87bbc1fa9b5732598",
+      "translationHash": "bd7ef07b4d27ca22ff39bfe595c209e90b97bd7eea0c33163a8131ed5d386cd3"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "26af9e2008e93cf860282f658201f2f6793894a7f5222ae87bbc1fa9b5732598"
+  }
+}
