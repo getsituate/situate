@@ -152,6 +152,10 @@ test("source attestation binds the exact digest without interpreting an external
   );
   assert.match(required, /subject-name: evidence\.json/);
   assert.doesNotMatch(required, /subject-path:/);
+  assert.match(
+    required,
+    /path: \$\{\{ runner\.temp \}\}\/source-verification-\$\{\{ github\.run_attempt \}\}\/evidence\.json/,
+  );
   assert.ok(
     required.indexOf("source-evidence --workflow") <
       required.indexOf("actions/attest-build-provenance"),
