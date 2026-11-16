@@ -207,19 +207,28 @@ afterEach(() => {
 });
 
 describe("workspace layout rendering", () => {
-  it("disables adding tabs at capacity and shows how to make room", async () => {
+  it("explains the tab limit only after an attempted creation and allows another attempt", async () => {
     let state = fixture(false);
     let next = 0;
     for (let i = 1; i < 20; i++)
       state = reduceLayout(state, { type: "new-tab" }, () => `id-${++next}`);
     const wrapper = render(state);
-    expect(wrapper.get(".new-tab").attributes()).toHaveProperty("disabled");
-    expect(wrapper.get(".layout-limit").text()).toContain("⟦layoutUi.tabLimit");
-    await wrapper.get(".new-tab").trigger("click");
+    expect(wrapper.get(".new-tab").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find(".layout-limit").exists()).toBe(false);
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await wrapper.get(".new-tab").trigger("click");
+      const error = wrapper.get("dialog.error-dialog[open]");
+      expect(error.text()).toContain("⟦layoutUi.tabLimit");
+      expect(error.text()).toContain("20");
+      await error.get("button").trigger("click");
+      expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    }
+    expect(wrapper.props("state").tabs).toHaveLength(20);
     expect(wrapper.emitted("intent")).toBeUndefined();
   });
 
-  it("disables both split controls at six panes and explains the limit", async () => {
+  it("shows a standard error for either rejected split without adding inline messages", async () => {
     let state = fixture(false);
     let next = 0;
     for (let i = 1; i < 6; i++)
@@ -230,12 +239,20 @@ describe("workspace layout rendering", () => {
       );
     const wrapper = render(state);
     await wrapper.findAll(".pane-title")[0]!.trigger("click");
-    expect(wrapper.get(".pane-actions .layout-limit").text()).toContain(
-      "⟦layoutUi.paneLimit",
-    );
+    expect(wrapper.find(".layout-limit").exists()).toBe(false);
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
     for (const key of ["splitRight", "splitBelow"]) {
-      expect(button(wrapper, key).attributes()).toHaveProperty("disabled");
+      expect(button(wrapper, key).attributes("disabled")).toBeUndefined();
       await button(wrapper, key).trigger("click");
+      const error = wrapper.get("dialog.error-dialog[open]");
+      expect(error.text()).toContain("⟦layoutUi.paneLimit");
+      expect(error.text()).toContain("6");
+      expect(wrapper.get(".pane-actions").text()).not.toContain("paneLimit");
+      await error.trigger("cancel");
+      expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+      expect(wrapper.get(".pane-actions").element.closest("dialog")?.open).toBe(
+        true,
+      );
     }
     expect(wrapper.props("state").tabs[0]?.panes).toHaveLength(6);
     expect(
@@ -245,6 +262,53 @@ describe("workspace layout rendering", () => {
         false,
     ).toBe(false);
   });
+  it.each([false, true])(
+    "rejects menu and overview opening attempts without consuming closed tabs (mobile: %s)",
+    async (mobile) => {
+      let state = fixture(false);
+      let next = 0;
+      const nextId = () => `id-${++next}`;
+      for (let i = 1; i < 20; i++)
+        state = reduceLayout(state, { type: "new-tab" }, nextId);
+      state = reduceLayout(
+        state,
+        { type: "close-tab", tabId: state.activeTabId! },
+        nextId,
+      );
+      state = reduceLayout(state, { type: "new-tab" }, nextId);
+      const wrapper = render(state, mobile);
+      for (const key of mobile ? ["newTab", "reopenTab"] : ["reopenTab"]) {
+        await wrapper.get(".tab-header .tab-actions-trigger").trigger("click");
+        await flushPromises();
+        expect(button(wrapper, key).attributes("disabled")).toBeUndefined();
+        await button(wrapper, key).trigger("click");
+        expect(wrapper.get("dialog.error-dialog[open]").text()).toContain(
+          "⟦layoutUi.tabLimit",
+        );
+        expect(wrapper.vm.back()).toBe(true);
+        await flushPromises();
+      }
+      if (mobile) {
+        await wrapper.get(".mobile-tab-trigger").trigger("click");
+        for (const selector of [".sheet-new-tab", ".sheet-reopen-tab"]) {
+          expect(wrapper.get(selector).attributes("disabled")).toBeUndefined();
+          await wrapper.get(selector).trigger("click");
+          expect(wrapper.get("dialog.error-dialog[open]").text()).toContain(
+            "⟦layoutUi.tabLimit",
+          );
+          expect(wrapper.vm.back()).toBe(true);
+          await flushPromises();
+          expect(wrapper.get(selector).element.closest("dialog")?.open).toBe(
+            true,
+          );
+        }
+      }
+      expect(wrapper.props("state")).toEqual(state);
+      expect(wrapper.find(".layout-limit, .limit-help").exists()).toBe(false);
+      expect(wrapper.emitted("intent")).toBeUndefined();
+    },
+  );
+
   it("forwards real pane slots through recursive splits and selects only the focused pane", async () => {
     const wrapper = render();
     expect(

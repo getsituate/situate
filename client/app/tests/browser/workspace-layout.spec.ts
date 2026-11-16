@@ -4,6 +4,7 @@ import {
   emptyLayout,
   reduceLayout,
   type LayoutState,
+  type LayoutIntent,
 } from "../../src/layout/model";
 import { filesFixture } from "./files-fixture";
 import {
@@ -61,6 +62,118 @@ async function paneOptions(page: Page) {
   }
   return page.getByRole("dialog", { name: "Pane layout", exact: true });
 }
+for (const width of [1440, 390]) {
+  test(
+    `layout capacity errors appear only after an opening attempt at ${width}px`,
+    { tag: width < 600 ? "@visual-mobile" : "@visual-desktop" },
+    async ({ page, visual }) => {
+      await page.setViewportSize({ width, height: 920 });
+      let layout = emptyLayout();
+      let sequence = 0;
+      const send = (intent: LayoutIntent) => {
+        layout = reduceLayout(layout, intent, () => `capacity-${++sequence}`);
+      };
+      send({ type: "new-tab" });
+      const tab = layout.tabs[0]!;
+      for (let index = 0; index < 5; index++)
+        send({
+          type: "split",
+          tabId: tab.id,
+          paneId: layout.tabs[0]!.panes[index % 2]!.id,
+          edge: index === 0 || index > 2 ? "right" : "bottom",
+        });
+      for (let index = 1; index < 20; index++) send({ type: "new-tab" });
+      send({ type: "close-tab", tabId: layout.activeTabId! });
+      send({ type: "new-tab" });
+      send({ type: "select-tab", tabId: tab.id });
+      const initial: Document = { version: 1, layout, pinnedViews: [] };
+      await workspaceFixture(page, shellState, {
+        layout: {
+          records: { garden: { revision: "capacity-layout", data: initial } },
+        },
+      });
+      await page.goto("/");
+      await expect(page.locator(".topic-window")).toBeVisible();
+      const error = page.getByRole("dialog", {
+        name: "Action could not be completed",
+        exact: true,
+      });
+      const dismiss = error.getByRole("button", {
+        name: "Dismiss",
+        exact: true,
+      });
+      await expect(error).not.toBeVisible();
+      await expect(page.locator(".layout-limit, .limit-help")).toHaveCount(0);
+      const options = await paneOptions(page);
+      await expect(options.getByText(/Up to 6 panes/)).toHaveCount(0);
+      await visual.capture("layout.capacity.pane-options");
+      const split = options.getByRole("button", {
+        name: "Add pane to the right",
+        exact: true,
+      });
+      await expect(split).toBeEnabled();
+      await split.click();
+      await expect(error).toContainText("Up to 6 panes can be open in a tab.");
+      await expect(dismiss).toBeFocused();
+      await visual.capture("layout.capacity.pane-rejected");
+      await page.keyboard.press("Escape");
+      await expect(error).not.toBeVisible();
+      await expect(options).toBeVisible();
+      await expect(split).toBeFocused();
+      await options
+        .getByRole("button", { name: "Add pane below", exact: true })
+        .click();
+      await expect(error).toBeVisible();
+      await dismiss.click();
+      await page.keyboard.press("Escape");
+      await expect(options).not.toBeVisible();
+
+      await newTab(page);
+      await expect(error).toContainText("Up to 20 tabs can be open.");
+      await expect(dismiss).toBeFocused();
+      await visual.capture("layout.capacity.tab-rejected");
+      await dismiss.click();
+      await expect
+        .poll(() =>
+          page
+            .locator(".tab-header")
+            .evaluate((header) => header.contains(document.activeElement)),
+        )
+        .toBe(true);
+      await page.locator(".tab-header .tab-actions-trigger").click();
+      const reopen = page.getByRole("menuitem", {
+        name: "Reopen closed tab",
+        exact: true,
+      });
+      await expect(reopen).toBeEnabled();
+      await reopen.click();
+      await expect(error).toContainText("Up to 20 tabs can be open.");
+      await visual.capture("layout.capacity.reopen-rejected");
+      await dismiss.click();
+      if (width < 600) {
+        await page.locator(".mobile-tab-trigger").click();
+        const overview = page.getByRole("dialog", {
+          name: "All tabs",
+          exact: true,
+        });
+        await overview
+          .getByRole("button", { name: "New tab", exact: true })
+          .click();
+        await expect(error).toContainText("Up to 20 tabs can be open.");
+        await visual.capture("layout.capacity.overview-rejected");
+        await dismiss.click();
+        await expect(overview).toBeVisible();
+        await overview
+          .getByRole("button", { name: "Reopen closed tab", exact: true })
+          .click();
+        await expect(error).toBeVisible();
+        await dismiss.click();
+      }
+      expect(await stored(page)).toEqual(initial);
+    },
+  );
+}
+
 test("new chat views leave no conversation or persisted draft before sending", async ({
   page,
 }) => {
@@ -1793,7 +1906,12 @@ test(
       layout: { records: { garden: unreadable } },
     });
     await page.goto("/");
-    await expect(page.getByRole("alert")).toContainText(
+    const error = page.getByRole("dialog", {
+      name: "Action could not be completed",
+      exact: true,
+    });
+    await expect(error).toBeVisible();
+    await expect(error).toContainText(
       "This layout was saved by an unsupported version of Situate.",
     );
     await expect(page.locator(".topic-window")).toHaveCount(0);
@@ -1808,6 +1926,14 @@ test(
       ),
     ).toEqual([]);
     await visual.capture("layout.storage.unreadable");
+    await page.keyboard.press("Escape");
+    await expect(error).not.toBeVisible();
+    await expect(page.locator(".layout-notice")).toHaveText("Review error");
+    await visual.capture("layout.storage.unreadable-dismissed");
+    await page
+      .getByRole("button", { name: "Review error", exact: true })
+      .click();
+    await expect(error).toBeVisible();
     await page.evaluate(() =>
       window.__layoutTest.replace("garden", { revision: null, data: null }),
     );
@@ -1832,12 +1958,26 @@ test(
       window.__layoutTest.failSave("native.layout.storage.failed"),
     );
     await newTab(page);
-    await expect(page.getByRole("alert")).toContainText(
+    const error = page.getByRole("dialog", {
+      name: "Action could not be completed",
+      exact: true,
+    });
+    await expect(error).toBeVisible();
+    await expect(error).toContainText(
       "The workspace layout could not be read or saved.",
     );
     await expect(page.getByRole("tab")).toHaveCount(2);
     expect((await stored(page))!.layout.tabs).toHaveLength(1);
     await visual.capture("layout.storage.save-failed");
+    await error.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await expect(error).not.toBeVisible();
+    await expect(page.locator(".layout-notice")).toHaveText("Review error");
+    await expect(page.getByRole("tab")).toHaveCount(2);
+    await visual.capture("layout.storage.save-failed-dismissed");
+    await page
+      .getByRole("button", { name: "Review error", exact: true })
+      .click();
+    await expect(error).toBeVisible();
     await page.evaluate(() => window.__layoutTest.failSave(null));
     await page.getByRole("button", { name: "Try again", exact: true }).click();
     await expect

@@ -14,28 +14,27 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-it("explains the tab limit and disables creating and reopening at capacity", async () => {
+it("forwards creation and reopening attempts without inline capacity messages", async () => {
   const wrapper = mount(TabActions, {
     attachTo: document.body,
     props: {
       label: "Tab actions",
       surface: true,
       canReopen: true,
-      tabsLimited: true,
     },
   });
-  await wrapper.get(".tab-actions-trigger").trigger("click");
-  await flushPromises();
-  expect(wrapper.get(".limit-help").text()).toContain("⟦layoutUi.tabLimit");
   for (const key of ["newTab", "reopenTab"]) {
+    await wrapper.get(".tab-actions-trigger").trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".limit-help").exists()).toBe(false);
     const button = wrapper
       .findAll("button")
       .find((button) => button.text() === `⟦layoutUi.${key}⟧`)!;
-    expect(button.attributes()).toHaveProperty("disabled");
+    expect(button.attributes("disabled")).toBeUndefined();
     await button.trigger("click");
   }
-  expect(wrapper.emitted("create")).toBeUndefined();
-  expect(wrapper.emitted("reopen")).toBeUndefined();
+  expect(wrapper.emitted("create")).toEqual([[]]);
+  expect(wrapper.emitted("reopen")).toEqual([[]]);
 });
 
 it("opens the last action with ArrowUp and passes the trigger to rename", async () => {

@@ -1,5 +1,6 @@
 {
   "errorRecovery.title": "Oops. Something went wrong.",
+  "errorRecovery.operationTitle": "Action could not be completed",
   "errorRecovery.body": "Not quite the feature we had in mind. You can send us a report, or try reloading.",
   "errorRecovery.report": "Report a problem",
   "errorRecovery.reload": "Reload workspace",

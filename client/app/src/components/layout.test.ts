@@ -428,6 +428,59 @@ describe("workspace view host", () => {
         ),
     ).toHaveLength(1);
   });
+  it("presents an oversized layout save in a dismissible error dialog and retains pending state for retry", async () => {
+    const wrapper = await mountHost();
+    const ui = workspaceUi("garden");
+    const saved = structuredClone(stored.get("garden")!);
+    const invokeNormally = vi.mocked(invoke).getMockImplementation()!;
+    let blocked = true;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "layout_save" && blocked)
+        throw new Error("native.layout.storage.tooLarge");
+      return invokeNormally(command, args);
+    });
+    await wrapper.get(".new-tab").trigger("click");
+    const pending = ui.session.state.document;
+    await expect(ui.session.flush()).rejects.toThrow(
+      "native.layout.storage.tooLarge",
+    );
+    await settleViews();
+    expect(wrapper.get("dialog.error-dialog[open]").text()).toContain(
+      "⟦native.layout.storage.tooLarge⟧",
+    );
+    expect(wrapper.get(".layout-notice").text()).toBe("⟦errorRecovery.review⟧");
+    await hostButton(wrapper, "⟦errorRecovery.dismiss⟧").trigger("click");
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    expect(ui.session.state.document).toBe(pending);
+    expect(ui.session.state.dirty).toBe(true);
+    expect(stored.get("garden")).toEqual(saved);
+
+    await hostButton(wrapper, "⟦errorRecovery.review⟧").trigger("click");
+    await wrapper.get("dialog.error-dialog[open]").trigger("cancel");
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    await hostButton(wrapper, "⟦errorRecovery.review⟧").trigger("click");
+    expect(wrapper.vm.back()).toBe(true);
+    await nextTick();
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+
+    await hostButton(wrapper, "⟦errorRecovery.review⟧").trigger("click");
+    await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+    await settleViews();
+    expect(wrapper.get("dialog.error-dialog[open]").text()).toContain(
+      "⟦native.layout.storage.tooLarge⟧",
+    );
+    expect(ui.session.state.document).toBe(pending);
+    blocked = false;
+    await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+    await settleViews();
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    expect(wrapper.find(".layout-notice").exists()).toBe(false);
+    expect(ui.session.state.dirty).toBe(false);
+    expect(stored.get("garden")?.data?.layout.tabs).toHaveLength(
+      saved.data!.layout.tabs.length + 1,
+    );
+  });
+
   it("flushes layout state and restores it after the workspace UI is released and reopened", async () => {
     const wrapper = await mountHost();
     const ui = workspaceUi("garden");

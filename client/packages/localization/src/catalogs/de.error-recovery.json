@@ -1,5 +1,6 @@
 {
   "errorRecovery.title": "Ups. Hier ist etwas schiefgelaufen.",
+  "errorRecovery.operationTitle": "Aktion konnte nicht ausgeführt werden",
   "errorRecovery.body": "Das war nicht ganz die Funktion, die wir im Sinn hatten. Du kannst uns einen Bericht schicken oder es mit Neuladen versuchen.",
   "errorRecovery.report": "Problem melden",
   "errorRecovery.reload": "Arbeitsbereich neu laden",

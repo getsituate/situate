@@ -21,6 +21,7 @@ import {
 import { diagnosticsFor, type Context } from "../../diagnostics";
 import { layoutAction } from "../../diagnostics/actions";
 import WorkingIndicator from "../../components/WorkingIndicator.vue";
+import ErrorDialog from "../../errors/ErrorDialog.vue";
 import MaximizedPaneHeader from "./MaximizedPaneHeader.vue";
 import { t } from "@situate/localization";
 import SplitLayout from "./SplitLayout.vue";
@@ -30,6 +31,7 @@ import PanePager from "./PanePager.vue";
 import TabActions from "./TabActions.vue";
 import {
   selectedTab as activeTab,
+  layoutLimit,
   tabTitle,
   type LayoutState,
   type LayoutIntent,
@@ -68,9 +70,13 @@ const emit = defineEmits<{
   navigation: [event: MouseEvent];
 }>();
 const tab = computed(() => activeTab(props.state));
-const tabsLimited = computed(() => props.state.tabs.length >= MAX_OPEN_TABS);
-const panesLimited = computed(
-  () => (tab.value?.panes.length ?? 0) >= MAX_PANES_PER_TAB,
+const limitError = ref<ReturnType<typeof layoutLimit>>();
+const limitMessage = computed(() =>
+  limitError.value === "tabs"
+    ? t("layoutUi.tabLimit", { count: MAX_OPEN_TABS })
+    : limitError.value === "panes"
+      ? t("layoutUi.paneLimit", { count: MAX_PANES_PER_TAB })
+      : "",
 );
 const surfaceMenu = ref<InstanceType<typeof TabActions>>();
 const maximizedHeader = ref<InstanceType<typeof MaximizedPaneHeader>>();
@@ -318,6 +324,11 @@ function renameTab(
   });
 }
 function recordIntent(intent: LayoutIntent, control = "button") {
+  const limit = layoutLimit(props.state, intent);
+  if (limit) {
+    limitError.value = limit;
+    return false;
+  }
   const context = diagnosticsFor(props.workspaceId).action(
     layoutAction(intent),
     control,
@@ -325,6 +336,14 @@ function recordIntent(intent: LayoutIntent, control = "button") {
   );
   if (context) emit("intent", intent, context);
   else emit("intent", intent);
+  return true;
+}
+function dismissLimitError() {
+  limitError.value = undefined;
+  void nextTick(() => {
+    if (dialog.value?.open) focusDialog();
+    else focusActiveTab();
+  });
 }
 function saveName() {
   if (!editedTab.value) return;
@@ -360,7 +379,7 @@ function dismiss(restoreFocus: boolean) {
   });
 }
 function act(action: LayoutIntent) {
-  recordIntent(action, "menu");
+  if (!recordIntent(action, "menu")) return;
   dismiss(false);
   void nextTick(() => {
     const paneAction = [
@@ -376,7 +395,7 @@ function act(action: LayoutIntent) {
   });
 }
 function paneAction(action: LayoutIntent) {
-  recordIntent(action, "pane");
+  if (!recordIntent(action, "pane")) return;
   if (
     action.type === "open" ||
     action.type === "move" ||
@@ -423,13 +442,16 @@ function tabKey(event: KeyboardEvent, index: number) {
   selectTab(props.state.tabs[next]!.id, true, "keyboard");
 }
 function createTab() {
-  recordIntent({ type: "new-tab" });
-  void nextTick(focusActiveTab);
+  if (recordIntent({ type: "new-tab" })) void nextTick(focusActiveTab);
 }
 function tabHasActivity(id: string) {
   return props.hasActivity?.(id) ?? false;
 }
 function back(): boolean {
+  if (limitError.value) {
+    dismissLimitError();
+    return true;
+  }
   if (maximizedHeader.value?.back()) return true;
   for (const menu of [...overviewMenus.value, surfaceMenu.value]) {
     if (menu?.back()) return true;
@@ -586,12 +608,6 @@ defineExpose({ back, focusPaneHeader });
         icon="plus"
         :label="t('layoutUi.newTab')"
         class="new-tab"
-        :disabled="tabsLimited"
-        :title="
-          tabsLimited
-            ? t('layoutUi.tabLimit', { count: MAX_OPEN_TABS })
-            : undefined
-        "
         @click="createTab"
       />
       <TabActions
@@ -601,7 +617,6 @@ defineExpose({ back, focusPaneHeader });
         :can-close-others="multipleTabs"
         @close-all="act({ type: 'close-all-tabs' })"
         @close-others="act({ type: 'close-other-tabs', tabId: tab.id })"
-        :tabs-limited="tabsLimited"
         :can-reopen="state.closedTabs.length > 0"
         @reopen="act({ type: 'reopen-tab' })"
         :key="tab.id"
@@ -638,7 +653,6 @@ defineExpose({ back, focusPaneHeader });
         :can-close-others="multipleTabs"
         @close-all="act({ type: 'close-all-tabs' })"
         @close-others="act({ type: 'close-other-tabs', tabId: tab.id })"
-        :tabs-limited="tabsLimited"
         :can-reopen="state.closedTabs.length > 0"
         @reopen="act({ type: 'reopen-tab' })"
         :key="tab.id"
@@ -653,9 +667,6 @@ defineExpose({ back, focusPaneHeader });
         @close="closeTab(tab.id, 'surface')"
       />
     </header>
-    <p v-if="tabsLimited" class="layout-limit" role="status">
-      {{ t("layoutUi.tabLimit", { count: MAX_OPEN_TABS }) }}
-    </p>
     <div class="topic-workarea">
       <section
         v-for="item in state.tabs.filter(
@@ -817,9 +828,6 @@ defineExpose({ back, focusPaneHeader });
         </SituateDialogActions>
       </form>
       <div v-else-if="mode === 'pane' && tab" class="pane-actions">
-        <p v-if="panesLimited" class="layout-limit" role="status">
-          {{ t("layoutUi.paneLimit", { count: MAX_PANES_PER_TAB }) }}
-        </p>
         <SituateButton
           variant="ghost"
           @click="
@@ -830,7 +838,6 @@ defineExpose({ back, focusPaneHeader });
               edge: 'right',
             })
           "
-          :disabled="panesLimited"
         >
           <SituateIcon name="split" />{{ t("layoutUi.splitRight") }}
         </SituateButton>
@@ -844,7 +851,6 @@ defineExpose({ back, focusPaneHeader });
               edge: 'bottom',
             })
           "
-          :disabled="panesLimited"
         >
           <SituateIcon name="split" class="rotate-icon" />{{
             t("layoutUi.splitBelow")
@@ -984,15 +990,11 @@ defineExpose({ back, focusPaneHeader });
             @close="closeTab(item.id, 'all')"
           />
         </div>
-        <p v-if="tabsLimited" class="layout-limit">
-          {{ t("layoutUi.tabLimit", { count: MAX_OPEN_TABS }) }}
-        </p>
         <footer class="tab-overview-actions">
           <SituateButton
             v-if="state.closedTabs.length"
             variant="plain"
             class="sheet-reopen-tab"
-            :disabled="tabsLimited"
             @click="act({ type: 'reopen-tab' })"
           >
             <SituateIcon name="history" />{{ t("layoutUi.reopenTab") }}
@@ -1001,7 +1003,6 @@ defineExpose({ back, focusPaneHeader });
             variant="secondary"
             size="small"
             class="sheet-new-tab"
-            :disabled="tabsLimited"
             @click="act({ type: 'new-tab' })"
           >
             <SituateIcon name="plus" />{{ t("layoutUi.newTab") }}
@@ -1009,15 +1010,15 @@ defineExpose({ back, focusPaneHeader });
         </footer>
       </div>
     </SituateDialog>
+    <ErrorDialog
+      :open="!!limitError"
+      :message="limitMessage"
+      @dismiss="dismissLimitError"
+    />
   </main>
 </template>
 
 <style scoped>
-.layout-limit {
-  margin: 8px 16px;
-  color: var(--situate-muted);
-  font-size: 13px;
-}
 .topic-window {
   min-width: 0;
   min-height: 0;

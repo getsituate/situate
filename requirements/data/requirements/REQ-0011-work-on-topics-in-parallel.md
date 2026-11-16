@@ -80,7 +80,7 @@ Private multi-device AI configuration clarification; date not recorded, not publ
 - Clearing a tab's name restores automatic naming without changing its identity.
 - Closing the last pane leaves a chooser. Closing the last tab or all tabs opens exactly one fresh empty tab; subsequent view navigation fills its existing pane.
 - Reopening a closed tab restores its layout and histories without recreating conversations or restarting work.
-- New tabs and pane splits stop at 20 open tabs per workspace and six panes per tab, with an explanation. Restoring existing over-limit open layouts does not close their tabs or panes.
+- New tabs and pane splits stop at 20 open tabs per workspace and six panes per tab. Opening controls remain usable at capacity; a rejected creation or reopening attempt shows the reason in the standard error dialog, not inline in the view, menu or pane-layout dialog. Restoring existing over-limit open layouts does not close their tabs or panes.
 - Only the 20 most recently closed tabs are retained. A failed reopening at the open-tab limit does not remove a retained tab.
 - Pane history is bounded to 50 entries including the current entry; trimming never removes the current view or its presentation.
 - Regular layout save starts are separated by at least one second; pending changes are coalesced, while explicit closure and quit flush the latest state before completion.

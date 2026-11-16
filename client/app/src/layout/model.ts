@@ -307,6 +307,27 @@ function addTab(
   return { ...state, tabs: [...state.tabs, tab], activeTabId: id };
 }
 
+export function layoutLimit(
+  state: LayoutState,
+  intent: LayoutIntent,
+): "tabs" | "panes" | undefined {
+  if (
+    (intent.type === "new-tab" ||
+      (intent.type === "reopen-tab" && state.closedTabs.length > 0)) &&
+    state.tabs.length >= MAX_OPEN_TABS
+  )
+    return "tabs";
+  if (intent.type === "split") {
+    const tab = state.tabs.find((tab) => tab.id === intent.tabId);
+    if (
+      tab &&
+      tab.panes.some((pane) => pane.id === intent.paneId) &&
+      tab.panes.length >= MAX_PANES_PER_TAB
+    )
+      return "panes";
+  }
+}
+
 /**
  * The owner supplies fresh IDs and cancels effects on closure, even if a tab is reopened.
  * This reducer checks address existence, not the lifetime of asynchronous callers.
@@ -326,6 +347,7 @@ export function reduceLayout(
     )
   )
     state = normalizeLayout(state);
+  if (layoutLimit(state, intent)) return state;
   switch (intent.type) {
     case "new-tab":
       return addTab(state, { kind: "empty" }, nextId);
@@ -381,7 +403,7 @@ export function reduceLayout(
     }
     case "reopen-tab": {
       const closed = state.closedTabs.at(-1);
-      if (!closed || state.tabs.length >= MAX_OPEN_TABS) return state;
+      if (!closed) return state;
       const tabs = [...state.tabs];
       tabs.splice(closed.index, 0, closed.tab);
       return {
@@ -483,7 +505,6 @@ export function reduceLayout(
                 });
           }
           case "split": {
-            if (tab.panes.length >= MAX_PANES_PER_TAB) return tab;
             const added = createPane({ kind: "empty" }, nextId);
             return {
               ...tab,

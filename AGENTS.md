@@ -42,6 +42,7 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 - For branded interfaces or artwork, start with `design/brand/README.md` and reuse its canonical tokens, Bend geometry, and motion guidance. Keep exploratory departures separate from the brand sources.
 - Keep links and examples working when files move. Write for readers who do not have access to private conversations or notes.
 - Do not record task narration, compliance claims, or conversation history in product copy, comments, or documentation.
+- Show rejected or failed actions, including capacity limits, in the standard error dialog after the attempt. Do not put the error inline in a view or another dialog, or disable an action solely because a capacity limit was reached. Keep field validation beside its field and retain recovery access for unresolved failures. Follow [error placement and recovery](design/brand/docs/layout-and-components.md#error-placement-and-recovery).
 
 ## Delegation
 
