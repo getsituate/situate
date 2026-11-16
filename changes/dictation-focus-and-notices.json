@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "dictation-focus-and-notices",
-  "behaviorDigest": "9bbb764ecc463bd5448cbfe5cb21c0980847ffdb733a511fb8c51654d5aa9418",
+  "behaviorDigest": "273841ab59ff461a989967a556cc462eb7a29c11f826aa4f1d9bca9718bb35b3",
   "locales": {
     "en": {
       "title": "Changes",
@@ -36,12 +36,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "1285c23074ce4e669a0d786cde81f71481824b956d2ee1073908cee2e8091812",
-      "translationHash": "65e90b4b230bc0c381e3e5dc8ebd3cd38a6edb99bed009d2ea3e9262c6496ce0"
+      "sourceHash": "4f2d6cf54700f1f701b84986bb665635314539cfe29a739afd4628dfb70cff74",
+      "translationHash": "86a39545cf1c3d8c2a80aed3f82dee6fed916b6c1c3f3b47df77300858023e01"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "1285c23074ce4e669a0d786cde81f71481824b956d2ee1073908cee2e8091812"
+    "sourceHash": "4f2d6cf54700f1f701b84986bb665635314539cfe29a739afd4628dfb70cff74"
   }
 }
