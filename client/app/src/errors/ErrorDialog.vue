@@ -9,6 +9,7 @@ const id = useId();
 
 <template>
   <SituateDialog
+    v-if="open"
     class="error-dialog"
     :open="open"
     :aria-labelledby="`${id}-title`"

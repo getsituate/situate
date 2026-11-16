@@ -216,6 +216,7 @@ describe("workspace layout rendering", () => {
     expect(wrapper.get(".new-tab").attributes("disabled")).toBeUndefined();
     expect(wrapper.find(".layout-limit").exists()).toBe(false);
     expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     for (let attempt = 0; attempt < 2; attempt++) {
       await wrapper.get(".new-tab").trigger("click");
       const error = wrapper.get("dialog.error-dialog[open]");
@@ -223,6 +224,7 @@ describe("workspace layout rendering", () => {
       expect(error.text()).toContain("20");
       await error.get("button").trigger("click");
       expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     }
     expect(wrapper.props("state").tabs).toHaveLength(20);
     expect(wrapper.emitted("intent")).toBeUndefined();
