@@ -24,6 +24,7 @@ import {
   createSourceVerificationApi,
   publishSourceVerificationEvidence,
   readSourceVerificationArchive,
+  readSourceVerificationArchiveMember,
   selectActionsSourceEvidence,
 } from "./source-verification-actions.mjs";
 
@@ -186,6 +187,7 @@ function fixture() {
     head_repository: { id: 1455575895, full_name: "getsituate/situate" },
     pull_requests: [
       {
+        number: 31,
         base: { ref: "main", sha: baseSHA, repo: { id: 1455575895 } },
         head: { sha: headSHA, repo: { id: 1455575895 } },
       },
@@ -234,6 +236,13 @@ function fixture() {
     artifacts: [artifact],
     bytes,
     listed: [run],
+    proof: {
+      checkedSHA: testedSHA,
+      workflowSHA: testedSHA,
+      subjectDigest: digest(Buffer.from(JSON.stringify(evidence))),
+      runId: "123",
+      runAttempt: "2",
+    },
     producerDefinition: workflow,
     producerCommit: {
       sha: testedSHA,
@@ -307,11 +316,20 @@ function fixture() {
       GITHUB_REPOSITORY_ID: "1455575895",
       GITHUB_EVENT_NAME: "push",
       GITHUB_REF: "refs/heads/main",
+      GITHUB_REF_PROTECTED: "true",
+      GITHUB_WORKFLOW_REF:
+        "getsituate/situate/.github/workflows/release-macos.yml@refs/heads/main",
       GITHUB_SHA: mainSHA,
     },
     api,
     execute,
     capture: () => structuredClone(measured),
+    verifyAttestation: async (_jsonBytes, context) => {
+      assert.equal(context.runId, 123);
+      assert.equal(context.runAttempt, 2);
+      assert.equal(context.pullNumber, 31);
+      return structuredClone(data.proof);
+    },
   };
   return {
     plan,
@@ -357,6 +375,133 @@ test("consumer retrieves an attempt-bound artifact and independently resolves so
   assert.deepEqual(
     f.requests.find(({ path }) => path.endsWith("/zip")).options,
     { raw: true, maxBytes: MAX_SOURCE_EVIDENCE_BYTES + 1024 * 1024 },
+  );
+});
+
+test("attested execution, not an artifact-selected merge with the same parents, anchors reuse", async () => {
+  const f = fixture();
+  const actualSHA = "f".repeat(40);
+  const actual = {
+    sha: actualSHA,
+    tree: { sha: "0".repeat(40) },
+    parents: [{ sha: baseSHA }, { sha: headSHA }],
+  };
+  assert.deepEqual(actual.parents, f.data.producerCommit.parents);
+  assert.notEqual(actual.tree.sha, f.data.producerCommit.tree.sha);
+  f.data.proof.checkedSHA = actualSHA;
+  const api = f.options.api;
+  f.options.api = (path, options) =>
+    path === `/git/commits/${actualSHA}`
+      ? structuredClone(actual)
+      : api(path, options);
+  assert.equal(
+    (await selectActionsSourceEvidence(root, f.options)).action,
+    "execute",
+  );
+  assert(!f.requests.some(({ path }) => path === `/git/commits/${testedSHA}`));
+});
+
+test("a claimed PR head cannot replace the platform-attested test merge", async () => {
+  const f = fixture();
+  const plan = sealPlan({ ...f.plan, source: headSHA });
+  const receipts = f.receipts.map((receipt) => ({
+    ...receipt,
+    source: headSHA,
+    planDigest: plan.authorizationDigest,
+  }));
+  const evidence = createSourceVerificationEvidence({
+    ...f.evidence,
+    testedSHA: headSHA,
+    plan,
+    receipts,
+    aggregate: aggregateReceipts(plan, receipts),
+  });
+  const raw = Buffer.from(JSON.stringify(evidence));
+  f.data.bytes = zip(raw);
+  f.data.artifacts[0].digest = `sha256:${digest(f.data.bytes)}`;
+  f.data.artifacts[0].size_in_bytes = f.data.bytes.length;
+  f.data.proof.subjectDigest = digest(raw);
+  const api = f.options.api;
+  f.options.api = (path, options) => {
+    if (path === `/git/commits/${headSHA}`)
+      return { sha: headSHA, tree: { sha: tree }, parents: [{ sha: baseSHA }] };
+    if (path === `/contents/.github/workflows/verify.yml?ref=${headSHA}`)
+      return {
+        type: "file",
+        path: ".github/workflows/verify.yml",
+        encoding: "base64",
+        size: Buffer.byteLength(workflow),
+        content: Buffer.from(workflow).toString("base64"),
+      };
+    return api(path, options);
+  };
+  assert.equal(f.data.proof.checkedSHA, testedSHA);
+  assert.equal(
+    (await selectActionsSourceEvidence(root, f.options)).action,
+    "execute",
+  );
+});
+
+test("the attested workflow revision must contain the approved definition", async () => {
+  const f = fixture();
+  const executedWorkflowSHA = "9".repeat(40);
+  const unapproved = "name: Unapproved\n";
+  f.data.proof.workflowSHA = executedWorkflowSHA;
+  const api = f.options.api;
+  let readExecuted = false;
+  f.options.api = (path, options) => {
+    if (
+      path ===
+      `/contents/.github/workflows/verify.yml?ref=${executedWorkflowSHA}`
+    ) {
+      readExecuted = true;
+      return {
+        type: "file",
+        path: ".github/workflows/verify.yml",
+        encoding: "base64",
+        size: Buffer.byteLength(unapproved),
+        content: Buffer.from(unapproved).toString("base64"),
+      };
+    }
+    return api(path, options);
+  };
+  assert.equal(
+    (await selectActionsSourceEvidence(root, f.options)).action,
+    "execute",
+  );
+  assert(readExecuted);
+});
+
+test("unattested and byte-changed artifacts execute even when parsed evidence is identical", async () => {
+  const f = fixture();
+  f.options.verifyAttestation = async () => null;
+  assert.equal(
+    (await selectActionsSourceEvidence(root, f.options)).action,
+    "execute",
+  );
+  const changed = fixture();
+  const raw = Buffer.from(`${JSON.stringify(changed.evidence, null, 2)}\n`);
+  changed.data.bytes = zip(raw);
+  changed.data.artifacts[0].digest = `sha256:${digest(changed.data.bytes)}`;
+  changed.data.artifacts[0].size_in_bytes = changed.data.bytes.length;
+  assert.deepEqual(
+    readSourceVerificationArchive(changed.data.bytes),
+    changed.evidence,
+  );
+  assert.deepEqual(
+    readSourceVerificationArchiveMember(changed.data.bytes).jsonBytes,
+    raw,
+  );
+  assert.notEqual(changed.data.proof.subjectDigest, digest(raw));
+  assert.equal(
+    (await selectActionsSourceEvidence(root, changed.options)).action,
+    "execute",
+  );
+  const noCredentials = fixture();
+  delete noCredentials.options.verifyAttestation;
+  assert.equal(
+    (await selectActionsSourceEvidence(root, noCredentials.options)).action,
+    "execute",
   );
 });
 
@@ -447,6 +592,13 @@ test("consumer never trusts failed, forked, raced, altered or incomplete produce
         args[0] === "status" && f.requests.length
           ? " M changed-during-lookup"
           : f.execute(command, args, options);
+    },
+    (f) => {
+      f.options.environment.GITHUB_REF_PROTECTED = "false";
+    },
+    (f) => {
+      f.options.environment.GITHUB_WORKFLOW_REF =
+        "getsituate/situate/.github/workflows/other.yml@refs/heads/main";
     },
     (f) => {
       f.options.environment.GITHUB_REPOSITORY_ID = "1";

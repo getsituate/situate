@@ -13,6 +13,7 @@ import { inflateRawSync } from "node:zlib";
 import { ordinaryEnvironment } from "./pipeline-environment.mjs";
 import { aggregateReceipts, digest, validatePlan } from "./pipeline-state.mjs";
 import { suiteInventory } from "./test.mjs";
+import { verifySourceVerificationAttestation } from "./source-verification-attestation.mjs";
 import {
   createSourceVerificationEvidence,
   MAX_SOURCE_EVIDENCE_BYTES,
@@ -354,7 +355,7 @@ function crc32(bytes) {
 }
 
 /** The supported small Actions ZIP format has one regular evidence.json member. */
-export function readSourceVerificationArchive(bytes) {
+export function readSourceVerificationArchiveMember(bytes) {
   assert(
     Buffer.isBuffer(bytes) && bytes.length >= 22 && bytes.length <= maxArchive,
   );
@@ -420,7 +421,14 @@ export function readSourceVerificationArchive(bytes) {
         });
   assert.equal(value.length, size);
   assert.equal(crc32(value), crc);
-  return validateSourceVerificationEvidence(value.toString("utf8"));
+  return {
+    evidence: validateSourceVerificationEvidence(value.toString("utf8")),
+    jsonBytes: Buffer.from(value),
+  };
+}
+
+export function readSourceVerificationArchive(bytes) {
+  return readSourceVerificationArchiveMember(bytes).evidence;
 }
 
 function controller(environment) {
@@ -457,6 +465,7 @@ async function producerMetadata(api, runId, attempt, completed) {
   else assert(run.status === "in_progress" && run.conclusion === null);
   assert(run.pull_requests?.length === 1);
   const pull = run.pull_requests[0];
+  positiveId(pull.number);
   assert(
     pull.base?.repo?.id === repositoryId &&
       pull.head?.repo?.id === repositoryId,
@@ -650,6 +659,7 @@ export async function selectActionsSourceEvidence(
     api = createSourceVerificationApi({ token: environment.GITHUB_TOKEN }),
     execute = executeDefault,
     capture = captureLaneEvidence,
+    verifyAttestation = verifySourceVerificationAttestation,
   },
 ) {
   const miss = (reason) => ({ action: "execute", reason });
@@ -658,6 +668,11 @@ export async function selectActionsSourceEvidence(
     assert(
       environment.GITHUB_EVENT_NAME === "push" &&
         environment.GITHUB_REF === "refs/heads/main",
+    );
+    assert.equal(environment.GITHUB_REF_PROTECTED, "true");
+    assert.equal(
+      environment.GITHUB_WORKFLOW_REF,
+      "getsituate/situate/.github/workflows/release-macos.yml@refs/heads/main",
     );
     assert.equal(environment.GITHUB_SHA, plan.source);
     const measured = capture(root, { plan, lane, environment, execute });
@@ -719,17 +734,42 @@ export async function selectActionsSourceEvidence(
         assert(Buffer.isBuffer(bytes) && bytes.length <= maxArchive);
         if (artifact.digest !== undefined && artifact.digest !== null)
           assert.equal(artifact.digest, `sha256:${digest(bytes)}`);
-        const evidence = readSourceVerificationArchive(bytes);
+        const { evidence, jsonBytes } =
+          readSourceVerificationArchiveMember(bytes);
+        const proof = await verifyAttestation(jsonBytes, {
+          runId: metadata.run.id,
+          runAttempt: metadata.run.run_attempt,
+          pullNumber: metadata.pull.number,
+          environment,
+        });
+        assert(
+          proof &&
+            revision.test(proof.checkedSHA) &&
+            revision.test(proof.workflowSHA),
+        );
+        assert.equal(proof.runId, String(metadata.run.id));
+        assert.equal(proof.runAttempt, String(metadata.run.run_attempt));
+        assert.equal(proof.subjectDigest, digest(jsonBytes));
+        assert.equal(evidence.testedSHA, proof.checkedSHA);
+        assert.notEqual(proof.checkedSHA, metadata.pull.head.sha);
         const checkedProducer = await commit(
           root,
-          evidence.testedSHA,
+          proof.checkedSHA,
           api,
           execute,
         );
-        const observedOrigin = origin(
-          metadata,
-          await definition(root, evidence.testedSHA, api, execute),
+        assert.deepEqual(checkedProducer.parents, [
+          metadata.pull.base.sha,
+          metadata.pull.head.sha,
+        ]);
+        const executedWorkflowDigest = await definition(
+          root,
+          proof.workflowSHA,
+          api,
+          execute,
         );
+        assert.equal(executedWorkflowDigest, reviewedWorkflowDigest);
+        const observedOrigin = origin(metadata, executedWorkflowDigest);
         const observation = {
           origin: observedOrigin,
           trusted: true,
@@ -738,11 +778,8 @@ export async function selectActionsSourceEvidence(
           conclusion: metadata.run.conclusion,
           aggregateConclusion: metadata.aggregate.conclusion,
           headRepositoryId: String(metadata.run.head_repository.id),
-          checkedSHA: evidence.testedSHA,
-          checkedParents:
-            evidence.testedSHA === metadata.pull.head.sha
-              ? null
-              : checkedProducer.parents,
+          checkedSHA: proof.checkedSHA,
+          checkedParents: checkedProducer.parents,
           tree: checkedProducer.tree,
           jobs: evidence.lanes.map(({ lane }) => ({
             lane,
