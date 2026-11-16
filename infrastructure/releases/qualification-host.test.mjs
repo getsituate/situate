@@ -164,6 +164,46 @@ function harness(t) {
   };
 }
 
+test("bounded family inspection retains original operation identity and blocks active or uncertain fresh attempts", (t) => {
+  const h = harness(t);
+  assert.deepEqual(h.success("inspect-family"), { operations: [] });
+  h.success("prepare");
+  const fresh = { ...h.request, operationNonce: "fresh-attempt" };
+  assert.notEqual(h.invoke("prepare", fresh).status, 0);
+  assert.equal(
+    h.success("inspect-family").operations[0].operationId,
+    operation.operationId,
+  );
+  h.success("cleanup");
+  const prepared = h.success("prepare", fresh);
+  assert.equal(prepared.operationId, operation.operationId);
+  assert.equal(prepared.operationNonce, "fresh-attempt");
+  const family = h.success("inspect-family").operations;
+  assert.equal(family.length, 2);
+  assert.deepEqual(
+    family.map((item) => item.operationNonce).sort(),
+    [operation.operationNonce, "fresh-attempt"].sort(),
+  );
+  const statePath = join(h.root, "private", sha("fresh-attempt"), "state.json");
+  const state = JSON.parse(readFileSync(statePath));
+  state.uncertain = true;
+  writeFileSync(statePath, JSON.stringify(state));
+  assert.equal(
+    h
+      .success("inspect-family")
+      .operations.find((item) => item.operationNonce === "fresh-attempt")
+      .uncertain,
+    true,
+  );
+  assert.notEqual(
+    h.invoke("prepare", { ...fresh, operationNonce: "third-attempt" }).status,
+    0,
+  );
+  state.operationNonce = "mismatched-directory";
+  writeFileSync(statePath, JSON.stringify(state));
+  assert.notEqual(h.invoke("inspect-family").status, 0);
+});
+
 test("host prepares immutable identity before staging and privately serves exact hash-bound files", (t) => {
   const h = harness(t);
   assert.equal(h.success("inspect").status, "absent");

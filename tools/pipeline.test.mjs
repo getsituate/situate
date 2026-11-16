@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -18,6 +19,7 @@ import {
   runWorkflow,
   inspectWorkflow,
   reconcileWorkflow,
+  restoreWorkflow,
   validateDeclarations,
 } from "./pipeline.mjs";
 import { behaviorDigest, fragmentHashes } from "./change-fragments.mjs";
@@ -466,6 +468,65 @@ test("creation verifies once and executes the shared dependency order", async (t
   );
 });
 
+test("durable stage intent precedes effects and failed checkpoint acknowledgements never pass a build", async (t) => {
+  const { root, source: revision } = committedFixture(t);
+  const plan = sealPlan({
+    ...selection(),
+    source: revision,
+    workflow: "create",
+    appImpact: true,
+    operation: "checkpoint-ack",
+    repository: "getsituate/situate",
+    destination: "synthetic.invalid",
+  });
+  const calls = [];
+  const adapters = Object.fromEntries(
+    ["compatibility", "reserve", "inputs", "build", "qualify", "github"].map(
+      (name) => [
+        name,
+        async () => {
+          calls.push(name);
+          if (name === "build")
+            throw new Error("Checkpoint acknowledgement lost; inspect");
+          return { evidence: name };
+        },
+      ],
+    ),
+  );
+  adapters.persistIntent = async ({ stage }) => {
+    calls.push(`intent:${stage}`);
+  };
+  const events = [];
+  await assert.rejects(
+    runWorkflow(root, plan, {
+      adapters,
+      receipts: [receipt(plan)],
+      confirmation: plan.authorizationDigest,
+      onEvent: (event) => events.push(event),
+    }),
+    /acknowledgement lost/,
+  );
+  assert.deepEqual(calls, [
+    "intent:compatibility",
+    "compatibility",
+    "intent:reserve",
+    "reserve",
+    "intent:inputs",
+    "inputs",
+    "intent:build",
+    "build",
+  ]);
+  assert.equal(
+    readOperation(root, plan.operation).stages.at(-1).status,
+    "unknown",
+  );
+  assert(
+    !events.some(
+      (event) => event.stage === "build" && event.status === "passed",
+    ),
+  );
+});
+
 test("private release authorization retains original source receipts without rebinding them", async (t) => {
   const { root, source: revision } = committedFixture(t);
   const adapters = {
@@ -871,6 +932,81 @@ test("only tool containers retain the pinned NSS runtime for arbitrary numeric u
       LD_PRELOAD: "/tmp/untrusted.so",
     }).LD_PRELOAD,
     undefined,
+  );
+});
+
+test("fresh checkpoint inspection and explicit restoration preserve original operation paths and reject stale observations", async (t) => {
+  const root = fixture(t);
+  const plan = sealPlan({
+    schemaVersion: 1,
+    workflow: "create",
+    source,
+    base,
+    operation: "fresh-restore",
+    lanes: [],
+    configurationDigest: "c".repeat(64),
+  });
+  let remote = { checkpoints: { inspectionDigest: "host-inspection" } };
+  let restores = 0;
+  const adapters = {
+    inspect: async () => remote,
+    restore: async ({ checkpointId, destination }) => {
+      restores++;
+      assert.equal(checkpointId, "selected-checkpoint");
+      return {
+        directory: destination,
+        manifestSha256: "d".repeat(64),
+        descriptor: { checkpointId },
+      };
+    },
+  };
+  const inspection = await inspectWorkflow(root, plan.operation, {
+    plan,
+    adapters,
+  });
+  await assert.rejects(
+    restoreWorkflow(root, plan.operation, "wrong-confirmation", {
+      plan,
+      adapters,
+      checkpointId: "selected-checkpoint",
+      destination: "/synthetic/restore",
+    }),
+  );
+  assert.equal(restores, 0);
+  remote = { changed: true };
+  await assert.rejects(
+    restoreWorkflow(root, plan.operation, inspection.reconciliationDigest, {
+      plan,
+      adapters,
+      checkpointId: "selected-checkpoint",
+      destination: "/synthetic/restore",
+    }),
+    /External state changed/,
+  );
+  assert.equal(restores, 0);
+  remote = inspection.remote;
+  const result = await restoreWorkflow(
+    root,
+    plan.operation,
+    inspection.reconciliationDigest,
+    {
+      plan,
+      adapters,
+      checkpointId: "selected-checkpoint",
+      destination: "/synthetic/restore",
+    },
+  );
+  assert.equal(result.status, "restored");
+  assert.equal(
+    result.recoveryAuthorization.inspectionDigest,
+    inspection.reconciliationDigest,
+  );
+  assert.equal(restores, 1);
+  assert.equal(
+    existsSync(
+      join(root, ".release-operations", plan.operation, "operation.json"),
+    ),
+    false,
   );
 });
 

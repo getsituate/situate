@@ -485,6 +485,8 @@ async function executeStages(
       operation: operation.operationId,
     });
     try {
+      if (adapters.persistIntent)
+        await adapters.persistIntent({ operation, stage: name });
       stage.output = await invoke({
         root,
         plan: operation.plan,
@@ -493,6 +495,8 @@ async function executeStages(
       });
       assert(stage.output !== undefined, `Stage ${name} returned no evidence`);
       stage.status = "passed";
+      if (adapters.persistOutcome)
+        await adapters.persistOutcome({ operation, stage: name });
       saveOperation(root, operation);
       onEvent({
         type: "stage",
@@ -564,6 +568,7 @@ export async function runWorkflow(
     onEvent = () => {},
     laneOptions,
     until,
+    planBytes = `${JSON.stringify(plan)}\n`,
     environment = process.env,
   } = {},
 ) {
@@ -611,6 +616,24 @@ export async function runWorkflow(
         : undefined;
       const resuming = retained?.status === "paused";
       const operation = resuming ? retained : openOperation(root, plan);
+      if (!resuming) {
+        assert.deepEqual(
+          JSON.parse(planBytes),
+          plan,
+          "Original workflow plan bytes differ",
+        );
+        const { writeRestoredFile } = await import("./release-checkpoint.mjs");
+        const bytes = Buffer.from(planBytes);
+        writeRestoredFile(
+          operationDirectory(root, plan.operation),
+          {
+            name: "sealed-plan.json",
+            size: bytes.length,
+            sha256: digest(bytes),
+          },
+          bytes,
+        );
+      }
       assert.equal(
         operation.plan.authorizationDigest,
         plan.authorizationDigest,
@@ -662,13 +685,39 @@ async function runLocalLanes(root, plan, options) {
   return receipts;
 }
 
+async function withRecoveryAdapters(root, plan, adapters, environment, use) {
+  if (adapters) return use(adapters);
+  const { withReleaseSSH } = await import("./release-environment.mjs");
+  const { checkpointRecoveryAdapters } =
+    await import("./release-checkpoint-recovery.mjs");
+  return withReleaseSSH({ root, environment }, async (prepared) =>
+    use(
+      await checkpointRecoveryAdapters(root, plan, { environment: prepared }),
+    ),
+  );
+}
+function recoveryOperation(root, operationId, plan) {
+  if (existsSync(join(operationDirectory(root, operationId), "operation.json")))
+    return readOperation(root, operationId);
+  validatePlan(plan);
+  assert.equal(plan.operation, operationId);
+  return {
+    schemaVersion: 1,
+    operationId,
+    plan,
+    status: "checkpoint-inspection",
+    stages: [],
+  };
+}
+
 export async function inspectWorkflow(
   root,
   operationId,
-  { adapters, environment = process.env } = {},
+  { adapters, environment = process.env, plan } = {},
 ) {
-  const operation = readOperation(root, operationId);
-  return withWorkflowAdapters(
+  const operation = recoveryOperation(root, operationId, plan);
+  const withAdapters = plan ? withRecoveryAdapters : withWorkflowAdapters;
+  return withAdapters(
     root,
     operation.plan,
     adapters,
@@ -698,6 +747,85 @@ export async function inspectWorkflow(
       return { ...observation, reconciliationDigest: digest(observation) };
     },
   );
+}
+
+export async function restoreWorkflow(
+  root,
+  operationId,
+  confirmation,
+  { checkpointId, destination, adapters, environment = process.env, plan } = {},
+) {
+  assert(
+    checkpointId && destination,
+    "Select an exact checkpoint and fresh restore destination",
+  );
+  return withOperationLock(root, operationId, async () => {
+    const operation = recoveryOperation(root, operationId, plan);
+    assert.equal(operation.plan.workflow, "create");
+    const observation = JSON.parse(
+      readFileSync(
+        join(operationDirectory(root, operationId), "inspection.json"),
+        "utf8",
+      ),
+    );
+    requireReconciliation(operation, observation, confirmation);
+    const withAdapters = plan ? withRecoveryAdapters : withWorkflowAdapters;
+    return withAdapters(
+      root,
+      operation.plan,
+      adapters,
+      environment,
+      async (adapters) => {
+        assert.equal(
+          typeof adapters.restore,
+          "function",
+          "Checkpoint restoration is unavailable",
+        );
+        const current = await adapters.inspect({
+          root,
+          operation,
+          plan: operation.plan,
+        });
+        assert.equal(
+          digest(current),
+          digest(observation.remote),
+          "External state changed; inspect again before restoring",
+        );
+        const file = join(
+          operationDirectory(root, operationId),
+          `restore-${checkpointId}.json`,
+        );
+        assert(
+          !existsSync(file),
+          "Restore authorization exists; inspect instead of replaying",
+        );
+        const result = await adapters.restore({
+          root,
+          operation,
+          observation,
+          checkpointId,
+          destination,
+        });
+        const recoveryAuthorization = {
+          schemaVersion: 1,
+          operationId,
+          planDigest: operation.plan.authorizationDigest,
+          checkpointId,
+          inspectionDigest: confirmation,
+          inspection: { ...observation, reconciliationDigest: confirmation },
+          manifestSha256: result.manifestSha256,
+          directory: result.directory,
+          descriptor: result.descriptor,
+        };
+        atomicJson(file, recoveryAuthorization);
+        return {
+          status: "restored",
+          recoveryAuthorization,
+          authorizationFile: file,
+        };
+      },
+    );
+  });
 }
 
 export async function reconcileWorkflow(
@@ -827,6 +955,8 @@ export async function main(
           "declaration-heads",
           "verification-plan",
           "resolution",
+          "checkpoint",
+          "restore-directory",
         ].map((name) => [name, { type: "string" }]),
       ),
       json: { type: "boolean" },
@@ -836,13 +966,19 @@ export async function main(
   if (values.help)
     return {
       usage:
-        "node tools/pipeline.mjs plan|run|stage|status|inspect|reconcile verify|create|publish --source FULL_SHA --base FULL_SHA [--plan FILE] [--operation ID] [--destination SSH_HOST] [--release-id ID] [--confirm DIGEST]",
+        "node tools/pipeline.mjs plan|run|stage|status|inspect|restore|reconcile verify|create|publish --source FULL_SHA --base FULL_SHA [--plan FILE] [--operation ID] [--destination SSH_HOST] [--release-id ID] [--confirm DIGEST]",
     };
   const [command, workflow] = positionals;
   assert(
-    ["plan", "run", "stage", "status", "inspect", "reconcile"].includes(
-      command,
-    ),
+    [
+      "plan",
+      "run",
+      "stage",
+      "status",
+      "inspect",
+      "restore",
+      "reconcile",
+    ].includes(command),
     "Unknown workflow command",
   );
   assert(positionals.length <= 2, "Unexpected workflow arguments");
@@ -869,8 +1005,22 @@ export async function main(
     return plan;
   }
   if (command === "status") return readOperation(root, values.operation);
+  const recoveryPlan =
+    values.plan && ["inspect", "restore"].includes(command)
+      ? validatePlan(JSON.parse(readFileSync(values.plan, "utf8")))
+      : undefined;
   if (command === "inspect")
-    return inspectWorkflow(root, values.operation, adapters);
+    return inspectWorkflow(root, values.operation, {
+      ...adapters,
+      plan: recoveryPlan,
+    });
+  if (command === "restore")
+    return restoreWorkflow(root, values.operation, values.confirm, {
+      ...adapters,
+      plan: recoveryPlan,
+      checkpointId: values.checkpoint,
+      destination: values["restore-directory"],
+    });
   if (command === "reconcile")
     return reconcileWorkflow(root, values.operation, values.confirm, {
       ...adapters,
@@ -881,7 +1031,8 @@ export async function main(
     values.plan && existsSync(values.plan),
     "Read an explicit workflow plan file first",
   );
-  const plan = validatePlan(JSON.parse(readFileSync(values.plan, "utf8")));
+  const planBytes = readFileSync(values.plan, "utf8");
+  const plan = validatePlan(JSON.parse(planBytes));
   assert.equal(
     plan.workflow,
     workflow,
@@ -905,6 +1056,7 @@ export async function main(
     ? JSON.parse(readFileSync(values.receipts, "utf8"))
     : undefined;
   return runWorkflow(root, plan, {
+    planBytes,
     confirmation: values.confirm,
     receipts,
     ...adapters,

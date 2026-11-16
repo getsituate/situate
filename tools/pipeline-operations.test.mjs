@@ -16,8 +16,45 @@ import {
   inspectCandidateReservation,
   publicationEnvironment,
   productionStages,
+  assertLatestMain,
 } from "./pipeline-operations.mjs";
 import { digest } from "./pipeline-state.mjs";
+
+test("latest-main observation uses exact read-only repository identity and stops superseded sources", async () => {
+  const plan = { repository: "getsituate/situate", source: "a".repeat(40) };
+  let calls = 0;
+  const execute = (command, args, options) => {
+    calls++;
+    assert.equal(command, "gh");
+    assert.deepEqual(args, [
+      "api",
+      "--hostname",
+      "github.com",
+      "--method",
+      "GET",
+      "repos/getsituate/situate/git/ref/heads/main",
+    ]);
+    assert(!Object.hasOwn(options.env, "APPLE_ID"));
+    return JSON.stringify({
+      ref: "refs/heads/main",
+      object: { type: "commit", sha: plan.source },
+    });
+  };
+  await assertLatestMain(plan, {
+    execute,
+    environment: { APPLE_ID: "synthetic-private" },
+  });
+  assert.equal(calls, 1);
+  await assert.rejects(
+    assertLatestMain({ ...plan, source: "b".repeat(40) }, { execute }),
+    { code: "RELEASE_SOURCE_SUPERSEDED" },
+  );
+  await assert.rejects(
+    assertLatestMain({ ...plan, repository: "other/repository" }, { execute }),
+    /Unexpected release repository/,
+  );
+  assert.equal(calls, 2);
+});
 
 test("production stages do not require or forward operational recovery evidence", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "situate-pipeline-stages-"));
