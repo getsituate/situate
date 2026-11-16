@@ -261,11 +261,19 @@ impl Storage {
         for entry in root.entries().map_err(|_| STORAGE)? {
             let entry = entry.map_err(|_| STORAGE)?;
             let name = entry.file_name();
-            let id = name.to_str().ok_or(INVALID)?;
-            validate_id(id)?;
-            let metadata = self
-                .read_conversation_metadata_unlocked(id)?
-                .ok_or(INVALID)?;
+            let Some(id) = name.to_str().filter(|id| validate_id(id).is_ok()) else {
+                continue;
+            };
+            if !entry.file_type().map_err(|_| STORAGE)?.is_dir() {
+                continue;
+            }
+            let Ok(Some(context)) = self.read_conversation_context_unlocked(id) else {
+                continue;
+            };
+            if context.project_record().is_err() {
+                continue;
+            }
+            let metadata = context.metadata;
             if metadata.development.as_ref().is_some_and(|d| {
                 d.origin_conversation_id.is_none()
                     && metadata.title_input.as_deref() == Some("")
@@ -523,6 +531,77 @@ mod tests {
                 .exists()
         );
     }
+    #[test]
+    fn listing_selects_readable_conversations_without_changing_unrelated_entries() {
+        let (temp, storage) = workspace();
+        storage.create_conversation("good", "Readable").unwrap();
+        storage
+            .create_conversation("bad-metadata", "Broken")
+            .unwrap();
+        storage
+            .create_conversation("bad-history", "Broken")
+            .unwrap();
+        let root = temp.path().join(".situate/conversations");
+        let bad_metadata = b"not conversation metadata";
+        let bad_history = b"not conversation history\n";
+        fs::write(root.join("bad-metadata/metadata.json"), bad_metadata).unwrap();
+        fs::write(root.join("bad-history/history.jsonl"), bad_history).unwrap();
+        for name in [".DS_Store", "notes.txt", "valid-id"] {
+            fs::write(root.join(name), b"unrelated").unwrap();
+        }
+        fs::create_dir(root.join("empty")).unwrap();
+        fs::create_dir(root.join("UPPERCASE")).unwrap();
+
+        let summaries = storage.list_conversations().unwrap();
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            ["good"]
+        );
+        assert_eq!(
+            fs::read(root.join("bad-metadata/metadata.json")).unwrap(),
+            bad_metadata
+        );
+        assert_eq!(
+            fs::read(root.join("bad-history/history.jsonl")).unwrap(),
+            bad_history
+        );
+        for name in [".DS_Store", "notes.txt", "valid-id"] {
+            assert_eq!(fs::read(root.join(name)).unwrap(), b"unrelated");
+        }
+        assert!(storage.read_conversation("bad-metadata").is_err());
+        assert!(storage.read_conversation("bad-history").is_err());
+        storage
+            .create_conversation("new", "New conversation")
+            .unwrap();
+        assert_eq!(storage.list_conversations().unwrap().len(), 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn listing_does_not_follow_conversation_symlinks() {
+        use std::os::unix::fs::symlink;
+        let (temp, storage) = workspace();
+        storage.create_conversation("good", "Readable").unwrap();
+        let root = temp.path().join(".situate/conversations");
+        symlink(root.join("good"), root.join("linked")).unwrap();
+        assert_eq!(storage.list_conversations().unwrap().len(), 1);
+        assert!(root.join("linked").is_symlink());
+    }
+
+    #[test]
+    fn listing_reports_failure_to_open_the_conversations_directory() {
+        let (temp, storage) = workspace();
+        fs::write(
+            temp.path().join(".situate/conversations"),
+            b"not a directory",
+        )
+        .unwrap();
+        assert_eq!(storage.list_conversations(), Err(STORAGE.into()));
+    }
+
     #[test]
     fn development_identity_is_immutable_and_unsubmitted_assignments_are_hidden() {
         let (_temp, storage) = workspace();

@@ -491,7 +491,6 @@ const sidebar = computed(() => ({
       : undefined,
   conversationsBusy:
     conversations.value?.state.loading || conversations.value?.state.creating,
-  conversationsError: conversations.value?.state.error,
   conversationRunning: conversations.value?.running,
   filesActive:
     !settingsVisible.value &&
@@ -514,7 +513,6 @@ const sidebarActions = {
   conversation: (id: string) =>
     open({ kind: "conversation", conversationId: id }),
   newConversation: () => newConversation(),
-  retryConversations: () => conversations.value?.refresh(),
   files: () => open({ kind: "view", viewId: "files" }),
   view: (id: string) => open({ kind: "view", viewId: id }),
   pin: (id: string) => ui.value?.session.pin(id),

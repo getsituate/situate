@@ -330,7 +330,7 @@ fn malformed_local_selectors_fail_closed_in_every_known_slot() {
         let bytes = serde_json::to_vec(&value).unwrap();
         fs::write(&chat_path, &bytes).unwrap();
         assert!(storage.read_conversation("chat").is_err());
-        assert!(storage.list_conversations().is_err());
+        assert!(storage.list_conversations().unwrap().is_empty());
         assert!(
             storage
                 .persist_runtime_fixture(&record, record.revision)
@@ -436,7 +436,7 @@ fn duplicate_owned_fields_are_rejected_without_touching_raw_bytes() {
     for bytes in records {
         fs::write(&path, &bytes).unwrap();
         assert!(storage.read_conversation("chat").is_err(), "{bytes}");
-        assert!(storage.list_conversations().is_err());
+        assert!(storage.list_conversations().unwrap().is_empty());
         assert!(storage.persist_runtime_fixture(&record, 0).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), bytes);
     }

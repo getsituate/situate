@@ -53,6 +53,7 @@ import {
 } from "./native-conversation";
 import { ownsDictation } from "../dictation/runtime";
 import type { DictationDraft } from "../dictation/draft";
+import { captureIncident } from "../errors/runtime";
 
 export interface ChatState extends DictationDraft {
   questions: RetainedQuestion[];
@@ -149,7 +150,6 @@ interface WorkspaceChats {
     loading: boolean;
     creating: boolean;
     loaded: boolean;
-    error: unknown;
   };
   sessions: Map<string, Session>;
   listVersion: number;
@@ -165,7 +165,6 @@ function workspace(scope: string): WorkspaceChats {
         loading: false,
         creating: false,
         loaded: false,
-        error: "",
       }),
       sessions: shallowReactive(new Map()),
       listVersion: 0,
@@ -231,17 +230,15 @@ export function workspaceConversations(scope: string) {
           })
           .sort(compareConversations);
         owner.state.loaded = true;
-        owner.state.error = "";
-      } catch {
-        if (version === owner.listVersion)
-          owner.state.error = "ai.aiAccessOrConversationHistoryCouldNotBeRead";
+      } catch (error) {
+        if (version === owner.listVersion && workspaces.get(scope) === owner)
+          captureIncident("conversation", error, scope);
       } finally {
         if (version === owner.listVersion) owner.state.loading = false;
       }
     },
     async create(): Promise<string | undefined> {
-      if (owner.state.creating || owner.state.loading || owner.state.error)
-        return;
+      if (owner.state.creating || owner.state.loading) return;
       const id = crypto.randomUUID();
       workspaceChat(scope, id).state.ephemeral = true;
       return id;

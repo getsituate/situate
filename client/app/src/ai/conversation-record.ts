@@ -217,25 +217,24 @@ export function compareConversations(
 }
 
 export function readConversationList(value: unknown): ConversationSummary[] {
-  if (
-    !Array.isArray(value) ||
-    !value.every(
-      (item) =>
-        summary(item) &&
-        (item.lastUserMessageAt === undefined ||
-          Number.isFinite(item.lastUserMessageAt)) &&
-        Object.keys(item).every((key) =>
-          [
-            "id",
-            "title",
-            "revision",
-            "development",
-            "lastUserMessageAt",
-          ].includes(key),
-        ),
-    ) ||
-    new Set(value.map((item) => item.id)).size !== value.length
-  )
+  if (!Array.isArray(value))
     throw new Error("native.ai.conversation.versionInvalid");
-  return value;
+  const items = value.filter(
+    (item): item is ConversationSummary =>
+      summary(item) &&
+      (item.lastUserMessageAt === undefined ||
+        Number.isFinite(item.lastUserMessageAt)) &&
+      Object.keys(item).every((key) =>
+        [
+          "id",
+          "title",
+          "revision",
+          "development",
+          "lastUserMessageAt",
+        ].includes(key),
+      ),
+  );
+  if (new Set(items.map((item) => item.id)).size !== items.length)
+    throw new Error("native.ai.conversation.versionInvalid");
+  return items;
 }

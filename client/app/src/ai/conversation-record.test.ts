@@ -96,11 +96,11 @@ test("development metadata is strict and survives record and summary parsing", (
     expect(() =>
       readConversationRecord({ ...stored, development: invalid }, id),
     ).toThrow();
-    expect(() =>
+    expect(
       readConversationList([
         { id, title: "", revision: 0, development: invalid },
       ]),
-    ).toThrow();
+    ).toEqual([]);
   }
 });
 
@@ -257,20 +257,21 @@ test("conversation summaries order only by the newest user message with stable t
   ).toEqual(["newer", "tied", "older", "empty", "empty-a"]);
 });
 
-test("conversation lists reject duplicate identities and unknown fields", () => {
+test("conversation lists retain valid summaries and ignore unreadable entries", () => {
   const summary = { id: "one", title: "One", revision: 2 };
   expect(readConversationList([summary])).toEqual([summary]);
-  for (const value of [
+  for (const invalid of [
     null,
-    [summary, summary],
-    [{ ...summary, extra: true }],
-    [{ ...summary, id: "" }],
-    [{ ...summary, lastUserMessageAt: null }],
-    [{ ...summary, lastUserMessageAt: "100" }],
-    [{ ...summary, lastUserMessageAt: Infinity }],
-    [{ ...summary, lastUserMessageAt: NaN }],
+    { ...summary, extra: true },
+    { ...summary, id: "" },
+    { ...summary, lastUserMessageAt: null },
+    { ...summary, lastUserMessageAt: "100" },
+    { ...summary, lastUserMessageAt: Infinity },
+    { ...summary, lastUserMessageAt: NaN },
   ])
-    expect(() => readConversationList(value)).toThrow();
+    expect(readConversationList([invalid, summary])).toEqual([summary]);
+  expect(() => readConversationList(null)).toThrow();
+  expect(() => readConversationList([summary, summary])).toThrow();
 });
 test("native event sequences are ordered per run while projection positions remain separate", () => {
   const runtime = {
