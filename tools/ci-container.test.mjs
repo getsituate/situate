@@ -47,6 +47,7 @@ const options = {
   name: "owned",
   token: "nonce",
   rust: "1.98.1",
+  platform: "linux",
 };
 
 test("image lock requires a registry digest and matching input fingerprint", () => {
@@ -219,6 +220,50 @@ test("container execution has no host socket, credentials, privileged mode, or t
     /exact Rust/,
   );
   assert.throws(() => inside("/checkout", "/outside"), /inside/);
+});
+
+test("macOS diagnostic containers keep caches and Rust targets off host shares", () => {
+  for (const shard of ["checks", "quick", "history", "visual", "coverage"]) {
+    for (const platform of ["darwin", "linux"]) {
+      const args = containerArguments({
+        ...options,
+        platform,
+        shard,
+        visual: "check",
+      });
+      const tmpfs = args.filter((_, index) => args[index - 1] === "--tmpfs");
+      const mounts = args.filter((_, index) => args[index - 1] === "--mount");
+      assert.equal(
+        mounts.includes("type=bind,src=/cache,dst=/ci-cache"),
+        platform === "linux",
+      );
+      const roots =
+        shard === "coverage"
+          ? ["/workspace/harness", "/workspace/source"]
+          : ["/workspace"];
+      for (const target of [
+        "/ci-cache",
+        ...roots.flatMap((root) => [
+          `${root}/client/target`,
+          `${root}/tools/dev-tui/target`,
+        ]),
+      ])
+        assert.equal(
+          tmpfs.includes(`${target}:exec,mode=1777`),
+          platform === "darwin",
+        );
+      assert(args.includes("CARGO_HOME=/ci-cache/cargo"));
+      assert(args.includes("npm_config_cache=/ci-cache/npm"));
+      assert(args.includes("PLAYWRIGHT_BROWSERS_PATH=/ci-cache/browsers"));
+      assert(mounts.includes(`type=bind,src=/checkout,dst=${roots[0]}`));
+      if (shard === "coverage")
+        assert(
+          mounts.includes(
+            "type=bind,src=/checkout/report.json,dst=/workspace/report.json",
+          ),
+        );
+    }
+  }
 });
 
 test("quick containers forward selection as data, without shell interpolation", () => {

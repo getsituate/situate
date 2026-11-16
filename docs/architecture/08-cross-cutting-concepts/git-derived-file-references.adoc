@@ -206,7 +206,6 @@ Only the known structured reference fields are projected. User messages, tool/ev
 
 ==== Implementation and verification boundaries
 
-The link:{architecture-repository-root}/docs/development/git-derived-file-references-plan.md[development plan] allocates the format, resolver, writer, direct consumer replacement and target-platform work.
 The PDF example concerns path continuity and history, not a new PDF text-extraction or chat-attachment capability; test binary identity without assuming the current UTF-8 document API can read it.
 
 Removing witness-based reconciliation does not remove every use of hardlinks, prove Android no-replace compatibility or authorize weaker file publication.

@@ -14,7 +14,6 @@ endif::[]
 Parent: <<application-agent-integration,Agent Integration>> in Level 2.
 
 This decomposition follows link:{architecture-docs-root}/09-architecture-decisions/ADR-0013-native-conversation-execution.adoc[ADR-0013] with the storage representation selected in <<adr-0016,ADR-0016>>.
-Storage implementation and verification are tracked in the link:{architecture-repository-root}/docs/development/conversation-storage-implementation-plan.md[conversation storage plan].
 *Agent Integration* runs in the native application host and embeds Rig through `situate-agent`, owning conversation execution and completion independently of frontend views.
 Native provider, tool, persistence and projection adapters connect the owner to the application.
 See <<current-client-packages>> for package locations and link:{architecture-repository-root}/docs/development/provider-qualification.md[provider qualification] for evidence limits.
@@ -110,5 +109,3 @@ Opaque provider signatures and retained message content can be part of domain da
 * Native Operation Admission and durable intent/result barriers do not create exactly-once external effects. On interrupted execution, retain observed results and uncertainty rather than inferring that cancellation undid an effect. Reopening after process exit waits for user interaction; it does not replay retained work.
 
 The <<current-client-packages,client package mapping>> records package-level responsibilities.
-Storage delivery and the final architecture-to-code reconciliation are defined in the link:{architecture-repository-root}/docs/development/conversation-storage-implementation-plan.md[conversation storage plan].
-The link:{architecture-repository-root}/docs/development/rig-implementation-plan.md[Rig replacement plan] records the earlier runtime replacement.

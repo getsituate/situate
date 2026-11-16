@@ -65,6 +65,7 @@ export function containerArguments({
   grep,
   dependencyPaths = ["client/node_modules"],
   arch = process.arch,
+  platform = process.platform,
 }) {
   if (!shardNames.includes(shard) && !["coverage", "visual"].includes(shard))
     throw new Error("Unknown container test shard.");
@@ -92,8 +93,9 @@ export function containerArguments({
     "--security-opt=no-new-privileges",
     "--mount",
     `type=bind,src=${harness},dst=${target}`,
-    "--mount",
-    `type=bind,src=${cache},dst=/ci-cache`,
+    ...(platform === "darwin"
+      ? ["--tmpfs", "/ci-cache:exec,mode=1777"]
+      : ["--mount", `type=bind,src=${cache},dst=/ci-cache`]),
     "--workdir",
     shard === "coverage" ? "/workspace" : target,
   ];
@@ -130,6 +132,13 @@ export function containerArguments({
       );
       env.GITHUB_STEP_SUMMARY = "/ci-step-summary";
     }
+  }
+  if (platform === "darwin") {
+    const roots =
+      shard === "coverage" ? [target, "/workspace/source"] : [target];
+    for (const root of roots)
+      for (const relative of ["client/target", "tools/dev-tui/target"])
+        args.push("--tmpfs", `${root}/${relative}:exec,mode=1777`);
   }
   if (shard === "visual") env.SITUATE_VISUAL_GREP = grep ?? "";
   if (shard === "quick" || linuxShards.includes(shard)) {

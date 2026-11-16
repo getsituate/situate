@@ -92,30 +92,47 @@ test("tool containers isolate dependencies and credentials and retain their owne
   );
 });
 
-test("macOS disposable caches and Rust targets stay inside the Linux VM", (t) => {
-  const root = fixture(t);
-  const result = python(
-    `root=pathlib.Path(${JSON.stringify(root)}); state=root/'state'
-m.sys.platform='darwin'
-mac=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,['suites'],{},'fixture','fixture')
-m.sys.platform='linux'
-linux=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,['suites'],{},'fixture','fixture')
-print(json.dumps({'mac':mac,'linux':linux}))`,
-  );
-  for (const target of [
-    "/ci-cache",
-    `${root}/client/target`,
-    `${root}/tools/dev-tui/target`,
-  ]) {
-    assert(result.mac.includes(`${target}:exec,mode=1777`));
-    assert(!result.mac.some((arg) => arg.endsWith(`dst=${target}`)));
-    assert(result.linux.some((arg) => arg.endsWith(`dst=${target}`)));
+test("macOS keeps disposable caches and Rust targets inside the Linux VM", (t) => {
+  for (const platform of ["darwin", "linux"]) {
+    const root = fixture(t);
+    for (const relative of ["client/target", "tools/dev-tui/target"]) {
+      mkdirSync(join(root, relative), { recursive: true });
+      writeFileSync(join(root, relative, "host-sentinel"), "host-native");
+    }
+    const { args, hostCacheExists } = python(
+      `root=pathlib.Path(${JSON.stringify(root)}); state=root/'state'
+m.sys.platform=${JSON.stringify(platform)}
+args=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,['suites'],{},'fixture','fixture')
+print(json.dumps({'args':args,'hostCacheExists':(state/'cache').exists()}))`,
+    );
+    const targets = [
+      "/ci-cache",
+      `${root}/client/target`,
+      `${root}/tools/dev-tui/target`,
+    ];
+    const tmpfs = args.filter((_, index) => args[index - 1] === "--tmpfs");
+    const mounts = args.filter((_, index) => args[index - 1] === "--mount");
+    for (const target of targets) {
+      assert.equal(
+        tmpfs.includes(`${target}:exec,mode=1777`),
+        platform === "darwin",
+      );
+      assert.equal(
+        mounts.some((arg) => arg.endsWith(`dst=${target}`)),
+        platform === "linux",
+      );
+    }
+    assert.equal(hostCacheExists, platform === "linux");
+    assert(args.includes(`type=bind,src=${root}/state,dst=${root}/state`));
+    assert(args.includes("CARGO_HOME=/ci-cache/cargo"));
+    assert(args.includes("npm_config_cache=/ci-cache/npm"));
+    assert(args.includes("PLAYWRIGHT_BROWSERS_PATH=/ci-cache/browsers"));
+    for (const relative of ["client/target", "tools/dev-tui/target"])
+      assert.equal(
+        readFileSync(join(root, relative, "host-sentinel"), "utf8"),
+        "host-native",
+      );
   }
-  assert(
-    !result.mac.some((arg) =>
-      arg.startsWith(`type=bind,src=${root}/state/cache`),
-    ),
-  );
 });
 
 test("private startup directories do not change the test process file-creation mask", (t) => {

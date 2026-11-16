@@ -29,7 +29,7 @@ The host supervisor owns the worktree until Docker absence is verified. Heavy pr
 
 ## Runtime contract
 
-For a direct image invocation, mount a checkout at `/workspace` and a writable cache at `/ci-cache`. Run with the desired
+For a direct image invocation, mount a checkout at `/workspace` and a writable cache at `/ci-cache`. On macOS, use `--tmpfs /ci-cache:exec,mode=1777` instead of a host cache directory, and mount disposable Rust target directories with tmpfs as well. The legacy diagnostic launcher's `CI_CACHE_DIR` is validated but not mounted on macOS; Linux continues to use it for downloads. Run with the desired
 numeric UID/GID. Set `CARGO_HOME=/ci-cache/cargo`, `npm_config_cache=/ci-cache/npm`, and
 `HOME` to a writable temporary directory. Set `RUSTUP_TOOLCHAIN` to the repository's
 pinned Rust version to prevent directory override discovery from initiating toolchain

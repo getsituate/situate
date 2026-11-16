@@ -2,7 +2,7 @@
 
 ## Approved direction and review question
 
-This approved workshop direction covers [REQ-0024](../../../../requirements/data/requirements/REQ-0024-dictate-text-input.md) and the assigned portion of [REQ-0041](../../../../requirements/data/requirements/REQ-0041-download-dictation-models-after-installation.md). Production adoption, catalog reconciliation and native speech qualification remain open in the [implementation plan](../../../../docs/development/dictation-mvp-plan.md).
+This approved workshop direction covers [REQ-0024](../../../../requirements/data/requirements/REQ-0024-dictate-text-input.md) and the assigned portion of [REQ-0041](../../../../requirements/data/requirements/REQ-0041-download-dictation-models-after-installation.md). Workshop coverage does not establish production adoption, catalog reconciliation or native speech qualification; see the [testing guide](../../../../docs/development/testing.md).
 
 The central question is whether someone can distinguish **recording**, **transcribing** and **ready to send**, while understanding which draft receives the result after navigation.
 
@@ -43,9 +43,9 @@ Controls expose the current operation rather than a completion timer. Stop recor
 - **Recovery:** permission guidance, denied access, no speech, transcription failure and lost dictation use dismissible dialogs without expanding the input. Dismissing permission guidance does not grant access or cancel the pending system request. Other errors preserve the draft and selection; closing returns focus to the originating input. Notices from hidden chats wait until their draft is shown. A navigation confirmation takes precedence over a notice. Download and storage notices link to Settings for retry, still subject to connection eligibility. Offline sending is explained by its disabled-button tooltip; local dictation remains available.
 - **Scope:** no mobile-data authorization, download cancellation, recording-cancel button, model/language chooser, cloud fallback or live partial transcript. The language selector in the controls is for design review, not a product preference for speech recognition.
 
-## Coverage of the development-plan gaps
+## Prototype coverage
 
-The references below correspond to the [plan's gap matrix](../../../../docs/development/dictation-mvp-plan.md#design-workshop-coverage). They describe prototype coverage, not catalog implementation status.
+The references below describe prototype coverage, not catalog implementation status.
 
 | Gap | Review path                                                                                                                                                                            |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

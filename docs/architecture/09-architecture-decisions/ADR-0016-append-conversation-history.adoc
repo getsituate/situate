@@ -11,7 +11,6 @@ endif::[]
 
 Status:: accepted
 Date:: 2026-11-11
-Implementation plan:: link:{architecture-repository-root}/docs/development/conversation-storage-implementation-plan.md[Conversation storage implementation plan]
 Related decision:: link:ADR-0013-native-conversation-execution.adoc[ADR-0013]
 Compatibility:: one-way conversion from published v2 data; app 0.1.6 or newer required, with no older writer or reverse conversion
 Requirements:: link:{architecture-repository-root}/requirements/data/requirements/REQ-0005-record-process-history.md[REQ-0005], link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md[REQ-0069]
