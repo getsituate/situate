@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "conversation-list-recovery",
+  "behaviorDigest": "bea9e25bcf0bbf0a29fd6bfa72d7db4de333a077d519a30beedec49793305dcc",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "conversation-list-recovery",
+          "type": "fixed",
+          "platforms": [
+            "macos"
+          ],
+          "title": "Keep the conversation list usable",
+          "paragraphs": [
+            "Unrelated files and unreadable conversations no longer block the conversation list. Unreadable conversations are hidden without deleting their files. If the list cannot be loaded, the recovery dialog offers reporting and recovery options."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "conversation-list-recovery",
+          "type": "fixed",
+          "platforms": [
+            "macos"
+          ],
+          "title": "Die Gesprächsliste bleibt nutzbar",
+          "paragraphs": [
+            "Fremde Dateien und nicht lesbare Gespräche blockieren die Gesprächsliste nicht mehr. Nicht lesbare Gespräche werden ausgeblendet, ohne ihre Dateien zu löschen. Wenn sich die Liste nicht laden lässt, bietet der Fehlerdialog Möglichkeiten zum Melden des Fehlers und zur Wiederherstellung."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "98f20a289f114c8c8fc2713b4299681d7c477bd9a4d5478444f7f2de6396660d",
+      "translationHash": "d9e47bca914e4a4ae89f590153335f3d10b2324ebdc9d26c5d62145f49fca554"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "98f20a289f114c8c8fc2713b4299681d7c477bd9a4d5478444f7f2de6396660d"
+  }
+}
