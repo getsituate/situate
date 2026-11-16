@@ -697,8 +697,18 @@ async function withRecoveryAdapters(root, plan, adapters, environment, use) {
   );
 }
 function recoveryOperation(root, operationId, plan) {
-  if (existsSync(join(operationDirectory(root, operationId), "operation.json")))
-    return readOperation(root, operationId);
+  if (
+    existsSync(join(operationDirectory(root, operationId), "operation.json"))
+  ) {
+    const operation = readOperation(root, operationId);
+    if (plan)
+      assert.deepEqual(
+        plan,
+        operation.plan,
+        "Explicit recovery plan differs from local operation",
+      );
+    return operation;
+  }
   validatePlan(plan);
   assert.equal(plan.operation, operationId);
   return {

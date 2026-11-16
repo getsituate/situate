@@ -228,6 +228,7 @@ def perform(action, request, source=None):
     require(os.getuid() == HOST_UID, 'Qualification host requires uid 1000')
     token = sha(nonce.encode())
     operation = ROOT / token
+    require(not ROOT.is_symlink(), 'Qualification resource root must not be a symlink')
     require(config['caddyContainer'] != 'situate-qualification-' + token[:32], 'Production and private listener names must differ')
     if action == 'inspect-family' and not ROOT.exists():
         return {'operations': []}

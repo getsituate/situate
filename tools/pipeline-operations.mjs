@@ -244,7 +244,7 @@ export function notesForCatalog(catalog) {
     .join("\n\n");
 }
 
-async function verifiedBuilds(
+export async function verifiedBuilds(
   root,
   plan,
   { hostSnapshot: history },

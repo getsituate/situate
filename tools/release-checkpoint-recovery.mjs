@@ -5,7 +5,10 @@ import { digest, validatePlan } from "./pipeline-state.mjs";
 import { createHostCheckpointStore } from "../infrastructure/releases/checkpoint.mjs";
 import { createGitReservationAdapter } from "./release-reservation.mjs";
 import { collectFragments } from "./change-fragments.mjs";
-import { inspectCandidateReservation } from "./pipeline-operations.mjs";
+import {
+  inspectCandidateReservation,
+  verifiedBuilds,
+} from "./pipeline-operations.mjs";
 import { validateRestoredCheckpoint } from "./release-checkpoint.mjs";
 
 export async function checkpointRecoveryAdapters(
@@ -32,9 +35,8 @@ export async function checkpointRecoveryAdapters(
       root,
       hostConfig: host,
       environment,
-      readVerifiedBuilds: async () => {
-        throw new Error("Recovery cannot allocate a build");
-      },
+      readVerifiedBuilds: (snapshot) =>
+        verifiedBuilds(root, plan, snapshot, environment),
     });
   return {
     async inspect() {
