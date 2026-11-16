@@ -79,7 +79,14 @@ impl<H: Host> Owner<H> {
                 state.snapshot.event_offset += removed;
             }
         }
-        state.snapshot.history_before = state.snapshot.message_entry_ids.first().cloned();
+        if state.snapshot.message_offset > 0 || state.snapshot.event_offset > 0 {
+            state.snapshot.history_before = state
+                .snapshot
+                .message_entry_ids
+                .first()
+                .cloned()
+                .or_else(|| state.snapshot.history_before.clone());
+        }
         let retained: std::collections::HashSet<_> = state
             .snapshot
             .message_entry_ids

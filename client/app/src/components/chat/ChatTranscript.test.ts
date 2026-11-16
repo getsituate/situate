@@ -259,28 +259,19 @@ test("presented user attachments keep image references and text content visible"
   expect(wrapper.get(".message.user").text()).toContain("Attached text");
 });
 
-test("older history is requested explicitly and the loading control cannot repeat it", async () => {
+test("prepending older history retains the recent message element without a paging button", async () => {
   const wrapper = mount(ChatTranscript, {
     props: {
       messages: [{ role: "user", content: "Recent", timestamp: 1 }],
       activity: [],
       running: false,
       scope: "workspace",
-      historyBefore: "entry",
       messageOffset: 20,
     },
   });
-  expect(wrapper.emitted("loadOlder")).toBeUndefined();
-  const button = wrapper.get("button[data-chat-disclosure]");
-  expect(button.text()).toBe("⟦chat.loadEarlierMessages⟧");
-  await button.trigger("click");
-  expect(wrapper.emitted("loadOlder")).toEqual([[]]);
-  await wrapper.setProps({ historyLoading: true });
-  expect(button.attributes("disabled")).toBeDefined();
-  expect(button.text()).toBe("⟦chat.loadingEarlierMessages⟧");
+  expect(wrapper.find("button[data-chat-disclosure]").exists()).toBe(false);
   const recent = wrapper.get(".message.user").element;
   await wrapper.setProps({
-    historyBefore: null,
     messageOffset: 19,
     messages: [
       { role: "user", content: "Earlier", timestamp: 0 },
