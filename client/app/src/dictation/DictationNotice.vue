@@ -13,7 +13,6 @@ const message = computed(
       model: modelLabel(),
       permission: t("dictation.permission"),
       denied: t("dictation.denied"),
-      noSpeech: t("dictation.noSpeech"),
       failed: t("dictation.failed"),
       interrupted: t("dictation.interrupted"),
     })[props.notice],

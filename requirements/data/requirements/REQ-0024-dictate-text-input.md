@@ -80,7 +80,7 @@ acceptanceCriteria:
     milestone: Dictation MVP
     status: open
   - id: AC-19
-    text: "Application backgrounding or device locking stops and discards an active recording when prior confirmation is unavailable. An already-running transcription continues where platform execution permits; on return, a detected interruption that lost the dictation is explained where possible."
+    text: "Switching focus to another application leaves recording active until the user stops it. Device locking stops and discards an active recording when prior confirmation is unavailable. An already-running transcription continues where platform execution permits; on return, a detected interruption that lost the dictation is explained where possible."
     milestone: Dictation MVP
     status: open
   - id: AC-20
@@ -88,7 +88,7 @@ acceptanceCriteria:
     milestone: Dictation MVP
     status: open
   - id: AC-21
-    text: "If no speech is recognized, the application reports that outcome without inserting or replacing text."
+    text: "If no speech is recognized, dictation finishes silently without inserting or replacing text."
     milestone: Dictation MVP
     status: open
   - id: AC-22
@@ -109,9 +109,9 @@ The originating chat draft remains editable during recording and transcription, 
 
 Navigation away from a running recording, including a chat or workspace switch, warns that proceeding discards the dictation and lets the user cancel the navigation. During transcription, switching chats does not warn or abort the work; the result still belongs to the originating draft. Closing the originating workspace or quitting the application warns if doing so would abort transcription and discard the dictation, allowing the user to stay and wait.
 
-Moving the application to the background or locking the device stops and discards an active recording when a prior navigation confirmation is not available. An already-running transcription should complete if platform execution permits. If operating-system interruption prevents completion, the application explains the lost dictation on return where possible; graceful handling after forced termination is not guaranteed.
+Switching focus to another application does not stop or discard an active recording. Locking the device stops and discards an active recording when a prior navigation confirmation is not available. An already-running transcription should complete if platform execution permits. If operating-system interruption prevents completion, the application explains the lost dictation on return where possible; graceful handling after forced termination is not guaranteed.
 
-Denied microphone access is explained with guidance to system settings; typed input remains available. If no speech is recognized, the application reports that outcome without inserting or replacing text. On transcription failure, the application leaves the draft and selection unchanged, discards the audio and explains that the user must dictate again.
+Denied microphone access is explained with guidance to system settings; typed input remains available. Starting dictation does not open an application permission dialog; macOS requests microphone access when needed. If no speech is recognized, dictation finishes silently without inserting or replacing text. On transcription failure, the application leaves the draft and selection unchanged, discards the audio and explains that the user must dictate again.
 
 Once the model is ready locally, recording and transcription work without an internet connection. Audio is processed only on the device, with no cloud fallback, and is discarded after processing. Interrupted or aborted recordings and failed transcription attempts also discard their audio rather than retaining it for retry. Audio is not retained as chat content, synchronized content or a permanent recording. Disposal after an interruption does not require a recording-cancel control.
 

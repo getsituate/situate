@@ -5,7 +5,7 @@ import { shallowReactive, shallowRef } from "vue";
 
 export type Phase = "permission" | "recording" | "transcribing";
 export type Notice =
-  "permission" | "denied" | "noSpeech" | "failed" | "interrupted" | "model";
+  "permission" | "denied" | "failed" | "interrupted" | "model";
 export interface DictationOwner {
   id: string;
   scope: string;
@@ -37,7 +37,6 @@ export const dictation = shallowReactive<Snapshot>({
 export const dictationLevel = shallowRef(0);
 export const dictationSettingsRequested = shallowRef(0);
 export const noticePresentation = shallowRef<symbol | null>(null);
-export const dismissedPermission = shallowRef<string | null>(null);
 export const confirmation = shallowRef<{
   id: string;
   notice?: Notice;
@@ -105,20 +104,22 @@ export function initializeDictation(): Promise<void> {
       ),
     );
     listeners.push(
-      await listen<{ id: string; text?: string; notice?: Notice }>(
+      await listen<{ id: string; text?: string; notice?: Notice | "noSpeech" }>(
         "dictation-result",
         ({ payload }) => {
+          const notice =
+            payload.notice === "noSpeech" ? undefined : payload.notice;
           ++version;
           if (confirmation.value && confirmation.value.id === payload.id)
             confirmation.value = {
               ...confirmation.value,
-              notice: payload.notice,
+              notice,
               inserted: !!payload.text,
             };
           if (binding && binding.id === payload.id) {
             const current = binding;
             binding = undefined;
-            current.complete(payload.text, payload.notice);
+            current.complete(payload.text, notice);
           }
           if (dictation.owner?.id === payload.id) {
             dictationLevel.value = 0;
@@ -149,7 +150,6 @@ export function stopDictationListeners(): void {
   dictationLevel.value = 0;
   confirmation.value?.decide(false);
   noticePresentation.value = null;
-  dismissedPermission.value = null;
 }
 export async function startDictation(
   scope: string,
