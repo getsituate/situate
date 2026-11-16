@@ -31,7 +31,7 @@ async function until(predicate) {
   }
 }
 
-function fixture(t, inspection = () => "") {
+function fixture(t, inspection = () => "", parentEnvironment = process.env) {
   const directory = mkdtempSync(join(tmpdir(), "situate-coordination-test-"));
   const helperPath = join(directory, "run-coordinated.mjs");
   copyFileSync(helperSource, helperPath);
@@ -74,8 +74,14 @@ except Exception as error:
     writeFileSync(worker, source);
     const script = `import {runCoordinated} from ${JSON.stringify(helper)};
       process.exitCode = await runCoordinated({directory: ${JSON.stringify(cwd)}, resource: ${JSON.stringify(resource)}, cleanupGraceMs: ${JSON.stringify(cleanupGraceMs)}, command: process.execPath, args: [${JSON.stringify(worker)}], onTiming: event => console.log('TIMING:' + JSON.stringify(event))});`;
-    const inheritedEnvironment = { ...process.env };
-    delete inheritedEnvironment.SITUATE_TOOL_BUILD_SLOTS;
+    const inheritedEnvironment = { ...parentEnvironment };
+    for (const name of [
+      "SITUATE_TOOL_BUILD_SLOTS",
+      "SITUATE_TOOL_CONTAINER",
+      "SITUATE_HOST_ADMISSION",
+      "SITUATE_HOST_ADMITTED",
+    ])
+      delete inheritedEnvironment[name];
     const child = spawn(
       process.execPath,
       ["--input-type=module", "-e", script],
@@ -95,6 +101,25 @@ except Exception as error:
   }
   return { directory, run, helper };
 }
+
+test("coordination fixtures do not inherit the enclosing container admission", async (t) => {
+  const { directory, run } = fixture(t, () => "", {
+    ...process.env,
+    SITUATE_TOOL_CONTAINER: "1",
+    SITUATE_TOOL_BUILD_SLOTS: "1",
+    SITUATE_HOST_ADMISSION: "/unavailable-enclosing-admission",
+    SITUATE_HOST_ADMITTED: "1",
+  });
+  const child = run(
+    directory,
+    `
+    for(const name of ['SITUATE_TOOL_CONTAINER','SITUATE_TOOL_BUILD_SLOTS','SITUATE_HOST_ADMISSION','SITUATE_HOST_ADMITTED'])
+      if(process.env[name]!==undefined) throw new Error('enclosing admission leaked: '+name);
+  `,
+    "build",
+  );
+  assert.equal(await child.done, 0, child.output);
+});
 
 function fakeDocker(directory) {
   const bin = join(directory, "bin");
