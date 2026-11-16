@@ -1,5 +1,6 @@
 import test from "node:test";
-import { spawnSync } from "node:child_process";
+import childProcess, { spawnSync } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -199,6 +200,25 @@ for (const [lastStage, output] of [
     async (t) => {
       const root = await mkdtemp(join(tmpdir(), "situate-build-deadline-"));
       const ready = join(root, "ready");
+      const completedOutput = "diagnostic-fixture-output-complete";
+      let outputObserved = false;
+      const originalSpawn = childProcess.spawn;
+      const spawnMock = t.mock.method(childProcess, "spawn", (...args) => {
+        const child = originalSpawn(...args);
+        for (const stream of [child.stdout, child.stderr]) {
+          let tail = "";
+          stream?.on("data", (chunk) => {
+            tail = (tail + chunk.toString()).slice(-1024);
+            if (tail.includes(completedOutput)) outputObserved = true;
+          });
+        }
+        return child;
+      });
+      syncBuiltinESMExports();
+      t.after(() => {
+        spawnMock.mock.restore();
+        syncBuiltinESMExports();
+      });
       t.mock.timers.enable({ apis: ["setTimeout"] });
       const pending = runChild(
         process.execPath,
@@ -210,7 +230,7 @@ ${lastStage === "unknown" ? "" : 'output.write("   Compiling earlier v1.0.0\\n")
 output.write("synthetic-secret /private/home --token=secret\\n".repeat(10000));
 output.write(${JSON.stringify(output.slice(0, 8))});
 output.write(${JSON.stringify(output.slice(8) + "\n")});
-output.write("unclassified stderr sk-synthetic-secret --token=secret\\n", () => {
+output.write("unclassified stderr sk-synthetic-secret --token=secret\\n" + ${JSON.stringify(completedOutput + "\n")}, () => {
   require('node:fs').writeFileSync(${JSON.stringify(ready)}, String(process.pid));
 });
 setInterval(() => {}, 1000);
@@ -241,7 +261,8 @@ setInterval(() => {}, 1000);
         while (true) {
           try {
             await access(ready);
-            break;
+            // A child-side write can finish before the supervisor forwards the pipe.
+            if (outputObserved) break;
           } catch (error) {
             assert.equal(error.code, "ENOENT");
           }

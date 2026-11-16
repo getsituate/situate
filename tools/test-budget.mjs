@@ -13,6 +13,7 @@ export function needsBuildLease(suite) {
     suite.command === "swift" ||
     ["browser", "coverage"].includes(suite.kind) ||
     [
+      "npm-dependencies",
       "client-vue",
       "client-executor-integration",
       "client-scripts-integration",

@@ -22,7 +22,12 @@ import {
   cleanupOwnedContainer,
   visualDependencyPaths,
 } from "./ci-container.mjs";
-import { validateLock, inputDigest, checkBrowserPins } from "./ci-image.mjs";
+import {
+  validateLock,
+  inputDigest,
+  checkBrowserPins,
+  selectImagePlatform,
+} from "./ci-image.mjs";
 
 const lock = {
   version: 1,
@@ -57,6 +62,67 @@ test("image lock requires a registry digest and matching input fingerprint", () 
       validateLock({ ...lock, ...change }, lock.inputsSha256),
     );
   assert.throws(() => validateLock(lock, "c".repeat(64)), /inputs changed/);
+});
+
+test("multi-architecture locks require both reviewed platforms without ambiguity", () => {
+  const { platform: _platform, ...base } = lock;
+  const multi = {
+    ...base,
+    version: 2,
+    platforms: ["linux/amd64", "linux/arm64"],
+  };
+  assert.equal(validateLock(multi, multi.inputsSha256), multi);
+  for (const change of [
+    { platforms: ["linux/amd64"] },
+    { platforms: ["linux/amd64", "linux/amd64"] },
+    { platforms: ["linux/amd64", "linux/riscv64"] },
+    { platforms: ["linux/arm64", "linux/amd64"] },
+    { platforms: "linux/amd64,linux/arm64" },
+    { platform: "linux/amd64" },
+    { revision: "c".repeat(40) },
+    { image: "ghcr.io/owner/ci:multiarch" },
+  ])
+    assert.throws(() =>
+      validateLock({ ...multi, ...change }, multi.inputsSha256),
+    );
+  assert.throws(() =>
+    validateLock({ ...lock, platforms: multi.platforms }, lock.inputsSha256),
+  );
+});
+
+test("ordinary containers select the native image while visual references stay on amd64", () => {
+  const { platform: _platform, ...base } = lock;
+  const multi = {
+    ...base,
+    version: 2,
+    platforms: ["linux/amd64", "linux/arm64"],
+  };
+  for (const [arch, expected] of [
+    ["x64", "linux/amd64"],
+    ["arm64", "linux/arm64"],
+  ]) {
+    assert.equal(selectImagePlatform(multi, { arch }), expected);
+    const args = containerArguments({ ...options, lock: multi, arch });
+    assert.equal(args[args.indexOf("--platform") + 1], expected);
+    const visual = containerArguments({
+      ...options,
+      lock: multi,
+      arch,
+      shard: "visual",
+      visual: "check",
+    });
+    assert.equal(visual[visual.indexOf("--platform") + 1], "linux/amd64");
+  }
+  assert.equal(selectImagePlatform(lock, { arch: "arm64" }), "linux/amd64");
+  assert.throws(() => selectImagePlatform(multi, { arch: "riscv64" }), /host/);
+  assert.throws(
+    () =>
+      selectImagePlatform(
+        { ...multi, platforms: ["linux/amd64"] },
+        { arch: "arm64" },
+      ),
+    /does not provide/,
+  );
 });
 
 test("ordinary package updates do not invalidate the tool image; browser changes do", () => {

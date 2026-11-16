@@ -35,10 +35,23 @@ export function inputDigest(directory = root) {
   }
   return hash.digest("hex");
 }
+export const imagePlatforms = ["linux/amd64", "linux/arm64"];
+
 export function validateLock(lock, digest) {
+  const platformValid =
+    lock?.version === 1
+      ? lock.platform === "linux/amd64" && lock.platforms === undefined
+      : lock?.version === 2 &&
+        Object.keys(lock).sort().join(",") ===
+          "image,inputsSha256,platforms,version" &&
+        lock.platform === undefined &&
+        Array.isArray(lock.platforms) &&
+        lock.platforms.length === imagePlatforms.length &&
+        imagePlatforms.every(
+          (platform, index) => lock.platforms[index] === platform,
+        );
   if (
-    lock?.version !== 1 ||
-    lock.platform !== "linux/amd64" ||
+    !platformValid ||
     typeof lock.image !== "string" ||
     !/^ghcr\.io\/[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$/.test(lock.image) ||
     !/^[a-f0-9]{64}$/.test(lock.inputsSha256 ?? "")
@@ -50,6 +63,23 @@ export function validateLock(lock, digest) {
     );
   return lock;
 }
+export function selectImagePlatform(
+  lock,
+  { arch = process.arch, visual = false } = {},
+) {
+  const native = { x64: "linux/amd64", arm64: "linux/arm64" }[arch];
+  if (!native) throw new Error("CI tools require an x64 or arm64 host.");
+  const platform = visual
+    ? "linux/amd64"
+    : lock.version === 2
+      ? native
+      : lock.platform;
+  const platforms = lock.version === 2 ? lock.platforms : [lock.platform];
+  if (!platforms?.includes(platform))
+    throw new Error(`The pinned CI image does not provide ${platform}.`);
+  return platform;
+}
+
 export function checkBrowserPins(directory = root) {
   const browserPins = JSON.parse(
     readFileSync(resolve(directory, "client/docker/ci-browsers.json"), "utf8"),

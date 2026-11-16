@@ -1002,7 +1002,11 @@ export function executeSuite(
   } = {},
 ) {
   signal?.throwIfAborted();
-  const env = suiteEnvironment(suite, directory, environment);
+  // The launcher uses the caller's CI marker to decide whether caches may persist.
+  const env =
+    suite.id === "tool-container" && suite.kind === "container"
+      ? { ...environment }
+      : suiteEnvironment(suite, directory, environment);
   let command = suite.command;
   if (
     (command === "cargo" ||
@@ -1369,7 +1373,7 @@ export async function prepareDependencies(
           ? ["/d", "/s", "/c", "npm ci --include=dev --no-audit --no-fund"]
           : ["ci", "--include=dev", "--no-audit", "--no-fund"];
       const result = await install(
-        { cwd: workspace, command, args },
+        { id: "npm-dependencies", cwd: workspace, command, args },
         { ...options, directory, signal, timeout, output },
       );
       if (result.cleanupIncomplete) retain();

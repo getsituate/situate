@@ -45,6 +45,50 @@ export async function runCoordinated({
     );
   if (!["worktree", "desktop", "build"].includes(resource))
     throw new Error("Unknown coordinated resource.");
+  if (
+    resource === "build" &&
+    environment.SITUATE_HOST_ADMISSION &&
+    environment.SITUATE_HOST_ADMITTED !== "1"
+  ) {
+    const controller = new AbortController();
+    const admissionSignal = signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal;
+    let signalExit;
+    const handlers = ["SIGINT", "SIGTERM", "SIGHUP"].map((name) => {
+      const handler = () => {
+        signalExit = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 }[name];
+        controller.abort();
+      };
+      process.on(name, handler);
+      return [name, handler];
+    });
+    try {
+      const { withHostBuildAdmission } =
+        await import("./container-admission.mjs");
+      const code = await withHostBuildAdmission(
+        (admittedEnvironment) =>
+          runCoordinated({
+            directory,
+            resource,
+            command,
+            args,
+            environment: admittedEnvironment,
+            signal: admissionSignal,
+            output,
+            cleanupGraceMs,
+          }),
+        { environment, signal: admissionSignal, onTiming },
+      );
+      return signalExit ?? code;
+    } catch (error) {
+      if (signalExit !== undefined) return signalExit;
+      throw error;
+    } finally {
+      for (const [name, handler] of handlers)
+        process.removeListener(name, handler);
+    }
+  }
   const dockerLeaseDirectory =
     resource === "worktree" && !coordinated(directory, environment)
       ? mkdtempSync(join(tmpdir(), "situate-docker-lease-"))

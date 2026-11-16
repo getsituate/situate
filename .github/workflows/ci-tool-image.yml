@@ -7,6 +7,8 @@ on:
       - .github/workflows/ci-tool-image.yml
       - tools/actions-adapter.mjs
       - tools/ci-publish.mjs
+      - tools/ci-image-transport.mjs
+      - tools/ci-image.mjs
       - LICENSE
       - package.json
       - client/docker/Dockerfile
@@ -28,12 +30,29 @@ env:
   WORKFLOW_SHA: ${{ github.workflow_sha }}
 
 jobs:
-  build:
+  policy:
     if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 5
     outputs:
       needed: ${{ steps.policy.outputs.needed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - id: policy
+        run: node tools/actions-adapter.mjs image-policy
+
+  build-amd64:
+    needs: policy
+    if: needs.policy.outputs.needed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI_IMAGE_PLATFORM: linux/amd64
+    outputs:
       provenance: ${{ steps.build.outputs.provenance }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -42,17 +61,40 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - id: policy
-        run: node tools/actions-adapter.mjs image-policy
       - run: node tools/actions-adapter.mjs image-transfer-gate
-        if: steps.policy.outputs.needed == 'true'
         env:
           CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
       - id: build
-        if: steps.policy.outputs.needed == 'true'
         run: node tools/actions-adapter.mjs image-build
       - run: node tools/actions-adapter.mjs image-upload
-        if: steps.policy.outputs.needed == 'true'
+        env:
+          PROVENANCE: ${{ steps.build.outputs.provenance }}
+          CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
+          CI_IMAGE_TRANSFER_SSH_PRIVATE_KEY: ${{ secrets.CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY }}
+          CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS: ${{ secrets.CI_IMAGE_TRANSFER_KNOWN_HOSTS }}
+
+  build-arm64:
+    needs: policy
+    if: needs.policy.outputs.needed == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    env:
+      CI_IMAGE_PLATFORM: linux/arm64
+    outputs:
+      provenance: ${{ steps.build.outputs.provenance }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs image-transfer-gate
+        env:
+          CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
+      - id: build
+        run: node tools/actions-adapter.mjs image-build
+      - run: node tools/actions-adapter.mjs image-upload
         env:
           PROVENANCE: ${{ steps.build.outputs.provenance }}
           CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_UPLOAD_HOST }}
@@ -60,10 +102,15 @@ jobs:
           CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS: ${{ secrets.CI_IMAGE_TRANSFER_KNOWN_HOSTS }}
 
   publish:
-    needs: build
-    if: needs.build.outputs.needed == 'true' && github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
+    needs: [policy, build-amd64, build-arm64]
+    if: needs.policy.outputs.needed == 'true' && github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
+    outputs:
+      candidate: ${{ steps.publish.outputs.candidate }}
+      digest: ${{ steps.publish.outputs.digest }}
+      inputsSha256: ${{ steps.publish.outputs.inputsSha256 }}
+      children: ${{ steps.publish.outputs.children }}
     permissions:
       contents: read
       packages: write
@@ -76,12 +123,21 @@ jobs:
       - run: python3 tools/pipeline-bootstrap.py
       - run: node tools/actions-adapter.mjs image-download
         env:
-          PROVENANCE: ${{ needs.build.outputs.provenance }}
+          CI_IMAGE_PLATFORM: linux/amd64
+          PROVENANCE: ${{ needs.build-amd64.outputs.provenance }}
           CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_READ_HOST }}
           CI_IMAGE_TRANSFER_SSH_PRIVATE_KEY: ${{ secrets.CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY }}
           CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS: ${{ secrets.CI_IMAGE_TRANSFER_KNOWN_HOSTS }}
-      - run: node tools/actions-adapter.mjs image-publish
+      - run: node tools/actions-adapter.mjs image-download
+        env:
+          CI_IMAGE_PLATFORM: linux/arm64
+          PROVENANCE: ${{ needs.build-arm64.outputs.provenance }}
+          CI_IMAGE_TRANSFER_HOST: ${{ vars.CI_IMAGE_TRANSFER_READ_HOST }}
+          CI_IMAGE_TRANSFER_SSH_PRIVATE_KEY: ${{ secrets.CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY }}
+          CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS: ${{ secrets.CI_IMAGE_TRANSFER_KNOWN_HOSTS }}
+      - id: publish
+        run: node tools/actions-adapter.mjs image-publish
         env:
           GH_TOKEN: ${{ github.token }}
-          PROVENANCE: ${{ needs.build.outputs.provenance }}
+          PROVENANCES: ${{ format('[{0},{1}]', needs.build-amd64.outputs.provenance, needs.build-arm64.outputs.provenance) }}
           DOCKER_CONFIG: ${{ runner.temp }}/ci-registry-auth

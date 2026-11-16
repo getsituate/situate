@@ -11,6 +11,18 @@ import { pathToFileURL } from "node:url";
 import { createGunzip } from "node:zlib";
 
 export const image = "ghcr.io/getsituate/situate-ci-linux";
+export const platforms = ["linux/amd64", "linux/arm64"];
+export function platformContext(expected, platform) {
+  if (!platforms.includes(platform))
+    throw new Error("Unsupported image platform.");
+  const suffix = `-${platform.split("/")[1]}`;
+  return {
+    ...expected,
+    platform,
+    localTag: expected.localTag + suffix,
+    publishTag: expected.publishTag + suffix,
+  };
+}
 export const maxArchiveBytes = 8 * 1024 ** 3;
 export const maxExpandedArchiveBytes = 12 * 1024 ** 3;
 const hex = /^[a-f0-9]{64}$/;
@@ -30,7 +42,7 @@ export function context(env = process.env) {
     throw new Error(
       "Publication requires a main-branch run in getsituate/situate.",
     );
-  return {
+  const expected = {
     repository: env.GITHUB_REPOSITORY,
     repositoryId: env.GITHUB_REPOSITORY_ID,
     runId: env.GITHUB_RUN_ID,
@@ -39,6 +51,9 @@ export function context(env = process.env) {
     localTag: `situate-ci-build:${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
     publishTag: `${image}:build-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
   };
+  return env.CI_IMAGE_PLATFORM === undefined
+    ? expected
+    : platformContext(expected, env.CI_IMAGE_PLATFORM);
 }
 
 export function candidateRevision(requested, fallback) {
@@ -53,7 +68,30 @@ export function candidateRevision(requested, fallback) {
 export function validateProvenance(value, expected) {
   if (
     !value ||
-    value.version !== 1 ||
+    JSON.stringify(Object.keys(value).sort()) !==
+      JSON.stringify(
+        [
+          "version",
+          "repository",
+          "repositoryId",
+          "runId",
+          "attempt",
+          "workflowSha",
+          "localTag",
+          "publishTag",
+          "revision",
+          "inputsSha256",
+          "imageId",
+          "configDigest",
+          "bytes",
+          "archiveSha256",
+          ...(expected.platform ? ["platform"] : []),
+        ].sort(),
+      ) ||
+    value.version !== (expected.platform ? 2 : 1) ||
+    (expected.platform
+      ? !platforms.includes(value.platform)
+      : value.platform !== undefined) ||
     Object.entries(expected).some(([key, entry]) => value[key] !== entry) ||
     !revisionPattern.test(value.revision ?? "") ||
     !hex.test(value.inputsSha256 ?? "") ||
@@ -159,7 +197,8 @@ export function validateImage(inspected, provenance) {
     inspected?.Id !== provenance.imageId ||
     imageConfigDigest(inspected) !== provenance.configDigest ||
     inspected.Os !== "linux" ||
-    inspected.Architecture !== "amd64" ||
+    inspected.Architecture !==
+      (provenance.platform ?? "linux/amd64").split("/")[1] ||
     !inspected.RepoTags?.includes(provenance.localTag) ||
     labels?.["org.opencontainers.image.source"] !==
       `https://github.com/${provenance.repository}` ||
@@ -241,9 +280,250 @@ async function api(path, allowMissing = false) {
 }
 const packagePath = "/orgs/getsituate/packages/container/situate-ci-linux";
 
+export function validateBuildSet(receipts, expected, source, inputsSha256) {
+  if (!Array.isArray(receipts) || receipts.length !== platforms.length)
+    throw new Error("Expected both platform build receipts.");
+  for (const platform of platforms) {
+    const matches = receipts.filter(
+      (receipt) => receipt?.platform === platform,
+    );
+    if (matches.length !== 1)
+      throw new Error("Missing or duplicate image platform.");
+    const receipt = validateProvenance(
+      matches[0],
+      platformContext(expected, platform),
+    );
+    if (receipt.revision !== source || receipt.inputsSha256 !== inputsSha256)
+      throw new Error("Image source or tool inputs differ from the publisher.");
+  }
+  return platforms.map((platform) =>
+    receipts.find((receipt) => receipt.platform === platform),
+  );
+}
+const manifestTypes = [
+  "application/vnd.oci.image.manifest.v1+json",
+  "application/vnd.docker.distribution.manifest.v2+json",
+];
+export function validateRemoteChild(manifest, receipt) {
+  if (
+    manifest?.schemaVersion !== 2 ||
+    !manifestTypes.includes(manifest.mediaType) ||
+    manifest.config?.digest !== receipt.configDigest
+  )
+    throw new Error(
+      "Remote child differs from the verified image configuration.",
+    );
+}
+export function validateRemoteIndex(index, children) {
+  if (
+    index?.schemaVersion !== 2 ||
+    ![
+      "application/vnd.oci.image.index.v1+json",
+      "application/vnd.docker.distribution.manifest.list.v2+json",
+    ].includes(index.mediaType) ||
+    !Array.isArray(index.manifests) ||
+    index.manifests.length !== 2
+  )
+    throw new Error("Expected an exact two-platform image index.");
+  const digests = new Set();
+  for (const platform of platforms) {
+    const matches = index.manifests.filter(
+      (entry) =>
+        `${entry.platform?.os}/${entry.platform?.architecture}` === platform,
+    );
+    const entry = matches[0];
+    if (
+      matches.length !== 1 ||
+      !manifestTypes.includes(entry.mediaType) ||
+      entry.digest !== children[platform] ||
+      !/^sha256:[a-f0-9]{64}$/.test(entry.digest) ||
+      digests.has(entry.digest) ||
+      (entry.platform.variant !== undefined &&
+        !(platform === "linux/arm64" && entry.platform.variant === "v8"))
+    )
+      throw new Error(
+        "Remote index platform or digest differs from verified children.",
+      );
+    digests.add(entry.digest);
+  }
+}
+async function boundedResponse(response) {
+  if (!response.ok)
+    throw new Error(
+      `Anonymous registry access returned HTTP ${response.status}.`,
+    );
+  const chunks = [];
+  let bytes = 0;
+  for await (const chunk of response.body) {
+    bytes += chunk.length;
+    if (bytes > 1024 * 1024) throw new Error("Registry response is too large.");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+export async function anonymousManifest(digest, request = fetch) {
+  if (!/^sha256:[a-f0-9]{64}$/.test(digest))
+    throw new Error("Invalid registry digest.");
+  const options = { redirect: "error", signal: AbortSignal.timeout(30000) };
+  const tokenResponse = await request(
+    "https://ghcr.io/token?service=ghcr.io&scope=repository:getsituate/situate-ci-linux:pull",
+    options,
+  );
+  const { token } = JSON.parse(
+    (await boundedResponse(tokenResponse)).toString("utf8"),
+  );
+  if (typeof token !== "string" || !token || /[\r\n]/.test(token))
+    throw new Error("Invalid anonymous registry token.");
+  const response = await request(
+    `https://ghcr.io/v2/getsituate/situate-ci-linux/manifests/${digest}`,
+    {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: [
+          ...manifestTypes,
+          "application/vnd.oci.image.index.v1+json",
+          "application/vnd.docker.distribution.manifest.list.v2+json",
+        ].join(", "),
+      },
+    },
+  );
+  const raw = await boundedResponse(response);
+  if (`sha256:${createHash("sha256").update(raw).digest("hex")}` !== digest)
+    throw new Error("Anonymous registry manifest digest differs.");
+  return JSON.parse(raw.toString("utf8"));
+}
+export async function publishIndex(
+  { receipts, directories, expected, source, inputsSha256 },
+  {
+    execute = docker,
+    packageInfo = () => api(packagePath),
+    readManifest = anonymousManifest,
+    readArchiveManifest = (directory) =>
+      JSON.parse(
+        execFileSync(
+          "tar",
+          ["-xOf", join(directory, "image.tar"), "manifest.json"],
+          { encoding: "utf8", maxBuffer: 64 * 1024, timeout: 60000 },
+        ),
+      ),
+  } = {},
+) {
+  const builds = validateBuildSet(receipts, expected, source, inputsSha256);
+  // Validate every archive before loading any candidate or acquiring registry access.
+  for (const receipt of builds) {
+    const directory = directories[receipt.platform];
+    const archive = await archiveDigest(directory);
+    if (
+      archive.bytes !== receipt.bytes ||
+      archive.archiveSha256 !== receipt.archiveSha256
+    )
+      throw new Error("Image archive checksum or size differs from the build.");
+    validateArchiveManifest(readArchiveManifest(directory), receipt);
+  }
+  validatePackage(await packageInfo(), expected);
+  for (const receipt of builds) {
+    execute([
+      "load",
+      "--input",
+      join(directories[receipt.platform], "image.tar"),
+    ]);
+    validateImage(
+      JSON.parse(execute(["image", "inspect", receipt.localTag]))[0],
+      receipt,
+    );
+  }
+  if (!process.env.GITHUB_ACTOR || !process.env.GH_TOKEN)
+    throw new Error("Registry publisher identity is required.");
+  execute(
+    [
+      "login",
+      "ghcr.io",
+      "--username",
+      process.env.GITHUB_ACTOR,
+      "--password-stdin",
+    ],
+    {
+      input: process.env.GH_TOKEN,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  try {
+    const children = {};
+    for (const receipt of builds) {
+      execute(["tag", receipt.imageId, receipt.publishTag]);
+      const pushed = execute(["push", receipt.publishTag]);
+      const matches = [...pushed.matchAll(/digest: (sha256:[a-f0-9]{64})\b/g)];
+      if (matches.length !== 1)
+        throw new Error("The pushed child digest is unavailable.");
+      const digest = matches[0][1];
+      validateRemoteChild(await readManifest(digest), receipt);
+      children[receipt.platform] = digest;
+    }
+    if (new Set(Object.values(children)).size !== 2)
+      throw new Error("Duplicate child digests.");
+    validatePackage(await packageInfo(), expected);
+    execute([
+      "manifest",
+      "create",
+      expected.publishTag,
+      ...platforms.map((platform) => `${image}@${children[platform]}`),
+    ]);
+    validateRemoteIndex(
+      JSON.parse(execute(["manifest", "inspect", expected.publishTag])),
+      children,
+    );
+    const pushed = execute(["manifest", "push", expected.publishTag]).trim();
+    const digest = pushed.split(/\s+/).at(-1);
+    if (!/^sha256:[a-f0-9]{64}$/.test(digest))
+      throw new Error("The pushed index digest is unavailable.");
+    validateRemoteIndex(await readManifest(digest), children);
+    validatePackage(await packageInfo(), expected);
+    return {
+      version: 2,
+      platforms: [...platforms],
+      image: `${image}@${digest}`,
+      inputsSha256,
+      revision: source,
+      children,
+    };
+  } finally {
+    execute(["logout", "ghcr.io"]);
+  }
+}
+
 export async function main(args = process.argv.slice(2)) {
   const [command, directory] = args;
   const expected = context();
+  if (command === "publish-index") {
+    if (process.env.CI_IMAGE_PLATFORM !== undefined)
+      throw new Error("Index publication must not select a single platform.");
+    const raw = process.env.PROVENANCES ?? "";
+    if (Buffer.byteLength(raw) > 16384)
+      throw new Error("Image provenance is too large.");
+    const candidate = await publishIndex({
+      receipts: JSON.parse(raw),
+      expected,
+      source: process.env.GITHUB_SHA,
+      inputsSha256: process.env.INPUTS_SHA256,
+      directories: Object.fromEntries(
+        platforms.map((platform) => [
+          platform,
+          join(directory, platform.split("/")[1]),
+        ]),
+      ),
+    });
+    const { revision, children, ...lock } = candidate;
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `candidate=${JSON.stringify(lock)}\ndigest=${candidate.image}\ninputsSha256=${candidate.inputsSha256}\nrevision=${revision}\nchildren=${JSON.stringify(children)}\n`,
+    );
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `## Public Linux CI image\n\n- Image: \`${candidate.image}\`\n- Revision: \`${revision}\`\n- Inputs SHA-256: \`${candidate.inputsSha256}\`\n- Platforms: ${platforms.join(", ")}\n\nReview the published digests and distribution obligations before updating the image lock.\n`,
+    );
+    return candidate;
+  }
   if (command === "revision") {
     console.log(
       candidateRevision(process.env.REQUESTED_REVISION, process.env.GITHUB_SHA),
@@ -264,7 +544,7 @@ export async function main(args = process.argv.slice(2)) {
     const inspected = inspect(expected.localTag);
     const provenance = validateProvenance(
       {
-        version: 1,
+        version: expected.platform ? 2 : 1,
         ...expected,
         revision,
         inputsSha256: process.env.INPUTS_SHA256,
@@ -283,7 +563,9 @@ export async function main(args = process.argv.slice(2)) {
   }
   const bootstrap = command === "bootstrap";
   if (command !== "publish" && !bootstrap)
-    throw new Error("Choose revision, artifact, seal, bootstrap or publish.");
+    throw new Error(
+      "Choose revision, artifact, seal, bootstrap, publish or publish-index.",
+    );
   if (bootstrap && process.env.GITHUB_EVENT_NAME !== "workflow_dispatch")
     throw new Error("Bootstrap requires an explicitly reviewed manual run.");
   const raw = process.env.PROVENANCE ?? "";

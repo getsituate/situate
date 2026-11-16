@@ -13,8 +13,16 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import {
   archiveDigest,
+  anonymousManifest,
+  platformContext,
+  platforms,
+  publishIndex,
+  validateBuildSet,
+  validateRemoteChild,
+  validateRemoteIndex,
   candidateRevision,
   context,
   image,
@@ -496,6 +504,7 @@ test("image script verifies a source-bound candidate without network or registry
       (command, args) => {
         calls.push([command, args]);
         if (command === "git") return source;
+        if (command === "docker" && args[0] === "info") return "linux/amd64";
         if (command === "docker" && args[0] === "save") throw stopped;
         return "";
       },
@@ -576,7 +585,7 @@ test("image script rejects another source before building and delegates publicat
   assert.deepEqual(calls, [
     [
       process.execPath,
-      ["tools/ci-publish.mjs", "publish", join(directory, "ci-image")],
+      ["tools/ci-publish.mjs", "publish-index", join(directory, "ci-image")],
     ],
   ]);
 });
@@ -596,13 +605,26 @@ test("workflow separates read-only candidate building from privileged data-only 
   assert.match(build, /github.ref == 'refs\/heads\/main'/);
   assert.match(publish, /github.ref == 'refs\/heads\/main'/);
   assert.match(build, /run: node tools\/actions-adapter\.mjs image-build/);
-  const [buildSteps, transferStep] = build.split(
-    "      - run: node tools/actions-adapter.mjs image-upload\n",
-  );
-  assert.doesNotMatch(buildSteps, /packages: write|GH_TOKEN:|secrets\./);
-  assert.match(transferStep, /CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY/);
-  assert.doesNotMatch(transferStep, /GH_TOKEN:|MACOS_(?:RELEASE|PUBLICATION)/);
-  assert.match(publish, /needs: build/);
+  for (const [architecture, runner] of [
+    ["amd64", "ubuntu-24.04"],
+    ["arm64", "ubuntu-24.04-arm"],
+  ]) {
+    const job = build
+      .split(`  build-${architecture}:\n`)[1]
+      .split(/\n {2}[a-z]+-/)[0];
+    assert.ok(job.includes(`runs-on: ${runner}\n`));
+    assert.ok(job.includes(`CI_IMAGE_PLATFORM: linux/${architecture}`));
+    const [buildSteps, transferStep] = job.split(
+      "      - run: node tools/actions-adapter.mjs image-upload\n",
+    );
+    assert.doesNotMatch(buildSteps, /packages: write|GH_TOKEN:|secrets\./);
+    assert.match(transferStep, /CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY/);
+    assert.doesNotMatch(
+      transferStep,
+      /GH_TOKEN:|MACOS_(?:RELEASE|PUBLICATION)/,
+    );
+  }
+  assert.match(publish, /needs: \[policy, build-amd64, build-arm64\]/);
   assert.match(publish, /run: node tools\/actions-adapter\.mjs image-publish/);
   assert.match(publish, /packages: write/);
   assert.doesNotMatch(publish, /actions: read/);
@@ -611,7 +633,7 @@ test("workflow separates read-only candidate building from privileged data-only 
   assert.match(publish, /GH_TOKEN: \$\{\{ github.token \}\}/);
   assert.match(
     publish,
-    /PROVENANCE: \$\{\{ needs.build.outputs.provenance \}\}/,
+    /PROVENANCES: .*needs.build-amd64.outputs.provenance, needs.build-arm64.outputs.provenance/,
   );
   assert.match(
     publish,
@@ -620,9 +642,339 @@ test("workflow separates read-only candidate building from privileged data-only 
   assert.doesNotMatch(publish, /docker run|docker build|image-build/);
   assert.equal(
     (workflow.match(/ref: \$\{\{ github.sha \}\}/g) ?? []).length,
-    2,
+    4,
   );
-  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 2);
+  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 4);
   for (const action of workflow.matchAll(/uses: (.+)/g))
     assert.match(action[1], /^actions\/checkout@[a-f0-9]{40}$/);
+});
+
+const buildReceipts = () =>
+  platforms.map((platform, index) => ({
+    ...provenance(),
+    version: 2,
+    ...platformContext(expected, platform),
+    imageId: `sha256:${String(index + 1).repeat(64)}`,
+    configDigest: `sha256:${String(index + 3).repeat(64)}`,
+  }));
+const childDigests = {
+  "linux/amd64": `sha256:${"5".repeat(64)}`,
+  "linux/arm64": `sha256:${"6".repeat(64)}`,
+};
+const remoteIndex = () => ({
+  schemaVersion: 2,
+  mediaType: "application/vnd.oci.image.index.v1+json",
+  manifests: platforms.map((platform) => ({
+    mediaType: "application/vnd.oci.image.manifest.v1+json",
+    digest: childDigests[platform],
+    platform: { os: "linux", architecture: platform.split("/")[1] },
+  })),
+});
+
+test("two-platform provenance rejects mixed identities and missing, duplicate or unknown platforms", () => {
+  const check = (receipts) =>
+    validateBuildSet(
+      receipts,
+      expected,
+      provenance().revision,
+      provenance().inputsSha256,
+    );
+  assert.deepEqual(
+    check(buildReceipts().reverse()).map((receipt) => receipt.platform),
+    platforms,
+  );
+  for (const receipts of [
+    [],
+    buildReceipts().slice(0, 1),
+    [...buildReceipts(), buildReceipts()[0]],
+    [buildReceipts()[0], buildReceipts()[0]],
+    [buildReceipts()[0], { ...buildReceipts()[1], platform: "linux/s390x" }],
+  ])
+    assert.throws(() => check(receipts));
+  for (const [key, value] of [
+    ["version", 1],
+    ["repository", "other/repo"],
+    ["repositoryId", "99"],
+    ["runId", "124"],
+    ["attempt", "1"],
+    ["workflowSha", "c".repeat(40)],
+    ["revision", "f".repeat(40)],
+    ["inputsSha256", "f".repeat(64)],
+    ["localTag", expected.localTag],
+    ["publishTag", expected.publishTag],
+    ["platform", undefined],
+  ])
+    assert.throws(
+      () =>
+        check([buildReceipts()[0], { ...buildReceipts()[1], [key]: value }]),
+      key,
+    );
+  assert.throws(
+    () => context({ ...env, CI_IMAGE_PLATFORM: "linux/s390x" }),
+    /platform/,
+  );
+  assert.throws(
+    () =>
+      validateImage(
+        { ...inspected(), Architecture: "amd64" },
+        buildReceipts()[1],
+      ),
+    /provenance/,
+  );
+});
+
+test("remote indexes require exactly the verified platform-to-digest correspondence", () => {
+  validateRemoteIndex(remoteIndex(), childDigests);
+  const dockerIndex = remoteIndex();
+  dockerIndex.mediaType =
+    "application/vnd.docker.distribution.manifest.list.v2+json";
+  dockerIndex.manifests[1].platform.variant = "v8";
+  validateRemoteIndex(dockerIndex, childDigests);
+  for (const mutate of [
+    (value) => value.manifests.pop(),
+    (value) => value.manifests.push(value.manifests[0]),
+    (value) => (value.manifests[1].platform.architecture = "amd64"),
+    (value) => (value.manifests[1].platform.architecture = "s390x"),
+    (value) => delete value.manifests[1].platform,
+    (value) => (value.manifests[1].platform.variant = "v7"),
+    (value) =>
+      value.manifests
+        .reverse()
+        .forEach((entry, i) => (entry.digest = Object.values(childDigests)[i])),
+    (value) => (value.manifests[1].digest = childDigests["linux/amd64"]),
+    (value) => (value.mediaType = "application/vnd.oci.image.manifest.v1+json"),
+  ]) {
+    const value = remoteIndex();
+    mutate(value);
+    assert.throws(() => validateRemoteIndex(value, childDigests));
+  }
+  assert.throws(
+    () =>
+      validateRemoteChild(
+        {
+          schemaVersion: 2,
+          mediaType: "application/vnd.oci.image.manifest.v1+json",
+          config: { digest: "sha256:wrong" },
+        },
+        buildReceipts()[0],
+      ),
+    /configuration/,
+  );
+});
+
+async function indexFixture(t) {
+  const f = await publisherFixture(t);
+  const receipts = buildReceipts();
+  const directories = {};
+  for (const receipt of receipts) {
+    const directory = join(f.directory, receipt.platform.split("/")[1]);
+    mkdirSync(directory);
+    writeFileSync(join(directory, "image.tar"), "synthetic archive");
+    Object.assign(receipt, await archiveDigest(directory));
+    directories[receipt.platform] = directory;
+  }
+  const calls = [];
+  const indexDigest = `sha256:${"7".repeat(64)}`;
+  const dependencies = {
+    packageInfo: async () => pkg(),
+    readArchiveManifest: (directory) => {
+      const receipt = receipts.find(
+        (receipt) => directories[receipt.platform] === directory,
+      );
+      return [
+        {
+          ...manifest()[0],
+          RepoTags: [receipt.localTag],
+          Config: `${receipt.configDigest.slice(7)}.json`,
+        },
+      ];
+    },
+    execute: (args) => {
+      calls.push(args);
+      if (args[0] === "image") {
+        const receipt = receipts.find(
+          (receipt) => receipt.localTag === args[2],
+        );
+        return JSON.stringify([
+          {
+            ...inspected(),
+            Id: receipt.imageId,
+            Descriptor: {
+              mediaType: "application/vnd.oci.image.manifest.v1+json",
+              annotations: { "config.digest": receipt.configDigest },
+            },
+            Architecture: receipt.platform.split("/")[1],
+            RepoTags: [receipt.localTag],
+          },
+        ]);
+      }
+      if (args[0] === "push")
+        return `digest: ${childDigests[receipts.find((receipt) => receipt.publishTag === args[1]).platform]} size: 1024`;
+      if (args[0] === "manifest" && args[1] === "inspect")
+        return JSON.stringify(remoteIndex());
+      if (args[0] === "manifest" && args[1] === "push") return indexDigest;
+      return "";
+    },
+    readManifest: async (digest) => {
+      calls.push(["anonymous", digest]);
+      if (digest === indexDigest) return remoteIndex();
+      const receipt = receipts.find(
+        (receipt) => childDigests[receipt.platform] === digest,
+      );
+      return {
+        schemaVersion: 2,
+        mediaType: "application/vnd.oci.image.manifest.v1+json",
+        config: { digest: receipt.configDigest },
+      };
+    },
+  };
+  return {
+    ...f,
+    calls,
+    dependencies,
+    receipts,
+    directories,
+    options: {
+      receipts,
+      directories,
+      expected,
+      source: provenance().revision,
+      inputsSha256: provenance().inputsSha256,
+    },
+  };
+}
+
+test("publisher verifies both archives and images before pushing children and an anonymously verified immutable index", async (t) => {
+  const f = await indexFixture(t);
+  const candidate = await publishIndex(f.options, f.dependencies);
+  assert.deepEqual(candidate, {
+    version: 2,
+    platforms: ["linux/amd64", "linux/arm64"],
+    image: `${image}@sha256:${"7".repeat(64)}`,
+    inputsSha256: provenance().inputsSha256,
+    revision: provenance().revision,
+    children: childDigests,
+  });
+  assert.deepEqual(
+    f.calls.map((args) => args[0]),
+    [
+      "load",
+      "image",
+      "load",
+      "image",
+      "login",
+      "tag",
+      "push",
+      "anonymous",
+      "tag",
+      "push",
+      "anonymous",
+      "manifest",
+      "manifest",
+      "manifest",
+      "anonymous",
+      "logout",
+    ],
+  );
+  assert.deepEqual(
+    f.calls.find((args) => args[0] === "manifest"),
+    [
+      "manifest",
+      "create",
+      expected.publishTag,
+      `${image}@${childDigests["linux/amd64"]}`,
+      `${image}@${childDigests["linux/arm64"]}`,
+    ],
+  );
+  assert.doesNotMatch(
+    JSON.stringify(f.calls),
+    /fixture-token|latest|\["run"|\["build"/,
+  );
+});
+
+test("a corrupt second archive cannot load or publish even the first child", async (t) => {
+  const f = await indexFixture(t);
+  writeFileSync(join(f.directories["linux/arm64"], "image.tar"), "corrupt");
+  await assert.rejects(
+    publishIndex(f.options, f.dependencies),
+    /checksum or size/,
+  );
+  assert.deepEqual(f.calls, []);
+});
+
+test("a wrong second architecture cannot log in or publish", async (t) => {
+  const f = await indexFixture(t);
+  const execute = f.dependencies.execute;
+  f.dependencies.execute = (args) => {
+    const result = execute(args);
+    if (args[0] === "image" && args[2].endsWith("arm64")) {
+      const value = JSON.parse(result);
+      value[0].Architecture = "amd64";
+      return JSON.stringify(value);
+    }
+    return result;
+  };
+  await assert.rejects(publishIndex(f.options, f.dependencies), /provenance/);
+  assert.ok(
+    f.calls.every((args) => !["login", "push", "manifest"].includes(args[0])),
+  );
+});
+
+test("failed anonymous child verification prevents index creation and logs out", async (t) => {
+  const f = await indexFixture(t);
+  f.dependencies.readManifest = async () => {
+    throw new Error("anonymous access denied");
+  };
+  await assert.rejects(
+    publishIndex(f.options, f.dependencies),
+    /anonymous access denied/,
+  );
+  assert.ok(f.calls.every((args) => args[0] !== "manifest"));
+  assert.deepEqual(f.calls.at(-1), ["logout", "ghcr.io"]);
+});
+
+test("a remote index with switched platform digests cannot produce a candidate", async (t) => {
+  const f = await indexFixture(t);
+  const readManifest = f.dependencies.readManifest;
+  f.dependencies.readManifest = async (digest) => {
+    const result = await readManifest(digest);
+    if (result.manifests)
+      result.manifests[1].digest = childDigests["linux/amd64"];
+    return result;
+  };
+  await assert.rejects(
+    publishIndex(f.options, f.dependencies),
+    /platform or digest/,
+  );
+  assert.deepEqual(f.calls.at(-1), ["logout", "ghcr.io"]);
+});
+
+test("anonymous manifest reads use only an anonymous pull token and bind exact response bytes", async () => {
+  const raw = JSON.stringify(remoteIndex());
+  const digest = `sha256:${createHash("sha256").update(raw).digest("hex")}`;
+  const calls = [];
+  const request = async (url, options) => {
+    calls.push([url, options]);
+    return new Response(
+      url.includes("/token?")
+        ? JSON.stringify({ token: "anonymous-pull" })
+        : raw,
+    );
+  };
+  assert.deepEqual(await anonymousManifest(digest, request), remoteIndex());
+  assert.equal(calls[0][1].headers, undefined);
+  assert.equal(calls[1][1].headers.Authorization, "Bearer anonymous-pull");
+  assert.equal(
+    calls[1][0],
+    `https://ghcr.io/v2/getsituate/situate-ci-linux/manifests/${digest}`,
+  );
+  assert.ok(calls.every(([, options]) => options.redirect === "error"));
+  await assert.rejects(
+    anonymousManifest(`sha256:${"0".repeat(64)}`, request),
+    /digest differs/,
+  );
+  await assert.rejects(
+    anonymousManifest(digest, async () => new Response("", { status: 401 })),
+    /HTTP 401/,
+  );
 });
