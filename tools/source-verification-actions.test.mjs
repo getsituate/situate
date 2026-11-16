@@ -16,6 +16,7 @@ import { aggregateReceipts, digest, sealPlan } from "./pipeline-state.mjs";
 import {
   createSourceVerificationEvidence,
   MAX_SOURCE_EVIDENCE_BYTES,
+  validateSourceVerificationReuse,
 } from "./source-verification-evidence.mjs";
 import {
   captureLaneEvidence,
@@ -334,6 +335,22 @@ test("consumer retrieves an attempt-bound artifact and independently resolves so
   assert.deepEqual(result.observation.checkedParents, [baseSHA, headSHA]);
   assert.equal(result.source.tree, tree);
   assert.equal(result.contract.toolsDigest, f.measured.contract.toolsDigest);
+  const receipt = {
+    schemaVersion: 1,
+    source: mainSHA,
+    planDigest: f.options.plan.authorizationDigest,
+    lane: "macos-native",
+    host: "macos",
+    executionHost: "macos",
+    status: "passed",
+    coverage: "reused",
+    originalReceipt: result.binding.originalReceipt,
+    reuse: result,
+  };
+  assert.equal(
+    validateSourceVerificationReuse(f.options.plan, receipt),
+    receipt,
+  );
   assert(f.requests.some(({ path }) => path === `/git/commits/${testedSHA}`));
   assert(f.requests.some(({ path }) => path.startsWith("/contents/")));
   assert.deepEqual(
@@ -688,6 +705,14 @@ test("capture measures actual process identity and excludes tokens and ephemeral
   const execute = (command, args, options) => {
     if (command !== "git") {
       probes.push(options.env);
+      if (command === "rustup" || command.startsWith("/synthetic/toolchain/")) {
+        assert.equal(options.cwd, join(root, "client"));
+        assert.equal(options.env.RUSTUP_AUTO_INSTALL, "0");
+        if (command === "rustup") return `/synthetic/toolchain/bin/${args[1]}`;
+        if (command.endsWith("/rustc"))
+          return "rustc 1.98.1 (synthetic)\nrelease: 1.98.1\nhost: synthetic-host";
+        return "cargo 1.98.1 (synthetic)";
+      }
       return command === "npm" ? "11.12.0" : "synthetic-tool-version";
     }
     if (args.join(" ") === "rev-parse HEAD") return testedSHA;
@@ -701,7 +726,7 @@ test("capture measures actual process identity and excludes tokens and ephemeral
     if (args[1].endsWith(":tools/ci-image.lock.json"))
       return JSON.stringify({ image });
     if (args[1].endsWith(":client/rust-toolchain.toml"))
-      return '[toolchain]\nchannel = "synthetic"';
+      return '[toolchain]\nchannel = "1.98.1"';
     throw new Error(`Unexpected synthetic command: ${command} ${args}`);
   };
   const options = { plan, lane: plan.lanes[0].id, environment, execute };
@@ -715,6 +740,43 @@ test("capture measures actual process identity and excludes tokens and ephemeral
   assert.equal(measured.host.arch, process.arch);
   assert(!JSON.stringify(measured).includes("synthetic-secret"));
   assert(probes.every((env) => env.GITHUB_TOKEN === undefined));
+  const rustPlan = sealPlan({
+    ...plan,
+    lanes: [
+      {
+        ...plan.lanes[0],
+        id: linux ? "rust" : "macos-native",
+        suites: [linux ? "client-core" : "client-native"],
+      },
+    ],
+  });
+  const rustOptions = {
+    ...options,
+    plan: rustPlan,
+    lane: rustPlan.lanes[0].id,
+  };
+  assert(captureLaneEvidence(root, rustOptions));
+  assert.equal(
+    captureLaneEvidence(root, {
+      ...rustOptions,
+      execute: (command, args, config) =>
+        command.endsWith("/rustc")
+          ? "rustc 1.98.0 (wrong toolchain)\nrelease: 1.98.0"
+          : execute(command, args, config),
+    }),
+    null,
+  );
+  assert.equal(
+    captureLaneEvidence(root, {
+      ...rustOptions,
+      execute: (command, args, config) => {
+        if (command === "rustup")
+          throw new Error("Pinned toolchain is not installed");
+        return execute(command, args, config);
+      },
+    }),
+    null,
+  );
   const relocated = captureLaneEvidence(root, {
     ...options,
     environment: {

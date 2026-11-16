@@ -160,9 +160,9 @@ export function captureLaneEvidence(
     const behavior = Object.fromEntries(
       behaviorKeys.map((key) => [key, runtime[key] ?? null]),
     );
-    const probe = (command, args) => {
+    const probe = (command, args, cwd = root) => {
       const value = execute(command, args, {
-        cwd: root,
+        cwd,
         env: { ...runtime, RUSTUP_AUTO_INSTALL: "0" },
       }).trim();
       assert(value.length > 0 && value.length <= 8192);
@@ -188,8 +188,18 @@ export function captureLaneEvidence(
         "show",
         `${plan.source}:client/rust-toolchain.toml`,
       );
-      tools.rustc = probe("rustc", ["--version", "--verbose"]);
-      tools.cargo = probe("cargo", ["--version"]);
+      const channel = tools.rustPin.match(
+        /^\s*channel\s*=\s*"(\d+\.\d+\.\d+)"\s*$/m,
+      )?.[1];
+      assert(channel, "An exact Rust release pin is required");
+      const cwd = join(root, "client");
+      const rustc = probe("rustup", ["which", "rustc"], cwd);
+      const cargo = probe("rustup", ["which", "cargo"], cwd);
+      assert(isAbsolute(rustc) && isAbsolute(cargo));
+      tools.rustc = probe(rustc, ["--version", "--verbose"], cwd);
+      assert.equal(tools.rustc.match(/^release: ([^\r\n]+)$/m)?.[1], channel);
+      tools.cargo = probe(cargo, ["--version"], cwd);
+      assert(/^cargo \d+\.\d+\.\d+\b/.test(tools.cargo));
     }
     if (process.platform === "darwin") {
       tools.xcode = probe("xcodebuild", ["-version"]);

@@ -425,7 +425,8 @@ export function selectSourceVerificationEvidence({
       assert(
         previousLane &&
           previousLane.host === lane.host &&
-          previousLane.execution === lane.execution,
+          previousLane.execution === lane.execution &&
+          (previousLane.timeoutSeconds ?? 600) === (lane.timeoutSeconds ?? 600),
       );
       assert(previousLane.suites.every((id) => eligible[laneId].includes(id)));
       const entry = evidence.lanes.find(({ lane }) => lane === laneId);
@@ -467,4 +468,53 @@ export function selectSourceVerificationEvidence({
     }
   }
   return miss("no-matching-evidence");
+}
+
+/**
+ * Validate an offline receipt from the trusted main-lane controller. Its observation
+ * must already have been independently resolved by selectActionsSourceEvidence;
+ * this consistency check does not authenticate artifact-supplied observations.
+ */
+export function validateSourceVerificationReuse(plan, receipt) {
+  const reuse = receipt?.reuse;
+  assert.equal(reuse?.action, "reuse");
+  const selected = selectSourceVerificationEvidence({
+    candidates: [{ evidence: reuse.evidence, observation: reuse.observation }],
+    plan,
+    lane: receipt.lane,
+    host: reuse.host,
+    contract: reuse.contract,
+    source: reuse.source,
+    reviewedWorkflowDigest: reuse.reviewedWorkflowDigest,
+  });
+  assert.equal(
+    selected.action,
+    "reuse",
+    "Reuse no longer covers the selected lane",
+  );
+  const lane = plan.lanes.find(({ id }) => id === receipt.lane);
+  exact(
+    receipt,
+    {
+      schemaVersion: 1,
+      source: plan.source,
+      planDigest: plan.authorizationDigest,
+      lane: lane.id,
+      host: lane.host,
+      executionHost: lane.host,
+      status: "passed",
+      coverage: "reused",
+      originalReceipt: selected.binding.originalReceipt,
+      reuse: {
+        ...selected,
+        observation: reuse.observation,
+        host: reuse.host,
+        contract: reuse.contract,
+        source: reuse.source,
+        reviewedWorkflowDigest: reuse.reviewedWorkflowDigest,
+      },
+    },
+    "Reuse receipt binding differs",
+  );
+  return receipt;
 }

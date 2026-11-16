@@ -10,6 +10,7 @@ import {
   selectSourceVerificationEvidence,
   sanitizeSourceVerificationReceipts,
   validateSourceVerificationEvidence,
+  validateSourceVerificationReuse,
 } from "./source-verification-evidence.mjs";
 
 const testedSHA = "a".repeat(40);
@@ -299,6 +300,100 @@ test("real runLane/runPlan result fields survive public receipt sanitization", a
     );
 });
 
+test("offline reuse receipts preserve the original execution and validate full coverage bindings", () => {
+  const input = fixture();
+  const selected = selectSourceVerificationEvidence(input);
+  const receipt = {
+    schemaVersion: 1,
+    source: mainSHA,
+    planDigest: input.plan.authorizationDigest,
+    lane: input.lane,
+    host: "macos",
+    executionHost: "macos",
+    status: "passed",
+    coverage: "reused",
+    originalReceipt: structuredClone(selected.binding.originalReceipt),
+    reuse: {
+      ...selected,
+      observation: input.candidates[0].observation,
+      host: input.host,
+      contract: input.contract,
+      source: input.source,
+      reviewedWorkflowDigest: input.reviewedWorkflowDigest,
+    },
+  };
+  const original = structuredClone(receipt);
+  assert.equal(validateSourceVerificationReuse(input.plan, receipt), receipt);
+  assert.deepEqual(receipt, original);
+  assert.equal(receipt.originalReceipt.source, testedSHA);
+  assert.notEqual(receipt.originalReceipt.planDigest, receipt.planDigest);
+  for (const mutate of [
+    (v) => {
+      v.coverage = "executed";
+    },
+    (v) => {
+      v.source = testedSHA;
+    },
+    (v) => {
+      v.planDigest = "0".repeat(64);
+    },
+    (v) => {
+      v.host = "linux";
+    },
+    (v) => {
+      v.executionHost = "linux";
+    },
+    (v) => {
+      v.status = "failed";
+    },
+    (v) => {
+      v.results = v.originalReceipt.results;
+    },
+    (v) => {
+      v.originalReceipt.source = mainSHA;
+    },
+    (v) => {
+      v.reuse.binding.executedSuites = [];
+    },
+    (v) => {
+      v.reuse.binding.suites = [];
+    },
+    (v) => {
+      v.reuse.binding.evidenceDigest = "0".repeat(64);
+    },
+    (v) => {
+      v.reuse.observation.aggregateConclusion = "failure";
+    },
+    (v) => {
+      v.reuse.observation.tree = "0".repeat(40);
+    },
+    (v) => {
+      v.reuse.contract.toolsDigest = "0".repeat(64);
+    },
+    (v) => {
+      v.reuse.source.clean = false;
+    },
+    (v) => {
+      v.reuse.host.ImageVersion = "unknown";
+    },
+    (v) => {
+      v.reuse.extra = "unknown";
+    },
+  ]) {
+    const invalid = structuredClone(receipt);
+    mutate(invalid);
+    assert.throws(
+      () => validateSourceVerificationReuse(input.plan, invalid),
+      mutate.toString(),
+    );
+  }
+  const timeoutPlan = sealPlan({
+    ...input.plan,
+    lanes: [{ ...input.plan.lanes[0], timeoutSeconds: 600 }],
+  });
+  assert.throws(() => validateSourceVerificationReuse(timeoutPlan, receipt));
+});
+
 test("successful superset coverage can satisfy an explicitly selected nonempty subset", () => {
   const input = fixture();
   input.plan = sealPlan({
@@ -331,6 +426,12 @@ test("changed whole tree, source checkout, tools, command, coverage and host all
     },
     (v) => {
       v.contract.suites.pop();
+    },
+    (v) => {
+      v.plan = sealPlan({
+        ...v.plan,
+        lanes: [{ ...v.plan.lanes[0], timeoutSeconds: 600 }],
+      });
     },
     (v) => {
       v.plan = sealPlan({
