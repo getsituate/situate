@@ -88,5 +88,4 @@ The current filesystem, conversation-format and provider-access boundaries remai
 == Design and implementation
 
 The link:{architecture-docs-root}/index.adoc#git-derived-file-references[Git-derived file-reference concept] defines ownership, normal and interrupted flows, reconstruction and the pre-release replacement boundary.
-The link:{architecture-repository-root}/docs/development/git-derived-file-references-plan.md[development plan] sequences the format decisions, direct replacement and platform verification.
 Acceptance requires equivalent reference results after a fresh Git-only rebuild, safe interrupted-operation behavior and correct new-format reference persistence; accepting this ADR does not establish those results.

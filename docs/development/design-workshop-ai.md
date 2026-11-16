@@ -60,7 +60,7 @@ The `scenario` URL parameter identifies a starting state, including the existing
 
 **Conversation** has the empty, completed, working and failed-response states, plus missing access, catalog failure, no eligible models, an unavailable saved model and confirmed/uncertain save failures. Catalog loading, reasoning levels, a single available model, manual IDs and save outcomes are live controls rather than duplicate starting states. Legacy `ai-chat-*` links resolve to these Conversation states. Setup completion also enters this same view, including its pane tabs, spacing and composer.
 
-Browser/device completion and saving are distinct simulated steps. Copy-code flows require input before completion. Device authorization does not ask the person to paste the displayed challenge back into Situate. Manual return is available only where the provider pattern supports it. [Authentication inventory and evidence boundaries](design-workshop-auth.md) describe the provisional provider fixtures; the production runtime's actual catalog and platform checks remain authoritative.
+Browser/device completion and saving are distinct simulated steps. Copy-code flows require input before completion. Device authorization does not ask the person to paste the displayed challenge back into Situate. Manual return is available only where the provider pattern supports it. The [provider qualification record](provider-qualification.md) distinguishes production integration, runtime evidence and remaining access limitations; workshop fixtures do not establish provider support.
 
 ## Provider attention in Settings
 

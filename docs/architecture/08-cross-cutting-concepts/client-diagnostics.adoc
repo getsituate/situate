@@ -354,6 +354,6 @@ Before delivery, verify the following with synthetic data and fault injection:
 * Replacing the writer with an in-memory destination does not change producers, and filtering one destination does not change another's accepted event set.
 * Desktop and mobile builds verify private directory resolution, file locking, lifecycle flush behavior and log retrieval through developer tooling. Browser tests alone cannot establish these properties.
 
-The link:{architecture-repository-root}/client/contracts/diagnostics.json[v1 catalog] and link:{architecture-repository-root}/docs/development/client-diagnostics-plan.md[development plan] define the implementation and verification boundary.
+The link:{architecture-repository-root}/client/contracts/diagnostics.json[v1 catalog] defines the shared event contract; the link:{architecture-repository-root}/docs/development/testing.md[testing guide] describes focused diagnostic checks.
 An explicit operation for making a copied workspace independent remains unspecified. Production plugin/synchronization integration is deferred with those runtimes.
 Mobile device retrieval, backup behavior, suspension and non-host desktop behavior must be verified on their target platforms; finite queue tests do not establish zero resource overhead or a user-facing latency guarantee.

@@ -147,7 +147,7 @@ Technical bounds from E2, E3 and E5: text pages are at most 32 KiB, search/list 
 
 ### Documentation and design scenarios — not current execution
 
-**E8:** `docs/development/workspace-development-plan.md:280–286` explicitly leaves Notes access, permissions and distribution qualification open. `client/workshop/src/onboarding/source-conversation.test.ts:30–42` checks scripted interface copy, not real Notes access. `README.md:5` supplies the outdated status statement discussed above.
+**E8:** `client/workshop/src/onboarding/source-conversation.test.ts:30–42` checks scripted interface copy, not real Notes access. `README.md:5` supplies the outdated status statement discussed above.
 
 ### Checks actually executed
 
