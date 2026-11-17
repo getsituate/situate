@@ -49,6 +49,18 @@ const statuses = new Set([
   "cancelled",
   "nonzero",
   "failed",
+  "exited_zero",
+  "exited_nonzero",
+  "dialog_observed",
+  "dialog_not_observed",
+  "observation_unavailable",
+]);
+const launchObservations = new Set([
+  "exited_zero",
+  "exited_nonzero",
+  "dialog_observed",
+  "dialog_not_observed",
+  "observation_unavailable",
 ]);
 
 export function validateQualificationProgress(event) {
@@ -72,6 +84,10 @@ export function validateQualificationProgress(event) {
           ["queued", "acquired", "released"].includes(event.status)
       : !["queued", "acquired", "released"].includes(event.status),
     "Invalid qualification progress",
+  );
+  assert(
+    !launchObservations.has(event.status) || event.command === "launch",
+    "Invalid launch observation",
   );
   return event;
 }

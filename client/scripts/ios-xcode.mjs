@@ -77,7 +77,7 @@ export function simulatorTarget(hostTriple) {
 export function run(
   command,
   args,
-  { cwd, env, signal, capture = false, terminationGraceMs = 2000 } = {},
+  { cwd, env, signal, capture = false, terminationGraceMs = 2000, onExit } = {},
 ) {
   if (
     !Number.isSafeInteger(terminationGraceMs) ||
@@ -85,6 +85,8 @@ export function run(
     terminationGraceMs > 120_000
   )
     throw new Error("Invalid subprocess termination grace");
+  if (onExit !== undefined && typeof onExit !== "function")
+    throw new Error("Invalid subprocess exit observer");
   signal?.throwIfAborted();
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, {
@@ -96,6 +98,14 @@ export function run(
     let output = "";
     let errors = "";
     let timer;
+    let observationFailure;
+    child.once("exit", (code, exitSignal) => {
+      try {
+        onExit?.({ code, signal: exitSignal });
+      } catch (error) {
+        observationFailure = { error };
+      }
+    });
     child.stdout?.on("data", (data) => {
       output += data;
     });
@@ -128,13 +138,25 @@ export function run(
     child.once("close", (code, exitSignal) => {
       if (signal?.aborted) kill("SIGKILL");
       cleanup();
-      if (signal?.aborted) reject(signal.reason);
-      else if (code !== 0)
+      const failure = signal?.aborted
+        ? signal.reason
+        : code !== 0
+          ? new Error(
+              `${command} failed (${code ?? exitSignal}).${errors ? `\n${errors.trim()}` : ""}`,
+            )
+          : undefined;
+      const failed = signal?.aborted || code !== 0;
+      if (observationFailure)
         reject(
-          new Error(
-            `${command} failed (${code ?? exitSignal}).${errors ? `\n${errors.trim()}` : ""}`,
-          ),
+          failed
+            ? new AggregateError(
+                [failure, observationFailure.error],
+                "Subprocess and exit observation failed",
+                { cause: failure },
+              )
+            : observationFailure.error,
         );
+      else if (failed) reject(failure);
       else resolvePromise(output.trim());
     });
   });

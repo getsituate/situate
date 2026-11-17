@@ -28,6 +28,153 @@ function assertStopped(pid) {
   assert.match(result.stdout.trim(), /^Z/, "Owned native process remains live");
 }
 
+test("subprocess exit observers preserve output and cannot mask native failure", async () => {
+  const exits = [];
+  assert.equal(
+    await run(process.execPath, ["-e", "console.log('synthetic output')"], {
+      capture: true,
+      onExit: (event) => exits.push(event),
+    }),
+    "synthetic output",
+  );
+  assert.deepEqual(exits, [{ code: 0, signal: null }]);
+  const observation = new Error("Synthetic observer failure");
+  await assert.rejects(
+    run(process.execPath, ["-e", "process.exitCode=3"], {
+      capture: true,
+      onExit: () => {
+        throw observation;
+      },
+    }),
+    (error) =>
+      error instanceof AggregateError &&
+      error.cause.message.includes("failed (3)") &&
+      error.errors.includes(observation),
+  );
+});
+
+test("a real launcher exit is observable before a descendant closes captured streams", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "situate-exit-observation-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const release = join(root, "release"),
+    exited = join(root, "exited");
+  const application = `const fs=require('fs');const end=()=>{fs.writeFileSync(${JSON.stringify(exited)},'exited');console.log('application output');process.exit(0)};setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)}))end()},10);setTimeout(end,5000);`;
+  const launcher = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(application)}],{detached:true,stdio:['ignore',1,2]}).unref();`;
+  const observations = [];
+  const output = await run(process.execPath, ["-e", launcher], {
+    capture: true,
+    onExit: (event) => {
+      observations.push(event);
+      assert.equal(existsSync(exited), false);
+      writeFileSync(release, "release");
+    },
+  });
+  assert.equal(output, "application output");
+  assert.deepEqual(observations, [{ code: 0, signal: null }]);
+  assert.equal(existsSync(exited), true);
+});
+
+test("only pre-abort launch exits produce nonterminal observations", async () => {
+  const events = [],
+    timeout = new AbortController();
+  const execute = createQualificationProcess({
+    deadline: () => timeout.signal,
+    progress: (...event) => events.push(event),
+    execute: async (_command, _args, options) => {
+      options.onExit({ code: 0, signal: null });
+      timeout.abort(new Error("synthetic timeout"));
+      options.onExit({ code: null, signal: "SIGTERM" });
+      throw timeout.signal.reason;
+    },
+  });
+  await assert.rejects(
+    execute("open", ["-n", "/synthetic/Situate.app"]),
+    /launch: timeout/,
+  );
+  assert.deepEqual(
+    events.map((event) => event[1]),
+    ["started", "exited_zero", "timeout"],
+  );
+});
+
+test("launch dialog observation is sampled at most once while pending", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const events = [];
+  let samples = 0,
+    finish;
+  const native = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const execute = createQualificationProcess({
+    deadline: () => new AbortController().signal,
+    progress: (...event) => events.push(event),
+    observeLaunch: async () => {
+      samples++;
+      return "dialog_observed";
+    },
+    execute: () => native,
+  });
+  const pending = execute("open", ["-n", "/synthetic/Situate.app"]);
+  t.mock.timers.tick(3999);
+  assert.equal(samples, 0);
+  t.mock.timers.tick(1);
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+  assert.equal(samples, 1);
+  t.mock.timers.tick(4000);
+  assert.equal(samples, 1);
+  finish("");
+  await pending;
+  assert.ok(events.some((event) => event[1] === "dialog_observed"));
+});
+
+test("settled launch cancels an unstarted observation and drains a started one", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let samples = 0;
+  const fast = createQualificationProcess({
+    observeLaunch: async () => {
+      samples++;
+      return "dialog_observed";
+    },
+    execute: async () => "",
+  });
+  await fast("open", ["-n", "/synthetic/Situate.app"]);
+  t.mock.timers.tick(4000);
+  assert.equal(samples, 0);
+  let finish,
+    drained = false;
+  const native = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const slow = createQualificationProcess({
+    deadline: () => new AbortController().signal,
+    observeLaunch: ({ signal }) => {
+      samples++;
+      return new Promise((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            drained = true;
+            resolve("observation_unavailable");
+          },
+          { once: true },
+        );
+      });
+    },
+    execute: () => native,
+  });
+  const pending = slow("open", ["-n", "/synthetic/Situate.app"]);
+  t.mock.timers.tick(4000);
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+  finish("");
+  await pending;
+  assert.equal(samples, 1);
+  assert.equal(drained, true);
+});
+
 test("process cleanup assertions reject a live process", () => {
   assert.throws(() => assertStopped(process.pid), /remains live/);
 });
