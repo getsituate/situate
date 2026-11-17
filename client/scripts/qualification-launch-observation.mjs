@@ -65,8 +65,8 @@ export const launchDialogQuery = `(() => {
             stage = "element_attributes";
             const element = children[childIndex];
             const role = string(element.role());
-            const value = role === "AXStaticText" ? string(element.value()) :
-              role === "AXButton" ? string(element.name()) : "";
+            const value = role === "AXStaticText" || role === "AXButton" ?
+              string(element.name()) : "";
             window.elements.push({ role, text: value });
             visit(element);
           }
