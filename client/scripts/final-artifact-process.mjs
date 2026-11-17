@@ -97,7 +97,9 @@ export function createQualificationProcess({
                 phase,
                 [
                   "dialog_observed",
+                  "associated_dialog_observed",
                   "dialog_not_observed",
+                  "query_unavailable",
                   "observation_unavailable",
                 ].includes(status)
                   ? status

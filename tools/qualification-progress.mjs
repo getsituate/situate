@@ -52,14 +52,18 @@ const statuses = new Set([
   "exited_zero",
   "exited_nonzero",
   "dialog_observed",
+  "associated_dialog_observed",
   "dialog_not_observed",
+  "query_unavailable",
   "observation_unavailable",
 ]);
 const launchObservations = new Set([
   "exited_zero",
   "exited_nonzero",
   "dialog_observed",
+  "associated_dialog_observed",
   "dialog_not_observed",
+  "query_unavailable",
   "observation_unavailable",
 ]);
 
