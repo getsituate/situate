@@ -98,6 +98,27 @@ test("private live progress distinguishes waiting, acquisition, native timeout a
   observer.close();
 });
 
+test("launch observations are restricted and cannot replace a native timeout", (t) => {
+  const path = fixture(t);
+  const emit = qualificationProgressWriter(path);
+  const observer = observeQualificationProgress(path, {
+    output: { write() {} },
+  });
+  for (const status of [
+    "exited_zero",
+    "exited_nonzero",
+    "dialog_observed",
+    "dialog_not_observed",
+    "observation_unavailable",
+  ]) {
+    emit("install", status, "launch", 1);
+    assert.throws(() => emit("install", status, "process", 1));
+  }
+  emit("install", "timeout", "launch", 10000);
+  assert.equal(observer.summary("failed").failure.status, "timeout");
+  observer.close();
+});
+
 test("unknown fields, codes, linked files, permissions and excessive records fail closed without echoing input", (t) => {
   const path = fixture(t);
   const emit = qualificationProgressWriter(path);

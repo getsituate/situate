@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import { run } from "./ios-xcode.mjs";
 import { qualificationProgressReporter } from "../../tools/qualification-progress.mjs";
+import { observeLaunchDialog } from "./qualification-launch-observation.mjs";
 
 export const qualificationCommandTimeouts = Object.freeze({
   accessibility: 30_000,
@@ -64,6 +65,7 @@ export function createQualificationProcess({
   progress = () => {},
   getPhase = () => "prepare",
   deadline = (ms) => AbortSignal.timeout(ms),
+  observeLaunch = observeLaunchDialog,
 } = {}) {
   const reporter = qualificationProgressReporter(progress);
   // Telemetry must not prevent later termination or detach commands.
@@ -76,6 +78,52 @@ export function createQualificationProcess({
       ? AbortSignal.any([options.signal, timeout])
       : timeout;
     reporter.emit(phase, "started", code, 0);
+    let stopObservation;
+    if (code === "launch") {
+      const observationSignal = new AbortController();
+      let observation;
+      const timer = setTimeout(() => {
+        observation = Promise.resolve()
+          .then(() =>
+            observeLaunch({
+              applicationName: basename(args.at(-1), ".app"),
+              environment: options.env,
+              signal: AbortSignal.any([signal, observationSignal.signal]),
+            }),
+          )
+          .then(
+            (status) =>
+              reporter.emit(
+                phase,
+                [
+                  "dialog_observed",
+                  "dialog_not_observed",
+                  "observation_unavailable",
+                ].includes(status)
+                  ? status
+                  : "observation_unavailable",
+                code,
+                Math.round(performance.now() - started),
+              ),
+            () =>
+              reporter.emit(
+                phase,
+                "observation_unavailable",
+                code,
+                Math.round(performance.now() - started),
+              ),
+          );
+      }, 4000);
+      const cancelUnstarted = () => clearTimeout(timer);
+      signal.addEventListener("abort", cancelUnstarted, { once: true });
+      if (signal.aborted) cancelUnstarted();
+      stopObservation = async () => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", cancelUnstarted);
+        observationSignal.abort();
+        await observation;
+      };
+    }
     try {
       // LaunchServices can pass these streams to an app that outlives open.
       const commandArgs =
@@ -87,6 +135,20 @@ export function createQualificationProcess({
         capture: true,
         signal,
         terminationGraceMs: 2000,
+        ...(code === "launch"
+          ? {
+              onExit: (event) => {
+                if (!signal.aborted)
+                  reporter.emit(
+                    phase,
+                    event.code === 0 ? "exited_zero" : "exited_nonzero",
+                    code,
+                    Math.round(performance.now() - started),
+                  );
+                options.onExit?.(event);
+              },
+            }
+          : {}),
       });
       signal.throwIfAborted();
       reporter.emit(
@@ -116,6 +178,8 @@ export function createQualificationProcess({
       error.qualificationStatus = status;
       error.uncertain = true;
       throw error;
+    } finally {
+      await stopObservation?.();
     }
   };
   executeCommand.assertProgress = () => reporter.check();
