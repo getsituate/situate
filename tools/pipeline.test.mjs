@@ -915,6 +915,22 @@ test("publication never uses builder or source verification lanes", async (t) =>
   assert.deepEqual(calls, ["download", "verify", "promote"]);
 });
 
+test("ordinary environments preserve only a restrictive single build slot outside containers", () => {
+  assert.deepEqual(
+    ordinaryEnvironment({
+      SITUATE_TOOL_BUILD_SLOTS: "1",
+      SITUATE_HOST_ADMISSION: "untrusted",
+      GH_TOKEN: "untrusted",
+    }),
+    { SITUATE_TOOL_BUILD_SLOTS: "1" },
+  );
+  for (const value of ["0", "2", "invalid"])
+    assert.deepEqual(
+      ordinaryEnvironment({ SITUATE_TOOL_BUILD_SLOTS: value }),
+      {},
+    );
+});
+
 test("only tool containers retain the pinned NSS runtime for arbitrary numeric users", () => {
   const runtime = {
     LD_PRELOAD: "/opt/ci-tools/libnss_wrapper.so",

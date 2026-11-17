@@ -25,6 +25,7 @@ import {
   QUICK_EXECUTION_MS,
   isFeedbackSuite,
   workerBudget,
+  nativeCompilerBudget,
   needsBuildLease,
 } from "./test-budget.mjs";
 export { isFeedbackSuite } from "./test-budget.mjs";
@@ -917,15 +918,29 @@ export function createPlan(
   };
 }
 
-export function suiteEnvironment(suite, directory, environment = process.env) {
+export function suiteEnvironment(
+  suite,
+  directory,
+  environment = process.env,
+  parallelism = availableParallelism(),
+) {
   const cargo = cargoEnvironment(directory, environment);
   const cacheRust =
     suite.kind !== "coverage" &&
     (suite.command === "cargo" || suite.id === "root-rust");
-  const workers = String(workerBudget(availableParallelism()));
+  const workers = String(workerBudget(parallelism));
+  const compilerWorkers =
+    suite.kind === "native"
+      ? String(
+          nativeCompilerBudget(
+            parallelism,
+            environment.SITUATE_TOOL_BUILD_SLOTS === "1" ? 1 : undefined,
+          ),
+        )
+      : workers;
   const env = {
     VITEST_MAX_WORKERS: workers,
-    CARGO_BUILD_JOBS: workers,
+    CARGO_BUILD_JOBS: compilerWorkers,
     RUST_TEST_THREADS: workers,
     ...(cacheRust ? compilerCacheEnvironment(cargo) : cargo),
     CI: "true",
@@ -1007,6 +1022,10 @@ export function executeSuite(
     suite.id === "tool-container" && suite.kind === "container"
       ? { ...environment }
       : suiteEnvironment(suite, directory, environment);
+  if (suite.kind === "native")
+    output.write(
+      `${JSON.stringify({ type: "native-build-resources", parallelism: availableParallelism(), cargoJobs: Number(env.CARGO_BUILD_JOBS) })}\n`,
+    );
   let command = suite.command;
   if (
     (command === "cargo" ||

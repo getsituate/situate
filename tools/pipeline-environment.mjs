@@ -29,6 +29,8 @@ export function ordinaryEnvironment(environment = process.env) {
     "SITUATE_COMPILER_CACHE",
     "SCCACHE_DIR",
   ];
+  if (environment.SITUATE_TOOL_BUILD_SLOTS === "1")
+    names.push("SITUATE_TOOL_BUILD_SLOTS");
   if (environment.SITUATE_TOOL_CONTAINER === "1") {
     names.push(
       "NSS_WRAPPER_PASSWD",
@@ -36,8 +38,6 @@ export function ordinaryEnvironment(environment = process.env) {
       "SITUATE_HOST_ADMISSION",
       "SITUATE_HOST_ADMITTED",
     );
-    if (environment.SITUATE_TOOL_BUILD_SLOTS === "1")
-      names.push("SITUATE_TOOL_BUILD_SLOTS");
     if (environment.LD_PRELOAD === "/opt/ci-tools/libnss_wrapper.so")
       names.push("LD_PRELOAD");
   }

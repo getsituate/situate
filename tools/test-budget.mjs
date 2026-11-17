@@ -7,6 +7,12 @@ export function workerBudget(parallelism) {
   return Math.max(1, Math.min(4, Math.floor(parallelism / (2 * BUILD_SLOTS))));
 }
 
+export function nativeCompilerBudget(parallelism, buildSlots = BUILD_SLOTS) {
+  if (buildSlots !== 1) return workerBudget(parallelism);
+  // A single native build can use two compiler jobs while reserving a core.
+  return Math.max(1, Math.min(2, Math.floor(parallelism) - 1));
+}
+
 export function needsBuildLease(suite) {
   return (
     suite.command === "cargo" ||

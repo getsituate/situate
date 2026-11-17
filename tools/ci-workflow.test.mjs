@@ -144,6 +144,14 @@ test("fixed independent families depend on planning and aggregate every selected
   }
 });
 
+test("native source jobs declare one build slot in both PR and release verification", () => {
+  for (const workflow of ["verify", "release-macos"])
+    assert.match(
+      job(read(workflow), "macos-native"),
+      /SITUATE_TOOL_BUILD_SLOTS: "1"/,
+    );
+});
+
 test("source reuse controllers can read merged pull-request associations", () => {
   const text = read("release-macos");
   for (const id of [
