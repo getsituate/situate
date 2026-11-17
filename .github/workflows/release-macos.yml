@@ -123,6 +123,7 @@ jobs:
       contents: read
       actions: read
       attestations: read
+      pull-requests: read
     outputs:
       receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
       evidence: ${{ steps.lane.outputs.evidence }}
@@ -152,6 +153,7 @@ jobs:
       contents: read
       actions: read
       attestations: read
+      pull-requests: read
     outputs:
       receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
       evidence: ${{ steps.lane.outputs.evidence }}
@@ -181,6 +183,7 @@ jobs:
       contents: read
       actions: read
       attestations: read
+      pull-requests: read
     outputs:
       receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
       evidence: ${{ steps.lane.outputs.evidence }}
@@ -214,6 +217,7 @@ jobs:
       contents: read
       actions: read
       attestations: read
+      pull-requests: read
     outputs:
       receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
       evidence: ${{ steps.lane.outputs.evidence }}
@@ -243,6 +247,7 @@ jobs:
       contents: read
       actions: read
       attestations: read
+      pull-requests: read
     outputs:
       receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
       evidence: ${{ steps.lane.outputs.evidence }}

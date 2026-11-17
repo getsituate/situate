@@ -144,6 +144,24 @@ test("fixed independent families depend on planning and aggregate every selected
   }
 });
 
+test("source reuse controllers can read merged pull-request associations", () => {
+  const text = read("release-macos");
+  for (const id of [
+    "frontend",
+    "rust",
+    "macos-code",
+    "browser",
+    "macos-native",
+  ]) {
+    const body = job(text, id);
+    assert.match(body, /pull-requests: read/);
+    assert.match(body, /attestations: read/);
+    assert.match(body, /actions: read/);
+    assert.doesNotMatch(body, /(?:pull-requests|attestations|actions): write/);
+    assert.match(body, /source-reuse --workflow create/);
+  }
+});
+
 test("source attestation binds the exact digest without interpreting an external relative path as a glob", () => {
   const required = job(read("verify"), "required");
   assert.match(
