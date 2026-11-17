@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "qualification-launch-observations",
+  "behaviorDigest": "3e55216759e828e9595f326b65393a1cc69f3b05a0f5ce9b832134e0bf497d54",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Native package launch diagnostics.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "dd86ae7c37a0ec1e869253cc529b136b65ee726cdf42ad2f4336518ae3a126a0",
+      "translationHash": "611b7176b3e5e62d4d955bf7f1b3696ee4dd6234b15f7e21effa89bd5d07f470"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "dd86ae7c37a0ec1e869253cc529b136b65ee726cdf42ad2f4336518ae3a126a0"
+  }
+}
