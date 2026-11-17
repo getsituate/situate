@@ -7,6 +7,7 @@ import {
   QUICK_EXECUTION_MS,
   BUILD_SLOTS,
   workerBudget,
+  nativeCompilerBudget,
   needsBuildLease,
 } from "./test-budget.mjs";
 import { createPlan, isQuickSuite, runPlan, root } from "./test.mjs";
@@ -88,6 +89,17 @@ test("worker allocations leave capacity for other worktrees", () => {
     true,
   );
   assert.equal(needsBuildLease({ id: "quick-source" }), false);
+});
+
+test("single-slot native compilation reserves a core and caps compiler concurrency", () => {
+  assert.deepEqual(
+    [1, 2, 3, 7, 8, 64].map((cpus) => nativeCompilerBudget(cpus, 1)),
+    [1, 1, 2, 2, 2, 2],
+  );
+  assert.deepEqual(
+    [1, 2, 3, 7, 8, 64].map((cpus) => nativeCompilerBudget(cpus)),
+    [1, 1, 1, 1, 2, 4],
+  );
 });
 
 test("deadline cleanup reuses confirmed process absence after escalation", () => {

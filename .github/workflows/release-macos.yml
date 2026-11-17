@@ -252,6 +252,7 @@ jobs:
       receipt: ${{ steps.reuse.outputs.receipt || steps.lane.outputs.receipt }}
       evidence: ${{ steps.lane.outputs.evidence }}
     env:
+      SITUATE_TOOL_BUILD_SLOTS: "1"
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
     steps:

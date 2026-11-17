@@ -1442,6 +1442,30 @@ test("design runs pin Playwright but leave browser defaults and explicit overrid
     assert.equal(env[key], value);
 });
 
+test("only single-slot native builds receive the bounded compiler allocation", () => {
+  const environment = { SITUATE_TOOL_BUILD_SLOTS: "1" };
+  const native = suiteEnvironment({ kind: "native" }, root, environment, 3);
+  assert.equal(native.CARGO_BUILD_JOBS, "2");
+  assert.equal(native.VITEST_MAX_WORKERS, "1");
+  assert.equal(native.RUST_TEST_THREADS, "1");
+  assert.equal(native.SITUATE_TOOL_BUILD_SLOTS, "1");
+  for (const kind of ["browser", "unit", "integration"])
+    assert.equal(
+      suiteEnvironment({ kind }, root, environment, 3).CARGO_BUILD_JOBS,
+      "1",
+    );
+  for (const slots of [undefined, "2", "invalid"])
+    assert.equal(
+      suiteEnvironment(
+        { kind: "native" },
+        root,
+        { SITUATE_TOOL_BUILD_SLOTS: slots },
+        3,
+      ).CARGO_BUILD_JOBS,
+      "1",
+    );
+});
+
 test("nested Node test workers cannot suppress registered suites", () => {
   const original = { NODE_TEST_CONTEXT: "child-v8", KEEP: "value" };
   const environment = suiteEnvironment({}, root, original);
