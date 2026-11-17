@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "launch-observation-interop",
+  "behaviorDigest": "97b08875f7fdb6d3196d8e22a1728ffb497dc76e494bbcb5bc5451ef2dd9b731",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Native launch observation interoperability.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "135a5f77413fa06bdfa15881aae891a285b6869b1536d4253e5a273fddbb454a",
+      "translationHash": "ee7ae8f10ebc8c937ae5183d75b6d5da07dd9a6471ebc2761c6394c6152dfda8"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "135a5f77413fa06bdfa15881aae891a285b6869b1536d4253e5a273fddbb454a"
+  }
+}

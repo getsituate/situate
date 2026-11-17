@@ -108,7 +108,9 @@ test("launch observations are restricted and cannot replace a native timeout", (
     "exited_zero",
     "exited_nonzero",
     "dialog_observed",
+    "associated_dialog_observed",
     "dialog_not_observed",
+    "query_unavailable",
     "observation_unavailable",
   ]) {
     emit("install", status, "launch", 1);

@@ -20,17 +20,28 @@ const snapshot = (...windows) => ({
   windows,
 });
 
-function query(windows, { present = true } = {}) {
+function query(
+  windows,
+  {
+    present = true,
+    onCollection = () => {},
+    materialize = (items) => items,
+  } = {},
+) {
+  const collection = (items) => () => {
+    onCollection();
+    return materialize(Object.freeze(items));
+  };
   const element = (node) =>
     Object.freeze({
       role: () => node.role,
       name: () => node.text ?? node.title,
       value: () => node.text,
-      uiElements: Object.freeze((node.elements ?? []).map(element)),
+      uiElements: collection((node.elements ?? []).map(element)),
     });
   const agent = Object.freeze({
     exists: () => present,
-    windows: Object.freeze(windows.map(element)),
+    windows: collection(windows.map(element)),
   });
   const output = runInNewContext(launchDialogQuery, {
     Application(name) {
@@ -48,6 +59,16 @@ function query(windows, { present = true } = {}) {
   assert.equal(typeof output, "string");
   return JSON.parse(output);
 }
+
+test("JXA resolves callable window and element collections before counting or indexing", () => {
+  let collections = 0;
+  assert.deepEqual(
+    query([dialog()], { onCollection: () => collections++ }),
+    snapshot(dialog()),
+  );
+  assert.equal(collections, 4);
+  assert.equal(query([dialog()], { materialize: () => ({ length: 0 }) }), null);
+});
 
 test("only a specific Situate token and English Open/Cancel pair in the same window is positive", () => {
   assert.equal(
@@ -81,7 +102,48 @@ test("only a specific Situate token and English Open/Cancel pair in the same win
   );
 });
 
-test("generic, ambiguous, missing and localized observations are unavailable", () => {
+test("a single Situate-associated window with another layout is not a confirmed Open/Cancel dialog", () => {
+  const windows = [
+    { ...dialog(), elements: [] },
+    { ...dialog(), elements: [button("Open")] },
+    { ...dialog(), elements: [button("Öffnen"), button("Abbrechen")] },
+    {
+      ...dialog(),
+      elements: [{ role: "AXStaticText", text: "Open" }, button("Cancel")],
+    },
+    {
+      ...dialog(""),
+      elements: [
+        { role: "AXStaticText", text: "Situate cannot start." },
+        button("OK"),
+      ],
+    },
+  ];
+  for (const window of windows)
+    assert.equal(
+      classifyLaunchDialog(snapshot(window), "Situate"),
+      "associated_dialog_observed",
+    );
+  assert.equal(
+    classifyLaunchDialog(
+      snapshot(
+        { ...dialog(), elements: [button("Open")] },
+        { ...dialog("Other.app"), elements: [button("Cancel")] },
+      ),
+      "Situate",
+    ),
+    "associated_dialog_observed",
+  );
+  assert.equal(
+    classifyLaunchDialog(
+      snapshot({ ...dialog("Other.app"), elements: [button("OK")] }),
+      "Situate",
+    ),
+    "dialog_not_observed",
+  );
+});
+
+test("generic, ambiguous, missing and unsupported observations are unavailable", () => {
   const cases = [
     null,
     {},
@@ -91,18 +153,9 @@ test("generic, ambiguous, missing and localized observations are unavailable", (
     snapshot(dialog("")),
     snapshot(dialog("Confirmation")),
     snapshot(dialog(), dialog()),
-    snapshot({ ...dialog(), elements: [button("Open")] }),
     snapshot({
       ...dialog(),
       elements: [button("Open"), button("Cancel"), button("Open")],
-    }),
-    snapshot({
-      ...dialog(),
-      elements: [button("Öffnen"), button("Abbrechen")],
-    }),
-    snapshot({
-      ...dialog(),
-      elements: [{ role: "AXStaticText", text: "Open" }, button("Cancel")],
     }),
     snapshot({
       ...dialog(),
@@ -114,10 +167,11 @@ test("generic, ambiguous, missing and localized observations are unavailable", (
     }),
     snapshot(dialog("Situate.app and Other.app")),
     snapshot(dialog("Other.app and Another.app")),
-    snapshot(
-      { ...dialog(), elements: [button("Open")] },
-      { ...dialog("Other.app"), elements: [button("Cancel")] },
-    ),
+    snapshot({
+      ...dialog(""),
+      elements: [button("Öffnen"), button("Abbrechen")],
+    }),
+    snapshot({ ...dialog(), elements: [button("OK")] }, dialog()),
   ];
   for (const value of cases)
     assert.equal(classifyLaunchDialog(value, "Situate"), unavailable);
@@ -307,21 +361,32 @@ test("omitted environment forwards only public worker environment keys", async (
   );
 });
 
-test("API, output, schema and parse failures are unavailable and never return private errors", async () => {
+test("query failures and unknown snapshots have distinct fixed codes without returning private errors", async () => {
   const cases = [
-    async () => {
-      throw new Error("private stderr/UI/account path");
-    },
-    async () => "private UI text",
-    async () => "{}",
-    async () => "null",
-    async () => "x".repeat(65537),
-    async () => JSON.stringify({ ...snapshot(dialog()), stderr: "private" }),
+    [
+      async () => {
+        throw new Error("private stderr/UI/account path");
+      },
+      "query_unavailable",
+    ],
+    [async () => "private UI text", "query_unavailable"],
+    [async () => "null", "query_unavailable"],
+    [async () => "{}", unavailable],
+    [async () => "x".repeat(65537), unavailable],
+    [
+      async () => JSON.stringify({ ...snapshot(dialog()), stderr: "private" }),
+      unavailable,
+    ],
+    [
+      async () =>
+        JSON.stringify(snapshot({ ...dialog(), elements: [button("OK")] })),
+      "associated_dialog_observed",
+    ],
   ];
-  for (const execute of cases)
+  for (const [execute, expected] of cases)
     assert.equal(
       await observeLaunchDialog({ applicationName: "Situate", execute }),
-      unavailable,
+      expected,
     );
 });
 
