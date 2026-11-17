@@ -243,6 +243,14 @@ function fixture() {
       runId: "123",
       runAttempt: "2",
     },
+    associated: [
+      {
+        ...structuredClone(run.pull_requests[0]),
+        state: "closed",
+        merged_at: "2026-11-16T23:35:07Z",
+        merge_commit_sha: mainSHA,
+      },
+    ],
     producerDefinition: workflow,
     producerCommit: {
       sha: testedSHA,
@@ -265,6 +273,8 @@ function fixture() {
       };
     if (path === "/actions/runs/123/attempts/2")
       return structuredClone(data.run);
+    if (path === `/commits/${headSHA}/pulls?per_page=100`)
+      return structuredClone(data.associated);
     if (path === "/actions/runs/123/attempts/2/jobs?per_page=100")
       return {
         total_count: data.jobs.length,
@@ -375,10 +385,188 @@ test("consumer retrieves an attempt-bound artifact and independently resolves so
   );
   assert(f.requests.some(({ path }) => path === `/git/commits/${testedSHA}`));
   assert(f.requests.some(({ path }) => path.startsWith("/contents/")));
+  assert(!f.requests.some(({ path }) => path.startsWith("/commits/")));
   assert.deepEqual(
     f.requests.find(({ path }) => path.endsWith("/zip")).options,
     { raw: true, maxBytes: MAX_SOURCE_EVIDENCE_BYTES + 1024 * 1024 },
   );
+});
+
+test("a completed post-merge run with no PR snapshot uses its unique merged head association", async () => {
+  const f = fixture();
+  f.data.run.pull_requests = [];
+  assert.equal(f.data.associated[0].merged, undefined);
+  const result = await selectActionsSourceEvidence(root, f.options);
+  assert.equal(result.action, "reuse");
+  assert.equal(result.observation.origin.baseSHA, baseSHA);
+  assert.equal(result.observation.origin.headSHA, headSHA);
+  assert.equal(result.observation.checkedSHA, testedSHA);
+  assert.notEqual(
+    result.observation.checkedSHA,
+    f.data.associated[0].merge_commit_sha,
+  );
+  assert.deepEqual(result.observation.checkedParents, [baseSHA, headSHA]);
+  assert.deepEqual(
+    f.requests
+      .filter(({ path }) => path.startsWith("/commits/"))
+      .map(({ path }) => path),
+    [`/commits/${headSHA}/pulls?per_page=100`],
+  );
+  const receipt = createSourceVerificationReuseReceipt(f.options.plan, result);
+  assert.equal(
+    validateSourceVerificationReuse(f.options.plan, receipt),
+    receipt,
+  );
+});
+
+test("post-merge associations must be unique, closed, merged and match the certified base/head and PR ref", async () => {
+  for (const mutate of [
+    (f) => {
+      f.data.associated = [];
+    },
+    (f) => {
+      f.data.associated = null;
+    },
+    (f) => {
+      f.data.associated = {};
+    },
+    (f) => {
+      f.data.associated = [null];
+    },
+    (f) => {
+      f.data.associated.push(structuredClone(f.data.associated[0]));
+    },
+    (f) => {
+      f.data.associated = Array(100).fill(f.data.associated[0]);
+    },
+    (f) => {
+      f.data.associated[0].state = "open";
+    },
+    (f) => {
+      f.data.associated[0].merged = false;
+    },
+    (f) => {
+      f.data.associated[0].merged_at = null;
+    },
+    (f) => {
+      f.data.associated[0].merged_at = "not-a-timestamp";
+    },
+    (f) => {
+      f.data.associated[0].merge_commit_sha = null;
+    },
+    (f) => {
+      f.data.associated[0].merge_commit_sha = "not-a-commit";
+    },
+    (f) => {
+      f.data.associated[0].head.sha = mainSHA;
+    },
+    (f) => {
+      f.data.associated[0].base.sha = mainSHA;
+    },
+    (f) => {
+      f.data.associated[0].head.repo.id = 1;
+    },
+    (f) => {
+      f.data.associated[0].base.repo.id = 1;
+    },
+    (f) => {
+      f.data.associated[0].base.ref = "another-branch";
+    },
+    (f) => {
+      f.data.associated[0].number = 0;
+    },
+    (f) => {
+      f.data.associated[0].number = 1.5;
+    },
+    (f) => {
+      f.data.associated[0].number = 32;
+    },
+    (f) => {
+      f.options.api = (path, options) => {
+        if (path.startsWith("/commits/"))
+          throw new Error("Association API unavailable");
+        return f.api(path, options);
+      };
+    },
+  ]) {
+    const f = fixture();
+    f.data.run.pull_requests = [];
+    mutate(f);
+    const result = await selectActionsSourceEvidence(root, f.options);
+    assert.equal(result.action, "execute", mutate.toString());
+    assert.equal(result.binding, undefined);
+  }
+});
+
+test("captured PR snapshots and unsuccessful attempts cannot be replaced by a later association", async () => {
+  for (const mutate of [
+    (f) => {
+      f.data.run.pull_requests[0].base.sha = mainSHA;
+    },
+    (f) => {
+      f.data.run.pull_requests = null;
+    },
+    (f) => {
+      f.data.run.pull_requests = {};
+    },
+    (f) => {
+      f.data.run.pull_requests = [];
+      f.data.run.status = "in_progress";
+      f.data.run.conclusion = null;
+    },
+    (f) => {
+      f.data.run.pull_requests = [];
+      f.data.run.conclusion = "failure";
+    },
+  ]) {
+    const f = fixture();
+    mutate(f);
+    assert.equal(
+      (await selectActionsSourceEvidence(root, f.options)).action,
+      "execute",
+    );
+    assert(!f.requests.some(({ path }) => path.startsWith("/commits/")));
+  }
+});
+
+test("commit associations use one fixed bounded GET and reject pagination or other commit routes", async () => {
+  const f = fixture();
+  const requests = [];
+  const api = createSourceVerificationApi({
+    fetchImpl: async (url, options) => {
+      requests.push({ url: String(url), method: options.method });
+      return new Response(JSON.stringify(f.data.associated));
+    },
+  });
+  const endpoint = `/commits/${headSHA}/pulls?per_page=100`;
+  assert.deepEqual(await api(endpoint), f.data.associated);
+  assert.deepEqual(requests, [
+    {
+      url: `https://api.github.com/repos/getsituate/situate${endpoint}`,
+      method: "GET",
+    },
+  ]);
+  for (const endpoint of [
+    `/commits/${headSHA}/pulls`,
+    `/commits/${headSHA}/pulls?per_page=1`,
+    `/commits/${headSHA}/pulls?per_page=100&page=2`,
+    `/commits/${headSHA}/pulls?per_page=100\n`,
+    `/commits/${headSHA}`,
+    "/commits/not-a-commit/pulls?per_page=100",
+    "/pulls/31",
+    "https://example.org/commits/other/pulls?per_page=100",
+  ])
+    await assert.rejects(api(endpoint));
+  assert.equal(requests.length, 1);
+  const truncated = createSourceVerificationApi({
+    fetchImpl: async () =>
+      new Response(JSON.stringify(f.data.associated), {
+        headers: {
+          link: `<https://api.github.com/repos/getsituate/situate${endpoint}&page=2>; rel="next"`,
+        },
+      }),
+  });
+  await assert.rejects(truncated(endpoint), /Truncated/);
 });
 
 test("attested execution, not an artifact-selected merge with the same parents, anchors reuse", async () => {
@@ -538,7 +726,7 @@ test("consumer never trusts failed, forked, raced, altered or incomplete produce
       f.data.run.pull_requests[0].head.sha = mainSHA;
     },
     (f) => {
-      f.data.run.pull_requests = [];
+      f.data.run.pull_requests = null;
     },
     (f) => {
       f.data.jobs[0].conclusion = "skipped";

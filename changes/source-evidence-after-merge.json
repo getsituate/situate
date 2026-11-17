@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "source-evidence-after-merge",
+  "behaviorDigest": "f108ab36cfc5e21488efcfc0781725761def9e4a3c447a0cc56ce9aba9f81e0c",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "CI source-verification metadata maintenance.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "b6df0492f4780653a49f00997fc50beeeb88e3954c25d745c5af77f20302ef09",
+      "translationHash": "4e6dae4d1fa7fb2af692d7a34f24f64358602e378231da335eeea25a79c08365"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "b6df0492f4780653a49f00997fc50beeeb88e3954c25d745c5af77f20302ef09"
+  }
+}

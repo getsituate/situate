@@ -292,9 +292,13 @@ export function createSourceVerificationApi({
   signal = AbortSignal.timeout(60_000),
 } = {}) {
   return async (endpoint, { raw = false, maxBytes = maxMetadata } = {}) => {
+    const association =
+      typeof endpoint === "string" &&
+      !/\s/.test(endpoint) &&
+      /^\/commits\/[a-f0-9]{40}\/pulls\?per_page=100$/.test(endpoint);
     assert(
       typeof endpoint === "string" &&
-        /^\/(actions|git|contents)\//.test(endpoint) &&
+        (/^\/(actions|git|contents)\//.test(endpoint) || association) &&
         !endpoint.includes("..") &&
         !/[\\#]/.test(endpoint),
     );
@@ -339,6 +343,11 @@ export function createSourceVerificationApi({
       });
     }
     assert.equal(response.status, 200, "Evidence API request failed");
+    if (association)
+      assert(
+        !response.headers.get("link"),
+        "Truncated pull request associations",
+      );
     const bytes = await boundedBody(response, maxBytes);
     return raw ? bytes : JSON.parse(bytes.toString("utf8"));
   };
@@ -463,8 +472,30 @@ async function producerMetadata(api, runId, attempt, completed) {
   if (completed)
     assert(run.status === "completed" && run.conclusion === "success");
   else assert(run.status === "in_progress" && run.conclusion === null);
-  assert(run.pull_requests?.length === 1);
-  const pull = run.pull_requests[0];
+  assert(Array.isArray(run.pull_requests));
+  let pull;
+  if (completed && run.pull_requests.length === 0) {
+    // GitHub may clear a completed run's PR snapshot after the pull request merges.
+    assert(revision.test(run.head_sha));
+    const associated = await api(`/commits/${run.head_sha}/pulls?per_page=100`);
+    assert(Array.isArray(associated) && associated.length === 1);
+    pull = associated[0];
+    assert(
+      pull.state === "closed" &&
+        (pull.merged === undefined || pull.merged === true) &&
+        typeof pull.merged_at === "string" &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(
+          pull.merged_at,
+        ) &&
+        Number.isFinite(Date.parse(pull.merged_at)) &&
+        typeof pull.merge_commit_sha === "string" &&
+        pull.merge_commit_sha.length === 40 &&
+        revision.test(pull.merge_commit_sha),
+    );
+  } else {
+    assert.equal(run.pull_requests.length, 1);
+    pull = run.pull_requests[0];
+  }
   positiveId(pull.number);
   assert(
     pull.base?.repo?.id === repositoryId &&
