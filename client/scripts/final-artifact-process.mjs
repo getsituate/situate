@@ -100,6 +100,14 @@ export function createQualificationProcess({
                   "associated_dialog_observed",
                   "dialog_not_observed",
                   "query_unavailable",
+                  "query_process_unavailable",
+                  "query_window_collection_unavailable",
+                  "query_window_attributes_unavailable",
+                  "query_element_collection_unavailable",
+                  "query_element_attributes_unavailable",
+                  "query_limit_unavailable",
+                  "query_serialization_unavailable",
+                  "query_execution_unavailable",
                   "observation_unavailable",
                 ].includes(status)
                   ? status
