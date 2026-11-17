@@ -99,7 +99,9 @@ export async function prepareLane(
         "clippy",
         "--component",
         "rustfmt",
-        ...(selected.coverage ? ["--component", "llvm-tools"] : []),
+        ...(packageDirectory === "client" || selected.coverage
+          ? ["--component", "llvm-tools"]
+          : []),
       ]);
       coordinated(
         "rustup",

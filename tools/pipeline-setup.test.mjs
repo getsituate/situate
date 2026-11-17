@@ -89,6 +89,37 @@ test("native macOS setup retains pinned Rust and exposes its binary path", async
     /require macOS/,
   );
 });
+test("native client setup installs every declared component before Cargo resolution", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-native-setup-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const calls = [];
+  await prepareLane(
+    { id: "macos-native", host: "macos", suites: ["client-native"] },
+    {
+      platform: "darwin",
+      environment: { RUNNER_TEMP: directory },
+      execute: (...args) => calls.push(args),
+    },
+  );
+  const install = calls[0][1];
+  assert.ok(install.includes("install"));
+  const declared = JSON.parse(
+    readFileSync(join(root, "client/rust-toolchain.toml"), "utf8").match(
+      /components\s*=\s*(\[[^\]]*\])/,
+    )[1],
+  );
+  assert.ok(declared.includes("llvm-tools"));
+  for (const component of declared)
+    assert.ok(
+      install.some(
+        (arg, index) =>
+          arg === "--component" && install[index + 1] === component,
+      ),
+      component,
+    );
+  assert.ok(calls[1][1].includes("fetch"));
+});
+
 test("Python bootstrap verifies archive before installation and invokes Node only through Volta shims", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-bootstrap-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

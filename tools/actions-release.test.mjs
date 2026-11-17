@@ -16,6 +16,7 @@ import {
   configureRelease,
   prepareCreate,
   preparePublish,
+  prepareReleaseDependencies,
   requireProvisioned,
   resolveProducerRelease,
   runReleaseStage,
@@ -64,6 +65,40 @@ function environment(t, workflow = "create") {
     PIPELINE_NEEDS: "{}",
   };
 }
+test("full and toolchain-only release preparation install all declared Rust components", () => {
+  const directory = new URL("../", import.meta.url).pathname;
+  const declared = JSON.parse(
+    readFileSync(join(directory, "client/rust-toolchain.toml"), "utf8").match(
+      /components\s*=\s*(\[[^\]]*\])/,
+    )[1],
+  );
+  assert.ok(declared.includes("llvm-tools"));
+  for (const toolchainOnly of [false, true]) {
+    const calls = [];
+    prepareReleaseDependencies(directory, (...args) => calls.push(args), {
+      toolchainOnly,
+    });
+    const install = calls.find(
+      ([, args]) => args.includes("toolchain") && args.includes("install"),
+    )[1];
+    for (const component of declared)
+      assert.ok(
+        install.some(
+          (arg, index) =>
+            arg === "--component" && install[index + 1] === component,
+        ),
+        `${toolchainOnly}: ${component}`,
+      );
+    if (toolchainOnly)
+      assert.ok(
+        calls.every(
+          ([, args]) =>
+            !args.includes("fetch") && !args.includes("tools/npm-ci.mjs"),
+        ),
+      );
+  }
+});
+
 test("enabled delivery requires exact protected workflow and attested private configuration", (t) => {
   const env = environment(t);
   for (const changed of [

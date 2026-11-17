@@ -307,6 +307,8 @@ export async function prepareReleaseDependencies(
         "clippy",
         "--component",
         "rustfmt",
+        "--component",
+        "llvm-tools",
       ],
     ],
     [
