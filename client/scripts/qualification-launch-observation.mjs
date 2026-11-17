@@ -32,22 +32,22 @@ export const launchDialogQuery = `(() => {
       if (typeof value !== "string" || value.length > 128) throw new Error();
       return value;
     }
-    function count(value, maximum) {
-      if (!Number.isInteger(value) || value < 0 || value > maximum) throw new Error();
+    function collection(value, maximum) {
+      if (!Array.isArray(value) || value.length > maximum) throw new Error();
       return value;
     }
     const present = agent.exists();
     if (typeof present !== "boolean") throw new Error();
     if (present) {
-      const windows = count(agent.windows.length, 4);
-      for (let index = 0; index < windows; index++) {
-        const source = agent.windows[index];
+      const windows = collection(agent.windows(), 4);
+      for (let index = 0; index < windows.length; index++) {
+        const source = windows[index];
         const window = { role: string(source.role()), title: string(source.name()), elements: [] };
         function visit(parent) {
-          const children = count(parent.uiElements.length, 64);
-          for (let childIndex = 0; childIndex < children; childIndex++) {
+          const children = collection(parent.uiElements(), 64);
+          for (let childIndex = 0; childIndex < children.length; childIndex++) {
             if (window.elements.length >= 64) throw new Error();
-            const element = parent.uiElements[childIndex];
+            const element = children[childIndex];
             const role = string(element.role());
             const value = role === "AXStaticText" ? string(element.value()) :
               role === "AXButton" ? string(element.name()) : "";
@@ -79,6 +79,7 @@ export function classifyLaunchDialog(snapshot, applicationName) {
     )
       return unavailable;
     let matches = 0;
+    let strict = false;
     for (const window of snapshot.windows) {
       if (
         !keys(window, "elements,role,title") ||
@@ -101,12 +102,7 @@ export function classifyLaunchDialog(snapshot, applicationName) {
         else if (element.role === "AXStaticText") names.push(element.text);
         else if (element.text !== "") return unavailable;
       }
-      if (
-        buttons.length !== 2 ||
-        !buttons.includes("Open") ||
-        !buttons.includes("Cancel")
-      )
-        return unavailable;
+      if (new Set(buttons).size !== buttons.length) return unavailable;
       const content = names.join("\n");
       const applications = [...content.matchAll(otherApplicationToken)].map(
         (match) => match[1],
@@ -115,11 +111,16 @@ export function classifyLaunchDialog(snapshot, applicationName) {
       if (applicationToken.test(content)) {
         if (applications.some((name) => name !== "Situate") || ++matches > 1)
           return unavailable;
+        strict =
+          buttons.length === 2 &&
+          buttons.includes("Open") &&
+          buttons.includes("Cancel");
       } else if (!applications.length) return unavailable;
     }
     if (Buffer.byteLength(JSON.stringify(snapshot)) > maxBytes)
       return unavailable;
-    return matches === 1 ? "dialog_observed" : "dialog_not_observed";
+    if (!matches) return "dialog_not_observed";
+    return strict ? "dialog_observed" : "associated_dialog_observed";
   } catch {
     return unavailable;
   }
@@ -162,8 +163,11 @@ export async function observeLaunchDialog({
       Buffer.byteLength(output) > maxBytes
     )
       return unavailable;
-    return classifyLaunchDialog(JSON.parse(output), applicationName);
+    const snapshot = JSON.parse(output);
+    return snapshot === null
+      ? "query_unavailable"
+      : classifyLaunchDialog(snapshot, applicationName);
   } catch {
-    return unavailable;
+    return combined.aborted ? unavailable : "query_unavailable";
   }
 }
