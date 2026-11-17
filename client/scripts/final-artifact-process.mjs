@@ -77,7 +77,12 @@ export function createQualificationProcess({
       : timeout;
     reporter.emit(phase, "started", code, 0);
     try {
-      const result = await execute(command, args, {
+      // LaunchServices can pass these streams to an app that outlives open.
+      const commandArgs =
+        code === "launch"
+          ? ["--stdout", "/dev/null", "--stderr", "/dev/null", ...args]
+          : args;
+      const result = await execute(command, commandArgs, {
         ...options,
         capture: true,
         signal,
