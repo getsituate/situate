@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "launch-query-failure-stages",
+  "behaviorDigest": "cb699007facce5c0f56ec9c2475f9ebcfa3f02f9ef64a015d34d6fa92a9d51ce",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Bounded native launch query diagnostics.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "cb01e3eb45520ac6586da3c35674b9a4ca0a9f782d6f66a5573e22a0eefa12c5",
+      "translationHash": "f5c7c3c552709c22400a9d8ae2fdbca339e600850d6d9a34e7bc67a918eb1622"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "cb01e3eb45520ac6586da3c35674b9a4ca0a9f782d6f66a5573e22a0eefa12c5"
+  }
+}
