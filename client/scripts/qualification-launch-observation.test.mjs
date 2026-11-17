@@ -26,29 +26,49 @@ function query(
     present = true,
     onCollection = () => {},
     materialize = (items) => items,
+    onRead = () => {},
+    serialize = JSON.stringify,
   } = {},
 ) {
-  const collection = (items) => () => {
+  const read = (point, value) => {
+    onRead(point);
+    return value;
+  };
+  const collection = (items, point) => () => {
     onCollection();
+    onRead(point);
     return materialize(Object.freeze(items));
   };
-  const element = (node) =>
+  const element = (node, isWindow = false) =>
     Object.freeze({
-      role: () => node.role,
-      name: () => node.text ?? node.title,
-      value: () => node.text,
-      uiElements: collection((node.elements ?? []).map(element)),
+      role: () => read(isWindow ? "window_role" : "element_role", node.role),
+      name: () =>
+        read(
+          isWindow ? "window_name" : "element_name",
+          node.text ?? node.title,
+        ),
+      value: () => read("element_value", node.text),
+      uiElements: collection(
+        (node.elements ?? []).map((node) => element(node)),
+        "element_collection",
+      ),
     });
   const agent = Object.freeze({
-    exists: () => present,
-    windows: collection(windows.map(element)),
+    exists: () => read("process_exists", present),
+    windows: collection(
+      windows.map((node) => element(node, true)),
+      "window_collection",
+    ),
   });
   const output = runInNewContext(launchDialogQuery, {
+    JSON: { stringify: serialize },
     Application(name) {
+      onRead("application");
       assert.equal(name, "System Events");
       return Object.freeze({
         applicationProcesses: Object.freeze({
           byName(processName) {
+            onRead("process_lookup");
             assert.equal(processName, "CoreServicesUIAgent");
             return agent;
           },
@@ -67,7 +87,9 @@ test("JXA resolves callable window and element collections before counting or in
     snapshot(dialog()),
   );
   assert.equal(collections, 4);
-  assert.equal(query([dialog()], { materialize: () => ({ length: 0 }) }), null);
+  assert.deepEqual(query([dialog()], { materialize: () => ({ length: 0 }) }), {
+    unavailable: "window_collection",
+  });
 });
 
 test("only a specific Situate token and English Open/Cancel pair in the same window is positive", () => {
@@ -242,12 +264,12 @@ test("JXA query is process-scoped and read-only and returns locally classified b
 });
 
 test("JXA traversal and attribute limits return unavailable without partial snapshots", () => {
-  assert.equal(
+  assert.deepEqual(
     query(Array.from({ length: 5 }, () => dialog("Other.app"))),
-    null,
+    { unavailable: "limit" },
   );
-  assert.equal(query([dialog("x".repeat(129))]), null);
-  assert.equal(
+  assert.deepEqual(query([dialog("x".repeat(129))]), { unavailable: "limit" });
+  assert.deepEqual(
     query([
       {
         ...dialog(),
@@ -258,7 +280,7 @@ test("JXA traversal and attribute limits return unavailable without partial snap
         ],
       },
     ]),
-    null,
+    { unavailable: "limit" },
   );
   const atLimit = dialog();
   atLimit.elements.push(
@@ -269,15 +291,17 @@ test("JXA traversal and attribute limits return unavailable without partial snap
     "dialog_observed",
   );
   atLimit.elements.push({ role: "AXGroup" });
-  assert.equal(query([atLimit]), null);
+  assert.deepEqual(query([atLimit]), { unavailable: "limit" });
   const nested = dialog();
   nested.elements.push({
     role: "AXGroup",
     elements: Array.from({ length: 62 }, () => ({ role: "AXGroup" })),
   });
-  assert.equal(query([nested]), null);
-  assert.equal(query([], { present: "unknown" }), null);
-  assert.equal(query([], { present: null }), null);
+  assert.deepEqual(query([nested]), { unavailable: "limit" });
+  assert.deepEqual(query([], { present: "unknown" }), {
+    unavailable: "process",
+  });
+  assert.deepEqual(query([], { present: null }), { unavailable: "process" });
   const oversized = Array.from({ length: 4 }, () => ({
     ...dialog("Other.app"),
     elements: [
@@ -289,15 +313,96 @@ test("JXA traversal and attribute limits return unavailable without partial snap
       })),
     ],
   }));
-  assert.equal(query(oversized), null);
+  assert.deepEqual(query(oversized), { unavailable: "limit" });
   assert.equal(
     runInNewContext(launchDialogQuery, {
       Application() {
         throw new Error("private API error");
       },
     }),
-    "null",
+    '{"unavailable":"process"}',
   );
+});
+
+test("query getter failures expose only the fixed stage at the failed operation", async () => {
+  const window = {
+    ...dialog(),
+    elements: [...dialog().elements, { role: "AXStaticText", text: "Situate" }],
+  };
+  const points = [
+    ["application", "process"],
+    ["process_lookup", "process"],
+    ["process_exists", "process"],
+    ["window_collection", "window_collection"],
+    ["window_role", "window_attributes"],
+    ["window_name", "window_attributes"],
+    ["element_collection", "element_collection"],
+    ["element_role", "element_attributes"],
+    ["element_name", "element_attributes"],
+    ["element_value", "element_attributes"],
+  ];
+  for (const [point, stage] of points) {
+    const result = query([window], {
+      onRead(current) {
+        if (current === point) throw new Error("private UI/path/error details");
+      },
+    });
+    assert.deepEqual(result, { unavailable: stage });
+    assert.equal(
+      await observeLaunchDialog({
+        applicationName: "Situate",
+        execute: async () => JSON.stringify(result),
+      }),
+      `query_${stage}_unavailable`,
+    );
+  }
+  assert.deepEqual(query([{ ...dialog(), title: null }]), {
+    unavailable: "window_attributes",
+  });
+  assert.deepEqual(
+    query([{ ...dialog(), elements: [{ role: "AXStaticText", text: null }] }]),
+    { unavailable: "element_attributes" },
+  );
+  const serialization = query([window], {
+    serialize() {
+      throw new Error("private serialization failure");
+    },
+  });
+  assert.deepEqual(serialization, { unavailable: "serialization" });
+});
+
+test("Node accepts only exact allowlisted query failure envelopes", async () => {
+  for (const stage of [
+    "process",
+    "window_collection",
+    "window_attributes",
+    "element_collection",
+    "element_attributes",
+    "limit",
+    "serialization",
+  ])
+    assert.equal(
+      await observeLaunchDialog({
+        applicationName: "Situate",
+        execute: async () => JSON.stringify({ unavailable: stage }),
+      }),
+      `query_${stage}_unavailable`,
+    );
+  for (const value of [
+    { unavailable: "private error" },
+    { unavailable: 4 },
+    { unavailable: null },
+    { unavailable: "query_process_unavailable" },
+    { unavailable: "process", message: "private UI text" },
+    { unavailable: "process", count: 1 },
+  ])
+    assert.equal(
+      await observeLaunchDialog({
+        applicationName: "Situate",
+        execute: async () => JSON.stringify(value),
+      }),
+      "query_execution_unavailable",
+    );
 });
 
 test("observer takes one credential-free bounded sample and returns no raw attributes", async () => {
@@ -367,12 +472,12 @@ test("query failures and unknown snapshots have distinct fixed codes without ret
       async () => {
         throw new Error("private stderr/UI/account path");
       },
-      "query_unavailable",
+      "query_execution_unavailable",
     ],
-    [async () => "private UI text", "query_unavailable"],
-    [async () => "null", "query_unavailable"],
+    [async () => "private UI text", "query_execution_unavailable"],
+    [async () => "null", "query_execution_unavailable"],
     [async () => "{}", unavailable],
-    [async () => "x".repeat(65537), unavailable],
+    [async () => "x".repeat(65537), "query_limit_unavailable"],
     [
       async () => JSON.stringify({ ...snapshot(dialog()), stderr: "private" }),
       unavailable,

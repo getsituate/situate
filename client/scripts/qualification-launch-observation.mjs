@@ -2,6 +2,15 @@ import { run } from "./ios-xcode.mjs";
 
 const maxBytes = 64 * 1024;
 const unavailable = "observation_unavailable";
+const queryFailureStages = new Set([
+  "process",
+  "window_collection",
+  "window_attributes",
+  "element_collection",
+  "element_attributes",
+  "limit",
+  "serialization",
+]);
 const roles = new Set([
   "AXGroup",
   "AXStaticText",
@@ -24,29 +33,36 @@ const otherApplicationToken =
   /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}_-]+)\.app(?![\p{L}\p{N}_.-])/gu;
 
 export const launchDialogQuery = `(() => {
+  let stage = "process";
   try {
     const events = Application("System Events");
     const agent = events.applicationProcesses.byName("CoreServicesUIAgent");
     const snapshot = { version: 1, process: "CoreServicesUIAgent", windows: [] };
     function string(value) {
-      if (typeof value !== "string" || value.length > 128) throw new Error();
+      if (typeof value !== "string") throw new Error();
+      if (value.length > 128) { stage = "limit"; throw new Error(); }
       return value;
     }
     function collection(value, maximum) {
-      if (!Array.isArray(value) || value.length > maximum) throw new Error();
+      if (!Array.isArray(value)) throw new Error();
+      if (value.length > maximum) { stage = "limit"; throw new Error(); }
       return value;
     }
     const present = agent.exists();
     if (typeof present !== "boolean") throw new Error();
     if (present) {
+      stage = "window_collection";
       const windows = collection(agent.windows(), 4);
       for (let index = 0; index < windows.length; index++) {
+        stage = "window_attributes";
         const source = windows[index];
         const window = { role: string(source.role()), title: string(source.name()), elements: [] };
         function visit(parent) {
+          stage = "element_collection";
           const children = collection(parent.uiElements(), 64);
           for (let childIndex = 0; childIndex < children.length; childIndex++) {
-            if (window.elements.length >= 64) throw new Error();
+            if (window.elements.length >= 64) { stage = "limit"; throw new Error(); }
+            stage = "element_attributes";
             const element = children[childIndex];
             const role = string(element.role());
             const value = role === "AXStaticText" ? string(element.value()) :
@@ -59,11 +75,12 @@ export const launchDialogQuery = `(() => {
         snapshot.windows.push(window);
       }
     }
+    stage = "serialization";
     const serialized = JSON.stringify(snapshot);
-    if (encodeURIComponent(serialized).replace(/%[A-F\\d]{2}/gi, "x").length > 65536) return "null";
+    if (encodeURIComponent(serialized).replace(/%[A-F\\d]{2}/gi, "x").length > 65536) { stage = "limit"; throw new Error(); }
     return serialized;
   } catch {
-    return "null";
+    return '{"unavailable":"' + stage + '"}';
   }
 })()`;
 
@@ -157,17 +174,21 @@ export async function observeLaunchDialog({
         terminationGraceMs: 2000,
       },
     );
-    if (
-      combined.aborted ||
-      typeof output !== "string" ||
-      Buffer.byteLength(output) > maxBytes
-    )
-      return unavailable;
+    if (combined.aborted) return unavailable;
+    if (typeof output !== "string") return "query_execution_unavailable";
+    if (Buffer.byteLength(output) > maxBytes) return "query_limit_unavailable";
     const snapshot = JSON.parse(output);
-    return snapshot === null
-      ? "query_unavailable"
-      : classifyLaunchDialog(snapshot, applicationName);
+    if (snapshot === null) return "query_execution_unavailable";
+    if (Object.hasOwn(snapshot, "unavailable")) {
+      if (
+        !keys(snapshot, "unavailable") ||
+        !queryFailureStages.has(snapshot.unavailable)
+      )
+        return "query_execution_unavailable";
+      return `query_${snapshot.unavailable}_unavailable`;
+    }
+    return classifyLaunchDialog(snapshot, applicationName);
   } catch {
-    return combined.aborted ? unavailable : "query_unavailable";
+    return combined.aborted ? unavailable : "query_execution_unavailable";
   }
 }
