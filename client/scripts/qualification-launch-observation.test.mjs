@@ -92,6 +92,18 @@ test("JXA resolves callable window and element collections before counting or in
   });
 });
 
+test("static-text labels use names without requiring a generic accessibility value", () => {
+  const window = dialog("");
+  window.elements.push({ role: "AXStaticText", text: "Open “Situate”?" });
+  const result = query([window], {
+    onRead(point) {
+      if (point === "element_value")
+        throw new Error("Synthetic unsupported generic value");
+    },
+  });
+  assert.equal(classifyLaunchDialog(result, "Situate"), "dialog_observed");
+});
+
 test("only a specific Situate token and English Open/Cancel pair in the same window is positive", () => {
   assert.equal(
     classifyLaunchDialog(snapshot(dialog()), "Situate"),
@@ -339,7 +351,6 @@ test("query getter failures expose only the fixed stage at the failed operation"
     ["element_collection", "element_collection"],
     ["element_role", "element_attributes"],
     ["element_name", "element_attributes"],
-    ["element_value", "element_attributes"],
   ];
   for (const [point, stage] of points) {
     const result = query([window], {
