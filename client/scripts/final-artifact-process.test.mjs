@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync, readFileSync, watch, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  writeFileSync,
+  watch,
+  existsSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -99,6 +106,76 @@ test("fixed native policy reports categories, not arguments or stderr", async ()
   assert.equal(qualificationCommandTimeouts.mount, 120_000);
   assert.equal(qualificationCommandTimeouts.detach, 30_000);
 });
+
+test("application launches redirect application streams without losing launcher output", async () => {
+  const calls = [];
+  const execute = createQualificationProcess({
+    execute: async (command, args, options) => {
+      calls.push({ command, args, capture: options.capture });
+      return "launcher output";
+    },
+  });
+  assert.equal(
+    await execute("open", ["-n", "/synthetic/Situate.app"]),
+    "launcher output",
+  );
+  assert.deepEqual(calls, [
+    {
+      command: "open",
+      args: [
+        "--stdout",
+        "/dev/null",
+        "--stderr",
+        "/dev/null",
+        "-n",
+        "/synthetic/Situate.app",
+      ],
+      capture: true,
+    },
+  ]);
+  assert.equal(qualificationCommandTimeouts.launch, 10_000);
+});
+
+test(
+  "a launched process cannot hold the bounded launcher's captured streams open",
+  { timeout: 10000 },
+  async (t) => {
+    const root = mkdtempSync(join(tmpdir(), "situate-launch-streams-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const ready = join(root, "ready"),
+      exited = join(root, "exited"),
+      release = join(root, "release");
+    const application = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},'ready');let ending=false;const stop=()=>{if(ending)return;ending=true;fs.writeFileSync(${JSON.stringify(exited)},'exited');process.exit(0)};setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)}))stop()},10);setTimeout(stop,5000);`;
+    const launcher = `const fs=require('fs');const args=process.argv.slice(1);const stream=(flag,fallback)=>args.includes(flag)?fs.openSync(args[args.indexOf(flag)+1],'w'):fallback;const app=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(application)}],{detached:true,stdio:['ignore',stream('--stdout',1),stream('--stderr',2)]});app.unref();console.log('launcher complete');`;
+    const waitForFile = async (file) => {
+      for (let i = 0; i < 600 && !existsSync(file); i++)
+        await new Promise((resolve) => {
+          setTimeout(resolve, 10);
+        });
+      assert.ok(existsSync(file));
+    };
+    const execute = createQualificationProcess({
+      deadline: () => AbortSignal.timeout(2500),
+      execute: (_command, args, options) =>
+        run(process.execPath, ["-e", launcher, "--", ...args], options),
+    });
+    try {
+      assert.equal(
+        await execute("open", ["-n", "/synthetic/Situate.app"]),
+        "launcher complete",
+      );
+      await waitForFile(ready);
+      assert.equal(
+        existsSync(exited),
+        false,
+        "Application must remain alive independently of the completed launcher",
+      );
+    } finally {
+      writeFileSync(release, "release");
+      await waitForFile(exited);
+    }
+  },
+);
 
 test("timeouts drain a synthetic owned process before reporting its command", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "situate-bounded-process-"));
