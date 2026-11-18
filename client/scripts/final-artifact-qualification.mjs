@@ -365,8 +365,22 @@ function validateAction(action) {
         ),
       "Invalid accessibility key chord",
     );
-  } else if (action.click || action.assert || action.focus) {
-    const target = action.click ?? action.assert ?? action.focus;
+  } else if (
+    action.click ||
+    action.assert ||
+    action.focus ||
+    action.navigation
+  ) {
+    const target =
+      action.click ?? action.assert ?? action.focus ?? action.navigation;
+    if (action.navigation)
+      assert(
+        ["AXButton", "AXPopUpButton"].includes(target.role) &&
+          target.window &&
+          target.name !== "Open navigation" &&
+          target.value === undefined,
+        "Invalid workspace navigation target",
+      );
     assert(
       [
         "AXButton",
@@ -414,7 +428,8 @@ export function accessibilityScript(pid, action) {
       : "";
     return `${prefix}${code ? `key code ${code}` : `keystroke ${quote(action.key.key)}`}${modifiers}\nend tell\nend tell`;
   }
-  const target = action.click ?? action.assert ?? action.focus;
+  const target =
+    action.click ?? action.assert ?? action.focus ?? action.navigation;
   const selectWindow = target.window
     ? `set ownedWindows to windows whose name is ${quote(target.window)}\nif count of ownedWindows is not 1 then error "Owned window must be unique"\nset ownedWindow to item 1 of ownedWindows\n${action.focus ? 'perform action "AXRaise" of ownedWindow\n' : ""}`
     : "";
@@ -429,6 +444,28 @@ export function accessibilityScript(pid, action) {
         ? "set entries to entire contents of ownedWindow\n"
         : "set entries to {}\nrepeat with windowRef in windows\nset entries to entries & (entire contents of (contents of windowRef))\nend repeat\n";
   const label = quote(target.name);
+  if (action.navigation)
+    return `${prefix}${selectWindow}${enumerate}set targetCount to 0
+set openers to {}
+repeat with elementRef in entries
+try
+set candidate to contents of elementRef
+set candidateRole to role of candidate
+if candidateRole is ${quote(target.role)} and (name of candidate is ${label} or description of candidate is ${label}) then
+set targetCount to targetCount + 1
+else if candidateRole is "AXButton" and (name of candidate is "Open navigation" or description of candidate is "Open navigation") then
+set end of openers to candidate
+end if
+end try
+end repeat
+if targetCount > 1 then error "Workspace navigation target must be unique"
+if targetCount is 1 then return "visible"
+if count of openers > 1 then error "Workspace navigation opener must be unique"
+if count of openers is 0 then return "pending"
+if not enabled of item 1 of openers then return "pending"
+return "reveal"
+end tell
+end tell`;
   return `${prefix}${selectWindow}${enumerate}set matches to {}\nrepeat with elementRef in entries\ntry\nset candidate to contents of elementRef\nif role of candidate is ${quote(target.role)} and (name of candidate is ${label} or description of candidate is ${label}) then set end of matches to candidate\nend try\nend repeat\nif count of matches is not 1 then error ("Accessibility target must be unique: " & (count of matches))\n${["AXButton", "AXPopUpButton"].includes(target.role) ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
 }
 
@@ -438,6 +475,23 @@ export async function checkAccessibilityAction(
   { execute, options },
 ) {
   const script = accessibilityScript(pid, action);
+  if (action.navigation) {
+    const state = await execute("osascript", ["-e", script], options);
+    if (state === "pending") return false;
+    if (state === "visible") return true;
+    assert.equal(state, "reveal", "Workspace navigation state is unknown");
+    const opener = {
+      role: "AXButton",
+      name: "Open navigation",
+      window: action.navigation.window,
+    };
+    await execute(
+      "osascript",
+      ["-e", accessibilityScript(pid, { click: opener })],
+      options,
+    );
+    return true;
+  }
   const target = action.assert;
   // System Events can omit static text that WebKit exposes through native AX.
   if (

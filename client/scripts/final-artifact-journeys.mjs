@@ -244,6 +244,8 @@ export function finalArtifactJourneys({
   const click = async (target) =>
     actions([{ assert: target }, { click: target }]);
   const expect = async (target) => actions([{ assert: target }]);
+  const navigationClick = (target) =>
+    actions([{ navigation: target }, { assert: target }, { click: target }]);
   const key = async (key, modifiers = []) =>
     actions([{ key: { key, modifiers } }]);
   const fill = async (target, value) => {
@@ -274,7 +276,7 @@ export function finalArtifactJourneys({
     await click(button("Create workspace"));
   }
   async function updates() {
-    await click(button("Settings", window));
+    await navigationClick(button("Settings", window));
     await click(button("Updates", window));
     await expect(text("The update is verified and ready to install.", window));
   }
@@ -285,17 +287,17 @@ export function finalArtifactJourneys({
   }
   async function reopen(draft = "") {
     await actions([{ windows: 2 }]);
-    await expect(workspaceMenu);
-    await click(button("[e2e:final-artifact-plugin-read]", window));
+    await actions([{ navigation: workspaceMenu }, { assert: workspaceMenu }]);
+    await navigationClick(button("[e2e:final-artifact-plugin-read]", window));
     await expect({
       ...area("Message", window),
       value: draft,
     });
     await expect(text("Final artifact plugin v1 verified.", window));
-    await click(button("Plugins", window));
+    await navigationClick(button("Plugins", window));
     await expect(text("Final artifact plugin", window));
     await expect(button("Disable", window));
-    await click(button("Files", window));
+    await navigationClick(button("Files", window));
     await click(button("e2e-note.md", window));
     await click({ role: "AXPopUpButton", name: "File actions", window });
     await click({ role: "AXMenuItem", name: "Edit source", window });
@@ -349,25 +351,25 @@ export function finalArtifactJourneys({
       await click(button("Adopt working method"));
       await click(button("Finish setup"));
       await seed(name, "seed.md", "# Synthetic seed\n");
-      await click(button("New chat", window));
+      await navigationClick(button("New chat", window));
       await send("[e2e:create] Create e2e-note.md", "Created the note.");
       await send(
         "[e2e:edit] Replace only Alpha marker with Beta marker",
         "Updated the note.",
       );
-      await click(button("Plugins", window));
+      await navigationClick(button("Plugins", window));
       await click(button("Create a plugin", window));
       await send(
         "[e2e:final-artifact-plugin] Create and activate the synthetic plugin.",
         "Final artifact plugin activated.",
       );
-      await click(button("New chat", window));
+      await navigationClick(button("New chat", window));
       await send(
         "[e2e:final-artifact-plugin-read]",
         "Final artifact plugin v1 verified.",
       );
       await fill(area("Message", window), chatDraft);
-      await click(workspaceMenu);
+      await navigationClick(workspaceMenu);
       await click({ role: "AXMenuItem", name: "Open workspace…", window });
       await create(secondary);
       await expect(
@@ -379,7 +381,7 @@ export function finalArtifactJourneys({
     },
     reopen,
     async close() {
-      await click(workspaceMenu);
+      await navigationClick(workspaceMenu);
       await click({ role: "AXMenuItem", name: "Close workspace", window });
       await expect(
         button("OpenAI-compatible server", `${secondary} — Situate`),
@@ -398,7 +400,7 @@ export function finalArtifactJourneys({
         await confirmUpdate();
         await expect(text("Keep your unsaved changes", window));
         await click(button("Cancel", window));
-        await click(button("Files", window));
+        await navigationClick(button("Files", window));
         await expect({
           ...area("Markdown source", window),
           value: "# E2E note\n\nUnsaved cancellation marker\n",
@@ -408,7 +410,7 @@ export function finalArtifactJourneys({
       } finally {
         await writable(name, true);
       }
-      await click(button("Files", window));
+      await navigationClick(button("Files", window));
       await fill(area("Markdown source", window), finalNote);
       await expect(text("Saved", window));
       await verifyFiles(name, [["e2e-note.md", finalNote]]);
