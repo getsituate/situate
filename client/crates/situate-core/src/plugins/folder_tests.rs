@@ -22,6 +22,178 @@ fn enable(root: &Path, id: &str, enabled: bool) {
     runtime::prepare(root).unwrap();
 }
 
+#[test]
+fn package_capacity_ignores_siblings_but_counts_draft_only_containers() {
+    let root = root();
+    let inventory = root.path().join(".situate/plugins");
+    fs::create_dir(&inventory).unwrap();
+    for index in 0..MAX_PACKAGES + 1 {
+        fs::write(inventory.join(format!("noise-{index}")), "keep").unwrap();
+        fs::create_dir(inventory.join(format!("unrelated-{index}"))).unwrap();
+    }
+    for index in 0..MAX_PACKAGES - 1 {
+        fs::create_dir_all(inventory.join(format!("draft-only-{index}/drafts"))).unwrap();
+    }
+    sources::create(root.path(), "last").unwrap();
+    assert!(sources::create(root.path(), "overflow").is_err());
+    assert!(!inventory.join("overflow").exists());
+    assert_eq!(fs::read(inventory.join("noise-0")).unwrap(), b"keep");
+}
+
+#[test]
+fn legacy_migrations_preserve_unrelated_siblings() {
+    let root = root();
+    let package = install(root.path(), "sample", &[]);
+    let id = "00000000-0000-4000-8000-000000000003";
+    drafts::create(root.path(), id, "sample").unwrap();
+    let legacy = root.path().join(".situate/plugin-drafts");
+    fs::create_dir(&legacy).unwrap();
+    fs::rename(
+        root.path().join(".situate/plugins/sample/drafts").join(id),
+        legacy.join(id),
+    )
+    .unwrap();
+    legacy_state(root.path(), &package);
+    let marker = root.path().join(".situate");
+    let plugins = marker.join("plugins");
+    let noise = vec![
+        legacy.join(".DS_Store"),
+        legacy.join("00000000-0000-4000-8000-000000000004"),
+        plugins.join(".DS_Store"),
+        marker.join("plugin-publication-not-a-record.json"),
+        marker.join("plugin-publication-00000000000040008000000000000005.json"),
+    ];
+    fs::create_dir(legacy.join("unrelated")).unwrap();
+    fs::create_dir(plugins.join("unrelated")).unwrap();
+    let matching_directory =
+        marker.join("plugin-publication-00000000-0000-4000-8000-000000000006.json");
+    fs::create_dir(&matching_directory).unwrap();
+    fs::write(matching_directory.join("keep"), "keep").unwrap();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let noise = {
+        use std::os::unix::ffi::OsStringExt;
+        let name = std::ffi::OsString::from_vec(vec![0xff]);
+        let mut noise = noise;
+        noise.extend([legacy.join(&name), plugins.join(&name), marker.join(&name)]);
+        noise
+    };
+    for path in &noise {
+        fs::write(path, "keep").unwrap();
+    }
+    for _ in 0..2 {
+        assert_eq!(drafts::list(root.path()).unwrap().len(), 1);
+        assert_eq!(
+            drafts::inspect(root.path(), id).unwrap().plugin_id,
+            "sample"
+        );
+        assert!(runtime::prepare(root.path()).unwrap().plugins[0].enabled);
+        for path in &noise {
+            assert_eq!(fs::read(path).unwrap(), b"keep");
+        }
+        assert!(!plugins.join("unrelated/.runtime").exists());
+        assert_eq!(fs::read(matching_directory.join("keep")).unwrap(), b"keep");
+    }
+    install(root.path(), "other", &[]);
+    fs::write(plugins.join("other/.runtime/runtime-state.json"), "corrupt").unwrap();
+    assert!(
+        runtime::read_state(
+            root.path(),
+            &runtime::storage(root.path()).unwrap().unwrap()
+        )
+        .is_err()
+    );
+    assert_eq!(drafts::list(root.path()).unwrap().len(), 1);
+    assert!(drafts::inspect(root.path(), id).is_ok());
+    assert_eq!(fs::read(legacy.join(".DS_Store")).unwrap(), b"keep");
+}
+
+#[test]
+fn interrupted_orphan_archival_retries_without_moving_unrelated_entries() {
+    let root = root();
+    install(root.path(), "removed", &[]);
+    let ids = [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+    ];
+    let legacy = root.path().join(".situate/plugin-drafts");
+    let archive = root.path().join(".situate/plugin-drafts-legacy");
+    fs::create_dir(&legacy).unwrap();
+    let mut records = vec![];
+    for id in ids {
+        drafts::create(root.path(), id, "removed").unwrap();
+        let source = root.path().join(".situate/plugins/removed/drafts").join(id);
+        records.push((
+            id,
+            fs::read(source.join(".situate/plugin-draft.json")).unwrap(),
+            fs::read(source.join(".situate/history.git/HEAD")).unwrap(),
+        ));
+    }
+    for id in ids {
+        fs::rename(
+            root.path().join(".situate/plugins/removed/drafts").join(id),
+            legacy.join(id),
+        )
+        .unwrap();
+    }
+    fs::remove_dir_all(root.path().join(".situate/plugins/removed")).unwrap();
+    fs::write(legacy.join(".DS_Store"), "keep").unwrap();
+    publication::inject_failure("draft-orphan-archived");
+    assert!(drafts::list(root.path()).is_err());
+    assert_eq!(ids.iter().filter(|id| archive.join(id).is_dir()).count(), 1);
+    assert_eq!(ids.iter().filter(|id| legacy.join(id).is_dir()).count(), 1);
+    for _ in 0..2 {
+        assert!(drafts::list(root.path()).unwrap().is_empty());
+        for (id, metadata, head) in &records {
+            assert_eq!(
+                &fs::read(archive.join(id).join(".situate/plugin-draft.json")).unwrap(),
+                metadata
+            );
+            assert_eq!(
+                &fs::read(archive.join(id).join(".situate/history.git/HEAD")).unwrap(),
+                head
+            );
+            assert!(!legacy.join(id).exists());
+            assert!(drafts::inspect(root.path(), id).is_err());
+        }
+        assert_eq!(fs::read(legacy.join(".DS_Store")).unwrap(), b"keep");
+    }
+}
+
+#[test]
+fn selected_corrupt_legacy_drafts_still_fail_without_moving_them() {
+    let root = root();
+    install(root.path(), "sample", &[]);
+    let id = "00000000-0000-4000-8000-000000000003";
+    drafts::create(root.path(), id, "sample").unwrap();
+    let legacy = root.path().join(".situate/plugin-drafts");
+    fs::create_dir(&legacy).unwrap();
+    fs::write(legacy.join(".DS_Store"), "keep").unwrap();
+    let original = root.path().join(".situate/plugins/sample/drafts").join(id);
+    fs::rename(&original, legacy.join(id)).unwrap();
+    let metadata = legacy.join(id).join(".situate/plugin-draft.json");
+    fs::write(&metadata, "{").unwrap();
+    assert!(drafts::list(root.path()).is_err());
+    assert_eq!(fs::read(metadata).unwrap(), b"{");
+    assert_eq!(fs::read(legacy.join(".DS_Store")).unwrap(), b"keep");
+    assert!(!original.exists());
+}
+
+#[test]
+fn selected_corrupt_legacy_records_still_fail_without_removal() {
+    let root = root();
+    let package = install(root.path(), "sample", &[]);
+    legacy_state(root.path(), &package);
+    let name = "plugin-publication-00000000-0000-4000-8000-000000000002.json";
+    let path = root.path().join(".situate").join(name);
+    fs::write(&path, "{").unwrap();
+    let store = runtime::storage(root.path()).unwrap().unwrap();
+    assert!(runtime::read_state(root.path(), &store).is_err());
+    let listing = runtime::prepare(root.path()).unwrap();
+    assert!(listing.plugins[0].error.is_some());
+    assert!(!listing.plugins[0].enabled);
+    assert_eq!(fs::read(&path).unwrap(), b"{");
+}
+
 fn legacy_state(root: &Path, package: &sources::PackageRevision) {
     fs::remove_file(
         root.join(".situate/plugins")

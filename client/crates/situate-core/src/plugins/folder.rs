@@ -141,19 +141,7 @@ pub(super) fn records(root: &Path) -> Result<Vec<(String, Dir)>, String> {
         return Ok(vec![]);
     };
     let mut records = vec![];
-    for entry in inventory.entries().map_err(|_| INVALID)? {
-        let id = entry
-            .map_err(|_| INVALID)?
-            .file_name()
-            .into_string()
-            .map_err(|_| INVALID)?;
-        if !inventory
-            .symlink_metadata(&id)
-            .map_err(|_| INVALID)?
-            .is_dir()
-        {
-            continue;
-        }
+    for id in directory_names(&inventory, valid_id).map_err(|e| e.to_string())? {
         let plugin = child(&inventory, &id).map_err(|e| e.to_string())?;
         if let Some(marker) = optional_child(&plugin, ".runtime").map_err(|e| e.to_string())? {
             if records.len() == MAX_PACKAGES {

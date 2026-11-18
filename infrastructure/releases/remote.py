@@ -62,6 +62,14 @@ def validate_tree(path):
             require_regular(metadata)
 
 
+def release_directories(releases):
+    require_directory(releases)
+    for path in releases.iterdir():
+        if VERSION.fullmatch(path.name):
+            require_directory(path)
+            yield path
+
+
 def validate_storage(token):
     for path in [*reversed(ROOT.parents), ROOT]:
         require_directory(path)
@@ -71,10 +79,7 @@ def validate_storage(token):
             require_regular(metadata)
     releases = ROOT / 'releases'
     if entry(releases) is not None:
-        require_directory(releases)
-        for path in releases.iterdir():
-            if not VERSION.fullmatch(path.name):
-                raise ValueError('Unexpected release storage entry')
+        for path in release_directories(releases):
             validate_tree(path)
     incoming = ROOT / ('.release-incoming-' + token)
     if entry(incoming) is not None:
@@ -113,10 +118,9 @@ def history(*, include_qualifications=False):
         if entry(ROOT / 'current-release') is not None or entry(ROOT / 'release-pending.json') is not None:
             raise ValueError('Missing stored release directory')
         return ([], []) if include_qualifications else []
-    require_directory(releases)
     result = []
     qualifications = []
-    for directory in sorted(releases.iterdir(), key=lambda path: path.name):
+    for directory in sorted(release_directories(releases), key=lambda path: path.name):
         with os.fdopen(open_regular(directory / 'manifest.json', os.O_RDONLY), 'rb') as stream:
             data = stream.read(1024 * 1024 + 1)
         if len(data) > 1024 * 1024:
@@ -264,9 +268,7 @@ def main():
                 raise ValueError('Unexpected pointer or backward release activation')
         if releases.is_symlink() or destination.is_symlink():
             raise ValueError('Unexpected release symlink')
-        for path in (releases.iterdir() if releases.exists() else []):
-            if path.is_symlink() or not path.is_dir() or not VERSION.fullmatch(path.name):
-                raise ValueError('Unexpected release storage entry')
+        for path in (release_directories(releases) if releases.exists() else []):
             if compare(version, path.name) < 0 or (compare(version, path.name) == 0 and version != path.name):
                 raise ValueError('Release activation must move forward')
         if destination.exists():

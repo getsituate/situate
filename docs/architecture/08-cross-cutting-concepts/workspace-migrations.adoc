@@ -32,8 +32,9 @@ The first migration creates this file without changing other managed records or 
 |===
 
 The app owns one central, ordered registry of migration IDs and implementations.
-Append new migrations after all published entries; never change a published migration, reuse its ID or insert a step before it.
-Corrections are new migrations.
+Append new migrations after all published entries. Do not reuse an ID or insert a step before a published entry.
+Corrections normally require a new migration. The only exception is the validation-only correction to `m0002_conversation_history`: it leaves unrelated siblings untouched, still rejects corrupt conversation records and valid-ID symlinks, and does not change conversion or the data format.
+Release verification accepts only the exact original-to-corrected implementation bytes at that path.
 
 .Compatibility gate for valid metadata, with no recovery or cleanup pending.
 image::{architecture-diagrams-root}/workspace-compatibility.svg["An app below minimumAppVersion refuses opening. A compatible app migrates a known earlier position, or preserves a current or valid later position before opening the core.",width=700]

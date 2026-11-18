@@ -23,6 +23,62 @@ fn location(root: &Path, id: &str) -> PathBuf {
     root.join(".situate/plugins/demo/drafts").join(id)
 }
 
+#[test]
+fn discovery_and_quota_select_only_canonical_draft_directories() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    create(root, ID, "demo").unwrap();
+    let plugins = root.join(".situate/plugins");
+    let drafts = plugins.join("demo/drafts");
+    for index in 0..MAX_PACKAGES + 1 {
+        fs::write(plugins.join(format!("noise-{index}")), "keep").unwrap();
+        fs::write(drafts.join(format!("noise-{index}")), "keep").unwrap();
+    }
+    fs::write(plugins.join(".DS_Store"), "keep").unwrap();
+    fs::write(drafts.join(".DS_Store"), "keep").unwrap();
+    fs::create_dir(drafts.join("not-a-draft")).unwrap();
+    let regular_uuid = "00000000-0000-4000-8000-000000000001";
+    fs::write(drafts.join(regular_uuid), "keep").unwrap();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        let name = std::ffi::OsString::from_vec(vec![0xff]);
+        fs::write(plugins.join(&name), "keep").unwrap();
+        fs::write(drafts.join(&name), "keep").unwrap();
+    }
+    create(root, OTHER, "demo").unwrap();
+    assert_eq!(list(root).unwrap().len(), 2);
+    assert_eq!(inspect(root, ID).unwrap().plugin_id, "demo");
+    assert!(!plugins.join("demo/code").exists());
+    for index in 0..MAX_PACKAGES - 3 {
+        let id = uuid::Uuid::from_u128(index as u128 + 2).to_string();
+        fs::create_dir(drafts.join(id)).unwrap();
+    }
+    create(root, "00000000-0000-4000-8000-000000000098", "demo").unwrap();
+    let summaries = list(root).unwrap();
+    assert_eq!(summaries.len(), MAX_PACKAGES);
+    assert_eq!(
+        summaries.iter().filter(|s| s.error.is_some()).count(),
+        MAX_PACKAGES - 3
+    );
+    let before = snapshot(root);
+    assert!(create(root, "00000000-0000-4000-8000-000000000099", "demo").is_err());
+    assert_eq!(snapshot(root), before);
+    assert_eq!(fs::read(drafts.join(regular_uuid)).unwrap(), b"keep");
+}
+
+#[cfg(unix)]
+#[test]
+fn selected_draft_symlink_is_not_followed() {
+    let temp = tempfile::tempdir().unwrap();
+    create(temp.path(), ID, "demo").unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(outside.path(), location(temp.path(), OTHER)).unwrap();
+    assert!(list(temp.path()).is_err());
+    assert!(inspect(temp.path(), OTHER).is_err());
+    assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
+}
+
 fn active(root: &Path) -> PathBuf {
     let code = root.join(".situate/plugins/demo/code");
     fs::create_dir_all(code.join("nested")).unwrap();

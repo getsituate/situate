@@ -9,6 +9,8 @@ import {
   copyFileSync,
   existsSync,
   realpathSync,
+  symlinkSync,
+  readlinkSync,
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
@@ -501,6 +503,43 @@ test("dedicated cache validation rejects shared directories and unrelated conten
       () => validateCacheDirectory(directory, "/checkout", "/home"),
       /unrelated/,
     );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("dedicated cache accepts only regular Finder metadata alongside cache entries", () => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-cache-"));
+  try {
+    for (const name of ["npm", "cargo", "browsers"])
+      mkdirSync(join(directory, name));
+    const metadata = join(directory, ".DS_Store");
+    writeFileSync(metadata, "Finder metadata");
+    validateCacheDirectory(directory, "/checkout", "/home");
+    assert.equal(readFileSync(metadata, "utf8"), "Finder metadata");
+    writeFileSync(join(directory, "unexpected"), "unrelated");
+    assert.throws(
+      () => validateCacheDirectory(directory, "/checkout", "/home"),
+      /unrelated/,
+    );
+    rmSync(join(directory, "unexpected"));
+    rmSync(metadata);
+    for (const kind of ["directory", "symlink", "dangling", "fifo"]) {
+      if (kind === "directory") mkdirSync(metadata);
+      if (kind === "symlink") symlinkSync("npm", metadata);
+      if (kind === "dangling") symlinkSync("missing", metadata);
+      if (kind === "fifo") {
+        const result = spawnSync("mkfifo", [metadata]);
+        assert.equal(result.status, 0, result.stderr?.toString());
+      }
+      assert.throws(
+        () => validateCacheDirectory(directory, "/checkout", "/home"),
+        /unrelated/,
+        kind,
+      );
+      if (kind === "symlink") assert.equal(readlinkSync(metadata), "npm");
+      rmSync(metadata, { recursive: true });
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -659,22 +659,85 @@ fn failed_conflict_application_can_retry_without_discarding_the_review() {
 
 #[cfg(unix)]
 #[test]
-fn failed_initial_snapshot_does_not_publish_broken_history() {
+fn unsupported_entries_are_omitted_from_listing_and_initial_history_without_changes() {
     let temp = workspace();
+    fs::write(temp.path().join("valid.md"), "visible").unwrap();
     fs::write(temp.path().join("invalid:name.md"), "keep").unwrap();
-    assert!(matches!(
-        ContentStore::open(temp.path()),
-        Err(ContentError::InvalidPath)
-    ));
-    assert!(!temp.path().join(".situate/history.git").exists());
-    fs::rename(
-        temp.path().join("invalid:name.md"),
-        temp.path().join("valid.md"),
-    )
-    .unwrap();
+    fs::create_dir(temp.path().join("invalid:folder")).unwrap();
+    fs::write(temp.path().join("invalid:folder/keep.md"), "nested").unwrap();
+    #[cfg(target_os = "linux")]
+    let opaque = {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        let path = temp.path().join(OsStr::from_bytes(b"opaque-\xff"));
+        fs::write(&path, "opaque").unwrap();
+        path
+    };
+    let socket = std::os::unix::net::UnixListener::bind(temp.path().join("socket")).unwrap();
+    let mut store = ContentStore::open(temp.path()).unwrap();
+    let revision = store.record_external_changes().unwrap();
+    let expected = vec![ContentEntry {
+        path: "valid.md".into(),
+        is_directory: false,
+    }];
+    assert_eq!(store.list().unwrap(), expected);
+    assert_eq!(list_content(temp.path()).unwrap(), expected);
+    let historical = vec![
+        ContentEntry {
+            path: ".situate".into(),
+            is_directory: true,
+        },
+        expected[0].clone(),
+    ];
+    assert_eq!(store.list_revision(&revision).unwrap(), historical);
+    assert_eq!(
+        fs::read(temp.path().join("invalid:name.md")).unwrap(),
+        b"keep"
+    );
+    assert_eq!(
+        fs::read(temp.path().join("invalid:folder/keep.md")).unwrap(),
+        b"nested"
+    );
+    #[cfg(target_os = "linux")]
+    assert_eq!(fs::read(opaque).unwrap(), b"opaque");
+    drop(socket);
+    drop(store);
     let store = ContentStore::open(temp.path()).unwrap();
     assert_eq!(store.history().unwrap().len(), 1);
-    assert_eq!(store.read_text("valid.md").unwrap().text, "keep");
+    assert_eq!(store.list_revision(&revision).unwrap(), historical);
+}
+
+#[cfg(unix)]
+#[test]
+fn external_rename_to_an_unsupported_name_retains_prior_versions_and_original_bytes() {
+    let temp = workspace();
+    fs::write(temp.path().join("note.md"), "before").unwrap();
+    let mut store = ContentStore::open(temp.path()).unwrap();
+    let previous = store.record_external_changes().unwrap();
+    fs::rename(
+        temp.path().join("note.md"),
+        temp.path().join("invalid:note.md"),
+    )
+    .unwrap();
+    fs::write(temp.path().join("invalid:note.md"), "after").unwrap();
+    let current = store.record_external_changes().unwrap();
+    assert_ne!(current, previous);
+    assert!(store.list().unwrap().is_empty());
+    assert!(store.read_revision("note.md", &current).is_err());
+    assert_eq!(
+        store.read_revision("note.md", &previous).unwrap(),
+        b"before"
+    );
+    assert_eq!(
+        fs::read(temp.path().join("invalid:note.md")).unwrap(),
+        b"after"
+    );
+    drop(store);
+    let store = ContentStore::open(temp.path()).unwrap();
+    assert_eq!(
+        store.read_revision("note.md", &previous).unwrap(),
+        b"before"
+    );
+    assert!(store.read_revision("note.md", &current).is_err());
 }
 
 #[test]
@@ -739,7 +802,10 @@ fn history_publication_never_replaces_an_occupied_directory() {
 fn corrupt_draft_is_reported_not_removed() {
     let temp = workspace();
     let store = ContentStore::open(temp.path()).unwrap();
-    let draft = temp.path().join(".situate/drafts/broken.json");
+    let draft = temp
+        .path()
+        .join(".situate/drafts")
+        .join(draft_name("note.md").unwrap());
     fs::write(&draft, "not json").unwrap();
     assert!(matches!(
         store.drafts(),
@@ -788,16 +854,72 @@ fn recovery_drafts_remain_readable_when_history_cannot_open() {
     let mut store = ContentStore::open(temp.path()).unwrap();
     conflict(&mut store, &temp);
     let expected = store.drafts().unwrap();
+    let drafts = temp.path().join(".situate/drafts");
+    for name in [
+        "notes.json",
+        ".DS_Store",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.json",
+    ] {
+        fs::write(drafts.join(name), "not a draft").unwrap();
+    }
+    fs::create_dir(drafts.join("settings.json")).unwrap();
+    #[cfg(target_os = "linux")]
+    {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        fs::write(drafts.join(OsStr::from_bytes(b"opaque-\xff.json")), "keep").unwrap();
+    }
+    assert_eq!(store.drafts().unwrap(), expected);
     drop(store);
     let head = temp.path().join(".situate/history.git/HEAD");
     fs::write(&head, "broken history").unwrap();
     assert!(ContentStore::open(temp.path()).is_err());
     assert_eq!(read_recovery_drafts(temp.path()).unwrap(), expected);
     assert_eq!(fs::read_to_string(&head).unwrap(), "broken history");
+    assert_eq!(fs::read(drafts.join("notes.json")).unwrap(), b"not a draft");
+    assert!(drafts.join("settings.json").is_dir());
     assert_eq!(
         fs::read_to_string(temp.path().join("note.md")).unwrap(),
         "external\n"
     );
+}
+
+#[test]
+fn recovery_draft_filename_must_match_its_target() {
+    let temp = workspace();
+    let store = ContentStore::open(temp.path()).unwrap();
+    let path = temp
+        .path()
+        .join(".situate/drafts")
+        .join(draft_name("note.md").unwrap());
+    let bytes = serde_json::json!({"version": 1, "draft": {
+        "path": "other.md", "base": null, "text": "retained text"
+    }})
+    .to_string();
+    fs::write(&path, &bytes).unwrap();
+    assert!(matches!(
+        store.drafts(),
+        Err(ContentError::DraftPersistence(_))
+    ));
+    assert!(matches!(
+        read_recovery_drafts(temp.path()),
+        Err(ContentError::DraftPersistence(_))
+    ));
+    assert_eq!(fs::read_to_string(path).unwrap(), bytes);
+}
+
+#[test]
+fn selected_recovery_draft_directories_are_rejected() {
+    let temp = workspace();
+    let store = ContentStore::open(temp.path()).unwrap();
+    let path = temp
+        .path()
+        .join(".situate/drafts")
+        .join(draft_name("note.md").unwrap());
+    fs::create_dir(&path).unwrap();
+    assert!(store.drafts().is_err());
+    assert!(read_recovery_drafts(temp.path()).is_err());
+    assert!(path.is_dir());
 }
 
 #[test]
@@ -810,15 +932,13 @@ fn recovery_read_does_not_initialize_storage_and_preserves_invalid_drafts() {
     );
     let drafts = temp.path().join(".situate/drafts");
     fs::create_dir(&drafts).unwrap();
-    fs::write(drafts.join("broken.json"), "retained bytes").unwrap();
+    let draft = drafts.join(draft_name("note.md").unwrap());
+    fs::write(&draft, "retained bytes").unwrap();
     assert!(matches!(
         read_recovery_drafts(temp.path()),
         Err(ContentError::DraftPersistence(_))
     ));
-    assert_eq!(
-        fs::read_to_string(drafts.join("broken.json")).unwrap(),
-        "retained bytes"
-    );
+    assert_eq!(fs::read_to_string(draft).unwrap(), "retained bytes");
 }
 
 #[cfg(unix)]

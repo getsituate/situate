@@ -446,11 +446,10 @@ fn shared_plugin_explorer_is_code_only_readonly_and_recovery_independent() {
     )
     .unwrap();
     std::fs::create_dir_all(root.path().join(".situate/drafts")).unwrap();
-    std::fs::write(
-        root.path().join(".situate/drafts/unsupported.json"),
-        "invalid recovery",
-    )
-    .unwrap();
+    let corrupt_draft = root
+        .path()
+        .join(".situate/drafts/1e50750837601dd74a8505be1987a04acf5f4a90.json");
+    std::fs::write(&corrupt_draft, "invalid recovery").unwrap();
     let owner = ContentStore::open(root.path()).unwrap();
     assert!(owner.drafts().is_err());
 
@@ -567,7 +566,7 @@ fn shared_plugin_explorer_is_code_only_readonly_and_recovery_independent() {
         "const value = 1;"
     );
     assert_eq!(
-        std::fs::read_to_string(root.path().join(".situate/drafts/unsupported.json")).unwrap(),
+        std::fs::read_to_string(corrupt_draft).unwrap(),
         "invalid recovery"
     );
 }
@@ -731,11 +730,10 @@ fn failed_open_and_untouched_unsupported_recovery_records_do_not_trap_viewers() 
     detach(&viewer, &mut content).unwrap();
     assert_eq!(owner.drafts().unwrap()[0].text, "other session");
     drop(owner);
-    std::fs::write(
-        root.path().join(".situate/drafts/unsupported.json"),
-        b"not a recovery record",
-    )
-    .unwrap();
+    let corrupt_draft = root
+        .path()
+        .join(".situate/drafts/1e50750837601dd74a8505be1987a04acf5f4a90.json");
+    std::fs::write(&corrupt_draft, b"not a recovery record").unwrap();
     let viewer = Session::default();
     let mut content = viewer.inner.lock().unwrap();
     content.root = Some(root.path().to_owned());
@@ -743,7 +741,7 @@ fn failed_open_and_untouched_unsupported_recovery_records_do_not_trap_viewers() 
     assert!(content.store.as_ref().unwrap().drafts().is_err());
     detach(&viewer, &mut content).unwrap();
     assert_eq!(
-        std::fs::read(root.path().join(".situate/drafts/unsupported.json")).unwrap(),
+        std::fs::read(corrupt_draft).unwrap(),
         b"not a recovery record"
     );
 }

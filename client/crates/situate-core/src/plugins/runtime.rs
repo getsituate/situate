@@ -276,11 +276,10 @@ fn read_snapshot(root: &Path, store: &Storage) -> Result<Snapshot, String> {
 fn archive_legacy_artifacts(store: &Storage) -> Result<(), String> {
     let mut names = vec![];
     for entry in store.dir.entries().map_err(|_| INVALID)? {
-        let name = entry
-            .map_err(|_| INVALID)?
-            .file_name()
-            .into_string()
-            .map_err(|_| INVALID)?;
+        let name = entry.map_err(|_| INVALID)?.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
         let attempt = name
             .strip_prefix("plugin-publication-")
             .and_then(|value| {
@@ -292,15 +291,18 @@ fn archive_legacy_artifacts(store: &Storage) -> Result<(), String> {
                 name.strip_prefix("plugin-state-")
                     .and_then(|value| value.strip_suffix(".tmp"))
             });
-        if attempt.is_some_and(|id| uuid::Uuid::parse_str(id).is_ok()) {
+        if attempt.is_some_and(canonical_uuid) {
+            let metadata = store.dir.symlink_metadata(name).map_err(|_| INVALID)?;
+            if metadata.file_type().is_symlink() {
+                return Err(INVALID.into());
+            }
+            if !metadata.is_file() {
+                continue;
+            }
             if names.len() == MAX_FILES {
                 return Err(PluginError::TooLarge.to_string());
             }
-            let metadata = store.dir.symlink_metadata(&name).map_err(|_| INVALID)?;
-            if !metadata.is_file() || metadata.file_type().is_symlink() {
-                return Err(INVALID.into());
-            }
-            names.push(name);
+            names.push(name.to_owned());
         }
     }
     if names.is_empty() {

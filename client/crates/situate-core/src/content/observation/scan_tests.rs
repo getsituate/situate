@@ -74,16 +74,13 @@ fn cached_files_replaced_by_symlinks_or_special_files_do_not_reuse_blobs() {
     for symbolic in [true, false] {
         let temp = workspace();
         let mut store = ContentStore::open(temp.path()).unwrap();
-        let previous = store.repo.head().unwrap().target().unwrap();
+        let previous = store.repo.head().unwrap().target().unwrap().to_string();
         let path = temp.path().join("nested/note.md");
         fs::remove_file(&path).unwrap();
         let outside = tempfile::NamedTempFile::new().unwrap();
         fs::write(outside.path(), b"outside synthetic bytes").unwrap();
         if symbolic {
             symlink(outside.path(), &path).unwrap();
-            let revision = store.record_external_changes().unwrap();
-            assert!(store.read_revision("nested/note.md", &revision).is_err());
-            assert!(!store.observations.blobs.contains_key("nested/note.md"));
         } else {
             assert!(
                 std::process::Command::new("mkfifo")
@@ -92,12 +89,15 @@ fn cached_files_replaced_by_symlinks_or_special_files_do_not_reuse_blobs() {
                     .unwrap()
                     .success()
             );
-            assert!(matches!(
-                store.record_external_changes(),
-                Err(ContentError::InvalidPath)
-            ));
-            assert_eq!(store.repo.head().unwrap().target(), Some(previous));
         }
+        let revision = store.record_external_changes().unwrap();
+        assert!(store.read_revision("nested/note.md", &revision).is_err());
+        assert!(!store.observations.blobs.contains_key("nested/note.md"));
+        assert_eq!(
+            store.read_revision("nested/note.md", &previous).unwrap(),
+            b"before"
+        );
+        assert!(fs::symlink_metadata(&path).is_ok());
         assert_eq!(
             fs::read(outside.path()).unwrap(),
             b"outside synthetic bytes"

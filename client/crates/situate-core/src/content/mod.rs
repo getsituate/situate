@@ -8,8 +8,8 @@
 //! Situate exclusively manages Git internals; other programs may edit content
 //! files, not history files. Workspace snapshots are sequential observations,
 //! not atomic multi-file snapshots. Symlinks and technical directories are excluded,
-//! except the editable `.situate/working-method.md` document. Non-UTF-8 filenames
-//! and special files reject a snapshot rather than being silently omitted.
+//! except the editable `.situate/working-method.md` document. Unsupported names
+//! and special files are omitted without changing the working files.
 //!
 //! Saves preserve caller bytes; metadata validation/identity confirmation belongs to
 //! the caller. A successful draft write precedes each versioned text target write. Retain editor text
@@ -798,12 +798,27 @@ fn read_drafts(directory: &Dir) -> Result<Vec<Draft>> {
     let mut drafts = Vec::new();
     for entry in directory.entries()? {
         let name = entry?.file_name();
-        let name = name.to_str().ok_or(ContentError::InvalidPath)?;
-        if !name.ends_with(".json") {
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(hash) = name.strip_suffix(".json") else {
+            continue;
+        };
+        if hash.len() != 40
+            || !hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
             continue;
         }
         let (bytes, _) = read_file(directory, name)?;
-        drafts.push(decode_draft(&bytes)?);
+        let draft = decode_draft(&bytes)?;
+        if draft_name(&draft.path)? != name {
+            return Err(ContentError::DraftPersistence(
+                "native.content.draft.targetMismatch".into(),
+            ));
+        }
+        drafts.push(draft);
     }
     drafts.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(drafts)
@@ -1020,10 +1035,9 @@ fn temporary_file_with_permissions(
 fn list_dir(dir: &Dir, prefix: &str, result: &mut Vec<ContentEntry>) -> Result<()> {
     for entry in dir.entries()? {
         let entry = entry?;
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| ContentError::InvalidPath)?;
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
         if technical(&name) || crate::ignored_files::is_ignored(&name) {
             continue;
         }
@@ -1036,15 +1050,13 @@ fn list_dir(dir: &Dir, prefix: &str, result: &mut Vec<ContentEntry>) -> Result<(
         } else {
             format!("{prefix}/{name}")
         };
-        validate_path(&path)?;
-        if kind.is_file() || kind.is_dir() {
-            result.push(ContentEntry {
-                path: path.clone(),
-                is_directory: kind.is_dir(),
-            });
-        } else {
-            return Err(ContentError::InvalidPath);
+        if validate_path(&path).is_err() || !(kind.is_file() || kind.is_dir()) {
+            continue;
         }
+        result.push(ContentEntry {
+            path: path.clone(),
+            is_directory: kind.is_dir(),
+        });
         if kind.is_dir() {
             list_dir(&child_dir(dir, &name)?, &path, result)?;
         }
@@ -1085,10 +1097,9 @@ fn snapshot_tree_cached(
     let mut tree = repo.treebuilder(None)?;
     for entry in dir.entries()? {
         let entry = entry?;
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| ContentError::InvalidPath)?;
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
         let path = format!("{prefix}{name}");
         let instruction_directory = prefix.is_empty() && name == ".situate";
         if (prefix == ".situate/" && name != "working-method.md")
@@ -1098,12 +1109,13 @@ fn snapshot_tree_cached(
             continue;
         }
         let kind = entry.file_type()?;
-        paths::validate_tree_path(&path, kind.is_dir())?;
-        if kind.is_symlink() {
-            continue;
-        }
         if instruction_directory && !kind.is_dir() {
             return Err(ContentError::InvalidPath);
+        }
+        if paths::validate_tree_path(&path, kind.is_dir()).is_err()
+            || !(kind.is_file() || kind.is_dir())
+        {
+            continue;
         }
         if kind.is_dir() {
             let oid = snapshot_tree_cached(
@@ -1149,8 +1161,6 @@ fn snapshot_tree_cached(
                 },
             );
             tree.insert(&name, blob, mode)?;
-        } else {
-            return Err(ContentError::InvalidPath);
         }
     }
     git_storage::write_tree(repo, &mut tree)

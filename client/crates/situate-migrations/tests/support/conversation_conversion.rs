@@ -179,6 +179,90 @@ fn successful_conversion_preserves_all_chats_and_reopening_does_not_repeat_it() 
     assert_eq!(tree(&managed), converted);
 }
 
+fn already_structured_workspace() -> tempfile::TempDir {
+    let root = tempfile::tempdir().unwrap();
+    let managed = root.path().join(".situate");
+    let conversations = managed.join("conversations");
+    fs::create_dir_all(conversations.join("one")).unwrap();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/m0002/after");
+    for file in ["metadata.json", "history.jsonl"] {
+        let path = format!("conversations/one/{file}");
+        fs::copy(fixture.join(&path), managed.join(path)).unwrap();
+    }
+    fs::write(conversations.join(".DS_Store"), [0, 255]).unwrap();
+    fs::write(conversations.join("retained"), "not a directory").unwrap();
+    fs::create_dir(conversations.join("old.backup")).unwrap();
+    fs::write(conversations.join("old.backup/metadata.json"), b"{broken").unwrap();
+    root
+}
+
+#[test]
+fn already_structured_conversations_migrate_without_altering_unrelated_siblings() {
+    let root = already_structured_workspace();
+    let managed = root.path().join(".situate");
+    let original = tree(&managed);
+    let lease = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+    let migrated = tree(&managed);
+    let mut records = migrated.clone();
+    let metadata: Value =
+        serde_json::from_slice(&records.remove("migrations.json").unwrap()).unwrap();
+    assert_eq!(metadata["lastAppliedMigration"], 2);
+    assert_eq!(records, original);
+    drop(lease);
+    let _reopened = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+    assert_eq!(tree(&managed), migrated);
+}
+
+#[test]
+fn unrelated_siblings_do_not_mask_corrupt_or_missing_conversation_records() {
+    use std::error::Error;
+
+    for corrupt in [true, false] {
+        let root = already_structured_workspace();
+        let managed = root.path().join(".situate");
+        let history = managed.join("conversations/one/history.jsonl");
+        if corrupt {
+            fs::write(&history, b"{broken\n").unwrap();
+        } else {
+            fs::remove_file(&history).unwrap();
+        }
+        let original = tree(&managed);
+        let error = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap_err();
+        assert_eq!(error.kind(), MigrationErrorKind::MigrationFailed);
+        if !corrupt {
+            assert_eq!(
+                error
+                    .source()
+                    .unwrap()
+                    .downcast_ref::<std::io::Error>()
+                    .unwrap()
+                    .kind(),
+                std::io::ErrorKind::NotFound
+            );
+        }
+        assert_eq!(tree(&managed), original);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn validation_never_follows_a_valid_id_symlink() {
+    use crate::Migration as _;
+    use cap_std::{ambient_authority, fs::Dir};
+
+    let root = already_structured_workspace();
+    let managed = root.path().join(".situate");
+    let link = managed.join("conversations/one");
+    let target = root.path().join("outside");
+    fs::rename(&link, &target).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let managed = Dir::open_ambient_dir(managed, ambient_authority()).unwrap();
+    // Backup rejects links independently; exercise the validator itself here.
+    let error = Migration::validate(&MigrationWorkspace { managed: &managed }).unwrap_err();
+    assert_eq!(error.kind(), MigrationErrorKind::UnsafePath);
+    assert_eq!(fs::read_link(link).unwrap(), target);
+}
+
 #[test]
 fn fixtures_match_independent_target_records() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/m0002");
