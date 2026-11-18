@@ -28,6 +28,24 @@ async fn finish(owner: &Owner<Fixture>) -> Snapshot {
 }
 
 #[tokio::test]
+async fn a_complete_conversation_has_no_older_page_after_saving_or_reopening() {
+    let host = Fixture::new();
+    *host.turns.lock().unwrap() = VecDeque::from([turn(false)]);
+    let owner = Owner::open(host.clone()).await.unwrap();
+    assert!(owner.snapshot().await.unwrap().history_before.is_none());
+    owner
+        .submit("first".into(), "First request".into(), 1)
+        .await
+        .unwrap();
+    let saved = finish(&owner).await;
+    assert_eq!(saved.message_offset, 0);
+    assert_eq!(saved.event_offset, 0);
+    assert!(saved.history_before.is_none());
+    let reopened = Owner::open(host).await.unwrap();
+    assert!(reopened.snapshot().await.unwrap().history_before.is_none());
+}
+
+#[tokio::test]
 async fn recalled_originals_are_history_only_after_submit_and_reopen() {
     let host = Fixture::new();
     *host.turns.lock().unwrap() = VecDeque::from([turn(false), turn(false)]);

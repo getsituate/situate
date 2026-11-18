@@ -136,6 +136,92 @@ async function openChat(
   await move(scroll(page), "end");
   await settled(page);
 }
+test("scrolling to the top loads older history once and preserves the reading position", async ({
+  page,
+}) => {
+  await openChat(page);
+  await page.evaluate(() => {
+    const native = Reflect.get(
+      window,
+      "__nativeConversationFixture",
+    ) as NativeConversationFixture;
+    const id = Reflect.get(window, "__scrollConversationId") as string;
+    const snapshot = native.publish("garden", id, {
+      messageOffset: 12,
+      historyBefore: "recent",
+      selectedEntryId: "recent",
+    });
+    const ipc = Reflect.get(window, "__TAURI_INTERNALS__");
+    const invoke = ipc.invoke;
+    Reflect.set(window, "__historyRequests", 0);
+    ipc.invoke = async (command: string, args: Record<string, unknown>) => {
+      if (command !== "ai_conversation_history") return invoke(command, args);
+      Reflect.set(
+        window,
+        "__historyRequests",
+        Reflect.get(window, "__historyRequests") + 1,
+      );
+      await new Promise<void>((resolve) => {
+        Reflect.set(window, "__releaseHistory", resolve);
+      });
+      return {
+        metadata: {
+          id,
+          revision: snapshot.record.revision,
+          selectedEntryId: "recent",
+        },
+        entries: Array.from({ length: 12 }, (_, index) => ({
+          version: 1,
+          id: `older-${index}`,
+          parentId: index ? `older-${index - 1}` : null,
+          type: "message",
+          data: {
+            message: {
+              role: "user",
+              content: `Earlier note ${index + 1}`,
+              timestamp: index,
+            },
+          },
+        })),
+        nextBefore: null,
+        messageOffset: 0,
+        eventOffset: 0,
+      };
+    };
+  });
+  await settled(page);
+  expect(
+    await page.evaluate(() => Reflect.get(window, "__historyRequests")),
+  ).toBe(0);
+  await move(scroll(page), 0);
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, "__historyRequests")))
+    .toBe(1);
+  const recent = page
+    .locator(".message.user")
+    .filter({ hasText: "Reading note 1\n" })
+    .first();
+  const before = await recent.boundingBox();
+  await scroll(page).dispatchEvent("wheel", { deltaY: -120 });
+  expect(
+    await page.evaluate(() => Reflect.get(window, "__historyRequests")),
+  ).toBe(1);
+  await page.evaluate(() => Reflect.get(window, "__releaseHistory")());
+  await expect(page.locator(".message.user")).toHaveCount(30);
+  await settled(page);
+  const after = await recent.boundingBox();
+  expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(1);
+  await move(scroll(page), 0);
+  await scroll(page).dispatchEvent("wheel", { deltaY: -120 });
+  await settled(page);
+  expect(
+    await page.evaluate(() => Reflect.get(window, "__historyRequests")),
+  ).toBe(1);
+  await expect(
+    page.getByRole("button", { name: "Load earlier messages", exact: true }),
+  ).toHaveCount(0);
+});
+
 async function append(page: Page, text = "New reading notes\n".repeat(12)) {
   await page.evaluate((text) => {
     const native = Reflect.get(

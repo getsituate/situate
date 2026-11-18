@@ -1798,21 +1798,13 @@
         "settings-not-restored",
       );
       await selectConversation(record.title);
-      while (
-        document.querySelectorAll(".change-card").length < 2 &&
-        button("Load earlier messages")
-      ) {
-        await click("Load earlier messages");
-        await wait(
-          "earlier-messages-loaded",
-          () => !button("Loading earlier messages…"),
-        );
-        await verifyAlerts(await snapshot(), record);
-      }
-      await wait(
-        "restored-tool-cards",
-        () => document.querySelectorAll(".change-card").length >= 2,
-      );
+      await wait("restored-tool-cards", () => {
+        if (document.querySelectorAll(".change-card").length >= 2) return true;
+        const transcript = query(".transcript-scroll");
+        transcript.scrollTop = 0;
+        transcript.dispatchEvent(new WheelEvent("wheel", { deltaY: -120 }));
+        return false;
+      });
       await verifyAlerts(state, record);
       assert(!button("Stop response"), "restored-run-replayed");
       await invoke("agent_e2e_ready");
