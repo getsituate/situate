@@ -1,5 +1,3 @@
-#[cfg(test)]
-use crate::conversation_fixtures::FixtureConversations;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use situate_core::{
@@ -7,6 +5,8 @@ use situate_core::{
     conversation_runtime::ContentReference,
     onboarding::{Choice, InstructionBase, OnboardingRecord, OnboardingStorage, Snapshot, Step},
 };
+#[cfg(test)]
+use situate_fixtures::FixtureConversations;
 use tokio_util::sync::CancellationToken;
 
 const INVALID: &str = "native.onboarding.storage.invalid";

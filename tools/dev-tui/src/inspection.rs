@@ -141,7 +141,8 @@ pub fn command(root: &Path, directory: &Path) -> Command {
     command
         .env_remove("PI_SESSION_ID")
         .env_remove("PI_SESSION_FILE")
-        .env_remove(crate::application_logs::MANIFEST_ENV);
+        .env_remove(crate::application_logs::MANIFEST_ENV)
+        .env_remove("SITUATE_TEST_WORKSPACES_DIR");
     command
 }
 

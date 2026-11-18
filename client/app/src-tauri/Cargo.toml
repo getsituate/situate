@@ -14,6 +14,7 @@ tauri-build = { version = "=2.7.2", features = [] }
 url = "2"
 
 [dependencies]
+situate-fixtures = { path = "../../crates/situate-fixtures", optional = true }
 situate-core = { path = "../../crates/situate-core" }
 situate-migrations = { path = "../../crates/situate-migrations" }
 situate-agent = { path = "../../crates/situate-agent" }
@@ -71,9 +72,10 @@ objc2-core-graphics = { version = "=0.3.2", default-features = false, features =
 rfd = "0.17"
 
 [dev-dependencies]
+situate-fixtures = { path = "../../crates/situate-fixtures" }
 tauri = { version = "=2.12.3", features = ["test"] }
 tokio = { version = "1", features = ["test-util"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
-native-smoke = []
+native-smoke = ["dep:situate-fixtures"]

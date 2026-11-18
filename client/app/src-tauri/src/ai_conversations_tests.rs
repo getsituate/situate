@@ -1,5 +1,5 @@
 use super::*;
-use crate::conversation_fixtures::FixtureConversations;
+use situate_fixtures::FixtureConversations;
 
 #[cfg(target_os = "macos")]
 #[test]

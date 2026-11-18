@@ -83,6 +83,8 @@ window.runLayoutSmoke = async () => {
       scope: workspaceId,
       conversation,
     });
+    if (retained.record.draft !== "Layout retained draft")
+      throw new Error("Native fixture did not persist the draft");
     const input = {
       text: "Layout retained draft",
       attachments: [],
@@ -108,6 +110,11 @@ window.runLayoutSmoke = async () => {
       scope: workspaceId,
       id: "native-editor",
       title: "Native editor conversation",
+    });
+    await invoke("smoke_conversation_fixture", {
+      scope: workspaceId,
+      fixture: "chat-draft",
+      references: [],
     });
     const data = structuredClone(record.data);
     data.layout.tabs.push({
@@ -175,6 +182,20 @@ window.runLayoutSmoke = async () => {
     return true;
   }
   await invoke("smoke_progress", { stage: "layout-readback" });
+  const scope = workspaceId;
+  const chats = await invoke("ai_conversations", { scope });
+  const added = chats.find((chat) => chat.title === "Draft: weekly review");
+  const existing = chats.find((chat) => chat.id === "native-editor");
+  if (!added || existing?.title !== "Native editor conversation")
+    throw new Error(
+      "Adding a fixture draft did not preserve both conversations",
+    );
+  const savedDraft = await invoke("ai_conversation_read", {
+    scope,
+    conversation: added.id,
+  });
+  if (savedDraft.draft !== "What should I review before Friday?")
+    throw new Error("The added fixture draft did not survive reopening");
   const tab = record.data.layout.tabs.find((item) => item.id === tabId);
   if (
     !tab ||

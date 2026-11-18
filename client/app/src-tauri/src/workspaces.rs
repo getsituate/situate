@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::conversation_fixtures::FixtureConversations;
+use situate_fixtures::FixtureConversations;
 #[cfg(feature = "native-smoke")]
 #[path = "../tests/support/workspace_failure_smoke.rs"]
 pub mod failure_smoke;

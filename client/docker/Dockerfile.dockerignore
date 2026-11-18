@@ -42,6 +42,8 @@
 !client/app/src-tauri/tests/**
 !client/crates/situate-core/Cargo.toml
 !client/crates/situate-core/src/**
+!client/crates/situate-fixtures/Cargo.toml
+!client/crates/situate-fixtures/src/**
 !client/crates/tauri-plugin-workspace-access/Cargo.toml
 !client/crates/tauri-plugin-workspace-access/build.rs
 !client/crates/tauri-plugin-workspace-access/src/**

@@ -1,0 +1,15 @@
+[package]
+name = "situate-fixtures"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+situate-core = { path = "../situate-core" }
+situate-migrations = { path = "../situate-migrations" }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,7 +1,7 @@
 use serde_json::json;
 use situate_core::{ConversationRecord, ai_storage::Storage, conversation_history::HistoryEntry};
 
-pub(crate) trait FixtureConversations {
+pub trait FixtureConversations {
     fn save_fixture_conversation(
         &self,
         record: &ConversationRecord,

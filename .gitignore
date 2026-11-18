@@ -25,6 +25,7 @@ blob-report/
 # Development output and worktree-local desktop data
 /tools/dev-tui/target/
 /client/.desktop-dev-data/
+/client/.desktop-fixture-data/
 /.release-preparation/
 /.release-operations/
 

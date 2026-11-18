@@ -64,6 +64,7 @@ const requirements = (file) => file.startsWith("requirements/");
 const pi = (file) => file.startsWith(".pi/") || tools.test(file);
 const dev = (file) =>
   file.startsWith("tools/dev-tui/") ||
+  file === "client/crates/situate-fixtures/src/catalog.json" ||
   file === "design/brand/tokens.json" ||
   releaseInputs(file);
 const scripts = (file) =>

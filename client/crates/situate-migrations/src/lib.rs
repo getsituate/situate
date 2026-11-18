@@ -8,7 +8,7 @@ mod runner;
 
 pub use migration::{Migration, MigrationDescriptor, MigrationId, MigrationWorkspace};
 pub use registry::MIGRATIONS;
-pub use runner::{WorkspaceLease, initialize_fresh, prepare};
+pub use runner::{WorkspaceLease, initialize_fresh, lock_current_exclusively, prepare};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MigrationErrorKind {

@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Task {
     Desktop,
+    FixtureCreate,
+    FixtureApply,
     Workflow(crate::release::Action),
     Unit,
     Quick,
@@ -54,6 +56,8 @@ impl Task {
         match self {
             Self::Workflow(action) => action.name(),
             Self::Desktop => text::TASK_NAMES[0],
+            Self::FixtureCreate => "Fixture workspace",
+            Self::FixtureApply => "Workspace fixture action",
             Self::Unit => text::TASK_NAMES[1],
             Self::Quick => text::TASK_NAMES[2],
             Self::Full => text::TASK_NAMES[3],
@@ -76,6 +80,11 @@ impl Task {
         match self {
             Self::Workflow(action) => crate::release::command(root, action, &[]),
             Self::Desktop => CommandSpec::new("npm", &["run", "dev:client"], &root.join("client")),
+            Self::FixtureCreate | Self::FixtureApply => CommandSpec::new(
+                "cargo",
+                &["run", "--locked", "-p", "situate-fixtures", "--"],
+                &root.join("client"),
+            ),
             Self::Design => CommandSpec::new("npm", &["run", "design"], &root.join("client")),
             Self::Website => {
                 let mut spec =

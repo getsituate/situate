@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::conversation_fixtures::FixtureConversations;
+use situate_fixtures::FixtureConversations;
 #[cfg(feature = "native-smoke")]
 #[path = "../tests/support/ai_files_smoke.rs"]
 pub(crate) mod file_smoke;

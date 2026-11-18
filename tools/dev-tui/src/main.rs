@@ -4,6 +4,7 @@ compile_error!("situate-dev currently supports macOS and Linux");
 mod actions;
 mod app;
 mod application_logs;
+mod fixtures;
 mod inspection;
 mod owned;
 mod process;
