@@ -150,6 +150,7 @@ interface WorkspaceChats {
     loading: boolean;
     creating: boolean;
     loaded: boolean;
+    error: unknown;
   };
   sessions: Map<string, Session>;
   listVersion: number;
@@ -165,6 +166,7 @@ function workspace(scope: string): WorkspaceChats {
         loading: false,
         creating: false,
         loaded: false,
+        error: null,
       }),
       sessions: shallowReactive(new Map()),
       listVersion: 0,
@@ -230,9 +232,12 @@ export function workspaceConversations(scope: string) {
           })
           .sort(compareConversations);
         owner.state.loaded = true;
+        owner.state.error = null;
       } catch (error) {
-        if (version === owner.listVersion && workspaces.get(scope) === owner)
+        if (version === owner.listVersion && workspaces.get(scope) === owner) {
+          owner.state.error = error;
           captureIncident("conversation", error, scope);
+        }
       } finally {
         if (version === owner.listVersion) owner.state.loading = false;
       }

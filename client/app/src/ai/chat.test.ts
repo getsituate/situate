@@ -509,6 +509,9 @@ test("list failures open general recovery, retain known conversations and allow 
   expect(list.state.conversations.map((item) => item.id)).toEqual(["chat"]);
   expect(list.state.loading).toBe(false);
   expect(await list.create()).toEqual(expect.any(String));
+  expect(list.state.error).toBe("native.ai.storage.failed");
+  await list.refresh();
+  expect(list.state.error).toBeNull();
 });
 
 test("a failed list request from a closed workspace does not open recovery", async () => {
