@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "release-app-translocation",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Handle macOS App Translocation during release qualification."
+}
