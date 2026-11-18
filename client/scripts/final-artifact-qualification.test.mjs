@@ -134,6 +134,50 @@ test("window text assertions require an exact match from the native AX query", a
   );
 });
 
+test("workspace navigation opens the compact drawer once and leaves a visible sidebar alone", async () => {
+  const action = {
+    navigation: {
+      role: "AXButton",
+      name: "New chat",
+      window: "Fixture — Situate",
+    },
+  };
+  for (const [state, ready, presses] of [
+    ["pending", false, 0],
+    ["visible", true, 0],
+    ["reveal", true, 1],
+  ]) {
+    const calls = [];
+    const execute = async (command, [mode, script]) => {
+      assert.equal(command, "osascript");
+      assert.equal(mode, "-e");
+      assert.match(script, /unix id is 123/);
+      assert.match(script, /windows whose name is "Fixture — Situate"/);
+      calls.push(script);
+      return calls.length === 1 ? state : "";
+    };
+    assert.equal(
+      await checkAccessibilityAction(123, action, { execute }),
+      ready,
+    );
+    assert.equal(calls.length, 1 + presses);
+    assert.doesNotMatch(calls[0], /AXPress/);
+    assert.match(calls[0], /targetCount > 1 then error/);
+    if (presses) {
+      assert.match(
+        calls[1],
+        /role of candidate is "AXButton" and \(name of candidate is "Open navigation"/,
+      );
+      assert.match(calls[1], /count of matches is not 1/);
+      assert.match(calls[1], /AXPress/);
+    }
+  }
+  await assert.rejects(
+    checkAccessibilityAction(123, action, { execute: async () => "unknown" }),
+    /Workspace navigation state is unknown/,
+  );
+});
+
 export function responseRequest(responses, calls = []) {
   return (url, options, callback) => {
     calls.push({ url: String(url), options });

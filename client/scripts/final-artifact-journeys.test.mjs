@@ -176,6 +176,12 @@ test("default journeys retain saved state across restart and keep chat drafts in
     },
   });
   await profile.exercise();
+  const newChat = actions.findIndex((step) => step.click?.name === "New chat");
+  assert.ok(newChat >= 2);
+  assert.deepEqual(actions.slice(newChat - 2, newChat), [
+    { navigation: actions[newChat].click },
+    { assert: actions[newChat].click },
+  ]);
   const beforeRestart = actions.length;
   await profile.reopen();
   const restarted = actions.slice(beforeRestart);
