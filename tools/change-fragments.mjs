@@ -17,6 +17,7 @@ import {
   localeDefinitionPath,
   localeRoot,
 } from "./release-catalog.mjs";
+import { requiresChangelog } from "./test-inputs.mjs";
 
 const idPattern = /^[a-z][a-z0-9-]{0,79}$/u;
 const fragmentPath = (id) => `changes/${id}.json`;
@@ -144,7 +145,7 @@ export function validateFragmentRange(
   {
     base,
     head,
-    requireNew = true,
+    requireForClientChanges = true,
     allowLegacyFragments = false,
     allowMigrationMetadata = false,
   } = {},
@@ -220,17 +221,30 @@ export function validateFragmentRange(
         fragment: content,
       };
     });
-  assert(
-    !requireNew || fragments.length > 0,
-    "Every pull request requires a new declaration",
-  );
+  if (!fragments.length && requireForClientChanges) {
+    const clientChange = git(root, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "-z",
+      base,
+      head,
+      "--",
+    ])
+      .split("\0")
+      .find(requiresChangelog);
+    assert(
+      !clientChange,
+      `Client changes require a new declaration in changes/ (changed input: ${JSON.stringify(clientChange)})`,
+    );
+  }
   return fragments.sort((a, b) => a.id.localeCompare(b.id, "en"));
 }
 
 export function collectFragments(root, options) {
   return validateFragmentRange(root, {
     ...options,
-    requireNew: false,
+    requireForClientChanges: false,
     allowLegacyFragments: true,
     // Published source baselines may precede the migration-ledger replacement.
     allowMigrationMetadata: true,

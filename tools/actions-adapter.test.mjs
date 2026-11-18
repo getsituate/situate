@@ -571,7 +571,7 @@ test("adapter subprocess transports plan-bound receipts and reports planner fail
 
   writeFileSync(
     join(directory, "tools/pipeline.mjs"),
-    "console.error('Every pull request requires a new declaration'); process.exitCode = 1;",
+    "console.error('Client changes require a new declaration'); process.exitCode = 1;",
   );
   const previousOutput = readFileSync(output, "utf8");
   const failedPlan = spawnSync(
@@ -580,10 +580,7 @@ test("adapter subprocess transports plan-bound receipts and reports planner fail
     { cwd: directory, env, encoding: "utf8" },
   );
   assert.equal(failedPlan.status, 1);
-  assert.match(
-    failedPlan.stderr,
-    /Every pull request requires a new declaration/,
-  );
+  assert.match(failedPlan.stderr, /Client changes require a new declaration/);
   assert.match(failedPlan.stderr, /failed \(1\)/);
   assert.equal(failedPlan.stdout, "");
   assert.equal(readFileSync(output, "utf8"), previousOutput);

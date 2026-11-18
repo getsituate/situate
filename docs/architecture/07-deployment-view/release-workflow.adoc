@@ -77,8 +77,8 @@ Scheduled npm monitoring alongside Dependabot is proposed; cadence and runner-bu
 ==== Release identity and content
 
 link:{architecture-docs-root}/09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[ADR-0017] selects `YYYY.M.N` public versions with separate platform build identifiers.
-link:{architecture-docs-root}/09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018] requires a new changelog declaration in every PR, including an explicit empty declaration when nothing merits a user-facing entry.
-Neither policy is currently enforced by the release pipeline.
+link:{architecture-docs-root}/09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018] requires a new changelog declaration for PRs that change the client. If a client change merits no user-facing entry, use an empty declaration with an internal reason.
+CI checks the declaration requirement before merge; release assembly collects committed declarations.
 
 Reserve the version centrally after merge and bind source, configuration and approved content as shown in link:{architecture-docs-root}/index.adoc#adr-0017[ADR-0017].
 Parallel PRs do not edit shared version pins; builds assemble approved content without generating prose.
