@@ -134,7 +134,6 @@ final class Dictation: NSObject, AVAudioRecorderDelegate {
             monitor.start(queue: DispatchQueue(label: "dev.situate.dictation.network"))
         }
         for (center, name) in [
-            (NotificationCenter.default, NSApplication.didResignActiveNotification),
             (NSWorkspace.shared.notificationCenter, NSWorkspace.sessionDidResignActiveNotification),
             (NSWorkspace.shared.notificationCenter, NSWorkspace.willSleepNotification),
             (NSWorkspace.shared.notificationCenter, NSWorkspace.screensDidSleepNotification),
@@ -227,10 +226,6 @@ final class Dictation: NSObject, AVAudioRecorderDelegate {
                     ])
                 await media?.begin(id)
                 guard operation == id, phase == "permission" else { return }
-                guard NSApplication.shared.isActive else {
-                    finish(id, notice: "interrupted")
-                    return
-                }
                 self.recorder = recorder
                 recorder.delegate = self
                 recorder.isMeteringEnabled = true
@@ -281,7 +276,7 @@ final class Dictation: NSObject, AVAudioRecorderDelegate {
                 if discarding {
                     finish(id)
                 } else {
-                    finish(id, notice: text.isEmpty ? "noSpeech" : nil, text: text)
+                    finish(id, text: text)
                 }
             } catch {
                 if operation == id { finish(id, notice: discarding ? nil : "failed") }

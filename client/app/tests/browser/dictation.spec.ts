@@ -173,7 +173,7 @@ test("recording navigation offers stay or discard before changing tabs", async (
   await expect(page.locator(".conversation-destination")).toHaveCount(1);
 });
 
-test("hidden transcription returns to its own draft and defers recovery notices", async ({
+test("empty hidden transcription leaves both drafts unchanged without a notice", async ({
   page,
 }) => {
   await workspaceFixture(page, shellState, { dictationModel: "ready" });
@@ -193,11 +193,7 @@ test("hidden transcription returns to its own draft and defers recovery notices"
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(field).toHaveValue("Second draft");
   await page.locator(".conversation-destination").first().click();
-  await expect(page.getByRole("dialog")).toContainText(
-    "No speech was recognized",
-  );
-  await page.getByRole("button", { name: "Dismiss notice" }).click();
-  await expect(field).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(field).toHaveValue("First draft");
 });
 

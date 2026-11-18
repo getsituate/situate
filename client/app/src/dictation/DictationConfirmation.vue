@@ -12,7 +12,6 @@ const outcome = computed(() =>
   confirmation.value?.inserted
     ? t("dictation.completedDetail")
     : {
-        noSpeech: t("dictation.noSpeech"),
         failed: t("dictation.failed"),
         denied: t("dictation.denied"),
         interrupted: t("dictation.interrupted"),

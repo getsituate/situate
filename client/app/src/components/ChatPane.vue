@@ -48,7 +48,6 @@ import {
   confirmation,
   dictationSettingsRequested,
   noticePresentation,
-  dismissedPermission,
   ownsDictation,
   stopRecording,
   type Notice,
@@ -181,13 +180,7 @@ const dictationPhase = computed(() =>
 const localNotice = ref<Notice | null>(null);
 const noticeId = Symbol();
 const notice = computed(
-  () =>
-    chat.value?.state.dictationNotice ??
-    localNotice.value ??
-    (dictationPhase.value === "permission" &&
-    dismissedPermission.value !== dictation.owner?.id
-      ? "permission"
-      : null),
+  () => chat.value?.state.dictationNotice ?? localNotice.value,
 );
 watch(
   [notice, confirmation, noticePresentation, () => props.navigationOpen],
@@ -222,8 +215,6 @@ async function dictate() {
 async function dismissNotice() {
   if (chat.value) chat.value.state.dictationNotice = null;
   localNotice.value = null;
-  if (dictationPhase.value === "permission")
-    dismissedPermission.value = dictation.owner?.id ?? null;
   await nextTick();
   composer.value?.focus();
   restoreSelection();

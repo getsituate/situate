@@ -140,7 +140,7 @@ test("inserts once into the originating draft's latest text and selection, and p
   expect(save).toHaveBeenCalledTimes(1);
 });
 
-for (const notice of ["noSpeech", "failed", "denied", "interrupted"] as const) {
+for (const notice of ["failed", "denied", "interrupted"] as const) {
   test(`${notice} preserves edits and selection without saving`, async () => {
     const state = draft(),
       save = vi.fn(async () => {});
@@ -154,6 +154,20 @@ for (const notice of ["noSpeech", "failed", "denied", "interrupted"] as const) {
       dictationNotice: notice,
     });
     expect(save).not.toHaveBeenCalled();
+    expect(dictation.busy).toBe(false);
+  });
+}
+
+for (const notice of [undefined, "noSpeech"] as const) {
+  test(`empty dictation with ${notice} finishes silently without changing the draft`, async () => {
+    const state = draft();
+    const save = vi.fn(async () => {});
+    await dictateDraft("garden", "first", state, () => true, save);
+    const before = { ...state };
+    result("", notice);
+    expect(state).toEqual(before);
+    expect(save).not.toHaveBeenCalled();
+    expect(dictation.owner).toBeNull();
     expect(dictation.busy).toBe(false);
   });
 }

@@ -7,11 +7,7 @@ import ChatPane from "./ChatPane.vue";
 import { onboardingSession, retainOnboarding } from "../onboarding/session";
 import { newOnboardingRecord } from "../onboarding/types";
 import { setupQuestion } from "../onboarding/questions";
-import {
-  dictation,
-  dismissedPermission,
-  noticePresentation,
-} from "../dictation/runtime";
+import { dictation, noticePresentation } from "../dictation/runtime";
 
 const mocks = vi.hoisted(() => ({
   chat: vi.fn(),
@@ -128,7 +124,6 @@ beforeEach(() => {
   dictation.owner = null;
   dictation.busy = false;
   noticePresentation.value = null;
-  dismissedPermission.value = null;
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
   };
@@ -362,11 +357,11 @@ function pane(props: Record<string, unknown> = {}) {
   return wrapper;
 }
 
-test("two presentations of one draft show one recovery dialog and dismiss permission guidance once", async () => {
+test("two presentations of one draft show one recovery dialog", async () => {
   const first = pane();
   const second = pane();
   await flushPromises();
-  services.get("one:topic")!.state.dictationNotice = "noSpeech";
+  services.get("one:topic")!.state.dictationNotice = "failed";
   await flushPromises();
   expect(document.querySelectorAll("dialog[open]")).toHaveLength(1);
   const shown = first.find("dialog").exists() ? first : second;
@@ -380,15 +375,11 @@ test("two presentations of one draft show one recovery dialog and dismiss permis
     phase: "permission",
   };
   await flushPromises();
-  expect(document.querySelectorAll("dialog[open]")).toHaveLength(1);
-  const permission = first.find("dialog").exists() ? first : second;
-  await permission.get("button[autofocus]").trigger("click");
-  await flushPromises();
   expect(document.querySelectorAll("dialog[open]")).toHaveLength(0);
   expect(dictation.owner?.phase).toBe("permission");
 });
 
-test("permission guidance closes automatically when recording starts", async () => {
+test("starting dictation never opens permission guidance", async () => {
   const wrapper = pane();
   dictation.owner = {
     id: "permission",
@@ -397,7 +388,7 @@ test("permission guidance closes automatically when recording starts", async () 
     phase: "permission",
   };
   await flushPromises();
-  expect(document.querySelectorAll("dialog[open]")).toHaveLength(1);
+  expect(document.querySelectorAll("dialog[open]")).toHaveLength(0);
 
   dictation.owner = { ...dictation.owner, phase: "recording" };
   await flushPromises();
