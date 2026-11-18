@@ -29,6 +29,7 @@ describe("plugin contribution boundaries", () => {
     { views: [{ ...view, id: "other:main" }] },
     { views: [{ ...view, title: "Main" }] },
     { views: [{ ...view, component: null }] },
+    { views: [{ ...view, availability: false }] },
     { views: [view], settings: view },
     { components: { invalid: null } },
     { dispose: true },
@@ -36,6 +37,16 @@ describe("plugin contribution boundaries", () => {
     expect(() => validateUiContributions(value, "demo")).toThrow(
       "plugins.invalidContributions",
     );
+  });
+
+  it("preserves availability hooks without invoking them during validation", () => {
+    const availability = vi.fn(() => ({ status: "missing" as const }));
+    const result = validateUiContributions(
+      { views: [{ ...view, availability }] },
+      "demo",
+    );
+    expect(result.views?.[0]?.availability).toBe(availability);
+    expect(availability).not.toHaveBeenCalled();
   });
 
   it("preserves ordinary views, settings and explicit component exports", () => {

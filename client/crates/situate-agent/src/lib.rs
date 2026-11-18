@@ -687,6 +687,19 @@ impl<H: Host> Owner<H> {
         self.publish(&mut state);
     }
 
+    /// Stop execution and join auxiliary work before removing the owner's storage.
+    /// Callers must separately block and drain new/admitted actions.
+    pub async fn stop_and_wait_idle(&self) -> Result<(), String> {
+        self.cancel_retained();
+        let result = self.wait_idle().await;
+        self.stop_auxiliaries().await;
+        result?;
+        if self.quiescence().await.status != Quiescence::Idle {
+            return Err("native.ai.conversation.saveFailed".into());
+        }
+        Ok(())
+    }
+
     /// An error leaves the owner retained and busy; it is not permission to
     /// release a failed persistence checkpoint or independently draining work.
     pub async fn wait_idle(&self) -> Result<(), String> {

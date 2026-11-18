@@ -141,6 +141,8 @@ interface FixtureOptions {
     >
   >;
   aiSaveError?: boolean;
+  aiDeleteFailures?: number;
+  aiHoldConversationList?: boolean;
   aiConversationLoadErrors?: Record<string, string>;
   aiLoginOutcome?: "success" | "denied" | "pending";
   aiConnection?: Config;
@@ -326,6 +328,8 @@ export async function workspaceFixture(
       );
       function conversation(scope: string, id = "legacy"): ConversationRecord {
         const key = `${scope}:${id}`;
+        if (deletedConversations.has(key))
+          throw new Error("Missing conversation");
         if (!conversations.has(key) && id === "legacy")
           conversations.set(key, {
             version: 2,
@@ -384,6 +388,12 @@ export async function workspaceFixture(
       if (initial.current && options.aiModelError)
         modelErrors.set(initial.current.id, options.aiModelError);
       let selectionFailures = options.aiSelectionFailures ?? 0;
+      let deleteFailures = options.aiDeleteFailures ?? 0;
+      const conversationListGate = options.aiHoldConversationList
+        ? new Promise<void>((resolve) => {
+            Reflect.set(window, "__releaseConversationList", resolve);
+          })
+        : Promise.resolve();
       const status = (
         scope: string,
         conversationId?: string,
@@ -565,6 +575,7 @@ export async function workspaceFixture(
         sessionStorage.getItem("native-conversation-fixture-v2") ?? "null",
       ) as {
         records: [string, ConversationRecord][];
+        deleted?: string[];
         owners: [string, Omit<ConversationSnapshot, "record">][];
         receipts: [string, string][];
         requests: NativeConversationFixtureRequest[];
@@ -572,6 +583,8 @@ export async function workspaceFixture(
       } | null;
       for (const [key, record] of retainedNative?.records ?? [])
         conversations.set(key, record);
+      const deletedConversations = new Set(retainedNative?.deleted ?? []);
+      for (const key of deletedConversations) conversations.delete(key);
       const nativeOwners = new Map<
         string,
         Omit<ConversationSnapshot, "record">
@@ -591,6 +604,7 @@ export async function workspaceFixture(
           "native-conversation-fixture-v2",
           JSON.stringify({
             records: [...conversations],
+            deleted: [...deletedConversations],
             owners: [...nativeOwners],
             receipts: [...nativeReceipts],
             requests: nativeRequests,
@@ -1163,6 +1177,7 @@ export async function workspaceFixture(
       };
       Reflect.set(window, "__nativeConversationFixture", nativeFixture);
       function respondNative(scope: string, id: string) {
+        if (deletedConversations.has(nativeKey(scope, id))) return;
         const owner = nativeState(scope, id);
         const actionId = owner.actionId;
         if (!owner.taskActive) return;
@@ -2141,7 +2156,14 @@ export async function workspaceFixture(
               return;
             }
             if (command === "ai_conversations") {
-              if (!initial.onboarding) conversation(String(args.scope));
+              await conversationListGate;
+              if (
+                !initial.onboarding &&
+                !deletedConversations.has(
+                  nativeKey(String(args.scope), "legacy"),
+                )
+              )
+                conversation(String(args.scope));
               return [...conversations.entries()]
                 .filter(([key]) => key.startsWith(`${args.scope}:`))
                 .map(([, record]) => ({
@@ -2305,7 +2327,31 @@ export async function workspaceFixture(
                 );
               return snapshot;
             }
+            if (command === "ai_conversation_delete") {
+              const scope = String(args.scope),
+                id = String(args.conversation);
+              const key = nativeKey(scope, id);
+              if (deletedConversations.has(key)) return;
+              const owner = nativeState(scope, id);
+              if (owner.taskActive || owner.questionBusy)
+                finishNative(scope, id, null, true);
+              if (deleteFailures > 0) {
+                deleteFailures--;
+                throw "native.ai.conversation.storageUnavailable";
+              }
+              conversations.delete(key);
+              deletedConversations.add(key);
+              nativeChannels.delete(key);
+              persistNative();
+              return;
+            }
             if (command === "ai_conversation_action") {
+              if (
+                deletedConversations.has(
+                  nativeKey(String(args.scope), String(args.conversation)),
+                )
+              )
+                throw "native.ai.conversation.readFailed";
               const scope = String(args.scope),
                 id = String(args.conversation),
                 actionId = String(args.actionId);

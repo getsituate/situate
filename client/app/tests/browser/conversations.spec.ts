@@ -6,18 +6,87 @@ import {
   type NativeConversationFixture,
 } from "./workspace-fixture";
 import type { ConversationAction } from "../../src/ai/native-conversation";
+import { emptyLayout, reduceLayout } from "../../src/layout/model";
 
 test.use({ localizationMode: "real" });
 
+for (const target of [
+  { kind: "conversation", conversationId: "deleted" },
+  { kind: "view", viewId: "missing:board", contentId: "old-item" },
+] as const) {
+  test(`a retained missing ${target.kind} opens the new-tab chooser without a startup error`, async ({
+    page,
+  }) => {
+    let sequence = 0;
+    await workspaceFixture(page, shellState, {
+      aiHoldConversationList: target.kind === "conversation",
+      layout: {
+        records: {
+          garden: {
+            revision: "retained-layout",
+            data: {
+              version: 1,
+              pinnedViews: ["files"],
+              layout: reduceLayout(
+                emptyLayout(),
+                {
+                  type: "open",
+                  target,
+                },
+                () => `retained-${++sequence}`,
+              ),
+            },
+          },
+        },
+      },
+    });
+    await page.goto("/");
+    if (target.kind === "conversation")
+      await expect(page.locator(".view-message")).toContainText(
+        "Opening your layout…",
+      );
+    const requestsForMissing = () =>
+      page.evaluate(() =>
+        (
+          Reflect.get(window, "__ipcCalls") as {
+            args: { conversation?: string };
+          }[]
+        ).filter(({ args }) => args.conversation === "deleted"),
+      );
+    expect(await requestsForMissing()).toEqual([]);
+    if (target.kind === "conversation")
+      await page.evaluate(() =>
+        Reflect.get(window, "__releaseConversationList")(),
+      );
+    await expect(
+      page.getByRole("heading", {
+        name: "What would you like here?",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(await requestsForMissing()).toEqual([]);
+    await page.locator(".view-chooser .new-conversation").click();
+    await expect(
+      page.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveValue("");
+  });
+}
+
 async function openNavigation(page: Page): Promise<void> {
-  if (
-    !(await page
-      .getByRole("navigation", { name: "Workspace navigation", exact: true })
-      .isVisible())
-  )
-    await page
-      .getByRole("button", { name: "Open navigation", exact: true })
-      .click();
+  const navigation = page.getByRole("navigation", {
+    name: "Workspace navigation",
+    exact: true,
+  });
+  const trigger = page.getByRole("button", {
+    name: "Open navigation",
+    exact: true,
+  });
+  await expect
+    .poll(
+      async () => (await navigation.isVisible()) || (await trigger.isVisible()),
+    )
+    .toBe(true);
+  if (!(await navigation.isVisible())) await trigger.click();
 }
 
 for (const viewport of [
@@ -52,7 +121,7 @@ for (const viewport of [
       await visual.capture("chat.conversations.title-single-line");
       await options.click();
       const menu = page.getByRole("menu", {
-        name: "Rename conversation",
+        name: `Conversation options: ${fullTitle}`,
         exact: true,
       });
       await expect(menu).toBeVisible();
@@ -260,6 +329,175 @@ for (const viewport of [
     },
   );
 
+  test(
+    `conversation deletion confirms, retries failures and survives reopening at ${viewport.width}px`,
+    { tag: viewport.width < 600 ? "@visual-mobile" : "@visual-desktop" },
+    async ({ page, visual }) => {
+      await workspaceFixture(
+        page,
+        { ...shellState, mobile: viewport.width < 600 },
+        {
+          aiConversations: [
+            { id: "legacy", title: "Garden plan", draft: "Unsent ideas" },
+            { id: "other", title: "Reading list", draft: "Keep this draft" },
+          ],
+          aiDeleteFailures: 1,
+        },
+      );
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await openNavigation(page);
+      const options = page.getByRole("button", {
+        name: "Conversation options: Garden plan",
+        exact: true,
+      });
+      await options.click();
+      await page
+        .getByRole("menuitem", { name: "Delete conversation…", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: "Delete conversation?",
+        exact: true,
+      });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText("Garden plan");
+      await expect(
+        dialog.getByRole("button", { name: "Cancel", exact: true }),
+      ).toBeFocused();
+      await visual.capture("chat.conversations.delete-confirmation");
+      await dialog.press("Escape");
+      await expect(dialog).toBeHidden();
+      await expect(options).toBeFocused();
+      await options.click();
+      await page
+        .getByRole("menuitem", { name: "Delete conversation…", exact: true })
+        .press("Enter");
+      await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        "Deletion could not be confirmed.",
+      );
+      await visual.capture("chat.conversations.delete-error");
+      await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await expect(options).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Reading list", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.locator(".conversations .section-heading button"),
+      ).toBeFocused();
+      if (viewport.width < 600)
+        await page
+          .getByRole("button", { name: "Close navigation", exact: true })
+          .click();
+      const chooser = page.getByRole("heading", {
+        name: "What would you like here?",
+        exact: true,
+      });
+      await expect(chooser).toBeVisible();
+      await visual.capture("chat.conversations.deleted-view");
+      await page.reload();
+      await expect(chooser).toBeVisible();
+      await page.locator(".view-chooser .new-conversation").click();
+      await expect(
+        page.getByRole("textbox", { name: "Message", exact: true }),
+      ).toHaveValue("");
+      await openNavigation(page);
+      await expect(options).toHaveCount(0);
+      await page
+        .getByRole("button", { name: "Reading list", exact: true })
+        .click();
+      await expect(
+        page.getByRole("textbox", { name: "Message", exact: true }),
+      ).toHaveValue("Keep this draft");
+    },
+  );
+  test(
+    `conversation deletion warns about running work and discards late responses at ${viewport.width}px`,
+    { tag: viewport.width < 600 ? "@visual-mobile" : "@visual-desktop" },
+    async ({ page, visual }) => {
+      await workspaceFixture(
+        page,
+        { ...shellState, mobile: viewport.width < 600 },
+        {
+          aiConnection: {
+            provider: "custom",
+            endpoint: "http://localhost:8888/v1",
+          },
+          aiModel: "test-model",
+          aiHoldResponse: true,
+          aiConversations: [
+            { id: "legacy", title: "Garden plan", draft: "" },
+            { id: "other", title: "Reading list", draft: "" },
+          ],
+        },
+      );
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await page
+        .getByRole("textbox", { name: "Message", exact: true })
+        .fill("Plan the garden");
+      await page
+        .getByRole("button", { name: "Send message", exact: true })
+        .click();
+      await expect(
+        page.getByRole("button", { name: "Stop response", exact: true }),
+      ).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(() => typeof Reflect.get(window, "__finishResponse")),
+        )
+        .toBe("function");
+      await openNavigation(page);
+      await page
+        .getByRole("button", { name: "Reading list", exact: true })
+        .click();
+      await openNavigation(page);
+      await page
+        .getByRole("button", {
+          name: "Conversation options: Garden plan",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole("menuitem", { name: "Delete conversation…", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: "Delete conversation?",
+        exact: true,
+      });
+      await expect(dialog).toContainText("Deleting it will stop that work.");
+      await visual.capture("chat.conversations.delete-running-confirmation");
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(
+        page.locator(".conversation-destination .working-indicator"),
+      ).toHaveCount(1);
+      await page
+        .getByRole("button", {
+          name: "Conversation options: Garden plan",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole("menuitem", { name: "Delete conversation…", exact: true })
+        .click();
+      await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await expect(
+        page.getByRole("button", { name: "Garden plan", exact: true }),
+      ).toHaveCount(0);
+      await page.evaluate(() => Reflect.get(window, "__finishResponse")());
+      await page.reload();
+      await openNavigation(page);
+      await expect(
+        page.getByRole("button", { name: "Garden plan", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Reading list", exact: true }),
+      ).toBeVisible();
+      expect(await nativeRequests(page)).toHaveLength(1);
+    },
+  );
   test(
     `switching the visible chat leaves a background response running at ${viewport.width}px`,
     { tag: viewport.width < 600 ? "@visual-mobile" : "@visual-desktop" },

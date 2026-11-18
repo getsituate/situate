@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "id": "delete-conversations",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "delete-conversations",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Delete conversations",
+          "paragraphs": [
+            "Delete conversations from their options menu after a confirmation. Deleting a conversation stops any running reply or recording; referenced notes and files remain unchanged.",
+            "Tabs with references to missing conversations or views show the existing new-tab chooser, including after reopening a workspace. Loading and access errors remain visible."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "delete-conversations",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Gespräche löschen",
+          "paragraphs": [
+            "Gespräche lassen sich nach einer Bestätigung über ihr Optionsmenü löschen. Dabei werden laufende Antworten oder Aufnahmen abgebrochen; referenzierte Notizen und Dateien bleiben unverändert.",
+            "Tabs mit Verweisen auf nicht mehr vorhandene Gespräche oder Ansichten zeigen die vorhandene Auswahl für einen neuen Tab, auch nach dem erneuten Öffnen eines Arbeitsbereichs. Lade- und Zugriffsfehler bleiben sichtbar."
+          ]
+        }
+      ]
+    }
+  }
+}

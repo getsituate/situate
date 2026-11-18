@@ -66,6 +66,41 @@ fn unresolved_owner_reads_do_not_initialize_or_recover_after_update_sealing() {
     assert_eq!(std::fs::read(path).unwrap(), before);
 }
 
+#[tokio::test]
+async fn deletion_blocks_late_admissions_and_waits_for_an_already_admitted_action() {
+    let lifecycle = Arc::new(ConversationLifecycle::default());
+    let other = Arc::new(ConversationLifecycle::default());
+    let admitted = lifecycle.admit().unwrap();
+    let deletion = lifecycle.delete().unwrap().unwrap();
+    assert!(lifecycle.admit().is_err());
+    assert!(lifecycle.ensure_open().is_err());
+    assert!(lifecycle.delete().is_err());
+    assert!(other.admit().is_ok());
+    let mut settled = Box::pin(lifecycle.actions.settled());
+    std::future::poll_fn(|cx| {
+        assert!(settled.as_mut().poll(cx).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    drop(admitted);
+    settled.await;
+    deletion.commit();
+    drop(deletion);
+    assert!(lifecycle.admit().is_err());
+    assert!(lifecycle.delete().unwrap().is_none());
+    assert!(other.ensure_open().is_ok());
+}
+
+#[test]
+fn failed_deletion_reopens_admission_for_persistence_recovery_and_retry() {
+    let lifecycle = Arc::new(ConversationLifecycle::default());
+    let deletion = lifecycle.delete().unwrap().unwrap();
+    assert!(lifecycle.admit().is_err());
+    drop(deletion);
+    assert!(lifecycle.admit().is_ok());
+    assert!(lifecycle.delete().unwrap().is_some());
+}
+
 #[test]
 fn main_instructions_include_the_working_method_and_development_contract() {
     let development = situate_core::conversation_store::Development {

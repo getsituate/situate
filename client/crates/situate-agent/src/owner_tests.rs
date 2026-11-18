@@ -12,6 +12,54 @@ async fn apply(
     owner.apply(id.into(), action).await
 }
 #[tokio::test]
+async fn stopping_one_owner_cancels_its_model_without_stopping_another_conversation() {
+    let first = Fixture::new();
+    let second = Fixture::new();
+    first.gate.forget_permits(20);
+    second.gate.forget_permits(20);
+    let first_owner = Owner::open(first.clone()).await.unwrap();
+    let second_owner = Owner::open(second.clone()).await.unwrap();
+    first_owner
+        .submit("first-run".into(), "First".into(), 10)
+        .await
+        .unwrap();
+    first.entered.notified().await;
+    second_owner
+        .submit("second-run".into(), "Second".into(), 10)
+        .await
+        .unwrap();
+    second.entered.notified().await;
+    first_owner.stop_and_wait_idle().await.unwrap();
+    assert_eq!(first_owner.quiescence().await.status, Quiescence::Idle);
+    assert_eq!(
+        first_owner.snapshot().await.unwrap().phase,
+        Phase::Interrupted
+    );
+    assert!(second_owner.snapshot().await.unwrap().task_active);
+    second_owner.stop_and_wait_idle().await.unwrap();
+}
+
+#[tokio::test]
+async fn stopping_for_deletion_preserves_failed_checkpoints_for_explicit_retry() {
+    let host = Fixture::new();
+    let owner = Owner::open(host.clone()).await.unwrap();
+    host.fail_at("input", false);
+    assert!(
+        owner
+            .submit("run".into(), "Retain me".into(), 10)
+            .await
+            .is_err()
+    );
+    assert!(owner.stop_and_wait_idle().await.is_err());
+    assert_eq!(
+        owner.quiescence().await.status,
+        Quiescence::PersistenceFailed
+    );
+    owner.retry_persistence().await.unwrap();
+    owner.stop_and_wait_idle().await.unwrap();
+}
+
+#[tokio::test]
 async fn versioned_drafts_are_atomic_memory_only_field_mutations() {
     let host = Fixture::new();
     let owner = Owner::open(host.clone()).await.unwrap();

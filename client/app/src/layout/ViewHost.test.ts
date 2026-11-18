@@ -1,15 +1,33 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h, markRaw, onMounted, onUnmounted } from "vue";
+import {
+  defineComponent,
+  h,
+  markRaw,
+  onMounted,
+  onUnmounted,
+  type Component,
+} from "vue";
 import ViewHost from "./ViewHost.vue";
-import type { WorkspaceUi } from "./runtime";
+import { closeChats, saveChatDrafts, workspaceConversations } from "../ai/chat";
+import { workspaceUi, retainWorkspaceUi, type WorkspaceUi } from "./runtime";
 import type { Pane, TopicTab } from "./model";
 
 const diagnostics = vi.hoisted(() => ({ emit: vi.fn(), resolve: vi.fn() }));
 vi.mock("../diagnostics", () => ({
   diagnosticsFor: diagnostics.resolve,
 }));
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  retainWorkspaceUi([]);
+  closeChats([]);
+});
+function conversationDefinition(component: Component) {
+  return {
+    ...workspaceUi("workspace").registry.definitions.get("conversation")!,
+    component,
+  };
+}
 
 it("renders temporary chats with conversation props and preserves the mounted pane on promotion", async () => {
   const mounted = vi.fn();
@@ -51,7 +69,7 @@ it("renders temporary chats with conversation props and preserves the mounted pa
     },
     registry: {
       definitions: new Map([
-        ["conversation", { id: "conversation", component }],
+        ["conversation", conversationDefinition(component)],
       ]),
     },
   } as unknown as WorkspaceUi;
@@ -72,6 +90,9 @@ it("renders temporary chats with conversation props and preserves the mounted pa
       navigationId: "",
       navigationOpen: false,
     });
+    workspaceConversations("workspace").state.conversations = [
+      { id: "same-id", title: "Garden", revision: 1 },
+    ];
     await wrapper.setProps({
       pane: {
         ...pane,
@@ -96,6 +117,143 @@ it("renders temporary chats with conversation props and preserves the mounted pa
   }
 });
 
+it("waits for inventory before mounting a retained target and leaves no missing session to flush", async () => {
+  const mounted = vi.fn();
+  const component = markRaw(
+    defineComponent({
+      setup() {
+        onMounted(mounted);
+        return () => h("div", "Conversation");
+      },
+    }),
+  );
+  const pane: Pane = {
+    id: "pane",
+    navigation: {
+      cursor: 0,
+      entries: [
+        {
+          id: "entry",
+          target: { kind: "conversation", conversationId: "deleted" },
+          presentation: null,
+        },
+      ],
+    },
+  };
+  const ui = {
+    session: {
+      workspaceId: "workspace",
+      capture: () => ({}),
+      state: { document: null },
+    },
+    registry: {
+      definitions: new Map([
+        ["conversation", conversationDefinition(component)],
+      ]),
+    },
+  } as unknown as WorkspaceUi;
+  const wrapper = mount(ViewHost, {
+    props: {
+      ui,
+      pane,
+      tab: { id: "tab" } as TopicTab,
+      workspaceName: "Workspace",
+    },
+  });
+  try {
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      "⟦layoutHost.loading⟧",
+    );
+    expect(mounted).not.toHaveBeenCalled();
+    const inventory = workspaceConversations("workspace").state;
+    inventory.error = "ai.aiAccessOrConversationHistoryCouldNotBeRead";
+    await flushPromises();
+    expect(wrapper.get("button").text()).toBe("⟦layoutHost.retry⟧");
+    inventory.error = "";
+    inventory.loaded = true;
+    await flushPromises();
+    expect(wrapper.get(".view-chooser").text()).toContain(
+      "⟦layoutHost.chooserTitle⟧",
+    );
+    expect(mounted).not.toHaveBeenCalled();
+    await expect(saveChatDrafts("workspace")).resolves.toBeUndefined();
+  } finally {
+    wrapper.unmount();
+  }
+});
+it("shows the existing new-tab chooser for a deleted conversation while preserving its history target", async () => {
+  const component = markRaw(
+    defineComponent({ render: () => h("div", "Conversation content") }),
+  );
+  const pane: Pane = {
+    id: "pane",
+    navigation: {
+      cursor: 0,
+      entries: [
+        {
+          id: "entry",
+          target: { kind: "conversation", conversationId: "garden" },
+          presentation: null,
+        },
+      ],
+    },
+  };
+  const inventory = workspaceConversations("workspace").state;
+  inventory.conversations = [{ id: "garden", title: "Garden", revision: 1 }];
+  inventory.loaded = true;
+  const ui = {
+    session: {
+      workspaceId: "workspace",
+      capture: () => ({}),
+      state: { document: null },
+    },
+    registry: {
+      definitions: new Map([
+        ["conversation", conversationDefinition(component)],
+      ]),
+    },
+  } as unknown as WorkspaceUi;
+  const wrapper = mount(ViewHost, {
+    props: {
+      ui,
+      pane,
+      tab: { id: "tab" } as TopicTab,
+      workspaceName: "Workspace",
+    },
+  });
+  try {
+    await flushPromises();
+    expect(wrapper.findComponent(component).exists()).toBe(true);
+    inventory.conversations = [];
+    await flushPromises();
+    expect(wrapper.findComponent(component).exists()).toBe(false);
+    expect(wrapper.get(".view-chooser").text()).toContain(
+      "⟦layoutHost.chooserTitle⟧",
+    );
+    expect(pane.navigation.entries[0]!.target).toEqual({
+      kind: "conversation",
+      conversationId: "garden",
+    });
+    await wrapper.get(".new-conversation").trigger("click");
+    expect(wrapper.emitted("newConversation")).toHaveLength(1);
+    const chooser = wrapper.get(".view-chooser").html();
+    await wrapper.setProps({
+      pane: {
+        ...pane,
+        navigation: {
+          cursor: 0,
+          entries: [
+            { id: "empty", target: { kind: "empty" }, presentation: null },
+          ],
+        },
+      },
+    });
+    expect(wrapper.get(".view-chooser").html()).toBe(chooser);
+  } finally {
+    wrapper.unmount();
+  }
+});
 it("logs a consumed view failure in its workspace and retains the fallback", async () => {
   diagnostics.resolve.mockReturnValue({ emit: diagnostics.emit });
   const pane: Pane = {

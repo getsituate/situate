@@ -169,7 +169,9 @@ export function validateUiContributions(
       typeof view.icon !== "string" ||
       !view.icon ||
       !component(view.component) ||
-      (view.reveal !== undefined && typeof view.reveal !== "function")
+      (view.reveal !== undefined && typeof view.reveal !== "function") ||
+      (view.availability !== undefined &&
+        typeof view.availability !== "function")
     )
       invalid();
     ids.add(view.id);

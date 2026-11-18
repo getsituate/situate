@@ -1,4 +1,11 @@
 {
+  "chat.deleteConversation": "Gespräch löschen…",
+  "chat.deleteTitle": "Gespräch löschen?",
+  "chat.deleteConfirmation": "Möchtest du dieses Gespräch löschen?",
+  "chat.deleteRunningConfirmation": "In diesem Gespräch läuft noch Arbeit. Wenn du es löschst, wird diese Arbeit abgebrochen.",
+  "chat.confirmDelete": "Löschen",
+  "chat.deleting": "Wird gelöscht…",
+  "chat.deleteFailed": "Das Löschen konnte nicht bestätigt werden. Laufende Arbeit wurde möglicherweise bereits abgebrochen. Versuche es erneut.",
   "chat.conversationTitle": "Gesprächstitel",
   "chat.conversationActions": "Gesprächsoptionen: {title}",
   "chat.renameConversation": "Gespräch umbenennen",

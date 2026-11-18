@@ -1,4 +1,11 @@
 {
+  "chat.deleteConversation": "Delete conversation…",
+  "chat.deleteTitle": "Delete conversation?",
+  "chat.deleteConfirmation": "Do you want to delete this conversation?",
+  "chat.deleteRunningConfirmation": "Work is still running in this conversation. Deleting it will stop that work.",
+  "chat.confirmDelete": "Delete",
+  "chat.deleting": "Deleting…",
+  "chat.deleteFailed": "Deletion could not be confirmed. Running work may already have stopped. Try again.",
   "chat.conversationTitle": "Conversation title",
   "chat.conversationActions": "Conversation options: {title}",
   "chat.renameConversation": "Rename conversation",

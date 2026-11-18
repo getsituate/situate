@@ -11,11 +11,20 @@ import { decodeTarget } from "./storage";
 import type { LayoutIntent } from "./model";
 import { dictation, guardDictation } from "../dictation/runtime";
 
+export type ViewAvailability =
+  | { readonly status: "ready" | "loading" | "missing" | "unavailable" }
+  | {
+      readonly status: "error";
+      readonly error: unknown;
+      readonly retry?: () => Promise<void>;
+    };
+
 export interface ViewDefinition {
   readonly id: string;
   readonly title: () => string;
   readonly icon: IconName;
   readonly component: Component;
+  readonly availability?: (target: ViewTarget) => ViewAvailability;
   readonly reveal?: (
     contentId: string,
     revision?: string,
@@ -134,6 +143,31 @@ export function createViewRegistry(scope = "") {
   };
 }
 export type ViewRegistry = ReturnType<typeof createViewRegistry>;
+
+export function resolveViewTarget(
+  target: ViewTarget,
+  registry: Pick<ViewRegistry, "definitions">,
+  installedPlugins: readonly { readonly id: string }[] = [],
+): ViewAvailability {
+  if (target.kind === "empty") return { status: "ready" };
+  const definition = registry.definitions.get(viewType(target));
+  if (!definition) {
+    const owner =
+      target.kind === "view" && target.viewId.includes(":")
+        ? target.viewId.split(":")[0]
+        : undefined;
+    return {
+      status: installedPlugins.some((plugin) => plugin.id === owner)
+        ? "unavailable"
+        : "missing",
+    };
+  }
+  try {
+    return definition.availability?.(target) ?? { status: "ready" };
+  } catch (error) {
+    return { status: "error", error };
+  }
+}
 
 export interface NavigationGuard {
   readonly signal?: AbortSignal;

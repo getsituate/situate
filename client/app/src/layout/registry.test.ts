@@ -14,6 +14,8 @@ import { createLayoutSession } from "./session";
 import {
   createUiCoordinator,
   createViewRegistry,
+  resolveViewTarget,
+  type ViewAvailability,
   type ViewDefinition,
 } from "./registry";
 import { emptyLayout, selectedTab } from "./model";
@@ -84,6 +86,76 @@ function entry(ui: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe("registered workspace navigation", () => {
+  it("resolves registered views and treats missing registrations as absent targets", () => {
+    const registry = createViewRegistry();
+    registry.register(definition("files"));
+    expect(resolveViewTarget({ kind: "empty" }, registry)).toEqual({
+      status: "ready",
+    });
+    expect(
+      resolveViewTarget({ kind: "view", viewId: "files" }, registry),
+    ).toEqual({ status: "ready" });
+    expect(
+      resolveViewTarget({ kind: "view", viewId: "missing:board" }, registry),
+    ).toEqual({ status: "missing" });
+  });
+
+  it("keeps installed plugin owners unavailable while a registration is absent", () => {
+    const registry = createViewRegistry();
+    const target = { kind: "view", viewId: "demo:board" } as const;
+    expect(resolveViewTarget(target, registry, [{ id: "demo" }])).toEqual({
+      status: "unavailable",
+    });
+    expect(resolveViewTarget(target, registry, [{ id: "other" }])).toEqual({
+      status: "missing",
+    });
+    registry.register(definition("demo:board"));
+    expect(resolveViewTarget(target, registry, [{ id: "demo" }])).toEqual({
+      status: "ready",
+    });
+  });
+
+  it("respects content availability without treating loading or access failures as missing", () => {
+    const registry = createViewRegistry();
+    let availability: ViewAvailability = { status: "loading" };
+    const check = vi.fn(() => availability);
+    registry.register({ ...definition("files"), availability: check });
+    const target = {
+      kind: "view",
+      viewId: "files",
+      contentId: "notes.md",
+    } as const;
+    expect(resolveViewTarget(target, registry)).toEqual({ status: "loading" });
+    availability = { status: "missing" };
+    expect(resolveViewTarget(target, registry)).toEqual({ status: "missing" });
+    const retry = vi.fn(async () => {});
+    availability = {
+      status: "error",
+      error: "native.files.accessDenied",
+      retry,
+    };
+    expect(resolveViewTarget(target, registry)).toEqual({
+      status: "error",
+      error: "native.files.accessDenied",
+      retry,
+    });
+    expect(retry).not.toHaveBeenCalled();
+    expect(check).toHaveBeenLastCalledWith(target);
+  });
+
+  it("keeps availability resolver failures visible instead of replacing them with an empty view", () => {
+    const registry = createViewRegistry();
+    const error = new Error("Access unavailable");
+    registry.register({
+      ...definition("files"),
+      availability() {
+        throw error;
+      },
+    });
+    expect(
+      resolveViewTarget({ kind: "view", viewId: "files" }, registry),
+    ).toEqual({ status: "error", error });
+  });
   it("publishes complete plugin view batches and preserves the old batch on validation failure", () => {
     const registry = createViewRegistry();
     registry.register(definition("files"));
@@ -430,7 +502,7 @@ describe("registered workspace navigation", () => {
     const before = ui.session.state.document;
     release();
     await nextTick();
-    expect(host.find('[role="status"]').exists()).toBe(true);
+    expect(host.find(".view-chooser").exists()).toBe(true);
     expect(disposed).toHaveBeenCalledTimes(1);
     expect(ui.session.state.document).toBe(before);
     ui.registry.registerPlugin({

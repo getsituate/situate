@@ -1525,7 +1525,10 @@ pub async fn ai_create_conversation(
 ) -> Result<ConversationRecord, String> {
     let authorization =
         crate::workspaces::storage_authorization_session(&app, window.label(), &scope)?;
+    let admission =
+        conversations::retain_stored_conversation(&app, &window, &scope, &authorization, &id)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _admission = admission;
         crate::workspaces::with_retained_session(&app, window.label(), &authorization, |location| {
             let storage = local_storage(&app, location)?;
             match initial {
