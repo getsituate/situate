@@ -148,6 +148,38 @@ test("publication uses a restored qualified checkpoint without preparing or qual
   assert.equal(result.releaseId, 42);
 });
 
+test("launch tracing has its own protected workflow and cannot continue publication", async (t) => {
+  const f = fixture(t, "qualify");
+  const environment = {
+    ...f.environment,
+    GITHUB_WORKFLOW_REF:
+      "getsituate/situate/.github/workflows/release-launch-trace.yml@refs/heads/main",
+  };
+  await assert.rejects(
+    runCheckpointRecovery(f.f.root, environment, { adapters: f.adapters }),
+  );
+  assert.deepEqual(f.calls, []);
+  await assert.rejects(
+    runCheckpointRecovery(
+      f.f.root,
+      { ...environment, RECOVERY_ACTION: "continue" },
+      { adapters: f.adapters, workflow: "launch-trace" },
+    ),
+  );
+  assert.deepEqual(f.calls, []);
+  await runCheckpointRecovery(f.f.root, environment, {
+    adapters: f.adapters,
+    workflow: "launch-trace",
+  });
+  assert.deepEqual(f.calls, [
+    "bootstrap",
+    "inspect",
+    "restore",
+    "prepare",
+    "qualify",
+  ]);
+});
+
 test("untrusted context and stale confirmation cannot restore or publish", async (t) => {
   const f = fixture(t, "continue");
   await assert.rejects(

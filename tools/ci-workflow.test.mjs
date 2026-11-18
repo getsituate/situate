@@ -16,6 +16,7 @@ const names = [
   "ci-tool-image",
   "diagnostics",
   "release-recovery",
+  "release-launch-trace",
 ];
 function job(workflow, id) {
   const body = workflow.match(
@@ -86,6 +87,23 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       /runs-on: (?:windows|macos-1[0-9])|--target.*(?:ios|android)/,
     );
   }
+});
+
+test("launch tracing is a protected direct checkpoint diagnostic without publication or public artifacts", () => {
+  const trace = job(read("release-launch-trace"), "trace");
+  assert.match(trace, /github\.ref == 'refs\/heads\/main'/);
+  assert.match(trace, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(trace, /environment: release-recovery/);
+  assert.match(trace, /group: situate-release-effects/);
+  assert.match(trace, /node tools\/actions-adapter\.mjs launch-trace/);
+  assert.match(
+    trace,
+    /SITUATE_RELEASE_SSH_PRIVATE_KEY:.*secrets\.SITUATE_RELEASE_SSH_PRIVATE_KEY/,
+  );
+  assert.doesNotMatch(
+    trace,
+    /APPLE_|TAURI_SIGNING|contents: write|actions: write|upload-artifact|create-stage|publish-run|source-reuse|prepare-release/,
+  );
 });
 
 test("fixed independent families depend on planning and aggregate every selected receipt", () => {

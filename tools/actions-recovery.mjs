@@ -9,7 +9,11 @@ import { prepareRestoredQualificationRuntime } from "./release-runtime-recovery.
 import { requalifyCheckpoint } from "./release-checkpoint-qualify.mjs";
 import { validatePlan } from "./pipeline-state.mjs";
 
-function requireController(env) {
+function requireController(env, workflow) {
+  assert(
+    ["recovery", "launch-trace"].includes(workflow),
+    "Unknown recovery workflow",
+  );
   assert(
     env.CI === "true" &&
       env.GITHUB_ACTIONS === "true" &&
@@ -21,7 +25,7 @@ function requireController(env) {
       env.GITHUB_REF_PROTECTED === "true" &&
       env.GITHUB_EVENT_NAME === "workflow_dispatch" &&
       env.GITHUB_WORKFLOW_REF ===
-        "getsituate/situate/.github/workflows/release-recovery.yml@refs/heads/main",
+        `getsituate/situate/.github/workflows/release-${workflow}.yml@refs/heads/main`,
     "Checkpoint recovery requires the protected main macOS recovery workflow",
   );
   assert(
@@ -32,6 +36,12 @@ function requireController(env) {
     ["inspect", "qualify", "continue"].includes(env.RECOVERY_ACTION),
     "Unknown checkpoint recovery action",
   );
+  if (workflow === "launch-trace")
+    assert.equal(
+      env.RECOVERY_ACTION,
+      "qualify",
+      "Launch tracing cannot publish",
+    );
   if (env.RECOVERY_ACTION !== "inspect")
     assert(
       /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(
@@ -44,10 +54,10 @@ function requireController(env) {
 export async function runCheckpointRecovery(
   root,
   environment,
-  { adapters = {}, signal } = {},
+  { adapters = {}, signal, workflow = "recovery" } = {},
 ) {
   try {
-    requireController(environment);
+    requireController(environment, workflow);
     const temporary = lstatSync(environment.RUNNER_TEMP);
     assert(
       temporary.isDirectory() &&

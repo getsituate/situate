@@ -712,6 +712,23 @@ export async function main(
     );
     return;
   }
+  if (command === "launch-trace") {
+    const abort = new AbortController();
+    const cancel = () => abort.abort(new Error("Launch trace cancelled"));
+    process.on("SIGINT", cancel);
+    process.on("SIGTERM", cancel);
+    try {
+      const { runLaunchTrace } = await import("./actions-launch-trace.mjs");
+      return await runLaunchTrace(root, env, { signal: abort.signal });
+    } catch {
+      throw new Error(
+        "Private launch trace did not complete; inspect the retained operation before another attempt",
+      );
+    } finally {
+      process.removeListener("SIGINT", cancel);
+      process.removeListener("SIGTERM", cancel);
+    }
+  }
   if (command === "recovery") {
     if (
       env.GITHUB_REPOSITORY !== repository ||

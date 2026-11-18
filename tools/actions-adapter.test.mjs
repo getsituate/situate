@@ -81,6 +81,30 @@ test("image builds verify and seal each native platform with separate tags and a
   assert.deepEqual(calls, ["rev-parse", "info"]);
 });
 
+test("the launch trace entrypoint sanitizes errors and removes its cancellation handlers", async () => {
+  const before = ["SIGINT", "SIGTERM"].map((name) =>
+    process.listenerCount(name),
+  );
+  await assert.rejects(
+    main(["launch-trace"], {
+      GITHUB_WORKFLOW_REF: "synthetic private UI text",
+    }),
+    (error) => {
+      assert.equal(
+        error.message,
+        "Private launch trace did not complete; inspect the retained operation before another attempt",
+      );
+      assert.equal(error.cause, undefined);
+      assert.doesNotMatch(error.message, /synthetic private/);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    ["SIGINT", "SIGTERM"].map((name) => process.listenerCount(name)),
+    before,
+  );
+});
+
 test("desktop preflight uses the shared adapter without production credentials", async () => {
   const evidence = { desktopUnlocked: true, accessibilityTrusted: true };
   const result = await main(

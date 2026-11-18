@@ -76,8 +76,11 @@ function runnerIdentity(configuration, plan, environment, account, platform) {
         environment.GITHUB_REF === "refs/heads/main" &&
         environment.GITHUB_REF_PROTECTED === "true" &&
         environment.GITHUB_EVENT_NAME === "workflow_dispatch" &&
-        environment.GITHUB_WORKFLOW_REF ===
-          "getsituate/situate/.github/workflows/release-recovery.yml@refs/heads/main",
+        (environment.GITHUB_WORKFLOW_REF ===
+          "getsituate/situate/.github/workflows/release-recovery.yml@refs/heads/main" ||
+          (environment.GITHUB_WORKFLOW_REF ===
+            "getsituate/situate/.github/workflows/release-launch-trace.yml@refs/heads/main" &&
+            environment.RECOVERY_ACTION === "qualify")),
       "Qualification recovery requires the protected main recovery workflow",
     );
     assert(

@@ -228,6 +228,53 @@ test("post-preparation rejection cleans only the acknowledged fresh owner and re
   );
 });
 
+test("the protected launch diagnostic can prepare fresh runtime but cannot use another action or context", async (t) => {
+  const hosted = {
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    RUNNER_OS: "macOS",
+    GITHUB_REPOSITORY: "getsituate/situate",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REF_PROTECTED: "true",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    GITHUB_WORKFLOW_REF:
+      "getsituate/situate/.github/workflows/release-launch-trace.yml@refs/heads/main",
+    RECOVERY_ACTION: "qualify",
+    GITHUB_RUN_ID: "999999",
+    GITHUB_RUN_ATTEMPT: "1",
+  };
+  const good = fixture(t);
+  Object.assign(good.input.environment, hosted);
+  good.input.adapters.readOriginalAttempt = async () => {};
+  assert.equal(
+    (await prepareRestoredQualificationRuntime(good.f.root, good.input))
+      .runtimeAuthorization.routeNonce,
+    good.nonce,
+  );
+  for (const context of [
+    { RECOVERY_ACTION: "continue" },
+    { RECOVERY_ACTION: "inspect" },
+    { GITHUB_REF_PROTECTED: "false" },
+    {
+      GITHUB_WORKFLOW_REF:
+        "getsituate/situate/.github/workflows/foreign.yml@refs/heads/main",
+    },
+    { RUNNER_ENVIRONMENT: "self-hosted" },
+  ]) {
+    const invalid = fixture(t);
+    Object.assign(invalid.input.environment, hosted, context);
+    invalid.input.adapters.readOriginalAttempt = async () =>
+      assert.fail(
+        "Untrusted context must stop before original-attempt inspection",
+      );
+    await assert.rejects(
+      prepareRestoredQualificationRuntime(invalid.f.root, invalid.input),
+    );
+    assert.equal(invalid.calls.length, 0);
+  }
+});
+
 test("personal accounts and replayed hosted attempts fail before namespace or route preparation", async (t) => {
   const { f, input, calls } = fixture(t);
   input.adapters.account.username = "personal";
