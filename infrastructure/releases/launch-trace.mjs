@@ -48,13 +48,24 @@ function jsonBytes(bytes) {
 
 async function exchange(
   config,
-  { identity, traceId, bytes, environment = process.env, start = spawn },
+  {
+    identity,
+    traceId,
+    bytes,
+    environment = process.env,
+    start = spawn,
+    signal,
+  },
   action,
 ) {
   let child;
   let closed;
   let output;
+  let didClose = false;
+  let deadline;
+  let abort;
   try {
+    signal?.throwIfAborted();
     binding(identity, traceId);
     const request = { action, identity, traceId };
     if (action === "retain") {
@@ -73,14 +84,32 @@ async function exchange(
         ...sshArguments(config),
         `python3 -u -c 'import base64;exec(base64.b64decode("${code}"))'`,
       ],
-      { env, stdio: ["pipe", "pipe", "pipe"], timeout: 30000 },
+      { env, stdio: ["pipe", "pipe", "pipe"], timeout: 30000, signal },
     );
-    child.stderr.resume();
-    child.stdin.on("error", () => {});
-    closed = new Promise((resolve) => {
-      child.once("error", () => resolve(-1));
-      child.once("close", resolve);
+    let interrupt;
+    const interrupted = new Promise((_, reject) => {
+      interrupt = () => reject(failure());
     });
+    closed = new Promise((resolve) => {
+      child.on("error", () => {
+        if (!child.pid) {
+          didClose = true;
+          resolve(-1);
+        }
+        interrupt();
+      });
+      child.once("close", (status) => {
+        didClose = true;
+        resolve(status);
+      });
+    });
+    child.stderr.on("error", interrupt);
+    child.stderr.resume();
+    child.stdin.on("error", interrupt);
+    abort = interrupt;
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    deadline = setTimeout(interrupt, 30000);
     output = (async () => {
       const chunks = [];
       let size = 0;
@@ -97,7 +126,11 @@ async function exchange(
         ...(action === "retain" ? [bytes] : []),
       ]),
     );
-    const [response, status] = await Promise.all([output, closed]);
+    const [response, status] = await Promise.race([
+      Promise.all([output, closed]),
+      interrupted,
+    ]);
+    signal?.throwIfAborted();
     if (status !== 0) throw failure();
     if (action === "retain") {
       const result = JSON.parse(response.toString("utf8"));
@@ -109,6 +142,7 @@ async function exchange(
         result.size !== request.size
       )
         throw failure();
+      signal?.throwIfAborted();
       return { traceId, sha256: result.sha256, size: result.size };
     }
     const end = response.indexOf(10);
@@ -126,13 +160,38 @@ async function exchange(
     )
       throw failure();
     jsonBytes(retained);
+    signal?.throwIfAborted();
     return retained;
   } catch {
     child?.stdin.destroy();
-    child?.kill("SIGTERM");
+    if (child?.pid && !didClose) {
+      // AbortSignal or spawn's deadline may already have sent TERM, not closed SSH.
+      const terminate = (kind) => {
+        try {
+          child.kill(kind);
+        } catch {
+          // Keep waiting for actual closure; signal failures prove no remote outcome.
+        }
+      };
+      if (!child.killed) terminate("SIGTERM");
+      const escalation = setTimeout(() => {
+        if (!didClose) terminate("SIGKILL");
+      }, 2000);
+      child.stdout.resume();
+      child.stderr.resume();
+      try {
+        await closed;
+      } finally {
+        clearTimeout(escalation);
+      }
+    }
+    child?.stdout.destroy();
     await output?.catch(() => {});
     await closed;
     throw failure();
+  } finally {
+    clearTimeout(deadline);
+    if (abort) signal?.removeEventListener("abort", abort);
   }
 }
 

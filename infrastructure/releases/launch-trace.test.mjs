@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { EventEmitter, once } from "node:events";
 import {
   chmodSync,
   existsSync,
@@ -18,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { PassThrough } from "node:stream";
 import {
   launchTraceProgram,
   readLaunchTrace,
@@ -589,6 +591,242 @@ test("the controller rejects mismatched acknowledgements and downloaded descript
     }),
     failure,
   );
+});
+
+function mockSSH(signal) {
+  const child = new EventEmitter();
+  child.pid = 321;
+  child.killed = false;
+  child.stdin = new PassThrough();
+  child.stdin.resume();
+  child.stdout = new PassThrough({ highWaterMark: 8 });
+  child.stderr = new PassThrough();
+  const term = Promise.withResolvers();
+  const kill = Promise.withResolvers();
+  const signals = [];
+  child.kill = (kind) => {
+    signals.push(kind);
+    child.killed = true;
+    (kind === "SIGTERM" ? term : kill).resolve();
+    return true;
+  };
+  const options = {
+    identity,
+    traceId: randomUUID(),
+    bytes,
+    signal,
+    environment: { PATH: "/tools", HOME: "/synthetic", LANG: "C" },
+    start: (_command, _args, launch) => {
+      assert.equal(launch.signal, signal);
+      assert.equal(launch.timeout, 30000);
+      return child;
+    },
+  };
+  const acknowledgement = Buffer.from(
+    JSON.stringify({
+      durable: true,
+      traceId: options.traceId,
+      sha256: digest(bytes),
+      size: bytes.length,
+    }),
+  );
+  return {
+    child,
+    options,
+    acknowledgement,
+    signals,
+    term: term.promise,
+    kill: kill.promise,
+    finish: (status = 0) => {
+      child.exitCode = status;
+      child.stdin.destroy();
+      if (!child.stdout.writableEnded) child.stdout.end();
+      if (!child.stderr.writableEnded) child.stderr.end();
+      child.emit("close", status);
+    },
+  };
+}
+
+function observe(promise) {
+  let settled = false;
+  promise.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  return () => settled;
+}
+
+test("pre-aborted transfers never spawn SSH", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("synthetic-private cancellation"));
+  const options = {
+    identity,
+    traceId: randomUUID(),
+    bytes,
+    signal: controller.signal,
+    start: () => assert.fail("pre-aborted transfer must not spawn"),
+  };
+  await assert.rejects(retainLaunchTrace(config, options), failure);
+  await assert.rejects(readLaunchTrace(config, options), failure);
+});
+
+test("cancellation escalates an owned SSH child after two seconds and awaits its actual close", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const controller = new AbortController();
+  const ssh = mockSSH(controller.signal);
+  const run = retainLaunchTrace(config, ssh.options);
+  const settled = observe(run);
+  const rejected = assert.rejects(run, failure);
+  controller.abort(new Error("synthetic-private cancellation"));
+  await ssh.term;
+  assert.deepEqual(ssh.signals, ["SIGTERM"]);
+  t.mock.timers.tick(1999);
+  assert.equal(settled(), false);
+  assert.deepEqual(ssh.signals, ["SIGTERM"]);
+  t.mock.timers.tick(1);
+  await ssh.kill;
+  assert.deepEqual(ssh.signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(settled(), false);
+  ssh.finish(null);
+  await rejected;
+});
+
+test("the thirty-second transfer deadline has only the existing two-second termination grace", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const ssh = mockSSH();
+  const run = retainLaunchTrace(config, ssh.options);
+  const rejected = assert.rejects(run, failure);
+  t.mock.timers.tick(29999);
+  assert.deepEqual(ssh.signals, []);
+  t.mock.timers.tick(1);
+  await ssh.term;
+  t.mock.timers.tick(2000);
+  await ssh.kill;
+  ssh.finish(null);
+  await rejected;
+});
+
+test("a spawned child error is not evidence of process closure", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const ssh = mockSSH();
+  const run = retainLaunchTrace(config, ssh.options);
+  const settled = observe(run);
+  const rejected = assert.rejects(run, failure);
+  ssh.child.emit("error", new Error("synthetic-private SSH error"));
+  await ssh.term;
+  assert.equal(settled(), false);
+  ssh.finish(1);
+  await rejected;
+  t.mock.timers.tick(2000);
+  assert.deepEqual(ssh.signals, ["SIGTERM"]);
+});
+
+test("an AbortError after Node sends TERM still requires KILL or actual close", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const controller = new AbortController();
+  const ssh = mockSSH(controller.signal);
+  const run = retainLaunchTrace(config, ssh.options);
+  const settled = observe(run);
+  const rejected = assert.rejects(run, failure);
+  ssh.child.kill("SIGTERM");
+  const cleanup = once(ssh.child.stdin, "close");
+  controller.abort();
+  ssh.child.emit(
+    "error",
+    Object.assign(new Error("synthetic-private abort"), { name: "AbortError" }),
+  );
+  await cleanup;
+  assert.equal(settled(), false);
+  t.mock.timers.tick(2000);
+  await ssh.kill;
+  assert.deepEqual(ssh.signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(settled(), false);
+  ssh.finish(null);
+  await rejected;
+});
+
+test("failed spawn without a PID can reject without an impossible process close", async () => {
+  const ssh = mockSSH();
+  ssh.child.pid = undefined;
+  const run = retainLaunchTrace(config, ssh.options);
+  ssh.child.emit("error", new Error("synthetic-private spawn error"));
+  await assert.rejects(run, failure);
+  assert.deepEqual(ssh.signals, []);
+  ssh.child.stderr.end();
+});
+
+test("oversized output and stdin errors terminate SSH, without resolving on TERM", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  for (const kind of ["output", "stdin"]) {
+    const ssh = mockSSH();
+    const run = retainLaunchTrace(config, ssh.options);
+    const settled = observe(run);
+    const rejected = assert.rejects(run, failure);
+    if (kind === "output")
+      ssh.child.stdout.end(Buffer.alloc(256 * 1024 + 4097));
+    else
+      ssh.child.stdin.emit(
+        "error",
+        new Error("synthetic-private stream error"),
+      );
+    await ssh.term;
+    assert.equal(settled(), false);
+    t.mock.timers.tick(2000);
+    await ssh.kill;
+    assert.equal(settled(), false);
+    ssh.finish(null);
+    await rejected;
+  }
+});
+
+test("cancellation after a durable acknowledgement and close cannot report success", async () => {
+  const controller = new AbortController();
+  const ssh = mockSSH(controller.signal);
+  const run = retainLaunchTrace(config, ssh.options);
+  ssh.child.stdout.end(ssh.acknowledgement);
+  ssh.finish(0);
+  controller.abort();
+  await assert.rejects(run, failure);
+  assert.deepEqual(ssh.signals, []);
+});
+
+test("an acknowledgement must drain and SSH must close successfully before return", async () => {
+  const ssh = mockSSH();
+  const run = retainLaunchTrace(config, ssh.options);
+  const settled = observe(run);
+  ssh.child.emit("exit", 0);
+  const drain = once(ssh.child.stdout, "drain");
+  assert.equal(
+    ssh.child.stdout.write(ssh.acknowledgement.subarray(0, 32)),
+    false,
+  );
+  await drain;
+  assert.equal(settled(), false);
+  ssh.child.stderr.write("synthetic-private raw SSH diagnostic".repeat(1000));
+  const end = once(ssh.child.stdout, "end");
+  ssh.child.stdout.end(ssh.acknowledgement.subarray(32));
+  await end;
+  assert.equal(settled(), false);
+  ssh.finish(0);
+  assert.deepEqual(await run, {
+    traceId: ssh.options.traceId,
+    sha256: digest(bytes),
+    size: bytes.length,
+  });
+  assert.deepEqual(ssh.signals, []);
+});
+
+test("nonzero SSH closure rejects even an otherwise valid durable acknowledgement", async () => {
+  const ssh = mockSSH();
+  const run = retainLaunchTrace(config, ssh.options);
+  ssh.child.stdout.end(ssh.acknowledgement);
+  ssh.finish(7);
+  await assert.rejects(run, failure);
+  assert.deepEqual(ssh.signals, []);
 });
 
 test("transport failures expose no raw host diagnostics, payload or exception cause", async (t) => {
