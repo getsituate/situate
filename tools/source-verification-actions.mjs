@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { inflateRawSync } from "node:zlib";
 import { ordinaryEnvironment } from "./pipeline-environment.mjs";
 import { aggregateReceipts, digest, validatePlan } from "./pipeline-state.mjs";
@@ -289,9 +290,13 @@ async function boundedBody(response, limit) {
 export function createSourceVerificationApi({
   token,
   fetchImpl = fetch,
+  wait = delay,
   signal = AbortSignal.timeout(60_000),
 } = {}) {
-  return async (endpoint, { raw = false, maxBytes = maxMetadata } = {}) => {
+  return async (
+    endpoint,
+    { raw = false, maxBytes = maxMetadata, newlyUploaded = false } = {},
+  ) => {
     const association =
       typeof endpoint === "string" &&
       !/\s/.test(endpoint) &&
@@ -315,34 +320,45 @@ export function createSourceVerificationApi({
       "User-Agent": "situate-source-verification",
     };
     if (token) headers.Authorization = `Bearer ${token}`;
-    let response = await fetchImpl(url, {
-      method: "GET",
-      headers,
-      redirect: "manual",
-      signal,
-    });
-    if (
-      response.status === 302 &&
-      raw &&
-      /^\/actions\/artifacts\/[1-9][0-9]*\/zip$/.test(endpoint)
-    ) {
-      const location = new URL(response.headers.get("location"));
-      assert(
-        location.protocol === "https:" &&
-          !location.username &&
-          !location.password &&
-          !location.port,
-      );
-      assert(/^[a-z0-9-]+\.blob\.core\.windows\.net$/.test(location.hostname));
-      await response.body?.cancel();
-      response = await fetchImpl(location, {
+    const archive =
+      raw && /^\/actions\/artifacts\/[1-9][0-9]*\/zip$/.test(endpoint);
+    assert(!newlyUploaded || archive);
+    let response;
+    for (let attempt = 0; ; attempt++) {
+      response = await fetchImpl(url, {
         method: "GET",
-        headers: { Accept: "application/octet-stream" },
-        redirect: "error",
+        headers,
+        redirect: "manual",
         signal,
       });
+      if (response.status === 302 && archive) {
+        const location = new URL(response.headers.get("location"));
+        assert(
+          location.protocol === "https:" &&
+            !location.username &&
+            !location.password &&
+            !location.port,
+        );
+        assert(
+          /^[a-z0-9-]+\.blob\.core\.windows\.net$/.test(location.hostname),
+        );
+        await response.body?.cancel();
+        response = await fetchImpl(location, {
+          method: "GET",
+          headers: { Accept: "application/octet-stream" },
+          redirect: "error",
+          signal,
+        });
+      }
+      // Upload completion can precede ZIP availability through the download API.
+      if (!newlyUploaded || response.status !== 404 || attempt === 6) break;
+      await response.body?.cancel();
+      await wait(5_000, undefined, { signal });
     }
-    assert.equal(response.status, 200, "Evidence API request failed");
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      assert.equal(response.status, 200, "Evidence API request failed");
+    }
     if (association)
       assert(
         !response.headers.get("link"),
