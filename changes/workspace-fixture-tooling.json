@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "workspace-fixture-tooling",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Adds developer tooling for preparing local test workspaces without changing the shipped app."
+}
