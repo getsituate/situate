@@ -39,8 +39,8 @@
 |Calendar-versioned app releases with separate platform build identifiers; target delivery in <<release-workflow>>.
 |Accepted; automatic allocation, build integration and distribution qualification remain
 |link:09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018]
-|Mandatory versionless PR changelog declarations, explicit empty entries and localized release assembly.
-|Accepted; fragment validation, PR enforcement and release assembly remain
+|Versionless changelog declarations for client changes and localized release assembly.
+|Accepted; CI validates declarations and release assembly collects them.
 |===
 
 :architecture-repository-root: ../..

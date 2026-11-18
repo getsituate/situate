@@ -1,5 +1,5 @@
 [[adr-0018]]
-= ADR-0018: Require changelog declarations in every pull request
+= ADR-0018: Require changelog declarations for client changes
 :lang: en
 
 ifndef::architecture-repository-root[]
@@ -14,7 +14,7 @@ endif::[]
 
 Status:: accepted
 Date:: 2026-11-13
-Implementation:: Planned; fragment format, required PR check and automatic release assembly are not implemented; existing release-level preparation remains operational
+Implementation:: CI validates declarations per PR; release assembly collects committed declarations.
 
 == Context
 
@@ -27,17 +27,17 @@ link:{architecture-repository-root}/requirements/data/requirements/REQ-0053-enfo
 
 == Decision
 
-Require every PR to add a new, uniquely identified, versionless changelog declaration.
+Require a new, uniquely identified, versionless changelog declaration for each PR that changes the client.
 Independent fragments avoid shared-file contention; identifiers must be available before the PR number exists.
 
-.Target content lifecycle. An explicit empty declaration is valid; a missing one is not.
-image::{architecture-diagrams-root}/release-changelog-fragments.svg["Each PR declares public entries or an empty list with an internal reason; public entries in every supported language are reviewed in the PR before post-merge assembly.",width=500]
+.Changelog review and release assembly
+image::{architecture-diagrams-root}/release-changelog-fragments.svg["Client changes need public entries or an empty list with an internal reason. Other changes can pass the check without a declaration.",width=500]
 
-* Every PR participates, including documentation, infrastructure, tests and bots. No bypass label replaces the declaration.
+* The check uses each PR's changed paths to identify client inputs. Documentation, tests and developer tooling alone need no declaration. Automated PRs follow the same rule.
 * A declaration holds zero or more entries. Empty lists need an internal reason that never appears in public notes; do not generate filler text.
 * Public entries explain observable effects, necessary actions and limitations. Keep `new`, `changed`, `fixed` and `important` categories and explicit platform applicability. Current release entries target macOS; preserve historical catalog metadata for deferred platforms.
 * In PR review, check the English text against the implementation and each translation against the English text. Declarations store content, not review records.
-* The merge check inspects the PR's new declaration, rejects reused IDs, malformed or incomplete entries, missing empty reasons and changes to immutable published catalogs. It does not establish factual or translation accuracy.
+* The merge check validates every new declaration and rejects reused IDs, malformed or incomplete entries, missing empty reasons and changes to immutable published catalogs. It does not establish factual or translation accuracy.
 * Configure required checks and review protections separately from workflow definitions. The fragment schema and directory remain implementation choices.
 
 == Release assembly
@@ -63,7 +63,7 @@ The link:{architecture-docs-root}/index.adoc#release-workflow[release workflow] 
 |One shared changelog edited in every PR
 |Immediately readable and requires little tooling.
 |Parallel changes compete for the same sections; version assignment and localization remain release-time work.
-|Independent PR fragments, including explicit empty declarations (selected)
+|Independent PR fragments for client changes (selected)
 |Review stays beside the change; parallel PRs do not share changelog lines.
 |Adds fragment validation, translation coordination and release/channel assignment.
 |Generate notes from commit subjects
@@ -73,13 +73,12 @@ The link:{architecture-docs-root}/index.adoc#release-workflow[release workflow] 
 
 == Consequences and verification
 
-Every PR gains a small declaration obligation, including bot PRs; contributor and automation tooling must support empty declarations.
 The final factual/content judgment stays with reviewers.
 A structurally valid fragment is not evidence that a planned feature shipped or that a test passed.
 Changelog review does not authorize a build, upload or publication; protected-branch release automation has its own authorization boundary.
 
 Keep historical fragments readable at their original Git revisions and preserve finalized catalogs byte for byte.
-Test missing declarations, explicit empty lists, reused IDs, missing or mismatched translation entries, concurrent PRs, failed release assembly, retries, unpublished changes and aggregation across skipped macOS candidates.
+Test missing declarations on client changes, unrelated changes without declarations, explicit empty lists, reused IDs, missing or mismatched translation entries, concurrent PRs, failed release assembly, retries, unpublished changes and aggregation across skipped macOS candidates.
 Verify that internal reasons and entries for newer uninstalled versions never appear in app history.
 
 == Reference

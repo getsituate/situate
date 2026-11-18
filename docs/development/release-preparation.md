@@ -1,12 +1,14 @@
 # Prepare changelog declarations
 
-Every pull request adds a new versionless declaration in `changes/`, including documentation, tooling and automated dependency changes. A declaration contains reviewed public entries in every language from `client/packages/localization/locales.json`, or an empty entry list with an internal reason. Missing declarations fail validation. An empty changelog does not mean that the application needs no release.
+Add a versionless declaration in `changes/` when a pull request changes the client. CI checks changed paths, including app code, bundled assets, localization and client dependency files. Documentation, tests and developer tooling alone need no declaration. CI still validates any declaration a PR adds.
+
+A declaration contains reviewed public entries in every language from `client/packages/localization/locales.json`, or an empty entry list with an internal reason. An empty changelog does not mean that the application needs no release.
 
 Use the repository's [Volta toolchain](README.md#install-volta).
 
 ## Author and review a declaration
 
-For an internal-only change:
+For a client change with no user-facing effect:
 
 ```sh
 node tools/change-fragments.mjs author --id improve-build-inputs --reason "Build-input validation only; no user-facing changes."

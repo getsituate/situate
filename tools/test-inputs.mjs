@@ -303,6 +303,31 @@ export function suiteAffectedFiles(suite, files) {
   });
 }
 
+const clientTest =
+  /(?:^|\/)(?:tests?|__tests__|__fixtures__)(?:\/|$)|\.(?:test|spec)\.[^/]+$|(?:^|\/)(?:test-setup\.[^/]+|(?:playwright|vitest)(?:\.[^/]+)*\.config\.[^/]+)$/;
+const bundledBrand =
+  /^design\/brand\/(?:tokens\.(?:css|json)|assets\/[^/]+\.svg|bend\/(?:svg\/[^/]+\.svg|performance\.js|mini\/mini\.js))$/;
+const clientBuildScript =
+  /^client\/scripts\/(?:ai-catalog|release-history)\.mjs$/;
+
+// Release selection also covers verification and delivery inputs that don't change the client.
+export function requiresChangelog(file) {
+  if (
+    isPlainDocumentation(file) ||
+    clientTest.test(file) ||
+    file.endsWith("/.gitignore")
+  )
+    return false;
+  return (
+    /^client\/app\//.test(file) ||
+    rust.test(file) ||
+    ui.test(file) ||
+    clientConfig.test(file) ||
+    bundledBrand.test(file) ||
+    clientBuildScript.test(file)
+  );
+}
+
 export function appAffected(file) {
   if (/^(?:tools|client\/scripts)\/.*\.test\.mjs$/.test(file)) return false;
   if (

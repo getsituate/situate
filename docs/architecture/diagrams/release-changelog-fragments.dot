@@ -3,7 +3,9 @@ digraph ReleaseChangelogFragments {
   node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.12"];
   edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
 
-  declaration [label="PR declaration\nUnique versionless ID"];
+  client [shape=diamond, style=filled, label="Client inputs\nchanged?"];
+  declaration [label="New PR declaration\nUnique versionless ID"];
+  optional [label="Declaration optional"];
   relevant [shape=diamond, style=filled, label="User-facing\nentries?"];
   english [label="Write English entries\nTranslate to all supported languages"];
   review [label="Review entries and\ntranslations in the PR"];
@@ -14,12 +16,15 @@ digraph ReleaseChangelogFragments {
 
   { rank=same; english; empty; }
 
+  client -> declaration [label="Yes"];
+  client -> optional [label="No"];
+  optional -> gate;
   declaration -> relevant;
   relevant -> english [label="Yes"];
   relevant -> empty [label="No"];
   english -> review;
   review -> gate;
   empty -> gate;
-  gate -> assemble;
+  gate -> assemble [label="When preparing a release"];
   assemble -> history [label="Public entries only"];
 }

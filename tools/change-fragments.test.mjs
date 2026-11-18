@@ -57,7 +57,7 @@ function repository(t) {
     "client/packages/localization/locales.json",
     JSON.stringify({ source: "en", locales }),
   );
-  write("app.txt", "initial");
+  write("client/app/src/main.ts", "initial");
   const commit = () => {
     git("add", ".");
     git("commit", "-qm", "test: fixture");
@@ -103,11 +103,8 @@ test("Git ranges require new immutable declarations, ancestry and historical cat
     ),
     ["test-change"],
   );
-  assert.throws(
-    () => validateFragmentRange(repo.root, { base: head, head }),
-    /requires a new declaration/,
-  );
-  repo.write("app.txt", "changed after review");
+  assert.deepEqual(validateFragmentRange(repo.root, { base: head, head }), []);
+  repo.write("client/app/src/main.ts", "changed after review");
   const changed = repo.commit();
   assert.equal(
     validateFragmentRange(repo.root, { base: repo.base, head: changed }).length,
@@ -134,6 +131,76 @@ test("Git ranges require new immutable declarations, ancestry and historical cat
   );
   assert.throws(() =>
     collectFragments(repo.root, { base: "f".repeat(40), head: historic }),
+  );
+});
+
+test("range validation requires a declaration only for client inputs", (t) => {
+  const repo = repository(t);
+  for (const file of [
+    ".github/workflows/verify.yml",
+    "docs/development/testing.md",
+    "tools/pipeline.mjs",
+    "package-lock.json",
+    "client/README.md",
+    "client/app/src/App.test.ts",
+    "client/app/tests/browser/example.spec.ts",
+    "client/crates/situate-core/tests/example.rs",
+    "client/scripts/native-smoke-runtime.mjs",
+    "client/workshop/src/example.vue",
+    "design/brand/reference/index.html",
+  ]) {
+    repo.write(file, "changed");
+  }
+  const internal = repo.commit();
+  assert.deepEqual(
+    runFragmentCli(
+      ["validate", "--base", repo.base, "--head", internal],
+      repo.root,
+    ),
+    [],
+  );
+
+  for (const file of [
+    "client/app/src/App.vue",
+    "client/app/src-tauri/tauri.conf.json",
+    "client/crates/situate-core/src/lib.rs",
+    "client/packages/localization/locales.json",
+    "client/package-lock.json",
+    "client/Cargo.lock",
+    "design/brand/tokens.css",
+    "client/scripts/release-history.mjs",
+  ]) {
+    repo.git("checkout", "--detach", internal);
+    repo.write(
+      file,
+      file.endsWith("locales.json")
+        ? JSON.stringify({ source: "en", locales: ["en", "de", "fr"] })
+        : "changed",
+    );
+    const head = repo.commit();
+    assert.throws(
+      () => validateFragmentRange(repo.root, { base: repo.base, head }),
+      {
+        message: `Client changes require a new declaration in changes/ (changed input: ${JSON.stringify(file)})`,
+      },
+    );
+  }
+
+  repo.git("checkout", "--detach", internal);
+  repo.git("mv", "client/app/src/main.ts", "retired-source.txt");
+  const removed = repo.commit();
+  assert.throws(
+    () => validateFragmentRange(repo.root, { base: internal, head: removed }),
+    /changed input: "client\/app\/src\/main\.ts"/,
+  );
+  repo.write(
+    "changes/internal-client.json",
+    JSON.stringify(draft("internal-client", true)),
+  );
+  const declared = repo.commit();
+  assert.equal(
+    validateFragmentRange(repo.root, { base: internal, head: declared })[0].id,
+    "internal-client",
   );
 });
 
@@ -174,9 +241,9 @@ test("only content-preserving upgrades of legacy declarations are allowed", (t) 
     collectFragments(repo.root, { base: legacy, head: upgraded }),
     [],
   );
-  assert.throws(
-    () => validateFragmentRange(repo.root, { base: legacy, head: upgraded }),
-    /requires a new declaration/,
+  assert.deepEqual(
+    validateFragmentRange(repo.root, { base: legacy, head: upgraded }),
+    [],
   );
 
   repo.write("changes/tooling.json", JSON.stringify(draft("tooling", true)));

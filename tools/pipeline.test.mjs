@@ -186,6 +186,41 @@ test("PR planning excludes declarations merged into main after the event base", 
   );
 });
 
+test("merge groups require declarations only on branches that change the client", async (t) => {
+  const { root, git, base, branch } = declarationFixture(t);
+  const declared = branch("declared");
+  git("checkout", "-qb", "docs", base);
+  writeFileSync(join(root, "README.md"), "# Contributor guide\n");
+  git("add", ".");
+  git("commit", "-qm", "docs: add contributor guide");
+  const docs = git("rev-parse", "HEAD");
+
+  git("checkout", "-qb", "integrated", declared);
+  git("merge", "--no-ff", docs, "-m", "test: integrate docs");
+  const review = (head) =>
+    validateDeclarations(root, {
+      source: git("rev-parse", "HEAD"),
+      base,
+      heads: [declared, head],
+    });
+  assert.deepEqual(
+    (await review(docs)).fragments.map(({ id }) => id),
+    ["declared"],
+  );
+
+  git("checkout", "docs");
+  writeFileSync(join(root, "client/Cargo.lock"), "# updated dependencies\n");
+  git("add", ".");
+  git("commit", "-qm", "build: update client dependencies");
+  const undeclared = git("rev-parse", "HEAD");
+  git("checkout", "integrated");
+  git("merge", "--no-ff", undeclared, "-m", "test: integrate client change");
+  await assert.rejects(
+    review(undeclared),
+    /Client changes require a new declaration/,
+  );
+});
+
 test("integrated verification rejects overwriting a declaration added to the base", async (t) => {
   const { root, git, base, branch } = declarationFixture(t);
   const alpha = branch("alpha", "shared"),

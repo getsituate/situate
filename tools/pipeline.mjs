@@ -80,7 +80,6 @@ export async function validateDeclarations(root, { source, base, heads }) {
     const fragments = validateFragmentRange(root, {
       base: ancestor,
       head,
-      requireNew: ancestor !== head,
     });
     for (const { id, sha256 } of fragments) {
       assert(
@@ -95,7 +94,8 @@ export async function validateDeclarations(root, { source, base, heads }) {
   const integrated = validateFragmentRange(root, {
     base: integratedBase,
     head: source,
-    requireNew: integratedBase !== source,
+    // Require declarations on the originating branches, not on the synthetic merge.
+    requireForClientChanges: false,
   });
   const fragments = integrated
     .map(({ id, sha256 }) => ({ id, sha256 }))
