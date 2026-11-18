@@ -4,12 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
+import { digest } from "./release-catalog.mjs";
 import {
-  approveSource,
-  acceptTranslation,
-  behaviorDigest,
   collectFragments,
-  fragmentHashes,
   runFragmentCli,
   validateFragment,
   validateFragmentRange,
@@ -29,9 +26,8 @@ function draft(id = "test-change", empty = false) {
         },
       ];
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id,
-    behaviorDigest: "a".repeat(64),
     locales: Object.fromEntries(
       locales.map((locale) => [
         locale,
@@ -39,22 +35,7 @@ function draft(id = "test-change", empty = false) {
       ]),
     ),
     ...(empty ? { emptyReason: "Internal test tooling only." } : {}),
-    translationApprovals: {},
   };
-}
-function approved(fragment, inventory = locales) {
-  let result = approveSource(fragment, fragmentHashes(fragment).sourceHash, {
-    locales: inventory,
-  });
-  for (const locale of inventory.filter((item) => item !== "en"))
-    result = acceptTranslation(
-      result,
-      locale,
-      result.locales[locale],
-      fragmentHashes(result).translations[locale],
-      { locales: inventory },
-    );
-  return result;
 }
 function repository(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "situate-fragments-"));
@@ -85,91 +66,36 @@ function repository(t) {
   return { root, git, write, commit, base: commit() };
 }
 
-test("source and translation approvals bind source, behavior, locale inventory and exact translation", () => {
-  const value = approved(draft());
-  assert.equal(validateFragment(value, { locales }), value);
-  const translated = structuredClone(value);
-  translated.locales.de.entries[0].title = "Andere Navigation";
-  assert.throws(
-    () => validateFragment(translated, { locales }),
-    /Translation approval/,
-  );
-  for (const mutate of [
-    (copy) => {
-      copy.locales.en.entries[0].paragraphs = ["Different behavior."];
-    },
-    (copy) => {
-      copy.behaviorDigest = "b".repeat(64);
-    },
-    (copy) => {
-      copy.locales.fr = structuredClone(copy.locales.en);
-    },
-  ]) {
-    const copy = structuredClone(value);
-    mutate(copy);
-    assert.throws(
-      () => validateFragment(copy, { locales: Object.keys(copy.locales) }),
-      /Source approval/,
-    );
-  }
-  assert.throws(
-    () =>
-      acceptTranslation(
-        draft(),
-        "de",
-        draft().locales.de,
-        fragmentHashes(draft()).translations.de,
-        { locales },
-      ),
-    /Approve English/,
-  );
-  const edited = structuredClone(value);
-  edited.locales.en.title = "Corrected source";
-  const renewed = approveSource(edited, fragmentHashes(edited).sourceHash, {
-    locales,
-  });
-  assert.deepEqual(renewed.translationApprovals, {});
-  assert.throws(
-    () => validateFragment(renewed, { locales }),
-    /Unexpected fragment fields/,
-  );
-});
-
 test("empty reasons are mandatory and locale completeness follows the inventory", () => {
   const value = draft("empty", true);
-  assert.doesNotThrow(() => validateFragment(approved(value), { locales }));
+  assert.doesNotThrow(() => validateFragment(value, { locales }));
   delete value.emptyReason;
   assert.throws(
-    () => validateFragment(value, { locales, requireApprovals: false }),
+    () => validateFragment(value, { locales }),
     /nonempty plain text/,
   );
   const extra = draft();
   extra.locales.fr = structuredClone(extra.locales.en);
   assert.doesNotThrow(() =>
-    validateFragment(approved(extra, [...locales, "fr"]), {
+    validateFragment(extra, {
       locales: [...locales, "fr"],
     }),
   );
-  assert.throws(
-    () => validateFragment(extra, { locales, requireApprovals: false }),
-    /Unexpected/,
-  );
+  assert.throws(() => validateFragment(extra, { locales }), /Unexpected/);
   extra.locales.de.entries[0].platforms = ["ios"];
   assert.throws(
     () =>
       validateFragment(extra, {
         locales: [...locales, "fr"],
-        requireApprovals: false,
       }),
     /preserve entry/,
   );
 });
 
-test("Git ranges require new immutable declarations, behavior review, ancestry and historical catalog immutability", (t) => {
+test("Git ranges require new immutable declarations, ancestry and historical catalog immutability", (t) => {
   const repo = repository(t);
   const value = draft();
-  value.behaviorDigest = behaviorDigest(repo.root, repo.base);
-  repo.write("changes/test-change.json", JSON.stringify(approved(value)));
+  repo.write("changes/test-change.json", JSON.stringify(value));
   const head = repo.commit();
   assert.deepEqual(
     validateFragmentRange(repo.root, { base: repo.base, head }).map(
@@ -183,17 +109,13 @@ test("Git ranges require new immutable declarations, behavior review, ancestry a
   );
   repo.write("app.txt", "changed after review");
   const changed = repo.commit();
-  assert.throws(
-    () => validateFragmentRange(repo.root, { base: repo.base, head: changed }),
-    /Behavior changed/,
-  );
   assert.equal(
-    collectFragments(repo.root, { base: repo.base, head: changed }).length,
+    validateFragmentRange(repo.root, { base: repo.base, head: changed }).length,
     1,
   );
   repo.write(
     "changes/test-change.json",
-    JSON.stringify(approved(draft("test-change", true))),
+    JSON.stringify(draft("test-change", true)),
   );
   const amended = repo.commit();
   assert.throws(
@@ -215,6 +137,72 @@ test("Git ranges require new immutable declarations, behavior review, ancestry a
   );
 });
 
+test("only content-preserving upgrades of legacy declarations are allowed", (t) => {
+  const repo = repository(t);
+  const file = "changes/test-change.json";
+  const value = draft();
+  const legacyBytes = JSON.stringify({
+    ...value,
+    schemaVersion: 1,
+    behaviorDigest: "a".repeat(64),
+    sourceApproval: { action: "approve", sourceHash: "b".repeat(64) },
+    translationApprovals: {
+      de: { sourceHash: "b".repeat(64), translationHash: "c".repeat(64) },
+    },
+  });
+  repo.write(file, legacyBytes);
+  const legacy = repo.commit();
+  assert.throws(
+    () => validateFragmentRange(repo.root, { base: repo.base, head: legacy }),
+    /Unexpected fragment fields/,
+  );
+  assert.deepEqual(
+    collectFragments(repo.root, { base: repo.base, head: legacy }),
+    [
+      {
+        id: value.id,
+        path: file,
+        sha256: digest(legacyBytes),
+        fragment: value,
+      },
+    ],
+  );
+
+  repo.write(file, JSON.stringify(value));
+  const upgraded = repo.commit();
+  assert.deepEqual(
+    collectFragments(repo.root, { base: legacy, head: upgraded }),
+    [],
+  );
+  assert.throws(
+    () => validateFragmentRange(repo.root, { base: legacy, head: upgraded }),
+    /requires a new declaration/,
+  );
+
+  repo.write("changes/tooling.json", JSON.stringify(draft("tooling", true)));
+  const head = repo.commit();
+  assert.deepEqual(
+    validateFragmentRange(repo.root, { base: legacy, head }).map(
+      ({ id }) => id,
+    ),
+    ["tooling"],
+  );
+  assert.deepEqual(
+    collectFragments(repo.root, { base: repo.base, head }).map(({ id }) => id),
+    ["test-change", "tooling"],
+  );
+
+  value.locales.de.entries[0].title = "Changed translation";
+  repo.write(file, JSON.stringify(value));
+  const edited = repo.commit();
+  for (const base of [legacy, upgraded]) {
+    assert.throws(
+      () => collectFragments(repo.root, { base, head: edited }),
+      /immutable/,
+    );
+  }
+});
+
 test("release collection crosses migration metadata replacement but keeps catalogs immutable", (t) => {
   const repo = repository(t);
   repo.write("releases/legacy-migration-evidence.json", "{}");
@@ -229,13 +217,9 @@ test("release collection crosses migration metadata replacement but keeps catalo
     "releases/migration-checkpoint.json",
     JSON.stringify({ release: { revision: baseline } }),
   );
-  const migrated = repo.commit();
+  repo.commit();
   const value = draft("migration-metadata", true);
-  value.behaviorDigest = behaviorDigest(repo.root, migrated);
-  repo.write(
-    "changes/migration-metadata.json",
-    JSON.stringify(approved(value)),
-  );
+  repo.write("changes/migration-metadata.json", JSON.stringify(value));
   const head = repo.commit();
   assert.deepEqual(
     collectFragments(repo.root, { base: baseline, head }).map(
@@ -269,8 +253,7 @@ test("concurrent PRs use independent IDs and assembly retains both declarations"
   for (const id of ["change-alpha", "change-beta"]) {
     repo.git("checkout", "--detach", repo.base);
     const value = draft(id, true);
-    value.behaviorDigest = behaviorDigest(repo.root, repo.base);
-    repo.write(`changes/${id}.json`, JSON.stringify(approved(value)));
+    repo.write(`changes/${id}.json`, JSON.stringify(value));
     const head = repo.commit();
     assert.equal(
       validateFragmentRange(repo.root, { base: repo.base, head })[0].id,
@@ -291,15 +274,14 @@ test("concurrent PRs use independent IDs and assembly retains both declarations"
 test("range validation rejects reused identities, missing locales, symlinks and shallow history", (t) => {
   const repo = repository(t);
   const value = draft();
-  value.behaviorDigest = behaviorDigest(repo.root, repo.base);
-  repo.write("changes/different-name.json", JSON.stringify(approved(value)));
+  repo.write("changes/different-name.json", JSON.stringify(value));
   let head = repo.commit();
   assert.throws(
     () => validateFragmentRange(repo.root, { base: repo.base, head }),
     /filename and ID/,
   );
   fs.rmSync(path.join(repo.root, "changes/different-name.json"));
-  const missing = approved(value);
+  const missing = structuredClone(value);
   delete missing.locales.de;
   repo.write("changes/test-change.json", JSON.stringify(missing));
   head = repo.commit();
@@ -330,97 +312,32 @@ test("range validation rejects reused identities, missing locales, symlinks and 
   );
 });
 
-test("CLI authors versionless declarations and requires explicit hash review before validation", (t) => {
+test("CLI authors versionless declarations and validates them without approval", (t) => {
   const repo = repository(t);
   const authored = runFragmentCli(
     ["author", "--id", "tooling", "--reason", "Test runner maintenance."],
     repo.root,
   );
-  assert.throws(() =>
+  assert.deepEqual(
     runFragmentCli(["validate", "--id", "tooling"], repo.root),
+    authored,
   );
-  assert.equal(
-    runFragmentCli(["validate", "--draft", "--id", "tooling"], repo.root)
-      .sourceHash,
-    authored.sourceHash,
+  const input = path.join(repo.root, "localized.json");
+  repo.write("localized.json", JSON.stringify(draft().locales));
+  assert.deepEqual(
+    runFragmentCli(
+      ["author", "--id", "navigation", "--input", input],
+      repo.root,
+    ),
+    { id: "navigation" },
   );
-  assert.throws(
-    () =>
-      runFragmentCli(
-        ["source-approve", "--id", "tooling", "--hash", "0".repeat(64)],
-        repo.root,
-      ),
-    /Inspect/,
-  );
-  const source = runFragmentCli(
-    ["source-approve", "--id", "tooling", "--hash", authored.sourceHash],
-    repo.root,
-  );
-  runFragmentCli(
-    [
-      "translation-accept",
-      "--id",
-      "tooling",
-      "--locale",
-      "de",
-      "--hash",
-      source.translations.de,
-    ],
-    repo.root,
-  );
-  assert.equal(
-    runFragmentCli(["validate", "--id", "tooling"], repo.root).id,
-    "tooling",
-  );
-  const before = fs.readFileSync(
-    path.join(repo.root, "changes/tooling.json"),
-    "utf8",
-  );
-  repo.write("app.txt", "new committed behavior");
-  repo.commit();
-  assert.throws(
-    () => runFragmentCli(["validate", "--id", "tooling"], repo.root),
-    /Behavior changed/,
-  );
-  const reviewed = runFragmentCli(
-    ["validate", "--draft", "--id", "tooling"],
-    repo.root,
-  );
-  assert.notEqual(reviewed.sourceHash, authored.sourceHash);
-  assert.equal(
-    fs.readFileSync(path.join(repo.root, "changes/tooling.json"), "utf8"),
-    before,
-  );
-  assert.throws(
-    () =>
-      runFragmentCli(
-        ["source-approve", "--id", "tooling", "--hash", authored.sourceHash],
-        repo.root,
-      ),
-    /Inspect/,
-  );
-  runFragmentCli(
-    ["source-approve", "--id", "tooling", "--hash", reviewed.sourceHash],
-    repo.root,
-  );
-  assert.throws(() =>
-    runFragmentCli(["validate", "--id", "tooling"], repo.root),
-  );
-  runFragmentCli(
-    [
-      "translation-accept",
-      "--id",
-      "tooling",
-      "--locale",
-      "de",
-      "--hash",
-      reviewed.translations.de,
-    ],
-    repo.root,
-  );
-  assert.equal(
-    runFragmentCli(["validate", "--id", "tooling"], repo.root).sourceHash,
-    reviewed.sourceHash,
+  const head = repo.commit();
+  assert.deepEqual(
+    runFragmentCli(
+      ["validate", "--base", repo.base, "--head", head],
+      repo.root,
+    ).map(({ id }) => id),
+    ["navigation", "tooling"],
   );
   assert.throws(
     () =>

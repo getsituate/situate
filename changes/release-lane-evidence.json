@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "release-lane-evidence",
-  "behaviorDigest": "717cdd61ea92fba97ea339ac07da36d8ca4f4d619a66d0a4d835d20f759d8823",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Corrects release verification evidence serialization; application behavior is unchanged.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "fecf672adf7339ee59f92b7d839f19752411429172633df97dc551c3b5b41a15",
-      "translationHash": "93ac7341f376b4f327b1850b3a9cd2123795332a05f23dde45c3675e262569e5"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "fecf672adf7339ee59f92b7d839f19752411429172633df97dc551c3b5b41a15"
-  }
+  "emptyReason": "Corrects release verification evidence serialization; application behavior is unchanged."
 }

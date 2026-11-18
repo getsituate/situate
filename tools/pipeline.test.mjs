@@ -22,7 +22,6 @@ import {
   restoreWorkflow,
   validateDeclarations,
 } from "./pipeline.mjs";
-import { behaviorDigest, fragmentHashes } from "./change-fragments.mjs";
 import { digest, readOperation, sealPlan } from "./pipeline-state.mjs";
 
 const source = "a".repeat(40),
@@ -89,24 +88,12 @@ function declarationFixture(t) {
     git("add", ".");
     git("commit", "-qm", `test: ${name}`);
     const fragment = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id,
-      behaviorDigest: behaviorDigest(root, git("rev-parse", "HEAD")),
       emptyReason: name,
       locales: {
         en: { title: "Changes", entries: [] },
         de: { title: "Änderungen", entries: [] },
-      },
-    };
-    const hashes = fragmentHashes(fragment);
-    fragment.sourceApproval = {
-      action: "approve",
-      sourceHash: hashes.sourceHash,
-    };
-    fragment.translationApprovals = {
-      de: {
-        sourceHash: hashes.sourceHash,
-        translationHash: hashes.translations.de,
       },
     };
     mkdirSync(join(root, "changes"), { recursive: true });
@@ -139,8 +126,8 @@ test("merge groups review original branch heads and preserve their exact declara
     [alpha, beta],
   );
   await assert.rejects(
-    validateDeclarations(root, { source, base, heads: [source] }),
-    /behavior|binding|bound/i,
+    validateDeclarations(root, { source, base, heads: [alpha] }),
+    /Integrated declarations differ from branch inputs/,
   );
 });
 

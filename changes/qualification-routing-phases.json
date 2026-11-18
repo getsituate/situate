@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "qualification-routing-phases",
-  "behaviorDigest": "60b4d9efb4fc3c218b77312253bb7b5141442c55633ef4253e2c5b95e69ecba5",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Identifies the failing network check and reports bounded error codes during macOS package qualification.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "1584b70ab87a0aeba344b4943a97ff8b7646cf9b1c886cf7e0ca9c05b0135dd7",
-      "translationHash": "45f9ade17b8e40162e567962dcee63980cf334723c7ebde0a01ce71594b41e75"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "1584b70ab87a0aeba344b4943a97ff8b7646cf9b1c886cf7e0ca9c05b0135dd7"
-  }
+  "emptyReason": "Identifies the failing network check and reports bounded error codes during macOS package qualification."
 }
