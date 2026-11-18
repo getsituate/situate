@@ -17,6 +17,7 @@ import { get } from "node:https";
 import { homedir, userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { setTimeout } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import {
   bundleDigest,
   verifyDirectPayloads,
@@ -348,6 +349,13 @@ function validateAction(action) {
         action.windows <= 4,
       "Invalid owned window count",
     );
+  } else if (action.folderField !== undefined) {
+    assert(
+      action.folderField === true ||
+        (typeof action.folderField === "string" &&
+          action.folderField.length <= 4096),
+      "Invalid folder picker assertion",
+    );
   } else if (action.key) {
     assert(
       ["return", "a", "g", "w"].includes(action.key.key) &&
@@ -363,6 +371,7 @@ function validateAction(action) {
       [
         "AXButton",
         "AXMenuItem",
+        "AXPopUpButton",
         "AXStaticText",
         "AXTextField",
         "AXCheckBox",
@@ -391,6 +400,13 @@ export function accessibilityScript(pid, action) {
     return `${prefix}keystroke ${quote(action.type)}\nend tell\nend tell`;
   if (action.windows !== undefined)
     return `${prefix}if count of windows is not ${action.windows} then error "Owned window count differs"\nend tell\nend tell`;
+  if (action.folderField !== undefined) {
+    const checkValue =
+      action.folderField === true
+        ? ""
+        : `\nif value of field is not ${quote(action.folderField)} then error "Folder path differs"`;
+    return `${prefix}if count of (windows whose subrole is "AXDialog") is not 1 then error "Owned window must be unique"\nset field to value of attribute "AXFocusedUIElement"\nif role of field is not "AXTextField" then error "Folder field is not focused"${checkValue}\nend tell\nend tell`;
+  }
   if (action.key) {
     const code = { return: 36, tab: 48, escape: 53 }[action.key.key];
     const modifiers = action.key.modifiers.length
@@ -400,12 +416,20 @@ export function accessibilityScript(pid, action) {
   }
   const target = action.click ?? action.assert ?? action.focus;
   const selectWindow = target.window
-    ? `if count of (windows whose name is ${quote(target.window)}) is not 1 then error "Owned window must be unique"\nperform action "AXRaise" of first window whose name is ${quote(target.window)}\n`
+    ? `set ownedWindows to windows whose name is ${quote(target.window)}\nif count of ownedWindows is not 1 then error "Owned window must be unique"\nset ownedWindow to item 1 of ownedWindows\n${action.focus ? 'perform action "AXRaise" of ownedWindow\n' : ""}`
     : "";
-  const contents = target.window
-    ? `entire contents of first window whose name is ${quote(target.window)}`
-    : "entire contents";
-  return `${prefix}${selectWindow}set matches to {}\nrepeat with elementRef in ${contents}\ntry\nif role of elementRef is ${quote(target.role)} and (name of elementRef is ${quote(target.name)} or description of elementRef is ${quote(target.name)}) then set end of matches to elementRef\nend try\nend repeat\nif count of matches is not 1 then error "Accessibility target must be unique"\n${target.role === "AXButton" ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
+  const folderButton =
+    target.role === "AXButton" && target.name === "Open" && !target.window;
+  if (folderButton)
+    return `${prefix}set panels to windows whose subrole is "AXDialog"\nif count of panels is not 1 then error "Owned window must be unique"\nset targets to my openPanelButtons(item 1 of panels, 0)\nif count of targets is not 1 then error "Accessibility target must be unique"\nset confirmation to item 1 of targets\nif enabled of confirmation is not true then error "Accessibility control is disabled"\n${action.click ? 'perform action "AXPress" of confirmation\n' : ""}end tell\nend tell\non openPanelButtons(parentRef, depth)\nif depth > 7 then return {}\nset matches to {}\ntell application "System Events"\nset children to UI elements of parentRef\nif (count of children) > 64 then error "Folder panel exceeds accessibility bounds"\nrepeat with childRef in children\nset child to contents of childRef\nset childRole to role of child\nif childRole is "AXButton" then\nif name of child is "Open" or title of child is "Open" then set end of matches to child\nelse if childRole is in {"AXGroup", "AXSplitGroup", "AXSheet"} then\nset matches to matches & my openPanelButtons(child, depth + 1)\nend if\nend repeat\nend tell\nreturn matches\nend openPanelButtons`;
+  const enumerate =
+    target.role === "AXMenuItem" && !target.window
+      ? "set entries to entire contents\n"
+      : target.window
+        ? "set entries to entire contents of ownedWindow\n"
+        : "set entries to {}\nrepeat with windowRef in windows\nset entries to entries & (entire contents of (contents of windowRef))\nend repeat\n";
+  const label = quote(target.name);
+  return `${prefix}${selectWindow}${enumerate}set matches to {}\nrepeat with elementRef in entries\ntry\nset candidate to contents of elementRef\nif role of candidate is ${quote(target.role)} and (name of candidate is ${label} or description of candidate is ${label}) then set end of matches to candidate\nend try\nend repeat\nif count of matches is not 1 then error ("Accessibility target must be unique: " & (count of matches))\n${["AXButton", "AXPopUpButton"].includes(target.role) ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
 }
 
 export async function checkAccessibilityAction(
@@ -413,17 +437,41 @@ export async function checkAccessibilityAction(
   action,
   { execute, options },
 ) {
-  try {
-    await execute(
-      "osascript",
-      ["-e", accessibilityScript(pid, action)],
+  const script = accessibilityScript(pid, action);
+  const target = action.assert;
+  // System Events can omit static text that WebKit exposes through native AX.
+  if (
+    target?.role === "AXStaticText" &&
+    target.window &&
+    target.value === undefined
+  ) {
+    const result = await execute(
+      "/usr/bin/swift",
+      [
+        fileURLToPath(
+          new URL("./qualification-ax-text.swift", import.meta.url),
+        ),
+        String(pid),
+        target.name,
+        target.window,
+      ],
       options,
     );
+    assert(
+      result === "matched" || result === "unmatched",
+      "Native text observation unavailable",
+    );
+    return result === "matched";
+  }
+  try {
+    await execute("osascript", ["-e", script], options);
     return true;
   } catch (error) {
     if (
       ["timeout", "cancelled"].includes(error.qualificationStatus) ||
-      (!action.assert && action.windows === undefined)
+      (!action.assert &&
+        action.windows === undefined &&
+        action.folderField === undefined)
     )
       throw error;
     return false;
@@ -692,6 +740,8 @@ export function createFinalArtifactQualificationHost(
           .replaceAll("{{fixture.baseUrl}}", provider.baseUrl)
           .replaceAll("{{fixture.token}}", provider.token)
           .replaceAll("{{fixture.model}}", PINNED_AGENT_MODEL);
+      if (action.folderField === "{{workspace}}")
+        action.folderField = join(stateRoot, "workspace");
       await waitFor(
         () => checkAccessibilityAction(pid, action, { execute, options }),
         "accessibility assertion",

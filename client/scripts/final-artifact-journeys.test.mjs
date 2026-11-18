@@ -156,7 +156,7 @@ test("a retained plugin read requires the actual enabled production capability",
   assert.throws(() => fixtureTurn({ input }), /tool_changed/);
 });
 
-test("default journeys use product labels, verify reopened draft/files/plugin state, and cancel unsaved update", async () => {
+test("default journeys retain saved state across restart and keep chat drafts in the live session", async () => {
   const actions = [];
   const files = [];
   const permissions = [];
@@ -176,6 +176,20 @@ test("default journeys use product labels, verify reopened draft/files/plugin st
     },
   });
   await profile.exercise();
+  const beforeRestart = actions.length;
+  await profile.reopen();
+  const restarted = actions.slice(beforeRestart);
+  assert.deepEqual(
+    restarted
+      .filter((step) => step.assert?.name === "Message")
+      .map((step) => step.assert.value),
+    [""],
+  );
+  assert.ok(
+    restarted.some(
+      (step) => step.assert?.name === "Final artifact plugin v1 verified.",
+    ),
+  );
   await profile.update();
   await profile.close();
   for (const name of ["Open workspace…", "Close workspace"]) {

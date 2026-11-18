@@ -235,6 +235,12 @@ export function finalArtifactJourneys({
   const name = `Qualification ${phase}`;
   const window = `${name} — Situate`;
   const secondary = `Secondary ${phase}`;
+  const chatDraft = "Unsent qualification draft";
+  const workspaceMenu = {
+    role: "AXPopUpButton",
+    name: "Workspace menu",
+    window,
+  };
   const click = async (target) =>
     actions([{ assert: target }, { click: target }]);
   const expect = async (target) => actions([{ assert: target }]);
@@ -258,9 +264,13 @@ export function finalArtifactJourneys({
     await fill({ role: "AXTextField", name: "Workspace name" }, workspaceName);
     await click(button("Choose…"));
     await key("g", ["command", "shift"]);
-    await actions([{ type: "{{workspace}}" }]);
+    await actions([{ folderField: true }]);
+    await actions([
+      { type: "{{workspace}}" },
+      { folderField: "{{workspace}}" },
+    ]);
     await key("return");
-    await click(button("Choose"));
+    await click(button("Open"));
     await click(button("Create workspace"));
   }
   async function updates() {
@@ -273,13 +283,13 @@ export function finalArtifactJourneys({
     await expect(text("Restart to update Situate?", window));
     await click(button("Install and restart", window));
   }
-  async function reopen() {
+  async function reopen(draft = "") {
     await actions([{ windows: 2 }]);
-    await expect(button("Workspace menu", window));
+    await expect(workspaceMenu);
     await click(button("[e2e:final-artifact-plugin-read]", window));
     await expect({
       ...area("Message", window),
-      value: "Unsent qualification draft",
+      value: draft,
     });
     await expect(text("Final artifact plugin v1 verified.", window));
     await click(button("Plugins", window));
@@ -287,29 +297,19 @@ export function finalArtifactJourneys({
     await expect(button("Disable", window));
     await click(button("Files", window));
     await click(button("e2e-note.md", window));
-    await click(button("File actions", window));
+    await click({ role: "AXPopUpButton", name: "File actions", window });
     await click({ role: "AXMenuItem", name: "Edit source", window });
     await expect({ ...area("Markdown source", window), value: finalNote });
     await verifyFiles(name, [
       ["e2e-note.md", finalNote],
       [".situate/working-method.md", finalMethod],
     ]);
-    await expect(
-      button(
-        "Connect my provider Bring your own key or other supported access.",
-        `${secondary} — Situate`,
-      ),
-    );
+    await expect(button("OpenAI-compatible server", `${secondary} — Situate`));
   }
   return {
     async exercise() {
       await create(name);
-      await click(
-        button(
-          "Connect my provider Bring your own key or other supported access.",
-        ),
-      );
-      await click(button("OpenAI-compatible server"));
+      await click(button("OpenAI-compatible server", window));
       await fill(
         { role: "AXTextField", name: "OpenAI-compatible endpoint" },
         "{{fixture.baseUrl}}",
@@ -323,7 +323,14 @@ export function finalArtifactJourneys({
         name: "I understand and want to use this HTTP destination.",
       });
       await click(button("Save AI access"));
-      await click(button("Model"));
+      await expect(
+        text(
+          "The saved chat model is unavailable or could not be read. Choose a model again.",
+          window,
+        ),
+      );
+      await click(button("Dismiss", window));
+      await click({ role: "AXPopUpButton", name: "Model", window });
       await fill(
         { role: "AXTextField", name: "Model ID" },
         "{{fixture.model}}",
@@ -359,28 +366,23 @@ export function finalArtifactJourneys({
         "[e2e:final-artifact-plugin-read]",
         "Final artifact plugin v1 verified.",
       );
-      await fill(area("Message", window), "Unsent qualification draft");
-      await click(button("Workspace menu", window));
+      await fill(area("Message", window), chatDraft);
+      await click(workspaceMenu);
       await click({ role: "AXMenuItem", name: "Open workspace…", window });
       await create(secondary);
       await expect(
-        button(
-          "Connect my provider Bring your own key or other supported access.",
-          `${secondary} — Situate`,
-        ),
+        button("OpenAI-compatible server", `${secondary} — Situate`),
       );
       await actions([{ windows: 2 }]);
-      await reopen();
+      // Chat drafts remain in memory; saved history must survive relaunch.
+      await reopen(chatDraft);
     },
     reopen,
     async close() {
-      await click(button("Workspace menu", window));
+      await click(workspaceMenu);
       await click({ role: "AXMenuItem", name: "Close workspace", window });
       await expect(
-        button(
-          "Connect my provider Bring your own key or other supported access.",
-          `${secondary} — Situate`,
-        ),
+        button("OpenAI-compatible server", `${secondary} — Situate`),
       );
       await key("w", ["command"]);
     },

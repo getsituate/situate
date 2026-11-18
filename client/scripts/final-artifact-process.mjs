@@ -26,6 +26,14 @@ function category(command, args) {
   switch (basename(command)) {
     case "osascript":
       return "accessibility";
+    case "swift":
+      if (
+        command === "/usr/bin/swift" &&
+        args.length === 4 &&
+        basename(args[0]) === "qualification-ax-text.swift"
+      )
+        return "accessibility";
+      break;
     case "ps":
       return "process";
     case "mount":

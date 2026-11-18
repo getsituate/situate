@@ -264,6 +264,58 @@ fn qualified_provider_defaults_persist_independent_function_choices() {
     }
 }
 #[test]
+fn a_custom_chat_choice_does_not_need_a_recommended_comment_model() {
+    let (_directory, storage) = workspace();
+    let config: Config = serde_json::from_value(json!({
+        "provider": "custom", "endpoint": "http://127.0.0.1:12345/v1", "auth": "api_key"
+    }))
+    .unwrap();
+    let observed = discovery::Catalog {
+        source: discovery::Source::Provider,
+        models: vec!["synthetic-chat".into()],
+    };
+    initialize(&storage, &config, &observed).unwrap();
+    assert!(required(&storage, &config).is_err());
+    save(&storage, &config, "synthetic-chat".into()).unwrap();
+    assert_eq!(required(&storage, &config).unwrap().model, "synthetic-chat");
+    let before = read_settings_bytes(&storage, &config).unwrap().unwrap();
+    assert!(
+        small_choice_observed(&storage, &config, &observed)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        read_settings_bytes(&storage, &config).unwrap().unwrap(),
+        before
+    );
+
+    let mut explicit = settings(&storage, &config).unwrap();
+    explicit.comment = Some(ModelChoice {
+        model: "synthetic-comment".into(),
+        thinking: "recommended".into(),
+        catalog_revision: None,
+    });
+    write_settings(&storage, &config, &explicit).unwrap();
+    assert_eq!(
+        small_choice_observed(&storage, &config, &observed)
+            .unwrap()
+            .unwrap()
+            .model,
+        "synthetic-comment"
+    );
+    let restricted = discovery::Catalog {
+        source: discovery::Source::Account,
+        ..observed
+    };
+    assert_eq!(
+        small_choice_observed(&storage, &config, &restricted)
+            .err()
+            .as_deref(),
+        Some(MODEL_ERROR)
+    );
+}
+
+#[test]
 fn custom_and_deferred_auth_have_no_guessed_default() {
     let catalog: Value = serde_json::from_str(RECOMMENDATIONS).unwrap();
     let inventory: Value = serde_json::from_str(CATALOG).unwrap();
