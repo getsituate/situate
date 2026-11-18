@@ -168,8 +168,10 @@ Keep mutable metadata revalidated and versioned artifact URLs immutable; website
 The implemented publisher verifies and stages immutable releases, activates website/feed metadata through one atomic pointer and reconciles uncertain release publication only for the same version and identical bytes.
 See link:{architecture-repository-root}/infrastructure/releases/README.md[release publication] and link:{architecture-repository-root}/infrastructure/production/README.md[service and traffic activation] for the separate operator commands and recovery procedures.
 The production publisher remains restricted to `https://getsituate.com/releases/` and the production embedded feed endpoint.
-The public preview at `https://reboot.getsituate.com` can expose independently published test artifacts; its download page accepts only that preview origin, not production artifacts.
-Preview delivery does not establish Terraform adoption, apex cutover or production approval, and requires no additional DNS record.
+The retired preview at `https://reboot.getsituate.com` redirects to the production origin.
+Website content publication uses a separate read-only Nginx mount and a content-only SSH receiver, as described in <<adr-0019>>.
+GitHub Actions verifies the built pages before publication, then checks the public revision and both app feeds before confirming the switch.
+Initial host provisioning and workflow activation remain operator actions; see the link:{architecture-repository-root}/infrastructure/production/README.md#automated-website-content-publication[website publication runbook].
 This hosting selection does not authorize release publication.
 
 ==== Faulty release handling

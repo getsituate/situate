@@ -1,0 +1,38 @@
+name: Deploy website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && vars.WEBSITE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: website-production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node website/site.mjs --build
+        env:
+          WEBSITE_POSTHOG_TOKEN: ${{ vars.WEBSITE_POSTHOG_TOKEN }}
+      - run: python3 tools/pipeline-container.py website prepared website/dist
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: website-visual-report
+          path: test-results/website-visual/
+          if-no-files-found: ignore
+          retention-days: 7
+      - run: python3 infrastructure/production/website_content.py deploy website/dist "$GITHUB_SHA" "$GITHUB_RUN_NUMBER"
+        env:
+          WEBSITE_CONTENT_HOST: ${{ vars.WEBSITE_CONTENT_HOST }}
+          WEBSITE_CONTENT_KNOWN_HOSTS: ${{ vars.WEBSITE_CONTENT_KNOWN_HOSTS }}
+          WEBSITE_CONTENT_SSH_KEY: ${{ secrets.WEBSITE_CONTENT_SSH_KEY }}

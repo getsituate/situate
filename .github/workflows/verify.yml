@@ -195,6 +195,13 @@ jobs:
           persist-credentials: false
       - id: lane
         run: python3 tools/pipeline-container.py actions lane --workflow verify --lane browser
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: website-visual-report
+          path: test-results/website-visual/
+          if-no-files-found: ignore
+          retention-days: 7
 
   macos-native:
     needs: plan

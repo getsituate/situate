@@ -126,6 +126,76 @@ Before `activate`, review public claims and the website/app [privacy disclosures
 
 Preserve recoverable copies of new `/opt/situate` artifacts and publication records, `/opt/situate-production` configuration, shared Caddy volumes and the proxy's actual bind-mounted configuration. Preserve HCP state, signing keys and their existing backups. Verify account access and backup readability independently. Rehearse state restoration and fresh-host service recovery in an isolated environment before relying on them; these exercises remain unqualified. Follow [signing-key recovery](../releases/README.md#signing-key-recovery) for signing incidents. Prototype site/counter content and data are intentionally discarded: no full prototype backup, restore exercise, backup service or data migration is required. This does not authorize deleting unknown content or unresolved operation evidence. Verify disk space before publication; do not automatically delete immutable releases to make room. After SSH interruption inspect `current`, `current.next`, `deploy.pending`, `proxy.pending`, `edge.pending`, backups and running containers before retrying. A disconnected local process does not establish the remote outcome. Website service recovery never rewinds the application feed. Application defects are corrected through higher-version releases only.
 
+### Automated website content publication
+
+[Deploy website](../../.github/workflows/deploy-website.yml) runs on pushes to
+`main` once enabled. It checks the static build before sending those files to
+the website content receiver. Identical content leaves the live site untouched.
+The workflow does not upload Caddy, Nginx or Compose configuration, run a
+container operation, or write app release data.
+
+Keep `WEBSITE_DEPLOY_ENABLED` unset until an operator completes these steps:
+
+1. Rehearse publication, a content mismatch and rollback on an isolated host.
+   The repository's production hosting test checks Nginx switching and feed
+   isolation without contacting production.
+2. Create a dedicated SSH account with no sudo, Docker access, writable parent
+   directories or membership in the service or app publisher groups. Create
+   `/opt/situate-production/website-content`, owned by that account and
+   readable by Nginx (mode `0755`). Deny the account write access to the
+   receiver, its authorized key configuration and every other production
+   directory. Install the reviewed `website_content.py` at
+   `/usr/local/libexec/situate/website_content.py`, owned by root. Install its
+   key using root-managed authorized keys and the following key options:
+   `restrict,command="/usr/bin/python3 -I /usr/local/libexec/situate/website_content.py receive"`.
+   Disable alternative authentication, user SSH startup files and unrestricted
+   keys for this account. Verify it can invoke the receiver but cannot run
+   a shell, transfer files through SFTP or forward connections.
+3. Separately roll out the production service configuration with normal
+   operator credentials. An empty content mount serves the existing service
+   package. From outside the host, verify that
+   `https://getsituate.com/__website_delivery` returns `website-content-v1`,
+   the site still works, and both app metadata endpoints return valid JSON.
+   Review published claims and privacy notices before enabling the workflow.
+4. In GitHub, require `PR verification` on protected `main`. Create the
+   `website-production` environment, restrict it to protected `main`, and
+   set `WEBSITE_CONTENT_HOST` (user@host), `WEBSITE_CONTENT_KNOWN_HOSTS`
+   (independently verified host key), and the `WEBSITE_CONTENT_SSH_KEY`
+   secret. If configured, `WEBSITE_POSTHOG_TOKEN` must be the existing public
+   project token. Set the repository variable `WEBSITE_DEPLOY_ENABLED=true`
+   only after approval. Dispatch against `main` or follow the first reviewed
+   merge until `/website-revision.txt` shows its confirmed revision.
+
+The receiver serializes publication and switches a content-only pointer. The
+runner checks the expected public HTML, analytics configuration and revision
+before confirming the switch, and checks that the existing app feeds still
+serve JSON. A confirmed content mismatch restores the previous website.
+An unavailable app feed blocks verification; neither a rollback nor a
+website retry changes the app feed.
+
+For uncertain outcomes, disable the workflow before recovery. Run the installed
+receiver as the website content account via operator access (not the CI key):
+
+```text
+/usr/bin/python3 -I /usr/local/libexec/situate/website_content.py status
+/usr/bin/python3 -I /usr/local/libexec/situate/website_content.py recover <pending-revision> rollback
+/usr/bin/python3 -I /usr/local/libexec/situate/website_content.py revert <active-revision>
+```
+
+Inspect the pending record, served revision and public pages before choosing
+an operation. Use `recover <pending-revision> commit` only once the candidate's
+public bytes and both app metadata endpoints have been verified. Use `revert`
+when the active revision is already confirmed but should be replaced with its
+predecessor. Check the site and both app endpoints after recovery. Fix or revert
+the source on `main` before re-enabling automation so the next push does not
+publish the same fault.
+
+Retain the current and previous content versions and any pending candidate.
+Monitor disk use and reconcile interrupted deliveries before removing unused
+versions. The service's fallback bundle does not follow automated publication;
+once automated content is active, a manual service redeploy alone does not
+replace the visible site.
+
 ### Edge relocation and recovery
 
 Freeze previous deployment writers before relocation. Proxy operations use `/opt/situate-production/edge.lock`; while `/opt/getsituate` exists they also acquire its legacy deployment lock. Removing that directory after retirement does not require creating a replacement legacy lock. Production website activation and relocation also share the production deployment lock.

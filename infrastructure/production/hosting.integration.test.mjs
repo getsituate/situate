@@ -598,6 +598,8 @@ test(
     await stage(directory);
     const data = join(directory, "distribution");
     const metadata = join(data, "releases/1.2.3/metadata");
+    const content = join(directory, "website-content");
+    mkdirSync(content, { mode: 0o755 });
     const jobs = join(
       data,
       "public-pages/jobs/studentische-aushilfe-social-media-community",
@@ -668,6 +670,8 @@ test(
       `${directory}/site:/usr/share/nginx/html:ro`,
       "--volume",
       `${data}:/srv/distribution:ro`,
+      "--volume",
+      `${content}:/srv/website-content:ro`,
       image,
     ]);
     t.after(() => docker(["rm", "--force", name]));
@@ -751,6 +755,49 @@ test(
     );
     assert.equal(missing.status, 404);
     assert.equal(missing.headers.get("cache-control"), "no-store");
+    const probe = await fetch(`${origin}/__website_delivery`);
+    assert.equal(await probe.text(), "website-content-v1\n");
+    const transaction = spawnSync(
+      "python3",
+      [
+        "-B",
+        "-c",
+        `
+import sys
+sys.path.insert(0, sys.argv[1])
+from website_content import publish
+from pathlib import Path
+import base64
+import json
+root = Path(sys.argv[2])
+for sequence, (body, decision) in enumerate([("first", "commit"), ("second", "rollback")], 1):
+    package = {"run": sequence, "sha": format(sequence, "040x"), "files": {
+        "index.html": base64.b64encode(body.encode()).decode(),
+        "product.html": base64.b64encode(("product " + body).encode()).decode(),
+    }}
+    publish(root, package, lambda value: print(json.dumps(value)), lambda: decision)
+`,
+        new URL("./", import.meta.url).pathname,
+        content,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(transaction.status, 0, transaction.stderr);
+    assert.equal(await (await fetch(origin)).text(), "first");
+    assert.equal(
+      await (await fetch(`${origin}/product.html`)).text(),
+      "product first",
+    );
+    const receipt = await (
+      await fetch(`${origin}/website-revision.txt`)
+    ).text();
+    assert.match(receipt.trim(), /^[0-9a-f]{39}1-[0-9a-f]{64}$/);
+    assert.equal((await fetch(`${origin}/.state.json`)).status, 404);
+    for (const path of ["update.json", "download.json"]) {
+      const response = await fetch(`${origin}/releases/current/${path}`);
+      assert.equal((await response.json()).version, "1.2.3");
+    }
+    assert.equal(await (await fetch(artifact)).text(), "Situate fixture");
   },
 );
 

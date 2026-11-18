@@ -4,7 +4,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
-import { createPreviewServer } from "../site.mjs";
+import { createBuildServer, createPreviewServer } from "../site.mjs";
 import { renderLegalPage } from "./render.mjs";
 
 const require = createRequire(import.meta.url);
@@ -52,7 +52,9 @@ assert.throws(
   () => renderLegalPage(unsafe, { ...shared, title: "Title" }),
   /Unsupported link/,
 );
-const server = createPreviewServer({ legalDirectory: content });
+const server = process.env.WEBSITE_BUILD
+  ? createBuildServer(process.env.WEBSITE_BUILD)
+  : createPreviewServer({ legalDirectory: content });
 server.listen(0, "127.0.0.1");
 await once(server, "listening");
 const origin = `http://127.0.0.1:${server.address().port}`;
@@ -61,7 +63,7 @@ let browser;
 try {
   browser = await chromium.launch({
     headless: true,
-    channel: process.env.WEBSITE_BROWSER_CHANNEL || "chrome",
+    channel: (process.env.WEBSITE_BROWSER_CHANNEL ?? "chrome") || undefined,
   });
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
@@ -235,4 +237,5 @@ try {
 } finally {
   await browser?.close();
   server.close();
+  server.closeAllConnections();
 }

@@ -10,6 +10,7 @@ const read = (name) =>
   );
 const names = [
   "verify",
+  "deploy-website",
   "release-macos",
   "publish-macos",
   "dependency-monitoring",
@@ -48,6 +49,9 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
           ]
         : []),
+      ...(name === "deploy-website"
+        ? ["actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"]
+        : []),
       ...(name === "verify"
         ? [
             "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
@@ -64,7 +68,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     for (const match of workflow.matchAll(/run: ([^\n]+)/g))
       assert.match(
         match[1],
-        /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
+        /^(?:(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/website_content\.py deploy website\/dist "\$GITHUB_SHA" "\$GITHUB_RUN_NUMBER")$/,
       );
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow

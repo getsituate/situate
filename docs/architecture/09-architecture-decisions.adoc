@@ -41,6 +41,9 @@
 |link:09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018]
 |Versionless changelog declarations for client changes and localized release assembly.
 |Accepted; CI validates declarations and release assembly collects them.
+|link:09-architecture-decisions/ADR-0019-publish-website-content-separately.adoc[ADR-0019]
+|Publish checked static website content from protected main without changing app publication.
+|Accepted; production activation is separate.
 |===
 
 :architecture-repository-root: ../..
@@ -71,6 +74,8 @@ include::09-architecture-decisions/ADR-0016-append-conversation-history.adoc[lev
 include::09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0019-publish-website-content-separately.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:
