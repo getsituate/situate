@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "qualification-first-launch-confirmation",
+  "behaviorDigest": "2692c859b8053744735b5cbdc5b15696659025e7553eda02616b63baac202a0f",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "macOS release qualification automation.",
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "3b67628e1c39bf4b71ca837f8256914e316b2696fed8add9abcbc7b9b49283a8",
+      "translationHash": "56d860913a9875dc29be8268111b655893ddf46b58dd1cc699a3e3f56bf03b9a"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "3b67628e1c39bf4b71ca837f8256914e316b2696fed8add9abcbc7b9b49283a8"
+  }
+}
