@@ -49,8 +49,10 @@ const failure =
   /Private launch trace transfer failed; inspect retained evidence/;
 
 function fixture(t) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "launch-trace-test-")));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "launch-trace-test-")));
+  const root = join(home, "release");
+  mkdirSync(root, { mode: 0o700 });
+  t.after(() => rmSync(home, { recursive: true, force: true }));
   writeFileSync(join(root, "release.lock"), "synthetic lock", { mode: 0o600 });
   const journal = join(root, "release-operations.jsonl");
   const claim = { identity, state: "claimed" };
@@ -79,7 +81,7 @@ function fixture(t) {
   };
   const environment = {
     PATH: process.env.PATH,
-    HOME: root,
+    HOME: home,
     LANG: "C",
     SSH_AUTH_SOCK: "/synthetic/agent",
     GH_TOKEN: "synthetic-private",
@@ -101,7 +103,7 @@ function fixture(t) {
         payload,
       ]),
       encoding: "utf8",
-      env: { PATH: process.env.PATH, HOME: root, LANG: "C" },
+      env: { PATH: process.env.PATH, HOME: home, LANG: "C" },
       timeout: 10000,
     });
   const request = (overrides = {}) => ({
@@ -464,7 +466,7 @@ test("symlinked ancestors, unsafe permissions and unowned storage are rejected w
   const f = fixture(t);
   const alias = `${f.root}-alias`;
   symlinkSync(f.root, alias);
-  t.after(() => rmSync(alias));
+  t.after(() => rmSync(alias, { force: true }));
   rejectHost(
     f.direct(f.request(), bytes, (code) =>
       code.replace(
