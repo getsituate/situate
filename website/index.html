@@ -61,14 +61,11 @@
                 >{{hero.secondary}} <span aria-hidden="true">↗</span></a
               >
             </div>
-            <a class="hero-facts" href="/product.html">
-              <ul role="list">
-                <li>{{hero.fact.free}}</li>
-                <li>{{hero.fact.ai}}</li>
-                <li>{{hero.fact.files}}</li>
-              </ul>
-              <span aria-hidden="true">↗</span>
-            </a>
+            <ul class="hero-facts" role="list">
+              <li><a href="{{site.repositoryUrl}}">{{hero.fact.free}}</a></li>
+              <li>{{hero.fact.ai}}</li>
+              <li>{{hero.fact.files}}</li>
+            </ul>
           </div>
           <div class="hero-stage" data-motion-scene>
             <div class="hero-sheet sheet-back" aria-hidden="true"></div>

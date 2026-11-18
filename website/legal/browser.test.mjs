@@ -100,7 +100,12 @@ try {
           .locator('.header nav:visible a[href="/product.html"]')
           .isVisible(),
       );
-      assert.equal(await page.locator(".header nav:visible a").count(), 2);
+      assert.equal(
+        await page
+          .getByRole("link", { name: "GitHub", exact: true })
+          .getAttribute("href"),
+        "https://github.com/getsituate/situate",
+      );
       assert.equal(
         await page.locator(".header [aria-current=page]").count(),
         0,

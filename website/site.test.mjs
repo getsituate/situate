@@ -272,7 +272,20 @@ test("all pages share navigation and footer in preview and static output", async
         }),
       ),
     );
-    assert.ok(content.includes(renderFooter(messages, { pathname: route })));
+    const footer = renderFooter(messages, { pathname: route });
+    assert.ok(content.includes(footer));
+    for (const [path, label] of [
+      ["", "Source code"],
+      ["/issues", "Report an issue"],
+      ["#contributing", "How to contribute"],
+      ["/blob/main/LICENSING.md", "Licensing and reuse"],
+    ]) {
+      assert.ok(
+        footer.includes(
+          `href="https://github.com/getsituate/situate${path}">${label}</a>`,
+        ),
+      );
+    }
     assert.equal([...content.matchAll(/<footer\b/g)].length, 1);
     assert.equal([...content.matchAll(/<header class="header"/g)].length, 1);
     assert.doesNotMatch(content, /class="motion(?:-dock)?"/);
@@ -605,8 +618,11 @@ test("landing introduces AI help, an example, setup and costs", async () => {
   ])
     assert.ok(hero.includes(render("{{copy}}", { copy: messages[key] })), key);
   assert.match(hero, /notes, tasks and documents in one free app/);
-  assert.match(hero, /Free app\. No limits\./);
-  assert.match(hero, /<a class="hero-facts" href="\/product.html">/);
+  assert.ok(
+    hero.includes(
+      'href="https://github.com/getsituate/situate">Free and open source.</a>',
+    ),
+  );
   assert.equal([...hero.matchAll(/<p\b/g)].length, 1);
   assert.doesNotMatch(hero, /class="eyebrow"|class="hero-lead"|unlimited AI/);
   assert.match(hero, /<a class="button" href="#story"/);
@@ -672,6 +688,7 @@ test("header separates page navigation from the download action", async () => {
   assert.deepEqual(menuLinks, [
     { href: "/", key: "nav.index" },
     { href: "/product.html", key: "nav.product" },
+    { href: "https://github.com/getsituate/situate", key: "nav.github" },
   ]);
   for (const pathname of ["/", "/product.html", "/privacy.html"]) {
     const header = renderHeader(messages, { home: pathname === "/", pathname });
@@ -682,7 +699,11 @@ test("header separates page navigation from the download action", async () => {
     for (const nav of navs) {
       assert.match(nav, /<ul class="site-links"><li><a href="\/"/);
       assert.match(nav, />Home<\/a><\/li><li><a href="\/product.html"/);
-      assert.match(nav, />Product<\/a><\/li><\/ul>/);
+      assert.ok(
+        nav.includes(
+          '<a href="https://github.com/getsituate/situate">GitHub</a>',
+        ),
+      );
       for (const { href } of menuLinks) {
         assert.equal(
           nav.includes(`href="${href}" aria-current="page"`),
@@ -779,8 +800,13 @@ test("product chapters explain adaptation, help, independence and getting starte
       copy,
     );
   assert.match(independence, /Markdown files/);
-  assert.match(independence, /no export required/);
-  assert.match(independence, /<h3>Open your files/);
+  assert.match(independence, /without exporting anything/);
+  assert.match(independence, /<h3>Open your notes/);
+  assert.match(independence, /<h3>See how Situate works\./);
+  assert.match(
+    independence,
+    /href="https:\/\/github\.com\/getsituate\/situate"\s*>View source on GitHub/,
+  );
   assert.match(html, /Start with the built-in tools/);
   assert.match(html, /The entire app is free/);
   assert.match(html, /Your chosen AI provider may charge for usage/);

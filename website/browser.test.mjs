@@ -78,17 +78,28 @@ async function inspect(page, route) {
   checks += 1;
 }
 
+async function followSourceLink(page) {
+  const destination = "https://github.com/getsituate/situate";
+  await page.route(destination, (route) =>
+    route.fulfill({ contentType: "text/html", body: "" }),
+  );
+  await page.locator(".hero-facts a").press("Enter");
+  await page.waitForURL(destination);
+  await page.goBack();
+  await page.waitForURL(origin + "/");
+}
+
 async function inspectHero(page) {
   assert.equal(await page.locator(".hero-copy > p").count(), 1);
   assert.equal(await page.locator(".hero .eyebrow, .hero-lead").count(), 0);
   assert.deepEqual(await page.locator(".hero-facts li").allTextContents(), [
-    "Free app. No limits.",
+    "Free and open source.",
     "Bring your own AI.",
     "Your files stay yours.",
   ]);
   assert.equal(
-    await page.locator(".hero-facts").getAttribute("href"),
-    "/product.html",
+    await page.locator(".hero-facts a").getAttribute("href"),
+    "https://github.com/getsituate/situate",
   );
   assert.match(
     await page.locator(".hero-product").innerText(),
@@ -230,10 +241,12 @@ async function inspectNavigation(page, size, delayMobileChange = false) {
   assert.deepEqual(await page.locator(".desktop-nav a").allTextContents(), [
     "Home",
     "Product",
+    "GitHub",
   ]);
   assert.deepEqual(await links.locator("a").allTextContents(), [
     "Home",
     "Product",
+    "GitHub",
   ]);
   assert.equal(
     await page.locator('.desktop-nav a[href="/"]').getAttribute("aria-current"),
@@ -268,7 +281,7 @@ async function inspectNavigation(page, size, delayMobileChange = false) {
   const panel = await links.boundingBox();
   assert.equal(panel.x, 0);
   assert.equal(panel.width, size.width);
-  assert.ok(panel.height >= 96 && panel.height <= 128);
+  assert.ok(panel.height >= 144 && panel.height <= 176);
   assert.ok(panel.y + panel.height <= size.height);
   const typography = await links.locator("a").evaluateAll((anchors) =>
     anchors.map((anchor) => ({
@@ -356,7 +369,7 @@ async function inspectNavigation(page, size, delayMobileChange = false) {
 }
 
 async function inspectNavigationGrowth() {
-  const labels = ["Home", "Product", "Guides", "Blog", "About"];
+  const labels = ["Home", "Product", "GitHub", "Guides", "About"];
   for (const size of [
     { width: 1440, height: 900 },
     { width: 1024, height: 768 },
@@ -384,7 +397,7 @@ async function inspectNavigationGrowth() {
       await page.goto(origin + "/product.html");
       await page.evaluate((labels) => {
         for (const list of document.querySelectorAll(".site-links")) {
-          for (const label of labels.slice(2)) {
+          for (const label of labels.slice(list.children.length)) {
             const item = list.firstElementChild.cloneNode(true);
             const link = item.querySelector("a");
             link.textContent = label;
@@ -717,11 +730,7 @@ try {
     const page = await context.newPage();
     await page.goto(`${origin}/`);
     await inspectHero(page);
-    await page.locator(".hero-facts").focus();
-    await page.keyboard.press("Enter");
-    await page.waitForURL(`${origin}/product.html`);
-    await page.goBack();
-    await page.waitForURL(`${origin}/`);
+    await followSourceLink(page);
     await page.locator(".overview").screenshot({
       path: join(proofs, `landing-benefits-${width}.png`),
     });
@@ -1004,11 +1013,7 @@ try {
     await inspect(page, `no-js/landing`);
     await inspectMotion(page);
     await inspectHero(page);
-    await page.locator(".hero-facts").focus();
-    await page.keyboard.press("Enter");
-    await page.waitForURL(origin + "/product.html");
-    await page.goBack();
-    await page.waitForURL(origin + "/");
+    await followSourceLink(page);
     await page.locator(".mobile-menu summary").focus();
     await page.keyboard.press("Space");
     assert.equal(
