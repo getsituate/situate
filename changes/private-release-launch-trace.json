@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "private-release-launch-trace",
-  "behaviorDigest": "705f2cf3824ef6db2d479eb64165196454e117cdb2bb6adf35c7918719e12cd8",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Private release launch diagnostics.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "8a0330a7ad4e06ee83af321f49e6e6cfa342117d660a28605e866fd5320ddf9b",
-      "translationHash": "f1f8918a7310b028f90ca036a835610e97fe4f33a7ca1340d4234179afa512c5"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "8a0330a7ad4e06ee83af321f49e6e6cfa342117d660a28605e866fd5320ddf9b"
-  }
+  "emptyReason": "Private release launch diagnostics."
 }

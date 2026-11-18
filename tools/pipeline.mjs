@@ -73,7 +73,7 @@ export async function validateDeclarations(root, { source, base, heads }) {
     "Declaration review requires unique exact branch heads",
   );
   const { validateFragmentRange } = await import("./change-fragments.mjs");
-  const approved = new Map();
+  const branchFragments = new Map();
   const reviewed = [];
   for (const head of heads) {
     const ancestor = git(root, ["merge-base", base, head]);
@@ -84,10 +84,10 @@ export async function validateDeclarations(root, { source, base, heads }) {
     });
     for (const { id, sha256 } of fragments) {
       assert(
-        !approved.has(id) || approved.get(id) === sha256,
+        !branchFragments.has(id) || branchFragments.get(id) === sha256,
         "Branch declarations collide",
       );
-      approved.set(id, sha256);
+      branchFragments.set(id, sha256);
     }
     reviewed.push({ source: head, base: ancestor });
   }
@@ -96,18 +96,17 @@ export async function validateDeclarations(root, { source, base, heads }) {
     base: integratedBase,
     head: source,
     requireNew: integratedBase !== source,
-    checkBehavior: false,
   });
   const fragments = integrated
     .map(({ id, sha256 }) => ({ id, sha256 }))
     .sort((left, right) => left.id.localeCompare(right.id));
-  const expected = [...approved]
+  const expected = [...branchFragments]
     .map(([id, sha256]) => ({ id, sha256 }))
     .sort((left, right) => left.id.localeCompare(right.id));
   assert.deepEqual(
     fragments,
     expected,
-    "Integrated declarations differ from approved branch inputs",
+    "Integrated declarations differ from branch inputs",
   );
   return {
     ...(heads.length === 1 ? { head: heads[0] } : {}),

@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "native-compiler-capacity",
-  "behaviorDigest": "9bfc2fdcf983b267ae7e6a05757e5ca0cb97fb391811b40e3a4b4cf352746988",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Native CI compiler scheduling maintenance.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "82b88b70ee6f6c9aa01dbbe79aa32f86f18dfcf2f4b871d1dd7b67c4dc8d91cd",
-      "translationHash": "2eb05cd66467e54aca0ae1f20955ae67667ac3781d173c506c04e1327d9a3731"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "82b88b70ee6f6c9aa01dbbe79aa32f86f18dfcf2f4b871d1dd7b67c4dc8d91cd"
-  }
+  "emptyReason": "Native CI compiler scheduling maintenance."
 }

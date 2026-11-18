@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "qualification-launch-streams",
-  "behaviorDigest": "99218ab6aa5a721d5f7596cf510f2e0381bad8627346812eb31407621fc9f315",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Native package qualification process isolation.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "3496851d6da25bd12d4fd74750bb96fdd60014a051f6ac5bdd9ecace2aaa7f95",
-      "translationHash": "bdc3aa0cf399af7bcd4a85e6785b173f1d6c29c16b4d4b4d6042218b452f2f54"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "3496851d6da25bd12d4fd74750bb96fdd60014a051f6ac5bdd9ecace2aaa7f95"
-  }
+  "emptyReason": "Native package qualification process isolation."
 }

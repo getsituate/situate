@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "simplify-changelog-declarations",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Changelog authoring and validation only; no user-facing changes."
+}
