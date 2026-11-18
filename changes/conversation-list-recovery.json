@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "conversation-list-recovery",
-  "behaviorDigest": "cd55c232a8eaf2f0e20bb9aa2af80a89e0180b3b855da829ce1a43fde1b015af",
   "locales": {
     "en": {
       "title": "Changes",
@@ -31,15 +30,5 @@
         }
       ]
     }
-  },
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "9909762de84fcb20f599da0e8e37765ee1ce18952ce59735e21601175f045759",
-      "translationHash": "b9ad1056f97823a7b102bc729c6e4651067eb355ba9a6184ee7ec3a13922fd45"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "9909762de84fcb20f599da0e8e37765ee1ce18952ce59735e21601175f045759"
   }
 }
