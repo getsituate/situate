@@ -407,6 +407,7 @@ const chatScroll = useChatScroll(
     scrollTop = top;
     publishPresentation();
   },
+  () => void chat.value?.loadOlder(),
 );
 const captureScroll = chatScroll.capture;
 function scrollToEnd() {
@@ -663,9 +664,6 @@ defineExpose({
                 :key="`${workspaceScope}:${conversationId ?? ''}`"
                 :messages="chat.state.transcript"
                 :message-offset="chat.state.messageOffset"
-                :history-before="chat.state.historyBefore"
-                :history-loading="chat.state.historyLoading"
-                @load-older="chat.loadOlder()"
                 @preview="questionPreview = $event"
                 :questions="questions"
                 :notices="chat.state.pluginNotices"

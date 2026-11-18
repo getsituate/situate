@@ -6,6 +6,7 @@ export function useChatScroll(
   visible: Readonly<Ref<boolean>>,
   initialTop: number | undefined,
   changed: (top: number) => void,
+  loadOlder?: () => void,
 ) {
   const awayFromEnd = ref(false);
   let initialized = false;
@@ -82,12 +83,14 @@ export function useChatScroll(
       resize();
       return;
     }
+    const movingUp = element.scrollTop < top;
     if (element.scrollTop !== top) {
       restoreTop = undefined;
       following =
         element.scrollHeight - element.clientHeight - element.scrollTop <= 48;
     }
     remember();
+    if (movingUp && element.scrollTop <= 160) loadOlder?.();
   }
   function follow() {
     restoreTop = undefined;
@@ -107,6 +110,14 @@ export function useChatScroll(
     if (event.deltaY < 0) {
       restoreTop = undefined;
       following = false;
+      const element = viewport.value;
+      if (
+        initialized &&
+        visible.value &&
+        element?.clientHeight &&
+        element.scrollTop <= 160
+      )
+        loadOlder?.();
     }
   }
 

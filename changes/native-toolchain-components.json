@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "native-toolchain-components",
-  "behaviorDigest": "076e7aa9a1f65afa2b7f907bd6c2ae366f4363b7611998eee8c70bb14449bed6",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Pinned Rust toolchain component preparation.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "d161fa66329cff1427b6ff44df5cca144583a5bf2a1345be72ead311faea9195",
-      "translationHash": "502271de7cbc33245767e658398c34de36542c3e6432d72f02563777a098df1d"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "d161fa66329cff1427b6ff44df5cca144583a5bf2a1345be72ead311faea9195"
-  }
+  "emptyReason": "Pinned Rust toolchain component preparation."
 }

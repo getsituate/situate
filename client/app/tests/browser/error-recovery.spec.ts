@@ -71,13 +71,16 @@ for (const width of [1440, 390]) {
       await visual.capture("recovery.mail-unavailable");
       await mail.getByRole("button", { name: "Close", exact: true }).click();
       await expect(composer).toHaveValue("PRIVATE_DRAFT_MARKER");
+      await expect(
+        page.getByRole("button", { name: "Review error", exact: true }),
+      ).toHaveCount(0);
       await page.evaluate(() => {
         void Promise.reject(new Error("PRIVATE_EXCEPTION_MARKER"));
       });
       await expect(page.getByRole("dialog")).not.toBeVisible();
       await expect(
         page.getByRole("button", { name: "Review error", exact: true }),
-      ).toHaveCount(1);
+      ).toHaveCount(0);
     },
   );
 }

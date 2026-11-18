@@ -7,12 +7,6 @@ import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { canonical, digest } from "./release-catalog.mjs";
 import {
-  approveSource,
-  acceptTranslation,
-  behaviorDigest,
-  fragmentHashes,
-} from "./change-fragments.mjs";
-import {
   assembleReleaseInputs,
   verifyReleaseInputs,
   writeReleaseInputs,
@@ -55,10 +49,9 @@ function repository(t) {
       title: `Title ${id}`,
       paragraphs: ["Recent files open in the selected pane."],
     };
-    let fragment = {
-      schemaVersion: 1,
+    const fragment = {
+      schemaVersion: 2,
       id,
-      behaviorDigest: behaviorDigest(root, git("rev-parse", "HEAD")),
       locales: {
         en: { title: "Changes", entries: empty ? [] : [entry] },
         de: {
@@ -67,21 +60,7 @@ function repository(t) {
         },
       },
       ...(empty ? { emptyReason: "PRIVATE INTERNAL REASON" } : {}),
-      translationApprovals: {},
     };
-    const options = { locales: ["en", "de"] };
-    fragment = approveSource(
-      fragment,
-      fragmentHashes(fragment).sourceHash,
-      options,
-    );
-    fragment = acceptTranslation(
-      fragment,
-      "de",
-      fragment.locales.de,
-      fragmentHashes(fragment).translations.de,
-      options,
-    );
     write(`changes/${id}.json`, JSON.stringify(fragment));
     return commit();
   };

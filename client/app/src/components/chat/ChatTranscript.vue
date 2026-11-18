@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { ActiveWorkBlock, WorkBlock } from "../../ai/work-blocks";
 import { computed } from "vue";
-import { SituateButton } from "@situate/ui";
 import { t } from "@situate/localization";
 import type { AgentMessage } from "../../ai/contracts";
 import type { PluginNotice } from "../../ai/plugin-notices";
@@ -14,8 +13,6 @@ import ChatSystemAnnouncement from "./ChatSystemAnnouncement.vue";
 const props = defineProps<{
   messages: AgentMessage[];
   messageOffset?: number;
-  historyBefore?: string | null;
-  historyLoading?: boolean;
   workBlocks?: WorkBlock[];
   activeWork?: ActiveWorkBlock;
   workError?: unknown;
@@ -27,7 +24,6 @@ const props = defineProps<{
   announcement?: PluginNotice;
 }>();
 const emit = defineEmits<{
-  loadOlder: [];
   preview: [preview: NonNullable<RetainedQuestion["preview"]>];
 }>();
 const blocks = computed(() =>
@@ -45,20 +41,6 @@ const blocks = computed(() =>
 );
 </script>
 <template>
-  <SituateButton
-    v-if="historyBefore"
-    variant="ghost"
-    :disabled="historyLoading"
-    data-chat-disclosure
-    @click="emit('loadOlder')"
-    >{{
-      t(
-        historyLoading
-          ? "chat.loadingEarlierMessages"
-          : "chat.loadEarlierMessages",
-      )
-    }}</SituateButton
-  >
   <div
     v-if="blocks.length"
     class="messages"

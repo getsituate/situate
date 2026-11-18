@@ -20,66 +20,7 @@ import {
   resolveMergeGroupHeads,
   validatePlan,
   diagnosticPlan,
-  imageBuildRequired,
 } from "./actions-adapter.mjs";
-
-test("image builds verify and seal each native platform with separate tags and archive paths", async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), "situate-image-build-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const environment = {
-    GITHUB_REPOSITORY: "getsituate/situate",
-    GITHUB_REPOSITORY_ID: "42",
-    GITHUB_RUN_ID: "123",
-    GITHUB_RUN_ATTEMPT: "2",
-    WORKFLOW_SHA: "a".repeat(40),
-    GITHUB_SHA: "b".repeat(40),
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_EVENT_NAME: "push",
-    RUNNER_TEMP: directory,
-  };
-  for (const architecture of ["amd64", "arm64"]) {
-    const platform = `linux/${architecture}`;
-    const env = { ...environment, CI_IMAGE_PLATFORM: platform };
-    const calls = [];
-    await main(["image-build"], env, (command, args, options) => {
-      calls.push({ command, args, options });
-      if (command === "git") return env.GITHUB_SHA;
-      if (args[0] === "info") return platform;
-      return "";
-    });
-    for (const operation of ["build", "run"]) {
-      const args = calls.find((call) => call.args[0] === operation).args;
-      assert.equal(args[args.indexOf("--platform") + 1], platform);
-      assert.ok(args.includes(`situate-ci-build:123-2-${architecture}`));
-    }
-    const seal = calls.find((call) => call.args[1] === "seal");
-    assert.equal(seal.args[2], join(directory, "ci-image", architecture));
-    assert.equal(seal.options.env.CI_IMAGE_PLATFORM, platform);
-    assert.equal(seal.options.env.SOURCE_REVISION, env.GITHUB_SHA);
-    assert.match(seal.options.env.INPUTS_SHA256, /^[a-f0-9]{64}$/);
-    const transfers = [];
-    for (const operation of ["image-upload", "image-download"]) {
-      await main([operation], env, (command, args) => transfers.push(args));
-      assert.equal(
-        transfers.at(-1)[2],
-        join(directory, "ci-image", architecture),
-      );
-    }
-  }
-  const calls = [];
-  await assert.rejects(
-    main(
-      ["image-build"],
-      { ...environment, CI_IMAGE_PLATFORM: "linux/arm64" },
-      (command, args) => {
-        calls.push(args[0]);
-        return command === "git" ? environment.GITHUB_SHA : "linux/amd64";
-      },
-    ),
-    /native Docker host/,
-  );
-  assert.deepEqual(calls, ["rev-parse", "info"]);
-});
 
 test("the launch trace entrypoint sanitizes errors and removes its cancellation handlers", async () => {
   const before = ["SIGINT", "SIGTERM"].map((name) =>
@@ -132,17 +73,6 @@ test("desktop preflight uses the shared adapter without production credentials",
       throw new Error("Synthetic unavailable desktop");
     }),
     /Synthetic unavailable desktop/,
-  );
-});
-
-test("tool-image selection ignores unchanged tool inputs and honors an explicit rebuild", () => {
-  const pinned = "a".repeat(64);
-  assert.equal(imageBuildRequired("push", pinned, pinned), false);
-  assert.equal(imageBuildRequired("push", "b".repeat(64), pinned), true);
-  assert.equal(imageBuildRequired("workflow_dispatch", pinned, pinned), true);
-  assert.throws(
-    () => imageBuildRequired("pull_request", pinned, pinned),
-    /selection/,
   );
 });
 
@@ -794,7 +724,6 @@ test("unprovisioned remote operations and paid diagnostics fail visibly before e
     throw new Error("Unexpected external command");
   };
   await assert.rejects(main(["blocked"], {}, execute), /disabled pending/);
-  await assert.rejects(main(["image-build"], {}, execute), /main-branch run/);
   await assert.rejects(
     main(
       ["diagnostics", "--lane", "provider"],

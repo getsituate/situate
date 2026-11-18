@@ -241,7 +241,7 @@ impl<H: Host> Owner<H> {
                         .map(|run| run.id.clone()),
                     message_entry_ids,
                     selected_entry_id: context.metadata.selected_entry_id.clone(),
-                    history_before: context.entries.first().map(|entry| entry.id.clone()),
+                    history_before: context.next_before.clone(),
                     message_offset: context.message_offset,
                     event_offset: context.event_offset,
                     has_history: context.metadata.message_count > 0,

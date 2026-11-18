@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "automatic-earlier-messages",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "automatic-earlier-messages",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Scroll to earlier messages",
+          "paragraphs": [
+            "Older messages now load automatically when you scroll up, keeping your reading position in place. New conversations no longer incorrectly indicate that earlier messages are available."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "automatic-earlier-messages",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Zu älteren Nachrichten scrollen",
+          "paragraphs": [
+            "Ältere Nachrichten werden jetzt beim Hochscrollen automatisch geladen. Die Leseposition bleibt dabei erhalten. Neue Unterhaltungen zeigen nicht mehr fälschlich an, dass ältere Nachrichten verfügbar sind."
+          ]
+        }
+      ]
+    }
+  }
+}

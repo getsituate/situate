@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "manual-license-notices",
-  "behaviorDigest": "3db5bae597cdde8e61a3c18c39cf77753063ba70c9b18615f6848dd3c346fd82",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Replaces build-time license collection with manually maintained bundled notices.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "32c678be5ab11d605f9c8591cec3d0725f0db1fdc0116f697496880d77ef958d",
-      "translationHash": "0d46d11ecc415762ae13265943e3a9ea797a180612a8ca172b5660f4b2d5cdef"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "32c678be5ab11d605f9c8591cec3d0725f0db1fdc0116f697496880d77ef958d"
-  }
+  "emptyReason": "Replaces build-time license collection with manually maintained bundled notices."
 }

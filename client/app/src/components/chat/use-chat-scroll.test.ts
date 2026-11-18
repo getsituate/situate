@@ -49,10 +49,18 @@ async function view(
   const content = shallowRef<HTMLElement | null>(null);
   const visible = ref(true);
   const changed = vi.fn();
+  const loadOlder = vi.fn();
   let control!: ReturnType<typeof useChatScroll>;
   const wrapper = mount({
     setup() {
-      control = useChatScroll(viewport, content, visible, initialTop, changed);
+      control = useChatScroll(
+        viewport,
+        content,
+        visible,
+        initialTop,
+        changed,
+        loadOlder,
+      );
       return () => null;
     },
   });
@@ -115,10 +123,45 @@ async function view(
     dimensions,
     visible,
     changed,
+    loadOlder,
     move,
     body,
   };
 }
+
+test("approaching the top loads history only while scrolling upward", async () => {
+  const chat = await view();
+  expect(chat.loadOlder).not.toHaveBeenCalled();
+  chat.move(300);
+  expect(chat.loadOlder).not.toHaveBeenCalled();
+  chat.move(150);
+  expect(chat.loadOlder).toHaveBeenCalledTimes(1);
+  chat.move(155);
+  resize();
+  expect(chat.loadOlder).toHaveBeenCalledTimes(1);
+});
+
+test("upward wheel input at the top loads history even when the page is short", async () => {
+  const chat = await view(undefined, 200);
+  expect(chat.loadOlder).not.toHaveBeenCalled();
+  chat.control.wheel(new WheelEvent("wheel", { deltaY: 120 }));
+  expect(chat.loadOlder).not.toHaveBeenCalled();
+  chat.control.wheel(new WheelEvent("wheel", { deltaY: -120 }));
+  expect(chat.loadOlder).toHaveBeenCalledTimes(1);
+  chat.visible.value = false;
+  chat.control.wheel(new WheelEvent("wheel", { deltaY: -120 }));
+  expect(chat.loadOlder).toHaveBeenCalledTimes(1);
+});
+
+test("prepending a page keeps the visible message at its previous position", async () => {
+  const chat = await view();
+  chat.move(100);
+  chat.dimensions.anchorTop += 600;
+  chat.dimensions.contentHeight += 600;
+  resize();
+  expect(chat.element.scrollTop).toBe(700);
+  expect(chat.loadOlder).toHaveBeenCalledTimes(1);
+});
 
 test("a new view starts at the end and follows growth beyond the old end range", async () => {
   const chat = await view();
