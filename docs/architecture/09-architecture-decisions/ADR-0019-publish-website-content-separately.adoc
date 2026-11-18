@@ -1,0 +1,31 @@
+[[adr-0019]]
+= ADR-0019: Publish website content independently of app releases
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-18
+Implementation:: Workflow and receiver are in the repository; production provisioning and activation are separate.
+
+== Context
+
+Reviewed website changes should go live after merge without a second routine approval.
+The public site and app feeds share Nginx, but a website rollback must not rewind the app feed under link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068].
+
+== Decision
+
+Keep Caddy and Nginx on the existing host. Publish the checked static build from protected `main` through a dedicated content-only SSH receiver.
+The receiver can write only the website content directory. Nginx reads that directory and the independently managed app distribution directory through separate read-only mounts.
+
+Automating the full service deploy would make the workflow a Docker operator and couple ordinary edits to runtime changes.
+A separate hosting platform would avoid that access but add another origin and a routing change for the existing app feed.
+The content-only path keeps the same public origin and does not require a public staging site.
+
+== Consequences
+
+Website revisions switch without restarting Nginx. A failed content check can restore the previous revision without touching app publication.
+Operators must provision the receiver and its credentials, retain the previous version, and reconcile an interrupted switch before another publish.
+See the link:{architecture-repository-root}/infrastructure/production/README.md#automated-website-content-publication[production runbook].
