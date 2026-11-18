@@ -481,9 +481,14 @@ export function createFinalArtifactQualificationHost(
     }
     throw new Error(`Native qualification timed out: ${description}`);
   }
-  async function launch(start = true, previousPid) {
+  async function launch(start = true, previousPid, confirmFirstLaunch = false) {
     launchPending = true;
-    if (start) await execute("open", ["-n", app], options);
+    if (start)
+      await execute(
+        "open",
+        ["-n", app],
+        confirmFirstLaunch ? { ...options, confirmFirstLaunch } : options,
+      );
     await waitFor(async () => {
       const output = await execute(
         "osascript",
@@ -603,7 +608,11 @@ export function createFinalArtifactQualificationHost(
     );
     await execute("spctl", ["--assess", "--type", "execute", app], options);
     await execute("xcrun", ["stapler", "validate", app], options);
-    await launch();
+    await launch(
+      true,
+      undefined,
+      configuration.account.mode === "ephemeral-host",
+    );
   }
   async function actions(items) {
     for (const original of items) {

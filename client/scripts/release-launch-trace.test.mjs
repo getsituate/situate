@@ -88,6 +88,7 @@ test("raw launch observations remain in private storage and cannot become produc
   });
   const pending = execute("open", ["-n", "/synthetic/Situate.app"], {
     env: { PATH: "/synthetic" },
+    confirmFirstLaunch: true,
   });
   t.mock.timers.tick(4000);
   await new Promise((resolve) => {
