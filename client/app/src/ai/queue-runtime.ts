@@ -1,6 +1,9 @@
 import type { AgentMessage } from "./contracts";
-import { mergeReferences, type ContentReference } from "./content-references";
-export type { ContentReference } from "./content-references";
+import {
+  mergeReferences,
+  type ContentReference,
+} from "../files/content-reference";
+export type { ContentReference } from "../files/content-reference";
 
 export interface AttachmentRef {
   id: string;

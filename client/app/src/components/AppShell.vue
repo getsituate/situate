@@ -26,7 +26,7 @@ import {
   workspaceChat,
   discardUnsentChat,
 } from "../ai/chat";
-import { captureReference } from "../ai/content-references";
+import { captureReference } from "../files/reference-operations";
 import AppSidebar from "./AppSidebar.vue";
 import ErrorActions from "../errors/ErrorActions.vue";
 const PluginManagement = defineAsyncComponent(

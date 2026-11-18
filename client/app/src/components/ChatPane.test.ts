@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { shallowReactive } from "vue";
 import type { ChatState } from "../ai/chat";
-import type { ContentReference } from "../ai/content-references";
+import type { ContentReference } from "../files/content-reference";
 import ChatPane from "./ChatPane.vue";
 import { onboardingSession, retainOnboarding } from "../onboarding/session";
 import { newOnboardingRecord } from "../onboarding/types";

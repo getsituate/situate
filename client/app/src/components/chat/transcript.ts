@@ -1,5 +1,5 @@
 import type { ActiveWorkBlock, WorkBlock } from "../../ai/work-blocks";
-import { validReferencePath } from "../../ai/content-references";
+import { validReferencePath } from "../../files/content-reference";
 import type { RetainedQuestion } from "../../ai/question";
 import type { PluginNotice } from "../../ai/plugin-notices";
 import type {

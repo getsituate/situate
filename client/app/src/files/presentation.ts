@@ -1,8 +1,5 @@
 import type { PresentationValue } from "../layout/navigation";
-import {
-  validReference,
-  type ContentReference,
-} from "../ai/content-references";
+import { validReference, type ContentReference } from "./content-reference";
 
 export interface FilePaneTarget {
   contentId?: string;

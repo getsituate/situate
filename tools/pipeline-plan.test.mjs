@@ -70,6 +70,11 @@ test("app consumers and native harnesses have explicit host assignments", () => 
   const frontend = planPaths(["client/app/src/App.vue"]);
   assert.equal(frontend.appImpact, true);
   assert.ok(suites(frontend).includes("client-vue"));
+  assert.ok(
+    frontend.lanes
+      .find((lane) => lane.id === "frontend")
+      .suites.includes("client-architecture"),
+  );
   assert.equal(
     frontend.lanes.find((lane) => lane.id === "browser").host,
     "linux",
@@ -100,6 +105,7 @@ test("release source gates are complete, unique and exclude diagnostics and advi
     "root-rust",
     "root-secrets",
     "client-types",
+    "client-architecture",
   ])
     assert.ok(ids.includes(id), id);
   for (const id of [

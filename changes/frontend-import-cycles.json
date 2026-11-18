@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "frontend-import-cycles",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Frontend dependency checks and internal refactoring only; no user-facing changes."
+}

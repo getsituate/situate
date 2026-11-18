@@ -64,7 +64,7 @@ const families = [
     ["client-docker-context", "design-website-hosting"],
     "host-docker",
   ],
-  ["frontend", "linux", ["client-vue", "client-types"]],
+  ["frontend", "linux", ["client-vue", "client-types", "client-architecture"]],
   [
     "rust",
     "linux",

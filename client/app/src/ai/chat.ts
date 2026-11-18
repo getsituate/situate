@@ -21,7 +21,7 @@ import {
   referenceKey,
   validReference,
   type ContentReference,
-} from "./content-references";
+} from "../files/content-reference";
 import {
   emptyRuntime,
   type AttachmentRef,
@@ -51,9 +51,10 @@ import {
   type ConversationInput,
   type ConversationAction,
 } from "./native-conversation";
-import { ownsDictation, type Notice } from "../dictation/runtime";
+import { ownsDictation } from "../dictation/runtime";
+import type { DictationDraft } from "../dictation/draft";
 
-export interface ChatState {
+export interface ChatState extends DictationDraft {
   questions: RetainedQuestion[];
   questionBusy: boolean;
   questionAnnouncement?: { id: string; prompt: string };
@@ -63,14 +64,6 @@ export interface ChatState {
   pluginNotices?: PluginNotice[];
   pluginNoticeAnnouncement?: PluginNotice;
   development?: PluginDevelopment;
-  draft: string;
-  draftSelection: {
-    start: number;
-    end: number;
-    direction: "forward" | "backward" | "none";
-  } | null;
-  dictationNotice: Notice | null;
-  dictationInserted: number;
   draftAttachments: AttachmentRef[];
   draftReferences: ContentReference[];
   readonly runReferences: readonly ContentReference[];
@@ -91,7 +84,6 @@ export interface ChatState {
   error: unknown;
   running: boolean;
   submitting: boolean;
-  unsaved: boolean;
   selectingModel: boolean;
   selectionError: unknown;
   selectionUncertain: boolean;

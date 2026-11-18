@@ -411,6 +411,13 @@ export function suiteInventory(files, host = process.platform) {
       "client/scripts/test-workspace-access-swift.mjs",
     ]);
   }
+  add(
+    "client-architecture",
+    "client",
+    "check",
+    "client",
+    ...npm("check:architecture"),
+  );
   add("client-types", "client", "check", "client/app", process.execPath, [
     "../node_modules/vue-tsc/bin/vue-tsc.js",
     "--noEmit",
@@ -703,6 +710,7 @@ export function suiteInventory(files, host = process.platform) {
         "client-vue",
         "client-executor-integration",
         "client-types",
+        "client-architecture",
         "client-browser-chromium",
         "client-browser-webkit",
         "client-visual",
@@ -1429,6 +1437,7 @@ const parallelSafeSuites = new Set([
   "workshop-vue",
   "client-core",
   "client-types",
+  "client-architecture",
   "workshop-types",
   "client-format",
   "requirements-unit",
@@ -1762,7 +1771,7 @@ No options runs supported suites available on this host, not optional diagnostic
   --extended       Restore the comprehensive current-host inventory, including deferred suites
   --unit           Unit and contract tests; no browsers, servers or native app builds
   --quick          Dependency-free source checks and fast contracts; five-second total budget
-  --feedback       Unit tests plus cached lint/format, Vue types and Rust formatting
+  --feedback       Unit tests plus cached lint/format, frontend checks and Rust formatting
   --checks         Static/build checks only
   --coverage       Vue and Rust workspace coverage (requires native build tools)
   --require-tests  Fail an empty selection (always enabled in CI)

@@ -1,10 +1,10 @@
-import { filesRequest, type FileDocument } from "../files/api";
+import { filesRequest, type FileDocument } from "./api";
 import {
   referenceKey,
   validReference,
   validReferencePath,
   type ContentReference,
-} from "./content-references";
+} from "./content-reference";
 
 export async function captureReference(
   scope: string,

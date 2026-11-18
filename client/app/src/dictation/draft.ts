@@ -1,14 +1,16 @@
-import type { ChatState } from "../ai/chat";
-import { startDictation } from "./runtime";
+import { startDictation, type Notice } from "./runtime";
 
-export type DictationDraft = Pick<
-  ChatState,
-  | "draft"
-  | "draftSelection"
-  | "dictationNotice"
-  | "dictationInserted"
-  | "unsaved"
->;
+export interface DictationDraft {
+  draft: string;
+  draftSelection: {
+    start: number;
+    end: number;
+    direction: "forward" | "backward" | "none";
+  } | null;
+  dictationNotice: Notice | null;
+  dictationInserted: number;
+  unsaved: boolean;
+}
 
 export async function dictateDraft(
   scope: string,

@@ -1,18 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { diagnosticsFor } from "../diagnostics";
 
-export interface Config {
-  provider: string;
-  endpoint: string | null;
-  auth?: "api_key" | "oauth";
-  connectionId?: string;
-  label?: string;
-  httpAcknowledgement?: string;
-}
-export interface ModelCatalog {
-  source: "account" | "provider" | "static" | "unknown";
-  models: string[];
-}
+import type { Config, ModelCatalog } from "./connection-types";
+
+export type { Config, ModelCatalog } from "./connection-types";
 export interface Status {
   catalog?: ModelCatalog;
   config: Config | null;
