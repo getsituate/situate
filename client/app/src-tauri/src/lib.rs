@@ -9,8 +9,7 @@ mod ai_protocol;
 mod appearance;
 mod change_history;
 mod codex_oauth;
-#[cfg(any(test, feature = "native-smoke"))]
-mod conversation_fixtures;
+
 mod conversation_projection;
 mod device_locale;
 mod diagnostics;

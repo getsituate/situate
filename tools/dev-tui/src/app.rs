@@ -44,6 +44,7 @@ impl Status {
 pub enum Dialog {
     Install(Task),
     Tests,
+    Fixtures,
     Releases,
     WorkflowInput,
     WorkflowConfirm,
@@ -147,6 +148,7 @@ pub struct App {
     pub dialog: Option<Dialog>,
     pub notice: String,
     pub workflow: release::Workflow,
+    pub fixtures: crate::fixtures::Menu,
     pub historical_artifacts: String,
     pub quitting: bool,
     inspect_run_id: Option<usize>,
@@ -173,6 +175,7 @@ impl App {
             dialog: None,
             notice: String::new(),
             workflow: release::Workflow::default(),
+            fixtures: crate::fixtures::Menu::default(),
             historical_artifacts: String::new(),
             quitting: false,
             inspect_run_id: None,
@@ -462,6 +465,10 @@ impl App {
             .ok_or_else(|| std::io::Error::other(text::INSPECTION_NO_RUN))?;
         inspection::prepare(run, &self.root, &self.branch).map(Some)
     }
+    fn open_fixtures(&mut self) {
+        self.fixtures = crate::fixtures::Menu::default();
+        self.dialog = Some(Dialog::Fixtures);
+    }
     pub fn key(&mut self, key: KeyEvent) {
         if self.quitting {
             return;
@@ -471,6 +478,26 @@ impl App {
             return;
         }
         if let Some(dialog) = self.dialog {
+            if dialog == Dialog::Fixtures {
+                if key.code == KeyCode::Esc {
+                    self.dialog = None;
+                } else {
+                    match self.fixtures.key(key.code, &self.root) {
+                        Ok(Some((task, spec))) => {
+                            if let Some(reason) = self.conflict(task) {
+                                self.fixtures.error = reason.into();
+                            } else {
+                                self.dialog = None;
+                                self.notice.clear();
+                                self.launch_spec(task, spec);
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(error) => self.fixtures.error = error,
+                    }
+                }
+                return;
+            }
             if matches!(dialog, Dialog::WorkflowInput | Dialog::WorkflowConfirm) {
                 self.workflow_key(key);
                 return;
@@ -564,6 +591,7 @@ impl App {
                 self.dialog = Some(Dialog::Releases);
             }
             KeyCode::Char('t') => self.dialog = Some(Dialog::Tests),
+            KeyCode::Char('f') => self.open_fixtures(),
             KeyCode::Char('a') => self.launch(Task::Docs),
             KeyCode::Char('?') => self.dialog = Some(Dialog::Help),
             KeyCode::Tab => self.output_focus = !self.output_focus,
@@ -575,6 +603,7 @@ impl App {
                     3 => self.launch(Task::Design),
                     4 => self.launch(Task::Website),
                     5 => self.launch(Task::Requirements),
+                    7 => self.open_fixtures(),
                     _ => {
                         self.notice.clear();
                         self.dialog = Some(Dialog::Releases);
@@ -596,6 +625,7 @@ impl App {
                     let task = run.task;
                     match task {
                         Task::Full => self.dialog = Some(Dialog::Full),
+                        Task::FixtureCreate | Task::FixtureApply => self.open_fixtures(),
                         Task::Workflow(_) => {
                             self.workflow.plan = None;
                             self.dialog = Some(Dialog::WorkflowInput);

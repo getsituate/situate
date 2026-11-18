@@ -1,6 +1,6 @@
 use super::*;
-use crate::conversation_fixtures::FixtureConversations;
 use serde_json::json;
+use situate_fixtures::FixtureConversations;
 use std::{fs, path::Path};
 
 const PLUGIN: &str = "native-check";
@@ -561,12 +561,19 @@ pub fn smoke_conversation_fixture(
         owned_workspace(&app, location)?;
         let storage = local_storage(&app, location)?;
         let mut record = match fixture.as_str() {
+            "chat-draft" if references.is_empty() => {
+                let record = situate_fixtures::add_chat_draft(&storage)?;
+                return Ok(json!({"id":record.id,"revision":record.revision}));
+            }
             "layout" if references.is_empty() => {
-                let mut record =
-                    storage.create_conversation("native-layout", "Native layout conversation")?;
-                record.draft = "Layout retained draft".into();
-                record.messages = json!([{"role":"user","content":"Retained workspace context.\n".repeat(100),"timestamp":1}]);
-                record
+                let record = situate_fixtures::seed_conversation(
+                    &storage,
+                    "native-layout",
+                    "Native layout conversation",
+                    "Layout retained draft",
+                    &"Retained workspace context.\n".repeat(100),
+                )?;
+                return Ok(json!({"id":record.id,"revision":record.revision}));
             }
             "references" => {
                 use situate_core::conversation_runtime::{ContentReference, Pending, Run, Runtime};

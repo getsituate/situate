@@ -4613,6 +4613,7 @@ dependencies = [
  "sha2 0.10.9",
  "situate-agent",
  "situate-core",
+ "situate-fixtures",
  "situate-migrations",
  "system-configuration",
  "tauri",
@@ -4651,6 +4652,17 @@ dependencies = [
  "windows-sys 0.61.2",
  "yaml-rust2",
  "zeroize",
+]
+
+[[package]]
+name = "situate-fixtures"
+version = "0.1.6"
+dependencies = [
+ "serde_json",
+ "situate-core",
+ "situate-migrations",
+ "tempfile",
+ "uuid",
 ]
 
 [[package]]

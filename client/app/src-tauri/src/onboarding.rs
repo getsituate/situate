@@ -1,6 +1,6 @@
-#[cfg(test)]
-use crate::conversation_fixtures::FixtureConversations;
 use situate_core::onboarding::{OnboardingRecord, OnboardingStorage, Snapshot};
+#[cfg(test)]
+use situate_fixtures::FixtureConversations;
 
 #[tauri::command]
 pub async fn onboarding_load(

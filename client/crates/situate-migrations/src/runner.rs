@@ -86,6 +86,20 @@ pub(crate) fn prepare_with(
     app_version: &str,
     migrations: &[MigrationDescriptor],
 ) -> Result<WorkspaceLease> {
+    admit(root, app_version, migrations, false)
+}
+
+/// Admit a closed, already-current workspace without migrating it.
+pub fn lock_current_exclusively(root: &Path, app_version: &str) -> Result<WorkspaceLease> {
+    admit(root, app_version, registry::MIGRATIONS, true)
+}
+
+fn admit(
+    root: &Path,
+    app_version: &str,
+    migrations: &[MigrationDescriptor],
+    exclusive: bool,
+) -> Result<WorkspaceLease> {
     registry::validate(migrations)?;
     let app = Version::parse(app_version)
         .map_err(|_| MigrationError::new(MigrationErrorKind::InvalidAppVersion))?;
@@ -97,18 +111,26 @@ pub(crate) fn prepare_with(
     {
         require_app(&value, &app)?;
     }
-    let control = fs::ensure_child(&managed, fs::CONTROL)?;
+    let control = if exclusive {
+        fs::child(&managed, fs::CONTROL)?
+    } else {
+        fs::ensure_child(&managed, fs::CONTROL)?
+    };
     let lock = control
         .open_with(
             "workspace.lock",
-            fs::options().read(true).write(true).create(true),
+            fs::options().read(true).write(true).create(!exclusive),
         )?
         .into_std();
     if !lock.metadata()?.is_file() {
         return Err(MigrationError::new(MigrationErrorKind::UnsafePath));
     }
-    lock.try_lock_shared()
-        .map_err(|_| MigrationError::new(MigrationErrorKind::Busy))?;
+    if exclusive {
+        lock.try_lock()
+    } else {
+        lock.try_lock_shared()
+    }
+    .map_err(|_| MigrationError::new(MigrationErrorKind::Busy))?;
     let lease = WorkspaceLease {
         lock,
         root: root.try_clone()?,
@@ -123,6 +145,9 @@ pub(crate) fn prepare_with(
     }
     if current(&managed, &control, &app, migrations)? {
         return Ok(lease);
+    }
+    if exclusive {
+        return Err(MigrationError::new(MigrationErrorKind::Busy));
     }
     // No payload read above this point authorizes writes. Re-read under exclusive
     // ownership after conversion; a competing opener may have completed the work.

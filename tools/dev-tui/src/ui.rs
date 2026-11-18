@@ -502,7 +502,9 @@ impl Ui {
     fn modal(&mut self, frame: &mut Frame, dialog: Dialog, app: &App) {
         self.hits.clear();
         let workflow_message = format!("{}\n\n{}", app.workflow.description(), app.notice);
+        let fixture_message = (dialog == Dialog::Fixtures).then(|| app.fixtures.message());
         let (title, message) = match dialog {
+            Dialog::Fixtures => ("Fixtures", fixture_message.as_deref().unwrap_or("")),
             Dialog::Install(_) => (text::INSTALL_TITLE, text::INSTALL_CONFIRM),
             Dialog::Releases => (text::RELEASES, text::RELEASE_MENU),
             Dialog::WorkflowInput | Dialog::WorkflowConfirm => {
@@ -522,7 +524,10 @@ impl Ui {
         let height = area.height.min(
             if matches!(
                 dialog,
-                Dialog::WorkflowInput | Dialog::WorkflowConfirm | Dialog::HistoricalArtifacts
+                Dialog::WorkflowInput
+                    | Dialog::WorkflowConfirm
+                    | Dialog::HistoricalArtifacts
+                    | Dialog::Fixtures
             ) {
                 30
             } else if dialog == Dialog::Help {
@@ -543,6 +548,7 @@ impl Ui {
         frame.render_widget(Clear, rect);
         frame.render_widget(block, rect);
         let choices: Vec<(&str, KeyCode)> = match dialog {
+            Dialog::Fixtures => app.fixtures.buttons(),
             Dialog::WorkflowInput => vec![
                 ("Enter Plan", KeyCode::Enter),
                 ("Tab Next field", KeyCode::Tab),

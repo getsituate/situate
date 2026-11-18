@@ -1,6 +1,6 @@
 use super::*;
 #[cfg(test)]
-use crate::conversation_fixtures::FixtureConversations;
+use situate_fixtures::FixtureConversations;
 
 const MODEL_ERROR: &str = "native.ai.model.savedUnavailable";
 const CHOOSE: &str = "native.ai.model.required";

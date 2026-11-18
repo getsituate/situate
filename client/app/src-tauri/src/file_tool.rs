@@ -366,8 +366,8 @@ pub(crate) fn instructions(
 
 #[cfg(test)]
 mod tests {
-    use crate::conversation_fixtures::FixtureConversations;
     use serde_json::json;
+    use situate_fixtures::FixtureConversations;
 
     #[test]
     fn move_and_copy_use_managed_operations_and_preserve_sources_on_failure() {

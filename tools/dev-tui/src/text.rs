@@ -1,5 +1,5 @@
 pub const TITLE: &str = "Situate Dev";
-pub const ACTIONS: [&str; 7] = [
+pub const ACTIONS: [&str; 8] = [
     "[c] Desktop client",
     "[t] Tests…",
     "[a] Architecture docs",
@@ -7,6 +7,7 @@ pub const ACTIONS: [&str; 7] = [
     "[w] Build & open website",
     "[r] Requirements preview",
     "[R] Release…",
+    "[f] Fixtures…",
 ];
 pub const REQUIREMENTS: &str = "Requirements preview";
 pub const REQUIREMENTS_READY: &str = "Requirements preview: ";
@@ -56,7 +57,7 @@ pub const TEST_MENU: &str =
     "Choose a test profile.\nTests may install missing npm dependencies using npm ci.";
 pub const FULL_CONFIRM: &str = "Run the selected suites?\nIncludes shared checks and macOS product verification.\nRequired tools and services must already be available.";
 pub const QUIT_CONFIRM: &str = "Stop all tasks started here and quit?";
-pub const HELP: &str = "c  Start desktop client     d  Open design workshop\nw  Build & open website     a  Build & open architecture docs\nt  Choose test profile      r  Build & open requirements\nR (Shift+r)  Build / publish release\nTab  Switch list/output     Enter  Run action / view run\n↑↓ / jk  Select or scroll   PgUp/PgDn  Scroll page\nHome / End  First / follow latest output\ne  Toggle results/logs     ←→  Scroll horizontally\no  Application/process output (desktop launches only)\np  Pause application view  l/g/x  Level/category/trace\nSelect a desktop run to filter by its discovered session.\ns  Stop selected run        Ctrl+r  Rerun selected task\ni  Exit console & inspect selected run with Pi\nq / Ctrl-C  Quit            Esc  Close this dialog\n\nClick actions, runs and buttons to operate the console.\nWheel over a pane to scroll; wheel over dialogs to read more.\nDrag within logs to select text; click Copy to copy the selection.\nEsc or a click clears the selection; scrolling resumes the view.\nCmd-C also copies if forwarded by the terminal.\nHold Shift to use the terminal selection instead.\nNO_COLOR=1 disables colors.\n\nOnly tasks started by this console are stopped.\nView buffers are bounded; the oldest lines and runs expire.\nTest/release output is also captured in private temporary files.\nInspect with Pi stops owned tasks, saves the selected run's evidence,\nand starts Pi in this terminal. Other temporary captures are removed.";
+pub const HELP: &str = "c  Start desktop client     d  Open design workshop\nw  Build & open website     a  Build & open architecture docs\nt  Choose test profile      r  Build & open requirements\nR (Shift+r)  Build / publish release\nf  Create or modify test workspaces\nTab  Switch list/output     Enter  Run action / view run\n↑↓ / jk  Select or scroll   PgUp/PgDn  Scroll page\nHome / End  First / follow latest output\ne  Toggle results/logs     ←→  Scroll horizontally\no  Application/process output (desktop launches only)\np  Pause application view  l/g/x  Level/category/trace\nSelect a desktop run to filter by its discovered session.\ns  Stop selected run        Ctrl+r  Rerun selected task\ni  Exit console & inspect selected run with Pi\nq / Ctrl-C  Quit            Esc  Close this dialog\n\nClick actions, runs and buttons to operate the console.\nWheel over a pane to scroll; wheel over dialogs to read more.\nDrag within logs to select text; click Copy to copy the selection.\nEsc or a click clears the selection; scrolling resumes the view.\nCmd-C also copies if forwarded by the terminal.\nHold Shift to use the terminal selection instead.\nNO_COLOR=1 disables colors.\n\nOnly tasks started by this console are stopped.\nView buffers are bounded; the oldest lines and runs expire.\nTest/release output is also captured in private temporary files.\nInspect with Pi stops owned tasks, saves the selected run's evidence,\nand starts Pi in this terminal. Other temporary captures are removed.";
 pub const RELEASES: &str = "Release";
 pub const VERSION_INVALID_SOURCE: &str = "The checkout version is unavailable.";
 pub const PUBLICATION_REVISION: &str = "Source revision";

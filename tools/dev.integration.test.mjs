@@ -30,11 +30,18 @@ function fixture(t) {
     new URL("../package.json", import.meta.url),
     join(root, "package.json"),
   );
+  mkdirSync(join(root, "client/scripts"), { recursive: true });
+  copyFileSync(
+    new URL("../client/scripts/private-dotenv.mjs", import.meta.url),
+    join(root, "client/scripts/private-dotenv.mjs"),
+  );
   copyFileSync(new URL("../dev.sh", import.meta.url), join(root, "dev.sh"));
   writeFileSync(
     join(root, "bin/cargo"),
     `#!${process.execPath}
-console.log(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2), pid: process.pid }));
+console.log(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2), pid: process.pid,
+  fixtureFolder: process.env.SITUATE_TEST_WORKSPACES_DIR, unrelated: process.env.UNRELATED_DOTENV_TEST }));
+
 if (process.env.HOLD === "1") setInterval(() => {}, 1000);
 else process.exit(17);
 `,
@@ -104,6 +111,38 @@ test(
       "--manifest-path",
       "Cargo.toml",
     ]);
+  },
+);
+
+test(
+  "the launcher reads only the fixture directory from the checkout's private dotenv",
+  { skip: !supported, timeout: 10000 },
+  async (t) => {
+    const { root, env } = fixture(t);
+    delete env.CI;
+    delete env.SITUATE_TEST_WORKSPACES_DIR;
+    delete env.UNRELATED_DOTENV_TEST;
+    writeFileSync(
+      join(root, ".env"),
+      'SITUATE_TEST_WORKSPACES_DIR="/tmp/Test Workspaces"\nUNRELATED_DOTENV_TEST=not-forwarded\n',
+      { mode: 0o600 },
+    );
+    const start = async (extra) => {
+      const run = launch(t, join(root, "dev.sh"), [], {
+        cwd: join(root, "nested/directory"),
+        env: { ...env, ...extra },
+      });
+      assert.deepEqual(await run.closed, [17, null], run.output().stderr);
+      return JSON.parse(run.output().stdout);
+    };
+    const local = await start({});
+    assert.equal(local.fixtureFolder, "/tmp/Test Workspaces");
+    assert.equal(local.unrelated, undefined);
+    assert.equal(
+      (await start({ SITUATE_TEST_WORKSPACES_DIR: "" })).fixtureFolder,
+      "",
+    );
+    assert.equal((await start({ CI: "true" })).fixtureFolder, undefined);
   },
 );
 

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/situate-migrations", "crates/situate-agent", "crates/situate-core", "crates/tauri-plugin-workspace-access", "crates/tauri-plugin-provider-platform", "crates/tauri-plugin-executor-platform", "app/src-tauri"]
+members = ["crates/situate-migrations", "crates/situate-agent", "crates/situate-core", "crates/situate-fixtures", "crates/tauri-plugin-workspace-access", "crates/tauri-plugin-provider-platform", "crates/tauri-plugin-executor-platform", "app/src-tauri"]
 resolver = "2"
 
 [workspace.package]

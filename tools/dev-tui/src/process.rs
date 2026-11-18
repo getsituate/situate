@@ -167,6 +167,7 @@ pub async fn execute(
         .kill_on_drop(true)
         .process_group(0);
     command.env_remove(crate::application_logs::MANIFEST_ENV);
+    command.env_remove("SITUATE_TEST_WORKSPACES_DIR");
     if let Some(path) = &spec.diagnostics_manifest {
         command.env(crate::application_logs::MANIFEST_ENV, path);
     }
