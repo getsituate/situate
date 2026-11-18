@@ -147,13 +147,13 @@ describe("conversational setup presentation", () => {
       button(view, t("onboarding.conversation.start")).attributes("disabled"),
     ).toBeDefined();
   });
-  it("opens the app after method confirmation without requiring completion", async () => {
+  it("can finish after method confirmation without waiting for import", async () => {
     const view = render(
       { step: "sources", instructionRevision: "a".repeat(40) },
       { started: true },
     );
-    await button(view, t("onboarding.conversation.openApp")).trigger("click");
-    expect(view.emitted("action")).toEqual([["enter"]]);
+    await button(view, t("onboardingAgent.choice.finish")).trigger("click");
+    expect(view.emitted("action")).toEqual([["finish"]]);
     expect(view.find("[data-conversation]").exists()).toBe(true);
   });
   it("offers explicit optional support after import without consuming chat feedback", async () => {
@@ -176,19 +176,20 @@ describe("conversational setup presentation", () => {
   it("finishes setup independently of plugin selection and keeps chat visible", async () => {
     const view = render(
       { step: "support", instructionRevision: "a".repeat(40), ideas: [] },
-      { started: true, canFinish: true },
+      { started: true },
     );
+    expect(view.get(".conversation-actions").findAll("button")).toHaveLength(1);
     await button(view, t("onboardingAgent.choice.finish")).trigger("click");
     expect(view.emitted("action")).toEqual([["finish"]]);
     expect(view.find("[data-conversation]").exists()).toBe(true);
-    await view.setProps({ canFinish: false });
+    await view.setProps({ busy: true });
     expect(
       button(view, t("onboardingAgent.choice.finish")).attributes("disabled"),
     ).toBeDefined();
   });
   it("does not allow initial app entry before a method is confirmed", () => {
     const view = render({ step: "proposal" }, { started: true });
-    expect(view.text()).not.toContain(t("onboarding.conversation.openApp"));
+    expect(view.text()).not.toContain(t("onboardingAgent.choice.finish"));
   });
   it("keeps the same frame and conversation surface through import and support", async () => {
     const view = render(
@@ -213,7 +214,7 @@ describe("conversational setup presentation", () => {
     expect(view.find("[data-conversation]").exists()).toBe(false);
     expect(view.getComponent(SetupFrame).props("step")).toBe(1);
     expect(view.text()).not.toContain(t("onboarding.pause"));
-    expect(view.text()).not.toContain(t("onboarding.conversation.openApp"));
+    expect(view.text()).not.toContain(t("onboardingAgent.choice.finish"));
   });
   it("blocks disconnected first entry but permits offline return after entry", async () => {
     const view = render(
@@ -221,11 +222,11 @@ describe("conversational setup presentation", () => {
       { access: true, connected: false },
     );
     expect(
-      button(view, t("onboarding.conversation.openApp")).attributes("disabled"),
+      button(view, t("onboardingAgent.choice.finish")).attributes("disabled"),
     ).toBeDefined();
     await view.setProps({ state: { ...view.props("state"), entered: true } });
     expect(
-      button(view, t("onboarding.conversation.openApp")).attributes("disabled"),
+      button(view, t("onboardingAgent.choice.finish")).attributes("disabled"),
     ).toBeUndefined();
   });
   it("retains paused progress until explicit resume", async () => {

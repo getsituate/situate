@@ -43,7 +43,6 @@ vi.mock("./agent", () => ({
   startSetupConversation: vi.fn(),
   enterSetupApp: mock.enter,
   recoverSetupQuestion: vi.fn(),
-  finishOnboarding: vi.fn(),
   continueSetupSupport: mock.support,
 }));
 vi.mock("../layout/runtime", () => ({ workspaceUi: vi.fn() }));
@@ -80,7 +79,7 @@ vi.mock("./OnboardingView.vue", () => ({
     props: ["canContinueSupport", "busy", "error"],
     emits: ["action"],
     template:
-      '<div><slot name="access" /><button data-support :disabled="busy || !canContinueSupport" @click="$emit(\'action\', \'support\')">Continue</button><button data-enter :disabled="busy" @click="$emit(\'action\', \'enter\')">Open app</button><slot name="notices" /></div>',
+      '<div><slot name="access" /><button data-support :disabled="busy || !canContinueSupport" @click="$emit(\'action\', \'support\')">Continue</button><button data-finish :disabled="busy" @click="$emit(\'action\', \'finish\')">Finish setup</button><slot name="notices" /></div>',
   },
 }));
 enableAutoUnmount(afterEach);
@@ -187,7 +186,7 @@ it("routes explicit support continuation to the retained setup without approving
   await flushPromises();
   expect(wrapper.get("[data-support]").attributes("disabled")).toBeDefined();
 });
-it("permits app entry during a pending support answer and retains late failures without cancelling work", async () => {
+it("can finish during a pending support answer and retains late failures without cancelling work", async () => {
   mock.restore.mockResolvedValue({ id: "setup" });
   mock.state.record = {
     ...newOnboardingRecord(),
@@ -208,10 +207,13 @@ it("permits app entry during a pending support answer and retains late failures 
   await flushPromises();
   expect(mock.chatState.running).toBe(true);
   expect(wrapper.get("[data-support]").attributes("disabled")).toBeDefined();
-  expect(wrapper.get("[data-enter]").attributes("disabled")).toBeUndefined();
-  await wrapper.get("[data-enter]").trigger("click");
+  expect(wrapper.get("[data-finish]").attributes("disabled")).toBeUndefined();
+  await wrapper.get("[data-finish]").trigger("click");
   await flushPromises();
-  expect(mock.enter).toHaveBeenCalledExactlyOnceWith("test-workspace");
+  expect(mock.enter).toHaveBeenCalledExactlyOnceWith(
+    "test-workspace",
+    expect.any(AbortSignal),
+  );
   expect(wrapper.emitted("enter")).toHaveLength(1);
   expect(mock.support).toHaveBeenCalledOnce();
   expect(mock.abort).not.toHaveBeenCalled();
@@ -234,7 +236,7 @@ it.each(["attachmentBusy", "dictating"] as const)(
     mock.chatState[field] = true;
     await flushPromises();
     expect(wrapper.get("[data-support]").attributes("disabled")).toBeDefined();
-    expect(wrapper.get("[data-enter]").attributes("disabled")).toBeUndefined();
+    expect(wrapper.get("[data-finish]").attributes("disabled")).toBeUndefined();
     await wrapper.get("[data-support]").trigger("click");
     expect(mock.support).not.toHaveBeenCalled();
     mock.chatState[field] = false;

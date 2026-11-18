@@ -21,7 +21,6 @@ import {
   restoreSetupConversation,
   enterSetupApp,
   recoverSetupQuestion,
-  finishOnboarding,
   continueSetupSupport,
 } from "./agent";
 import type { OnboardingRecord } from "./types";
@@ -97,7 +96,7 @@ const recoverable = computed(
     ) &&
     !["support", "complete"].includes(state.record?.step ?? ""),
 );
-const canFinish = computed(
+const chatIdle = computed(
   () =>
     !!chat.value &&
     !chat.value.state.running &&
@@ -107,7 +106,7 @@ const canFinish = computed(
 );
 const canContinueSupport = computed(
   () =>
-    canFinish.value &&
+    chatIdle.value &&
     !chat.value!.state.attachmentBusy &&
     !ownsDictation(props.scope, conversationId.value!) &&
     chat.value!.state.questions.every(
@@ -152,7 +151,6 @@ async function selectSetupModel(model: string | null) {
 async function perform(
   action:
     | "start"
-    | "enter"
     | "finish"
     | "support"
     | "pause"
@@ -190,14 +188,11 @@ async function perform(
   } else if (action === "start") {
     const started = await startSetupConversation(props.scope, signal);
     if (alive) conversationId.value = started.id;
-  } else if (action === "enter") {
+  } else if (action === "finish") {
     const firstEntry = !record.entered;
-    await enterSetupApp(props.scope);
+    await enterSetupApp(props.scope, signal);
     signal.throwIfAborted();
     emit("enter", structuredClone(state.record!), firstEntry);
-  } else if (action === "finish") {
-    if (!canFinish.value) throw new Error("native.onboarding.storage.conflict");
-    await finishOnboarding(props.scope, signal);
   } else if (action === "support") {
     if (!canContinueSupport.value)
       throw new Error("native.onboarding.storage.conflict");
@@ -363,7 +358,6 @@ defineExpose({ cancelAndWait, flush: session.flush });
     :access="access"
     :access-configured="!!status?.config && !changingConnection"
     :started="!!conversationId"
-    :can-finish="canFinish"
     :can-continue-support="canContinueSupport"
     :error="
       error ||

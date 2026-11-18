@@ -234,7 +234,6 @@ const celebration = ref<{
   scope: string;
   record: OnboardingRecord;
   generation: number;
-  startDevelopments: boolean;
   ready: boolean;
   finished: boolean;
   reveal: boolean;
@@ -327,7 +326,6 @@ function currentHandoff(scope: string, generation: number) {
 async function enterOnboardingApp(
   record: OnboardingRecord,
   firstEntry: boolean,
-  startDevelopments = false,
 ) {
   const scope = state.value?.current?.id;
   if (!scope || !record.instructionRevision) return;
@@ -351,7 +349,6 @@ async function enterOnboardingApp(
       scope,
       record,
       generation,
-      startDevelopments,
       ready: false,
       finished: false,
       reveal: false,
@@ -400,8 +397,7 @@ async function enterOnboardingApp(
       await ui.session.flush();
     }
     if (!currentHandoff(scope, generation)) return;
-    if (!showCelebration && startDevelopments)
-      await dispatchDevelopments(scope, record, generation);
+    if (!showCelebration) await dispatchDevelopments(scope, record, generation);
   } catch (cause) {
     if (!currentHandoff(scope, generation)) return;
     celebration.value = undefined;
@@ -416,8 +412,7 @@ async function finishOnboarding(record: OnboardingRecord) {
   await enterSetupApp(scope);
   if (state.value?.current?.id !== scope) return;
   const current = setupProgress.value?.state.record;
-  if (current)
-    await enterOnboardingApp(structuredClone(current), firstEntry, true);
+  if (current) await enterOnboardingApp(structuredClone(current), firstEntry);
 }
 watch(
   () => [workspaceScope.value, setupRecord.value?.step] as const,
@@ -450,12 +445,7 @@ async function finishCelebration() {
     return;
   celebrationFocusScope = pending.scope;
   celebration.value = undefined;
-  if (pending.startDevelopments)
-    await dispatchDevelopments(
-      pending.scope,
-      pending.record,
-      pending.generation,
-    );
+  await dispatchDevelopments(pending.scope, pending.record, pending.generation);
 }
 async function dispatchDevelopments(
   scope: string,

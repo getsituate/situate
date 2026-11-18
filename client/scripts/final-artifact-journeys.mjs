@@ -340,7 +340,7 @@ export function finalArtifactJourneys({
       );
       await click(button("Start setting up my workspace"));
       await click(button("Adopt working method"));
-      await click(button("Open app"));
+      await click(button("Finish setup"));
       await seed(name, "seed.md", "# Synthetic seed\n");
       await click(button("New chat", window));
       await send("[e2e:create] Create e2e-note.md", "Created the note.");

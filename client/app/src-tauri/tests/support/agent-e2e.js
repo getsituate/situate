@@ -966,7 +966,7 @@
         subtree: true,
       });
       try {
-        await click("Open app");
+        await click("Finish setup");
         const finale = await wait("onboarding-first-finale", () => {
           retainFinales(finaleObserver.takeRecords());
           const skip = button("Go to workspace");

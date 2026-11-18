@@ -54,7 +54,6 @@ import {
   continueSetupSupport,
   confirmInstructions,
   enterSetupApp,
-  finishOnboarding,
   pendingSetupDevelopments,
   recoverSetupQuestion,
   restoreSetupConversation,
@@ -295,27 +294,15 @@ it("does not turn failed confirmation readback into a successful save", async ()
   expect(mock.session.retry).not.toHaveBeenCalled();
   expect(mock.session.state.record?.step).toBe("method");
 });
-it("finishes through native storage without entering the app or dispatching children", async () => {
+it("honors cancellation before admitting native setup completion", async () => {
   Object.assign(mock.session.state.record!, {
     step: "support",
     instructionRevision: "a".repeat(40),
-    ideas: [selectedIdea()],
   });
-  const expected = structuredClone(mock.session.state.record!);
-  await finishOnboarding("scope");
-  expect(mock.invoke).toHaveBeenCalledExactlyOnceWith("onboarding_action", {
-    scope: "scope",
-    action: "finish",
-    expected,
-  });
-  expect(mock.session.update).not.toHaveBeenCalled();
-  expect(mock.chat.send).not.toHaveBeenCalled();
-});
-it("honors cancellation before native action admission", async () => {
   const controller = new AbortController();
   controller.abort();
-  await expect(finishOnboarding("scope", controller.signal)).rejects.toThrow();
-  expect(mock.invoke).not.toHaveBeenCalled();
+  await expect(enterSetupApp("scope", controller.signal)).rejects.toThrow();
+  expect(mock.invoke.mock.calls).toEqual([["ai_status", { scope: "scope" }]]);
 });
 it("refreshes changed working instructions through native recovery before presenting", async () => {
   Object.assign(mock.session.state.record!, {

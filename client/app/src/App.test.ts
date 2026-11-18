@@ -410,7 +410,7 @@ describe("onboarding handoff", () => {
                     "button",
                     {
                       class: "enter",
-                      onClick: () => emit("enter", record, true, true),
+                      onClick: () => emit("enter", record, true),
                     },
                     "Enter",
                   );
@@ -578,7 +578,6 @@ describe("onboarding handoff", () => {
                             instructionRevision: "instructions-1",
                             conversationId: "setup-chat",
                           },
-                          true,
                           true,
                         ),
                     },
