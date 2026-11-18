@@ -55,9 +55,17 @@ impl crate::Migration for Migration {
             return Ok(());
         }
         let conversations = filesystem::child(workspace.managed, "conversations")?;
-        for id in filesystem::names(&conversations)? {
-            if !valid_id(&id) {
-                return Err(invalid());
+        for entry in conversations.entries()? {
+            let name = entry?.file_name();
+            let Some(id) = name.to_str().filter(|id| valid_id(id)) else {
+                continue;
+            };
+            let kind = conversations.symlink_metadata(id)?.file_type();
+            if kind.is_symlink() {
+                return Err(MigrationError::new(MigrationErrorKind::UnsafePath));
+            }
+            if !kind.is_dir() {
+                continue;
             }
             let metadata: Value = serde_json::from_slice(
                 &workspace.read(format!("conversations/{id}/metadata.json"))?,

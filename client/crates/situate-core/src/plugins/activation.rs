@@ -179,20 +179,22 @@ pub struct Publication {
 }
 
 fn artifact_capacity(plugin: &Dir) -> Result<()> {
-    let mut artifacts = 0;
-    for (index, entry) in plugin.entries()?.enumerate() {
-        if index >= MAX_FILES {
-            return Err(PluginError::TooLarge.into());
-        }
-        let name = entry?.file_name();
-        let name = name.to_str().ok_or(PluginError::InvalidPath)?;
-        if name.starts_with("activation-") {
-            artifacts += 1;
-            // Reserve both names without removing evidence from earlier attempts.
-            if artifacts > MAX_ARTIFACTS - 2 {
-                return Err(PluginError::TooLarge.into());
-            }
-        }
+    let artifacts = directory_names(plugin, |name| {
+        let attempt = name.strip_prefix("activation-").and_then(|name| {
+            name.strip_suffix("-staged")
+                .or_else(|| name.strip_suffix("-backup"))
+        });
+        attempt.is_some_and(|attempt| {
+            attempt.is_ascii()
+                && attempt.len() == 73
+                && attempt.as_bytes()[36] == b'-'
+                && canonical_uuid(&attempt[..36])
+                && canonical_uuid(&attempt[37..])
+        })
+    })?;
+    // Reserve both names without removing evidence from earlier attempts.
+    if artifacts.len() > MAX_ARTIFACTS - 2 {
+        return Err(PluginError::TooLarge.into());
     }
     Ok(())
 }
@@ -239,7 +241,7 @@ pub fn publish(root: &Path, draft_id: &str, expected_digest: &str) -> Result<Pub
     let marker = drafts::ensure_child(&drafts::workspace(root)?, ".situate")?;
     let inventory = drafts::ensure_child(&marker, "plugins")?;
     if optional_child(&inventory, &captured.info.plugin_id)?.is_none()
-        && inventory.entries()?.count() >= MAX_PACKAGES
+        && container_count(&inventory)? >= MAX_PACKAGES
     {
         return Err(PluginError::TooLarge.into());
     }

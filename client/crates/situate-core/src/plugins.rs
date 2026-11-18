@@ -248,6 +248,57 @@ fn code(root: &Path, id: &str) -> Result<Dir, PluginError> {
     code_from(&inventory(root)?.ok_or(PluginError::Unavailable)?, id)
 }
 
+fn canonical_uuid(name: &str) -> bool {
+    uuid::Uuid::parse_str(name).is_ok_and(|id| id.to_string() == name)
+}
+
+fn directory_names(dir: &Dir, selected: impl Fn(&str) -> bool) -> Result<Vec<String>, PluginError> {
+    let mut names = Vec::new();
+    for (index, entry) in dir
+        .entries()
+        .map_err(|_| PluginError::Unavailable)?
+        .enumerate()
+    {
+        let entry = entry.map_err(|_| PluginError::Unavailable)?;
+        if index >= 100_000 {
+            return Err(PluginError::TooLarge);
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str().filter(|name| selected(name)) else {
+            continue;
+        };
+        let metadata = dir
+            .symlink_metadata(name)
+            .map_err(|_| PluginError::Unavailable)?;
+        if metadata.file_type().is_symlink() {
+            return Err(PluginError::InvalidPath);
+        }
+        if metadata.is_dir() {
+            names.push(name.to_owned());
+        }
+    }
+    Ok(names)
+}
+
+fn container_count(inventory: &Dir) -> Result<usize, PluginError> {
+    let mut count = 0;
+    for id in directory_names(inventory, valid_id)? {
+        let plugin = child(inventory, &id)?;
+        for name in ["code", "drafts", ".runtime"] {
+            match plugin.symlink_metadata(name) {
+                Ok(_) => {
+                    child(&plugin, name)?;
+                    count += 1;
+                    break;
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+                Err(_) => return Err(PluginError::Unavailable),
+            }
+        }
+    }
+    Ok(count)
+}
+
 fn package_ids(inventory: &Dir) -> Result<Vec<String>, PluginError> {
     let mut ids = Vec::new();
     for entry in inventory.entries().map_err(|_| PluginError::Unavailable)? {

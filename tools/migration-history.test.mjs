@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -19,7 +25,8 @@ function fixture(t) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-  git("init", "-q");
+  git("init", "-q", "--object-format=sha1");
+  git("config", "core.autocrlf", "false");
   git("config", "user.name", "Migration Test");
   git("config", "user.email", "migration@example.invalid");
   const put = (file, bytes) => {
@@ -108,6 +115,70 @@ test("qualification rejects edited, deleted and renamed released implementations
         /Published migration changed or disappeared/u,
       );
     });
+});
+
+test("only the exact published m0002 correction is accepted, in one direction and at one path", (t) => {
+  const name = "m0002_conversation_history";
+  const path = `${source}migrations/${name}.rs`;
+  const corrected = readFileSync(
+    new URL(`../${path}`, import.meta.url),
+    "utf8",
+  );
+  // Reverse the selection hunk to get the published bytes without Git history.
+  const original = corrected.replace(
+    `        for entry in conversations.entries()? {
+            let name = entry?.file_name();
+            let Some(id) = name.to_str().filter(|id| valid_id(id)) else {
+                continue;
+            };
+            let kind = conversations.symlink_metadata(id)?.file_type();
+            if kind.is_symlink() {
+                return Err(MigrationError::new(MigrationErrorKind::UnsafePath));
+            }
+            if !kind.is_dir() {
+                continue;
+            }`,
+    `        for id in filesystem::names(&conversations)? {
+            if !valid_id(&id) {
+                return Err(invalid());
+            }`,
+  );
+  const reject = (f, publishedRevision, revision) =>
+    assert.throws(
+      () => verifyMigrationHistory(f.root, { publishedRevision, revision }),
+      /Published migration changed or disappeared/u,
+    );
+
+  const f = fixture(t);
+  f.migrations([names[0], name]);
+  f.put(path, original);
+  const published = f.commit();
+  assert.equal(
+    f.git("rev-parse", `${published}:${path}`),
+    "710b321fd962d68c6275febd4bd23466313b4cb1",
+  );
+  f.put(path, corrected);
+  const correction = f.commit();
+  assert.equal(
+    verifyMigrationHistory(f.root, { publishedRevision: published }).migrations,
+    2,
+  );
+  f.put(path, `${corrected}// arbitrary edit\n`);
+  const arbitrary = f.commit();
+  reject(f, published, arbitrary);
+  reject(f, correction, arbitrary);
+  f.put(path, corrected);
+  reject(f, arbitrary, f.commit());
+  f.put(path, original);
+  reject(f, correction, f.commit());
+
+  const other = fixture(t);
+  const otherPath = `${source}migrations/${names[1]}.rs`;
+  other.migrations(names);
+  other.put(otherPath, original);
+  const otherPublished = other.commit();
+  other.put(otherPath, corrected);
+  reject(other, otherPublished, other.commit());
 });
 
 test("pre-migration published commit establishes an empty prefix, never an implicit baseline", (t) => {

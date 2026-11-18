@@ -14,6 +14,49 @@ pub(super) fn fail_at(point: &str) -> io::Result<()> {
     }
 }
 
+#[test]
+fn artifact_capacity_counts_only_exact_activation_directories() {
+    let temp = tempfile::tempdir().unwrap();
+    let plugin = Dir::open_ambient_dir(temp.path(), ambient_authority()).unwrap();
+    for index in 0..MAX_FILES + 1 {
+        fs::write(
+            temp.path().join(format!("activation-noise-{index}")),
+            "keep",
+        )
+        .unwrap();
+    }
+    let draft = "00000000-0000-4000-8000-000000000001";
+    for index in 0..MAX_ARTIFACTS - 2 {
+        let attempt = uuid::Uuid::from_u128(index as u128).to_string();
+        plugin
+            .create_dir(format!("activation-{draft}-{attempt}-backup"))
+            .unwrap();
+    }
+    let file = format!("activation-{draft}-{draft}-staged");
+    fs::write(temp.path().join(&file), "keep").unwrap();
+    fs::create_dir(temp.path().join("activation-not-a-record-backup")).unwrap();
+    fs::create_dir(
+        temp.path()
+            .join(format!("activation-{}-staged", "é".repeat(36) + "x")),
+    )
+    .unwrap();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        fs::write(
+            temp.path().join(std::ffi::OsString::from_vec(vec![0xff])),
+            "keep",
+        )
+        .unwrap();
+    }
+    artifact_capacity(&plugin).unwrap();
+    plugin
+        .create_dir(format!("activation-{draft}-{draft}-backup"))
+        .unwrap();
+    assert!(artifact_capacity(&plugin).is_err());
+    assert_eq!(fs::read(temp.path().join(file)).unwrap(), b"keep");
+}
+
 fn artifacts(code: &Path) -> Vec<PathBuf> {
     let mut paths: Vec<_> = fs::read_dir(code.parent().unwrap())
         .unwrap()

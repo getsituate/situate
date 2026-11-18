@@ -156,11 +156,13 @@ impl FileDestination {
         let mut segments = Vec::new();
         for entry in dir.entries()? {
             let entry = entry?;
-            let name = entry.file_name().into_string().map_err(|_| invalid())?;
-            if name == "writer.lock" || name == "device-id" {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            if !is_segment(&name) {
                 continue;
             }
-            if !is_segment(&name) || !entry.file_type()?.is_file() || segments.len() >= 4096 {
+            if !entry.file_type()?.is_file() || segments.len() >= 4096 {
                 return Err(invalid());
             }
             let file = open(&dir, &name, false)?;

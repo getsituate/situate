@@ -8,6 +8,10 @@ import { parseArgs } from "node:util";
 const directory = "client/crates/situate-migrations/src/";
 const registryPath = `${directory}registry.rs`;
 const migrationsPath = `${directory}migrations/`;
+// Only the validation-only correction may replace the published m0002 blob.
+const m0002Path = `${migrationsPath}m0002_conversation_history.rs`;
+const m0002Original = "710b321fd962d68c6275febd4bd23466313b4cb1";
+const m0002Corrected = "12127a6e3b206a5ce3efd85c12b1b97058941878";
 const fullRevision = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u;
 
 function git(root, args) {
@@ -131,12 +135,18 @@ export function verifyMigrationHistory(
   git(root, ["merge-base", "--is-ancestor", publishedRevision, revision]);
   const published = migrationInventory(root, publishedRevision);
   const current = migrationInventory(root, revision);
-  for (const file of published.implementations)
-    assert.equal(
-      current.files.get(file),
-      published.files.get(file),
+  for (const file of published.implementations) {
+    const before = published.files.get(file);
+    const after = current.files.get(file);
+    const isM0002Correction =
+      file === m0002Path &&
+      before === m0002Original &&
+      after === m0002Corrected;
+    assert(
+      before === after || isM0002Correction,
       `Published migration changed or disappeared: ${file}`,
     );
+  }
   assert.deepEqual(
     current.entries.slice(0, published.entries.length),
     published.entries,

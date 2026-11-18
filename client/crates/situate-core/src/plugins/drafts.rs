@@ -82,16 +82,12 @@ fn inventories(root: &Path) -> Result<Vec<Dir>> {
         return Ok(vec![]);
     };
     let mut result = vec![];
-    for (index, entry) in plugins.entries()?.enumerate() {
-        if index >= MAX_PACKAGES {
-            return Err(PluginError::TooLarge.into());
-        }
-        let name = entry?.file_name();
-        if name == ".git" {
-            continue;
-        }
-        let plugin = child(&plugins, name.to_str().ok_or(PluginError::InvalidPath)?)?;
+    for name in directory_names(&plugins, valid_id)? {
+        let plugin = child(&plugins, &name)?;
         if let Some(drafts) = optional_child(&plugin, "drafts")? {
+            if result.len() == MAX_PACKAGES {
+                return Err(PluginError::TooLarge.into());
+            }
             result.push(drafts);
         }
     }
@@ -105,6 +101,9 @@ fn migrate(root: &Path) -> Result<()> {
     let Some(legacy) = optional_child(&marker, "plugin-drafts")? else {
         return Ok(());
     };
+    if directory_names(&legacy, canonical_uuid)?.is_empty() {
+        return Ok(());
+    }
     let store = runtime::storage(root)
         .map_err(|_| PluginError::Unavailable)?
         .ok_or(PluginError::Unavailable)?;
@@ -113,12 +112,7 @@ fn migrate(root: &Path) -> Result<()> {
         .lock_named("plugin-migration.lock")
         .map_err(|_| PluginError::Unavailable)?;
     let plugins = super::inventory(root)?;
-    for entry in legacy.entries()? {
-        let id = entry?
-            .file_name()
-            .into_string()
-            .map_err(|_| PluginError::InvalidPath)?;
-        check_id(&id)?;
+    for id in directory_names(&legacy, canonical_uuid)? {
         let dir = child(&legacy, &id)?;
         let text = read_text(&child(&dir, ".situate")?, METADATA, MAX_MANIFEST)?;
         let info: DraftInfo =
@@ -145,14 +139,7 @@ fn migrate(root: &Path) -> Result<()> {
         }
     }
     if let Some(plugins) = &plugins {
-        for entry in plugins.entries()? {
-            let id = entry?
-                .file_name()
-                .into_string()
-                .map_err(|_| PluginError::InvalidPath)?;
-            if id == ".git" {
-                continue;
-            }
+        for id in directory_names(plugins, valid_id)? {
             let plugin = child(plugins, &id)?;
             if let Some(drafts) = optional_child(&plugin, "drafts")? {
                 sync(&drafts)?;
@@ -163,12 +150,20 @@ fn migrate(root: &Path) -> Result<()> {
     }
     sync(&legacy)?;
     // Orphans cannot be attributed to an installed incarnation and are never adopted.
-    crate::durable_storage::rename_noreplace(
-        &marker,
-        "plugin-drafts",
-        &marker,
-        "plugin-drafts-legacy",
-    )?;
+    let orphans = directory_names(&legacy, canonical_uuid)?;
+    if !orphans.is_empty() {
+        let archive = ensure_child(&marker, "plugin-drafts-legacy")?;
+        for id in orphans {
+            crate::durable_storage::rename_noreplace(&legacy, &id, &archive, &id)?;
+            sync(&archive)?;
+            sync(&legacy)?;
+            #[cfg(test)]
+            publication::fail_at("draft-orphan-archived")?;
+        }
+    }
+    if legacy.entries()?.next().transpose()?.is_none() {
+        marker.remove_dir("plugin-drafts")?;
+    }
     sync(&marker)?;
     Ok(())
 }
@@ -295,11 +290,8 @@ pub fn create(root: &Path, id: &str, plugin_id: &str) -> Result<DraftInfo> {
     }
     folder::incarnation(root, plugin_id).map_err(|_| PluginError::Unavailable)?;
     let inventory = ensure_child(&plugin, "drafts")?;
-    for (index, entry) in inventory.entries()?.enumerate() {
-        entry?;
-        if index + 1 == MAX_PACKAGES {
-            return Err(PluginError::TooLarge.into());
-        }
+    if directory_names(&inventory, canonical_uuid)?.len() >= MAX_PACKAGES {
+        return Err(PluginError::TooLarge.into());
     }
     inventory.create_dir(id)?;
     sync(&inventory)?;
@@ -361,11 +353,7 @@ pub fn create(root: &Path, id: &str, plugin_id: &str) -> Result<DraftInfo> {
 pub fn list(root: &Path) -> Result<Vec<DraftSummary>> {
     let mut summaries = Vec::new();
     for inventory in inventories(root)? {
-        for entry in inventory.entries()? {
-            let id = entry?
-                .file_name()
-                .into_string()
-                .map_err(|_| PluginError::InvalidPath)?;
+        for id in directory_names(&inventory, canonical_uuid)? {
             if summaries.len() == MAX_PACKAGES {
                 return Err(PluginError::TooLarge.into());
             }

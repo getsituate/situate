@@ -433,7 +433,7 @@ fn startup_evicts_old_history_and_repairs_only_torn_tail() {
 }
 
 #[test]
-fn writer_lock_huge_records_and_unexpected_files_fail_closed() {
+fn writer_lock_and_huge_records_fail_closed() {
     let temp = tempfile::tempdir().unwrap();
     let mut writer = FileDestination::open(temp.path()).unwrap();
     assert!(FileDestination::open(temp.path()).is_err());
@@ -446,11 +446,49 @@ fn writer_lock_huge_records_and_unexpected_files_fail_closed() {
     let mut recovered = FileDestination::open(temp.path()).unwrap();
     recovered.write(b"{}\n").unwrap();
     drop(recovered);
-    fs::write(temp.path().join("unrelated"), b"preserve").unwrap();
-    assert!(FileDestination::open(temp.path()).is_err());
+}
+
+#[test]
+fn unrelated_entries_survive_startup_rotation_and_restart() {
+    let temp = tempfile::tempdir().unwrap();
+    for name in [".DS_Store", "unrelated", "segment-not-a-record.jsonl"] {
+        fs::write(temp.path().join(name), [b'x'; 100]).unwrap();
+    }
+    fs::create_dir(temp.path().join("unrelated-directory")).unwrap();
+    fs::write(temp.path().join("unrelated-directory/keep"), "preserve").unwrap();
+    #[cfg(target_os = "linux")]
+    let opaque = {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        let path = temp.path().join(OsStr::from_bytes(b"opaque-\xff"));
+        fs::write(&path, "preserve").unwrap();
+        path
+    };
+    for _ in 0..2 {
+        let mut writer = FileDestination::with_limits(temp.path(), 16, 16).unwrap();
+        for _ in 0..3 {
+            writer.write(b"{\"a\":12345}\n").unwrap();
+        }
+    }
+    for name in [".DS_Store", "unrelated", "segment-not-a-record.jsonl"] {
+        assert_eq!(fs::read(temp.path().join(name)).unwrap(), [b'x'; 100]);
+    }
     assert_eq!(
-        fs::read(temp.path().join("unrelated")).unwrap(),
+        fs::read(temp.path().join("unrelated-directory/keep")).unwrap(),
         b"preserve"
+    );
+    #[cfg(target_os = "linux")]
+    assert_eq!(fs::read(opaque).unwrap(), b"preserve");
+}
+
+#[test]
+fn selected_segment_directories_are_rejected() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::create_dir(temp.path().join("segment-00000000000000000001.jsonl")).unwrap();
+    assert!(FileDestination::open(temp.path()).is_err());
+    assert!(
+        temp.path()
+            .join("segment-00000000000000000001.jsonl")
+            .is_dir()
     );
 }
 

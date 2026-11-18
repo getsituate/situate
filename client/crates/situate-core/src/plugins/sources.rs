@@ -62,7 +62,7 @@ pub fn create(root: &Path, id: &str) -> Result<(), String> {
     {
         return Err("native.plugins.stateConflict".into());
     }
-    if inventory.entries().map_err(|_| ERROR)?.count() >= MAX_PACKAGES {
+    if container_count(&inventory).map_err(|e| e.to_string())? >= MAX_PACKAGES {
         return Err(PluginError::TooLarge.to_string());
     }
     let plugin = drafts::ensure_child(&inventory, id).map_err(|e| e.to_string())?;

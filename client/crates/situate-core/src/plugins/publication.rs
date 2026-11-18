@@ -100,37 +100,44 @@ pub(super) fn migrate_record(
 pub(super) fn remove_legacy_records(store: &crate::ai_storage::Storage) -> Result<(), String> {
     let mut names = vec![];
     for entry in store.dir.entries().map_err(|_| INVALID)? {
-        let name = entry
-            .map_err(|_| INVALID)?
-            .file_name()
-            .into_string()
-            .map_err(|_| INVALID)?;
+        let name = entry.map_err(|_| INVALID)?.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
         if let Some(attempt) = name
             .strip_prefix("plugin-publication-")
             .and_then(|s| s.strip_suffix(".json"))
+            .filter(|attempt| canonical_uuid(attempt))
         {
-            filename(attempt)?;
+            let metadata = store.dir.symlink_metadata(name).map_err(|_| INVALID)?;
+            if metadata.file_type().is_symlink() {
+                return Err(INVALID.into());
+            }
+            if !metadata.is_file() {
+                continue;
+            }
+            let bytes = folder::read(&store.dir, name)?.ok_or(INVALID)?;
+            let record: Publication = serde_json::from_slice(&bytes).map_err(|_| INVALID)?;
+            if record.attempt != attempt {
+                return Err(INVALID.into());
+            }
             // Preserve even old attempt evidence inside every surviving owner.
             if let Some(inventory) =
                 optional_child(&store.dir, "plugins").map_err(|e| e.to_string())?
             {
-                for plugin in inventory.entries().map_err(|_| INVALID)? {
-                    let id = plugin
-                        .map_err(|_| INVALID)?
-                        .file_name()
-                        .into_string()
-                        .map_err(|_| INVALID)?;
-                    if id == ".git" {
+                for id in directory_names(&inventory, valid_id).map_err(|e| e.to_string())? {
+                    let plugin = child(&inventory, &id).map_err(|e| e.to_string())?;
+                    let Some(marker) =
+                        optional_child(&plugin, ".runtime").map_err(|e| e.to_string())?
+                    else {
                         continue;
-                    }
-                    let marker =
-                        folder::metadata(&child(&inventory, &id).map_err(|e| e.to_string())?)?;
+                    };
                     if folder::read(&marker, "credential-migration")?.is_some() {
                         migrate_record(store, &marker, attempt)?;
                     }
                 }
             }
-            names.push(name);
+            names.push(name.to_owned());
         }
     }
     for name in names {

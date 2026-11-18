@@ -239,8 +239,10 @@ export function validateCacheDirectory(cache, workspace, home = homedir()) {
       "Use a dedicated cache outside the checkout, not a host home or shared parent directory.",
     );
   if (
-    readdirSync(cache).some(
-      (name) => !["npm", "cargo", "browsers"].includes(name),
+    readdirSync(cache, { withFileTypes: true }).some(
+      (entry) =>
+        !["npm", "cargo", "browsers"].includes(entry.name) &&
+        !(entry.name === ".DS_Store" && entry.isFile()),
     )
   )
     throw new Error("The CI cache directory contains unrelated files.");

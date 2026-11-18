@@ -660,6 +660,85 @@ test("history accepts an empty request and reads sorted immutable manifests with
   );
 });
 
+test("release discovery preserves unrelated siblings through history and publication recovery", (t) => {
+  const { host, request, invoke } = remoteHarness(t);
+  const releases = join(host, "releases");
+  writeFileSync(join(releases, ".DS_Store"), "Finder metadata");
+  writeFileSync(join(releases, "notes.json"), "not JSON");
+  const unrelated = join(releases, "99.0.0-invalid..version");
+  mkdirSync(unrelated);
+  writeFileSync(join(unrelated, "sentinel"), "unchanged");
+  symlinkSync("missing", join(releases, "unrelated-link"));
+  execFileSync("mkfifo", [join(releases, "unrelated-pipe")]);
+  const baseline = [
+    storeRelease(host, "0.9.0+build.1"),
+    storeRelease(host, "1.2.3-rc.1"),
+  ];
+  const value = {
+    ...request,
+    migrationBaseline: baseline,
+    publicVerificationRequired: true,
+  };
+  const before = invoke("history", {});
+  assert.equal(before.status, 0, before.stderr);
+  assert.deepEqual(JSON.parse(before.stdout).releases, baseline);
+  for (const action of ["inspect", "publish", "reconcile", "complete"]) {
+    const result = invoke(action, value);
+    assert.equal(result.status, 0, `${action}: ${result.stderr}`);
+  }
+  const after = invoke("history", {});
+  assert.equal(after.status, 0, after.stderr);
+  assert.deepEqual(
+    JSON.parse(after.stdout).releases.map((release) => release.version),
+    ["0.9.0+build.1", "1.2.3", "1.2.3-rc.1"],
+  );
+  assert.equal(
+    readFileSync(join(releases, ".DS_Store"), "utf8"),
+    "Finder metadata",
+  );
+  assert.equal(readFileSync(join(releases, "notes.json"), "utf8"), "not JSON");
+  assert.equal(readFileSync(join(unrelated, "sentinel"), "utf8"), "unchanged");
+  assert.equal(readlinkSync(join(releases, "unrelated-link")), "missing");
+  assert.ok(statSync(join(releases, "unrelated-pipe")).isFIFO());
+  assert.equal(existsSync(join(host, "release-pending.json")), false);
+});
+
+test("unrelated release siblings do not bypass forward, pointer, pending or payload checks", (t) => {
+  for (const kind of ["forward", "pointer", "pending", "payload"]) {
+    const { host, request, invoke } = remoteHarness(t);
+    writeFileSync(join(host, "releases/.DS_Store"), "metadata");
+    let expected;
+    if (kind === "forward") {
+      storeRelease(host, "2.0.0-rc.1+build.2");
+      expected = /Release activation must move forward/;
+    }
+    if (kind === "pointer") {
+      symlinkSync("releases/notes/metadata", join(host, "current-release"));
+      expected = /Unexpected active release pointer/;
+    }
+    if (kind === "pending") {
+      writeFileSync(join(host, "release-pending.json"), "{}");
+      expected = /unresolved publication requires exact reconciliation/;
+    }
+    if (kind === "payload") {
+      const result = invoke("publish");
+      assert.equal(result.status, 0, result.stderr);
+      writeFileSync(
+        join(host, "releases/1.2.3/.DS_Store"),
+        "unexpected payload",
+      );
+      expected = /Release file inventory differs/;
+    }
+    const result = invoke("reconcile", request);
+    assert.equal(result.status, 1, kind);
+    assert.match(result.stderr, expected, kind);
+    assert.equal(
+      readFileSync(join(host, "releases/.DS_Store"), "utf8"),
+      "metadata",
+    );
+  }
+});
+
 test("history projects only reviewed qualification fields from the same hashed manifest bytes", (t) => {
   const { host, invoke } = remoteHarness(t);
   const predecessor = storeRelease(host, "1.0.0");
@@ -960,6 +1039,9 @@ test("release storage and reconciliation reject aliased siblings, nested entries
       assert.equal(result.status, 1, `${kind}/${action}: ${result.stdout}`);
       assert.equal(result.stdout, "");
       assert.equal(readFileSync(join(target, "sentinel"), "utf8"), "unchanged");
+      if (kind !== "incoming")
+        assert.equal(invoke("history", {}).status, 1, `${kind}/history`);
+      assert.equal(invoke("complete").status, 1, `${kind}/complete`);
       assert.equal(existsSync(join(host, "release.lock")), false);
       assert.equal(existsSync(join(host, "release-pending.json")), false);
     }

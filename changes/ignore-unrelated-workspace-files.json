@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "ignore-unrelated-workspace-files",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "ignore-unrelated-workspace-files",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Keep file browsing working around unsupported entries",
+          "paragraphs": [
+            "Unsupported names and special files no longer block the file list or new history snapshots. These entries stay on disk but are not included in new snapshots. Finder metadata no longer blocks the conversation upgrade or access to plugin and recovery drafts."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "ignore-unrelated-workspace-files",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Dateiliste trotz nicht unterstützter Einträge öffnen",
+          "paragraphs": [
+            "Nicht unterstützte Namen und spezielle Dateitypen blockieren weder die Dateiliste noch neue Aufnahmen der Versionshistorie. Die Einträge bleiben auf der Festplatte, werden aber nicht in neue Aufnahmen übernommen. Finder-Metadaten blockieren weder die Aktualisierung von Gesprächen noch den Zugriff auf Plugin- und Wiederherstellungsentwürfe."
+          ]
+        }
+      ]
+    }
+  }
+}
