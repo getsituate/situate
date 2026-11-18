@@ -381,7 +381,7 @@ test("a rejected completion save never celebrates or marks completion", async ({
     const host = Reflect.get(window, "__TAURI_INTERNALS__");
     const invoke = host.invoke.bind(host);
     host.invoke = (command: string, args: Record<string, unknown>) => {
-      if (command === "onboarding_action" && args.action === "finish")
+      if (command === "onboarding_action" && args.action === "enter")
         return Promise.reject("native.onboarding.storage.failed");
       return invoke(command, args);
     };
@@ -398,7 +398,7 @@ test("a rejected completion save never celebrates or marks completion", async ({
   ).toMatchObject({ step: "support", entered: false });
 });
 
-test("uncertain completion durability remains in setup and never celebrates or marks entry", async ({
+test("an unconfirmed completion write keeps setup visible without playing the finale", async ({
   page,
 }) => {
   await readyToFinish(page);
@@ -414,5 +414,5 @@ test("uncertain completion durability remains in setup and never celebrates or m
     await page.evaluate(() =>
       Reflect.get(window, "__onboardingFixture").progress(),
     ),
-  ).toMatchObject({ step: "complete", entered: false });
+  ).toMatchObject({ step: "complete", entered: true });
 });

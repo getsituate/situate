@@ -22,15 +22,13 @@ const props = defineProps<{
   access: boolean;
   accessConfigured: boolean;
   started: boolean;
-  canFinish?: boolean;
   canContinueSupport?: boolean;
   error?: unknown;
 }>();
 const emit = defineEmits<{
   patch: [patch: Partial<OnboardingRecord>];
   action: [
-    action:
-      "start" | "enter" | "finish" | "support" | "pause" | "resume" | "retry",
+    action: "start" | "finish" | "support" | "pause" | "resume" | "retry",
   ];
 }>();
 const id = useId();
@@ -72,11 +70,7 @@ function input(event: Event) {
   >
     <template #finale-actions><slot name="finale-actions" /></template>
     <template #actions>
-      <div
-        v-if="state.instructionRevision"
-        class="conversation-actions"
-        :class="{ 'with-completion': state.step === 'support' }"
-      >
+      <div v-if="state.instructionRevision" class="conversation-actions">
         <SituateButton
           v-if="
             started &&
@@ -90,17 +84,11 @@ function input(event: Event) {
           >{{ t("onboardingAgent.choice.support") }}</SituateButton
         >
         <SituateButton
-          v-if="state.step === 'support' && state.instructionRevision"
-          :disabled="busy || !canFinish"
+          v-if="['sources', 'review', 'support'].includes(state.step)"
+          :variant="state.step === 'support' ? 'primary' : 'secondary'"
+          :disabled="busy || (!state.entered && !connected)"
           @click="emit('action', 'finish')"
           >{{ t("onboardingAgent.choice.finish") }}</SituateButton
-        >
-        <SituateButton
-          variant="secondary"
-          :disabled="busy || (!state.entered && !connected)"
-          @click="emit('action', 'enter')"
-          >{{ t("onboarding.conversation.openApp") }}
-          <span aria-hidden="true">↗</span></SituateButton
         >
       </div>
     </template>
@@ -243,12 +231,6 @@ function input(event: Event) {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 12px;
-}
-.conversation-actions.with-completion
-  :deep(.situate-button.situate-button--secondary:not(:disabled)) {
-  background: var(--situate-surface);
-  color: var(--situate-ink);
-  border-color: var(--situate-control-line);
 }
 .starting-details,
 .setup-access-panel,

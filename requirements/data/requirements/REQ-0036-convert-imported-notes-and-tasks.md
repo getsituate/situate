@@ -46,7 +46,7 @@ Private onboarding import clarification; date not recorded, transcript not publi
 
 - Starting from the user's description of the source, the agent establishes the source structure and desired transfer, asking questions where these are unclear before importing.
 - Source inspection may precede working-method agreement, but actual onboarding import follows explicitly confirmed working instructions. The retained source brief and confirmation authorize the requested import without another source interview or approval step.
-- After working-method confirmation, Open app ends guidance without cancelling an active import or labeling it complete. The same conversation, draft, substantive questions and imported results remain available in ordinary chat, with no return to a guided setup state.
+- After working-method confirmation, **Finish setup** ends guidance without cancelling an active import or labeling it complete. The same conversation, draft, substantive questions and imported results remain available in ordinary chat, with no return to a guided setup state.
 - A partial or failed import is explained in the source chat with known transferred and missing scope. Successful copies remain usable, and the user can request another attempt or continue onboarding without resolving all missing content.
 - Import remains available in a later ordinary chat, including a new conversation, without an active setup role or a separate import-only publication tool.
 - A source is not excluded merely because it lacks a prebuilt importer; the agent can write an appropriate importer where available interfaces and permissions permit access.

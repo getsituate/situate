@@ -230,7 +230,7 @@ export async function continueSetupSupport(
   });
   return { completion };
 }
-export async function enterSetupApp(scope: string) {
+export async function enterSetupApp(scope: string, signal?: AbortSignal) {
   const session = onboardingSession(scope);
   await session.load();
   await session.flush();
@@ -248,7 +248,7 @@ export async function enterSetupApp(scope: string) {
       throw new Error("onboarding.accessRequired");
   }
   if (record.step === "complete" && record.entered) return;
-  await setupAction(scope, "enter");
+  await setupAction(scope, "enter", signal, record);
 }
 async function loadSetupChat(scope: string, id: string, title: string) {
   let record: ReturnType<typeof readConversationRecord>;
@@ -343,7 +343,7 @@ export async function instructionVersion(
 }
 async function setupAction(
   scope: string,
-  action: "confirm" | "finish" | "enter",
+  action: "confirm" | "enter",
   signal?: AbortSignal,
   expected?: OnboardingRecord,
 ) {
@@ -367,9 +367,6 @@ export async function confirmInstructions(
   expected?: OnboardingRecord,
 ) {
   await setupAction(scope, "confirm", signal, expected);
-}
-export async function finishOnboarding(scope: string, signal?: AbortSignal) {
-  await setupAction(scope, "finish", signal);
 }
 export async function pendingSetupDevelopments(
   scope: string,

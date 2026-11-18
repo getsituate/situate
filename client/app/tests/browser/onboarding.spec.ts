@@ -321,7 +321,7 @@ test("required access has no manual-use bypass", async ({ page }) => {
     "Skip for now",
     "Continue without AI",
     t("onboarding.conversation.start"),
-    t("onboarding.conversation.openApp"),
+    t("onboardingAgent.choice.finish"),
   ])
     await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
       0,
@@ -633,7 +633,7 @@ for (const viewport of [
 }
 
 test(
-  "Open app completes guidance during import and preserves ordinary chat across reload",
+  "Finish setup completes guidance during import and preserves ordinary chat across reload",
   { tag: "@visual-desktop" },
   async ({ page, visual }) => {
     await onboardingFixture(page, {
@@ -688,7 +688,7 @@ test(
     try {
       await page
         .getByRole("button", {
-          name: t("onboarding.conversation.openApp"),
+          name: t("onboardingAgent.choice.finish"),
           exact: true,
         })
         .click();
@@ -849,12 +849,12 @@ test("optional tools remain reachable after informational import replies without
   );
   try {
     await expect.poll(async () => (await progress(page)).step).toBe("support");
-    const open = page.getByRole("button", {
-      name: t("onboarding.conversation.openApp"),
+    const finish = page.getByRole("button", {
+      name: t("onboardingAgent.choice.finish"),
       exact: true,
     });
-    await expect(open).toBeEnabled();
-    await open.click();
+    await expect(finish).toBeEnabled();
+    await finish.click();
     await expect(page.locator(".topic-window")).toBeVisible();
     expect(await progress(page)).toMatchObject({
       step: "complete",
@@ -887,6 +887,67 @@ test("optional tools remain reachable after informational import replies without
       ["show_imported_files", "start_plugin_development"].includes(effect.name),
     ),
   ).toBe(false);
+});
+
+test("Finish setup starts only the retained plugin selections marked for development", async ({
+  page,
+}) => {
+  const idea = {
+    id: "reading",
+    title: "Reading view",
+    detail: "Browse reading notes.",
+    reason: "Keep notes in view.",
+    assignment: "Build a reading view.",
+    choice: "develop" as const,
+    developmentId: "11111111-1111-4111-8111-111111111111",
+    pluginId: "reading-view",
+    notePath: null,
+  };
+  await onboardingFixture(page, {
+    record: {
+      ...newOnboardingRecord(),
+      step: "support",
+      conversationId: "setup",
+      instructionRevision: "a".repeat(40),
+      ideas: [
+        idea,
+        {
+          ...idea,
+          id: "review",
+          developmentId: "22222222-2222-4222-8222-222222222222",
+          pluginId: "review-view",
+          choice: "discard",
+        },
+      ],
+    },
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const preparations = async () =>
+    (await calls(page))
+      .filter(
+        (call: { command: string }) =>
+          call.command === "onboarding_development_prepare",
+      )
+      .map(
+        (call: { args: { developmentId: string } }) => call.args.developmentId,
+      );
+
+  const header = page.locator(".conversation-actions");
+  await expect(header.getByRole("button")).toHaveCount(1);
+  expect(await preparations()).toEqual([]);
+  await header
+    .getByRole("button", { name: "Finish setup", exact: true })
+    .click();
+  await expect(page.locator(".topic-window")).toBeVisible();
+  await expect.poll(preparations).toEqual([idea.developmentId]);
+  await expect
+    .poll(async () =>
+      (await conversations(page))
+        .find((item: { id: string }) => item.id === idea.developmentId)
+        ?.messages.some((message: { role: string }) => message.role === "user"),
+    )
+    .toBe(true);
 });
 
 test("previously entered unfinished guidance migrates without a banner or replay", async ({
@@ -1176,11 +1237,18 @@ test(
     );
     await page.mouse.move(0, 0);
     await expect(page.locator(".setup-panel")).toHaveCSS("transform", "none");
+    const header = page.locator(".conversation-actions");
+    await expect(header.getByRole("button")).toHaveCount(1);
     await visual.capture(
       "onboarding.conversation.support-final",
       svgColorRounding,
     );
-    await choice(page, t("onboardingAgent.choice.finish")).click();
+    await header
+      .getByRole("button", {
+        name: t("onboardingAgent.choice.finish"),
+        exact: true,
+      })
+      .click();
     await expect.poll(async () => (await progress(page)).step).toBe("complete");
     const finale = page.getByRole("button", {
       name: "Go to workspace",
