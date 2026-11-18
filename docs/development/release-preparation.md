@@ -2,7 +2,7 @@
 
 Every pull request adds a new versionless declaration in `changes/`, including documentation, tooling and automated dependency changes. A declaration contains reviewed public entries in every language from `client/packages/localization/locales.json`, or an empty entry list with an internal reason. Missing declarations fail validation. An empty changelog does not mean that the application needs no release.
 
-Use the repository's [Volta toolchain](README.md#install-volta). Commit the behavior changes before approving their declaration. Content review is separate from authorization to build or publish.
+Use the repository's [Volta toolchain](README.md#install-volta).
 
 ## Author and review a declaration
 
@@ -18,7 +18,7 @@ For public entries, supply a JSON file containing one locale object per supporte
 
 ```sh
 node tools/change-fragments.mjs author --id keep-drafts --input /PATH/TO/localized-draft.json
-node tools/change-fragments.mjs validate --draft --id keep-drafts
+node tools/change-fragments.mjs validate --id keep-drafts
 ```
 
 Each locale object uses this structure; the input file wraps those objects under locale keys such as `en` and `de`:
@@ -38,25 +38,9 @@ Each locale object uses this structure; the input file wraps those objects under
 }
 ```
 
-Types are `new`, `changed`, `fixed` and `important`. Entry IDs are lowercase kebab-case strings, at most 80 characters long. New entries target macOS only; historical catalogs retain their original platform metadata. Use plain text without HTML. Describe implemented effects, required actions and limitations, not plans or commit lists. Draft translations are not accepted translations.
+Types are `new`, `changed`, `fixed` and `important`. Entry IDs are lowercase kebab-case strings, at most 80 characters long. New entries target macOS only; historical catalogs retain their original platform metadata. Use plain text without HTML. Describe implemented effects, required actions and limitations, not plans or commit lists.
 
-Review English against the committed implementation, then use the exact `sourceHash` reported by draft validation:
-
-```sh
-node tools/change-fragments.mjs source-approve --id keep-drafts --hash SOURCE_HASH
-```
-
-After English approval, translate and review every other required language. For each language, pass a locale object using `--input`, or edit that locale in the declaration and omit `--input`. Draft validation reports the translation hash to inspect before acceptance:
-
-```sh
-node tools/change-fragments.mjs validate --draft --id keep-drafts
-node tools/change-fragments.mjs translation-accept --id keep-drafts --locale de --input /PATH/TO/de.json --hash TRANSLATION_HASH
-node tools/change-fragments.mjs validate --id keep-drafts
-```
-
-When accepting a separate input file, obtain its hash by first placing the reviewed locale object in the declaration and running draft validation. Acceptance binds the exact translation to the approved English hash. Repeat acceptance for every non-English locale in the inventory, including empty declarations. Translations preserve entry order, IDs, types, platforms, facts and warnings. Structural checks cannot establish factual or translation accuracy.
-
-Source approval binds the declaration ID, English content, locale inventory, empty reason and a digest of the committed source tree excluding `changes/`. English or behavior edits invalidate review. The behavior binding is deliberately conservative: even an unrelated non-fragment change after a rebase requires renewed review. Review the new hash; do not reuse the old approval. PR validation uses the actual PR head for content review, while integrated verification can test a separate merge source.
+In the PR review, check that the English text describes the implemented behavior and that each translation preserves the facts, limitations and warnings. CI checks the structure, required languages, entry order, IDs, types and platforms; it does not check what the text means.
 
 Commit the completed declaration with the change. To validate the range locally, use full commit SHAs, with an ancestral base such as the PR merge base:
 
@@ -64,7 +48,7 @@ Commit the completed declaration with the change. To validate the range locally,
 node tools/change-fragments.mjs validate --base BASE_SHA --head PR_HEAD_SHA
 ```
 
-Existing declarations and finalized historical catalogs are immutable. Corrections use a new declaration rather than rewriting an existing one.
+Use a new declaration to correct an existing one. Finalized release catalogs stay unchanged.
 
 ## Generated release inputs
 

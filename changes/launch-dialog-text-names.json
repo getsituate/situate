@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "launch-dialog-text-names",
-  "behaviorDigest": "092b059e9cfc2eb35e91318dc76ad9918dd5e8d9bcc105056b2d795b3f0bff26",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Native launch dialog label observation.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "160ce60622f82ab76a7ab30b4c0574546350fb932939f1b9df6dd0480c0d5cfe",
-      "translationHash": "183d232dc5c066ea2db84b5f573759d5dc7add925f986fc60d511d325e7acd32"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "160ce60622f82ab76a7ab30b4c0574546350fb932939f1b9df6dd0480c0d5cfe"
-  }
+  "emptyReason": "Native launch dialog label observation."
 }
