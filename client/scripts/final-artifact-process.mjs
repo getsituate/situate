@@ -28,6 +28,10 @@ function category(command, args) {
       return "accessibility";
     case "ps":
       return "process";
+    case "mount":
+      if (args.length === 2 && args[0] === "-t" && args[1] === "nullfs")
+        return "process";
+      break;
     case "scutil":
     case "route":
     case "dscacheutil":

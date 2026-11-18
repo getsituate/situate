@@ -430,6 +430,50 @@ export async function checkAccessibilityAction(
   }
 }
 
+const translocatedExecutable = (path) =>
+  /^(\/(?:private\/)?var\/folders\/[^/\n]+\/[^/\n]+\/T\/AppTranslocation\/[\da-fA-F]{8}(?:-[\da-fA-F]{4}){3}-[\da-fA-F]{12})\/d\/Situate\.app\/Contents\/MacOS\/([^/\n]+)$/.exec(
+    path,
+  );
+
+export function isOwnedTranslocatedExecutable(
+  executable,
+  installed,
+  mounts,
+  stat = lstatSync,
+) {
+  const match = translocatedExecutable(executable);
+  if (!match || /[\r\n]/.test(installed)) return false;
+  const [, root, name] = match;
+  if (name === "." || name === "..") return false;
+  const mountpoint = root.startsWith("/var/") ? `/private${root}` : root;
+  const entries = mounts
+    .split("\n")
+    .filter((line) => line.includes(` on ${mountpoint} (`));
+  const prefix = `${installed} on ${mountpoint} (nullfs, `;
+  if (
+    entries.length !== 1 ||
+    !entries[0].startsWith(prefix) ||
+    !entries[0].endsWith(")") ||
+    !entries[0].slice(prefix.length, -1).split(", ").includes("read-only")
+  )
+    return false;
+  try {
+    const source = stat(join(installed, "Contents", "MacOS", name), {
+      bigint: true,
+    });
+    const view = stat(executable, { bigint: true });
+    return (
+      source.isFile() &&
+      view.isFile() &&
+      source.ino === view.ino &&
+      source.dev !== view.dev
+    );
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export function createFinalArtifactQualificationHost(
   configuration,
   {
@@ -452,6 +496,7 @@ export function createFinalArtifactQualificationHost(
   });
   let app;
   let pid;
+  let identifier;
   let launchPending = false;
   let owned;
   let session;
@@ -469,6 +514,45 @@ export function createFinalArtifactQualificationHost(
         signal: undefined,
       })
     ).trim();
+  }
+  async function applicationPids() {
+    const output = await execute(
+      "osascript",
+      [
+        "-l",
+        "JavaScript",
+        "-e",
+        `(() => {
+      ObjC.import("AppKit");
+      const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(${quote(identifier)});
+      if (apps.count > 16) throw new Error("Too many application instances");
+      const ids = [];
+      for (let index = 0; index < apps.count; index++)
+        ids.push(apps.objectAtIndex(index).processIdentifier);
+      return JSON.stringify(ids);
+    })()`,
+      ],
+      options,
+    );
+    const ids = JSON.parse(output);
+    assert(
+      Array.isArray(ids) &&
+        ids.length <= 16 &&
+        ids.every((id) => Number.isSafeInteger(id) && id > 0) &&
+        new Set(ids).size === ids.length,
+      "Invalid application process inventory",
+    );
+    return ids;
+  }
+  async function ownsProcess(id) {
+    const executable = await processPath(id);
+    if (executable.startsWith(`${app}/Contents/MacOS/`)) return true;
+    if (!translocatedExecutable(executable)) return false;
+    const mounts = await execute("/sbin/mount", ["-t", "nullfs"], {
+      ...options,
+      signal: undefined,
+    });
+    return isOwnedTranslocatedExecutable(executable, app, mounts);
   }
   async function waitFor(check, description, cleanup = false) {
     const deadline = Date.now() + 60_000;
@@ -490,30 +574,18 @@ export function createFinalArtifactQualificationHost(
         confirmFirstLaunch ? { ...options, confirmFirstLaunch } : options,
       );
     await waitFor(async () => {
-      const output = await execute(
-        "osascript",
-        [
-          "-e",
-          'tell application "System Events" to get unix id of every application process whose name is "Situate"',
-        ],
-        options,
-      );
-      const ids = output.trim().split(/,\s*/).filter(Boolean).map(Number);
-      for (const id of ids) {
-        if (
-          Number.isSafeInteger(id) &&
-          id !== previousPid &&
-          (await processPath(id)).startsWith(`${app}/Contents/MacOS/`)
-        ) {
-          assert(
-            !pid || pid === id,
-            "Multiple qualification application processes",
-          );
-          pid = id;
-          launchPending = false;
-        }
+      const matching = [];
+      for (const id of await applicationPids()) {
+        if (id !== previousPid && (await ownsProcess(id))) matching.push(id);
       }
-      return Boolean(pid);
+      assert(
+        matching.length <= 1,
+        "Multiple qualification application processes",
+      );
+      if (matching.length === 0) return false;
+      [pid] = matching;
+      launchPending = false;
+      return true;
     }, "signed app launch");
     await execute(
       "osascript",
@@ -526,10 +598,7 @@ export function createFinalArtifactQualificationHost(
   }
   async function quit() {
     if (!pid) return;
-    assert(
-      (await processPath(pid)).startsWith(`${app}/Contents/MacOS/`),
-      "Owned application PID changed",
-    );
+    assert(await ownsProcess(pid), "Owned application PID changed");
     await execute("kill", ["-TERM", String(pid)], {
       ...options,
       signal: undefined,
@@ -667,7 +736,7 @@ export function createFinalArtifactQualificationHost(
         ),
         "Qualification account must not receive signing or publication credentials",
       );
-      const identifier = manifest.artifacts[0].identifier;
+      identifier = manifest.artifacts[0].identifier;
       assert(
         /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(identifier),
         "Invalid signed application identifier",
@@ -677,16 +746,8 @@ export function createFinalArtifactQualificationHost(
         identifier,
         uid: configuration.account.uid,
       });
-      const processes = await execute(
-        "osascript",
-        [
-          "-e",
-          'tell application "System Events" to get unix id of every application process whose name is "Situate"',
-        ],
-        options,
-      );
       assert(
-        !processes.trim(),
+        (await applicationPids()).length === 0,
         "Qualification account already has a running Situate application",
       );
       const route = await routing.inspect();

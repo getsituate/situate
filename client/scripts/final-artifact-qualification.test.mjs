@@ -18,9 +18,52 @@ import {
   captureQualificationDeviceState,
   qualifyPredecessorUpdate,
   createFinalArtifactQualificationHost,
+  isOwnedTranslocatedExecutable,
   validateFinalArtifactConfiguration,
   verifyQualificationFeed,
 } from "./final-artifact-qualification.mjs";
+
+test("only the original executable on its read-only App Translocation mount is owned", () => {
+  const installed = "/Users/runner/situate-fixture/Situate.app";
+  const mountpoint =
+    "/private/var/folders/aa/bb/T/AppTranslocation/12345678-1234-5678-aaaa-123456789abc";
+  const executable = `${mountpoint}/d/Situate.app/Contents/MacOS/situate-client`;
+  const mount = `${installed} on ${mountpoint} (nullfs, local, read-only, nobrowse)`;
+  const stat = (path) => ({
+    isFile: () => true,
+    ino: 123n,
+    dev: path === executable ? 2n : 1n,
+  });
+  assert.equal(
+    isOwnedTranslocatedExecutable(executable, installed, mount, stat),
+    true,
+  );
+  for (const other of [
+    mount.replace(installed, "/other/Situate.app"),
+    mount.replace("read-only", "read-write"),
+    `${mount}\n${mount}`,
+  ])
+    assert.equal(
+      isOwnedTranslocatedExecutable(executable, installed, other, stat),
+      false,
+    );
+  assert.equal(
+    isOwnedTranslocatedExecutable(executable, installed, mount, (path) => ({
+      ...stat(path),
+      ino: path === executable ? 456n : 123n,
+    })),
+    false,
+  );
+  assert.equal(
+    isOwnedTranslocatedExecutable(
+      executable.replace("/AppTranslocation/", "/Other/"),
+      installed,
+      mount,
+      stat,
+    ),
+    false,
+  );
+});
 
 test("accessibility assertions can remain pending but native deadlines stop polling", async () => {
   let calls = 0;
@@ -323,7 +366,7 @@ test("native preparation binds both live public updater signatures and version t
         {
           environment: { PATH: "/synthetic" },
           execute: async (command) => {
-            if (command === "osascript") return "";
+            if (command === "osascript") return "[]";
             if (command === "route") return "interface: lo0\n";
             assert.fail(
               "predecessor identity must be checked before installing or launching an app",
