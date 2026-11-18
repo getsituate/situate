@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "file-view-layout-retention",
-  "behaviorDigest": "8f8d30f47890917783122dbb1953983031544139753344b5bb8a2ca2e1973841",
+  "behaviorDigest": "10c72c55b91751f9ba186c49fe2303961accdb5d33d7ff3afafe9d68f7bf5b05",
   "locales": {
     "en": {
       "title": "Changes",
@@ -22,7 +22,8 @@
           "title": "Device-local layouts and navigation limits",
           "paragraphs": [
             "Layouts stay on the current device and workspace location. Copying or moving a workspace does not transfer its layout. Existing layouts are retained at their current location.",
-            "Each workspace supports up to 20 open tabs, with six panes per tab. Each pane keeps 50 navigation entries, and the 20 most recently closed tabs can be reopened. Existing open tabs and panes above these limits remain available. If you try to open another tab or pane at the limit, a dialog explains how to make room."
+            "Each workspace supports up to 20 open tabs, with six panes per tab. Each pane keeps 50 navigation entries, and the 20 most recently closed tabs can be reopened. Existing open tabs and panes above these limits remain available. If you try to open another tab or pane at the limit, a dialog explains how to make room.",
+            "If a saved layout cannot be opened, an error screen offers retrying or returning to your workspaces. The stored layout is left unchanged."
           ]
         }
       ]
@@ -46,7 +47,8 @@
           "title": "Gerätelokale Layouts und Navigationsgrenzen",
           "paragraphs": [
             "Layouts bleiben an dieses Gerät und den Speicherort des Arbeitsbereichs gebunden. Beim Kopieren oder Verschieben eines Arbeitsbereichs wird das Layout nicht übernommen. Vorhandene Layouts bleiben am bisherigen Speicherort erhalten.",
-            "Jeder Arbeitsbereich unterstützt bis zu 20 offene Tabs mit jeweils sechs Bereichen. Jeder Bereich behält 50 Navigationseinträge. Die 20 zuletzt geschlossenen Tabs können wieder geöffnet werden. Bereits offene Tabs und Bereiche oberhalb dieser Grenzen bleiben erhalten. Wenn du an der Grenze einen weiteren Tab oder Bereich öffnen möchtest, erklärt ein Dialog, wie du Platz schaffen kannst."
+            "Jeder Arbeitsbereich unterstützt bis zu 20 offene Tabs mit jeweils sechs Bereichen. Jeder Bereich behält 50 Navigationseinträge. Die 20 zuletzt geschlossenen Tabs können wieder geöffnet werden. Bereits offene Tabs und Bereiche oberhalb dieser Grenzen bleiben erhalten. Wenn du an der Grenze einen weiteren Tab oder Bereich öffnen möchtest, erklärt ein Dialog, wie du Platz schaffen kannst.",
+            "Wenn ein gespeichertes Layout nicht geöffnet werden kann, bietet eine Fehleransicht einen erneuten Versuch oder die Rückkehr zur Arbeitsbereichsauswahl an. Das gespeicherte Layout bleibt unverändert."
           ]
         }
       ]
@@ -54,12 +56,12 @@
   },
   "translationApprovals": {
     "de": {
-      "sourceHash": "e14d2495fa803fe105e0d2fc5bab5e808a4a2eff25b55cc6714335e33ca83663",
-      "translationHash": "81412cd4d1484adb75c39c65da8740045b40327268701c95ee2e3d9b17c1009b"
+      "sourceHash": "eb69a1858024eb4278fca0b71854c9df18f7ed38a6528148a2bda9f3578df5a0",
+      "translationHash": "5c4b625089835ff64ed1b8d62e731eb210de1ccf78ca5a886a72a2413b022577"
     }
   },
   "sourceApproval": {
     "action": "approve",
-    "sourceHash": "e14d2495fa803fe105e0d2fc5bab5e808a4a2eff25b55cc6714335e33ca83663"
+    "sourceHash": "eb69a1858024eb4278fca0b71854c9df18f7ed38a6528148a2bda9f3578df5a0"
   }
 }
