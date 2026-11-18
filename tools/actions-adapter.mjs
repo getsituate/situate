@@ -730,7 +730,7 @@ export async function main(
     const api = createSourceVerificationApi({ token: env.GH_TOKEN });
     const bytes = await api(
       `/actions/artifacts/${env.PIPELINE_SOURCE_ARTIFACT_ID}/zip`,
-      { raw: true, maxBytes: 1280 * 1024 },
+      { raw: true, maxBytes: 1280 * 1024, newlyUploaded: true },
     );
     const { digest: canonicalDigest } = await import("./pipeline-state.mjs");
     const { evidence, jsonBytes } = readSourceVerificationArchiveMember(bytes);

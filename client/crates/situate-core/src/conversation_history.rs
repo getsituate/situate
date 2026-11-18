@@ -793,6 +793,12 @@ impl Storage {
         id: &str,
     ) -> Result<Option<ConversationContext>, String> {
         let _lock = self.lock_named("conversations.lock")?;
+        self.read_conversation_context_unlocked(id)
+    }
+    pub(crate) fn read_conversation_context_unlocked(
+        &self,
+        id: &str,
+    ) -> Result<Option<ConversationContext>, String> {
         let Some(dir) = self.conversation_dir(id, false)? else {
             return Ok(None);
         };

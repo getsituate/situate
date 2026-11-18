@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t, localizeError } from "@situate/localization";
+import { t } from "@situate/localization";
 import type { ConversationSummary } from "../ai/conversation-record";
 import ConversationListItem from "./ConversationListItem.vue";
 import { computed, nextTick, useId, ref, useTemplateRef, watch } from "vue";
@@ -27,7 +27,6 @@ const props = withDefaults(
     conversations?: ConversationSummary[];
     selectedConversation?: string;
     conversationsBusy?: boolean;
-    conversationsError?: unknown;
     conversationRunning?: (id: string) => boolean;
     availableViews?: { id: string; title: string; icon: IconName }[];
     pinnedViews?: readonly string[];
@@ -53,7 +52,6 @@ const emit = defineEmits<{
   plugins: [];
   conversation: [id: string];
   newConversation: [];
-  retryConversations: [];
   view: [id: string];
   pin: [id: string];
 }>();
@@ -401,9 +399,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
           <SituateIconButton
             icon="plus"
             :label="t('navigation.newChat')"
-            :disabled="
-              !currentWorkspaceId || conversationsBusy || !!conversationsError
-            "
+            :disabled="!currentWorkspaceId || conversationsBusy"
             @click="emit('newConversation')"
           />
         </div>
@@ -425,23 +421,9 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
             />
           </li>
         </ul>
-        <p
-          v-else-if="!conversationsBusy && !conversationsError"
-          class="empty-conversations"
-        >
+        <p v-else-if="!conversationsBusy" class="empty-conversations">
           {{ t("navigation.noConversationsYet") }}
         </p>
-        <div v-if="conversationsError" class="conversation-error">
-          <p role="alert">{{ localizeError(conversationsError) }}</p>
-          <SituateButton
-            variant="plain"
-            type="button"
-            :disabled="conversationsBusy"
-            @click="emit('retryConversations')"
-          >
-            {{ t("navigation.retry") }}
-          </SituateButton>
-        </div>
       </section>
     </div>
 
@@ -755,14 +737,6 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
 }
 .section-heading .situate-icon-button {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
-}
-.conversation-error {
-  margin: 8px 12px;
-  font-size: var(--situate-text-caption);
-  overflow-wrap: anywhere;
-}
-.conversation-error button {
-  min-height: var(--situate-target-min);
 }
 .empty-conversations {
   margin: 8px 12px 16px;

@@ -18,6 +18,7 @@ import type {
 import type { ConversationRecord } from "./conversation-record";
 import type { AssistantMessage } from "./contracts";
 import { emptyRuntime } from "./queue-runtime";
+import { recoveryState, resetIncidents } from "../errors/runtime";
 import { workspaceAiSettings } from "./settings";
 import { onboardingSession, retainOnboarding } from "../onboarding/session";
 import { newOnboardingRecord } from "../onboarding/types";
@@ -320,6 +321,7 @@ async function native(
   throw new Error(`Unexpected command: ${command}`);
 }
 beforeEach(() => {
+  resetIncidents();
   closeChats([]);
   vi.clearAllMocks();
   snapshots.clear();
@@ -480,6 +482,71 @@ test("a stale listing cannot restore a deleted conversation", async () => {
   await refresh;
   expect(inventory.state.conversations).toEqual([]);
 });
+
+test("listing conversations does not read AI access or attach chat owners", async () => {
+  ensure();
+  const list = workspaceConversations("scope");
+  await list.refresh();
+  expect(list.state.conversations.map((item) => item.id)).toEqual(["chat"]);
+  expect(mock.invoke.mock.calls.map(([command]) => command)).toEqual([
+    "ai_conversations",
+  ]);
+  expect(recoveryState.page).toBeNull();
+});
+
+test("list failures open general recovery, retain known conversations and allow a new chat", async () => {
+  ensure();
+  const list = workspaceConversations("scope");
+  await list.refresh();
+  mock.invoke.mockRejectedValueOnce("native.ai.storage.failed");
+  await list.refresh();
+  expect(recoveryState.page).toBe("unexpected");
+  expect(recoveryState.active).toMatchObject({
+    boundary: "conversation",
+    scope: "scope",
+    code: "native.ai.storage.failed",
+  });
+  expect(list.state.conversations.map((item) => item.id)).toEqual(["chat"]);
+  expect(list.state.loading).toBe(false);
+  expect(await list.create()).toEqual(expect.any(String));
+  expect(list.state.error).toBe("native.ai.storage.failed");
+  await list.refresh();
+  expect(list.state.error).toBeNull();
+});
+
+test("a failed list request from a closed workspace does not open recovery", async () => {
+  let reject!: (error: unknown) => void;
+  mock.invoke.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  const refresh = workspaceConversations("scope").refresh();
+  closeChats([]);
+  reject("native.ai.storage.failed");
+  await refresh;
+  expect(recoveryState.incidents).toEqual([]);
+});
+
+test("a superseded list failure does not replace a successful refresh", async () => {
+  ensure();
+  let reject!: (error: unknown) => void;
+  mock.invoke.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  const list = workspaceConversations("scope");
+  const first = list.refresh();
+  await list.refresh();
+  reject("native.ai.storage.failed");
+  await first;
+  expect(list.state.conversations.map((item) => item.id)).toEqual(["chat"]);
+  expect(recoveryState.incidents).toEqual([]);
+});
+
 test("send submits a captured action and renders native partial/final projections without frontend leases or saves", async () => {
   const chat = await ready();
   chat.state.draft = "Read my notes";

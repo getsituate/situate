@@ -212,6 +212,10 @@ window.runPluginRuntimeSmoke = async () => {
   }
   await unavailableInitializers();
   await runtime.refresh();
+  await wait(
+    () => counter()?.querySelector("output").textContent.length > 0,
+    "The refreshed counter did not finish its initial service read",
+  );
   listing = await request({ operation: "list" });
   async function disableHeldRoot(stop) {
     const service = await window.nativePluginService(
@@ -345,6 +349,10 @@ window.runPluginRuntimeSmoke = async () => {
       ?.status !== "loaded"
   )
     throw new Error("Re-enabling did not restore the counter runtime");
+  await wait(
+    () => counter()?.querySelector("output").textContent === "0",
+    "The re-enabled counter did not finish its initial service read",
+  );
   const original = listing.plugins.find(
     (plugin) => plugin.id === "native-counter",
   );

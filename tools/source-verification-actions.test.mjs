@@ -940,6 +940,29 @@ test("GET transport bounds streamed bytes and never carries auth to artifact sto
   await assert.rejects(bounded("/actions/../../other/project"));
 });
 
+test("only a newly uploaded archive retries 404 and stops after six retries", async () => {
+  const endpoint = "/actions/artifacts/987/zip";
+  const statuses = [404, 403, 404, 200, ...Array(7).fill(404)];
+  const waits = [];
+  const api = createSourceVerificationApi({
+    fetchImpl: async (url) => {
+      assert.equal(url.pathname, `/repos/getsituate/situate${endpoint}`);
+      assert(statuses.length);
+      return new Response("zip", { status: statuses.shift() });
+    },
+    wait: async (ms) => waits.push(ms),
+  });
+  await assert.rejects(api(endpoint, { raw: true }), { actual: 404 });
+  const options = { raw: true, newlyUploaded: true };
+  await assert.rejects(api(endpoint, options), { actual: 403 });
+  assert.deepEqual(waits, []);
+  assert.deepEqual(await api(endpoint, options), Buffer.from("zip"));
+  assert.deepEqual(waits, [5_000]);
+  await assert.rejects(api(endpoint, options), { actual: 404 });
+  assert.deepEqual(waits, Array(7).fill(5_000));
+  assert.deepEqual(statuses, []);
+});
+
 test("publisher writes only a bounded owned artifact after independent job and merge checks", async (t) => {
   const f = fixture();
   f.data.run.status = "in_progress";
