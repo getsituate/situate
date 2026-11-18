@@ -428,6 +428,55 @@ describe("workspace view host", () => {
         ),
     ).toHaveLength(1);
   });
+  it.each([
+    { data: { version: 99 }, error: "layoutHost.unsupportedStoredLayout" },
+    { data: { version: 1 }, error: "layoutHost.invalidStoredLayout" },
+    { data: null, error: "native.layout.storage.failed" },
+  ])(
+    "keeps a blocking layout failure on the error screen with retry and workspace exits ($error)",
+    async ({ data, error }) => {
+      const invokeNormally = vi.mocked(invoke).getMockImplementation()!;
+      let blocked = true;
+      vi.mocked(invoke).mockImplementation(async (command, args) => {
+        if (command === "layout_load" && blocked) {
+          if (data === null) throw new Error(error);
+          return { revision: "unreadable", data: structuredClone(data) };
+        }
+        return invokeNormally(command, args);
+      });
+      const wrapper = await mountHost();
+      const screen = wrapper.get(".situate-error-screen");
+      expect(screen.text()).toContain(`⟦${error}⟧`);
+      expect(screen.get("h2").element).toBe(document.activeElement);
+      expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+      expect(wrapper.find(".layout-notice").exists()).toBe(false);
+      expect(wrapper.find(".topic-window").exists()).toBe(false);
+      await screen.trigger("keydown", { key: "Escape" });
+      expect(wrapper.find(".situate-error-screen").exists()).toBe(true);
+      await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+      await settleViews();
+      expect(wrapper.get(".situate-error-screen").text()).toContain(
+        `⟦${error}⟧`,
+      );
+      await hostButton(wrapper, "⟦errorRecovery.workspaces⟧").trigger("click");
+      expect(wrapper.emitted("workspaces")).toHaveLength(1);
+      expect(wrapper.vm.back()).toBe(true);
+      expect(wrapper.emitted("workspaces")).toHaveLength(2);
+      expect(workspaceUi("garden").session.state.document).toBeNull();
+      expect(
+        vi
+          .mocked(invoke)
+          .mock.calls.filter(([command]) => command === "layout_save"),
+      ).toHaveLength(0);
+
+      blocked = false;
+      await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+      await settleViews();
+      expect(wrapper.find(".situate-error-screen").exists()).toBe(false);
+      expect(wrapper.find(".topic-window").exists()).toBe(true);
+    },
+  );
+
   it("presents an oversized layout save in a dismissible error dialog and retains pending state for retry", async () => {
     const wrapper = await mountHost();
     const ui = workspaceUi("garden");

@@ -1,4 +1,5 @@
 {
+  "layoutHost.openFailedTitle": "Arbeitsbereich konnte nicht geöffnet werden",
   "layoutHost.chooserTitle": "Was möchtest du hier öffnen?",
   "layoutHost.pinnedViews": "Angeheftete Ansichten",
   "layoutHost.noPinnedViews": "Noch keine angehefteten Ansichten.",

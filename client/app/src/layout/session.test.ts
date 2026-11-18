@@ -252,6 +252,25 @@ describe("workspace layout session", () => {
     await owner.flush();
     expect(store.save).not.toHaveBeenCalled();
   });
+  it("retains a load failure throughout retry until a valid layout is available", async () => {
+    const store = storage();
+    const failure = new Error("native.layout.storage.failed");
+    store.load.mockRejectedValueOnce(failure);
+    const owner = create(store);
+    await owner.load();
+    const pending = deferred<LayoutRecord>();
+    store.load.mockImplementationOnce(() => pending.promise);
+    const retrying = owner.retry();
+    expect(owner.state.loading).toBe(true);
+    expect(owner.state.error).toBe(failure);
+    expect(owner.state.document).toBeNull();
+    expect(store.save).not.toHaveBeenCalled();
+    pending.resolve(store.record);
+    await retrying;
+    expect(owner.state.loading).toBe(false);
+    expect(owner.state.error).toBe("");
+    expect(owner.state.document).not.toBeNull();
+  });
   it("persists adapter-normalized layouts without waiting for a user edit", async () => {
     vi.useFakeTimers();
     const store = storage();

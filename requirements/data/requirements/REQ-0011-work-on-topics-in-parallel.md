@@ -85,6 +85,7 @@ Private multi-device AI configuration clarification; date not recorded, not publ
 - Pane history is bounded to 50 entries including the current entry; trimming never removes the current view or its presentation.
 - Regular layout save starts are separated by at least one second; pending changes are coalesced, while explicit closure and quit flush the latest state before completion.
 - Reopening a workspace on the same device restores tabs, open targets, arrangements, active selection, histories, pinned views and supported presentation state from device-local layout storage.
+- If the saved layout cannot be read, the general error screen shows the cause, a retry action and a return to workspace selection. Escape does not dismiss that screen into an empty workspace. Failed retries and leaving the screen preserve the saved layout without resetting or overwriting it.
 - Workspace synchronization and transfer exclude layout state; another device's tabs, panes and navigation remain independent while conversation content stays portable.
 - Upgrading the app preserves device-local layout state, with migration where needed; downgrading to an older app after a layout-format upgrade is not required.
 

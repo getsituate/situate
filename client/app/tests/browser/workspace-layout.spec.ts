@@ -1889,59 +1889,87 @@ for (const viewport of [
   );
 }
 
-test(
-  "an unreadable saved layout is preserved until a successful reload",
-  { tag: "@visual-desktop" },
-  async ({ page, visual }) => {
-    await page.setViewportSize({ width: 1440, height: 920 });
-    const unreadable = {
-      revision: "unreadable-1",
-      data: {
-        version: 99,
-        layout: { original: "Keep this data" },
-        pinnedViews: [],
-      },
-    };
-    await workspaceFixture(page, shellState, {
-      layout: { records: { garden: unreadable } },
-    });
-    await page.goto("/");
-    const error = page.getByRole("dialog", {
-      name: "Action could not be completed",
-      exact: true,
-    });
-    await expect(error).toBeVisible();
-    await expect(error).toContainText(
-      "This layout was saved by an unsupported version of Situate.",
-    );
-    await expect(page.locator(".topic-window")).toHaveCount(0);
-    expect(
-      await page.evaluate(() => window.__layoutTest.stored("garden")),
-    ).toEqual(unreadable);
-    expect(
-      await page.evaluate(() =>
-        Reflect.get(window, "__ipcCalls").filter(
-          (call: { command: string }) => call.command === "layout_save",
+for (const width of [1440, 390]) {
+  test(
+    `an unreadable saved layout is preserved until a successful reload at ${width}px`,
+    { tag: width < 600 ? "@visual-mobile" : "@visual-desktop" },
+    async ({ page, visual }) => {
+      await page.setViewportSize({ width, height: 920 });
+      const unreadable = {
+        revision: "unreadable-1",
+        data: {
+          version: 99,
+          layout: { original: "Keep this data" },
+          pinnedViews: [],
+        },
+      };
+      await workspaceFixture(page, shellState, {
+        layout: { records: { garden: unreadable } },
+      });
+      await page.goto("/");
+      const error = page.getByRole("region", {
+        name: "Workspace could not be opened",
+        exact: true,
+      });
+      await expect(error).toBeVisible();
+      await expect(error.getByRole("heading")).toBeFocused();
+      await expect(error).toContainText(
+        "This layout was saved by an unsupported version of Situate.",
+      );
+      await expect(
+        page.locator("dialog.error-dialog, .layout-notice"),
+      ).toHaveCount(0);
+      await expect(page.locator(".topic-window")).toHaveCount(0);
+      expect(
+        await page.evaluate(() => window.__layoutTest.stored("garden")),
+      ).toEqual(unreadable);
+      expect(
+        await page.evaluate(() =>
+          Reflect.get(window, "__ipcCalls").filter(
+            (call: { command: string }) => call.command === "layout_save",
+          ),
         ),
-      ),
-    ).toEqual([]);
-    await visual.capture("layout.storage.unreadable");
-    await page.keyboard.press("Escape");
-    await expect(error).not.toBeVisible();
-    await expect(page.locator(".layout-notice")).toHaveText("Review error");
-    await visual.capture("layout.storage.unreadable-dismissed");
-    await page
-      .getByRole("button", { name: "Review error", exact: true })
-      .click();
-    await expect(error).toBeVisible();
-    await page.evaluate(() =>
-      window.__layoutTest.replace("garden", { revision: null, data: null }),
-    );
-    await page.getByRole("button", { name: "Try again", exact: true }).click();
-    await expect(page.locator(".view-chooser")).toBeVisible();
-    await expect(page.getByRole("alert")).toHaveCount(0);
-  },
-);
+      ).toEqual([]);
+      await visual.capture("layout.storage.unreadable");
+      await page.keyboard.press("Escape");
+      await expect(error).toBeVisible();
+      await error
+        .getByRole("button", { name: "Try again", exact: true })
+        .click();
+      await expect(error).toBeVisible();
+      expect(
+        await page.evaluate(() => window.__layoutTest.stored("garden")),
+      ).toEqual(unreadable);
+      await error
+        .getByRole("button", { name: "Return to workspaces", exact: true })
+        .click();
+      const entry = page.locator(".workspace-entry");
+      await expect(entry).toBeVisible();
+      await visual.capture("layout.storage.workspace-exit");
+      expect(
+        await page.evaluate(() => window.__layoutTest.stored("garden")),
+      ).toEqual(unreadable);
+      expect(
+        await page.evaluate(() =>
+          Reflect.get(window, "__ipcCalls").filter(
+            (call: { command: string }) => call.command === "layout_save",
+          ),
+        ),
+      ).toEqual([]);
+      await entry.getByRole("button", { name: /^Garden/ }).click();
+      await expect(error).toBeVisible();
+      await page.evaluate(() =>
+        window.__layoutTest.replace("garden", { revision: null, data: null }),
+      );
+      await page
+        .getByRole("button", { name: "Try again", exact: true })
+        .click();
+      await expect(page.locator(".view-chooser")).toBeVisible();
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(error).toHaveCount(0);
+    },
+  );
+}
 
 test(
   "failed layout saves retain changes and conflict recovery never overwrites another revision",

@@ -28,6 +28,7 @@ import {
 } from "../ai/chat";
 import { captureReference } from "../files/reference-operations";
 import AppSidebar from "./AppSidebar.vue";
+import SituateErrorScreen from "./SituateErrorScreen.vue";
 import ErrorActions from "../errors/ErrorActions.vue";
 import ErrorDialog from "../errors/ErrorDialog.vue";
 const PluginManagement = defineAsyncComponent(
@@ -418,7 +419,7 @@ function back(): boolean {
     reloadDialog.value.close();
     return true;
   }
-  if (layoutError.value && !errorDismissed.value) {
+  if (document.value && layoutError.value && !errorDismissed.value) {
     errorDismissed.value = true;
     return true;
   }
@@ -436,6 +437,10 @@ function back(): boolean {
     return true;
   }
   if (layout.value?.back()) return true;
+  if (!document.value && layoutError.value) {
+    showWorkspaces();
+    return true;
+  }
   const tab = activeTab.value;
   const pane = tab?.panes.find((item) => item.id === tab.activePaneId);
   if (tab && pane && pane.navigation.cursor > 0) {
@@ -584,13 +589,35 @@ const sidebarActions = {
           @click="openNavigation"
         />
       </header>
-      <div v-if="layoutError" class="layout-notice">
+      <SituateErrorScreen
+        v-if="layoutError && !document"
+        :title="t('layoutHost.openFailedTitle')"
+        :message="localizeError(layoutError)"
+      >
+        <template #actions>
+          <SituateButton
+            :busy="ui.session.state.loading"
+            @click="ui.session.retry()"
+          >
+            {{ t("layoutHost.retry") }}
+          </SituateButton>
+          <SituateButton variant="secondary" @click="showWorkspaces">
+            {{ t("errorRecovery.workspaces") }}
+          </SituateButton>
+          <ErrorActions
+            boundary="workspace"
+            :error="layoutError"
+            :scope="ui.session.workspaceId"
+          />
+        </template>
+      </SituateErrorScreen>
+      <div v-if="layoutError && document" class="layout-notice">
         <SituateButton variant="secondary" @click="errorDismissed = false">
           {{ t("errorRecovery.review") }}
         </SituateButton>
       </div>
       <ErrorDialog
-        :open="!!layoutError && !errorDismissed"
+        :open="!!layoutError && !!document && !errorDismissed"
         :message="localizeError(layoutError)"
         @dismiss="errorDismissed = true"
       >

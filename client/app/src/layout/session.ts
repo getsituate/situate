@@ -72,7 +72,6 @@ export function createLayoutSession(
     if (loading) return loading;
     const request = generation;
     state.loading = true;
-    state.error = "";
     loading = (async () => {
       try {
         const record = await storage.load(workspaceId);
@@ -87,6 +86,7 @@ export function createLayoutSession(
                 pinnedViews: ["files"],
               }
             : decodeLayoutDocument(record.data);
+        state.error = "";
         state.dirty =
           !!record.needsSave || !sameDocument(record.data, state.document);
         if (inventory) synchronizePluginIncarnations(inventory);
