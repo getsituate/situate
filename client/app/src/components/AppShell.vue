@@ -28,7 +28,9 @@ import {
 } from "../ai/chat";
 import { captureReference } from "../files/reference-operations";
 import AppSidebar from "./AppSidebar.vue";
+import SituateErrorScreen from "./SituateErrorScreen.vue";
 import ErrorActions from "../errors/ErrorActions.vue";
+import ErrorDialog from "../errors/ErrorDialog.vue";
 const PluginManagement = defineAsyncComponent(
   () => import("../plugins/PluginManagement.vue"),
 );
@@ -184,6 +186,13 @@ async function closePlugins() {
     ?.focus();
 }
 const operationError = ref<unknown>("");
+const layoutError = computed(
+  () => operationError.value || ui.value?.session.state.error,
+);
+const errorDismissed = ref(false);
+watch([ui, layoutError], () => {
+  errorDismissed.value = false;
+});
 const navigationId = useId();
 const drawerControl =
   useTemplateRef<InstanceType<typeof SituateDialog>>("drawerControl");
@@ -406,6 +415,14 @@ function updateLayout(event: MediaQueryListEvent) {
     });
 }
 function back(): boolean {
+  if (reloadDialog.value?.open) {
+    reloadDialog.value.close();
+    return true;
+  }
+  if (document.value && layoutError.value && !errorDismissed.value) {
+    errorDismissed.value = true;
+    return true;
+  }
   if (navigationOpen.value) {
     closeNavigation();
     return true;
@@ -420,6 +437,10 @@ function back(): boolean {
     return true;
   }
   if (layout.value?.back()) return true;
+  if (!document.value && layoutError.value) {
+    showWorkspaces();
+    return true;
+  }
   const tab = activeTab.value;
   const pane = tab?.panes.find((item) => item.id === tab.activePaneId);
   if (tab && pane && pane.navigation.cursor > 0) {
@@ -568,38 +589,61 @@ const sidebarActions = {
           @click="openNavigation"
         />
       </header>
-      <div
-        v-if="ui.session.state.error || operationError"
-        class="layout-notice"
-        role="alert"
+      <SituateErrorScreen
+        v-if="layoutError && !document"
+        :title="t('layoutHost.openFailedTitle')"
+        :message="localizeError(layoutError)"
       >
-        <span>{{
-          localizeError(operationError || ui.session.state.error)
-        }}</span>
-        <SituateButton
-          variant="plain"
-          type="button"
-          @click="
-            operationError = '';
-            ui.session.retry();
-          "
-        >
-          {{ t("layoutHost.retry") }}
+        <template #actions>
+          <SituateButton
+            :busy="ui.session.state.loading"
+            @click="ui.session.retry()"
+          >
+            {{ t("layoutHost.retry") }}
+          </SituateButton>
+          <SituateButton variant="secondary" @click="showWorkspaces">
+            {{ t("errorRecovery.workspaces") }}
+          </SituateButton>
+          <ErrorActions
+            boundary="workspace"
+            :error="layoutError"
+            :scope="ui.session.workspaceId"
+          />
+        </template>
+      </SituateErrorScreen>
+      <div v-if="layoutError && document" class="layout-notice">
+        <SituateButton variant="secondary" @click="errorDismissed = false">
+          {{ t("errorRecovery.review") }}
         </SituateButton>
-        <SituateButton
-          variant="plain"
-          v-if="document"
-          type="button"
-          @click="reloadDialog?.showModal()"
-        >
-          {{ t("layoutHost.reload") }}
-        </SituateButton>
-        <ErrorActions
-          boundary="workspace"
-          :error="operationError || ui.session.state.error"
-          :scope="ui.session.workspaceId"
-        />
       </div>
+      <ErrorDialog
+        :open="!!layoutError && !!document && !errorDismissed"
+        :message="localizeError(layoutError)"
+        @dismiss="errorDismissed = true"
+      >
+        <template #actions>
+          <SituateButton
+            @click="
+              operationError = '';
+              ui.session.retry();
+            "
+          >
+            {{ t("layoutHost.retry") }}
+          </SituateButton>
+          <SituateButton
+            variant="ghost"
+            v-if="document"
+            @click="reloadDialog?.showModal()"
+          >
+            {{ t("layoutHost.reload") }}
+          </SituateButton>
+          <ErrorActions
+            boundary="workspace"
+            :error="layoutError"
+            :scope="ui.session.workspaceId"
+          />
+        </template>
+      </ErrorDialog>
       <p v-if="ui.session.state.loading && !document" role="status">
         {{ t("layoutHost.loading") }}
       </p>
@@ -763,20 +807,6 @@ const sidebarActions = {
   gap: 12px;
   padding: 8px 16px;
   flex-wrap: wrap;
-}
-.layout-notice button {
-  min-height: 44px;
-  padding: 8px 16px;
-  border: 1px solid var(--situate-control-line);
-  border-radius: var(--situate-radius-control);
-  background: var(--situate-surface);
-  color: var(--situate-ink);
-  font: inherit;
-  font-size: var(--situate-text-caption);
-}
-.layout-notice button:focus:where(html:not([data-input-modality="pointer"]) *) {
-  outline: 2px solid var(--situate-accent-strong, var(--situate-cobalt));
-  outline-offset: var(--situate-focus-offset);
 }
 .navigation-drawer {
   margin: 0;

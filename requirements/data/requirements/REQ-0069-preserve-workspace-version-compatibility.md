@@ -10,7 +10,9 @@ goals: [GOAL-0001]
 
 ## Description
 
-By default, app releases must preserve mixed-version workspace use for at least six months from the publication of each supported app version. The window starts at that version's publication, not publication of its successor. This is an internal minimum compatibility policy for released versions, not an automatic expiry date.
+By default, app releases must preserve mixed-version use of synchronizable workspace data for at least six months from the publication of each supported app version. The window starts at that version's publication, not publication of its successor. This is an internal minimum compatibility policy for released versions, not an automatic expiry date.
+
+This policy applies to data intended for synchronization, even when synchronization is not currently enabled. Device-local data is excluded from mixed-version and downgrade compatibility. The device-local `layout.json` state, including tabs, pane navigation histories and retained view presentation, is not synchronized; see [REQ-0011](REQ-0011-work-on-topics-in-parallel.md). Device-local settings and provider connections likewise need only support data-preserving upgrades, with migration where needed. Reinstalling an older app after a device-local format upgrade is not a supported downgrade path. This exclusion does not authorize silent resets or loss of user data during upgrades and does not waive public plugin-interface compatibility under [REQ-0070](REQ-0070-preserve-plugin-api-compatibility.md).
 
 When preserving mixed-version workspace use requires disproportionate transition effort, an explicit decision for the specific format change may permit an incompatible migration within this window. The decision must identify the affected app versions and the new minimum app version; older apps must refuse the migrated workspace safely and request an update. An app update or migration alone does not authorize this exception. It does not waive public plugin-interface compatibility under [REQ-0070](REQ-0070-preserve-plugin-api-compatibility.md).
 
@@ -20,7 +22,7 @@ After the minimum window, a deliberate compatibility break is permitted but not 
 
 A blocked workspace can be repaired through the [assisted repair flow](REQ-0063-start-assisted-repair-from-errors.md) without opening it for normal use or enabling incompatible plugin execution. Starting repair does not lift the block. Only a repaired state that passes compatibility verification permits normal opening again. If safe repair is unavailable in the installed app, the block remains and the prerequisite is explained, including an app update where required.
 
-These rules govern workspace data compatibility, including changes received through [synchronization](REQ-0013-synchronization-service.md). They are internal release guidance, not a public promise of indefinite compatibility, permanently available migration paths, or a separate service API or operating-system support lifetime. [Plugin migration](REQ-0033-stage-and-activate-plugin-changes.md#data-formats-and-synchronized-changes) follows this bounded support policy; avoiding incompatibility beyond the window remains a design objective rather than an unlimited migration obligation.
+These rules govern synchronizable workspace data compatibility, including changes received through [synchronization](REQ-0013-synchronization-service.md). They are internal release guidance, not a public promise of indefinite compatibility, permanently available migration paths, or a separate service API or operating-system support lifetime. [Plugin migration](REQ-0033-stage-and-activate-plugin-changes.md#data-formats-and-synchronized-changes) follows this bounded support policy; avoiding incompatibility beyond the window remains a design objective rather than an unlimited migration obligation.
 
 Changes to published workspace formats must preserve supported data through compatible evolution or a tested migration. Migration failure or interruption must retain recoverable data and must not turn unreadable records into empty state. A migration must preserve the required mixed-version reading and writing behavior; successful opening in the new app alone is insufficient. Pre-release exceptions apply only to formats verified never to have shipped publicly.
 
@@ -32,16 +34,19 @@ Users may delay updates for months or receive releases at different times across
 
 Private application-update and compatibility clarification; date not recorded, transcript not publicly available. The behavior and must-have priority were confirmed.
 
+Private synchronization and device-local compatibility clarification; date not recorded, transcript not publicly available. The mixed-version policy covers synchronizable data, not device-local layout, settings or provider connections. Device-local upgrades preserve data; downgrade support is not required.
+
 Private update, migration and repair scope clarification; date not recorded, transcript not publicly available. The six-month policy remains internal guidance; indefinite migration availability is not required. Repair may restore a blocked workspace, but only verified compatibility removes its block.
 
 Private migration-policy clarification; date not recorded, transcript not publicly available. Disproportionate transition effort may justify an explicitly approved workspace-format exception within the minimum window, with safe refusal and an update request on affected older apps.
 
 ## Acceptance criteria
 
-- Within six months of an older version's publication, that version and newer releases can read and edit a shared compatible workspace unless an explicit exception for the specific workspace-format change has been approved.
+- Within six months of an older version's publication, that version and newer releases can read and edit synchronizable workspace data unless an explicit exception for the specific workspace-format change has been approved, whether or not synchronization is currently enabled.
+- Device-local formats, including layout and navigation state, are excluded from mixed-version and downgrade compatibility. Upgrades preserve their user data through a tested migration where needed; older apps need not read the upgraded device-local format.
 - An exception identifies affected versions and the required minimum app version, preserves user data and verifies refusal before unsafe access on affected older apps; it does not waive public plugin-interface compatibility.
 - Data written by the older supported app remains usable in the newer app.
-- Editing in the older supported app preserves information added by the newer app, even when the older app does not expose the new feature.
+- Editing synchronizable data in the older supported app preserves information added by the newer app, even when the older app does not expose the new feature.
 - Skipping intermediate app releases within the compatibility window does not require manually installing each skipped release to retain workspace use.
 - Upgrade tests use synthetic workspaces matching supported published formats and verify retained content, history, references, conversations and plugin state after reopening; fresh-workspace tests alone are insufficient.
 - Required migrations are tested for failure, process interruption and repeated opening without lost data, duplicate conversion or automatic replay of completed or uncertain effects.

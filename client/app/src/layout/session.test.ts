@@ -252,6 +252,99 @@ describe("workspace layout session", () => {
     await owner.flush();
     expect(store.save).not.toHaveBeenCalled();
   });
+  it("retains a load failure throughout retry until a valid layout is available", async () => {
+    const store = storage();
+    const failure = new Error("native.layout.storage.failed");
+    store.load.mockRejectedValueOnce(failure);
+    const owner = create(store);
+    await owner.load();
+    const pending = deferred<LayoutRecord>();
+    store.load.mockImplementationOnce(() => pending.promise);
+    const retrying = owner.retry();
+    expect(owner.state.loading).toBe(true);
+    expect(owner.state.error).toBe(failure);
+    expect(owner.state.document).toBeNull();
+    expect(store.save).not.toHaveBeenCalled();
+    pending.resolve(store.record);
+    await retrying;
+    expect(owner.state.loading).toBe(false);
+    expect(owner.state.error).toBe("");
+    expect(owner.state.document).not.toBeNull();
+  });
+  it("persists adapter-normalized layouts without waiting for a user edit", async () => {
+    vi.useFakeTimers();
+    const store = storage();
+    const original = create(store);
+    await original.load();
+    await original.flush();
+    store.load.mockResolvedValueOnce({ ...store.record, needsSave: true });
+    const restored = create(store);
+    await restored.load();
+    expect(restored.state.dirty).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store.save).toHaveBeenCalledTimes(2);
+    expect(restored.state.dirty).toBe(false);
+  });
+  it("coalesces regular saves to at most one start per second", async () => {
+    vi.useFakeTimers();
+    const store = storage();
+    const owner = create(store);
+    await owner.load();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(store.save).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.save).toHaveBeenCalledTimes(1);
+    owner.pin("demo:first");
+    await vi.advanceTimersByTimeAsync(400);
+    owner.pin("demo:second");
+    await vi.advanceTimersByTimeAsync(599);
+    expect(store.save).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.save).toHaveBeenCalledTimes(2);
+    expect(store.record.data?.pinnedViews).toEqual([
+      "files",
+      "demo:first",
+      "demo:second",
+    ]);
+  });
+  it("retains only the newest state during a regular in-flight save", async () => {
+    vi.useFakeTimers();
+    const store = storage();
+    const pending = deferred<LayoutRecord>();
+    store.save.mockImplementationOnce(() => pending.promise);
+    const owner = create(store);
+    await owner.load();
+    await vi.advanceTimersByTimeAsync(1000);
+    const first = owner.state.document!;
+    owner.pin("demo:first");
+    await vi.advanceTimersByTimeAsync(100);
+    owner.pin("demo:second");
+    expect(store.save).toHaveBeenCalledTimes(1);
+    store.external(first);
+    pending.resolve(store.record);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.save).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(store.save).toHaveBeenCalledTimes(2);
+    expect(store.record.data?.pinnedViews).toEqual([
+      "files",
+      "demo:first",
+      "demo:second",
+    ]);
+  });
+  it("flushes immediately for closure even within the regular save interval", async () => {
+    vi.useFakeTimers();
+    const store = storage();
+    const owner = create(store);
+    await owner.load();
+    await owner.flush();
+    owner.pin("demo:latest");
+    await owner.flush();
+    expect(store.save).toHaveBeenCalledTimes(2);
+    expect(store.record.data?.pinnedViews).toContain("demo:latest");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(store.save).toHaveBeenCalledTimes(2);
+  });
   it("serializes saves and flushes edits that arrive during a write", async () => {
     const store = storage();
     const owner = create(store);
@@ -458,6 +551,25 @@ describe("workspace layout session", () => {
       owner.state.document!.layout.tabs[0]!.panes[0]!.navigation.entries.at(-1)!
         .target,
     ).toEqual({ kind: "new-conversation", conversationId: "temporary" });
+  });
+  it("rewrites a remembered file after its original history entry was trimmed", async () => {
+    const owner = create(storage());
+    await owner.load();
+    owner.open({ kind: "view", viewId: "files", contentId: "folder/plan.md" });
+    for (let index = 0; index < 55; index++)
+      owner.open({ kind: "conversation", conversationId: `chat-${index}` });
+    owner.mapTargets((target) =>
+      target.kind === "view" && target.viewId === "files"
+        ? { ...target, contentId: "renamed/plan.md" }
+        : target,
+    );
+    owner.open({ kind: "view", viewId: "files" });
+    const pane = owner.state.document!.layout.tabs[0]!.panes[0]!;
+    expect(pane.navigation.entries[pane.navigation.cursor]!.target).toEqual({
+      kind: "view",
+      viewId: "files",
+      contentId: "renamed/plan.md",
+    });
   });
   it("rewrites live file paths across open and closed histories but not historical targets", async () => {
     const owner = create(storage());

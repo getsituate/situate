@@ -64,7 +64,10 @@ async function choose(
   action!.element.click();
   await flushPromises();
 }
-async function setup(writable = true) {
+async function setup(
+  writable = true,
+  extraEntries: { path: string; isDirectory: boolean }[] = [],
+) {
   const id = `editor-${++serial}`;
   const files: Record<string, string> = {
     "Notes/Garden.md":
@@ -83,6 +86,7 @@ async function setup(writable = true) {
             reason: null,
             entries: [
               { path: "Notes", isDirectory: true },
+              ...extraEntries,
               ...Object.keys(files).map((path) => ({
                 path,
                 isDirectory: false,
@@ -175,6 +179,7 @@ async function setup(writable = true) {
     },
   });
   await flushPromises();
+  await button(wrapper, "Notes").trigger("click");
   await button(wrapper, "Garden.md").trigger("click");
   await flushPromises();
   return { wrapper, session: workspaceSession(id) };
@@ -302,11 +307,89 @@ describe("file panes", () => {
     await flushPromises();
     return host;
   }
+  it("starts with folders closed when no folder state was retained", async () => {
+    const { wrapper, session } = await setup();
+    wrapper.unmount();
+    const editor = await pane(session.id, "Notes/Garden.md", {
+      treeOpen: true,
+    });
+    expect(button(editor, "Notes").attributes("aria-expanded")).toBe("false");
+    expect(editor.findAll(".file-entry")).toHaveLength(0);
+    await button(editor, "Notes").trigger("click");
+    expect(button(editor, "Garden.md").exists()).toBe(true);
+    await button(editor, "Notes").trigger("click");
+    expect(editor.findAll(".file-entry")).toHaveLength(0);
+    const search = editor.get('input[type="search"]');
+    await search.setValue("Garden");
+    expect(editor.findAll(".file-entry").map((entry) => entry.text())).toEqual([
+      "Notes/Garden.md",
+    ]);
+    await search.setValue("");
+    expect(button(editor, "Notes").attributes("aria-expanded")).toBe("false");
+    expect(editor.findAll(".file-entry")).toHaveLength(0);
+  });
+  it("keeps files with intentionally hidden parent directories accessible", async () => {
+    const { wrapper, session } = await setup(true, [
+      { path: ".situate/working-method.md", isDirectory: false },
+    ]);
+    wrapper.unmount();
+    const editor = await pane(session.id, "", { treeOpen: true });
+    expect(editor.findAll(".file-entry").map((entry) => entry.text())).toEqual([
+      "working-method.md",
+    ]);
+    expect(button(editor, "Notes").attributes("aria-expanded")).toBe("false");
+  });
+  it("retains open and closed folders when a file click remounts the pane", async () => {
+    const { wrapper, session } = await setup(true, [
+      { path: "Archive", isDirectory: true },
+      { path: "Archive/Old.md", isDirectory: false },
+      { path: "Notes/Ideas", isDirectory: true },
+      { path: "Notes/Ideas/Seed.md", isDirectory: false },
+    ]);
+    wrapper.unmount();
+    const host = await navigatingPane(session.id);
+    const editor = host.getComponent(FileEditor);
+    await editor.vm.showTree();
+    for (const name of ["Notes", "Archive", "Ideas"]) {
+      const folder = button(editor, name);
+      if (folder.attributes("aria-expanded") !== String(name === "Notes"))
+        await folder.trigger("click");
+    }
+    await button(editor, "Reading.md").trigger("click");
+    await flushPromises();
+    const destination = host.getComponent(FileEditor);
+    expect(destination.element === editor.element).toBe(false);
+    expect(destination.get(".document-location h3").text()).toBe("Reading.md");
+    expect(button(destination, "Notes").attributes("aria-expanded")).toBe(
+      "true",
+    );
+    expect(button(destination, "Archive").attributes("aria-expanded")).toBe(
+      "false",
+    );
+    expect(button(destination, "Ideas").attributes("aria-expanded")).toBe(
+      "false",
+    );
+    expect(
+      destination.findAll(".file-entry").map((entry) => entry.text()),
+    ).toEqual(["Garden.md", "Reading.md"]);
+    await button(destination, "Ideas").trigger("click");
+    await button(destination, "Ideas").trigger("click");
+    const presentation = structuredClone(
+      destination.emitted("presentation")!.at(-1)![0] as PresentationValue,
+    );
+    host.unmount();
+    const reopened = await pane(session.id, "Notes/Reading.md", presentation);
+    expect(button(reopened, "Notes").attributes("aria-expanded")).toBe("true");
+    expect(button(reopened, "Archive").attributes("aria-expanded")).toBe(
+      "false",
+    );
+  });
   it("retains source mode and live selection across historical navigation and return", async () => {
     const { wrapper, session } = await setup();
     wrapper.unmount();
     const host = await navigatingPane(session.id);
     let editor = host.getComponent(FileEditor);
+    await button(editor, "Notes").trigger("click");
     await choose(
       editor,
       '⟦files.actionsFor:{"name":"Notes/Reading.md"}⟧',
@@ -516,10 +599,15 @@ describe("file panes", () => {
       treeOpen: true,
       treeWidth: 320,
     });
+    await button(editor, "Notes").trigger("click");
     await button(editor, "Garden.md").trigger("click");
     await flushPromises();
     const [target, presentation] = editor.emitted("navigate")!.at(-1)!;
-    expect(presentation).toEqual({ treeOpen: true, treeWidth: 320 });
+    expect(presentation).toEqual({
+      treeOpen: true,
+      treeWidth: 320,
+      expandedFolders: ["Notes"],
+    });
     await editor.setProps({
       target: target as FilePaneNavigation,
       presentation: presentation as PresentationValue,
@@ -530,6 +618,7 @@ describe("file panes", () => {
     expect(editor.emitted("navigate")!.at(-1)![1]).toEqual({
       treeOpen: true,
       treeWidth: 320,
+      expandedFolders: ["Notes"],
     });
   });
   it("retains a resized browser across collapse and remount without changing other panes", async () => {
@@ -594,11 +683,12 @@ describe("file panes", () => {
     await flushPromises();
     expect(editor.get<HTMLTextAreaElement>("textarea").element.value).toBe("");
     await button(editor, "⟦files.expandFileBrowser⟧").trigger("click");
+    await button(editor, "Notes").trigger("click");
     await button(editor, "Reading.md").trigger("click");
     await flushPromises();
     expect(editor.emitted("navigate")?.at(-1)).toEqual([
       { kind: "view", viewId: "files", contentId: "Notes/Reading.md" },
-      { treeOpen: true, treeWidth: 228 },
+      { treeOpen: true, treeWidth: 228, expandedFolders: ["Notes"] },
     ]);
   });
   it("keeps different targets and modes local and routes file and rendered links through navigation", async () => {
@@ -613,11 +703,12 @@ describe("file panes", () => {
     expect(second.get<HTMLTextAreaElement>("textarea").element.value).toBe(
       "# Reading",
     );
+    await button(first, "Notes").trigger("click");
     await button(first, "Reading.md").trigger("click");
     await flushPromises();
     expect(first.emitted("navigate")?.at(-1)).toEqual([
       { kind: "view", viewId: "files", contentId: "Notes/Reading.md" },
-      { treeOpen: true, treeWidth: 228 },
+      { treeOpen: true, treeWidth: 228, expandedFolders: ["Notes"] },
     ]);
     first.getComponent(RenderedFile).vm.$emit("navigate", "Notes/Reading.md");
     await flushPromises();
@@ -1147,6 +1238,7 @@ describe("file editor actions", () => {
     const editor = await pane(session.id, "Notes/Garden.md", {
       mode: "read",
       treeOpen: true,
+      expandedFolders: ["Notes"],
     });
     const implementation = invoke.getMockImplementation()!;
     let reject!: (reason: Error) => void;

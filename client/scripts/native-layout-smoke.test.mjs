@@ -44,6 +44,54 @@ test("layout smoke IPC preserves replies and rejects a permanently pending reque
   await rejected;
 });
 
+test("Files navigation accepts a restored target while explicit file navigation stays exact", async () => {
+  const invoke = async () => ({
+    data: {
+      layout: {
+        activeTabId: "tab",
+        tabs: [
+          {
+            id: "tab",
+            activePaneId: "pane",
+            panes: [
+              {
+                id: "pane",
+                navigation: {
+                  cursor: 0,
+                  entries: [
+                    {
+                      target: {
+                        kind: "view",
+                        viewId: "files",
+                        contentId: "restored.md",
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  const smoke = binding(invoke, { querySelector: () => null });
+  const observed = [];
+  smoke.nativeSmokeWait.wait = async (probe) => {
+    const ready = await probe({ invoke });
+    observed.push(ready);
+    if (!ready) throw new Error("Fixture target not selected");
+    return true;
+  };
+  await smoke.waitSmokeFileTarget("fixture");
+  await smoke.waitSmokeFileTarget("fixture", "restored.md");
+  await assert.rejects(
+    smoke.waitSmokeFileTarget("fixture", "different.md"),
+    /Fixture target not selected/,
+  );
+  assert.deepEqual(observed, [true, true, false]);
+});
+
 test("durable navigation failure diagnostics omit content identities and presentation", async () => {
   const invoke = async () => ({
     data: {

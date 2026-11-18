@@ -10,17 +10,19 @@ goals: [GOAL-0001, GOAL-0004]
 
 ## Description
 
-A workspace must be one portable directory containing its organizational content, chats, internal state, plugins and all histories. Users must not need a special export to transfer that complete directory. Copying a closed workspace can produce a consistent backup. A safe snapshot mechanism for a live workspace remains undecided; an arbitrary live copy is not promised to be consistent.
+A workspace must be one portable directory containing its organizational content, chats, portable internal state, plugins and content and execution histories. Users must not need a special export to transfer that complete directory. Copying a closed workspace can produce a consistent backup. A safe snapshot mechanism for a live workspace remains undecided; an arbitrary live copy is not promised to be consistent.
 
 The portable metadata includes the identifier assigned at [workspace creation](REQ-0045-create-local-workspaces.md). Complete copies and restorations preserve it, including on another device, so [diagnostic correlation](REQ-0064-record-client-diagnostic-events.md) recognizes them as copies of the same workspace. A deliberately independent workspace needs a new identifier; copying a directory alone does not imply that decision. Diagnostic log files and device/session identifiers are not portable workspace state.
 
-Operational AI configuration and credentials are an explicit exception to directory completeness for every synchronization mode. Provider connections, endpoint addresses, selected access, default models and conversation-specific model selections are stored outside the portable directory and its histories, scoped to workspace and device under [REQ-0015](REQ-0015-connect-user-provided-models.md). Provider secrets remain in device-local OS secure storage. Copying or restoring a workspace does not transfer these records or overwrite a destination's existing local AI configuration. A new device offers local setup when AI is needed, without treating its absence as a damaged workspace; manual use remains available.
+[Layout state](REQ-0011-work-on-topics-in-parallel.md), including tabs, panes and navigation histories, is device-local and excluded from workspace transfer and synchronization. Copying or restoring a workspace must not overwrite the destination device's layout.
+
+Operational AI configuration and credentials are another explicit exception to directory completeness for every synchronization mode. Provider connections, endpoint addresses, selected access, default models and conversation-specific model selections are stored outside the portable directory and its histories, scoped to workspace and device under [REQ-0015](REQ-0015-connect-user-provided-models.md). Provider secrets remain in device-local OS secure storage. Copying or restoring a workspace does not transfer these records or overwrite a destination's existing local AI configuration. A new device offers local setup when AI is needed, without treating its absence as a damaged workspace; manual use remains available.
 
 Chats retain their content without per-message provider/model attribution. Copied conversations do not configure future requests or grant provider access on the destination. [Official synchronization and recovery](REQ-0013-synchronization-service.md) likewise do not provision user-provided AI settings or credentials. [Managed AI entitlement](REQ-0016-managed-ai-access.md) is account-based rather than part of the copied directory. Portability does not guarantee that a plugin or external connection works on a destination without its platform capabilities or authorization.
 
 Users may develop [synchronization plugins](REQ-0013-synchronization-service.md) that transfer the complete directory, including `.git` and internal files. This permission is not a consistency guarantee: uncontrolled transfer or modification of repository internals can corrupt history. The core retains responsibility for [file and history recovery](REQ-0022-explain-note-changes.md); a transport plugin does not take over those duties.
 
-The [workspace storage constraints](../foundations.md#workspace-storage-and-history) place all workspace-local Situate metadata and operational state under `.situate/`. Files outside it are user-owned content, not implicit configuration. File and task identity markers are the only Situate-owned metadata embedded in those files; task properties and existing user metadata remain user content. Device-local AI configuration, credentials and logs retain their separate storage boundaries.
+The [workspace storage constraints](../foundations.md#workspace-storage-and-history) place all workspace-local Situate metadata and operational state under `.situate/`. Files outside it are user-owned content, not implicit configuration. File and task identity markers are the only Situate-owned metadata embedded in those files; task properties and existing user metadata remain user content. Device-local layout, AI configuration, credentials and logs retain their separate storage boundaries.
 
 ## Rationale
 
@@ -36,11 +38,14 @@ Private diagnostic workspace-identity clarification; date not recorded, transcri
 
 Private provider-access and credential-recovery clarification; date not recorded, not publicly available. Device-local provider secrets were explicitly excluded from directory portability.
 
+Private layout storage clarification; date not recorded, not publicly available. Tab/pane layout and navigation histories are device-local rather than portable workspace content.
+
 Private multi-device AI configuration clarification; date not recorded, not publicly available. Provider configuration and future model choices also remain device-local for every transport; conversation content remains portable.
 
 ## Acceptance criteria
 
-- The workspace directory contains its content, chats, internal state, plugins and all associated histories.
+- The workspace directory contains its content, chats, portable internal state, plugins and content and execution histories.
+- Device-local layout state, including tabs, panes and navigation histories, is excluded from workspace transfer and synchronization; the destination's layout is not overwritten.
 - All workspace-local Situate metadata and operational state are stored under `.situate/`; user files outside it are not automatically interpreted as configuration, working rules or skills.
 - Onboarding saves confirmed working rules at `.situate/working-method.md` without creating or modifying external instruction files.
 - Temporary import scripts, mappings and manifests stay under `.situate/`, outside the user-content history. File and task identity markers remain the only Situate-owned metadata embedded in user content.

@@ -115,13 +115,13 @@ onErrorCaptured((error) => {
   failed.value = true;
   return false;
 });
-function retain(value: PresentationValue) {
+function retain(entryId: string, value: PresentationValue) {
   if (!props.ui.session.current(ticket)) return;
   props.ui.session.dispatch({
     type: "retain-presentation",
     tabId: props.tab.id,
     paneId: props.pane.id,
-    entryId: entry.value.id,
+    entryId,
     presentation: value,
   });
 }
@@ -132,11 +132,13 @@ function open(target: ViewTarget, presentation?: PresentationValue) {
 }
 const viewProps = computed(() => {
   const target = entry.value.target;
+  const entryId = entry.value.id;
   const common = {
     workspaceId: props.ui.session.workspaceId,
     workspaceName: props.workspaceName,
     embedded: true,
     presentation: entry.value.presentation,
+    onPresentation: (value: PresentationValue) => retain(entryId, value),
   };
   if (target.kind === "conversation" || target.kind === "new-conversation")
     return {
@@ -301,7 +303,6 @@ const viewProps = computed(() => {
     <component
       :is="definition.component"
       v-bind="viewProps"
-      @presentation="retain"
       @navigate="open"
       @leave="open({ kind: 'empty' })"
       @reference="emit('reference', $event)"

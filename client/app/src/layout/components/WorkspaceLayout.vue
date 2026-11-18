@@ -21,6 +21,7 @@ import {
 import { diagnosticsFor, type Context } from "../../diagnostics";
 import { layoutAction } from "../../diagnostics/actions";
 import WorkingIndicator from "../../components/WorkingIndicator.vue";
+import ErrorDialog from "../../errors/ErrorDialog.vue";
 import MaximizedPaneHeader from "./MaximizedPaneHeader.vue";
 import { t } from "@situate/localization";
 import SplitLayout from "./SplitLayout.vue";
@@ -30,12 +31,14 @@ import PanePager from "./PanePager.vue";
 import TabActions from "./TabActions.vue";
 import {
   selectedTab as activeTab,
+  layoutLimit,
   tabTitle,
   type LayoutState,
   type LayoutIntent,
   type Pane,
 } from "../model";
 import { currentEntry, type ViewTarget } from "../navigation";
+import { MAX_OPEN_TABS, MAX_PANES_PER_TAB } from "../limits";
 import { paneOrder, type PaneEdge } from "../tree";
 import { dimensions } from "./geometry";
 import { edges, edgeTitle } from "./edges";
@@ -67,6 +70,14 @@ const emit = defineEmits<{
   navigation: [event: MouseEvent];
 }>();
 const tab = computed(() => activeTab(props.state));
+const limitError = ref<ReturnType<typeof layoutLimit>>();
+const limitMessage = computed(() =>
+  limitError.value === "tabs"
+    ? t("layoutUi.tabLimit", { count: MAX_OPEN_TABS })
+    : limitError.value === "panes"
+      ? t("layoutUi.paneLimit", { count: MAX_PANES_PER_TAB })
+      : "",
+);
 const surfaceMenu = ref<InstanceType<typeof TabActions>>();
 const maximizedHeader = ref<InstanceType<typeof MaximizedPaneHeader>>();
 const overviewMenus = ref<InstanceType<typeof TabActions>[]>([]);
@@ -313,6 +324,11 @@ function renameTab(
   });
 }
 function recordIntent(intent: LayoutIntent, control = "button") {
+  const limit = layoutLimit(props.state, intent);
+  if (limit) {
+    limitError.value = limit;
+    return false;
+  }
   const context = diagnosticsFor(props.workspaceId).action(
     layoutAction(intent),
     control,
@@ -320,6 +336,14 @@ function recordIntent(intent: LayoutIntent, control = "button") {
   );
   if (context) emit("intent", intent, context);
   else emit("intent", intent);
+  return true;
+}
+function dismissLimitError() {
+  limitError.value = undefined;
+  void nextTick(() => {
+    if (dialog.value?.open) focusDialog();
+    else focusActiveTab();
+  });
 }
 function saveName() {
   if (!editedTab.value) return;
@@ -355,7 +379,7 @@ function dismiss(restoreFocus: boolean) {
   });
 }
 function act(action: LayoutIntent) {
-  recordIntent(action, "menu");
+  if (!recordIntent(action, "menu")) return;
   dismiss(false);
   void nextTick(() => {
     const paneAction = [
@@ -371,7 +395,7 @@ function act(action: LayoutIntent) {
   });
 }
 function paneAction(action: LayoutIntent) {
-  recordIntent(action, "pane");
+  if (!recordIntent(action, "pane")) return;
   if (
     action.type === "open" ||
     action.type === "move" ||
@@ -418,13 +442,16 @@ function tabKey(event: KeyboardEvent, index: number) {
   selectTab(props.state.tabs[next]!.id, true, "keyboard");
 }
 function createTab() {
-  recordIntent({ type: "new-tab" });
-  void nextTick(focusActiveTab);
+  if (recordIntent({ type: "new-tab" })) void nextTick(focusActiveTab);
 }
 function tabHasActivity(id: string) {
   return props.hasActivity?.(id) ?? false;
 }
 function back(): boolean {
+  if (limitError.value) {
+    dismissLimitError();
+    return true;
+  }
   if (maximizedHeader.value?.back()) return true;
   for (const menu of [...overviewMenus.value, surfaceMenu.value]) {
     if (menu?.back()) return true;
@@ -983,6 +1010,11 @@ defineExpose({ back, focusPaneHeader });
         </footer>
       </div>
     </SituateDialog>
+    <ErrorDialog
+      :open="!!limitError"
+      :message="limitMessage"
+      @dismiss="dismissLimitError"
+    />
   </main>
 </template>
 

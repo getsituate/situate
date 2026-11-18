@@ -18,6 +18,7 @@ async function enterFiles(page: Page): Promise<void> {
     exact: true,
   });
   if (await expand.isVisible()) await expand.click();
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
   await page.getByRole("button", { name: "Garden.md", exact: true }).click();
   if ((page.viewportSize()?.width ?? 0) >= 1184 && (await expand.isVisible()))
     await expand.click();

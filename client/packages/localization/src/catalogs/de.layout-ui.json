@@ -27,6 +27,8 @@
   "layoutUi.move": "Verschieben",
   "layoutUi.movePane": "Bereich verschieben",
   "layoutUi.nameLabel": "Tabname",
+  "layoutUi.tabLimit": "Du kannst bis zu {count} Tabs öffnen. Schließe einen Tab, um einen weiteren zu erstellen oder wieder zu öffnen.",
+  "layoutUi.paneLimit": "Ein Tab kann bis zu {count} Bereiche haben. Schließe einen Bereich, um einen weiteren hinzuzufügen.",
   "layoutUi.newTab": "Neuer Tab",
   "layoutUi.noBack": "Keine frühere Ansicht in diesem Bereich.",
   "layoutUi.noForward": "Keine spätere Ansicht in diesem Bereich.",

@@ -1,4 +1,5 @@
 {
+  "layoutHost.openFailedTitle": "Workspace could not be opened",
   "layoutHost.chooserTitle": "What would you like here?",
   "layoutHost.pinnedViews": "Pinned views",
   "layoutHost.noPinnedViews": "No pinned views yet.",

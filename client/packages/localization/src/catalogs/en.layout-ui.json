@@ -27,6 +27,8 @@
   "layoutUi.move": "Move",
   "layoutUi.movePane": "Move pane",
   "layoutUi.nameLabel": "Tab name",
+  "layoutUi.tabLimit": "Up to {count} tabs can be open. Close a tab to create or reopen another.",
+  "layoutUi.paneLimit": "Up to {count} panes can be open in a tab. Close a pane to add another.",
   "layoutUi.newTab": "New tab",
   "layoutUi.noBack": "No earlier view in this pane.",
   "layoutUi.noForward": "No later view in this pane.",

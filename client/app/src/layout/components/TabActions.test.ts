@@ -14,6 +14,29 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+it("forwards creation and reopening attempts without inline capacity messages", async () => {
+  const wrapper = mount(TabActions, {
+    attachTo: document.body,
+    props: {
+      label: "Tab actions",
+      surface: true,
+      canReopen: true,
+    },
+  });
+  for (const key of ["newTab", "reopenTab"]) {
+    await wrapper.get(".tab-actions-trigger").trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".limit-help").exists()).toBe(false);
+    const button = wrapper
+      .findAll("button")
+      .find((button) => button.text() === `⟦layoutUi.${key}⟧`)!;
+    expect(button.attributes("disabled")).toBeUndefined();
+    await button.trigger("click");
+  }
+  expect(wrapper.emitted("create")).toEqual([[]]);
+  expect(wrapper.emitted("reopen")).toEqual([[]]);
+});
+
 it("opens the last action with ArrowUp and passes the trigger to rename", async () => {
   const wrapper = mount(TabActions, {
     attachTo: document.body,

@@ -427,10 +427,12 @@ for (const width of [1440, 700]) {
         .getByRole("button", { name: "View files", exact: true })
         .press("Enter");
       await expect(page.locator(".file-tree")).toContainText("skills");
-      await visual.capture("plugins.management.files");
       const folder = page
         .locator(".folder-entry")
         .filter({ hasText: "skills" });
+      await expect(folder).toHaveAttribute("aria-expanded", "false");
+      await folder.click();
+      await visual.capture("plugins.management.files");
       await folder.click();
       await expect(folder).toHaveAttribute("aria-expanded", "false");
       await folder.click();

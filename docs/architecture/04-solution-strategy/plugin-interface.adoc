@@ -55,7 +55,7 @@ See link:{strategy-requirements-root}/data/requirements/REQ-0001-create-integrat
 Each workspace has user-named topic tabs with independent layouts of movable, resizable panes. Tabs group presentation without creating data or execution scopes; each pane has one active view and its own back/forward history.
 Navigation, hiding views and switching tabs preserve workspace-owned execution. Multiple panes can show one conversation without creating multiple owners.
 Phones normally project one pane at a time; larger displays can show several. Narrow or maximized presentation preserves the stored tab arrangement.
-Layout and supported navigation state belong in `.situate` for restoration and synchronization. Device geometry changes presentation, not the stored arrangement; concurrent layout reconciliation remains separate work.
+Layout and supported navigation state are device-local, scoped to a workspace and excluded from synchronization and workspace transfer. Each device restores its own arrangement; viewport changes affect its presentation, not another device's layout.
 Built-ins, plugins and agents use host navigation instead of manipulating layout internals. The <<ui-building-blocks,User Interface decomposition>> defines focus, opening, tab/pane controls and the separation of coordination, layout, navigation, sessions and rendering.
 See link:{strategy-requirements-root}/data/requirements/REQ-0011-work-on-topics-in-parallel.md[REQ-0011] and link:{strategy-requirements-root}/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026].
 

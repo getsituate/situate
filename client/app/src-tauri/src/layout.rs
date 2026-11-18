@@ -1,5 +1,6 @@
 use serde_json::Value;
 use situate_core::layout_storage::{Incarnations, LayoutStorage, Snapshot};
+use tauri::Manager;
 
 fn retry_layout_admission<T>(
     mut operation: impl FnMut() -> Result<T, String>,
@@ -23,7 +24,15 @@ fn with_storage<T>(
     operation: impl Fn(&LayoutStorage) -> Result<T, String>,
 ) -> Result<T, String> {
     crate::workspaces::with_open_storage_root(app, window, workspace_id, |root| {
-        let storage = LayoutStorage::open(root, workspace_id)?;
+        let directory = app
+            .path()
+            .app_data_dir()
+            .map_err(|_| "native.layout.storage.failed")?;
+        std::fs::create_dir_all(&directory).map_err(|_| "native.layout.storage.failed")?;
+        let directory = directory
+            .canonicalize()
+            .map_err(|_| "native.layout.storage.failed")?;
+        let storage = LayoutStorage::open_device(root, workspace_id, &directory)?;
         retry_layout_admission(|| operation(&storage))
     })
 }

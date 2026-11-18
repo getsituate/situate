@@ -42,6 +42,7 @@ export interface FilePanePresentation {
   readScrollTop: number;
   treeOpen: boolean;
   treeWidth: number;
+  expandedFolders: string[];
   history: FileHistoryPresentation | null;
 }
 export function filePresentation(
@@ -72,6 +73,12 @@ export function filePresentation(
     readScrollTop: position("readScrollTop"),
     treeOpen: typeof data.treeOpen === "boolean" ? data.treeOpen : treeOpen,
     treeWidth: position("treeWidth") || 228,
+    expandedFolders: Array.isArray(data.expandedFolders)
+      ? data.expandedFolders.filter(
+          (path): path is string =>
+            typeof path === "string" && safeFileTarget(path),
+        )
+      : [],
     history: readHistoryPresentation(data.history),
   };
 }

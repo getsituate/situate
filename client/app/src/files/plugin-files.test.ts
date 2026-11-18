@@ -68,6 +68,7 @@ function browser(pluginId?: string, controlled = false) {
       workspaceId: `inspection-${++sequence}`,
       workspaceName: "Sample",
       pluginId,
+      presentation: { expandedFolders: ["src"] },
       ...(controlled ? { target: {} } : {}),
     },
   });

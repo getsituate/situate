@@ -102,7 +102,7 @@ Use the preferred terms below consistently. Keep code identifiers, UI labels and
 |A plugin role that owns connections and account configuration for external systems and exposes reusable capabilities. Consumers independently select relevant accounts. This role can coexist with workflow and view contributions in the same plugin.
 
 |[[glossary-layout]]Layout
-|The tab and split-pane arrangement in a workspace's UI. It is distinct from content and execution ownership. Layout and supported navigation state are stored in the workspace's `.situate` directory for restoration and synchronization. Phones normally project one pane at a time without changing that arrangement.
+|The tab and split-pane arrangement in a workspace's UI. It is distinct from content and execution ownership. Layout and supported navigation state are device-local, scoped to a workspace and restored on the same device rather than synchronized or transferred with workspace content. Phones normally project one pane at a time without changing that arrangement.
 
 |[[glossary-lifecycle-admission]]Lifecycle Admission
 |The coordination gate controlling whether a workspace or application lifecycle operation, such as closure or update installation, may start. It is distinct from permission to access a workspace and from acceptance of individual plugin or model requests; see <<glossary-operation-admission,Operation Admission>>.
@@ -240,7 +240,7 @@ Use the preferred terms below consistently. Keep code identifiers, UI labels and
 |A plugin role that composes capabilities into individual workflows and, where useful, views. It can consume integration exports without owning duplicate connection logic. Plugins contributing only visual extensions need not be workflow plugins.
 
 |[[glossary-workspace]]Workspace
-|A personal organizational system whose portable content, conversations, plugins, workspace configuration and histories reside in one directory. <<glossary-device-local-ai-settings,Operational AI settings and credentials>> are an explicit device-local exception outside that directory. Workspace separation is an ownership and lifecycle boundary, not a malicious-plugin sandbox or a promise of encrypted local storage; a layout describes presentation, not the data boundary.
+|A personal organizational system whose portable content, conversations, plugins, workspace configuration and histories reside in one directory. Layout and pane navigation state, <<glossary-device-local-ai-settings,operational AI settings and credentials>> are device-local exceptions to workspace portability. Workspace separation is an ownership and lifecycle boundary, not a malicious-plugin sandbox or a promise of encrypted local storage; a layout describes presentation, not the data boundary.
 
 |[[glossary-workspace-operation-lease]]Workspace Operation Lease
 |A lifetime handle retaining an accepted operation for an open workspace session so that closure can wait for its actual completion and cleanup. It is distinct from a plugin <<glossary-worker-lease,Worker Lease>>, which retains an independent host request while plugin activation waits for affected work to finish.

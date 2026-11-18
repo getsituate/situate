@@ -162,7 +162,6 @@ const query = ref("");
 const treeOpen = ref(
   props.target === undefined ? true : viewState.value.treeOpen,
 );
-const collapsed = ref(new Set<string>());
 const mode = ref<"read" | "source">(viewState.value.mode);
 const sourceControl =
   useTemplateRef<InstanceType<typeof SituateTextarea>>("sourceControl");
@@ -264,6 +263,9 @@ let pressPoint: { x: number; y: number } | undefined;
 let suppressClick = false;
 const entries = computed(() => {
   const stored = session.value.snapshot?.entries ?? [];
+  const directories = new Set(
+    stored.filter((entry) => entry.isDirectory).map((entry) => entry.path),
+  );
   const drafts = Object.values(session.value.files)
     .filter(
       (file) => file.dirty && !stored.some((entry) => entry.path === file.path),
@@ -275,9 +277,14 @@ const entries = computed(() => {
         return entry.path
           .toLocaleLowerCase()
           .includes(query.value.toLocaleLowerCase());
-      return ![...collapsed.value].some((path) =>
-        entry.path.startsWith(`${path}/`),
-      );
+      const parts = entry.path.split("/");
+      return parts.slice(0, -1).every((_, index) => {
+        const parent = parts.slice(0, index + 1).join("/");
+        return (
+          !directories.has(parent) ||
+          viewState.value.expandedFolders.includes(parent)
+        );
+      });
     })
     .sort(compareFileEntries);
 });
@@ -550,7 +557,7 @@ async function restorePosition(): Promise<void> {
 function publishPresentation(): void {
   if (restoring || viewState.value.reference === null) return;
   const presentation = {
-    ...viewState.value,
+    ...toRaw(viewState.value),
     mode: mode.value,
     treeOpen: treeOpen.value,
     treeWidth: treeWidth.value,
@@ -656,6 +663,7 @@ async function select(path: string): Promise<void> {
       treeOpen:
         treeOpen.value && (pane.value?.clientWidth || window.innerWidth) > 560,
       treeWidth: treeWidth.value,
+      expandedFolders: [...viewState.value.expandedFolders],
     });
     return;
   }
@@ -704,7 +712,7 @@ async function sourceMode(): Promise<void> {
 async function returnToCurrent(): Promise<void> {
   if (props.target !== undefined) {
     const presentation = {
-      ...viewState.value,
+      ...toRaw(viewState.value),
       mode: mode.value,
       treeOpen: false,
       history: null,
@@ -776,8 +784,11 @@ function input(event: Event): void {
     );
 }
 function toggleFolder(path: string): void {
-  if (collapsed.value.has(path)) collapsed.value.delete(path);
-  else collapsed.value.add(path);
+  const folders = viewState.value.expandedFolders;
+  viewState.value.expandedFolders = folders.includes(path)
+    ? folders.filter((folder) => folder !== path)
+    : [...folders, path];
+  publishPresentation();
 }
 function isDirectory(path: string): boolean {
   return !!session.value.snapshot?.entries.find((entry) => entry.path === path)
@@ -1118,7 +1129,7 @@ async function inspectRevision(version: HistoryEntry): Promise<void> {
   if (props.target !== undefined) {
     rememberSelection();
     navigate(version.path ?? historyPath.value, version.revision, {
-      ...viewState.value,
+      ...toRaw(viewState.value),
       mode: mode.value,
       treeOpen: false,
       history: {
@@ -1394,7 +1405,9 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
                   : undefined
               "
               :aria-expanded="
-                entry.isDirectory ? !collapsed.has(entry.path) : undefined
+                entry.isDirectory
+                  ? viewState.expandedFolders.includes(entry.path)
+                  : undefined
               "
               @click="
                 entry.isDirectory

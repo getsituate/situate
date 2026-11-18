@@ -52,7 +52,7 @@ The following gaps do not imply that all mechanisms are absent or that every ite
 ==== Interaction and verification
 
 * Target-platform shared-component, accessibility and interruption qualification; broader compatibility than the demonstrated prototype scenarios.
-* Concurrent layout reconciliation, same-workspace window assignment and mobile workspace switching/closure, including combined action and pending-synchronization choices.
+* Same-workspace window assignment and mobile workspace switching/closure, including combined action and pending-synchronization choices.
 * Mobile recovery entry and broader multi-workspace startup gating; testing or resuming faulty code can freeze the app again.
 * Import preservation of content, metadata, links, attachments and task field meanings, including unsupported states and malformed metadata.
 * Presentation of retained binary variants, uncertain external continuity, missing restoration parents, whole-version conflicts and failed-save recovery.

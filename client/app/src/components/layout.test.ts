@@ -195,7 +195,10 @@ describe("workspace view host", () => {
                 writable: true,
                 reason: null,
                 drafts: [],
-                entries: [{ path: "Notes/Garden.md", isDirectory: false }],
+                entries: [
+                  { path: "Notes", isDirectory: true },
+                  { path: "Notes/Garden.md", isDirectory: false },
+                ],
               },
             };
           if (request.operation === "read")
@@ -425,6 +428,108 @@ describe("workspace view host", () => {
         ),
     ).toHaveLength(1);
   });
+  it.each([
+    { data: { version: 99 }, error: "layoutHost.unsupportedStoredLayout" },
+    { data: { version: 1 }, error: "layoutHost.invalidStoredLayout" },
+    { data: null, error: "native.layout.storage.failed" },
+  ])(
+    "keeps a blocking layout failure on the error screen with retry and workspace exits ($error)",
+    async ({ data, error }) => {
+      const invokeNormally = vi.mocked(invoke).getMockImplementation()!;
+      let blocked = true;
+      vi.mocked(invoke).mockImplementation(async (command, args) => {
+        if (command === "layout_load" && blocked) {
+          if (data === null) throw new Error(error);
+          return { revision: "unreadable", data: structuredClone(data) };
+        }
+        return invokeNormally(command, args);
+      });
+      const wrapper = await mountHost();
+      const screen = wrapper.get(".situate-error-screen");
+      expect(screen.text()).toContain(`⟦${error}⟧`);
+      expect(screen.get("h2").element).toBe(document.activeElement);
+      expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+      expect(wrapper.find(".layout-notice").exists()).toBe(false);
+      expect(wrapper.find(".topic-window").exists()).toBe(false);
+      await screen.trigger("keydown", { key: "Escape" });
+      expect(wrapper.find(".situate-error-screen").exists()).toBe(true);
+      await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+      await settleViews();
+      expect(wrapper.get(".situate-error-screen").text()).toContain(
+        `⟦${error}⟧`,
+      );
+      await hostButton(wrapper, "⟦errorRecovery.workspaces⟧").trigger("click");
+      expect(wrapper.emitted("workspaces")).toHaveLength(1);
+      expect(wrapper.vm.back()).toBe(true);
+      expect(wrapper.emitted("workspaces")).toHaveLength(2);
+      expect(workspaceUi("garden").session.state.document).toBeNull();
+      expect(
+        vi
+          .mocked(invoke)
+          .mock.calls.filter(([command]) => command === "layout_save"),
+      ).toHaveLength(0);
+
+      blocked = false;
+      await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+      await settleViews();
+      expect(wrapper.find(".situate-error-screen").exists()).toBe(false);
+      expect(wrapper.find(".topic-window").exists()).toBe(true);
+    },
+  );
+
+  it("presents an oversized layout save in a dismissible error dialog and retains pending state for retry", async () => {
+    const wrapper = await mountHost();
+    const ui = workspaceUi("garden");
+    const saved = structuredClone(stored.get("garden")!);
+    const invokeNormally = vi.mocked(invoke).getMockImplementation()!;
+    let blocked = true;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "layout_save" && blocked)
+        throw new Error("native.layout.storage.tooLarge");
+      return invokeNormally(command, args);
+    });
+    await wrapper.get(".new-tab").trigger("click");
+    const pending = ui.session.state.document;
+    await expect(ui.session.flush()).rejects.toThrow(
+      "native.layout.storage.tooLarge",
+    );
+    await settleViews();
+    expect(wrapper.get("dialog.error-dialog[open]").text()).toContain(
+      "⟦native.layout.storage.tooLarge⟧",
+    );
+    expect(wrapper.get(".layout-notice").text()).toBe("⟦errorRecovery.review⟧");
+    await hostButton(wrapper, "⟦errorRecovery.dismiss⟧").trigger("click");
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    expect(ui.session.state.document).toBe(pending);
+    expect(ui.session.state.dirty).toBe(true);
+    expect(stored.get("garden")).toEqual(saved);
+
+    await hostButton(wrapper, "⟦errorRecovery.review⟧").trigger("click");
+    await wrapper.get("dialog.error-dialog[open]").trigger("cancel");
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    await hostButton(wrapper, "⟦errorRecovery.review⟧").trigger("click");
+    expect(wrapper.vm.back()).toBe(true);
+    await nextTick();
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+
+    await hostButton(wrapper, "⟦errorRecovery.review⟧").trigger("click");
+    await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+    await settleViews();
+    expect(wrapper.get("dialog.error-dialog[open]").text()).toContain(
+      "⟦native.layout.storage.tooLarge⟧",
+    );
+    expect(ui.session.state.document).toBe(pending);
+    blocked = false;
+    await hostButton(wrapper, "⟦layoutHost.retry⟧").trigger("click");
+    await settleViews();
+    expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
+    expect(wrapper.find(".layout-notice").exists()).toBe(false);
+    expect(ui.session.state.dirty).toBe(false);
+    expect(stored.get("garden")?.data?.layout.tabs).toHaveLength(
+      saved.data!.layout.tabs.length + 1,
+    );
+  });
+
   it("flushes layout state and restores it after the workspace UI is released and reopened", async () => {
     const wrapper = await mountHost();
     const ui = workspaceUi("garden");
@@ -479,6 +584,38 @@ describe("workspace view host", () => {
       wrapper.get<HTMLTextAreaElement>(".source-text").element.selectionEnd,
     ).toBe(6);
     expect(wrapper.emitted("closeWorkspace")).toBeUndefined();
+  });
+  it("restores the same pane's file and folder state through the Files sidebar", async () => {
+    const wrapper = await mountHost();
+    const source = wrapper.get<HTMLTextAreaElement>(".source-text");
+    source.element.setSelectionRange(4, 7);
+    await source.trigger("select");
+    await hostButton(wrapper, "⟦files.expandFileBrowser⟧").trigger("click");
+    await hostButton(wrapper, "Notes").trigger("click");
+    expect(hostButton(wrapper, "Notes").attributes("aria-expanded")).toBe(
+      "true",
+    );
+    await openNavigation(wrapper);
+    await hostButton(wrapper, "Garden chat").trigger("click");
+    await settleViews();
+    await openNavigation(wrapper);
+    await hostButton(wrapper, "⟦navigation.files⟧").trigger("click");
+    await settleViews();
+    expect(wrapper.get(".document-location h3").text()).toBe("Garden.md");
+    expect(
+      wrapper.get<HTMLTextAreaElement>(".source-text").element.selectionStart,
+    ).toBe(4);
+    expect(hostButton(wrapper, "Notes").attributes("aria-expanded")).toBe(
+      "true",
+    );
+    await workspaceUi("garden").session.flush();
+    wrapper.unmount();
+    retainWorkspaceUi([]);
+    const reopened = await mountHost();
+    expect(reopened.get(".document-location h3").text()).toBe("Garden.md");
+    expect(hostButton(reopened, "Notes").attributes("aria-expanded")).toBe(
+      "true",
+    );
   });
   it("closing panes and tabs retains shared running chat state and never closes the workspace", async () => {
     stored.delete("garden");

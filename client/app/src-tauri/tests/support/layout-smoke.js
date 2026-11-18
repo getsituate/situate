@@ -10,17 +10,16 @@ window.waitSmokeFileTarget = (workspaceId, path) => {
         const tab = layout?.tabs.find((item) => item.id === layout.activeTabId);
         const pane = tab?.panes.find((item) => item.id === tab.activePaneId);
         const target = pane?.navigation.entries[pane.navigation.cursor]?.target;
+        const contentMatches = path === undefined || target?.contentId === path;
         observed = {
           hasLayout: !!layout,
           targetKind: target?.kind ?? null,
           isFiles: target?.viewId === "files",
-          contentMatches: target?.contentId === path,
+          contentMatches,
           hasLayoutNotice: !!document.querySelector(".layout-notice"),
         };
         return (
-          target?.kind === "view" &&
-          target.viewId === "files" &&
-          target.contentId === path
+          target?.kind === "view" && target.viewId === "files" && contentMatches
         );
       },
       path

@@ -4,6 +4,7 @@ import {
   emptyLayout,
   reduceLayout,
   type LayoutState,
+  type LayoutIntent,
 } from "../../src/layout/model";
 import { filesFixture } from "./files-fixture";
 import {
@@ -61,6 +62,118 @@ async function paneOptions(page: Page) {
   }
   return page.getByRole("dialog", { name: "Pane layout", exact: true });
 }
+for (const width of [1440, 390]) {
+  test(
+    `layout capacity errors appear only after an opening attempt at ${width}px`,
+    { tag: width < 600 ? "@visual-mobile" : "@visual-desktop" },
+    async ({ page, visual }) => {
+      await page.setViewportSize({ width, height: 920 });
+      let layout = emptyLayout();
+      let sequence = 0;
+      const send = (intent: LayoutIntent) => {
+        layout = reduceLayout(layout, intent, () => `capacity-${++sequence}`);
+      };
+      send({ type: "new-tab" });
+      const tab = layout.tabs[0]!;
+      for (let index = 0; index < 5; index++)
+        send({
+          type: "split",
+          tabId: tab.id,
+          paneId: layout.tabs[0]!.panes[index % 2]!.id,
+          edge: index === 0 || index > 2 ? "right" : "bottom",
+        });
+      for (let index = 1; index < 20; index++) send({ type: "new-tab" });
+      send({ type: "close-tab", tabId: layout.activeTabId! });
+      send({ type: "new-tab" });
+      send({ type: "select-tab", tabId: tab.id });
+      const initial: Document = { version: 1, layout, pinnedViews: [] };
+      await workspaceFixture(page, shellState, {
+        layout: {
+          records: { garden: { revision: "capacity-layout", data: initial } },
+        },
+      });
+      await page.goto("/");
+      await expect(page.locator(".topic-window")).toBeVisible();
+      const error = page.getByRole("dialog", {
+        name: "Action could not be completed",
+        exact: true,
+      });
+      const dismiss = error.getByRole("button", {
+        name: "Dismiss",
+        exact: true,
+      });
+      await expect(error).not.toBeVisible();
+      await expect(page.locator(".layout-limit, .limit-help")).toHaveCount(0);
+      const options = await paneOptions(page);
+      await expect(options.getByText(/Up to 6 panes/)).toHaveCount(0);
+      await visual.capture("layout.capacity.pane-options");
+      const split = options.getByRole("button", {
+        name: "Add pane to the right",
+        exact: true,
+      });
+      await expect(split).toBeEnabled();
+      await split.click();
+      await expect(error).toContainText("Up to 6 panes can be open in a tab.");
+      await expect(dismiss).toBeFocused();
+      await visual.capture("layout.capacity.pane-rejected");
+      await page.keyboard.press("Escape");
+      await expect(error).not.toBeVisible();
+      await expect(options).toBeVisible();
+      await expect(split).toBeFocused();
+      await options
+        .getByRole("button", { name: "Add pane below", exact: true })
+        .click();
+      await expect(error).toBeVisible();
+      await dismiss.click();
+      await page.keyboard.press("Escape");
+      await expect(options).not.toBeVisible();
+
+      await newTab(page);
+      await expect(error).toContainText("Up to 20 tabs can be open.");
+      await expect(dismiss).toBeFocused();
+      await visual.capture("layout.capacity.tab-rejected");
+      await dismiss.click();
+      await expect
+        .poll(() =>
+          page
+            .locator(".tab-header")
+            .evaluate((header) => header.contains(document.activeElement)),
+        )
+        .toBe(true);
+      await page.locator(".tab-header .tab-actions-trigger").click();
+      const reopen = page.getByRole("menuitem", {
+        name: "Reopen closed tab",
+        exact: true,
+      });
+      await expect(reopen).toBeEnabled();
+      await reopen.click();
+      await expect(error).toContainText("Up to 20 tabs can be open.");
+      await visual.capture("layout.capacity.reopen-rejected");
+      await dismiss.click();
+      if (width < 600) {
+        await page.locator(".mobile-tab-trigger").click();
+        const overview = page.getByRole("dialog", {
+          name: "All tabs",
+          exact: true,
+        });
+        await overview
+          .getByRole("button", { name: "New tab", exact: true })
+          .click();
+        await expect(error).toContainText("Up to 20 tabs can be open.");
+        await visual.capture("layout.capacity.overview-rejected");
+        await dismiss.click();
+        await expect(overview).toBeVisible();
+        await overview
+          .getByRole("button", { name: "Reopen closed tab", exact: true })
+          .click();
+        await expect(error).toBeVisible();
+        await dismiss.click();
+      }
+      expect(await stored(page)).toEqual(initial);
+    },
+  );
+}
+
 test("new chat views leave no conversation or persisted draft before sending", async ({
   page,
 }) => {
@@ -1072,6 +1185,7 @@ test(
     )
       .getByRole("button", { name: "Files", exact: true })
       .click();
+    await page.getByRole("button", { name: "Notes", exact: true }).click();
     await page.getByRole("button", { name: "Garden.md", exact: true }).click();
     await (
       await paneOptions(page)
@@ -1082,6 +1196,10 @@ test(
     await panes
       .last()
       .getByRole("button", { name: "Files", exact: true })
+      .click();
+    await panes
+      .last()
+      .getByRole("button", { name: "Notes", exact: true })
       .click();
     await panes
       .last()
@@ -1249,6 +1367,90 @@ test(
   },
 );
 
+test("Files navigation restores each pane's own file and folder state after restart", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 920 });
+  await filesFixture(page);
+  await page.goto("/");
+  await (
+    await navigation(page)
+  )
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  const notes = page.getByRole("button", { name: "Notes", exact: true });
+  await expect(notes).toHaveAttribute("aria-expanded", "false");
+  await notes.click();
+  await page.getByRole("button", { name: "Garden.md", exact: true }).click();
+  await notes.click();
+  await (
+    await paneOptions(page)
+  )
+    .getByRole("button", { name: "Add pane to the right", exact: true })
+    .click();
+  const panes = page.locator(".pane-tile");
+  await panes
+    .last()
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  await panes
+    .last()
+    .getByRole("button", { name: "Notes", exact: true })
+    .click();
+  await panes
+    .last()
+    .getByRole("button", { name: "Reading.md", exact: true })
+    .click();
+  await (
+    await navigation(page)
+  )
+    .getByLabel("New chat", { exact: true })
+    .click();
+  await expect(panes.last().locator(".chat-pane")).toBeVisible();
+  await (
+    await navigation(page)
+  )
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  await expect(panes.last().locator(".document-location h3")).toHaveText(
+    "Reading.md",
+  );
+  await expect(panes.first().locator(".document-location h3")).toHaveText(
+    "Garden.md",
+  );
+  await expect(
+    panes.first().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    panes.last().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect
+    .poll(async () => {
+      const document = await stored(page);
+      const pane = document?.layout.tabs[0]?.panes.at(-1);
+      return pane?.navigation.entries[pane.navigation.cursor]?.target;
+    })
+    .toMatchObject({
+      kind: "view",
+      viewId: "files",
+      contentId: "Notes/Reading.md",
+    });
+  await page.reload();
+  await expect(panes).toHaveCount(2);
+  await expect(panes.first().locator(".document-location h3")).toHaveText(
+    "Garden.md",
+  );
+  await expect(panes.last().locator(".document-location h3")).toHaveText(
+    "Reading.md",
+  );
+  await expect(
+    panes.first().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    panes.last().getByRole("button", { name: "Notes", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+});
+
 test("a live reference follows a managed move after its old path is reused", async ({
   page,
 }) => {
@@ -1260,6 +1462,7 @@ test("a live reference follows a managed move after its old path is reused", asy
   )
     .getByRole("button", { name: "Files", exact: true })
     .click();
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
   await page.getByRole("button", { name: "Garden.md", exact: true }).click();
   await page
     .getByRole("button", { name: "New chat with this file", exact: true })
@@ -1308,6 +1511,7 @@ test(
     )
       .getByRole("button", { name: "Files", exact: true })
       .click();
+    await page.getByRole("button", { name: "Notes", exact: true }).click();
     await page.getByRole("button", { name: "Garden.md", exact: true }).click();
     await page
       .getByRole("button", { name: "New chat with this file", exact: true })
@@ -1392,8 +1596,8 @@ test("the tab overview button follows strip overflow rather than clipped titles"
   await closeTab(page);
   await expect(overview).toHaveCount(0);
   await expect
-    .poll(async () => (await stored(page))?.layout.tabs.length)
-    .toBe(1);
+    .poll(async () => (await stored(page))?.layout.tabs.map((tab) => tab.name))
+    .toEqual([longTitle]);
   await page.reload();
   await expect(
     page.getByRole("tab", { name: longTitle, exact: true }),
@@ -1685,46 +1889,87 @@ for (const viewport of [
   );
 }
 
-test(
-  "an unreadable saved layout is preserved until a successful reload",
-  { tag: "@visual-desktop" },
-  async ({ page, visual }) => {
-    await page.setViewportSize({ width: 1440, height: 920 });
-    const unreadable = {
-      revision: "unreadable-1",
-      data: {
-        version: 99,
-        layout: { original: "Keep this data" },
-        pinnedViews: [],
-      },
-    };
-    await workspaceFixture(page, shellState, {
-      layout: { records: { garden: unreadable } },
-    });
-    await page.goto("/");
-    await expect(page.getByRole("alert")).toContainText(
-      "This layout was saved by an unsupported version of Situate.",
-    );
-    await expect(page.locator(".topic-window")).toHaveCount(0);
-    expect(
-      await page.evaluate(() => window.__layoutTest.stored("garden")),
-    ).toEqual(unreadable);
-    expect(
-      await page.evaluate(() =>
-        Reflect.get(window, "__ipcCalls").filter(
-          (call: { command: string }) => call.command === "layout_save",
+for (const width of [1440, 390]) {
+  test(
+    `an unreadable saved layout is preserved until a successful reload at ${width}px`,
+    { tag: width < 600 ? "@visual-mobile" : "@visual-desktop" },
+    async ({ page, visual }) => {
+      await page.setViewportSize({ width, height: 920 });
+      const unreadable = {
+        revision: "unreadable-1",
+        data: {
+          version: 99,
+          layout: { original: "Keep this data" },
+          pinnedViews: [],
+        },
+      };
+      await workspaceFixture(page, shellState, {
+        layout: { records: { garden: unreadable } },
+      });
+      await page.goto("/");
+      const error = page.getByRole("region", {
+        name: "Workspace could not be opened",
+        exact: true,
+      });
+      await expect(error).toBeVisible();
+      await expect(error.getByRole("heading")).toBeFocused();
+      await expect(error).toContainText(
+        "This layout was saved by an unsupported version of Situate.",
+      );
+      await expect(
+        page.locator("dialog.error-dialog, .layout-notice"),
+      ).toHaveCount(0);
+      await expect(page.locator(".topic-window")).toHaveCount(0);
+      expect(
+        await page.evaluate(() => window.__layoutTest.stored("garden")),
+      ).toEqual(unreadable);
+      expect(
+        await page.evaluate(() =>
+          Reflect.get(window, "__ipcCalls").filter(
+            (call: { command: string }) => call.command === "layout_save",
+          ),
         ),
-      ),
-    ).toEqual([]);
-    await visual.capture("layout.storage.unreadable");
-    await page.evaluate(() =>
-      window.__layoutTest.replace("garden", { revision: null, data: null }),
-    );
-    await page.getByRole("button", { name: "Try again", exact: true }).click();
-    await expect(page.locator(".view-chooser")).toBeVisible();
-    await expect(page.getByRole("alert")).toHaveCount(0);
-  },
-);
+      ).toEqual([]);
+      await visual.capture("layout.storage.unreadable");
+      await page.keyboard.press("Escape");
+      await expect(error).toBeVisible();
+      await error
+        .getByRole("button", { name: "Try again", exact: true })
+        .click();
+      await expect(error).toBeVisible();
+      expect(
+        await page.evaluate(() => window.__layoutTest.stored("garden")),
+      ).toEqual(unreadable);
+      await error
+        .getByRole("button", { name: "Return to workspaces", exact: true })
+        .click();
+      const entry = page.locator(".workspace-entry");
+      await expect(entry).toBeVisible();
+      await visual.capture("layout.storage.workspace-exit");
+      expect(
+        await page.evaluate(() => window.__layoutTest.stored("garden")),
+      ).toEqual(unreadable);
+      expect(
+        await page.evaluate(() =>
+          Reflect.get(window, "__ipcCalls").filter(
+            (call: { command: string }) => call.command === "layout_save",
+          ),
+        ),
+      ).toEqual([]);
+      await entry.getByRole("button", { name: /^Garden/ }).click();
+      await expect(error).toBeVisible();
+      await page.evaluate(() =>
+        window.__layoutTest.replace("garden", { revision: null, data: null }),
+      );
+      await page
+        .getByRole("button", { name: "Try again", exact: true })
+        .click();
+      await expect(page.locator(".view-chooser")).toBeVisible();
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(error).toHaveCount(0);
+    },
+  );
+}
 
 test(
   "failed layout saves retain changes and conflict recovery never overwrites another revision",
@@ -1741,12 +1986,26 @@ test(
       window.__layoutTest.failSave("native.layout.storage.failed"),
     );
     await newTab(page);
-    await expect(page.getByRole("alert")).toContainText(
+    const error = page.getByRole("dialog", {
+      name: "Action could not be completed",
+      exact: true,
+    });
+    await expect(error).toBeVisible();
+    await expect(error).toContainText(
       "The workspace layout could not be read or saved.",
     );
     await expect(page.getByRole("tab")).toHaveCount(2);
     expect((await stored(page))!.layout.tabs).toHaveLength(1);
     await visual.capture("layout.storage.save-failed");
+    await error.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await expect(error).not.toBeVisible();
+    await expect(page.locator(".layout-notice")).toHaveText("Review error");
+    await expect(page.getByRole("tab")).toHaveCount(2);
+    await visual.capture("layout.storage.save-failed-dismissed");
+    await page
+      .getByRole("button", { name: "Review error", exact: true })
+      .click();
+    await expect(error).toBeVisible();
     await page.evaluate(() => window.__layoutTest.failSave(null));
     await page.getByRole("button", { name: "Try again", exact: true }).click();
     await expect
