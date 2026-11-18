@@ -22,7 +22,7 @@ node tools/ci-image.mjs
 node tools/ci-image.mjs --inputs
 ```
 
-The [CI tool image workflow](../../.github/workflows/ci-tool-image.yml) separates image construction from publication. Registry publication, package visibility and repository linkage need explicit authorization and provisioning. Verify anonymous access to the exact public digest before using it for untrusted PRs; do not provide personal registry credentials to fix a private-image failure.
+Maintainers [build, verify and publish the CI tool image locally](ci-README.md#publishing-the-image). PR verification pulls the published digest without credentials.
 
 ## Source and credential boundaries
 

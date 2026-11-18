@@ -13,7 +13,6 @@ const names = [
   "release-macos",
   "publish-macos",
   "dependency-monitoring",
-  "ci-tool-image",
   "diagnostics",
   "release-recovery",
   "release-launch-trace",
@@ -425,38 +424,4 @@ test("qualification route diagnostics use protected hosted dispatch and only SSH
     route,
     /APPLE_|TAURI_SIGNING|GH_TOKEN|PAID_|contents: write|packages: write|create-stage|publish-run/,
   );
-});
-
-test("tool image preserves build/publisher separation and read-only build credentials", () => {
-  const workflow = read("ci-tool-image");
-  const publish = job(workflow, "publish");
-  for (const architecture of ["amd64", "arm64"]) {
-    const build = job(workflow, `build-${architecture}`);
-    assert.doesNotMatch(
-      build.split("actions-adapter.mjs image-upload")[0],
-      /secrets\.|GH_TOKEN|packages: write/,
-    );
-    assert.match(build, /actions-adapter\.mjs image-upload/);
-    assert.match(build, /CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY/);
-    assert.doesNotMatch(build, /ACTIONS_RUNTIME|ACTIONS_RESULTS|GH_TOKEN/);
-    assert.match(build, /actions-adapter\.mjs image-build/);
-    assert.ok(
-      publish.includes(`needs.build-${architecture}.outputs.provenance`),
-    );
-  }
-  assert.match(publish, /needs: \[policy, build-amd64, build-arm64\]/);
-  assert.match(publish, /packages: write/);
-  assert.match(publish, /GH_TOKEN:.*github\.token/);
-  assert.match(publish, /actions-adapter\.mjs image-publish/);
-  const [download, publication] = publish.split(
-    "        run: node tools/actions-adapter.mjs image-publish",
-  );
-  assert.match(download, /actions-adapter\.mjs image-download/);
-  assert.match(download, /CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY/);
-  assert.doesNotMatch(download, /GH_TOKEN/);
-  assert.doesNotMatch(
-    publication,
-    /CI_IMAGE_TRANSFER_SSH_PRIVATE_KEY|CI_IMAGE_TRANSFER_SSH_KNOWN_HOSTS/,
-  );
-  assert.match(workflow, /client\/docker\/ci-\*/);
 });

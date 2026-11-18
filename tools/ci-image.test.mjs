@@ -29,7 +29,7 @@ const read = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const quality = JSON.parse(read("tools/toolchain.quality.json"));
 
-test("CI helper and project-license changes invalidate image inputs and trigger publication", (t) => {
+test("CI helper and project-license changes invalidate image inputs", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-ci-inputs-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const file of imageInputs()) {
@@ -48,11 +48,6 @@ test("CI helper and project-license changes invalidate image inputs and trigger 
   const changedHelper = inputDigest(directory);
   writeFileSync(join(directory, "LICENSE"), read("LICENSE") + "\n");
   assert.notEqual(inputDigest(directory), changedHelper);
-  const workflow = read(".github/workflows/ci-tool-image.yml");
-  assert.ok(workflow.includes("      - client/docker/ci-*\n"));
-  assert.ok(workflow.includes("      - LICENSE\n"));
-  assert.match(workflow, /run: node tools\/actions-adapter\.mjs image-build/);
-  assert.match(workflow, /run: node tools\/actions-adapter\.mjs image-publish/);
 });
 
 test("CI tool pins bind prebuilt binaries or locked source builds to the quality toolchain", () => {

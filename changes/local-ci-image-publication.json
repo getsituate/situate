@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "local-ci-image-publication",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Build and publish the Linux CI tool image locally, and pin the public AMD64 and ARM64 index. No product changes."
+}
