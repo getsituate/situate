@@ -156,7 +156,7 @@
   padding-block: 45px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 24px 40px;
   border-top: 1px solid var(--situate-line);
@@ -171,8 +171,13 @@
 }
 .site-footer nav {
   display: flex;
-  gap: 8px 24px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.site-footer h2 {
+  margin: 0 0 4px;
+  font: 650 16px/1.5 var(--situate-font-body);
+  letter-spacing: normal;
 }
 .site-footer nav a,
 .site-footer nav button {
@@ -283,8 +288,8 @@
   .site-footer .wordmark img {
     width: 110px;
   }
-  .site-footer nav {
-    gap: 8px 20px;
+  .site-footer > div {
+    flex-basis: 100%;
   }
 }
 @media (max-width: 360px) {

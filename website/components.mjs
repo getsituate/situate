@@ -1,6 +1,16 @@
+export const repositoryUrl = "https://github.com/getsituate/situate";
+
 export const menuLinks = [
   { href: "/", key: "nav.index" },
   { href: "/product.html", key: "nav.product" },
+  { href: repositoryUrl, key: "nav.github" },
+];
+
+const projectLinks = [
+  { href: repositoryUrl, key: "footer.source" },
+  { href: `${repositoryUrl}/issues`, key: "footer.issue" },
+  { href: `${repositoryUrl}#contributing`, key: "footer.contribute" },
+  { href: `${repositoryUrl}/blob/main/LICENSING.md`, key: "footer.licensing" },
 ];
 
 export const legalLinks = [
@@ -63,7 +73,12 @@ export function renderFooter(messages, { pathname = "/" } = {}) {
   const text = translator(messages);
   return `<footer class="site-footer">
   <div><a class="wordmark" href="/" aria-label="${text("nav.home")}"><img src="/design/brand/assets/wordmark.svg" width="140" height="44" alt="${text("brand")}"></a><p>${text("footer.line")}</p></div>
-  <nav aria-label="${text("footer.navigation")}">
+  <nav aria-labelledby="footer-project">
+    <h2 id="footer-project">${text("footer.project")}</h2>
+    ${projectLinks.map(({ href, key }) => `<a href="${href}">${text(key)}</a>`).join("\n    ")}
+  </nav>
+  <nav aria-labelledby="footer-legal">
+    <h2 id="footer-legal">${text("footer.navigation")}</h2>
     ${legalLinks.map(({ href, key }) => `<a href="${href}"${pathname === href ? ' aria-current="page"' : ""}>${text(key)}</a>`).join("\n    ")}
     <button type="button" data-analytics-settings hidden>${text("analytics.settings")}</button>
     <a href="#top">${text("footer.top")} <span aria-hidden="true">↑</span></a>

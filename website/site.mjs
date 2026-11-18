@@ -26,6 +26,7 @@ import {
   renderHeader,
   renderFooter,
   renderViewer,
+  repositoryUrl,
   legalLinks,
 } from "./components.mjs";
 import { renderLegalPage } from "./legal/render.mjs";
@@ -87,6 +88,7 @@ export function render(template, messages, { pathname = "/" } = {}) {
         pathname,
       });
     if (key === "site.footer") return renderFooter(messages, { pathname });
+    if (key === "site.repositoryUrl") return escapeHtml(repositoryUrl);
     if (key === "site.viewer") return renderViewer(messages);
     return text(key);
   });

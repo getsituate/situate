@@ -238,22 +238,10 @@ h1 em path {
 }
 .hero-facts {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  width: fit-content;
-  max-width: 100%;
-  min-height: 44px;
-  margin-top: 18px;
-  padding-block: 8px;
-  color: var(--ink);
-  text-decoration: none;
-}
-.hero-facts ul {
-  display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 4px 16px;
   padding: 0;
-  margin: 0;
+  margin: 18px 0 0;
   list-style: none;
 }
 .hero-facts li {
@@ -271,16 +259,12 @@ h1 em path {
   border-radius: 50%;
   background: var(--purple);
 }
-.hero-facts li:first-child {
-  font-weight: 650;
-}
-.hero-facts > span {
+.hero-facts a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--purple);
-  font-size: 20px;
-}
-.hero-facts:hover li {
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  font-weight: 650;
 }
 .hero-actions {
   display: flex;
@@ -1588,8 +1572,6 @@ html:not(.enhanced) .story-layout {
   }
   .hero-facts {
     margin-top: 16px;
-  }
-  .hero-facts ul {
     gap: 6px 14px;
   }
   .hero-actions {

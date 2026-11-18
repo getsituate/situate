@@ -526,14 +526,15 @@
   text-wrap: balance;
 }
 .open-copy > p {
-  margin-top: 24px;
+  margin-top: 12px;
   max-width: 610px;
   font-size: 18px;
 }
-.open-copy .open-code {
-  margin-top: 16px;
-  font-size: 15px;
-  color: var(--muted);
+.open-copy p + h3 {
+  margin-top: 32px;
+}
+.open-copy .subtle-link {
+  margin-top: 8px;
 }
 .open-art {
   position: relative;
@@ -856,7 +857,6 @@
   }
   .open-copy > p:not(.eyebrow) {
     font-size: 17px;
-    margin-top: 24px;
   }
   .open-art {
     width: 230px;
