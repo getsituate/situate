@@ -21,12 +21,16 @@ func attribute(_ element: AXUIElement, _ key: String) -> CFTypeRef? {
 
 let app = AXUIElementCreateApplication(pid)
 AXUIElementSetMessagingTimeout(app, 0.5)
-guard let windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement], windows.count <= 16 else {
+guard let windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement], windows.count <= 16
+else {
     print("blocked-window-list")
     exit(0)
 }
 var pending = windows.filter { (attribute($0, kAXTitleAttribute) as? String) == windowName }
-if pending.isEmpty { print("unmatched"); exit(0) }
+if pending.isEmpty {
+    print("unmatched")
+    exit(0)
+}
 guard pending.count == 1 else { exit(2) }
 
 var seen = Set<AXUIElement>()
@@ -35,9 +39,10 @@ while let node = pending.popLast() {
     guard seen.insert(node).inserted else { continue }
     guard seen.count <= 1024 else { exit(2) }
     if attribute(node, kAXRoleAttribute) as? String == kAXStaticTextRole,
-       [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute].contains(where: {
-           (attribute(node, $0) as? String) == expected
-       }) {
+        [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute].contains(where: {
+            (attribute(node, $0) as? String) == expected
+        })
+    {
         matches += 1
         if matches > 1 { break }
     }
