@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "focused-local-verification",
-  "behaviorDigest": "e44fb53a36b730f9efe9bf2570d7b532c6b5ae2c6eaf16db526310731a45d9bc",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Developer test guidance and documentation cleanup only; no application behavior changes.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "618ac44689af31f298d80c3b907de4f8c0c2c44ec8734e4453b4cae1993e8d09",
-      "translationHash": "4c2b548565dc002084333c805387f5316d51fbb4f1916c9e5ced908473880e0a"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "618ac44689af31f298d80c3b907de4f8c0c2c44ec8734e4453b4cae1993e8d09"
-  }
+  "emptyReason": "Developer test guidance and documentation cleanup only; no application behavior changes."
 }

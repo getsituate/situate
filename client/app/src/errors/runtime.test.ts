@@ -25,8 +25,11 @@ test("repeated background delivery retains one dismissed incident and its descri
   expect(recoveryState.page).toBeNull();
   expect(recoveryState.incidents).toHaveLength(1);
   expect(first.description).toBe("Opening the list");
+  expect(first.dismissed).toBe(true);
+  expect(recoveryState.active).toBeUndefined();
   openIncident(first, "report");
   expect(recoveryState.page).toBe("report");
+  expect(first.dismissed).toBe(false);
   resolveIncident(first);
   expect(captureIncident("view", undefined, "scope")).not.toBe(first);
 });

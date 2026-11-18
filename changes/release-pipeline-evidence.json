@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "release-pipeline-evidence",
-  "behaviorDigest": "88150e76a4bcbd966611bea4a7e57e96bbfec12d893b3e6613f66590c9f225f9",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Release verification and recovery infrastructure only.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "48afd23d15e9c95f02258d5a83ae7610df88dac4ca0a424bae749f7738d29652",
-      "translationHash": "5ab1a8fa3c03bff1935e64c9832cbcaaf45177fc5740f419ba7645d4f48c30cc"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "48afd23d15e9c95f02258d5a83ae7610df88dac4ca0a424bae749f7738d29652"
-  }
+  "emptyReason": "Release verification and recovery infrastructure only."
 }

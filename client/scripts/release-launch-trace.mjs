@@ -130,7 +130,7 @@ export function createLaunchTraceAdapters(
   };
   return {
     createProcess(options) {
-      return createQualificationProcess({
+      const diagnostic = createQualificationProcess({
         ...options,
         execute: raw,
         observeLaunch: async ({ signal, environment }) => {
@@ -179,6 +179,10 @@ export function createLaunchTraceAdapters(
           return "observation_unavailable";
         },
       });
+      const readOnly = (command, args, options) =>
+        diagnostic(command, args, { ...options, confirmFirstLaunch: false });
+      readOnly.assertProgress = diagnostic.assertProgress;
+      return readOnly;
     },
     createHost(configuration, options) {
       const host = createHost(configuration, options);

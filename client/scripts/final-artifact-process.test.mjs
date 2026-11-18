@@ -175,6 +175,92 @@ test("settled launch cancels an unstarted observation and drains a started one",
   assert.equal(drained, true);
 });
 
+test("first install confirms once during a pending launch and drains the confirmation", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const events = [],
+    calls = [];
+  let finish, finishConsent;
+  const native = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const consent = new Promise((resolve) => {
+    finishConsent = resolve;
+  });
+  const execute = createQualificationProcess({
+    deadline: (ms) => {
+      assert.equal(ms, 10_000);
+      return new AbortController().signal;
+    },
+    progress: (_phase, status) => events.push(status),
+    launchConsent: (mode, { signal }) => {
+      calls.push(mode);
+      if (mode === "baseline") return "absent";
+      assert.equal(signal.aborted, false);
+      return consent;
+    },
+    execute: async (_command, _args, options) => {
+      calls.push("open");
+      await native;
+      options.onExit({ code: 0, signal: null });
+      return "";
+    },
+  });
+  let settled = false;
+  const pending = execute("open", ["-n", "/synthetic/Situate.app"], {
+    confirmFirstLaunch: true,
+  }).then(() => {
+    settled = true;
+  });
+  await new Promise(setImmediate);
+  assert.deepEqual(calls, ["baseline", "open"]);
+  t.mock.timers.tick(4000);
+  await new Promise(setImmediate);
+  finish();
+  await new Promise(setImmediate);
+  assert.equal(settled, false);
+  finishConsent("confirmed");
+  await pending;
+  t.mock.timers.tick(4000);
+  assert.deepEqual(calls, ["baseline", "open", "confirm"]);
+  assert.deepEqual(events, [
+    "started",
+    "exited_zero",
+    "confirmation_confirmed",
+    "completed",
+  ]);
+});
+
+test("unknown baseline prevents launch and a fast launch does not trigger a press", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let launches = 0;
+  const calls = [];
+  let baseline = "unexpected";
+  const execute = createQualificationProcess({
+    launchConsent: (mode) => {
+      calls.push(mode);
+      return baseline;
+    },
+    execute: async (_command, _args, options) => {
+      launches++;
+      options.onExit({ code: 0, signal: null });
+      return "";
+    },
+  });
+  const args = ["-n", "/synthetic/Situate.app"];
+  await assert.rejects(
+    execute("open", args, { confirmFirstLaunch: true }),
+    (error) =>
+      error.uncertain &&
+      /clear macOS confirmation baseline/.test(error.cause.message),
+  );
+  assert.equal(launches, 0);
+  baseline = "absent";
+  await execute("open", args, { confirmFirstLaunch: true });
+  t.mock.timers.tick(4000);
+  assert.deepEqual(calls, ["baseline", "baseline"]);
+  assert.equal(launches, 1);
+});
+
 test("process cleanup assertions reject a live process", () => {
   assert.throws(() => assertStopped(process.pid), /remains live/);
 });

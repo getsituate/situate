@@ -39,7 +39,16 @@ const commands = new Set([
   "launch",
   "terminate",
 ]);
+const launchConfirmationStatuses = [
+  "confirmation_baseline_blocked",
+  "confirmation_confirmed",
+  "confirmation_absent",
+  "confirmation_unexpected",
+  "confirmation_unavailable",
+  "confirmation_press_unknown",
+];
 const statuses = new Set([
+  ...launchConfirmationStatuses,
   "started",
   "completed",
   "queued",
@@ -66,6 +75,7 @@ const statuses = new Set([
   "observation_unavailable",
 ]);
 const launchObservations = new Set([
+  ...launchConfirmationStatuses,
   "exited_zero",
   "exited_nonzero",
   "dialog_observed",

@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "signing-search-list-probe",
-  "behaviorDigest": "9fdbab4013b0fb87310b3e806dce442000408526caabdbb8456edd906eeaa42c",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Adds a controlled search-list experiment to optional signing diagnostics on disposable CI runners.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "4a6f97eeb3de43bdc19f5572609eb6d4610c59008d78005f7978a9b1aa400371",
-      "translationHash": "c9805a616e4e19513f3939b9c2e3b5c8446833f9049375dbffa35af72147cacf"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "4a6f97eeb3de43bdc19f5572609eb6d4610c59008d78005f7978a9b1aa400371"
-  }
+  "emptyReason": "Adds a controlled search-list experiment to optional signing diagnostics on disposable CI runners."
 }

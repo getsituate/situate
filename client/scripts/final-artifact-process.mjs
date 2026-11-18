@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { run } from "./ios-xcode.mjs";
 import { qualificationProgressReporter } from "../../tools/qualification-progress.mjs";
 import { observeLaunchDialog } from "./qualification-launch-observation.mjs";
+import { queryLaunchConsent } from "./qualification-launch-confirmation.mjs";
 
 export const qualificationCommandTimeouts = Object.freeze({
   accessibility: 30_000,
@@ -66,6 +67,7 @@ export function createQualificationProcess({
   getPhase = () => "prepare",
   deadline = (ms) => AbortSignal.timeout(ms),
   observeLaunch = observeLaunchDialog,
+  launchConsent = queryLaunchConsent,
 } = {}) {
   const reporter = qualificationProgressReporter(progress);
   // Telemetry must not prevent later termination or detach commands.
@@ -78,63 +80,103 @@ export function createQualificationProcess({
       ? AbortSignal.any([options.signal, timeout])
       : timeout;
     reporter.emit(phase, "started", code, 0);
-    let stopObservation;
-    if (code === "launch") {
-      const observationSignal = new AbortController();
-      let observation;
-      const timer = setTimeout(() => {
-        observation = Promise.resolve()
-          .then(() =>
-            observeLaunch({
-              applicationName: basename(args.at(-1), ".app"),
-              environment: options.env,
-              signal: AbortSignal.any([signal, observationSignal.signal]),
-            }),
-          )
-          .then(
-            (status) =>
-              reporter.emit(
-                phase,
-                [
-                  "dialog_observed",
-                  "associated_dialog_observed",
-                  "dialog_not_observed",
-                  "query_unavailable",
-                  "query_process_unavailable",
-                  "query_window_collection_unavailable",
-                  "query_window_attributes_unavailable",
-                  "query_element_collection_unavailable",
-                  "query_element_attributes_unavailable",
-                  "query_limit_unavailable",
-                  "query_serialization_unavailable",
-                  "query_execution_unavailable",
-                  "observation_unavailable",
-                ].includes(status)
-                  ? status
-                  : "observation_unavailable",
-                code,
-                Math.round(performance.now() - started),
-              ),
-            () =>
-              reporter.emit(
-                phase,
-                "observation_unavailable",
-                code,
-                Math.round(performance.now() - started),
-              ),
-          );
-      }, 4000);
-      const cancelUnstarted = () => clearTimeout(timer);
-      signal.addEventListener("abort", cancelUnstarted, { once: true });
-      if (signal.aborted) cancelUnstarted();
-      stopObservation = async () => {
-        clearTimeout(timer);
-        signal.removeEventListener("abort", cancelUnstarted);
-        observationSignal.abort();
-        await observation;
-      };
-    }
+    const confirm = code === "launch" && options.confirmFirstLaunch === true;
+    let stopObservation, cancelUnstarted, confirmation;
+    const reportLaunch = (status) =>
+      reporter.emit(
+        phase,
+        status,
+        code,
+        Math.round(performance.now() - started),
+      );
     try {
+      if (confirm) {
+        if (
+          basename(args.at(-1)) !== "Situate.app" ||
+          args.length !== 2 ||
+          args[0] !== "-n" ||
+          (await launchConsent("baseline", {
+            environment: options.env,
+            signal,
+          })) !== "absent"
+        ) {
+          reportLaunch("confirmation_baseline_blocked");
+          throw new Error(
+            "First launch requires a clear macOS confirmation baseline",
+          );
+        }
+        signal.throwIfAborted();
+      }
+      if (code === "launch") {
+        const observationSignal = new AbortController();
+        let observation;
+        const timer = setTimeout(() => {
+          observation = Promise.resolve()
+            .then(async () => {
+              const observationOptions = {
+                environment: options.env,
+                signal: AbortSignal.any([signal, observationSignal.signal]),
+              };
+              if (!confirm)
+                return observeLaunch({
+                  applicationName: basename(args.at(-1), ".app"),
+                  ...observationOptions,
+                });
+              if (observationOptions.signal.aborted) return;
+              const result = await launchConsent("confirm", observationOptions);
+              confirmation = [
+                "confirmed",
+                "absent",
+                "unexpected",
+                "press-unknown",
+              ].includes(result)
+                ? result
+                : "unavailable";
+              reportLaunch(`confirmation_${confirmation.replaceAll("-", "_")}`);
+            })
+            .then(
+              (status) =>
+                !confirm &&
+                reporter.emit(
+                  phase,
+                  [
+                    "dialog_observed",
+                    "associated_dialog_observed",
+                    "dialog_not_observed",
+                    "query_unavailable",
+                    "query_process_unavailable",
+                    "query_window_collection_unavailable",
+                    "query_window_attributes_unavailable",
+                    "query_element_collection_unavailable",
+                    "query_element_attributes_unavailable",
+                    "query_limit_unavailable",
+                    "query_serialization_unavailable",
+                    "query_execution_unavailable",
+                    "observation_unavailable",
+                  ].includes(status)
+                    ? status
+                    : "observation_unavailable",
+                  code,
+                  Math.round(performance.now() - started),
+                ),
+              () => {
+                if (confirm) {
+                  confirmation = "unavailable";
+                  reportLaunch("confirmation_unavailable");
+                } else reportLaunch("observation_unavailable");
+              },
+            );
+        }, 4000);
+        cancelUnstarted = () => clearTimeout(timer);
+        signal.addEventListener("abort", cancelUnstarted, { once: true });
+        if (signal.aborted) cancelUnstarted();
+        stopObservation = async (drain = false) => {
+          clearTimeout(timer);
+          signal.removeEventListener("abort", cancelUnstarted);
+          if (!drain) observationSignal.abort();
+          await observation;
+        };
+      }
       // LaunchServices can pass these streams to an app that outlives open.
       const commandArgs =
         code === "launch"
@@ -148,6 +190,7 @@ export function createQualificationProcess({
         ...(code === "launch"
           ? {
               onExit: (event) => {
+                if (confirm) cancelUnstarted();
                 if (!signal.aborted)
                   reporter.emit(
                     phase,
@@ -160,6 +203,15 @@ export function createQualificationProcess({
             }
           : {}),
       });
+      if (confirm) {
+        await stopObservation(true);
+        if (
+          confirmation &&
+          confirmation !== "confirmed" &&
+          confirmation !== "absent"
+        )
+          throw new Error("macOS launch confirmation could not be verified");
+      }
       signal.throwIfAborted();
       reporter.emit(
         phase,

@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "release-aggregate-gate",
-  "behaviorDigest": "a422624e6d96bdee105d5d94e5fa1c325fef2f8e0b644fd89a8c55d5b6479640",
   "locales": {
     "en": {
       "title": "Changes",
@@ -12,15 +11,5 @@
       "entries": []
     }
   },
-  "emptyReason": "Corrects release job scheduling after selective verification; application behavior is unchanged.",
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "48455618455eab5c97f429ac51207d35bcac20f26b33a10c56eb97588c77d6aa",
-      "translationHash": "c951ff32ac3468bf1d9f271bc6d4682ff4026327591fd37857cbfe43b87c4bd1"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "48455618455eab5c97f429ac51207d35bcac20f26b33a10c56eb97588c77d6aa"
-  }
+  "emptyReason": "Corrects release job scheduling after selective verification; application behavior is unchanged."
 }
