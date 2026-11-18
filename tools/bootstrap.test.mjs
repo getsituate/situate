@@ -180,7 +180,6 @@ test("native and host Docker jobs require bootstrap before the Node adapter", ()
     ["verify.yml", "macos-native", "macos-latest"],
     ["verify.yml", "docker-integration", "ubuntu-24.04"],
     ["diagnostics.yml", "docker", "ubuntu-24.04"],
-    ["ci-tool-image.yml", "build", "ubuntu-24.04"],
   ]) {
     const adapter = "node tools/actions-adapter.mjs setup";
     checkWorkflowBootstrap(

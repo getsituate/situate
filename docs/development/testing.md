@@ -449,11 +449,7 @@ Public image visibility and anonymous access to the exact pinned digest must be 
 
 ### Updating the image
 
-The [CI tool image workflow](../../.github/workflows/ci-tool-image.yml) handles reviewed image-input changes on main and explicit main dispatch. A read-only build job treats candidate source as Docker build data; a separate publisher validates the archive/provenance before pushing. It never runs from a PR or updates the consumer lock automatically. Publication requires separately authorized package-write access and scoped artifact transport.
-
-Normal publication requires a public package linked to the exact `getsituate/situate` repository identity. An absent package needs separately authorized bootstrap and visibility/linkage provisioning; a permission error is not proof that a package is absent. Inspect any uncertain push before retrying. Review [notices and corresponding-source obligations](../../client/docker/ci-NOTICES.md) before distributing an image.
-
-Review image build/smoke results and provenance, then update `tools/ci-image.lock.json` through a PR with the published registry digest and matching input hash. Run `node tools/ci-image.mjs` to verify the lock; `--inputs` prints the input fingerprint. A local Docker image ID is not a registry manifest digest. Verify anonymous access to the exact public digest before activating consumers. Rebuilding unchanged inputs still requires an explicit digest update; security fixes need deliberate tool/base-image pin changes.
+When changing an image input, [build and publish the image locally](../../client/docker/ci-README.md#publishing-the-image) from the reviewed branch. Include the new public index digest and matching input fingerprint in the same PR as the input changes. The Verify workflow consumes the published image; it does not build or publish it.
 
 <a id="mobile-ci-disabled"></a>
 

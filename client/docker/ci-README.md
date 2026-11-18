@@ -3,7 +3,7 @@
 Build from the repository root without registry credentials:
 
 ```sh
-docker buildx build --platform linux/arm64 --target ci \
+docker buildx build --platform linux/arm64 --target ci --provenance=false --sbom=false \
   -f client/docker/Dockerfile -t situate-ci-local:arm64 --load .
 ```
 
@@ -159,14 +159,53 @@ sources; generation is not an upstream build attestation. cargo-llvm-cov's build
 is created during image construction, not precomputed by the updater. See
 [tool dependency notices](ci-NOTICES.md#tool-dependency-notices).
 
-After changing image inputs, build and verify both Linux architectures before updating `tools/ci-image.lock.json` with the published index digest and the input hash from `node tools/ci-image.mjs --inputs`. The existing lock intentionally rejects changed inputs; never replace only its input hash while retaining an older image digest. The image workflow builds AMD64 and ARM64 on matching native runners, then publishes through a separate job. Each platform has its own gzip-compressed `image.tar` and sealed same-run receipt. Docker and tar detect compression independently of the filename. Publication limits each transport archive to 8 GiB and its expanded tar stream to 12 GiB, including retained corresponding sources and notices. Each build uses `--provenance=false`; its receipt binds the source, tool inputs, architecture, image ID and configuration digest. The publisher checks both receipts before pushing, verifies the child manifests and exact two-platform index, and checks anonymous access before emitting a version 2 lock candidate. Pin that candidate through a reviewed change; publication does not update the checkout's lock automatically.
+## Publishing the image
 
-The build and publisher exchange sealed image data through `/opt/situate/ci-image-transfers` on an existing controlled host. Provision that directory separately with an isolated upload account, a separate read account and a shared read group; use group inheritance so uploaded `0750` directories and `0640` files remain readable by the reader. Neither account should own app publication storage. SSH host keys must be independently pinned. The scripts neither provision storage nor acquire host keys, and never execute transferred image bytes.
+Run this from a clean, reviewed checkout of the branch that will use the image. Check the
+[third-party notices and corresponding-source obligations](ci-NOTICES.md) before
+distributing it. Build and run the smoke check above for both `linux/amd64` and
+`linux/arm64`, using local tags ending in `:amd64` and `:arm64`. Docker Desktop can
+build and test the other architecture with emulation. Do not publish a variant that
+failed verification.
 
-CI supplies upload/read destinations through `CI_IMAGE_TRANSFER_UPLOAD_HOST` and `CI_IMAGE_TRANSFER_READ_HOST`, separate `CI_IMAGE_TRANSFER_UPLOAD_SSH_PRIVATE_KEY` and `CI_IMAGE_TRANSFER_READ_SSH_PRIVATE_KEY` secrets, and pinned host data in `CI_IMAGE_TRANSFER_KNOWN_HOSTS`. Credentials appear only in their transfer step and are removed afterward; the registry token appears only in the final publisher step. Local `tools/ci-image-transport.mjs upload|download DIR` accepts explicit `--provenance FILE --repository-id ID --run-id ID --attempt N --workflow-sha SHA --source SHA --host USER@HOST --identity FILE --known-hosts FILE`, without Actions event variables. The immutable transfer identity binds that exact provenance and image hash; a missing or modified transfer cannot substitute another run.
+The destination is the existing public `ghcr.io/getsituate/situate-ci-linux` package,
+linked to the `getsituate/situate` repository. Verify that linkage and visibility before
+pushing. Sign in to GHCR with a maintainer credential with package-write access. Keep
+credentials out of the build and verification containers. No SSH transfer or GitHub
+Actions secrets are needed.
 
-The distribution target is `ghcr.io/getsituate/situate-ci-linux`, intentionally public so contributors and permitted fork workflows can pull without a GitHub account or registry credentials. Normal publication requires public visibility and linkage to exactly `getsituate/situate`, including its numeric repository ID. Review [third-party notices and source obligations](ci-NOTICES.md) before authorizing distribution.
+1. Choose a fresh tag prefix for this build. Tag each verified local image with that
+   prefix and its architecture, and push it to GHCR:
 
-For an absent package, an authorized maintainer can manually dispatch the trusted `main` workflow with `bootstrap: true`. This uses the same restricted verification and provenance checks, creates a linked private package, and does not emit a pinnable result. Explicitly review and make that package public, then run normal publication and verify anonymous access to its exact digest. See [image updates and bootstrap](../../docs/development/testing.md#updating-the-image) for permissions, empty-repository setup and failure recovery. Never reuse an old digest with a new input hash or pin a local Docker image ID.
+   ```sh
+   image=ghcr.io/getsituate/situate-ci-linux
+   tag="build-$(git rev-parse --short=12 HEAD)-$(date -u +%Y%m%d%H%M%S)"
+   (
+     set -e
+     for arch in amd64 arm64; do
+       docker tag "situate-ci-local:$arch" "$image:$tag-$arch"
+       docker push --platform "linux/$arch" "$image:$tag-$arch"
+     done
+   )
+   ```
 
-No registry login, publishing, visibility change or SDK-license acceptance is part of the local build.
+2. Use the two **registry digests** printed by those pushes to create one index:
+
+   ```sh
+   docker buildx imagetools create --tag "$image:$tag" \
+     "$image@$amd64_digest" "$image@$arm64_digest"
+   docker buildx imagetools inspect "$image:$tag"
+   ```
+
+   Verify that the index contains exactly one `linux/amd64` and one `linux/arm64`
+   manifest and references exactly the two pushed digests. Record the index digest.
+   With an empty Docker credential configuration, pull that exact index digest for
+   both platforms to confirm anonymous access. Inspect the registry state before
+   retrying an uncertain push. Leave previous published digests available.
+
+3. Set `tools/ci-image.lock.json` to version 2, with
+   `"platforms": ["linux/amd64", "linux/arm64"]`, the public `image@sha256:…` index
+   reference and the fingerprint from `node tools/ci-image.mjs --inputs`. Remove the
+   version 1 `platform` field. Run `node tools/ci-image.mjs` to validate the lock.
+   Include the lock update in the same PR as any image-input changes. Do not reuse an
+   older digest with a new fingerprint or pin a local Docker image ID.
