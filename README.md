@@ -17,8 +17,6 @@
 
 ![Situate design preview showing a birthday planning note beside a conversation draft, with files and conversations in the sidebar.](website/media/workspace.webp)
 
-_Design preview from the Vue workshop with synthetic content, not a live AI or connected-account workflow. See [capture details and credits](website/media/manifest.json)._
-
 ## What you can do
 
 ### Work with your notes
