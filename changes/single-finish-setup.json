@@ -1,7 +1,6 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "single-finish-setup",
-  "behaviorDigest": "fbff583f668fb859012dfbc1de7ae2ff3b38ebaad45bf00f3036301152c0cbe8",
   "locales": {
     "en": {
       "title": "Changes",
@@ -31,15 +30,5 @@
         }
       ]
     }
-  },
-  "translationApprovals": {
-    "de": {
-      "sourceHash": "d5212b01d79ce2e16bbdac354b7f45caede69be7ebad43b375a0f97855f314ea",
-      "translationHash": "b7d1c86805ac51f3ad32ea143ffc91a1060409a42d8c6215ac1467cf03f39fc0"
-    }
-  },
-  "sourceApproval": {
-    "action": "approve",
-    "sourceHash": "d5212b01d79ce2e16bbdac354b7f45caede69be7ebad43b375a0f97855f314ea"
   }
 }
