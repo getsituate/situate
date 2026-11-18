@@ -20,6 +20,7 @@ export interface Incident {
   code: string;
   description: string;
   gestureSeen: boolean;
+  dismissed: boolean;
 }
 export type RecoveryPage =
   "unexpected" | "report" | "mail" | "repair" | "reopen" | null;
@@ -76,6 +77,7 @@ export function captureIncident(
     code,
     description: "",
     gestureSeen: false,
+    dismissed: false,
   });
   if (identity) failureIdentities.set(identity, incident);
   const incidents = [...recoveryState.incidents, incident];
@@ -94,10 +96,13 @@ export function openIncident(
   page: Exclude<RecoveryPage, null> = "unexpected",
 ) {
   if (!recoveryState.incidents.includes(incident)) return;
+  incident.dismissed = false;
   recoveryState.active = incident;
   recoveryState.page = page;
 }
 export function dismissIncident() {
+  if (recoveryState.active) recoveryState.active.dismissed = true;
+  recoveryState.active = undefined;
   recoveryState.page = null;
 }
 export function resolveIncident(incident: Incident) {
