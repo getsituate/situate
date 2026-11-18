@@ -1,10 +1,7 @@
 import { reactive } from "vue";
 import { diagnosticsFor, type Context } from "../diagnostics";
-import {
-  referenceKey,
-  resolveReference,
-  type ContentReference,
-} from "../ai/content-references";
+import { referenceKey, type ContentReference } from "./content-reference";
+import { resolveReference } from "./reference-operations";
 import {
   filesRequest,
   type DistributiveOmit,

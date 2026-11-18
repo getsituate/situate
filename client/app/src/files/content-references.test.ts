@@ -1,14 +1,13 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import { filesRequest } from "../files/api";
+import { filesRequest } from "./api";
 import {
   mergeReferences,
-  captureReference,
-  resolveReferences,
   validReference,
   referenceKey,
   type ContentReference,
-} from "./content-references";
-vi.mock("../files/api", () => ({ filesRequest: vi.fn() }));
+} from "./content-reference";
+import { captureReference, resolveReferences } from "./reference-operations";
+vi.mock("./api", () => ({ filesRequest: vi.fn() }));
 const live: ContentReference = {
   kind: "live",
   workspaceId: "one",

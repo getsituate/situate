@@ -2,7 +2,7 @@ import {
   validReference,
   validReferencePath,
   type ContentReference,
-} from "../ai/content-references";
+} from "../files/content-reference";
 
 export interface SupportIdea {
   id: string;

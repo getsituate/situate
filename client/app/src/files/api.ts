@@ -1,10 +1,7 @@
 import { localizeError } from "@situate/localization";
 import { invoke } from "@tauri-apps/api/core";
 import { diagnosticsFor, type Context } from "../diagnostics";
-import {
-  validReference,
-  type ContentReference,
-} from "../ai/content-references";
+import { validReference, type ContentReference } from "./content-reference";
 
 export interface TextVersion {
   text: string;

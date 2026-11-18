@@ -40,6 +40,7 @@ export function isFeedbackSuite(suite) {
       "root-lint",
       "root-format",
       "client-types",
+      "client-architecture",
       "workshop-types",
       "client-format",
     ]).has(suite.id)

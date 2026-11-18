@@ -17,10 +17,10 @@ import { modelRequestError } from "../ai/request-errors";
 import { isRetiredSetupQuestion } from "../onboarding/questions";
 import {
   referenceKey,
-  resolveReference,
   mergeReferences,
   type ContentReference,
-} from "../ai/content-references";
+} from "../files/content-reference";
+import { resolveReference } from "../files/reference-operations";
 import type { PresentationValue, ViewTarget } from "../layout/navigation";
 import {
   SituateButton,

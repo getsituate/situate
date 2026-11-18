@@ -31,7 +31,7 @@ node tools/test.mjs --unit
 # Dependency-free feedback with a five-second total budget
 node tools/test.mjs --quick --changed
 
-# Unit tests plus cached lint/format, Vue types and Rust formatting
+# Unit tests plus cached lint/format, frontend checks and Rust formatting
 node tools/test.mjs --feedback --changed
 
 # Static/build checks only
@@ -64,7 +64,7 @@ node tools/test.mjs --list --json
 
 The default scope policy is defined in [`tools/test-scope.mjs`](../../tools/test-scope.mjs). `--extended` opts into the complete current-host inventory and can be combined with profile and change selection. Plans and reports identify the scope and deferred suites; deferred checks are not reported as passed.
 
-The `--unit`, `--quick`, `--feedback`, `--checks`, and `--coverage` profiles are mutually exclusive. `--unit` retains its test-only meaning. `--feedback` runs unit suites plus root lint/format, application typechecking, and Rust formatting; these checks may take minutes. With `--changed`, every profile uses the suite input rules in [`tools/test-inputs.mjs`](../../tools/test-inputs.mjs). Ordinary documentation and documents under `concepts/` select formatting and documentation contracts, plus secret scanning in the full profile—not frontend, Rust, browser or native tests. Requirement records under `requirements/data/` retain catalog validation and catalog unit tests, not viewer builds or journeys. Markdown in fixtures, source, templates and Pi resources retains its consuming checks. Unknown inputs and shared configuration changes retain conservative coverage. A clean changed selection remains empty.
+The `--unit`, `--quick`, `--feedback`, `--checks`, and `--coverage` profiles are mutually exclusive. `--unit` retains its test-only meaning. `--feedback` runs unit suites plus root lint/format, application typechecking, frontend dependency checks, and Rust formatting; these checks may take minutes. With `--changed`, every profile uses the suite input rules in [`tools/test-inputs.mjs`](../../tools/test-inputs.mjs). Ordinary documentation and documents under `concepts/` select formatting and documentation contracts, plus secret scanning in the full profile—not frontend, Rust, browser or native tests. Requirement records under `requirements/data/` retain catalog validation and catalog unit tests, not viewer builds or journeys. Markdown in fixtures, source, templates and Pi resources retains its consuming checks. Unknown inputs and shared configuration changes retain conservative coverage. A clean changed selection remains empty.
 
 Direct host quality commands can use content caches under `node_modules/.cache/situate-quality/`. Portable batches use disposable Linux dependencies and do not import host quality caches or local successful-suite caches. Supplying `--success-cache` reports this limitation; portable checks still execute. Full verification never reuses successful test results.
 
@@ -89,6 +89,8 @@ Across worktrees, the runner admits at most two heavy compilation, dependency-in
 JSON reports separate `worktreeQueueWaitMs` from runner execution and expose total `elapsedMs`. Suite results include dependency `preparationDurationMs`, `resourceQueueWaitMs`, and `executionDurationMs`. Resource timing measures the runner's outer heavy-job lease; native scripts' internal build/desktop waits remain part of their suite execution time. Host admission for a portable container batch is included in batch elapsed time, not attributed to individual suites. Cache inspection has its own timing. Queue timings contain no command arguments or environment values.
 
 Use `node tools/run-coordinated.mjs -- command arguments...` for other test/build commands that write this checkout's artifacts. A separate build command needs both the worktree lease and the shared build lease: `node tools/run-coordinated.mjs -- node tools/run-coordinated.mjs --resource build -- command arguments...`. Direct `npm ci`, `cargo`, and test-framework invocations do not automatically join the queue. Avoid short outer timeouts for broad verification; use the runner's suite timeout or interrupt the caller and allow teardown to complete.
+
+`node tools/test.mjs --suite client-architecture` checks for circular runtime imports across the Vue app, shared UI, and localization sources. It reports the import chains, including statically resolvable dynamic imports. Pure type imports and test sources do not participate.
 
 ## Release compatibility verification
 

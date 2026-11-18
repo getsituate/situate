@@ -1,5 +1,5 @@
 import type { Model } from "./contracts";
-import type { Config, ModelCatalog } from "./api";
+import type { Config, ModelCatalog } from "./connection-types";
 import catalog from "./catalog.generated.json";
 import transports from "./transport-contract.json";
 import policy from "./provider-policy.json";

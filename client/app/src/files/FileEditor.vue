@@ -61,7 +61,7 @@ import {
   type FileSession,
 } from "./sessions";
 import type { PresentationValue } from "../layout/navigation";
-import { referenceKey } from "../ai/content-references";
+import { referenceKey } from "./content-reference";
 import {
   filePresentation,
   safeFileTarget,

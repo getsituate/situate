@@ -1,5 +1,5 @@
 import { loadConversation, type PortableMessage } from "./conversation";
-import { validReference } from "./content-references";
+import { validReference } from "../files/content-reference";
 import type { ConversationRuntime } from "./queue-runtime";
 export type {
   AttachmentRef,

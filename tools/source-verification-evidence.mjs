@@ -7,7 +7,7 @@ export const MAX_SOURCE_EVIDENCE_CANDIDATES = 20;
 const sha = /^[a-f0-9]{40}$/;
 const hash = /^[a-f0-9]{64}$/;
 const eligible = {
-  frontend: ["client-vue", "client-types"],
+  frontend: ["client-vue", "client-types", "client-architecture"],
   rust: [
     "client-agent-runtime",
     "client-migrations",

@@ -120,6 +120,8 @@ const rules = {
   "client-vue-coverage": productUnit,
   "client-executor-integration": product,
   "client-types": product,
+  "client-architecture": (file) =>
+    app.test(file) || frontend(file) || file === "tools/test.mjs",
   "client-browser-chromium": product,
   "client-browser-webkit": product,
   "client-visual": product,
