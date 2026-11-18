@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "single-finish-setup",
+  "behaviorDigest": "3448eac777bfdc013ba46027d50e56dbd1e44e165ed8d9afe0ada636697cdfe5",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "single-finish-setup",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "One button to finish setup",
+          "paragraphs": [
+            "Choose Finish setup to open your workspace. If you selected plugins to develop in the setup chat, any that have not started will start in separate chats."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "single-finish-setup",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Ein Button zum Abschluss der Einrichtung",
+          "paragraphs": [
+            "Wähle ‚Einrichtung abschließen‘, um deinen Arbeitsbereich zu öffnen. Wenn du im Einrichtungs-Chat Plugins zur Entwicklung ausgewählt hast, startet die noch ausstehende Entwicklung in separaten Chats."
+          ]
+        }
+      ]
+    }
+  },
+  "translationApprovals": {
+    "de": {
+      "sourceHash": "2c33febeb97d05281c56ccc0fa9149015710e113b496551ac60a2edd1ed68403",
+      "translationHash": "20cedb7104ff8ec3aec3395e187e17cb3deeb088904baf94c0ea388f95f5b46c"
+    }
+  },
+  "sourceApproval": {
+    "action": "approve",
+    "sourceHash": "2c33febeb97d05281c56ccc0fa9149015710e113b496551ac60a2edd1ed68403"
+  }
+}
