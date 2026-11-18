@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "custom-provider-chat-model",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "custom-provider-chat-model",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Chat with a custom AI provider",
+          "paragraphs": [
+            "A selected chat model now works even when your OpenAI-compatible provider has no recommended model."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "custom-provider-chat-model",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Chat mit einem eigenen KI-Anbieter",
+          "paragraphs": [
+            "Ein ausgewähltes Chatmodell funktioniert jetzt auch dann, wenn dein OpenAI-kompatibler Anbieter kein Modell empfiehlt."
+          ]
+        }
+      ]
+    }
+  }
+}

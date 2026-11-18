@@ -99,6 +99,41 @@ test("accessibility assertions can remain pending but native deadlines stop poll
   );
 });
 
+test("window text assertions require an exact match from the native AX query", async () => {
+  const action = {
+    assert: {
+      role: "AXStaticText",
+      name: "Updated the note.",
+      window: "Fixture — Situate",
+    },
+  };
+  for (const [output, expected] of [
+    ["unmatched", false],
+    ["matched", true],
+  ]) {
+    const execute = createQualificationProcess({
+      execute: async (command, args) => {
+        assert.equal(command, "/usr/bin/swift");
+        assert.match(args[0], /\/qualification-ax-text\.swift$/);
+        assert.deepEqual(args.slice(1), [
+          "123",
+          "Updated the note.",
+          "Fixture — Situate",
+        ]);
+        return output;
+      },
+    });
+    assert.equal(
+      await checkAccessibilityAction(123, action, { execute }),
+      expected,
+    );
+  }
+  await assert.rejects(
+    checkAccessibilityAction(123, action, { execute: async () => "unknown" }),
+    /Native text observation unavailable/,
+  );
+});
+
 export function responseRequest(responses, calls = []) {
   return (url, options, callback) => {
     calls.push({ url: String(url), options });
@@ -136,6 +171,21 @@ test("native accessibility actions target owned PIDs and exact unique roles/name
         assert: { role: "AXUnknown", name: "anything" },
       }),
     /Invalid accessibility target/,
+  );
+});
+
+test("folder path input requires the owned picker and exact focused field value", () => {
+  const script = accessibilityScript(1234, {
+    folderField: "/fixture/workspace",
+  });
+  assert.match(script, /unix id is 1234/);
+  assert.match(script, /windows whose subrole is "AXDialog"/);
+  assert.match(script, /AXFocusedUIElement/);
+  assert.match(script, /value of field is not "\/fixture\/workspace"/);
+  assert.doesNotMatch(script, /keystroke|AXPress/);
+  assert.throws(
+    () => accessibilityScript(1234, { folderField: false }),
+    /Invalid folder picker assertion/,
   );
 });
 

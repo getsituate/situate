@@ -435,11 +435,18 @@ pub(super) fn small_choice_observed(
     config: &Config,
     observed: &discovery::Catalog,
 ) -> Result<Option<Choice>, String> {
-    let settings = settings(storage, config)?;
-    settings
-        .comment
-        .map(|choice| resolve_choice(choice.snapshot(config), observed, "comment"))
-        .transpose()
+    let Some(choice) = settings(storage, config)?.comment else {
+        return Ok(None);
+    };
+    // Custom providers have no ranked recommendations. Optional generation must
+    // not block a chat with an explicitly selected model.
+    if config.provider == "custom"
+        && choice.model == "recommended"
+        && choice.thinking == "recommended"
+    {
+        return Ok(None);
+    }
+    resolve_choice(choice.snapshot(config), observed, "comment").map(Some)
 }
 #[cfg(test)]
 pub(super) fn load_current_settings(
