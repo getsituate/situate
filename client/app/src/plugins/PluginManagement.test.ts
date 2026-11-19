@@ -116,7 +116,10 @@ function setup(plugins: RuntimePlugin[] = [plugin("weekly")]) {
     });
   return { runtime, ui, onDevelop, render };
 }
-function action(wrapper: ReturnType<typeof mount>, key: string) {
+function action(
+  wrapper: Pick<ReturnType<typeof mount>, "findAll">,
+  key: string,
+) {
   return wrapper
     .findAll("button")
     .find((b) => b.text().includes(`⟦pluginManagement.${key}⟧`))!;
