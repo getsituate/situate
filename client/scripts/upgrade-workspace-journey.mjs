@@ -5,7 +5,14 @@ import {
   upgradeWorkspaceName,
 } from "./upgrade-workspace-fixture.mjs";
 
-export function upgradeWorkspaceJourney({ actions, verify, writable }) {
+const pendingNote = `${upgradeNoteAfter}\nUnsaved cancellation marker\n`;
+
+export function upgradeWorkspaceJourney({
+  actions,
+  verify,
+  verifyCancellation,
+  writable,
+}) {
   const window = `${upgradeWorkspaceName} — Situate`;
   const button = (name) => ({ role: "AXButton", name, window });
   const text = (name) => ({ role: "AXStaticText", name, window });
@@ -38,10 +45,8 @@ export function upgradeWorkspaceJourney({ actions, verify, writable }) {
     await click({ role: "AXPopUpButton", name: "File actions", window });
     await click({ role: "AXMenuItem", name: "Edit source", window });
   };
-  const updates = async () => {
-    await click(button("Update available"));
-    await expect(text("The update is verified and ready to install."));
-    await click(button("Install and restart"));
+  const confirmInstall = async (label) => {
+    await click(button(label));
     await expect(text("Restart to update Situate?"));
     await click(button("Install and restart"));
   };
@@ -69,29 +74,26 @@ export function upgradeWorkspaceJourney({ actions, verify, writable }) {
       await verify(upgradeNoteAfter);
     },
     async update() {
-      const unsaved = `${upgradeNoteAfter}\nUnsaved cancellation marker\n`;
       await writable(false);
       try {
-        await fill(unsaved);
+        await fill(pendingNote);
         await expect(text("Not saved"));
-        await updates();
+        await click(button("Update available"));
+        await expect(text("The update is verified and ready to install."));
+        await confirmInstall("Install and restart");
         await expect(text("Keep your unsaved changes"));
         await expect({
           ...editor,
           name: "Retained unsaved source",
-          value: unsaved,
+          value: pendingNote,
         });
         await click(button("Cancel"));
-        await openNote();
-        await expect({ ...editor, value: unsaved });
-        await verify(upgradeNoteAfter);
+        await expect(button("Try installation again"));
+        await verifyCancellation(pendingNote);
       } finally {
         await writable(true);
       }
-      await fill(upgradeNoteAfter);
-      await expect(text("Saved"));
-      await verify(upgradeNoteAfter);
-      await updates();
+      await confirmInstall("Try installation again");
     },
     async reopen() {
       await navigate("Archive follow-up");
@@ -100,8 +102,8 @@ export function upgradeWorkspaceJourney({ actions, verify, writable }) {
       await expect(text("Archive index"));
       await expect(button("Disable"));
       await openNote();
-      await expect({ ...editor, value: upgradeNoteAfter });
-      await verify(upgradeNoteAfter);
+      await expect({ ...editor, value: pendingNote });
+      await verify(pendingNote);
     },
   };
 }

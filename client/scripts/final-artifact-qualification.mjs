@@ -39,7 +39,9 @@ import {
 } from "./final-artifact-journeys.mjs";
 import {
   materializeUpgradeWorkspace,
+  upgradeNoteAfter,
   upgradeWorkspaceName,
+  verifyUpgradeDraft,
   verifyUpgradeWorkspace,
 } from "./upgrade-workspace-fixture.mjs";
 import { upgradeWorkspaceJourney } from "./upgrade-workspace-journey.mjs";
@@ -979,6 +981,18 @@ export function createFinalArtifactQualificationHost(
             upgrade = upgradeWorkspaceJourney({
               actions,
               verify: (expected) => verifyUpgradeWorkspace(root, expected),
+              verifyCancellation: async (expectedDraft) => {
+                assert(
+                  pid &&
+                    (await applicationPids()).includes(pid) &&
+                    (await ownsProcess(pid)) &&
+                    bundleDigest(app) ===
+                      previous.manifest.artifacts[0].bundleSha256,
+                  "Cancelled update did not leave the predecessor installed and running",
+                );
+                verifyUpgradeWorkspace(root, upgradeNoteAfter);
+                verifyUpgradeDraft(root, expectedDraft);
+              },
               writable: (enabled) => chmodSync(root, enabled ? 0o700 : 0o500),
             });
           }

@@ -15,6 +15,7 @@ import {
   upgradeNote,
   upgradeNoteBefore,
   upgradeNoteAfter,
+  verifyUpgradeDraft,
   verifyUpgradeWorkspace,
 } from "./upgrade-workspace-fixture.mjs";
 import { upgradeWorkspaceJourney } from "./upgrade-workspace-journey.mjs";
@@ -91,6 +92,32 @@ test("historical fixture retains file revisions, both transcripts and plugin cod
   );
 });
 
+test("cancellation requires the predecessor's exact persisted draft", (t) => {
+  const { root } = materialized(t);
+  const draft = `${upgradeNoteAfter}\nUnsaved cancellation marker\n`;
+  const file = join(
+    root,
+    ".situate/drafts/8219f709db5ea809757bda962d9c1bf13ace0317.json",
+  );
+  assert.throws(() => verifyUpgradeDraft(root, draft), { code: "ENOENT" });
+  writeFileSync(
+    file,
+    JSON.stringify({
+      version: 1,
+      draft: {
+        path: upgradeNote,
+        base: { text: upgradeNoteAfter },
+        text: draft,
+      },
+    }),
+  );
+  verifyUpgradeDraft(root, draft);
+  assert.throws(
+    () => verifyUpgradeDraft(root, upgradeNoteAfter),
+    /exact draft/,
+  );
+});
+
 test("fixture verification rejects linked retained files", (t) => {
   const { parent, root } = materialized(t);
   const outside = join(parent, "outside.md");
@@ -144,6 +171,7 @@ test("the upgrade launches the installed updater and verifies cancellation befor
   const journey = upgradeWorkspaceJourney({
     actions: async (items) => steps.push(...items),
     verify: async (note) => steps.push({ saved: note }),
+    verifyCancellation: async (draft) => steps.push({ cancelledDraft: draft }),
     writable: async (value) => steps.push({ writable: value }),
   });
   await journey.open();
@@ -157,45 +185,30 @@ test("the upgrade launches the installed updater and verifies cancellation befor
   const notices = steps.flatMap((step, index) =>
     step.click?.name === "Update available" ? [index] : [],
   );
-  assert.equal(indices.length, 4);
-  assert.equal(notices.length, 2);
-  assert.ok(
-    notices[0] < indices[0] &&
-      cancellation < notices[1] &&
-      notices[1] < indices[2],
+  const retry = steps.findIndex(
+    (step) => step.click?.name === "Try installation again",
   );
-  assert.ok(indices[1] < cancellation && cancellation < indices[2]);
   const unsaved = `${upgradeNoteAfter}\nUnsaved cancellation marker\n`;
   const draft = steps.findIndex(
     (step) =>
       step.assert?.name === "Retained unsaved source" &&
       step.assert.value === unsaved,
   );
-  const reopened = steps.findIndex(
-    (step, index) => index > cancellation && step.click?.name === "Edit source",
-  );
-  const retained = steps.findIndex(
-    (step, index) =>
-      index > reopened &&
-      step.assert?.name === "Markdown source" &&
-      step.assert.value === unsaved,
-  );
-  assert.ok(indices[1] < draft && draft < cancellation);
+  const unchanged = steps.findIndex((step) => step.cancelledDraft === unsaved);
+  const writable = steps.findIndex((step) => step.writable === true);
+  assert.equal(indices.length, 3);
+  assert.equal(notices.length, 1);
   assert.ok(
-    cancellation < reopened && reopened < retained && retained < notices[1],
+    notices[0] < indices[0] && indices[1] < draft && draft < cancellation,
   );
+  assert.ok(cancellation < unchanged && unchanged < writable);
+  assert.ok(writable < retry && retry < indices[2]);
   assert.deepEqual(
     steps.filter((step) => "writable" in step),
     [{ writable: false }, { writable: true }],
   );
   assert.deepEqual(
     steps.filter((step) => "saved" in step).map((step) => step.saved),
-    [
-      upgradeNoteBefore,
-      upgradeNoteAfter,
-      upgradeNoteAfter,
-      upgradeNoteAfter,
-      upgradeNoteAfter,
-    ],
+    [upgradeNoteBefore, upgradeNoteAfter, unsaved],
   );
 });
