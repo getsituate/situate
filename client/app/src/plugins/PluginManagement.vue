@@ -683,11 +683,10 @@ function settings(id: string) {
               autofocus
               :disabled="busy"
               @click="closeDialog"
-              >{{ t("pluginManagement.cancel") }}</SituateButton><SituateButton
-              :disabled="busy"
-              @click="disable()"
-              >{{ t("pluginManagement.disable") }}</SituateButton
-            >
+              >{{ t("pluginManagement.cancel") }}</SituateButton
+            ><SituateButton :disabled="busy" @click="disable()">{{
+              t("pluginManagement.disable")
+            }}</SituateButton>
           </SituateDialogActions>
         </template>
       </div>
