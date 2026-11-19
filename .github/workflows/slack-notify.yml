@@ -1,0 +1,107 @@
+name: Send a Slack notification
+
+on:
+  workflow_call:
+    inputs:
+      kind:
+        type: string
+        required: true
+      workflow_name:
+        type: string
+      run_id:
+        type: number
+      run_attempt:
+        type: number
+      release_id:
+        type: string
+    secrets:
+      webhook_url:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/slack-notification-smoke-test' && github.event_name == 'push' && github.workflow_ref == 'getsituate/situate/.github/workflows/slack-smoke-test.yml@refs/heads/slack-notification-smoke-test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check Slack webhook configuration
+        id: webhook
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.webhook_url }}
+        run: |
+          if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Slack webhook is not configured."
+            exit 1
+          fi
+      - name: Compose Slack message
+        id: message
+        if: steps.webhook.outputs.configured == 'true'
+        shell: bash
+        env:
+          KIND: ${{ inputs.kind }}
+          WORKFLOW_NAME: ${{ inputs.workflow_name }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          GH_TOKEN: ${{ inputs.kind == 'release' && github.token || '' }}
+        run: |
+          payload="$RUNNER_TEMP/slack-message.json"
+          case "$KIND" in
+            failure)
+              [[ "$RUN_ID" =~ ^[1-9][0-9]*$ && "$RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+              jq -n --arg workflow "$WORKFLOW_NAME" --arg attempt "$RUN_ATTEMPT" \
+                --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT" '
+                def header($text): {type: "header", text: {type: "plain_text", text: $text}};
+                def section($text): {type: "section", text: {type: "plain_text", text: $text}};
+                {
+                  text: "\($workflow[:200]) [TEST] failure notification (attempt \($attempt))",
+                  mrkdwn: false, unfurl_links: false, unfurl_media: false,
+                  blocks: [
+                    header("[TEST] Workflow failure notification"),
+                    section("\($workflow[:200]) · attempt \($attempt)"),
+                    {type: "section", text: {type: "mrkdwn", text: "<\($url)|Open test run>"}}
+                  ]
+                }' > "$payload"
+              ;;
+            release)
+              [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+              gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" |
+                jq -e --arg id "$RELEASE_ID" --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/" '
+                def section($text): {type: "section", text: {type: "plain_text", text: $text}};
+                select((.id | tostring) == $id and .draft == false
+                  and (.published_at | type) == "string" and (.tag_name | type) == "string" and .tag_name != "")
+                | (.body // "" | gsub("(?m)^#{1,6} +"; "")) as $notes
+                | ("[TEST] Release notification for " + .tag_name) as $title
+                | {
+                    text: $title, mrkdwn: false, unfurl_links: false, unfurl_media: false,
+                    blocks: (
+                      [{type: "header", text: {type: "plain_text", text: $title[:120]}}]
+                      + (if $notes == "" then []
+                         elif ($notes | length) > 1400 then [section($notes[:1400] + "…")]
+                         else [section($notes)] end)
+                      + [{type: "section", text: {
+                          type: "mrkdwn", text: "<\($url)\(.tag_name | @uri)|View release on GitHub>"
+                        }}]
+                    )
+                  }' > "$payload"
+              ;;
+            *) exit 1 ;;
+          esac
+      - name: Post to Slack
+        id: post
+        if: steps.message.outcome == 'success'
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.webhook_url }}
+        run: |
+          [[ "$SLACK_WEBHOOK_URL" =~ ^https://hooks\.slack\.com/services/[A-Za-z0-9]+/[A-Za-z0-9]+/[A-Za-z0-9]+$ ]]
+          response=$(printf 'url = "%s"\n' "$SLACK_WEBHOOK_URL" |
+            curl --disable --config - --silent --fail --max-time 20 \
+              --header 'Content-Type: application/json' --data-binary "@$RUNNER_TEMP/slack-message.json")
+          [[ "$response" == "ok" ]]

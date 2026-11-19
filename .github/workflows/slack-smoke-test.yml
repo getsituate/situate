@@ -1,0 +1,27 @@
+name: Slack notification smoke test
+
+on:
+  push:
+    branches: [slack-notification-smoke-test]
+
+permissions:
+  contents: read
+
+jobs:
+  failure-channel:
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      kind: failure
+      workflow_name: Slack notification smoke test
+      run_id: ${{ fromJSON(github.run_id) }}
+      run_attempt: ${{ fromJSON(github.run_attempt) }}
+    secrets:
+      webhook_url: ${{ secrets.SLACK_FAILURE_WEBHOOK_URL }}
+
+  release-channel:
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      kind: release
+      release_id: "451369934"
+    secrets:
+      webhook_url: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
