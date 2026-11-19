@@ -253,10 +253,10 @@ test("paused release skips planning and source work while only effect jobs share
 
 test("the Slack failure notifier observes repository workflows on main", () => {
   const workflow = read("notify-slack");
-  const sources = workflow.match(/workflows:\n([\s\S]*?)\n    types:/)?.[1];
+  const sources = workflow.match(/workflows:\n([\s\S]*?)\n {4}types:/)?.[1];
   assert.ok(sources);
   assert.deepEqual(
-    Array.from(sources.matchAll(/^      - (.+)$/gm), ([, name]) => name).sort(),
+    Array.from(sources.matchAll(/^ {6}- (.+)$/gm), ([, name]) => name).sort(),
     [
       ...pipelineWorkflows.map((name) => read(name).match(/^name: (.+)$/m)[1]),
       "Dependabot Updates",
