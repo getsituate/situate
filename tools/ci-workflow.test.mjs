@@ -64,7 +64,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     for (const match of workflow.matchAll(/run: ([^\n]+)/g))
       assert.match(
         match[1],
-        /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
+        /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
       );
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
@@ -72,18 +72,19 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       .slice(1)
       .filter((body) => body.includes("    steps:"))) {
       if (body.includes("run: node ")) {
-        assert.ok(body.includes("run: python3 tools/pipeline-bootstrap.py"));
-        assert.ok(
-          body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
-            body.indexOf("run: node "),
-        );
+        const python = body.includes("runs-on: windows-2025")
+          ? "python"
+          : "python3";
+        const bootstrap = `run: ${python} tools/pipeline-bootstrap.py`;
+        assert.ok(body.includes(bootstrap));
+        assert.ok(body.indexOf(bootstrap) < body.indexOf("run: node "));
       } else {
         assert.match(body, /run: python3 tools\/pipeline-container\.py/);
       }
     }
     assert.doesNotMatch(
       workflow,
-      /runs-on: (?:windows|macos-1[0-9])|--target.*(?:ios|android)/,
+      /runs-on: (?:windows(?!-2025\b)|macos-1[0-9])|--target.*(?:ios|android)/,
     );
   }
 });
@@ -116,13 +117,16 @@ test("fixed independent families depend on planning and aggregate every selected
       job(workflow, "plan"),
       /outputs:[\s\S]*plan:.*steps\.plan\.outputs\.plan[\s\S]*digest:/,
     );
-    for (const [id, host] of Object.entries(laneHosts)) {
+    const lanes = Object.entries(laneHosts).filter(
+      ([, host]) => name === "verify" || host !== "windows",
+    );
+    for (const [id, host] of lanes) {
       const lane = job(workflow, id);
       assert.match(lane, /needs: plan\n/);
       assert.match(
         lane,
         new RegExp(
-          `runs-on: ${host === "macos" ? "macos-latest" : "ubuntu-24.04"}`,
+          `runs-on: ${{ macos: "macos-latest", linux: "ubuntu-24.04", windows: "windows-2025" }[host]}`,
         ),
       );
       assert.ok(lane.includes(`.lanes.*.id, '${id}')`));
@@ -131,12 +135,14 @@ test("fixed independent families depend on planning and aggregate every selected
       assert.match(lane, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
       assert.match(lane, /ref:.*github\.sha/);
       assert.doesNotMatch(lane, /needs: \[/);
-      if (host === "macos" || id === "docker-integration") {
+      if (host !== "linux" || id === "docker-integration") {
         assert.ok(
           lane.indexOf("actions-adapter.mjs setup") <
             lane.indexOf("actions-adapter.mjs lane"),
         );
         assert.match(lane, /pipeline-bootstrap\.py/);
+        if (host === "windows")
+          assert.doesNotMatch(lane, /source-reuse|secrets\./);
       } else {
         assert.match(lane, /pipeline-container\.py actions lane/);
         assert.doesNotMatch(
@@ -152,13 +158,38 @@ test("fixed independent families depend on planning and aggregate every selected
         ? /if: always\(\)/
         : /needs\.plan\.outputs\.enabled == 'true'/,
     );
-    for (const id of Object.keys(laneHosts))
+    for (const [id] of lanes)
       assert.ok(aggregate.split("    if:")[0].includes(id));
     assert.match(aggregate, /PIPELINE_NEEDS:.*format\(/);
     assert.match(aggregate, /toJSON\(needs\.plan\.result\)/);
     assert.doesNotMatch(aggregate, /toJSON\(needs\)/);
     assert.match(aggregate, /pipeline-container\.py actions aggregate/);
   }
+});
+
+test("Windows verify requires a native receipt and uploads the CI build after it passes", () => {
+  const workflow = read("verify");
+  const lane = job(workflow, "windows-native");
+  assert.match(lane, /runs-on: windows-2025/);
+  assert.match(lane, /ref:.*github\.sha/);
+  assert.match(lane, /contents: read/);
+  assert.doesNotMatch(
+    lane,
+    /secrets\.|environment:|continue-on-error|source-reuse/,
+  );
+  assert.match(lane, /steps\.lane\.outputs\.receipt/);
+  assert.match(
+    lane,
+    /lane --workflow verify --lane windows-native[\s\S]*upload-artifact/,
+  );
+  assert.match(lane, /situate-windows-ci\/artifact\//);
+  assert.match(lane, /if-no-files-found: error/);
+  const required = job(workflow, "required");
+  assert.match(required.split("    if:")[0], /windows-native/);
+  assert.equal(
+    (required.match(/toJSON\(needs\.windows-native\)/g) ?? []).length,
+    2,
+  );
 });
 
 test("native source jobs declare one build slot in both PR and release verification", () => {
@@ -237,7 +268,8 @@ test("paused release skips planning and source work while only effect jobs share
   assert.match(plan, /release-selection --workflow create/);
   assert.match(plan, /PIPELINE_RELEASE_ENABLED:.*vars\.MACOS_RELEASE_ENABLED/);
   assert.match(plan, /if: steps\.selection\.outputs\.enabled == 'true'/);
-  for (const id of Object.keys(laneHosts)) {
+  for (const [id, host] of Object.entries(laneHosts)) {
+    if (host === "windows") continue;
     assert.match(job(workflow, id), /needs\.plan\.outputs\.enabled == 'true'/);
     assert.doesNotMatch(job(workflow, id), /concurrency:/);
   }

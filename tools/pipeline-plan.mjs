@@ -15,6 +15,7 @@ import {
   supportedSuiteEnabled,
   suiteHost,
   suiteExecution,
+  windowsNativeSuites,
 } from "./test-scope.mjs";
 
 const execute = promisify(execFile);
@@ -106,6 +107,7 @@ const families = [
       "client-plugins-e2e",
     ],
   ],
+  ["windows-native", "windows", windowsNativeSuites, "native"],
 ];
 
 function validateMode(mode) {
@@ -132,6 +134,8 @@ function select(paths, { mode, inventory, appImpact }) {
   }
   const full = mode === "release" && appImpact;
   const selected = mandatory.flatMap((suite) => {
+    // The current release workflow only publishes macOS.
+    if (mode === "release" && suiteHost(suite) === "windows") return [];
     const reasons = suiteSelectionReasons(suite, paths);
     const family = families.find(([, , ids]) => ids.includes(suite.id))[0];
     if (
@@ -159,14 +163,12 @@ function select(paths, { mode, inventory, appImpact }) {
             id,
             host,
             ...(execution ? { execution } : {}),
-            timeoutSeconds: [
-              "rust",
-              "browser",
-              "macos-code",
-              "macos-native",
-            ].includes(id)
-              ? 1800
-              : 600,
+            timeoutSeconds:
+              id === "windows-native"
+                ? 3015
+                : ["rust", "browser", "macos-code", "macos-native"].includes(id)
+                  ? 1800
+                  : 600,
             suites: suites.map((suite) => suite.id),
             reasons: [...new Set(suites.flatMap((suite) => suite.reasons))],
           },

@@ -154,6 +154,34 @@ const environment = {
   GITHUB_REF: "refs/heads/main",
 };
 
+test("Verify requires a successful selected Windows job and its receipt", () => {
+  const lane = {
+    id: "windows-native",
+    host: "windows",
+    reasons: [],
+    suites: ["client-windows-build"],
+  };
+  const input = { ...plan, workflow: "verify", lanes: [...plan.lanes, lane] };
+  const windows = { ...receipt, lane: lane.id, host: lane.host };
+  const needs = { ...statuses(), [lane.id]: { result: "success" } };
+  assert.equal(aggregate(input, [receipt, windows], needs).status, "passed");
+  assert.throws(() => aggregate(input, [receipt], needs), /Missing/);
+  for (const result of ["skipped", "failure", "cancelled", undefined])
+    assert.throws(
+      () =>
+        aggregate(input, [receipt, windows], {
+          ...needs,
+          [lane.id]: { result },
+        }),
+      /Unexpected windows-native job result/,
+    );
+  const { [lane.id]: _windows, ...releaseNeeds } = statuses();
+  assert.equal(
+    aggregate({ ...plan, workflow: "create" }, [receipt], releaseNeeds).status,
+    "passed",
+  );
+});
+
 test("event adapter rejects missing history and uses integrated PR source, preceding push, and merge queue base", () => {
   for (const [event, body] of [
     [

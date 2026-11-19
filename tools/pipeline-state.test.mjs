@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, symlinkSync, readdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  readdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
   aggregateReceipts,
+  atomicJson,
   digest,
   openOperation,
   readOperation,
@@ -44,6 +51,47 @@ function fixture(t) {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return root;
 }
+
+test("atomic JSON creates and replaces a receipt without leaving a temporary file", (t) => {
+  const root = fixture(t);
+  const path = join(root, "receipt.json");
+  for (const sequence of [1, 2]) {
+    atomicJson(path, { sequence });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), { sequence });
+    assert.deepEqual(readdirSync(root), ["receipt.json"]);
+  }
+});
+
+test("Windows receipts must contain every native suite executed on the candidate", () => {
+  const suites = ["client-windows-build", "client-windows-workspace"];
+  const lane = {
+    id: "windows-native",
+    host: "windows",
+    execution: "native",
+    suites,
+  };
+  const input = sealPlan({ ...plan(), workflow: "verify", lanes: [lane] });
+  const good = {
+    ...receipt(input),
+    lane: lane.id,
+    host: lane.host,
+    executionHost: lane.host,
+    results: suites.map((id) => ({ id, status: "passed", exitCode: 0 })),
+  };
+  assert.equal(aggregateReceipts(input, [good]).status, "passed");
+  for (const patch of [
+    { source: "c".repeat(40) },
+    { executionHost: "linux" },
+    { kind: "source-verification-reuse" },
+    { results: good.results.slice(1) },
+  ])
+    assert.throws(() => aggregateReceipts(input, [{ ...good, ...patch }]));
+  assert.throws(() =>
+    validatePlan(
+      sealPlan({ ...input, lanes: [{ ...lane, suites: suites.slice(1) }] }),
+    ),
+  );
+});
 
 test("authorization binds values independently of object key order", () => {
   assert.equal(

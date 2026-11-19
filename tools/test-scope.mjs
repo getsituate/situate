@@ -8,6 +8,11 @@ const deferred = new Set([
   "client-visual-fixture",
 ]);
 
+export const windowsNativeSuites = Object.freeze([
+  "client-windows-build",
+  "client-windows-workspace",
+]);
+
 const appleHostOnly = new Set([
   "client-core-macos",
   "client-host",
@@ -44,6 +49,7 @@ export function supportedSuiteEnabled(suite) {
 }
 
 export function suiteHost(suite) {
+  if (windowsNativeSuites.includes(suite.id)) return "windows";
   if (appleHostOnly.has(suite.id)) return "macos";
   return "linux";
 }
@@ -51,10 +57,11 @@ export function suiteHost(suite) {
 export function suiteExecution(suite) {
   if (["client-docker-context", "design-website-hosting"].includes(suite.id))
     return "host-docker";
-  return suiteHost(suite) === "macos" ? "native" : "container";
+  return suiteHost(suite) === "linux" ? "container" : "native";
 }
 
 export function suiteAvailable(suite, platform = process.platform) {
+  if (suiteHost(suite) === "windows") return platform === "win32";
   if (suiteHost(suite) === "macos") return platform === "darwin";
   if (suite.id.startsWith("dev-tui-"))
     return ["darwin", "linux"].includes(platform);
@@ -65,6 +72,7 @@ export function mvpSuiteEnabled(suite, platform = process.platform) {
   return (
     !deferred.has(suite.id) &&
     !(suite.project === "design" && suite.kind === "browser") &&
-    (platform === "darwin" || !appleHostOnly.has(suite.id))
+    (platform === "darwin" || !appleHostOnly.has(suite.id)) &&
+    (platform === "win32" || !windowsNativeSuites.includes(suite.id))
   );
 }
