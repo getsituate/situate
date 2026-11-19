@@ -620,6 +620,7 @@ export function createFinalArtifactQualificationHost(
   let archiveCandidateDeviceState;
   let deviceStateIsolationPending = false;
   let mountUncertain = false;
+  let placementUncertain = false;
   const defaultProfile = !configuration.journeys;
   async function processPath(id) {
     return (
@@ -732,12 +733,15 @@ export function createFinalArtifactQualificationHost(
     );
     pid = undefined;
   }
-  async function installDmg(directory, artifact) {
+  async function installDmg(directory, artifact, { updater = false } = {}) {
     assert(
       !existsSync(app),
       "Qualification application destination already exists",
     );
     const image = join(owned, "mount");
+    const downloaded = updater
+      ? join(mkdtempSync(join(owned, "downloaded-")), "Situate.app")
+      : app;
     mkdirSync(image, { recursive: true });
     let mounted = false;
     try {
@@ -764,7 +768,7 @@ export function createFinalArtifactQualificationHost(
         bundleDigest(join(image, "Situate.app")) === artifact.bundleSha256,
         "Mounted installation bundle changed",
       );
-      await execute("ditto", [join(image, "Situate.app"), app], options);
+      await execute("ditto", [join(image, "Situate.app"), downloaded], options);
     } finally {
       if (mounted) {
         mountUncertain = true;
@@ -776,8 +780,8 @@ export function createFinalArtifactQualificationHost(
       }
     }
     assert(
-      bundleDigest(app) === artifact.bundleSha256,
-      "Installed app differs from the final package",
+      bundleDigest(downloaded) === artifact.bundleSha256,
+      "Copied app differs from the final package",
     );
     await execute(
       "xattr",
@@ -785,10 +789,42 @@ export function createFinalArtifactQualificationHost(
         "-w",
         "com.apple.quarantine",
         "0083;00000000;SituateQualification;",
-        app,
+        downloaded,
       ],
       options,
     );
+    if (updater) {
+      const before = lstatSync(downloaded);
+      const finderInstall = new URL(
+        "./qualification-finder-install.swift",
+        import.meta.url,
+      );
+      placementUncertain = true;
+      assert.equal(
+        await execute(
+          "/usr/bin/swift",
+          [fileURLToPath(finderInstall), downloaded, owned],
+          options,
+        ),
+        "moved",
+        "Finder did not confirm the predecessor install",
+      );
+      const after = lstatSync(app);
+      assert(
+        !existsSync(downloaded) &&
+          after.isDirectory() &&
+          after.uid === configuration.account.uid &&
+          after.dev === before.dev &&
+          after.ino === before.ino &&
+          bundleDigest(app) === artifact.bundleSha256,
+        "Finder did not move the exact predecessor bundle",
+      );
+      placementUncertain = false;
+      assert(
+        await execute("xattr", ["-p", "com.apple.quarantine", app], options),
+        "Finder-installed predecessor lost quarantine",
+      );
+    }
     await execute("spctl", ["--assess", "--type", "execute", app], options);
     await execute("xcrun", ["stapler", "validate", app], options);
     await launch(
@@ -975,7 +1011,13 @@ export function createFinalArtifactQualificationHost(
           await startProviderPhase();
           rmSync(app, { recursive: true });
           const previous = configuration.predecessor;
-          await installDmg(previous.directory, previous.manifest.artifacts[0]);
+          await installDmg(previous.directory, previous.manifest.artifacts[0], {
+            updater: true,
+          });
+          assert(
+            (await processPath(pid)).startsWith(`${app}/Contents/MacOS/`),
+            "Predecessor must launch from the writable installed bundle",
+          );
           stateRoot = join(owned, "predecessor-state");
           seedWorkspace();
           if (defaultProfile) {
@@ -1098,6 +1140,10 @@ export function createFinalArtifactQualificationHost(
       assert(
         !mountUncertain,
         "Mount outcome is unknown; retain the isolated account and package for inspection",
+      );
+      assert(
+        !placementUncertain,
+        "Finder placement outcome is unknown; retain isolated storage for inspection",
       );
       if (owned) rmSync(owned, { recursive: true });
     },
