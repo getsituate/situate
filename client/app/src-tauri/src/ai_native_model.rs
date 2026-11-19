@@ -15,6 +15,11 @@ pub(super) struct NativeRequest {
 }
 
 pub(super) fn descriptor(choice: &model::Choice) -> Result<Value, String> {
+    if let Some(model) = &choice.discovered {
+        return model
+            .descriptor(&choice.connection)
+            .ok_or_else(|| "native.ai.model.chooseCatalog".into());
+    }
     if choice.connection.provider == "custom" {
         return Ok(serde_json::json!({
             "id":choice.model,"name":choice.model,"provider":"custom",
@@ -113,7 +118,7 @@ async fn execute_admitted(
     diagnostic: Option<&crate::diagnostics::Operation>,
 ) -> Result<Value, String> {
     let descriptor = descriptor(&choice)?;
-    let (api, url, fixed_headers) = target(&choice.connection, &choice.model)?;
+    let (api, url, fixed_headers) = choice.target()?;
     let prepared = crate::ai_protocol::build_request(
         &api,
         &descriptor,

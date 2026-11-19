@@ -852,6 +852,13 @@ onMounted(async () => {
     unlistenQuit = stopQuit;
     for (const [name, callback] of [
       [
+        "ai-models-changed",
+        (scope: string) => {
+          if (state.value?.current?.id === scope)
+            void refreshWorkspaceChats(scope);
+        },
+      ],
+      [
         "dictation-close-requested",
         (id: string) => {
           void run("close", id);

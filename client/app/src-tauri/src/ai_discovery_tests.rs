@@ -74,6 +74,45 @@ fn config(provider: &str, auth: AuthKind) -> Config {
         endpoint: None,
     }
 }
+#[test]
+fn every_implemented_connection_method_declares_a_refresh_strategy() {
+    let policy: Value = serde_json::from_str(PROVIDER_POLICY).unwrap();
+    for (provider, entry) in policy["providers"].as_object().unwrap() {
+        for (method, entry) in entry["methods"].as_object().unwrap() {
+            if entry["status"] != "implemented" {
+                continue;
+            }
+            let auth = match method.as_str() {
+                "oauth" => AuthKind::Oauth,
+                "api_key" => AuthKind::ApiKey,
+                _ => panic!("Unsupported authentication method: {method}"),
+            };
+            let refresh = strategy(&config(provider, auth))
+                .unwrap_or_else(|_| panic!("Missing discovery strategy for {provider}/{method}"));
+            assert_eq!(
+                matches!(refresh, ModelRefresh::Bundled),
+                provider == "openai-codex"
+            );
+        }
+    }
+}
+
+#[test]
+fn legacy_cache_is_due_and_refresh_is_throttled_across_reopening() {
+    let mut catalog: Catalog = serde_json::from_value(json!({
+        "source":"account", "models":["gpt-4o-mini"]
+    }))
+    .unwrap();
+    let now = 200_000;
+    assert!(due(&catalog, now));
+    catalog.checked_at = Some(now);
+    let reopened: Catalog = serde_json::from_value(serde_json::to_value(catalog).unwrap()).unwrap();
+    assert_eq!(reopened.models, ["gpt-4o-mini"]);
+    assert!(!due(&reopened, now + REFRESH_INTERVAL - 1));
+    assert!(due(&reopened, now + REFRESH_INTERVAL));
+    assert!(due(&reopened, now - 1));
+}
+
 #[tokio::test]
 async fn openai_key_and_direct_account_contracts_have_distinct_shapes_and_provenance() {
     let key = server(
@@ -199,7 +238,9 @@ async fn denials_redirects_partial_pages_and_malformed_ids_are_not_authoritative
         collect(request_to(&empty, Protocol::Direct)).await.unwrap(),
         Catalog {
             source: Source::Account,
-            models: vec![]
+            models: vec![],
+            checked_at: None,
+            selectable: vec![],
         }
     );
 }
@@ -249,6 +290,8 @@ fn account_exclusion_does_not_turn_provider_observations_into_entitlement_claims
     let mut observed = Catalog {
         source: Source::Account,
         models: vec!["available".into()],
+        checked_at: None,
+        selectable: vec![],
     };
     assert!(observed.admits("missing").is_err());
     observed.admits("available").unwrap();
@@ -277,6 +320,8 @@ fn observed_ids_resolve_symbolic_defaults_without_rewriting_preferences() {
         catalog: Some(Catalog {
             source: Source::Account,
             models: vec!["gpt-4o-mini".into()],
+            checked_at: None,
+            selectable: vec![],
         }),
     };
     assert_eq!(
@@ -420,6 +465,183 @@ fn browser() -> Connection {
     }
 }
 #[tokio::test]
+async fn qualified_live_models_survive_reopen_and_use_only_the_native_provider_transport() {
+    let workspace = Workspace::new();
+    let storage = workspace.storage();
+    let _lease = storage.lock_credentials().unwrap();
+    let id = "vendor/new-tool-model";
+    let router = server(vec![(200, json!({
+        "total_count": 2, "data":[
+            {"id":id, "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+             "supported_parameters":["tools"], "endpoints":["/api/v1/chat/completions"],
+             "context_length": 8192, "top_provider":{"max_completion_tokens": 2048},
+             "baseUrl":"https://untrusted.invalid"},
+            {"id":"text-without-tools", "architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+             "endpoints":["/api/v1/chat/completions"],"context_length":8192,
+             "top_provider":{"max_completion_tokens":2048}}
+        ]
+    }))], None).await;
+    let observed = collect(request_to(&router, Protocol::Router))
+        .await
+        .unwrap();
+    let mut connection = Connection {
+        config: config("openrouter", AuthKind::ApiKey),
+        key: "synthetic-key".into(),
+        oauth: None,
+        codex: None,
+        catalog: None,
+    };
+    workspace.save(&connection, false);
+    let connection_id = connection.config.connection_id.clone().unwrap();
+    store_observation(&storage, &workspace.keys, &mut connection, observed).unwrap();
+    let mut reopened = workspace.load(&connection_id);
+    let observed = catalog(&reopened);
+    assert_eq!(observed.models, [id, "text-without-tools"]);
+    assert!(model::admit_workspace(&storage, &reopened).is_err());
+    assert!(
+        model::save_observed(
+            &storage,
+            &reopened.config,
+            "text-without-tools".into(),
+            &observed
+        )
+        .is_err()
+    );
+    model::save_observed(&storage, &reopened.config, id.into(), &observed).unwrap();
+    let choice = model::admit_workspace(&storage, &reopened).unwrap();
+    let (api, url, _) = choice.target().unwrap();
+    assert_eq!(api, "openai-completions");
+    assert_eq!(url, "https://openrouter.ai/api/v1/chat/completions");
+    let descriptor = native_model::descriptor(&choice).unwrap();
+    assert_eq!(descriptor["maxTokens"], 2048);
+    assert_eq!(descriptor["contextWindow"], 8192);
+    let prepared = crate::ai_protocol::build_request(
+        &api,
+        &descriptor,
+        &choice.thinking,
+        &[json!({"role":"user","content":"hello"})],
+        &[],
+        None,
+    )
+    .unwrap();
+    assert_eq!(prepared.body["model"], id);
+    assert_eq!(prepared.body["stream"], true);
+    assert_eq!(
+        prepared.body["provider"],
+        json!({"require_parameters":true})
+    );
+    model::validate_payload(&choice, &prepared.body).unwrap();
+
+    store_observation(
+        &storage,
+        &workspace.keys,
+        &mut reopened,
+        Catalog {
+            source: Source::Account,
+            ..Catalog::default()
+        },
+    )
+    .unwrap();
+    assert!(model::admit_workspace(&storage, &reopened).is_err());
+    assert_eq!(
+        status(&storage, &reopened, false).selected_model.as_deref(),
+        Some(id)
+    );
+    assert_eq!(choice.target().unwrap().1, url);
+}
+
+#[tokio::test]
+async fn openai_responses_models_use_public_metadata_without_making_availability_depend_on_it() {
+    use sources::openai_metadata::enrich_from;
+    let direct = server(
+        vec![(
+            200,
+            json!({"models":[
+                {"slug":"gpt-6.2-sol","visibility":"list"},
+                {"slug":"hidden-model","visibility":"hidden"},
+                {"slug":"unreviewed","visibility":"list"}
+            ]}),
+        )],
+        None,
+    )
+    .await;
+    let observed = collect(request_to(&direct, Protocol::Direct))
+        .await
+        .unwrap();
+    let public = server(vec![(200, json!({"openai":{"models":{
+        "gpt-6.2-sol":{"id":"gpt-6.2-sol","tool_call":true,"modalities":{"input":["text"],"output":["text"]},
+        "limit":{"context":250_000,"output":80_000}},
+        "unreviewed":{"id":"unreviewed","tool_call":true,"modalities":{"input":["text"],"output":["text"]},
+        "limit":{"context":250_000,"output":80_000}}
+    }}}))], None).await;
+    let mut enriched = observed.clone();
+    enrich_from(&mut enriched, public.url.clone()).await;
+    {
+        let captured = public.requests.lock().unwrap();
+        assert!(!captured[0].contains("authorization:"));
+        assert!(!captured[0].contains("gpt-6.2-sol"));
+    }
+
+    let config = config("openai", AuthKind::Oauth);
+    assert!(enriched.selectable(&config, "unreviewed").is_none());
+    assert!(enriched.selectable(&config, "hidden-model").is_none());
+    let remote = enriched.selectable(&config, "gpt-6.2-sol").unwrap();
+    assert_eq!(
+        (remote.context_window, remote.max_tokens),
+        (250_000, 80_000)
+    );
+    assert!(!remote.image_input);
+
+    let unavailable = server(vec![(503, json!({}))], None).await;
+    let mut fallback = observed;
+    enrich_from(&mut fallback, unavailable.url.clone()).await;
+    assert_eq!(fallback.models, enriched.models);
+    let model = fallback.selectable(&config, "gpt-6.2-sol").unwrap();
+    assert_eq!(
+        (model.context_window, model.max_tokens),
+        (1_050_000, 128_000)
+    );
+    let descriptor = model.descriptor(&config).unwrap();
+    let request = crate::ai_protocol::build_request(
+        "openai-responses",
+        &descriptor,
+        "off",
+        &[],
+        &[],
+        Some(4096),
+    )
+    .unwrap();
+    assert_eq!(request.body["model"], "gpt-6.2-sol");
+    assert!(request.body.get("max_output_tokens").is_none());
+}
+
+#[tokio::test]
+async fn anthropic_limits_qualify_active_messages_models_but_openai_ids_alone_do_not() {
+    let anthropic = server(vec![(200, json!({"has_more":false,"data":[
+        {"id":"claude-new","type":"model","lifecycle":"active","max_input_tokens":8192,"max_tokens":2048},
+        {"id":"claude-no-limits","type":"model","lifecycle":"active"},
+        {"id":"claude-old","type":"model","lifecycle":"deprecated","max_input_tokens":8192,"max_tokens":2048}
+    ]}))], None).await;
+    let observed = collect(request_to(&anthropic, Protocol::Anthropic))
+        .await
+        .unwrap();
+    let config = config("anthropic", AuthKind::ApiKey);
+    let qualified = observed.selectable(&config, "claude-new").unwrap();
+    let descriptor = qualified.descriptor(&config).unwrap();
+    assert_eq!(descriptor["api"], "anthropic-messages");
+    assert_eq!(descriptor["maxTokens"], 2048);
+    assert!(observed.selectable(&config, "claude-no-limits").is_none());
+    assert!(observed.selectable(&config, "claude-old").is_none());
+
+    let openai = server(vec![(200, json!({"data":[{"id":"gpt-new"}]}))], None).await;
+    let observed = collect(request_to(&openai, Protocol::OpenAi))
+        .await
+        .unwrap();
+    assert_eq!(observed.models, ["gpt-new"]);
+    assert!(observed.selectable.is_empty());
+}
+
+#[tokio::test]
 async fn caches_are_encrypted_per_connection_and_failure_or_reauth_preserves_explicit_choices() {
     let workspace = Workspace::new();
     let storage = workspace.storage();
@@ -438,6 +660,8 @@ async fn caches_are_encrypted_per_connection_and_failure_or_reauth_preserves_exp
         Catalog {
             source: Source::Account,
             models: vec!["gpt-4o-mini".into()],
+            checked_at: None,
+            selectable: vec![],
         },
     )
     .unwrap();
@@ -448,6 +672,8 @@ async fn caches_are_encrypted_per_connection_and_failure_or_reauth_preserves_exp
         Catalog {
             source: Source::Account,
             models: vec!["gpt-6.1-sol".into()],
+            checked_at: None,
+            selectable: vec![],
         },
     )
     .unwrap();
@@ -475,7 +701,9 @@ async fn caches_are_encrypted_per_connection_and_failure_or_reauth_preserves_exp
     assert_eq!(observed, Catalog::default());
     let result = store_observation(&storage, &workspace.keys, &mut first, observed).unwrap();
     assert!(result.available);
-    assert_eq!(result.catalog.source, Source::Unknown);
+    assert_eq!(result.catalog.source, Source::Account);
+    assert_eq!(result.catalog.models, ["gpt-4o-mini"]);
+    assert!(!due(&result.catalog, unix_seconds()));
     assert_eq!(result.selected_model.as_deref(), Some("gpt-4o-mini"));
     assert_eq!(storage.read_connection_settings(&first_id).unwrap(), before);
     let result = store_observation(
@@ -485,6 +713,8 @@ async fn caches_are_encrypted_per_connection_and_failure_or_reauth_preserves_exp
         Catalog {
             source: Source::Account,
             models: vec![],
+            checked_at: None,
+            selectable: vec![],
         },
     )
     .unwrap();
@@ -587,6 +817,8 @@ async fn selection_change_during_renewal_keeps_rotation_and_discovery_bound_to_t
     second.catalog = Some(Catalog {
         source: Source::Account,
         models: vec!["gpt-6.1-sol".into()],
+        checked_at: None,
+        selectable: vec![],
     });
     workspace.save(&second, false);
     workspace.save(&first, false);
@@ -702,6 +934,8 @@ fn settings_toggles_preserve_excluded_choices_but_changed_or_enabled_choices_req
     connection.catalog = Some(Catalog {
         source: Source::Account,
         models: vec!["gpt-6.1-sol".into(), "gpt-4o-mini".into()],
+        checked_at: None,
+        selectable: vec![],
     });
     workspace.save(&connection, false);
     let initial = json!({"version":1,"chat":{"model":"gpt-6.1-sol","thinking":"medium","catalogRevision":null},"comment":{"model":"gpt-4o-mini","thinking":"off","catalogRevision":null},"generatedComments":true,"showInlineModel":false});
@@ -714,6 +948,8 @@ fn settings_toggles_preserve_excluded_choices_but_changed_or_enabled_choices_req
     connection.catalog = Some(Catalog {
         source: Source::Account,
         models: vec![],
+        checked_at: None,
+        selectable: vec![],
     });
     workspace.save(&connection, true);
     let mut toggled = initial.clone();
@@ -775,6 +1011,8 @@ fn settings_initialization_reads_the_latest_encrypted_catalog_even_when_config_i
     connection.catalog = Some(Catalog {
         source: Source::Account,
         models: vec!["gpt-6.1-sol".into()],
+        checked_at: None,
+        selectable: vec![],
     });
     workspace.save(&connection, false);
     let id = connection.config.connection_id.as_deref().unwrap();
@@ -783,6 +1021,8 @@ fn settings_initialization_reads_the_latest_encrypted_catalog_even_when_config_i
     connection.catalog = Some(Catalog {
         source: Source::Account,
         models: vec![],
+        checked_at: None,
+        selectable: vec![],
     });
     workspace.save(&connection, true);
     assert!(stale.config == connection.config);
@@ -900,6 +1140,8 @@ async fn external_configuration_and_selection_edits_during_discovery_are_not_rep
         second.catalog = Some(Catalog {
             source: Source::Account,
             models: vec!["gpt-6.1-sol".into()],
+            checked_at: None,
+            selectable: vec![],
         });
         workspace.save(&second, false);
         workspace.save(&first, false);

@@ -95,7 +95,34 @@ export function availableChatModels(
   if (discovery?.source !== "account" && discovery?.source !== "provider")
     return models;
   const ids = new Set(discovery.models);
-  return models.filter((model) => ids.has(model.id));
+  const available = models.filter((model) => ids.has(model.id));
+  if (!connectionAllowed(config)) return available;
+  const transport = {
+    openai: ["openai-responses", "https://api.openai.com/v1"],
+    anthropic: ["anthropic-messages", "https://api.anthropic.com"],
+    openrouter: ["openai-completions", "https://openrouter.ai/api/v1"],
+  } as const;
+  if (!Object.hasOwn(transport, config.provider)) return available;
+  const [api, baseUrl] = transport[config.provider as keyof typeof transport];
+  const bundled = new Set(
+    providers
+      .find((provider) => provider.id === config.provider)
+      ?.models.map((model) => model.id),
+  );
+  for (const model of discovery.selectable ?? []) {
+    if (!ids.has(model.id) || bundled.has(model.id)) continue;
+    available.push({
+      ...model,
+      name: model.id,
+      provider: config.provider,
+      api,
+      baseUrl,
+      input: model.imageInput ? ["text", "image"] : ["text"],
+      reasoning: false,
+      cost: null,
+    });
+  }
+  return available;
 }
 export function connectionModel(config: Config, modelId: string): Model {
   if (

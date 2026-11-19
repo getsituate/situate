@@ -131,6 +131,7 @@ fn conversation_model(
                 model: saved.model.clone(),
                 thinking: "recommended".into(),
                 catalog_revision: None,
+                discovered: None,
             }
         }
         None => selected(storage, config)?.ok_or(CHOOSE)?,
@@ -267,6 +268,7 @@ pub(super) fn select_conversation_model(
                     model: model.clone(),
                     thinking: "recommended".into(),
                     catalog_revision: None,
+                    discovered: None,
                 },
                 &discovery::catalog(connection),
                 "chat",
@@ -296,7 +298,13 @@ pub(super) fn select_conversation_thinking(
     if let Some(level) = &thinking
         && level != "recommended"
     {
-        validate_thinking(&connection.config, &choice.model, level)?;
+        if choice.discovered.is_some() {
+            if level != "off" {
+                return Err(MODEL_ERROR.into());
+            }
+        } else {
+            validate_thinking(&connection.config, &choice.model, level)?;
+        }
     }
     let key = thinking_key(&connection.config, &choice.model)?;
     match thinking {

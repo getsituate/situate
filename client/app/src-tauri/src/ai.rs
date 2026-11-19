@@ -255,6 +255,7 @@ pub struct Ai {
     closing: Mutex<HashSet<String>>,
     rejected: Mutex<HashSet<(String, String)>>,
     credential_epochs: Mutex<HashMap<(String, String), u64>>,
+    catalog_refreshes: Mutex<HashSet<(String, String)>>,
     storage_releases: Mutex<HashMap<String, std::sync::Arc<storage_releases::Releases>>>,
     logins: Mutex<HashMap<String, std::sync::Arc<login::Login>>>,
     credential_gates: Mutex<HashMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>>,
@@ -977,6 +978,14 @@ fn target(
     config: &Config,
     selected_model: &str,
 ) -> Result<(String, String, HashMap<String, String>), String> {
+    target_for(config, selected_model, None)
+}
+
+fn target_for(
+    config: &Config,
+    selected_model: &str,
+    discovered: Option<&discovery::DiscoveredModel>,
+) -> Result<(String, String, HashMap<String, String>), String> {
     admit_method(config)?;
     if config.auth == Some(AuthKind::Oauth)
         && !matches!(config.provider.as_str(), "openai" | "openai-codex")
@@ -998,6 +1007,15 @@ fn target(
                 .endpoint
                 .clone()
                 .ok_or("native.ai.endpoint.required")?,
+        )
+    } else if let Some(model) = discovered {
+        let descriptor = model
+            .descriptor(config)
+            .filter(|_| model.id == selected_model)
+            .ok_or("native.ai.model.chooseCatalog")?;
+        (
+            descriptor["api"].as_str().ok_or(NETWORK_ERROR)?.into(),
+            descriptor["baseUrl"].as_str().ok_or(NETWORK_ERROR)?.into(),
         )
     } else {
         if config.endpoint.is_some() {
@@ -1414,7 +1432,12 @@ pub async fn ai_select_model(
             if model != "recommended" {
                 discovery::catalog(&connection).admits(&model)?;
             }
-            model::save(storage, &connection.config, model)?;
+            model::save_observed(
+                storage,
+                &connection.config,
+                model,
+                &discovery::catalog(&connection),
+            )?;
             let status = discovery::status(storage, &connection, false);
             app.state::<Ai>()
                 .clear_rejected(&scope, connection.config.connection_id.as_deref())?;

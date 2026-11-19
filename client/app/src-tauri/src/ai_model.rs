@@ -16,6 +16,14 @@ pub(super) struct Choice {
     pub(super) thinking: String,
     #[serde(default)]
     pub(super) catalog_revision: Option<String>,
+    #[serde(skip)]
+    pub(super) discovered: Option<discovery::DiscoveredModel>,
+}
+
+impl Choice {
+    pub(super) fn target(&self) -> Result<(String, String, HashMap<String, String>), String> {
+        target_for(&self.connection, &self.model, self.discovered.as_ref())
+    }
 }
 fn off() -> String {
     "off".into()
@@ -118,6 +126,7 @@ fn selected(storage: &Storage, config: &Config) -> Result<Option<Choice>, String
                 connection: config.association(),
                 thinking: default_thinking(config, &model).unwrap_or_else(|_| off()),
                 catalog_revision: None,
+                discovered: None,
                 model,
             })
         })
@@ -141,6 +150,16 @@ pub(super) fn resolve_choice(
             choice.thinking = resolved.thinking;
         }
     }
+    choice.discovered = observed.selectable(&choice.connection, &choice.model);
+    if choice.discovered.is_some() {
+        if kind != "chat" || !matches!(choice.thinking.as_str(), "off" | "recommended") {
+            return Err(MODEL_ERROR.into());
+        }
+        choice.thinking = off();
+        choice.target().map_err(|_| MODEL_ERROR)?;
+        observed.admits(&choice.model)?;
+        return Ok(choice);
+    }
     if choice.thinking == "recommended" {
         choice.thinking = if kind == "comment" {
             comment_thinking(&choice.connection, &choice.model)?
@@ -161,9 +180,13 @@ pub(super) fn validate_snapshot(choice: &Choice, config: &Config) -> Result<(), 
     if choice.connection != config.association() {
         return Err("native.ai.access.changedDuringTurn".into());
     }
-    target(config, &choice.model)?;
-    validate_thinking(config, &choice.model, &choice.thinking)?;
-    Ok(())
+    choice.target()?;
+    if choice.discovered.is_some() {
+        return (choice.thinking == "off")
+            .then_some(())
+            .ok_or_else(|| MODEL_ERROR.into());
+    }
+    validate_thinking(config, &choice.model, &choice.thinking)
 }
 pub(super) fn validate_payload(choice: &Choice, payload: &Value) -> Result<(), String> {
     if payload["model"] != choice.model {
@@ -196,7 +219,7 @@ pub(super) fn validate_payload(choice: &Choice, payload: &Value) -> Result<(), S
         return Err("native.ai.request.streamingOnly".into());
     }
     let descriptor = super::native_model::descriptor(choice)?;
-    let (api, _, _) = target(&choice.connection, &choice.model)?;
+    let (api, _, _) = choice.target()?;
     let maximum = payload
         .get("max_output_tokens")
         .or_else(|| payload.get("max_completion_tokens"))
@@ -312,9 +335,25 @@ pub(super) fn resolve_status(storage: &Storage, config: &Config, mut status: Sta
     }
     status
 }
+#[cfg(test)]
 pub(super) fn save(storage: &Storage, config: &Config, model: String) -> Result<Status, String> {
+    save_observed(
+        storage,
+        config,
+        model,
+        &discovery::Catalog::static_models(config),
+    )
+}
+
+pub(super) fn save_observed(
+    storage: &Storage,
+    config: &Config,
+    model: String,
+    observed: &discovery::Catalog,
+) -> Result<Status, String> {
     if model != "recommended" {
-        target(config, &model)?;
+        target_for(config, &model, observed.selectable(config, &model).as_ref())?;
+        observed.admits(&model)?;
     }
     let mut settings = match settings(storage, config) {
         Ok(settings) => settings,
@@ -341,7 +380,7 @@ pub(super) fn save(storage: &Storage, config: &Config, model: String) -> Result<
         model,
         catalog_revision: None,
     });
-    write_settings(storage, config, &settings)?;
+    write_settings_observed(storage, config, &settings, observed)?;
     Ok(status(storage, config, false))
 }
 
@@ -521,6 +560,7 @@ mod tests {
                     model: retired.into(),
                     thinking: off(),
                     catalog_revision: None,
+                    discovered: None,
                 };
                 storage
                     .save_model(&serde_json::to_vec(&choice).unwrap())
@@ -554,6 +594,7 @@ mod tests {
             model: "other-retired-model".into(),
             thinking: off(),
             catalog_revision: None,
+            discovered: None,
         };
         storage
             .save_model(&serde_json::to_vec(&choice).unwrap())
