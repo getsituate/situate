@@ -38,3 +38,9 @@ jobs:
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
       - run: node tools/hosting-checks.mjs
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: "1.12.2"
+          terraform_wrapper: false
+      - run: terraform -chdir=infrastructure/production/terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=infrastructure/production/terraform validate

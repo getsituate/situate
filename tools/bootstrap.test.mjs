@@ -125,7 +125,7 @@ function checkWorkflowBootstrap(name, workflow) {
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
             : ({
                 "verify-hosting.yml: offline":
-                  /^node tools\/hosting-checks\.mjs$/,
+                  /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
                 "deploy-hosting.yml: rehearse":
                   /^node tools\/hosting-checks\.mjs$/,
                 "deploy-hosting.yml: hetzner-rehearsal":

@@ -52,7 +52,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
           ]
         : []),
-      ...(name === "deploy-hosting"
+      ...(["deploy-hosting", "verify-hosting"].includes(name)
         ? ["hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd"]
         : []),
       ...(name === "verify"
@@ -76,7 +76,9 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
         name === "deploy-hosting" &&
           match[1].includes("infrastructure/production/")
           ? /^(?:node infrastructure\/production\/immutable\/continuous-deploy\.mjs|(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?)$/
-          : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
+          : name === "verify-hosting" && match[1].startsWith("terraform ")
+            ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
+            : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
       );
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
