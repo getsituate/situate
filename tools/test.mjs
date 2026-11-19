@@ -1000,7 +1000,7 @@ export function dependencyOwnerBirth(pid) {
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `$ErrorActionPreference = 'Stop'; $process = Get-Process -Id ${pid} -ErrorAction SilentlyContinue; if ($process) { $start = $process.StartTime; if (!$start) { throw 'Cannot identify process start time' }; $start.ToUniversalTime().Ticks }`,
+      `$ErrorActionPreference = 'Stop'; $process = Get-Process | Where-Object Id -eq ${pid}; if ($process) { $start = $process.StartTime; if (!$start) { throw 'Cannot identify process start time' }; $start.ToUniversalTime().Ticks }`,
     ],
     { encoding: "utf8", timeout: 5000 },
   ).trim();
