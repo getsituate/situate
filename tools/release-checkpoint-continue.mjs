@@ -146,7 +146,9 @@ export async function continueQualifiedCheckpoint(
         : Number.isSafeInteger(draftId) &&
           draftId > 0 &&
           state.unresolvedPublication === true &&
-          draftIntent?.journal?.state === "creating"),
+          (draftIntent?.journal?.state === "creating" ||
+            (draftIntent?.journal?.state === "uploading:manifest.json" &&
+              draftIntent.journal.releaseId === draftId))),
     "Publication inspection has unresolved work",
   );
   assert.deepEqual(

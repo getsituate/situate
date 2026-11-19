@@ -188,6 +188,27 @@ test("explicit draft recovery never creates another release and rejects mismatch
   assert.equal(f.effects.at(-1), "finalize");
 });
 
+test("an absent first upload can resume only against the recorded empty draft", async (t) => {
+  const f = fixture(t);
+  const upload = f.github.uploadAsset;
+  f.github.uploadAsset = async () => {
+    throw new Error("upload rejected");
+  };
+  await assert.rejects(f.create(), /upload rejected/);
+  assert.equal(f.releases[0].assets.length, 0);
+  f.github.uploadAsset = upload;
+  await assert.rejects(
+    f.create({ reconcile: true, expectedDraftId: 8 }),
+    /exact empty draft/,
+  );
+  assert.equal(
+    (await f.create({ reconcile: true, expectedDraftId: 7 })).identity
+      .releaseId,
+    7,
+  );
+  assert.deepEqual(f.effects.slice(0, 2), ["create", "upload:manifest.json"]);
+});
+
 test("creation seals exact reserved inputs and publisher downloads only public bytes", async (t) => {
   const f = fixture(t);
   writeFileSync(
@@ -572,6 +593,7 @@ test("gh boundary uses exact repository API and isolates credentials; publisher 
     ),
   );
   assert.equal(upload.options.input.toString(), "synthetic");
+  assert(upload.args.includes("Content-Length: 9"));
   const count = calls.length;
   await assert.rejects(
     adapter.finalize("getsituate/situate", "../other"),

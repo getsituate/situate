@@ -112,6 +112,8 @@ export function githubAdapter({
             "POST",
             "-H",
             "Content-Type: application/octet-stream",
+            "-H",
+            `Content-Length: ${bytes.length}`,
             `https://uploads.github.com/repos/${repo}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`,
             "--input",
             "-",

@@ -198,13 +198,22 @@ def checkpoint_state(identity, directory):
         if stages:
             github_stages.append({'stages': stages, 'journal': snapshot.get('publicationJournal')})
     draft_intent = None
-    if len(github_stages) == 2:
-        journals = [item['journal'] for item in github_stages if item['journal'] is not None]
+    if len(github_stages) in (2, 3):
         stages = [item['stages'] for item in github_stages]
-        if (len(journals) == 1 and journals[0].get('state') == 'creating'
-                and 'releaseId' not in journals[0] and stages[0] == stages[1]
+        journals = [item['journal'] for item in github_stages if item['journal'] is not None]
+        creating = [journal for journal in journals
+                    if journal.get('state') == 'creating' and 'releaseId' not in journal]
+        if (len(journals) == len(github_stages) - 1 and len(creating) == 1
+                and all(stage == stages[0] for stage in stages)
                 and len(stages[0]) == 1 and stages[0][0].get('status') == 'running'):
-            draft_intent = {'journal': journals[0], 'stage': stages[0][0]}
+            if len(journals) == 1:
+                draft_intent = {'journal': creating[0], 'stage': stages[0][0]}
+            else:
+                upload = next(journal for journal in journals if journal != creating[0])
+                release_id = upload.get('releaseId')
+                initial = {**creating[0], 'state': 'uploading:manifest.json', 'releaseId': release_id}
+                if type(release_id) is int and release_id > 0 and upload == initial:
+                    draft_intent = {'journal': upload, 'stage': stages[0][0]}
     successful_notary = len(notary['operations']) >= 2
     for child in notary['operations']:
         records = child['records']
