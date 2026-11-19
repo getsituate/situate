@@ -192,6 +192,7 @@ test("HCP inspection uses authenticated GET requests only and returns no token o
     assert.ok(url.startsWith("https://app.terraform.io/api/v2/"));
     assert.equal(options.method, "GET");
     assert.equal(options.headers.Authorization, "Bearer synthetic-hcp");
+    assert.equal(options.headers.Connection, "close");
     assert.equal(options.redirect, "error");
   }
   assert.doesNotMatch(JSON.stringify(result), /synthetic-hcp|download-url/);
@@ -279,6 +280,20 @@ test("HCP errors do not expose response bodies or credentials and are not retrie
     );
     assert.equal(calls, failure === "state" ? 2 : 1);
   }
+});
+
+test("HCP reports known transport codes without exposing error details", async () => {
+  await assert.rejects(
+    inspectWorkspace(configured, async () => {
+      throw new Error("private URL", {
+        cause: { code: "UND_ERR_SOCKET", message: "private address" },
+      });
+    }),
+    {
+      message:
+        "HCP Terraform inspection failed (UND_ERR_SOCKET); no retry was attempted.",
+    },
+  );
 });
 
 test("initialization binds a pre-existing Local HCP workspace without migration or credential persistence", async (t) => {

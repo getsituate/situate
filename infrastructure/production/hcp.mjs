@@ -28,13 +28,25 @@ export async function inspectWorkspace(
         headers: {
           Authorization: `Bearer ${config.token}`,
           Accept: "application/vnd.api+json",
+          // A blocking Terraform apply can outlive an idle connection.
+          Connection: "close",
         },
         redirect: "error",
         signal: AbortSignal.timeout(30000),
       });
-    } catch {
+    } catch (error) {
+      const code = error?.cause?.code;
+      const known = [
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "EAI_AGAIN",
+        "ENOTFOUND",
+        "UND_ERR_SOCKET",
+        "UND_ERR_CONNECT_TIMEOUT",
+      ];
+      const detail = known.includes(code) ? ` (${code})` : "";
       throw new Error(
-        "HCP Terraform inspection failed; no retry was attempted.",
+        `HCP Terraform inspection failed${detail}; no retry was attempted.`,
       );
     }
     if (allowMissing && response.status === 404) return null;
