@@ -215,7 +215,7 @@ test("shows declared connection consumers and confirms only the enabled transiti
   expect(
     card.findAll(".plugin-consumers li").map((item) => item.text()),
   ).toEqual(["Plugin alpha", "Plugin quiet"]);
-  await action(wrapper, "disable").trigger("click");
+  await action(card, "disable").trigger("click");
   expect(
     wrapper
       .get("dialog")
