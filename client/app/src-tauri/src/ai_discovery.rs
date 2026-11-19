@@ -7,6 +7,20 @@ const TOTAL_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MODELS: usize = 2000;
 const MAX_PAGES: usize = 20;
 
+fn bundled_ids(provider: &str) -> HashSet<String> {
+    let inventory: Value = serde_json::from_str(CATALOG).expect("bundled catalog");
+    inventory["providers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|entry| entry["id"] == provider)
+        .and_then(|entry| entry["models"].as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|model| model["id"].as_str().map(str::to_owned))
+        .collect()
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
@@ -20,16 +34,81 @@ pub enum Source {
 pub struct Catalog {
     pub source: Source,
     pub models: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selectable: Vec<DiscoveredModel>,
 }
 impl Default for Catalog {
     fn default() -> Self {
         Self {
             source: Source::Unknown,
             models: vec![],
+            checked_at: None,
+            selectable: vec![],
         }
     }
 }
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DiscoveredModel {
+    pub id: String,
+    pub context_window: u32,
+    pub max_tokens: u32,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub image_input: bool,
+}
+
+impl DiscoveredModel {
+    pub(super) fn descriptor(&self, config: &Config) -> Option<Value> {
+        if config.endpoint.is_some()
+            || (config.auth == Some(AuthKind::Oauth) && config.provider != "openai")
+        {
+            return None;
+        }
+        let (api, base) = match config.provider.as_str() {
+            "openai" => ("openai-responses", "https://api.openai.com/v1"),
+            "anthropic" => ("anthropic-messages", "https://api.anthropic.com"),
+            "openrouter" => ("openai-completions", "https://openrouter.ai/api/v1"),
+            _ => return None,
+        };
+        let input = if self.image_input {
+            vec!["text", "image"]
+        } else {
+            vec!["text"]
+        };
+        let mut descriptor = serde_json::json!({
+            "id":self.id,"name":self.id,"provider":config.provider,"type":"chat",
+            "api":api,"baseUrl":base,"input":input,"reasoning":false,"cost":null,
+            "contextWindow":self.context_window,"maxTokens":self.max_tokens,
+            "compat":{"supportsStore":false,"supportsDeveloperRole":false,
+                "supportsReasoningEffort":false,"supportsUsageInStreaming":false,
+                "maxTokensField":"max_tokens"}
+        });
+        if config.auth == Some(AuthKind::Oauth) {
+            descriptor["compat"]["supportsMaxOutputTokens"] = serde_json::json!(false);
+        }
+        if config.provider == "openrouter" {
+            descriptor["compat"]["openRouterRouting"] =
+                serde_json::json!({"require_parameters":true});
+        }
+        Some(descriptor)
+    }
+}
+
 impl Catalog {
+    pub(super) fn selectable(&self, config: &Config, id: &str) -> Option<DiscoveredModel> {
+        if !matches!(self.source, Source::Account | Source::Provider)
+            || !self.models.iter().any(|model| model == id)
+        {
+            return None;
+        }
+        self.selectable
+            .iter()
+            .find(|model| model.id == id && model.descriptor(config).is_some())
+            .filter(|_| !bundled_ids(&config.provider).contains(id))
+            .cloned()
+    }
     pub(super) fn static_models(config: &Config) -> Self {
         let inventory: Value = serde_json::from_str(CATALOG).expect("bundled catalog");
         let models = inventory["providers"]
@@ -46,6 +125,8 @@ impl Catalog {
         Self {
             source: Source::Static,
             models,
+            checked_at: None,
+            selectable: vec![],
         }
     }
     pub(super) fn admits(&self, model: &str) -> Result<(), String> {
@@ -57,230 +138,19 @@ impl Catalog {
 }
 pub(super) fn catalog(connection: &Connection) -> Catalog {
     connection.catalog.clone().unwrap_or_else(|| {
-        if connection.config.provider == "openai-codex" {
+        if matches!(strategy(&connection.config), Ok(ModelRefresh::Bundled)) {
             Catalog::static_models(&connection.config)
         } else {
             Catalog::default()
         }
     })
 }
-#[derive(Clone, Copy)]
-enum Protocol {
-    OpenAi,
-    Direct,
-    Anthropic,
-    Router,
-    Custom,
-}
-struct Request {
-    endpoint: reqwest::Url,
-    protocol: Protocol,
-    secret: String,
-}
-fn request(connection: &Connection) -> Result<Option<Request>, String> {
-    admit_method(&connection.config)?;
-    let (endpoint, protocol, secret) = match connection.config.provider.as_str() {
-        "openai" if connection.config.auth == Some(AuthKind::Oauth) => (
-            "https://api.openai.com/v1/models".to_owned(),
-            Protocol::Direct,
-            connection.oauth.as_ref().ok_or(ERROR)?.access.clone(),
-        ),
-        "openai" => (
-            "https://api.openai.com/v1/models".into(),
-            Protocol::OpenAi,
-            connection.key.clone(),
-        ),
-        "anthropic" => (
-            "https://api.anthropic.com/v1/models".into(),
-            Protocol::Anthropic,
-            connection.key.clone(),
-        ),
-        "openrouter" => (
-            "https://openrouter.ai/api/v1/models/user".into(),
-            Protocol::Router,
-            connection.key.clone(),
-        ),
-        "custom" => {
-            let base = connection.config.endpoint.as_deref().ok_or(ERROR)?;
-            validate_http_consent(&connection.config, base, false)?;
-            (
-                format!("{}/models", base.trim_end_matches('/')),
-                Protocol::Custom,
-                connection.key.clone(),
-            )
-        }
-        "openai-codex" => return Ok(None),
-        _ => return Err(ERROR.into()),
-    };
-    Ok(Some(Request {
-        endpoint: validate_endpoint(&endpoint)?,
-        protocol,
-        secret,
-    }))
-}
-fn model_id(value: &Value) -> Result<String, String> {
-    value
-        .as_str()
-        .filter(|id| {
-            !id.is_empty()
-                && id.len() <= 256
-                && !id.chars().any(char::is_whitespace)
-                && !id.chars().any(char::is_control)
-        })
-        .map(str::to_owned)
-        .ok_or_else(|| ERROR.into())
-}
-async fn collect(request: Request) -> Result<Catalog, String> {
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|_| ERROR)?;
-    let mut models = Vec::new();
-    let mut seen = HashSet::new();
-    let mut cursors = HashSet::new();
-    let mut cursor: Option<String> = None;
-    let mut offset = 0usize;
-    let mut total_bytes = 0usize;
-    let mut router_total = None;
-    for _ in 0..MAX_PAGES {
-        let mut url = request.endpoint.clone();
-        match request.protocol {
-            Protocol::Anthropic => {
-                url.query_pairs_mut().append_pair("limit", "100");
-                if let Some(cursor) = &cursor {
-                    url.query_pairs_mut().append_pair("after_id", cursor);
-                }
-            }
-            Protocol::Router => {
-                url.query_pairs_mut()
-                    .append_pair("offset", &offset.to_string())
-                    .append_pair("limit", "100")
-                    .append_pair("output_modalities", "text");
-            }
-            _ => (),
-        }
-        let mut query = client.get(url);
-        if matches!(request.protocol, Protocol::Anthropic) {
-            query = query
-                .header("x-api-key", &request.secret)
-                .header("anthropic-version", "2023-06-01");
-        } else if !request.secret.is_empty() {
-            query = query.bearer_auth(&request.secret);
-        }
-        let mut response = query.send().await.map_err(|_| ERROR)?;
-        if response.status() != reqwest::StatusCode::OK
-            || response
-                .content_length()
-                .is_some_and(|size| size > PAGE_BYTES as u64)
-        {
-            return Err(ERROR.into());
-        }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| ERROR)? {
-            total_bytes += chunk.len();
-            if bytes.len() + chunk.len() > PAGE_BYTES || total_bytes > TOTAL_BYTES {
-                return Err(ERROR.into());
-            }
-            bytes.extend_from_slice(&chunk);
-        }
-        let body: Value = serde_json::from_slice(&bytes).map_err(|_| ERROR)?;
-        let items = body[if matches!(request.protocol, Protocol::Direct) {
-            "models"
-        } else {
-            "data"
-        }]
-        .as_array()
-        .ok_or(ERROR)?;
-        if items.len() > MAX_MODELS
-            || (matches!(request.protocol, Protocol::Anthropic | Protocol::Router)
-                && items.len() > 100)
-        {
-            return Err(ERROR.into());
-        }
-        for item in items {
-            if matches!(request.protocol, Protocol::Direct)
-                && item["visibility"].as_str().ok_or(ERROR)? != "list"
-            {
-                continue;
-            }
-            let id = model_id(
-                &item[if matches!(request.protocol, Protocol::Direct) {
-                    "slug"
-                } else {
-                    "id"
-                }],
-            )?;
-            if !seen.insert(id.clone()) || models.len() >= MAX_MODELS {
-                return Err(ERROR.into());
-            }
-            models.push(id);
-        }
-        let more = match request.protocol {
-            Protocol::Anthropic => {
-                let more = body["has_more"].as_bool().ok_or(ERROR)?;
-                if more {
-                    let next = model_id(&body["last_id"])?;
-                    if items.is_empty()
-                        || items.last().and_then(|m| m["id"].as_str()) != Some(next.as_str())
-                        || !cursors.insert(next.clone())
-                    {
-                        return Err(ERROR.into());
-                    }
-                    cursor = Some(next);
-                }
-                more
-            }
-            Protocol::Router => {
-                let total = body["total_count"]
-                    .as_u64()
-                    .filter(|n| *n <= MAX_MODELS as u64)
-                    .ok_or(ERROR)? as usize;
-                if router_total.is_some_and(|prior| prior != total) {
-                    return Err(ERROR.into());
-                }
-                router_total = Some(total);
-                offset += items.len();
-                if offset > total || (items.is_empty() && offset < total) {
-                    return Err(ERROR.into());
-                }
-                offset < total
-            }
-            _ => false,
-        };
-        if !more {
-            let catalog = Catalog {
-                source: if matches!(request.protocol, Protocol::Direct | Protocol::Router) {
-                    Source::Account
-                } else {
-                    Source::Provider
-                },
-                models,
-            };
-            if serde_json::to_vec(&catalog).map_err(|_| ERROR)?.len() > 24 * 1024 {
-                return Err(ERROR.into());
-            }
-            return Ok(catalog);
-        }
-    }
-    Err(ERROR.into())
-}
-async fn observe(request: Request, budget: Duration) -> Catalog {
-    tokio::time::timeout(budget, collect(request))
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .unwrap_or_default()
-}
-pub(super) async fn fetch(connection: &Connection) -> Catalog {
-    match request(connection) {
-        Ok(Some(request)) => observe(request, Duration::from_secs(30)).await,
-        Ok(None) => Catalog::static_models(&connection.config),
-        Err(_) => Catalog::default(),
-    }
-}
+#[path = "ai_model_sources.rs"]
+mod sources;
+use sources::{ModelRefresh, fetch, strategy};
+#[cfg(test)]
+use sources::{Protocol, Request, collect, observe, request};
+
 pub(super) fn fetch_for_app(app: &tauri::AppHandle, connection: &Connection) -> Catalog {
     tauri::async_runtime::block_on(async {
         tokio::time::timeout(Duration::from_secs(30), async {
@@ -296,14 +166,36 @@ pub(super) fn fetch_for_app(app: &tauri::AppHandle, connection: &Connection) -> 
         .unwrap_or_default()
     })
 }
-pub(super) fn attach(connection: &mut Connection, catalog: Catalog) -> Result<(), String> {
-    connection.catalog = Some(catalog);
+const REFRESH_INTERVAL: u64 = 24 * 60 * 60;
+
+fn unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn due(catalog: &Catalog, now: u64) -> bool {
+    catalog.checked_at.is_none_or(|checked| {
+        now.checked_sub(checked)
+            .is_none_or(|age| age >= REFRESH_INTERVAL)
+    })
+}
+
+pub(super) fn attach(connection: &mut Connection, observed: Catalog) -> Result<(), String> {
+    let mut next = if observed.source == Source::Unknown {
+        connection.catalog.clone().unwrap_or(observed)
+    } else {
+        observed
+    };
+    next.checked_at = Some(unix_seconds());
+    let previous = connection.catalog.replace(next);
     if serde_json::to_vec(&connection)
         .map_err(|_| KEY_ERROR)?
         .len()
         > 65_536
     {
-        connection.catalog = None;
+        connection.catalog = previous;
     }
     Ok(())
 }
@@ -378,6 +270,93 @@ pub(super) fn finish_setup(
         observed,
     )
 }
+pub(super) fn schedule_refresh(
+    app: tauri::AppHandle,
+    window: &str,
+    scope: String,
+    status: &Status,
+) {
+    let Some(config) = status.config.as_ref().filter(|_| status.available) else {
+        return;
+    };
+    let Some(id) = config.connection_id.clone() else {
+        return;
+    };
+    if !matches!(strategy(config), Ok(ModelRefresh::Live(_)))
+        || !due(&status.catalog, unix_seconds())
+    {
+        return;
+    }
+    let Ok(session) = crate::workspaces::authorization_session(&app, window, &scope) else {
+        return;
+    };
+    let key = (scope, id);
+    let state = app.state::<Ai>();
+    let Ok(mut pending) = state.catalog_refreshes.lock() else {
+        return;
+    };
+    if !pending.insert(key.clone()) {
+        return;
+    }
+    drop(pending);
+    let window = window.to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let changed = refresh_cached(&app, &window, &session, &key.1).unwrap_or(false);
+        if let Ok(mut pending) = app.state::<Ai>().catalog_refreshes.lock() {
+            pending.remove(&key);
+        }
+        if changed {
+            let _ = app.emit_to(&window, "ai-models-changed", &key.0);
+        }
+    });
+}
+
+fn refresh_cached(
+    app: &tauri::AppHandle,
+    window: &str,
+    session: &crate::workspaces::AuthorizationSession,
+    id: &str,
+) -> Result<bool, String> {
+    use crate::workspaces::with_authorization_session;
+    use sha2::{Digest, Sha256};
+
+    let keys = OsKeys(app.clone());
+    let (record, fingerprint, mut connection) =
+        with_authorization_session(app, window, session, |location| {
+            let storage = storage(app, location)?;
+            let record = storage.connection_record(id)?;
+            let bytes = storage.load_connection(&keys, id)?.ok_or(KEY_ERROR)?;
+            let fingerprint = Sha256::digest(&bytes);
+            Ok((record, fingerprint, decode_connection(&bytes)?))
+        })?;
+    if !due(&catalog(&connection), unix_seconds())
+        || connection
+            .oauth
+            .as_ref()
+            .is_some_and(|grant| grant.expired())
+    {
+        return Ok(false);
+    }
+    let observed = fetch_for_app(app, &connection);
+    let previous = catalog(&connection);
+    let changed = observed.source != Source::Unknown
+        && (observed.source != previous.source
+            || observed.models != previous.models
+            || observed.selectable != previous.selectable);
+    with_authorization_session(app, window, session, |location| {
+        ensure_idle(app, &location.id)?;
+        let storage = storage(app, location)?;
+        let _lock = storage.lock_credentials()?;
+        ensure_unchanged(&storage, &record)?;
+        let bytes = storage.load_connection(&keys, id)?.ok_or(KEY_ERROR)?;
+        if Sha256::digest(&bytes) != fingerprint {
+            return Err("native.ai.catalog.connectionChanged".into());
+        }
+        store_observation(&storage, &keys, &record, &mut connection, observed)?;
+        Ok(changed)
+    })
+}
+
 #[tauri::command]
 pub async fn ai_refresh_models(
     app: tauri::AppHandle,

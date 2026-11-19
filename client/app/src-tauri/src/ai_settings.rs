@@ -14,6 +14,7 @@ impl ModelChoice {
             model: self.model,
             thinking: self.thinking,
             catalog_revision: self.catalog_revision,
+            discovered: None,
         }
     }
 }
@@ -111,12 +112,28 @@ pub(super) fn validate_thinking(
     }
     Ok(())
 }
-fn validate_settings(config: &Config, settings: &WorkspaceAiSettings) -> Result<(), String> {
+fn validate_settings(
+    config: &Config,
+    settings: &WorkspaceAiSettings,
+    observed: &discovery::Catalog,
+    previous: Option<&WorkspaceAiSettings>,
+) -> Result<(), String> {
     if settings.version != 1 {
         return Err(MODEL_ERROR.into());
     }
-    for choice in [&settings.chat, &settings.comment].into_iter().flatten() {
+    for (choice, prior, is_chat) in [
+        (&settings.chat, previous.and_then(|p| p.chat.as_ref()), true),
+        (&settings.comment, previous.and_then(|p| p.comment.as_ref()), false),
+    ] {
+        let Some(choice) = choice else { continue };
         if choice.model == "recommended" {
+            continue;
+        }
+        if is_chat && choice.catalog_revision.is_none()
+            && matches!(choice.thinking.as_str(), "recommended" | "off")
+            && (observed.selectable(config, &choice.model).is_some()
+                || (prior == Some(choice) && target(config, &choice.model).is_err()))
+        {
             continue;
         }
         target(config, &choice.model)?;
@@ -216,11 +233,11 @@ fn write_settings_observed(
     settings: &WorkspaceAiSettings,
     observed: &discovery::Catalog,
 ) -> Result<(), String> {
-    validate_settings(config, settings)?;
     let previous = read_settings_bytes(storage, config)?
         .map(|bytes| serde_json::from_slice::<StoredSettings>(&bytes).map_err(|_| MODEL_ERROR))
         .transpose()?;
     let previous = previous.filter(|saved| saved.connection.association() == config.association());
+    validate_settings(config, settings, observed, previous.as_ref().map(|saved| &saved.settings))?;
     let mut thinking_by_model = previous
         .as_ref()
         .map(|saved| saved.thinking_by_model.clone())
@@ -245,7 +262,12 @@ fn write_settings_observed(
             {
                 choice.thinking = thinking.clone();
             }
-            if choice.thinking != "recommended" {
+            if choice.thinking != "recommended"
+                && !(choice.thinking == "off" && choice.catalog_revision.is_none()
+                    && (observed.selectable(config, &concrete).is_some()
+                        || (previous.as_ref().and_then(|p| p.settings.chat.as_ref()) == Some(choice)
+                            && target(config, &concrete).is_err())))
+            {
                 validate_thinking(config, &concrete, &choice.thinking)?;
             }
             thinking_by_model.insert(concrete, choice.thinking.clone());

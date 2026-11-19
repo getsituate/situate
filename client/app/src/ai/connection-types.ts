@@ -6,7 +6,14 @@ export interface Config {
   label?: string;
   httpAcknowledgement?: string;
 }
+export interface DiscoveredModel {
+  id: string;
+  contextWindow: number;
+  maxTokens: number;
+  imageInput?: boolean;
+}
 export interface ModelCatalog {
   source: "account" | "provider" | "static" | "unknown";
   models: string[];
+  selectable?: DiscoveredModel[];
 }

@@ -9,6 +9,63 @@ import {
   providers,
 } from "./model-catalog";
 
+test("qualified discovery adds new chat models without exposing listing-only IDs", () => {
+  const config = { provider: "openrouter", endpoint: null };
+  const discovery = {
+    source: "account",
+    models: ["vendor/qualified", "vendor/listed-only"],
+    selectable: [
+      { id: "vendor/qualified", contextWindow: 8192, maxTokens: 2048 },
+      { id: "vendor/not-listed", contextWindow: 8192, maxTokens: 2048 },
+    ],
+  } as const;
+  const observed = {
+    ...discovery,
+    models: [...discovery.models],
+    selectable: [...discovery.selectable],
+  };
+  expect(availableChatModels(config, observed)).toEqual([
+    expect.objectContaining({
+      id: "vendor/qualified",
+      api: "openai-completions",
+    }),
+  ]);
+  expect(
+    availableChatModels(
+      { provider: "openai-codex", endpoint: null, auth: "oauth" },
+      observed,
+    ),
+  ).toEqual([]);
+});
+
+test("qualified OpenAI IDs appear for API keys and direct login", () => {
+  for (const auth of ["api_key", "oauth"] as const) {
+    expect(
+      availableChatModels(
+        { provider: "openai", endpoint: null, auth },
+        {
+          source: auth === "oauth" ? "account" : "provider",
+          models: ["gpt-6.2-sol", "unqualified"],
+          selectable: [
+            {
+              id: "gpt-6.2-sol",
+              contextWindow: 1_050_000,
+              maxTokens: 128_000,
+              imageInput: true,
+            },
+          ],
+        },
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        id: "gpt-6.2-sol",
+        api: "openai-responses",
+        input: ["text", "image"],
+      }),
+    ]);
+  }
+});
+
 test("setup exposes only supported providers and authentication methods", () => {
   expect(providers.map(({ id }) => id).sort()).toEqual([
     "anthropic",
