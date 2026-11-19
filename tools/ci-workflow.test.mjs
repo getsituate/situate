@@ -8,7 +8,7 @@ const read = (name) =>
     new URL(`../.github/workflows/${name}.yml`, import.meta.url),
     "utf8",
   );
-const names = [
+const pipelineWorkflows = [
   "verify",
   "release-macos",
   "publish-macos",
@@ -28,7 +28,9 @@ function job(workflow, id) {
 test("workflows use the shared CLI and pinned checkout, cache and evidence actions", () => {
   assert.deepEqual(
     readdirSync(new URL("../.github/workflows/", import.meta.url)).sort(),
-    names.map((name) => `${name}.yml`).sort(),
+    [...pipelineWorkflows, "notify-slack", "slack-notify"]
+      .map((name) => `${name}.yml`)
+      .sort(),
   );
   assert.equal(
     existsSync(new URL("../.github/actions", import.meta.url)),
@@ -38,7 +40,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     existsSync(new URL("../.github/disabled-workflows", import.meta.url)),
     false,
   );
-  for (const name of names) {
+  for (const name of pipelineWorkflows) {
     const workflow = read(name);
     const allowed = new Set([
       "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
@@ -55,6 +57,8 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
           ]
         : []),
     ]);
+    if (name === "publish-macos")
+      allowed.add("./.github/workflows/slack-notify.yml");
     for (const match of workflow.matchAll(/uses: (\S+)/g))
       assert(allowed.has(match[1]), match[1]);
     for (const step of workflow.split(/\n {6}- /).slice(1))
@@ -245,6 +249,64 @@ test("paused release skips planning and source work while only effect jobs share
     assert.match(effect, /group: situate-release-effects/);
     assert.match(effect, /cancel-in-progress: false/);
   }
+});
+
+test("the Slack failure notifier observes repository workflows on main", () => {
+  const workflow = read("notify-slack");
+  const sources = workflow.match(/workflows:\n([\s\S]*?)\n {4}types:/)?.[1];
+  assert.ok(sources);
+  assert.deepEqual(
+    Array.from(sources.matchAll(/^ {6}- (.+)$/gm), ([, name]) => name).sort(),
+    [
+      ...pipelineWorkflows.map((name) => read(name).match(/^name: (.+)$/m)[1]),
+      "Dependabot Updates",
+    ].sort(),
+  );
+  assert.match(workflow, /types: \[completed\]/);
+  assert.match(workflow, /branches: \[main\]/);
+  assert.match(workflow, /head_repository\.full_name == github\.repository/);
+  assert.match(workflow, /conclusion == 'failure'/);
+  assert.match(workflow, /"pull_request","pull_request_target","merge_group"/);
+  assert.match(workflow, /uses: \.\/\.github\/workflows\/slack-notify\.yml/);
+  assert.match(workflow, /secrets\.SLACK_FAILURE_WEBHOOK_URL/);
+});
+
+test("the Slack changelog only follows a successful promotion of a selected release", () => {
+  const workflow = read("publish-macos");
+  const publish = job(workflow, "publish");
+  const notify = job(workflow, "notify-release");
+  assert.match(
+    publish,
+    /published_release_id: .*steps\.promote\.outcome == 'success' && steps\.plan\.outputs\.release_id/,
+  );
+  assert.match(
+    publish,
+    /id: promote\s+run: node tools\/actions-adapter\.mjs publish-run --workflow publish\s+if: steps\.plan\.outputs\.selected == 'true'/,
+  );
+  assert.match(notify, /needs: publish/);
+  assert.doesNotMatch(notify, /vars\./);
+  assert.match(notify, /needs\.publish\.outputs\.published_release_id != ''/);
+  assert.match(
+    notify,
+    /release_id: .*needs\.publish\.outputs\.published_release_id/,
+  );
+  assert.match(notify, /uses: \.\/\.github\/workflows\/slack-notify\.yml/);
+  assert.match(notify, /secrets\.SLACK_RELEASE_WEBHOOK_URL/);
+  assert.doesNotMatch(publish, /SLACK_.*WEBHOOK/);
+});
+
+test("Slack notifications skip message composition and delivery without a webhook", () => {
+  const notifier = read("slack-notify");
+  assert.match(notifier, /SLACK_WEBHOOK_URL: .*secrets\.webhook_url/);
+  assert.match(
+    notifier,
+    /\[\[ -n "\$SLACK_WEBHOOK_URL" \]\][\s\S]*?echo "configured=true" >> "\$GITHUB_OUTPUT"/,
+  );
+  assert.match(
+    notifier,
+    /id: message\s+if: steps\.webhook\.outputs\.configured == 'true'/,
+  );
+  assert.match(notifier, /id: post\s+if: steps\.message\.outcome == 'success'/);
 });
 
 test("creator and publisher have gated execution paths with signing scoped to build only", () => {
