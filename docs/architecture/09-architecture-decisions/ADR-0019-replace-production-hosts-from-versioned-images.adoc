@@ -1,0 +1,79 @@
+[[adr-0019]]
+= ADR-0019: Replace production hosts from versioned images
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+ifndef::architecture-diagrams-root[]
+:architecture-diagrams-root: ../diagrams
+endif::[]
+
+Status:: accepted; automated recovery revised by link:ADR-0020-stop-failed-hosting-deployments.adoc[ADR-0020]
+Date:: 2026-11-19
+Implementation:: The normal Terraform root targets only immutable generations. GitHub Actions qualifies the merged revision with synthetic publication data before staging a replacement. The branch rehearsal uses a separate Hetzner project. Production qualification uses isolated temporary resources in the production project so the resulting snapshot can boot there.
+
+== Context
+
+One Hetzner VM serves the production website and direct macOS downloads through Caddy and Nginx.
+Terraform describes the VM, but bootstrap installs packages from live repositories and operators can update the running proxy separately.
+Recreating the VM from Terraform alone therefore does not reproduce the serving stack or restore the current publication state.
+A host change must preserve the direct update contract in link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068].
+
+== Decision
+
+Build the production host image from reviewed repository sources with pinned base, package and container inputs.
+Record its source revision and provider image ID; test that exact image before promoting it.
+Replace the VM for operating-system, runtime and proxy-configuration changes, including security fixes.
+First boot may set instance identity, access and state mounts; it must not install mutable software inputs or change the baked serving configuration.
+Do not bake credentials, TLS private keys, production content or persistent data into the image.
+
+Publish the website independently as a versioned static artifact; updating website content does not replace the VM or rewrite the proxy configuration.
+Keep website artifacts and their activation pointer, published application bytes and manifests, publication state and the active release pointer recoverable independently of the VM root disk.
+Keep TLS state recoverable or provide a tested way to reissue certificates.
+App signing keys remain outside hosting.
+
+Use the same authoritative HCP Terraform workspace and locking under link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0014-host-production-state-in-hcp-terraform.adoc[ADR-0014].
+
+[[immutable-production-cutover]]
+.Continuous replacement of immutable hosts (target)
+image::{architecture-diagrams-root}/immutable-production-host-cutover.svg["A merge affecting production infrastructure starts GitHub Actions. Build and qualify the image, then stage the replacement before pausing publishers or moving the volume. Verify the replacement before switching DNS. After public checks pass, resume publication and retire the previous VM.",width=600]
+
+Changes to production infrastructure inputs on protected `main` trigger GitHub Actions automatically. Pull requests validate changes without production credentials; only trusted runs on `main` receive them through the production environment.
+Once continuous deployment is qualified and enabled, normal deployments need no second manual approval after merge. Build from the merged revision and deploy only the qualified image and checked plans for that revision. A no-change plan does not replace a host.
+Serialize production deployments without cancelling an active handoff. Coordinate with website and app publishers, and keep a durable operation record so interruption blocks new changes until the outcome is reconciled.
+
+Stage and verify the replacement alongside the serving VM. If Hetzner cannot provision it, leave the serving VM, volume, DNS and publishers unchanged.
+Plan a short maintenance window with exactly one writer authority; this is not a high-availability design. Retire only the previous VM after public acceptance; retain the volume and the previous qualified image.
+A host rollback must serve the latest committed publication state, including releases committed after cutover, or leave traffic paused until that state can be served safely.
+Never rewind the application feed or overwrite published artifacts as part of host recovery.
+
+The scope is the existing Hetzner website and direct-release host, not optional product services or local development.
+During the separately approved first migration, import the frozen legacy state into the new volume, verify public production, then delete the legacy VM and remove its deployment path, bootstrap and DNS fallback. Do not maintain a mutable mode.
+Enable production automation only after an isolated rehearsal and explicit approval of its change policy and spending limits. Out-of-policy changes stop for review.
+
+== Alternatives
+
+[cols="2,3,3",options="header"]
+|===
+|Alternative |Benefit |Trade-off
+|Patch the VM in place
+|Uses the current deployment path and avoids overlapping VMs.
+|A running host can drift from Git; recovery depends on preserving and restoring the modified host.
+|Replace the VM and install the stack at first boot
+|Replaces hosts without a custom image build.
+|Boot depends on package and registry availability, and the exact serving stack is not tested until the VM is provisioned.
+|Replace the VM from a qualified image (selected)
+|Test the serving stack before cutover and replace failed hosts from a known version.
+|Adds image build and retention work, overlapping VM capacity, and a state handoff to qualify.
+|===
+
+== Consequences and verification
+
+Test that a fresh VM boots without fetching runtime packages or images and that a content-only website publication leaves the VM and proxy unchanged.
+Before production cutover, rehearse recovery and traffic switch with isolated state, including interruption and rollback after publication has resumed.
+Compare both public release metadata documents and versioned artifact hashes before and after the handoff; check website HTTPS and the `www` and `reboot` redirects.
+Test that unrelated changes do not deploy, failed capacity allocation leaves production untouched, overlapping runs cannot interrupt a handoff, and a failed acceptance check prevents retirement.
+Reject plans outside the permitted phase, including changes to mail or deletion of persistent state.
+Keep the current production runbook authoritative for the live host until cutover is separately approved.
+See the link:{architecture-repository-root}/docs/architecture/index.adoc#immutable-production-host[target deployment view] for the state and traffic boundaries.

@@ -41,6 +41,12 @@
 |link:09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018]
 |Versionless changelog declarations for client changes and localized release assembly.
 |Accepted; CI validates declarations and release assembly collects them.
+|link:09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[ADR-0019]
+|Replace the production VM from versioned images while keeping website deployments and app publication independent.
+|Accepted; recovery revised by ADR-0020; production cutover remains pending
+|link:09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[ADR-0020]
+|GitHub-hosted production deployments stop on failure and block further runs until operator recovery.
+|Accepted; locally verified; live production run pending
 |===
 
 :architecture-repository-root: ../..
@@ -71,6 +77,10 @@ include::09-architecture-decisions/ADR-0016-append-conversation-history.adoc[lev
 include::09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

@@ -5,6 +5,8 @@ description: Create and review focused architecture diagrams with consistent abs
 
 # Architecture diagrams
 
+Prefer a diagram to a long prose walkthrough of topology, ownership, or a multi-step workflow. Lead with the diagram and use prose for rationale, guarantees, and exceptions rather than repeating its steps. Give the diagram descriptive alternative text and put any critical detail the visual cannot convey in nearby text.
+
 Identify the reader's question before drawing. Choose a context, component, sequence, deployment, or data view accordingly. A diagram should explain one coherent concern, not reproduce the entire system.
 
 Use the notation supported by the document toolchain. Mermaid and PlantUML are options, not assumed dependencies. In AsciiDoc, confirm how diagram blocks render before relying on them.

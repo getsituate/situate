@@ -39,7 +39,7 @@ Optional service rows describe required boundaries, not an operational service i
 
 |Direct-release hosting
 |The selected Hetzner host, with Nginx behind Caddy HTTPS.
-|Serves static update metadata and signed application artifacts, not workspace storage or an agent runtime. Production activation is separate from preview delivery; see link:{architecture-repository-root}/docs/architecture/index.adoc#delivery-and-operations[delivery and operations].
+|Serves static update metadata and signed application artifacts, not workspace storage or an agent runtime. The former preview hostname redirects to production. See link:{architecture-repository-root}/docs/architecture/index.adoc#immutable-production-host[the target host lifecycle].
 |===
 
 The native conversation owner requests model work through link:{architecture-repository-root}/docs/architecture/index.adoc#glossary-model-access[Model Access], an internal host capability.

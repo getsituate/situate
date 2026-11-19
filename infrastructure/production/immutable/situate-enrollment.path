@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch for a new instance's SSH enrollment capability
+
+[Path]
+PathExists=/run/situate-enrollment-token
+
+[Install]
+WantedBy=multi-user.target

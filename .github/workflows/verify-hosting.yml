@@ -1,0 +1,40 @@
+name: Verify hosting
+
+on:
+  pull_request:
+    paths:
+      - "infrastructure/production/**"
+      - "infrastructure/releases/remote.py"
+      - "infrastructure/website/config.mjs"
+      - "tools/pipeline-bootstrap.py"
+      - "client/docker/ci-volta.json"
+      - "package.json"
+      - "tools/hosting-checks.mjs"
+      - ".github/workflows/deploy-hosting.yml"
+      - ".github/workflows/verify-hosting.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infrastructure/production/**"
+      - "infrastructure/releases/remote.py"
+      - "infrastructure/website/config.mjs"
+      - "tools/pipeline-bootstrap.py"
+      - "client/docker/ci-volta.json"
+      - "package.json"
+      - "tools/hosting-checks.mjs"
+      - ".github/workflows/deploy-hosting.yml"
+      - ".github/workflows/verify-hosting.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/hosting-checks.mjs

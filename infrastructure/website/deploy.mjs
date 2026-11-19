@@ -79,7 +79,7 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
   throw new Error(
-    "Preview hosting is retired. Use infrastructure/production/deploy.mjs for getsituate.com.",
+    "Preview hosting is retired. See infrastructure/production/immutable/README.md for getsituate.com.",
   );
 }
 

@@ -68,28 +68,6 @@ resource "hcloud_firewall" "production" {
   }
 }
 
-resource "hcloud_server" "production" {
-  name         = "getsituate-production"
-  server_type  = "cx23"
-  location     = "nbg1"
-  image        = "ubuntu-24.04"
-  backups      = true
-  firewall_ids = [hcloud_firewall.production.id]
-  labels       = local.labels
-  user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    ssh_public_key = var.ssh_public_key
-  })
-
-  delete_protection  = true
-  rebuild_protection = true
-
-  lifecycle {
-    prevent_destroy = true
-    # Bootstrap inputs cannot be recovered through the server read API.
-    ignore_changes = [user_data, ssh_keys]
-  }
-}
-
 resource "hcloud_zone" "production" {
   name              = "getsituate.com"
   mode              = "primary"
@@ -107,7 +85,7 @@ resource "hcloud_zone_rrset" "apex_ipv4" {
   name    = "@"
   type    = "A"
   ttl     = 900
-  records = [{ value = hcloud_server.production.ipv4_address }]
+  records = [{ value = local.traffic_ipv4 }]
 
   lifecycle {
     prevent_destroy = true
@@ -119,7 +97,7 @@ resource "hcloud_zone_rrset" "apex_ipv6" {
   name    = "@"
   type    = "AAAA"
   ttl     = 900
-  records = [{ value = hcloud_server.production.ipv6_address }]
+  records = [{ value = local.traffic_ipv6 }]
 
   lifecycle {
     prevent_destroy = true

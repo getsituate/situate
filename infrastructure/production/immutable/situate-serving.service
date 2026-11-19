@@ -1,0 +1,15 @@
+[Unit]
+Description=Situate immutable web and direct releases
+Requires=docker.service
+BindsTo=srv-situate\x2dstate.mount opt-situate.mount
+After=docker.service srv-situate\x2dstate.mount opt-situate.mount cloud-final.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/usr/local/lib/situate
+ExecStartPre=/usr/local/lib/situate/state.sh check
+ExecStart=/usr/bin/docker compose up --wait --wait-timeout 90 --pull never --no-build
+ExecStopPost=/usr/bin/docker compose down --timeout 15
+TimeoutStartSec=120
+TimeoutStopSec=45

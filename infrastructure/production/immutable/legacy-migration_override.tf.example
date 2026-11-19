@@ -1,0 +1,4 @@
+locals {
+  traffic_ipv4 = var.traffic_host == "legacy" ? hcloud_server.production.ipv4_address : hcloud_server.immutable[var.traffic_host].ipv4_address
+  traffic_ipv6 = var.traffic_host == "legacy" ? hcloud_server.production.ipv6_address : hcloud_server.immutable[var.traffic_host].ipv6_address
+}
