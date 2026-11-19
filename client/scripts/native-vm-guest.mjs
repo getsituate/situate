@@ -18,7 +18,7 @@ export async function createGuestIsolation(manifest) {
     flag: "wx",
     mode: 0o600,
   });
-  for (const name of ["home", "tmp", "config", "data", "cache", "pi"])
+  for (const name of ["home", "tmp", "config", "data", "cache"])
     await mkdir(join(root, name), { mode: 0o700 });
   const isolated = {
     root,

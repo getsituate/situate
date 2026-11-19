@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "native-ai-user-agent",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Native model requests identify Situate; no changes to user workflows."
+}
