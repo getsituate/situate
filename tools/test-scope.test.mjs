@@ -32,6 +32,8 @@ test("portable checks remain available on both execution hosts without a Linux p
     "client-dictation-swift",
     "client-workspace-access-swift",
     "client-native",
+    "client-native-compatibility",
+    "client-dictation-recognition",
     "client-agent-e2e",
     "client-onboarding-e2e",
     "client-plugins-e2e",
@@ -235,6 +237,7 @@ test("app release verification keeps native gates alongside portable code and br
     ["browser", "linux"],
     ["macos-code", "macos"],
     ["macos-native", "macos"],
+    ["macos-compatibility", "macos"],
   ])
     assert.equal(plan.lanes.find((lane) => lane.id === id).host, host, id);
   for (const [id, seconds] of [
@@ -243,6 +246,7 @@ test("app release verification keeps native gates alongside portable code and br
     ["browser", 1800],
     ["macos-code", 1800],
     ["macos-native", 1800],
+    ["macos-compatibility", 1800],
   ])
     assert.equal(
       plan.lanes.find((lane) => lane.id === id).timeoutSeconds,

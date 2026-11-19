@@ -18,7 +18,9 @@ export function prerequisites(lane) {
     coverage: suites.has("client-rust-coverage"),
     swift:
       lane.host === "macos" &&
-      [...suites].some((id) => /swift|native|e2e|host|core-macos/.test(id)),
+      [...suites].some((id) =>
+        /swift|native|e2e|host|core-macos|dictation-recognition/.test(id),
+      ),
     native: [...suites].some((id) =>
       /client-(native|agent-e2e|onboarding-e2e|plugins-e2e)/.test(id),
     ),

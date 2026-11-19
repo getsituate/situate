@@ -43,7 +43,12 @@ fn main() {
             "Direct releases require an explicit HTTPS SITUATE_UPDATER_ENDPOINT"
         );
     }
-    if std::env::var("TARGET").as_deref() == Ok("aarch64-apple-darwin") {
+    let dictation_arch = match std::env::var("TARGET").as_deref() {
+        Ok("aarch64-apple-darwin") => Some("arm64"),
+        Ok("x86_64-apple-darwin") => Some("x86_64"),
+        _ => None,
+    };
+    if dictation_arch.is_some() {
         println!("cargo:rerun-if-changed=dictation/Media");
         std::fs::create_dir_all("dictation/.build/media").unwrap();
         let status = std::process::Command::new("clang")
@@ -52,6 +57,8 @@ fn main() {
                 "-fobjc-arc",
                 "-arch",
                 "arm64",
+                "-arch",
+                "x86_64",
                 "-mmacosx-version-min=14.0",
                 "-framework",
                 "Foundation",
@@ -65,14 +72,20 @@ fn main() {
         assert!(status.success(), "Could not build system media integration");
     }
     tauri_build::build();
-    if std::env::var("TARGET").as_deref() == Ok("aarch64-apple-darwin") {
+    if let Some(arch) = dictation_arch {
         println!("cargo:rerun-if-changed=dictation/Package.swift");
         println!("cargo:rerun-if-changed=dictation/Package.resolved");
         println!("cargo:rerun-if-changed=dictation/Sources");
+        // SwiftPM's Xcode build system uses the same product path for both architectures.
+        let scratch = format!("dictation/.build/{arch}");
         let args = [
             "build",
             "--package-path",
             "dictation",
+            "--scratch-path",
+            &scratch,
+            "--arch",
+            arch,
             "--disable-automatic-resolution",
             "-c",
             "release",
@@ -85,14 +98,8 @@ fn main() {
             .expect("Swift 6.2 or later is required");
         assert!(status.success(), "Could not build the dictation runtime");
         let output = std::process::Command::new("swift")
-            .args([
-                "build",
-                "--package-path",
-                "dictation",
-                "-c",
-                "release",
-                "--show-bin-path",
-            ])
+            .args(args)
+            .arg("--show-bin-path")
             .output()
             .expect("Could not locate the dictation runtime");
         assert!(output.status.success());

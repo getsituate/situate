@@ -48,6 +48,7 @@ test("developer-only inputs and required declarations do not activate app lanes"
               "rust",
               "browser",
               "macos-native",
+              "macos-compatibility",
             ].includes(lane.id),
         ),
         path,
@@ -90,6 +91,24 @@ test("app consumers and native harnesses have explicit host assignments", () => 
   const unknown = planPaths(["unclassified/runtime.bin"]);
   assert.equal(unknown.appImpact, true);
   assert.match(unknown.reasons[0], /Conservative/);
+});
+
+test("macOS compatibility selects the short desktop journey and only runs recognition for relevant PRs", () => {
+  const selected = (path, mode) =>
+    planPaths([path], { mode }).lanes.find(
+      ({ id }) => id === "macos-compatibility",
+    )?.suites;
+  assert.deepEqual(selected("client/app/src/App.vue", "verify"), [
+    "client-native-compatibility",
+  ]);
+  assert.deepEqual(
+    selected("client/app/src-tauri/src/dictation.rs", "verify"),
+    ["client-native-compatibility", "client-dictation-recognition"],
+  );
+  assert.deepEqual(selected("client/app/src/App.vue", "release"), [
+    "client-native-compatibility",
+    "client-dictation-recognition",
+  ]);
 });
 
 test("release source gates are complete, unique and exclude diagnostics and advisory scans", () => {

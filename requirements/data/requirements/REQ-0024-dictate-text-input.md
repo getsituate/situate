@@ -24,7 +24,7 @@ acceptanceCriteria:
     milestone: Dictation MVP
     status: open
   - id: AC-05
-    text: "On macOS with Apple Silicon, pressing the microphone button starts recording; the primary composer button stops recording and starts transcription. No separate recording-cancel button is offered."
+    text: "On macOS, pressing the microphone button starts recording; the primary composer button stops recording and starts transcription. No separate recording-cancel button is offered."
     milestone: Dictation MVP
     status: open
   - id: AC-06
@@ -101,7 +101,7 @@ acceptanceCriteria:
 
 Users should be able to dictate input for Situate through speech-to-text instead of typing it. Recognized speech is presented as editable text that users can review and correct before submitting. Dictation does not directly execute spoken instructions. Chat must offer this input method. Required transcription models are [downloaded separately at application startup](REQ-0041-download-dictation-models-after-installation.md), rather than bundled with the application.
 
-The MVP provides dictation in chat on macOS with Apple Silicon using one fixed NVIDIA Parakeet v3 model variant. iOS and Intel Macs are deferred. It automatically recognizes the spoken language among the selected variant's supported languages, independently of the system and interface languages. German and English are included; support for every language is not promised. The initial implementation uses FluidAudio 0.17.7 with the fixed Parakeet v3 Core ML conversion on macOS 14 or later. Performance benchmarking and quantitative quality thresholds are deferred; functional and privacy verification remain required. User-selectable models and specialized language or resource profiles are [outside the MVP](../foundations.md#initial-dictation-delivery).
+Chat dictation uses one fixed NVIDIA Parakeet v3 model variant on Apple Silicon and Intel Macs. iOS is deferred. It automatically recognizes the spoken language among the selected variant's supported languages, independently of the system and interface languages. German and English are included; support for every language is not promised. The initial implementation uses FluidAudio 0.17.7 with the fixed Parakeet v3 Core ML conversion on macOS 14 or later. Performance benchmarking and quantitative quality thresholds are deferred; functional and privacy verification remain required. User-selectable models and specialized language or resource profiles are [outside the MVP](../foundations.md#initial-dictation-delivery).
 
 Pressing the microphone button starts recording. The primary composer button then stops recording and starts transcription without submitting the draft. There is no separate recording-cancel button. Only one recording or transcription may be active across the application at a time. Dictation supports speech lasting several minutes; no fixed maximum recording duration or transcription latency is specified.
 
@@ -132,5 +132,5 @@ Private dictation interaction and lifecycle clarification; date not recorded, tr
 ## Open questions
 
 - Which exact Parakeet v3 package and runtime meet the recognition-quality, memory, latency and energy needs on supported macOS hardware? iOS device selection remains deferred.
-- When should iOS and Intel Macs be included in dictation delivery?
+- When should iOS be included in dictation delivery?
 - Which input areas beyond chat should offer dictation later?

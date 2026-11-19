@@ -1107,11 +1107,15 @@ test("ordinary subprocess environments contain no signing/publication/provider c
   assert.deepEqual(
     ordinaryEnvironment({
       PATH: "path",
+      DEVELOPER_DIR: "/Applications/Test-Xcode.app/Contents/Developer",
       GH_TOKEN: "not-forwarded",
       APPLE_ID: "not-forwarded",
       WEBSITE_DEPLOY_HOST: "not-forwarded",
       SITUATE_UPDATER_PRIVATE_KEY: "not-forwarded",
     }),
-    { PATH: "path" },
+    {
+      PATH: "path",
+      DEVELOPER_DIR: "/Applications/Test-Xcode.app/Contents/Developer",
+    },
   );
 });

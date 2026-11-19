@@ -220,6 +220,30 @@ jobs:
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-native
 
+  macos-compatibility:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-compatibility')
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      SITUATE_TOOL_BUILD_SLOTS: "1"
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs desktop
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-compatibility
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-compatibility
+
   required:
     name: PR verification
     needs:
@@ -234,6 +258,7 @@ jobs:
         macos-code,
         browser,
         macos-native,
+        macos-compatibility,
       ]
     if: always()
     runs-on: ubuntu-24.04
@@ -252,7 +277,7 @@ jobs:
         env:
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native)) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
       - run: python3 tools/pipeline-bootstrap.py
       - id: evidence
         run: node tools/actions-adapter.mjs source-evidence --workflow verify
@@ -260,7 +285,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native)) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
       - if: steps.evidence.outputs.created == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
