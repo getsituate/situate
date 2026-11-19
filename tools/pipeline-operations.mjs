@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -780,8 +786,22 @@ export async function productionStages(
       });
     },
     download: async () => {
+      try {
+        mkdirSync(resolve(outputRoot), { mode: 0o700 });
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      }
+      const storage = lstatSync(resolve(outputRoot));
+      assert(
+        storage.isDirectory() &&
+          storage.uid === process.getuid() &&
+          (storage.mode & 0o077) === 0,
+        "Publication download root must be an owned private directory",
+      );
       const { downloadGitHubRelease } = await import("./github-release.mjs");
-      const result = await downloadGitHubRelease(
+      const result = await (
+        publicationAdapter?.downloadRelease ?? downloadGitHubRelease
+      )(
         {
           ...plan.release,
           destination: directory,

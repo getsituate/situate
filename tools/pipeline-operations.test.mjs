@@ -7,6 +7,8 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
+  lstatSync,
+  symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +23,36 @@ import {
 } from "./pipeline-operations.mjs";
 import { digest, sealPlan, operationDirectory } from "./pipeline-state.mjs";
 import { checkpointFixture } from "./release-checkpoint-fixtures.mjs";
+
+test("publication creates a private download root and rejects linked storage", async (t) => {
+  const f = checkpointFixture(t);
+  const artifactRoot = join(f.root, "downloads");
+  const bytes = JSON.stringify({ schemaVersion: 1, artifactRoot });
+  const plan = {
+    operation: "publish-synthetic",
+    workflow: "publish",
+    destination: "release@fixture.invalid",
+    configurationDigest: digest(bytes),
+  };
+  const calls = [];
+  const stages = await productionStages(f.root, plan, {
+    environment: { CI: "true", SITUATE_RELEASE_CONFIG_JSON: bytes },
+    publicationAdapter: {
+      downloadRelease: async ({ destination }) => {
+        calls.push(destination);
+        mkdirSync(destination, { mode: 0o700 });
+        return { receipt: {} };
+      },
+    },
+  });
+  await stages.download();
+  assert.deepEqual(calls, [join(artifactRoot, plan.operation)]);
+  assert.equal(lstatSync(artifactRoot).mode & 0o777, 0o700);
+  rmSync(artifactRoot, { recursive: true });
+  symlinkSync(f.directory, artifactRoot);
+  await assert.rejects(stages.download(), /owned private directory/);
+  assert.equal(calls.length, 1);
+});
 
 test("production publication and reconciliation acknowledge complete journal checkpoints before releasing their claim", async (t) => {
   for (const path of ["ordinary", "reconcile"])
