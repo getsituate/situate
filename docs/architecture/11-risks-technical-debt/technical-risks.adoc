@@ -135,3 +135,15 @@ Verification and review trigger: before adopting or changing an internal-file tr
 History reinitialization requires explicit confirmation of prior-history loss and a preserved damaged-repository backup; it must not proceed if that backup cannot be preserved.
 Existing content remains the new baseline, and local reinitialization does not itself synchronize or delete histories elsewhere.
 See <<glossary-history-reinitialization,History Reinitialization>>.
+
+==== Production hosting
+
+[[production-publication-handoff-risk]]
+===== Host replacement can serve a stale release feed
+
+The serving VM and publication state have separate lifecycles in <<immutable-production-host>>.
+If both hosts accept writes, or if the previous host returns to service with an old state copy, update checks may advertise an older release or point to missing artifacts.
+
+Assessment: high impact; likelihood unknown until the operator rehearses cutover and recovery.
+Before switching traffic, pause writers and verify the receiving host against the latest committed state.
+Rehearse rollback after a new publication, not just before publication resumes. Keep traffic paused if current state cannot be recovered.

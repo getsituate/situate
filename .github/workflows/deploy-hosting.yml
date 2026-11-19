@@ -1,0 +1,81 @@
+name: Deploy hosting
+
+on:
+  push:
+    branches: [main, immutable-infrastructure]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/immutable-infrastructure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/hosting-checks.mjs
+
+  hetzner-rehearsal:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/immutable-infrastructure'
+    needs: rehearse
+    runs-on: ubuntu-24.04
+    environment: hosting-rehearsal
+    concurrency:
+      group: hosting-hetzner-rehearsal
+      cancel-in-progress: false
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - name: Build the snapshot and verify the real Hetzner handoff
+        env:
+          HCLOUD_REHEARSAL_TOKEN: ${{ secrets.HCLOUD_REHEARSAL_TOKEN }}
+        run: timeout --signal=TERM --kill-after=30s 24m python3 -B infrastructure/production/immutable/github-rehearsal.py
+      - name: Confirm cleanup after success, failure or cancellation
+        if: always()
+        env:
+          HCLOUD_REHEARSAL_TOKEN: ${{ secrets.HCLOUD_REHEARSAL_TOKEN }}
+        run: python3 -B infrastructure/production/immutable/github-rehearsal.py cleanup
+
+  production:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.HOSTING_PRODUCTION_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment: hosting-production
+    permissions:
+      contents: read
+      deployments: write
+    concurrency:
+      group: hosting-production
+      cancel-in-progress: false
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: "1.12.2"
+          terraform_wrapper: false
+      - name: Replace the production host
+        run: node infrastructure/production/immutable/continuous-deploy.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HOSTING_OPERATOR_KEY: ${{ secrets.HOSTING_OPERATOR_KEY }}
+          HOSTING_PUBLISHER_KEY: ${{ secrets.HOSTING_PUBLISHER_KEY }}
+          HOSTING_HOST_CA_KEY: ${{ secrets.HOSTING_HOST_CA_KEY }}
+          SITUATE_HCP_WORKSPACE_ID: ${{ vars.SITUATE_HCP_WORKSPACE_ID }}
+          TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_APP_TERRAFORM_IO }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}

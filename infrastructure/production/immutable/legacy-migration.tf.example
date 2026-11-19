@@ -1,0 +1,20 @@
+# Use only in the isolated initial migration checkout, not in the normal root.
+resource "hcloud_server" "production" {
+  name               = "getsituate-production"
+  server_type        = "cx23"
+  location           = "nbg1"
+  image              = "ubuntu-24.04"
+  backups            = true
+  firewall_ids       = [hcloud_firewall.production.id]
+  labels             = local.labels
+  delete_protection  = var.retiring_generation != "legacy"
+  rebuild_protection = var.retiring_generation != "legacy"
+
+  lifecycle {
+    ignore_changes = [user_data, ssh_keys]
+    precondition {
+      condition     = var.retiring_generation != "legacy" || var.traffic_host != "legacy"
+      error_message = "Move production traffic before retiring the legacy host."
+    }
+  }
+}

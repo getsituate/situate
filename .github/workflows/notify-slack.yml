@@ -1,0 +1,37 @@
+name: Notify Slack of workflow failures
+
+on:
+  workflow_run:
+    workflows:
+      - Dependency monitoring
+      - Deploy hosting
+      - Diagnostics
+      - Publish macOS
+      - Release launch trace
+      - Release macOS
+      - Release recovery
+      - Verify
+      - Verify hosting
+      - Dependabot Updates
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: >-
+      github.repository == 'getsituate/situate' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      !contains(fromJSON('["pull_request","pull_request_target","merge_group"]'), github.event.workflow_run.event)
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      kind: failure
+      workflow_name: ${{ github.event.workflow_run.name }}
+      run_id: ${{ github.event.workflow_run.id }}
+      run_attempt: ${{ github.event.workflow_run.run_attempt }}
+    secrets:
+      webhook_url: ${{ secrets.SLACK_FAILURE_WEBHOOK_URL }}

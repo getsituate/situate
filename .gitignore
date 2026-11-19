@@ -58,6 +58,8 @@ Sessionx.vim
 !.env.example
 
 # Local infrastructure state and credentials
+/infrastructure/production/terraform/legacy-migration.tf
+/infrastructure/production/terraform/legacy-migration_override.tf
 .terraform/
 *.tfstate
 *.tfstate.*

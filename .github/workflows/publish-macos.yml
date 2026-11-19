@@ -24,6 +24,8 @@ jobs:
     runs-on: macos-latest
     environment: macos-publication
     timeout-minutes: 60
+    outputs:
+      published_release_id: ${{ steps.promote.outcome == 'success' && steps.plan.outputs.release_id || '' }}
     permissions:
       contents: read
       actions: read
@@ -45,7 +47,8 @@ jobs:
           PIPELINE_RELEASE_ID: ${{ inputs.release_id }}
           SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}
           GH_TOKEN: ${{ github.token }}
-      - run: node tools/actions-adapter.mjs publish-run --workflow publish
+      - id: promote
+        run: node tools/actions-adapter.mjs publish-run --workflow publish
         if: steps.plan.outputs.selected == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,3 +56,13 @@ jobs:
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           SITUATE_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_UPDATER_PUBLIC_KEY }}
+
+  notify-release:
+    needs: publish
+    if: needs.publish.outputs.published_release_id != ''
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      kind: release
+      release_id: ${{ needs.publish.outputs.published_release_id }}
+    secrets:
+      webhook_url: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}

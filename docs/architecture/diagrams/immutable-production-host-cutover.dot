@@ -1,0 +1,19 @@
+digraph ImmutableProductionHostCutover {
+  graph [rankdir=TB, bgcolor="white", pad=0.25, nodesep=0.35, ranksep=0.30, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fillcolor="#f5f7fa", color="#536171", fontname="Helvetica", fontsize=13, margin="0.18,0.10"];
+  edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.75];
+
+  merge [label="Production infrastructure change on main", fillcolor="#e5effa"];
+  image [label="GitHub Actions builds and qualifies the image"];
+  stage [label="Stage and check the replacement VM"];
+  fence [label="Pause publishers\nSettle writes and fence the old VM"];
+  handoff [label="Move the current publication state\nDetach the volume, then attach it to the replacement"];
+  state [shape=cylinder, style=filled, label="Publication volume\nWebsite, app releases, feed and TLS", fillcolor="#fff4db"];
+  verify [label="Verify HTTPS, redirects and release bytes\nSwitch apex DNS after checks pass"];
+  resume [label="Verify public endpoints\nResume publishers"];
+  retire [label="Retire the previous VM", fillcolor="#e5effa"];
+
+  merge -> image -> stage -> fence -> handoff -> verify -> resume -> retire;
+  { rank=same; handoff; state; }
+  handoff -> state [dir=none, style=dashed, constraint=false];
+}

@@ -45,7 +45,28 @@ function checkWorkflowBootstrap(name, workflow) {
     const block = jobs[index + 1];
     const context = `${name}: ${id}`;
     const steps = block.split(/^ {4}steps:\n/m)[1];
+    if (
+      (name === "notify-slack.yml" && id === "notify") ||
+      (name === "publish-macos.yml" && id === "notify-release")
+    ) {
+      assert.equal(steps, undefined, context);
+      assert.match(
+        block,
+        /^ {4}uses: \.\/\.github\/workflows\/slack-notify\.yml$/m,
+      );
+      assert.doesNotMatch(block, /^ {4}runs-on:/m);
+      continue;
+    }
     assert.ok(steps, context);
+    if (name === "slack-notify.yml" && id === "send") {
+      // The notifier uses runner-provided tools and must not execute repository code.
+      assert.doesNotMatch(
+        steps,
+        /^ +(?:- )?uses:|\btools\/|\b(?:node|npm|python3|volta)\b/m,
+      );
+      assert.match(steps, /^ {8}shell: bash$/m);
+      continue;
+    }
     assert.match(
       steps,
       /^ {6}- uses: actions\/checkout@[a-f0-9]{40}\n/,
@@ -102,7 +123,17 @@ function checkWorkflowBootstrap(name, workflow) {
           command,
           name === "release-macos.yml" && id === "create"
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
-            : /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/,
+            : ({
+                "verify-hosting.yml: offline":
+                  /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
+                "deploy-hosting.yml: rehearse":
+                  /^node tools\/hosting-checks\.mjs$/,
+                "deploy-hosting.yml: hetzner-rehearsal":
+                  /^(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?$/,
+                "deploy-hosting.yml: production":
+                  /^node infrastructure\/production\/immutable\/continuous-deploy\.mjs$/,
+              }[context] ??
+                /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/),
           context,
         );
     }

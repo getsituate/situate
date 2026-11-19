@@ -25,7 +25,7 @@ Website deployment and app publication are separate from Terraform and do not ne
 Store authoritative production state in the HCP Terraform workspace `situate-production` at `app.terraform.io`.
 Supply the exact organization through private configuration rather than an inferred or example name.
 Use Local execution mode: Terraform runs on the operator's machine, while HCP provides state storage, version history and locking.
-A future approved GitHub Actions runner may use the same workspace; no CI applies, VCS triggers or automatic production changes are introduced by this decision.
+A future approved GitHub Actions runner may use the same workspace; this decision does not enable CI applies or VCS triggers. link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[ADR-0019] defines the target deployment policy.
 
 Use the Free plan while its resource allowance and terms meet the project's needs.
 Check the active plan during account setup; exceeding the allowance or accepting a paid service requires a separate spending decision.

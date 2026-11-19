@@ -630,6 +630,15 @@ Configure environment secrets and variables under repository **Settings → Envi
 
 Leave each automation gate unset or `false` until protected `main`, scoped host access and isolated final-artifact qualification have been provisioned and verified. Setting credentials does not qualify or authorize unattended application delivery.
 
+### Slack notifications
+
+Create a Slack incoming webhook for each destination channel. In GitHub, add the webhook URLs under **Settings → Secrets and variables → Actions → Repository secrets**:
+
+- `SLACK_FAILURE_WEBHOOK_URL`: Sends a message when a workflow listed in [the failure notifier](../.github/workflows/notify-slack.yml) fails on `main`. Add new workflow names to this list. Pull request runs, merge queue runs, and cancellations do not send messages.
+- `SLACK_RELEASE_WEBHOOK_URL`: Sends the GitHub release notes after `Publish macOS` successfully promotes the release.
+
+Leave either secret unset to disable its notifications. Delivery errors appear as warnings in the notification job and do not change the publication result.
+
 ### Direct macOS releases
 
 The workflow supports universal macOS direct distribution only. Direct builds require `SITUATE_UPDATER_PUBLIC_KEY` and `TAURI_SIGNING_PRIVATE_KEY`, with optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, in the root private `.env` or environment. These are separate from Apple credentials. Explicit environment values, including empty ones, take precedence; CI uses only environment values. The builder does not generate keys or invoke a secret manager.

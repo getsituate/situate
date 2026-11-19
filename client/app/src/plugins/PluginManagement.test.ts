@@ -116,7 +116,10 @@ function setup(plugins: RuntimePlugin[] = [plugin("weekly")]) {
     });
   return { runtime, ui, onDevelop, render };
 }
-function action(wrapper: ReturnType<typeof mount>, key: string) {
+function action(
+  wrapper: Pick<ReturnType<typeof mount>, "findAll">,
+  key: string,
+) {
   return wrapper
     .findAll("button")
     .find((b) => b.text().includes(`⟦pluginManagement.${key}⟧`))!;
@@ -215,7 +218,7 @@ test("shows declared connection consumers and confirms only the enabled transiti
   expect(
     card.findAll(".plugin-consumers li").map((item) => item.text()),
   ).toEqual(["Plugin alpha", "Plugin quiet"]);
-  await action(wrapper, "disable").trigger("click");
+  await action(card, "disable").trigger("click");
   expect(
     wrapper
       .get("dialog")

@@ -28,6 +28,8 @@ export async function inspectWorkspace(
         headers: {
           Authorization: `Bearer ${config.token}`,
           Accept: "application/vnd.api+json",
+          // A blocking Terraform apply can outlive an idle connection.
+          Connection: "close",
         },
         redirect: "error",
         signal: AbortSignal.timeout(30000),
