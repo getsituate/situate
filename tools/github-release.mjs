@@ -120,10 +120,6 @@ export function validateReleaseEvidence(evidence, identity) {
     dmg && archive && names.has(`${archive}.sig`),
     "Incomplete direct package set",
   );
-  assert(
-    sha.test(evidence.notesSha256),
-    "Missing reviewed release-note digest",
-  );
   if (evidence.producer !== undefined) {
     for (const key of ["runId", "runAttempt", "workflowId"])
       id(evidence.producer[key]);
@@ -288,12 +284,7 @@ function verifyContents(files, evidence, { metadataOnly = false } = {}) {
   return manifest;
 }
 
-export function createEvidenceFromDirectory({
-  identity,
-  directory,
-  notes,
-  producer,
-}) {
+export function createEvidenceFromDirectory({ identity, directory, producer }) {
   validateIdentity(identity);
   const manifestPath = join(directory, "manifest.json");
   assert(
@@ -335,13 +326,44 @@ export function createEvidenceFromDirectory({
     identity,
     platform: "macos",
     distribution: "direct",
-    notesSha256: releaseHash(Buffer.from(notes)),
     assets,
     ...(producer ? { producer } : {}),
   };
   validateReleaseEvidence(evidence, identity);
   verifyContents(files, evidence);
   return { evidence, files };
+}
+
+function releaseLocales(catalog) {
+  const current = catalog.releases.find(
+    (entry) => entry.version === catalog.installedVersion,
+  );
+  assert(current, "Catalog is missing the candidate release");
+  return current.locales;
+}
+
+const entryNotes = (entries) =>
+  entries.flatMap(({ title, paragraphs }) => [`### ${title}`, ...paragraphs]);
+
+const noteSections = {
+  important: "Important",
+  new: "Features",
+  changed: "Changes",
+  fixed: "Fixes",
+};
+
+export function notesForCatalog(catalog) {
+  const en = releaseLocales(catalog).en;
+  assert(en, "Catalog is missing English notes");
+  const entries = Object.groupBy(en.entries, ({ type }) => {
+    assert(Object.hasOwn(noteSections, type), "Unknown release note category");
+    return type;
+  });
+  return Object.entries(noteSections)
+    .flatMap(([type, heading]) =>
+      entries[type] ? [`## ${heading}`, ...entryNotes(entries[type])] : [],
+    )
+    .join("\n\n");
 }
 
 function marker(evidence, digest) {
@@ -424,7 +446,11 @@ export async function inspectGitHubOperation(
   const tag = await verifyTag(identity, github);
   const digest = evidence ? releaseHash(encoded(evidence)) : evidenceSha256;
   assert(sha.test(digest), "Supply exact evidence or its SHA-256");
-  if (evidence) validateReleaseEvidence(evidence, identity);
+  if (evidence) {
+    validateReleaseEvidence(evidence, identity);
+    if (evidenceSha256 !== undefined)
+      assert.equal(digest, evidenceSha256, "Retained release evidence differs");
+  }
   const matches = (await github.listReleases(identity.repository)).filter(
     (release) => release.tag_name === identity.tag,
   );
@@ -515,15 +541,6 @@ export async function inspectGitHubOperation(
     verifyRelease(release, identity, digest, true);
     assert.equal(missing.length, 0, "Completed release is missing assets");
   }
-  const notes = release.body.slice(
-    0,
-    release.body.lastIndexOf("\n\n<!-- situate-release:"),
-  );
-  assert.equal(
-    releaseHash(Buffer.from(notes)),
-    sealed.notesSha256,
-    "Reviewed notes differ",
-  );
   assert.equal(
     (await verifyTag(identity, github)).tagObject,
     tag.tagObject,
@@ -612,15 +629,6 @@ async function inspectReleaseData(
     files[expected.name] = data;
   }
   const manifest = verifyContents(files, sealed, { metadataOnly });
-  const publicNotes = release.body.slice(
-    0,
-    release.body.lastIndexOf("\n\n<!-- situate-release:"),
-  );
-  assert.equal(
-    releaseHash(Buffer.from(publicNotes)),
-    sealed.notesSha256,
-    "Reviewed notes differ",
-  );
   const receipt = {
     schemaVersion: 1,
     kind: "github-release-download",
@@ -704,11 +712,6 @@ export async function createGitHubRelease(
     identity.releaseId,
     undefined,
     "Creator resolves its reserved tag, not an unrelated release ID",
-  );
-  assert.equal(
-    releaseHash(Buffer.from(notes)),
-    evidence.notesSha256,
-    "Reviewed notes digest differs",
   );
   assert.deepEqual(
     Object.keys(files).sort(),

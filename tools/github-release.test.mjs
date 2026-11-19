@@ -44,7 +44,6 @@ function fixture(t) {
   const built = createEvidenceFromDirectory({
     identity,
     directory,
-    notes,
     producer,
   });
   const releases = [];
@@ -165,6 +164,48 @@ function fixture(t) {
   };
 }
 
+test("published notes can be edited without changing the retained evidence or release history", async (t) => {
+  const f = fixture(t);
+  const { identity } = await f.create();
+  const release = f.releases[0];
+  const asset = release.assets.find(
+    ({ name }) => name === "github-release.json",
+  );
+  const oldEvidence = json({
+    ...JSON.parse(f.blobs.get(asset.id)),
+    notesSha256: releaseHash(Buffer.from(f.notes)),
+  });
+  const evidenceSha256 = releaseHash(oldEvidence);
+  f.blobs.set(asset.id, oldEvidence);
+  asset.size = oldEvidence.length;
+  const comment = /<!-- situate-release:([A-Za-z0-9+/=]+) -->/;
+  const marker = JSON.parse(
+    Buffer.from(comment.exec(release.body)[1], "base64"),
+  );
+  marker.evidenceSha256 = evidenceSha256;
+  release.body = `## Fixes\n\nCorrected notes.\n\n<!-- situate-release:${Buffer.from(JSON.stringify(marker)).toString("base64")} -->`;
+
+  const inputs = { identity, evidenceSha256 };
+  const github = f.github;
+  const verified = await inspectGitHubRelease(inputs, { github });
+  assert.deepEqual(verified.evidenceBytes, oldEvidence);
+  assert.equal(
+    (await inspectGitHubOperation(inputs, { github })).state,
+    "complete",
+  );
+  const baseline = await readCompletedReleaseBaseline(f.directory, {
+    github,
+    execute: () => identity.sourceRevision,
+  });
+  assert.equal(baseline.identity.releaseId, identity.releaseId);
+
+  release.body = "Corrected notes without an identity marker.";
+  await assert.rejects(
+    inspectGitHubRelease(inputs, { github }),
+    /release identity marker/,
+  );
+});
+
 test("explicit draft recovery never creates another release and rejects mismatched or nonempty drafts", async (t) => {
   const f = fixture(t);
   const original = f.github.createDraft;
@@ -216,6 +257,7 @@ test("creation seals exact reserved inputs and publisher downloads only public b
     "private synthetic state",
   );
   const result = await f.create();
+  assert.equal(Object.hasOwn(result.evidence, "notesSha256"), false);
   assert.equal(result.identity.releaseId, 7);
   assert.equal(f.effects[0], "create");
   assert.equal(f.effects.at(-1), "finalize");
@@ -278,7 +320,6 @@ test("no effect without exact authorization, source, input and complete qualific
       createEvidenceFromDirectory({
         identity: f.identity,
         directory: f.directory,
-        notes: f.notes,
       }),
     /installation/,
   );
@@ -315,7 +356,6 @@ for (const mutation of [
   "draft",
   "asset",
   "extraAsset",
-  "notes",
   "evidence",
 ])
   test(`publisher rejects changed ${mutation}`, async (t) => {
@@ -335,8 +375,6 @@ for (const mutation of [
         size: 1,
         state: "uploaded",
       });
-    if (mutation === "notes")
-      f.releases[0].body = `unreviewed${f.releases[0].body}`;
     if (mutation === "evidence")
       f.blobs.set(
         f.releases[0].assets.find(
@@ -397,8 +435,17 @@ test("reconciliation never overwrites differing draft bytes", async (t) => {
     throw new Error("Interrupted");
   };
   await assert.rejects(f.create(), /Interrupted/);
-  f.blobs.set(f.releases[0].assets[0].id, Buffer.from("different"));
+  const release = f.releases[0];
+  const body = release.body;
   const effects = [...f.effects];
+  release.body = `Edited before publishing\n\n${body}`;
+  await assert.rejects(
+    f.create({ reconcile: true }),
+    /Draft notes or identity changed/,
+  );
+  assert.deepEqual(f.effects, effects);
+  release.body = body;
+  f.blobs.set(release.assets[0].id, Buffer.from("different"));
   await assert.rejects(f.create({ reconcile: true }), /differs/);
   assert.deepEqual(f.effects, effects);
 });
