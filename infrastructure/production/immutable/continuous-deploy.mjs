@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { isIP } from "node:net";
 import { join } from "node:path";
@@ -132,7 +132,45 @@ async function retryObservation(observe, repeats = 18, interval = 5000) {
   }
 }
 
-function liveDriver(root, revision, inventory, credentials, qualification) {
+function qualifyImage(root, revision, token, event) {
+  const path = join(root, "qualification.json");
+  const builder = fileURLToPath(
+    new URL("github-rehearsal.py", import.meta.url),
+  );
+  const result = spawnSync(
+    "python3",
+    ["-B", builder, "qualify-production", path],
+    {
+      cwd: repository,
+      env: { ...childEnvironment(), ...event, HCLOUD_TOKEN: token },
+      stdio: ["ignore", "inherit", "inherit"],
+      timeout: 1_800_000,
+    },
+  );
+  ensure(
+    result.status === 0 && !result.error,
+    "Image qualification failed; inspect the temporary Hetzner resources for this run.",
+  );
+  const bytes = readFileSync(path);
+  const value = JSON.parse(bytes);
+  ensure(
+    value.sourceRevision === revision &&
+      id.test(value.imageId) &&
+      value.schemaVersion === 1 &&
+      [
+        "offlineBoot",
+        "storageFence",
+        "httpsAndRedirects",
+        "publicationAndFailback",
+        "independentRestore",
+      ].every((check) => value.gates?.[check] === true),
+    "Image qualification does not match the deployed revision.",
+  );
+  return { value, hash: hash(bytes) };
+}
+
+function liveDriver(root, revision, inventory, credentials, event) {
+  let qualification;
   const old = inventory.traffic_host;
   const generation = `g${revision.slice(0, 15)}`;
   const disks = inventory.publication_volumes;
@@ -312,15 +350,6 @@ function liveDriver(root, revision, inventory, credentials, qualification) {
     const response = await provider(`volumes/${host.volumeId}`);
     ensure(response.ok, "Hetzner did not confirm the publication volume.");
     return (await response.json()).volume.server;
-  }
-
-  function prepareStage(files) {
-    const proofFile = join(files, "qualification.json");
-    writeFileSync(proofFile, qualification.bytes, {
-      mode: 0o600,
-      flag: "wx",
-      flush: true,
-    });
   }
 
   function variables(step, j) {
@@ -534,7 +563,13 @@ function liveDriver(root, revision, inventory, credentials, qualification) {
         }
         return { previous, deletedFirewallMembers };
       }
-      if (step === "stage") prepareStage(files);
+      if (step === "stage")
+        qualification = qualifyImage(
+          files,
+          revision,
+          credentials.env.HCLOUD_TOKEN,
+          event,
+        );
       if (phaseName[step]) return phase(step, j, files);
       if (step === "prepare") {
         const token = json(join(files, "stage.tfvars.json")).enrollment_tokens[
@@ -695,24 +730,15 @@ async function deploy(root, env, revision, gate) {
     latest === revision,
     "This is no longer the latest main revision. The newer workflow owns rollout selection.",
   );
-  const bytes = Buffer.from(env.HOSTING_QUALIFICATION || "");
-  ensure(
-    bytes.length > 0 && bytes.length <= 16384,
-    "Supply the approved image qualification for this revision.",
-  );
-  const value = JSON.parse(bytes);
-  ensure(
-    value.sourceRevision === revision &&
-      id.test(value.imageId) &&
-      value.schemaVersion === 1 &&
-      [
-        "offlineBoot",
-        "storageFence",
-        "httpsAndRedirects",
-        "publicationAndFailback",
-        "independentRestore",
-      ].every((gate) => value.gates?.[gate] === true),
-    "The runner requires an approved image qualification for the merged revision.",
+  const event = Object.fromEntries(
+    [
+      "GITHUB_REPOSITORY",
+      "GITHUB_REF",
+      "GITHUB_SHA",
+      "GITHUB_EVENT_NAME",
+      "GITHUB_RUN_ID",
+      "GITHUB_RUN_ATTEMPT",
+    ].map((name) => [name, env[name]]),
   );
   credentials.publisherKey = keyFile(
     root,
@@ -722,11 +748,7 @@ async function deploy(root, env, revision, gate) {
   credentials.ca = keyFile(root, env.HOSTING_HOST_CA_KEY, "host-ca");
   await rollOut(
     root,
-    liveDriver(root, revision, inventory, credentials, {
-      bytes,
-      value,
-      hash: hash(bytes),
-    }),
+    liveDriver(root, revision, inventory, credentials, event),
     gate,
   );
   console.log("Production replacement verified and predecessor retired.");

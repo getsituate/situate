@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and exercise an immutable snapshot in an otherwise empty test project."""
+"""Qualify an immutable snapshot using temporary hosts and synthetic data."""
 import http.client
 import ipaddress
 import json
@@ -115,9 +115,10 @@ class Cloud:
         require(not result.get('meta', {}).get('pagination', {}).get('next_page'), 'Refusing an unexpectedly large inventory.')
         return result[self.collections[kind]]
 
-    def preflight(self):
+    def preflight(self, production=False):
         for kind in self.collections:
-            require(not self.list(kind), f'Test project is not empty ({kind}); nothing was provisioned.')
+            require(not self.list(kind, scoped=production),
+                    f'Qualification inventory is not empty ({kind}); nothing was provisioned.')
         kind = self.call('GET', 'server_types?name=cx23')['server_types']
         price = next((p for item in kind for p in item['prices'] if p['location'] == LOCATION), None)
         require(price and float(price['price_hourly']['gross']) <= 0.02, 'Test VM exceeds the permitted hourly rate.')
@@ -150,22 +151,27 @@ class Cloud:
         if result and result.get('action'):
             self.wait_action(result['action'])
 
-    def cleanup(self):
+    def cleanup(self, *, production=False, keep_image=None):
         valid = {'servers': {'builder', 'old', 'new'}, 'volumes': {'publication', 'restore'},
                  'firewalls': {'builder', 'runtime'}, 'images': {'image'}, 'primary_ips': set()}
         problems = []
+        keep_ids = {'images': {keep_image}} if keep_image is not None else {}
         for kind in ('servers', 'volumes', 'images', 'firewalls', 'primary_ips'):
             for row in self.list(kind, scoped=True):
                 label = row.get('name') or row.get('description')
                 if row.get('labels', {}).get('rehearsal') != self.scope or label not in {f'{self.scope}-{part}' for part in valid[kind]}:
                     problems.append(kind)
                     continue
+                if row['id'] in keep_ids.get(kind, ()):
+                    continue
                 try:
                     self.drop(kind, row['id'])
                 except (OSError, RehearsalError):
                     problems.append(kind)
-        leftovers = [kind for kind in self.collections if self.list(kind)]
-        require(not (problems or leftovers), 'Test-project cleanup is incomplete; inspect the rehearsal inventory.')
+        leftovers = [kind for kind in self.collections
+                     if any(row['id'] not in keep_ids.get(kind, ())
+                            for row in self.list(kind, scoped=production))]
+        require(not (problems or leftovers), 'Qualification cleanup is incomplete; inspect the run-scoped inventory.')
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -421,30 +427,47 @@ def exercise(cloud, work, revision):
     cloud.action('volumes', publication, 'detach')
     cloud.drop('servers', old.id)
     require(cloud.call('GET', f'servers/{old.id}', missing=True) is None, 'Hetzner did not confirm predecessor retirement.')
+    return image
+
+
+def qualify(cloud, revision, receipt_path=None):
+    production = receipt_path is not None
+    cloud.preflight(production=production)
+    image = None
+    try:
+        with tempfile.TemporaryDirectory(prefix='situate-hosting-') as directory:
+            image = exercise(cloud, Path(directory), revision)
+    finally:
+        cloud.cleanup(production=production, keep_image=image if production else None)
+    if production:
+        receipt = {'schemaVersion': 1, 'imageId': str(image), 'sourceRevision': revision,
+                   'gates': dict.fromkeys(('offlineBoot', 'storageFence', 'httpsAndRedirects',
+                                          'publicationAndFailback', 'independentRestore'), True)}
+        with receipt_path.open('x') as output:
+            json.dump(receipt, output)
+    print('Snapshot boot, volume handoff, failback, restore and predecessor retirement verified.', flush=True)
 
 
 def main():
     os.umask(0o077)
+    args = sys.argv[1:]
+    production = len(args) == 2 and args[0] == 'qualify-production'
+    require(production or args in ([], ['cleanup']), 'Expected no arguments, cleanup, or qualify-production RECEIPT.')
+    branch = 'main' if production else 'immutable-infrastructure'
     require(os.environ.get('GITHUB_REPOSITORY') == 'getsituate/situate' and
-            os.environ.get('GITHUB_REF') == 'refs/heads/immutable-infrastructure' and
-            os.environ.get('GITHUB_EVENT_NAME') in {'push', 'workflow_dispatch'}, 'Use only the protected rehearsal branch.')
+            os.environ.get('GITHUB_REF') == f'refs/heads/{branch}' and
+            os.environ.get('GITHUB_EVENT_NAME') in {'push', 'workflow_dispatch'}, 'Unexpected qualification repository or ref.')
     run_id = os.environ.get('GITHUB_RUN_ID', '')
     attempt = os.environ.get('GITHUB_RUN_ATTEMPT', '')
     require(re.fullmatch('[0-9]{1,16}', run_id) and re.fullmatch('[0-9]{1,3}', attempt), 'Invalid GitHub run identity.')
-    cloud = Cloud(os.environ.get('HCLOUD_REHEARSAL_TOKEN'), f'sit-ci-{run_id}-{attempt}')
-    if sys.argv[1:] == ['cleanup']:
+    scope = f'sit-prod-{run_id}-{attempt}' if production else f'sit-ci-{run_id}-{attempt}'
+    cloud = Cloud(os.environ.get('HCLOUD_TOKEN' if production else 'HCLOUD_REHEARSAL_TOKEN'), scope)
+    if args == ['cleanup']:
         cloud.cleanup()
         return
-    require(not sys.argv[1:], 'Expected no arguments or cleanup.')
     revision = os.environ.get('GITHUB_SHA', '')
     require(re.fullmatch('[a-f0-9]{40}', revision) and run(['git', 'rev-parse', 'HEAD']).stdout.decode().strip() == revision, 'Checkout does not match GitHub revision.')
-    cloud.preflight()
-    try:
-        with tempfile.TemporaryDirectory(prefix='situate-hosting-') as directory:
-            exercise(cloud, Path(directory), revision)
-    finally:
-        cloud.cleanup()
-    print('Snapshot boot, volume handoff, failback, restore and predecessor retirement verified. Test project is empty.', flush=True)
+    qualify(cloud, revision, Path(args[1]) if production else None)
 
 
 if __name__ == '__main__':
