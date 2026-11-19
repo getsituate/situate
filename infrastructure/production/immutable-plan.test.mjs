@@ -233,6 +233,46 @@ test("detach only accepts firewall drift caused by adding the verified candidate
   );
 });
 
+test("traffic accepts only the expected provider-side attachment observation", () => {
+  const base = plan(
+    row(host, "no-op", candidate),
+    row(disk, "no-op", volume),
+    row(current, "no-op", active),
+    row(link, "no-op", lease),
+    ...records(),
+  );
+  const before = { ...volume, server_id: null, size: 50 };
+  const observed = { ...before, server_id: 516 };
+  const withDrift = (after) => ({
+    ...base,
+    resource_drift: [row(disk, "update", after, before)],
+  });
+  assert.equal(
+    checkImmutablePlan(withDrift(observed), "traffic", undefined, operation),
+    2,
+  );
+  assert.throws(
+    () =>
+      checkImmutablePlan(
+        withDrift({ ...observed, server_id: 517 }),
+        "traffic",
+        undefined,
+        operation,
+      ),
+    /free of drift/,
+  );
+  assert.throws(
+    () =>
+      checkImmutablePlan(
+        withDrift({ ...observed, size: 51 }),
+        "traffic",
+        undefined,
+        operation,
+      ),
+    /free of drift/,
+  );
+});
+
 test("routing and partial-DNS reconciliation require both final records on the attached host", () => {
   const base = [
     row(host, "no-op", candidate),

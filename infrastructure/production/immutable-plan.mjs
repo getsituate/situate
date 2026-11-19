@@ -16,6 +16,28 @@ const volume = /^hcloud_volume\.publication\["([a-z][a-z0-9-]{0,19})"\]$/;
 const attachment = "hcloud_volume_attachment.publication[0]";
 const apex = ["hcloud_zone_rrset.apex_ipv4", "hcloud_zone_rrset.apex_ipv6"];
 
+function allowsAttachmentDrift(drift, phase, operation, vars) {
+  if (!operation || !["attach", "traffic"].includes(phase)) return false;
+  const name = vars?.publication_volume?.value;
+  if (
+    !generation.test(name) ||
+    drift.address !== `hcloud_volume.publication["${name}"]` ||
+    !isDeepStrictEqual(drift.change?.actions, ["update"])
+  )
+    return false;
+  const { before, after } = drift.change;
+  if (!before || !after || String(before.id) !== operation.volumeId)
+    return false;
+  const { server_id: prior, ...old } = before;
+  const { server_id: current, ...next } = after;
+  return (
+    isDeepStrictEqual(old, next) &&
+    (phase === "attach"
+      ? String(prior) === operation.previousId && current === null
+      : prior === null && String(current) === operation.candidateId)
+  );
+}
+
 function allowsFirewallDrift(drift, phase, operation) {
   if (!drift.length) return true;
   if (
@@ -68,7 +90,14 @@ export function checkImmutablePlan(plan, phase, receiptBytes, operation) {
     plan.applyable === true &&
     plan.errored === false &&
     !plan.deferred_changes?.length &&
-    allowsFirewallDrift(plan.resource_drift ?? [], phase, operation) &&
+    (allowsFirewallDrift(plan.resource_drift ?? [], phase, operation) ||
+      (plan.resource_drift?.length === 1 &&
+        allowsAttachmentDrift(
+          plan.resource_drift[0],
+          phase,
+          operation,
+          plan.variables,
+        ))) &&
     Array.isArray(
       plan.resource_changes,
     ), "plan must be complete, applyable and free of drift");

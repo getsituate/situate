@@ -582,7 +582,7 @@ function liveDriver(root, revision, inventory, credentials, qualification) {
       if (step === "verifyPublic") {
         await retryObservation(
           () => verifyHttps(candidate, j.completed.fence.proof, previous, true),
-          8,
+          33,
           30000,
         );
         ssh(candidate.ipv4, "true", { key: publisherKey, login: "deploy" });
