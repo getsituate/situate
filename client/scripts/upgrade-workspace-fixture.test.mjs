@@ -154,7 +154,16 @@ test("the upgrade launches the installed updater and verifies cancellation befor
     step.click?.name === "Install and restart" ? [index] : [],
   );
   const cancellation = steps.findIndex((step) => step.click?.name === "Cancel");
+  const notices = steps.flatMap((step, index) =>
+    step.click?.name === "Update available" ? [index] : [],
+  );
   assert.equal(indices.length, 4);
+  assert.equal(notices.length, 2);
+  assert.ok(
+    notices[0] < indices[0] &&
+      cancellation < notices[1] &&
+      notices[1] < indices[2],
+  );
   assert.ok(indices[1] < cancellation && cancellation < indices[2]);
   assert.ok(
     steps.some(

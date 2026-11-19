@@ -39,8 +39,7 @@ export function upgradeWorkspaceJourney({ actions, verify, writable }) {
     await click({ role: "AXMenuItem", name: "Edit source", window });
   };
   const updates = async () => {
-    await navigate("Settings");
-    await click(button("Updates"));
+    await click(button("Update available"));
     await expect(text("The update is verified and ready to install."));
     await click(button("Install and restart"));
     await expect(text("Restart to update Situate?"));
