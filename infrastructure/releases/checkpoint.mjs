@@ -24,6 +24,9 @@ import {
 } from "../../tools/release-checkpoint.mjs";
 
 export function checkpointProgram() {
+  const listener = Buffer.from(
+    readFileSync(new URL("./qualification-host.py", import.meta.url)),
+  ).toString("base64");
   return (
     ["remote.py", "allocator.py", "checkpoint.py"]
       .map((name) =>
@@ -32,7 +35,12 @@ export function checkpointProgram() {
           "if False:",
         ),
       )
-      .join("\n") + "\ncheckpoint_main()\n"
+      .join("\n") +
+    `\nqualification_listener = {'__name__': 'qualification_listener'}
+exec(base64.b64decode('${listener}'), qualification_listener)
+qualification_listener['ROOT'] = ROOT / '.qualification-host'
+checkpoint_main()
+`
   );
 }
 export function createHostCheckpointStore(

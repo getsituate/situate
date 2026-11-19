@@ -223,6 +223,18 @@ def inspect_family(operation_id):
     return {'operations': operations}
 
 
+def read_family(operation_id):
+    ancestors(ROOT)
+    info = ROOT.lstat()
+    require(info.st_uid == os.getuid() and info.st_mode & 0o077 == 0,
+            'Unsafe qualification resource root')
+    regular(ROOT / 'lock')
+    fd = os.open(ROOT / 'lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as lock:
+        fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        return inspect_family(operation_id)
+
+
 def perform(action, request, source=None):
     nonce, config = validate(request)
     require(os.getuid() == HOST_UID, 'Qualification host requires uid 1000')

@@ -362,10 +362,24 @@ def checkpoint_main():
             attempts = {}
             for value in state['checkpoints']:
                 if value['kind'] == 'runtime-authorization':
-                    attempt = checkpoint_read(directory / value['checkpointId'] / 'operation.json').get('qualificationAttempt', {})
-                    attempts.setdefault(attempt.get('authorizationDigest'), set()).add(attempt.get('status'))
-            if any(values != {'intent', 'passed'} for values in attempts.values()):
-                raise ValueError('Qualification family contains interrupted or unknown work')
+                    attempt_dir = directory / value['checkpointId']
+                    attempt = checkpoint_read(attempt_dir / 'operation.json').get('qualificationAttempt', {})
+                    nonce = checkpoint_read(attempt_dir / 'runtime-authorization.json')['routeNonce']
+                    attempts.setdefault(nonce, set()).add(attempt.get('status'))
+            selected_nonce = checkpoint_read(selected_directory / 'runtime-authorization.json')['routeNonce']
+            if attempts.get(selected_nonce) != {'intent', 'passed'}:
+                raise ValueError('Selected qualification does not have an exact intent and pass')
+            incomplete = {nonce for nonce, statuses in attempts.items() if statuses != {'intent', 'passed'}}
+            if incomplete:
+                if any(attempts[nonce] not in ({'intent'}, {'intent', 'unknown'}) for nonce in incomplete):
+                    raise ValueError('Qualification family contains invalid attempt history')
+                family = qualification_listener['read_family'](identity['operationId'])['operations']
+                cleaned = {member['operationNonce'] for member in family
+                           if member['status'] in ('cleaned', 'cleaned-retained')
+                           and member.get('uncertain', False) is False
+                           and member['containerRunning'] is False}
+                if len(cleaned) != len(family) or not incomplete <= cleaned:
+                    raise ValueError('Unresolved private listeners block qualified restoration')
             recovery = checkpoint_read(selected_directory / 'original-recovery-authorization.json')
             build = recovery.get('descriptor')
             if not build or build.get('kind') != 'build' or build not in state['checkpoints']:

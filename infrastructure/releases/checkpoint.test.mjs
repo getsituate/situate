@@ -61,10 +61,15 @@ function host(
     records.map((record) => `${JSON.stringify(record)}\n`).join(""),
     { mode: 0o600 },
   );
-  const program = checkpointProgram().replace(
-    "ROOT = Path('/opt/situate')",
-    `ROOT = Path(${JSON.stringify(storage)})`,
-  );
+  const program = checkpointProgram()
+    .replace(
+      "ROOT = Path('/opt/situate')",
+      `ROOT = Path(${JSON.stringify(storage)})`,
+    )
+    .replace(
+      "\ncheckpoint_main()",
+      "\nqualification_listener['owned_container'] = lambda state: None\ncheckpoint_main()",
+    );
   const store = createHostCheckpointStore(
     {},
     {
@@ -395,6 +400,75 @@ test("qualified checkpoints survive loss of both producer roots and continue fro
       .sha256,
     digest(receiptBytes),
   );
+  const { authorizationDigest: _, ...fields } = authorization;
+  const priorFields = {
+    ...fields,
+    routeNonce: "qualification-incomplete",
+    hostInspectionDigest: state.inspectionDigest,
+  };
+  const prior = { ...priorFields, authorizationDigest: digest(priorFields) };
+  for (const status of ["intent", "unknown"]) {
+    await f.store.commit(
+      createCheckpoint({
+        ...input,
+        kind: "runtime-authorization",
+        operation: {
+          ...input.operation,
+          qualificationAttempt: {
+            status,
+            authorizationDigest: prior.authorizationDigest,
+          },
+        },
+        authorization: prior,
+        ...{ recoveryAuthorization: originalRecovery, inspection: inspected },
+      }),
+    );
+  }
+  const after = await f.store.inspect({ plan: input.plan });
+  const restore = (destination) =>
+    f.store.restoreQualified({
+      plan: input.plan,
+      checkpointId: qualified.checkpointId,
+      inspectionDigest: after.inspectionDigest,
+      destination,
+    });
+  await assert.rejects(restore(join(durable.root, "missing-listener")));
+  const listener = join(f.storage, ".qualification-host");
+  const token = digest(Buffer.from(prior.routeNonce));
+  const entry = join(listener, token);
+  mkdirSync(entry, { recursive: true, mode: 0o700 });
+  writeFileSync(join(listener, "lock"), "", { mode: 0o600 });
+  const listenerState = {
+    operationId: input.plan.operation,
+    operationNonce: prior.routeNonce,
+    config: {
+      caddyContainer: "production",
+      hostname: "example.com",
+      hostPort: 8443,
+      publicFeedSha256: "0".repeat(64),
+      feedPath: "releases/current/update.json",
+      certificateMount: "/data",
+      certificatePath: "certificate.crt",
+      keyPath: "certificate.key",
+    },
+    status: "serving",
+    identityPath: `/releases/.qualification/${token}/identity.json`,
+    identitySha256: "1".repeat(64),
+    imageId: "image",
+    certificateVolume: "volume",
+    containerName: `situate-qualification-${token.slice(0, 32)}`,
+  };
+  const stateFile = join(entry, "state.json");
+  const writeState = () =>
+    writeFileSync(stateFile, JSON.stringify(listenerState), { mode: 0o600 });
+  writeState();
+  await assert.rejects(restore(join(durable.root, "serving-listener")));
+  listenerState.status = "cleaned-retained";
+  listenerState.uncertain = true;
+  writeState();
+  await assert.rejects(restore(join(durable.root, "uncertain-listener")));
+  listenerState.uncertain = false;
+  writeState();
   rmSync(input.root, { recursive: true, force: true });
   rmSync(runner.root, { recursive: true, force: true });
   assert.equal(existsSync(input.root), false);
