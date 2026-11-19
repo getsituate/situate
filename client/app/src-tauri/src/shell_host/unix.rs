@@ -7,7 +7,7 @@ use tokio::process::{Child, Command};
 use tokio::time::{Instant, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
-const DRAIN_TIMEOUT: Duration = Duration::from_millis(500);
+const CLEANUP_TIMEOUT: Duration = Duration::from_millis(500);
 
 struct OwnedGroup {
     child: Child,
@@ -15,17 +15,27 @@ struct OwnedGroup {
 }
 
 impl OwnedGroup {
-    fn terminate(&mut self) -> Result<(), ShellError> {
-        if let Some(group) = self.group {
-            // The unreaped leader pins the group ID until after this signal.
-            let result = unsafe { libc::kill(-group, libc::SIGKILL) };
-            if result != 0 {
-                let error = std::io::Error::last_os_error().raw_os_error();
-                if error != Some(libc::ESRCH) && !zombie_only_group(group, error) {
-                    return Err(ShellError::WaitFailed);
+    fn signal_termination(&mut self) -> Result<(), ShellError> {
+        let Some(group) = self.group else {
+            return Ok(());
+        };
+        // Keep the leader unreaped so the group ID cannot be reused between signals.
+        if unsafe { libc::kill(-group, libc::SIGKILL) } == 0 {
+            // Darwin can miss a concurrent fork; keep the group for another pass.
+            if !cfg!(target_os = "macos") {
+                self.group = None;
+            }
+            return Ok(());
+        }
+        match std::io::Error::last_os_error().raw_os_error() {
+            Some(libc::ESRCH) => self.group = None,
+            #[cfg(target_os = "macos")]
+            Some(libc::EPERM) => {
+                if zombie_only_group(group) {
+                    self.group = None;
                 }
             }
-            self.group = None;
+            _ => return Err(ShellError::WaitFailed),
         }
         Ok(())
     }
@@ -57,19 +67,15 @@ impl OwnedGroup {
 
 impl Drop for OwnedGroup {
     fn drop(&mut self) {
-        let _ = self.terminate();
+        let _ = self.signal_termination();
         // kill_on_drop also arranges asynchronous reaping if the caller abandons
         // this future. Normal cancellation awaits cleanup before reconciliation.
     }
 }
 
 #[cfg(target_os = "macos")]
-fn zombie_only_group(group: libc::pid_t, error: Option<i32>) -> bool {
-    // Darwin reports EPERM when no live group member can receive the signal.
-    // Do not mistake a live, unsignalable member for an already exited group.
-    if error != Some(libc::EPERM) {
-        return false;
-    }
+fn zombie_only_group(group: libc::pid_t) -> bool {
+    // Darwin can report EPERM for zombies as well as live, unsignalable members.
     let mut pids = [0 as libc::pid_t; 4096];
     let capacity = std::mem::size_of_val(&pids) as libc::c_int;
     let bytes = unsafe { libc::proc_listpgrppids(group, pids.as_mut_ptr().cast(), capacity) };
@@ -99,11 +105,6 @@ fn zombie_only_group(group: libc::pid_t, error: Option<i32>) -> bool {
         }
     }
     true
-}
-
-#[cfg(not(target_os = "macos"))]
-fn zombie_only_group(_group: libc::pid_t, _error: Option<i32>) -> bool {
-    false
 }
 
 #[derive(Default)]
@@ -212,15 +213,20 @@ pub(super) async fn execute(
     };
     // A successful leader exit does not permit its background children to keep
     // running after the mutation window or hold the pipe readers open forever.
-    owned.terminate()?;
-    let drain_deadline = Instant::now() + DRAIN_TIMEOUT;
-    while !out.eof || !err.eof {
+    owned.signal_termination()?;
+    let cleanup_deadline = Instant::now() + CLEANUP_TIMEOUT;
+    poll.reset();
+    while owned.group.is_some() || !out.eof || !err.eof {
         tokio::select! {
             biased;
-            _ = tokio::time::sleep_until(drain_deadline) => break,
+            _ = tokio::time::sleep_until(cleanup_deadline) => break,
+            _ = poll.tick(), if owned.group.is_some() => owned.signal_termination()?,
             _ = read_chunk(&mut stdout, &mut out, request.output_limit_bytes), if !out.eof => {},
             _ = read_chunk(&mut stderr, &mut err, request.output_limit_bytes), if !err.eof => {},
         }
+    }
+    if owned.group.is_some() {
+        return Err(ShellError::WaitFailed);
     }
     let status = tokio::time::timeout(Duration::from_secs(1), owned.child.wait())
         .await
