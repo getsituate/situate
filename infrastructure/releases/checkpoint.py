@@ -191,11 +191,20 @@ def checkpoint_state(identity, directory):
             raise ValueError('Checkpoint identity differs')
         checkpoint_verify(child, descriptor)
         checkpoints.append(descriptor)
-    unresolved_publication = False
+    github_stages = []
     for descriptor in checkpoints:
         snapshot = checkpoint_read(directory / descriptor['checkpointId'] / 'operation.json')
-        if any(stage.get('name') == 'github' for stage in snapshot.get('stages', [])):
-            unresolved_publication = True
+        stages = [stage for stage in snapshot.get('stages', []) if stage.get('name') == 'github']
+        if stages:
+            github_stages.append({'stages': stages, 'journal': snapshot.get('publicationJournal')})
+    draft_intent = None
+    if len(github_stages) == 2:
+        journals = [item['journal'] for item in github_stages if item['journal'] is not None]
+        stages = [item['stages'] for item in github_stages]
+        if (len(journals) == 1 and journals[0].get('state') == 'creating'
+                and 'releaseId' not in journals[0] and stages[0] == stages[1]
+                and len(stages[0]) == 1 and stages[0][0].get('status') == 'running'):
+            draft_intent = {'journal': journals[0], 'stage': stages[0][0]}
     successful_notary = len(notary['operations']) >= 2
     for child in notary['operations']:
         records = child['records']
@@ -218,7 +227,9 @@ def checkpoint_state(identity, directory):
                     or (record['phase'] != 'intent' and record.get('submissionId') != submissions[0]['submissionId'])):
                 successful_notary = False
     state = {'coordination': coordination, 'notarization': notary, 'terminalNotary': terminal and successful_notary,
-             'publication': publication, 'unresolvedPublication': unresolved_publication, 'checkpoints': checkpoints}
+             'publication': publication, 'unresolvedPublication': bool(github_stages), 'checkpoints': checkpoints}
+    if draft_intent is not None:
+        state['draftIntent'] = draft_intent
     state['inspectionDigest'] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     return state
 
@@ -343,7 +354,11 @@ def checkpoint_main():
             return
         if action not in ('restore', 'restore-qualified') or request.get('inspectionDigest') != state['inspectionDigest']:
             raise ValueError('Restore requires exact fresh inspection')
-        if state['coordination']['active'] != identity or not state['terminalNotary'] or state['publication'] is not None or state['unresolvedPublication']:
+        draft_id = request.get('draftId')
+        reconcile_draft = (action == 'restore-qualified' and type(draft_id) is int and draft_id > 0
+                           and state.get('draftIntent') is not None)
+        if (state['coordination']['active'] != identity or not state['terminalNotary'] or state['publication'] is not None
+                or (state['unresolvedPublication'] and not reconcile_draft)):
             raise ValueError('Restore blocked by claim or unresolved external work')
         kind = 'build' if action == 'restore' else 'runtime-authorization'
         selected = [item for item in state['checkpoints'] if item['checkpointId'] == request['checkpointId'] and item['kind'] == kind]

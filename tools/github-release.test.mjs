@@ -89,7 +89,8 @@ function fixture(t) {
       const release = {
         ...body,
         id: 7,
-        html_url: `https://github.com/${repo}/releases/tag/${body.tag_name}`,
+        url: `https://api.github.com/repos/${repo}/releases/7`,
+        html_url: `https://github.com/${repo}/releases/tag/untagged-${"e".repeat(20)}`,
         assets: [],
       };
       releases.push(release);
@@ -110,6 +111,7 @@ function fixture(t) {
     async finalize() {
       effects.push("finalize");
       releases[0].draft = false;
+      releases[0].html_url = `https://github.com/${identity.repository}/releases/tag/${identity.tag}`;
       releases[0].published_at = "2026-11-13T00:00:00Z";
       return structuredClone(releases[0]);
     },
@@ -162,6 +164,29 @@ function fixture(t) {
     create,
   };
 }
+
+test("explicit draft recovery never creates another release and rejects mismatched or nonempty drafts", async (t) => {
+  const f = fixture(t);
+  const original = f.github.createDraft;
+  f.github.createDraft = async (...args) => {
+    await original(...args);
+    throw new Error("lost draft response");
+  };
+  await assert.rejects(f.create(), /lost draft response/);
+  const request = (expectedDraftId) =>
+    f.create({ reconcile: true, expectedDraftId });
+  await assert.rejects(request(8), /exact empty draft/);
+  f.releases[0].assets.push({ name: "unverified" });
+  await assert.rejects(request(7), /exact empty draft/);
+  f.releases[0].assets.pop();
+  f.releases[0].url = "https://api.github.com/repos/foreign/project/releases/7";
+  await assert.rejects(request(7), /Release repository differs/);
+  f.releases[0].url = `https://api.github.com/repos/${f.identity.repository}/releases/7`;
+  assert.deepEqual(f.effects, ["create"]);
+  assert.equal((await request(7)).identity.releaseId, 7);
+  assert.equal(f.effects.filter((effect) => effect === "create").length, 1);
+  assert.equal(f.effects.at(-1), "finalize");
+});
 
 test("creation seals exact reserved inputs and publisher downloads only public bytes", async (t) => {
   const f = fixture(t);

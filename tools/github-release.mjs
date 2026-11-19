@@ -388,9 +388,16 @@ function verifyRelease(release, identity, evidenceDigest, complete) {
   id(release.id);
   if (identity.releaseId !== undefined)
     assert.equal(release.id, identity.releaseId, "Wrong release ID");
-  assert.equal(
-    release.html_url,
-    `https://github.com/${identity.repository}/releases/tag/${identity.tag}`,
+  const githubPage = `https://github.com/${identity.repository}/releases/tag/`;
+  assert(
+    release.html_url === githubPage + identity.tag ||
+      (release.draft === true &&
+        release.url ===
+          `https://api.github.com/repos/${identity.repository}/releases/${release.id}` &&
+        release.html_url?.startsWith(githubPage) &&
+        /^untagged-[a-f0-9]{20}$/.test(
+          release.html_url.slice(githubPage.length),
+        )),
     "Release repository differs",
   );
   assert.equal(release.tag_name, identity.tag, "Release tag differs");
@@ -685,7 +692,12 @@ function saveJournal(path, journal) {
 
 export async function createGitHubRelease(
   { identity, files, evidence, notes, journalPath },
-  { github = githubAdapter(), authorize, reconcile = false } = {},
+  {
+    github = githubAdapter(),
+    authorize,
+    reconcile = false,
+    expectedDraftId,
+  } = {},
 ) {
   validateReleaseEvidence(evidence, identity);
   assert.equal(
@@ -769,6 +781,20 @@ export async function createGitHubRelease(
   );
   assert(releases.length <= 1, "Duplicate releases for reserved tag");
   let release = releases[0];
+  if (expectedDraftId !== undefined) {
+    id(expectedDraftId);
+    assert(
+      reconcile &&
+        journal.state === "creating" &&
+        journal.releaseId === undefined &&
+        release?.id === expectedDraftId &&
+        release.draft === true &&
+        release.target_commitish === identity.sourceRevision &&
+        Array.isArray(release.assets) &&
+        release.assets.length === 0,
+      "Draft creation recovery requires the exact empty draft",
+    );
+  }
   if (!release) {
     assert(!journal.releaseId, "Recorded release disappeared");
     release = await effect("creating", () =>
@@ -784,9 +810,11 @@ export async function createGitHubRelease(
   }
   if (journal.releaseId !== undefined)
     assert.equal(release.id, journal.releaseId, "Recovery release ID differs");
+  verifyRelease(release, identity, digest, false);
+  if (release.draft)
+    assert.equal(release.body, body, "Draft notes or identity changed");
   journal.releaseId = release.id;
   saveJournal(journalPath, journal);
-  verifyRelease(release, identity, digest, false);
   if (!release.draft) {
     const result = await inspectGitHubRelease(
       { identity: { ...identity, releaseId: release.id }, evidence },
@@ -796,7 +824,6 @@ export async function createGitHubRelease(
     saveJournal(journalPath, journal);
     return result;
   }
-  assert.equal(release.body, body, "Draft notes or identity changed");
   const expected = [
     ...evidence.assets,
     { name: EVIDENCE_ASSET, size: evidenceBytes.length, sha256: digest },
