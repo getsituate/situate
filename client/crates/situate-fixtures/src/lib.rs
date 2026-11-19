@@ -1,12 +1,11 @@
 mod conversation;
+mod full_workspace;
 pub use conversation::FixtureConversations;
 
 use serde_json::json;
 use situate_core::{
     ConversationRecord,
     ai_storage::Storage,
-    content::{ContentStore, SaveOutcome, WORKING_METHOD_PATH},
-    onboarding::{OnboardingRecord, OnboardingStorage, Step},
     workspaces::{self, Location},
 };
 use std::path::Path;
@@ -38,69 +37,13 @@ pub fn create(scenario: &str, parent: &Path, name: &str) -> Result<Location, Str
         return Err("Unknown workspace template".into());
     }
     let location = workspaces::create(parent, name)?;
-    seed_used_workspace(&location).map_err(|error| {
+    full_workspace::seed(&location).map_err(|error| {
         format!(
             "Workspace created at {}, but setup failed: {error}",
             location.handle
         )
     })?;
     Ok(location)
-}
-
-fn seed_used_workspace(location: &Location) -> Result<(), String> {
-    let root = Path::new(&location.handle);
-    let _lease = situate_migrations::prepare(root, situate_core::application_version())
-        .map_err(|error| error.to_string())?;
-    let mut files = ContentStore::open(root).map_err(|error| error.to_string())?;
-    for (path, markdown) in [
-        (
-            "Weekly review.md",
-            "# Weekly review\n\nReview open tasks every Friday.\n",
-        ),
-        (
-            "Project notes.md",
-            "# Project notes\n\n- [x] Collect ideas <!-- situate-task-id: null -->\n- [ ] Pick the next step <!-- situate-task-id: null -->\n",
-        ),
-    ] {
-        let outcome = files
-            .agent_write(path, None, markdown)
-            .map_err(|error| error.to_string())?;
-        if !matches!(outcome, SaveOutcome::Saved { .. }) {
-            return Err(format!("Could not finish saving {path}: {outcome:?}"));
-        }
-    }
-    let storage = Storage::open(root, &location.id)?;
-    seed_conversation(
-        &storage,
-        "fixture-weekly-review",
-        "Weekly review",
-        "",
-        "Help me plan my weekly review.",
-    )?;
-    let SaveOutcome::Saved { version, .. } = files
-        .create_text(
-            WORKING_METHOD_PATH,
-            "# Working method\n\nKeep project notes together and review open tasks every Friday.\n",
-        )
-        .map_err(|error| error.to_string())?
-    else {
-        return Err("Could not finish saving the working method".into());
-    };
-    OnboardingStorage::open(root, &location.id)?.save(
-        None,
-        OnboardingRecord {
-            step: Step::Complete,
-            entered: true,
-            proposal: version.text.clone(),
-            instruction_revision: Some(version.revision.clone()),
-            instruction_base: Some(situate_core::onboarding::InstructionBase {
-                text: version.text,
-                revision: version.revision,
-            }),
-            ..Default::default()
-        },
-    )?;
-    Ok(())
 }
 
 /// Requires a confirmed canonical workspace path. Never migrates or edits an open workspace.
@@ -137,23 +80,31 @@ pub fn add_chat_draft(storage: &Storage) -> Result<ConversationRecord, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use situate_core::{
+        content::ContentStore,
+        onboarding::{OnboardingStorage, Step},
+        plugins::runtime,
+    };
     use std::fs;
 
     #[test]
-    fn used_workspace_reopens_as_setup_with_notes_tasks_and_history() {
+    fn full_workspace_reopens_with_notes_tasks_chats_and_plugins() {
         let parent = tempfile::tempdir().unwrap();
         let location = create("used-workspace", parent.path(), "Sample").unwrap();
         let root = Path::new(&location.handle);
         let files = ContentStore::open(root).unwrap();
         assert!(
             files
-                .read_text("Weekly review.md")
+                .read_text("Reviews/Weekly review.md")
                 .unwrap()
                 .text
                 .contains("every Friday")
         );
-        let tasks = files.read_text("Project notes.md").unwrap().text;
-        assert!(tasks.contains("- [x] Collect ideas"));
+        let tasks = files
+            .read_text("Projects/Spring open day/Plan.md")
+            .unwrap()
+            .text;
+        assert!(tasks.contains("- [x] Reserve the garden gate"));
         assert!(!tasks.contains("situate-task-id: null"));
         let record = OnboardingStorage::open(root, &location.id)
             .unwrap()
@@ -163,13 +114,42 @@ mod tests {
             .unwrap();
         assert_eq!(record.step, Step::Complete);
         let storage = Storage::open(root, &location.id).unwrap();
+        assert_eq!(storage.list_conversations().unwrap().len(), 3);
         let record = storage
-            .read_conversation("fixture-weekly-review")
+            .read_conversation("fixture-open-day")
             .unwrap()
             .unwrap();
+        let messages = record.messages.as_array().unwrap();
+        assert!(messages.len() >= 30);
+        assert_eq!(messages.first().unwrap()["role"], "user");
+        assert_eq!(messages.last().unwrap()["role"], "assistant");
+        assert!(!record.draft.is_empty());
+
+        let listing = runtime::list(root).unwrap();
+        assert_eq!(listing.plugins.len(), 4);
+        assert!(listing.plugins.iter().all(|plugin| {
+            plugin.enabled && plugin.revision.is_some() && plugin.error.is_none()
+        }));
+        let skill = runtime::load(root, "garden-review").unwrap();
+        assert_eq!(skill.manifest.skills, ["review.md"]);
+        assert!(skill.service_entry.is_none() && skill.ui_entry.is_none());
+        let board = runtime::load(root, "garden-board").unwrap();
+        assert!(board.ui_entry.is_some() && board.service_entry.is_none());
+        assert!(board.manifest.skills.is_empty());
         assert_eq!(
-            record.messages[0]["content"],
-            "Help me plan my weekly review."
+            board.manifest.dependencies.unwrap(),
+            ["garden-calendar", "garden-archive"]
+        );
+        let calendar = runtime::load(root, "garden-calendar").unwrap();
+        assert_eq!(
+            calendar.manifest.kind,
+            Some(situate_core::plugins::PluginKind::Connection)
+        );
+        assert_eq!(calendar.manifest.exports.unwrap(), ["listEvents"]);
+        let archive = runtime::load(root, "garden-archive").unwrap();
+        assert_eq!(
+            archive.manifest.exports.unwrap(),
+            ["documentSourceDescribe", "documentSourceList"]
         );
         assert!(create("used-workspace", parent.path(), "Sample").is_err());
     }

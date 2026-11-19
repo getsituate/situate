@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "plugin-overview-groups",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "plugin-overview-groups",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Find connections and document sources separately",
+          "paragraphs": [
+            "The plugin overview groups your plugins, connections, and document sources in separate sections."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "plugin-overview-groups",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Verbindungen und Dokumentquellen getrennt finden",
+          "paragraphs": [
+            "In der Plugin-Übersicht haben deine Plugins, Verbindungen und Dokumentquellen jeweils einen eigenen Bereich."
+          ]
+        }
+      ]
+    }
+  }
+}
