@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   constants,
   closeSync,
@@ -104,6 +105,22 @@ function retainedBytes(root, relative) {
   } finally {
     closeSync(fd);
   }
+}
+
+export function verifyUpgradeDraft(root, expectedDraft) {
+  const name = createHash("sha1")
+    .update(`blob ${Buffer.byteLength(upgradeNote)}\0${upgradeNote}`)
+    .digest("hex");
+  const { version, draft } = JSON.parse(
+    retainedBytes(root, `.situate/drafts/${name}.json`),
+  );
+  assert(
+    version === 1 &&
+      draft?.path === upgradeNote &&
+      draft.base?.text === upgradeNoteAfter &&
+      draft.text === expectedDraft,
+    "Cancelled upgrade did not retain the exact draft",
+  );
 }
 
 export function verifyUpgradeWorkspace(root, expectedNote) {
