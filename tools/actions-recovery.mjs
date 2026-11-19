@@ -58,6 +58,15 @@ export async function runCheckpointRecovery(
 ) {
   try {
     requireController(environment, workflow);
+    const draft = environment.RECOVERY_DRAFT_ID;
+    const draftId = draft ? Number(draft) : undefined;
+    if (draft)
+      assert(
+        environment.RECOVERY_ACTION === "continue" &&
+          /^[1-9][0-9]*$/.test(draft) &&
+          Number.isSafeInteger(draftId),
+        "Draft recovery requires an exact draft ID and continuation",
+      );
     const temporary = lstatSync(environment.RUNNER_TEMP);
     assert(
       temporary.isDirectory() &&
@@ -176,6 +185,7 @@ export async function runCheckpointRecovery(
         destination,
         inspection,
         confirmation: env.RECOVERY_CONFIRMATION,
+        draftId,
         environment: env,
       });
       const continueQualified =
@@ -188,6 +198,7 @@ export async function runCheckpointRecovery(
         qualificationInspection: qualified.qualificationInspection,
         publicationInspection: inspection,
         confirmation: env.RECOVERY_CONFIRMATION,
+        draftId,
         restoredDirectory: destination,
         environment: env,
         signal,

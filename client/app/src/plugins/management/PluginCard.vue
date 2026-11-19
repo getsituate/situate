@@ -3,7 +3,7 @@ import { computed, type DeepReadonly } from "vue";
 import { t } from "@situate/localization";
 import "@situate/localization/plugin-management";
 import type { RuntimePlugin } from "../runtime";
-import { pluginSettingsId } from "../management";
+import { pluginManagementGroup, pluginSettingsId } from "../management";
 import PluginCardActions from "./PluginCardActions.vue";
 const props = defineProps<{
   plugin: DeepReadonly<RuntimePlugin>;
@@ -12,6 +12,7 @@ const props = defineProps<{
   canEnable: boolean;
   busy: boolean;
 }>();
+const group = computed(() => pluginManagementGroup(props.plugin.manifest));
 const blockedMessage = computed(() => {
   const blocked = props.plugin.blockedBy;
   if (!blocked) return undefined;
@@ -64,11 +65,13 @@ const emit = defineEmits<{
       >
     </div>
     <div class="plugin-row-content">
-      <p v-if="plugin.manifest?.kind" class="plugin-kind">
+      <p v-if="group === 'source' || plugin.manifest?.kind" class="plugin-kind">
         {{
-          plugin.manifest.kind === "connection"
-            ? t("pluginManagement.connectionKind")
-            : t("pluginManagement.toolKind")
+          group === "source"
+            ? t("pluginManagement.sourceKind")
+            : group === "connection"
+              ? t("pluginManagement.connectionKind")
+              : t("pluginManagement.toolKind")
         }}
       </p>
       <p v-if="plugin.manifest?.description" data-localization-content="user">

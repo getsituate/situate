@@ -14,7 +14,7 @@ import { SituateButton, SituateDialogActions } from "@situate/ui";
 import { workspaceUi } from "../layout/runtime";
 import { recoveryMode } from "../recovery";
 import type { PluginRuntime, RuntimePlugin } from "./runtime";
-import { openPluginSettings } from "./management";
+import { openPluginSettings, pluginManagementGroup } from "./management";
 import PluginCard from "./management/PluginCard.vue";
 import FileEditor from "../files/FileEditor.vue";
 import PluginUninstallDialog from "./management/PluginUninstallDialog.vue";
@@ -84,6 +84,19 @@ const root = ref<HTMLElement>();
 let generation = 0;
 let invoker: HTMLElement | null = null;
 const plugins = computed(() => runtime.value?.state.plugins ?? []);
+const pluginGroups = computed(() => {
+  const groups: Record<
+    ReturnType<typeof pluginManagementGroup>,
+    { label: string; plugins: DeepReadonly<RuntimePlugin>[] }
+  > = {
+    tool: { label: t("pluginManagement.collection"), plugins: [] },
+    connection: { label: t("pluginManagement.connections"), plugins: [] },
+    source: { label: t("pluginManagement.sources"), plugins: [] },
+  };
+  for (const plugin of plugins.value)
+    groups[pluginManagementGroup(plugin.manifest)].plugins.push(plugin);
+  return Object.entries(groups).filter(([, group]) => group.plugins.length);
+});
 const inspected = computed(() =>
   plugins.value.find((p) => p.id === selected.value),
 );
@@ -541,36 +554,38 @@ function settings(id: string) {
             </div>
           </div>
         </section>
-        <h2 v-if="plugins.length" class="plugin-collection-label">
-          {{ t("pluginManagement.collection") }}
-          <span>{{ plugins.length }}</span>
-        </h2>
         <section
-          v-if="plugins.length"
-          class="plugin-list plugin-card-grid"
-          :aria-label="t('pluginManagement.installed')"
+          v-for="[kind, group] in pluginGroups"
+          :key="kind"
+          class="plugin-collection-group"
+          :aria-label="group.label"
         >
-          <PluginCard
-            v-for="plugin in plugins"
-            :key="plugin.id"
-            :plugin="plugin"
-            :consumers="consumers(plugin.id)"
-            :blocked-by-name="
-              plugin.blockedBy
-                ? pluginName(plugin.blockedBy.pluginId)
-                : undefined
-            "
-            :busy="busy"
-            :can-enable="!inventoryFailure && recoveryMode() !== undefined"
-            @uninstall="openUninstall(plugin.id)"
-            @resume="
-              perform(`resume:${plugin.id}`, () => runtime!.resume(plugin.id))
-            "
-            @develop="develop(plugin.id)"
-            @inspect="inspect(plugin.id)"
-            @settings="settings(plugin.id)"
-            @toggle="toggle(plugin, $event)"
-          />
+          <h2 class="plugin-collection-label">
+            {{ group.label }} <span>{{ group.plugins.length }}</span>
+          </h2>
+          <div class="plugin-list plugin-card-grid">
+            <PluginCard
+              v-for="plugin in group.plugins"
+              :key="plugin.id"
+              :plugin="plugin"
+              :consumers="consumers(plugin.id)"
+              :blocked-by-name="
+                plugin.blockedBy
+                  ? pluginName(plugin.blockedBy.pluginId)
+                  : undefined
+              "
+              :busy="busy"
+              :can-enable="!inventoryFailure && recoveryMode() !== undefined"
+              @uninstall="openUninstall(plugin.id)"
+              @resume="
+                perform(`resume:${plugin.id}`, () => runtime!.resume(plugin.id))
+              "
+              @develop="develop(plugin.id)"
+              @inspect="inspect(plugin.id)"
+              @settings="settings(plugin.id)"
+              @toggle="toggle(plugin, $event)"
+            />
+          </div>
         </section>
       </template>
     </main>

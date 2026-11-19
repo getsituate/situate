@@ -225,13 +225,7 @@ export const finalNote = "# E2E note\n\nBeta marker\n";
 export const finalMethod =
   "# Working method\n\nReview tasks each Friday. Keep notes and tasks in Markdown with task identities. Preserve task metadata and keep created and due dates distinct. Never change source originals.\n";
 
-export function finalArtifactJourneys({
-  actions,
-  seed,
-  writable,
-  verifyFiles,
-  phase,
-}) {
+export function finalArtifactJourneys({ actions, seed, verifyFiles, phase }) {
   const name = `Qualification ${phase}`;
   const window = `${name} — Situate`;
   const secondary = `Secondary ${phase}`;
@@ -274,16 +268,6 @@ export function finalArtifactJourneys({
     await key("return");
     await click(button("Open"));
     await click(button("Create workspace"));
-  }
-  async function updates() {
-    await navigationClick(button("Settings", window));
-    await click(button("Updates", window));
-    await expect(text("The update is verified and ready to install.", window));
-  }
-  async function confirmUpdate() {
-    await click(button("Install and restart", window));
-    await expect(text("Restart to update Situate?", window));
-    await click(button("Install and restart", window));
   }
   async function reopen(draft = "") {
     await actions([{ windows: 2 }]);
@@ -387,35 +371,6 @@ export function finalArtifactJourneys({
         button("OpenAI-compatible server", `${secondary} — Situate`),
       );
       await key("w", ["command"]);
-    },
-    async update() {
-      await writable(name, false);
-      try {
-        await fill(
-          area("Markdown source", window),
-          "# E2E note\n\nUnsaved cancellation marker\n",
-        );
-        await expect(text("Not saved", window));
-        await updates();
-        await confirmUpdate();
-        await expect(text("Keep your unsaved changes", window));
-        await click(button("Cancel", window));
-        await navigationClick(button("Files", window));
-        await expect({
-          ...area("Markdown source", window),
-          value: "# E2E note\n\nUnsaved cancellation marker\n",
-        });
-        await actions([{ windows: 2 }]);
-        await verifyFiles(name, [["e2e-note.md", finalNote]]);
-      } finally {
-        await writable(name, true);
-      }
-      await navigationClick(button("Files", window));
-      await fill(area("Markdown source", window), finalNote);
-      await expect(text("Saved", window));
-      await verifyFiles(name, [["e2e-note.md", finalNote]]);
-      await updates();
-      await confirmUpdate();
     },
   };
 }

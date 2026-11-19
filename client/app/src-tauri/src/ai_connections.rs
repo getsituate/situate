@@ -60,7 +60,10 @@ pub async fn ai_status(
     scope: String,
     conversation: Option<String>,
 ) -> Result<Status, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let status_app = app.clone();
+    let status_window = window.clone();
+    let status_scope = scope.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || {
         crate::workspaces::with_current(&app, window.label(), &scope, |location| {
             let storage = match storage(&app, location) {
                 Ok(storage) => storage,
@@ -100,7 +103,9 @@ pub async fn ai_status(
         })
     })
     .await
-    .map_err(|_| KEY_ERROR.to_owned())?
+    .map_err(|_| KEY_ERROR.to_owned())??;
+    discovery::schedule_refresh(status_app, status_window.label(), status_scope, &status);
+    Ok(status)
 }
 #[tauri::command]
 pub async fn ai_preview_conversation_status(

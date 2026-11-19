@@ -7,12 +7,13 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
+  lstatSync,
+  symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
-  notesForCatalog,
   readConfiguration,
   inspectCandidateReservation,
   publicationEnvironment,
@@ -21,6 +22,37 @@ import {
 } from "./pipeline-operations.mjs";
 import { digest, sealPlan, operationDirectory } from "./pipeline-state.mjs";
 import { checkpointFixture } from "./release-checkpoint-fixtures.mjs";
+import { notesForCatalog } from "./github-release.mjs";
+
+test("publication creates a private download root and rejects linked storage", async (t) => {
+  const f = checkpointFixture(t);
+  const artifactRoot = join(f.root, "downloads");
+  const bytes = JSON.stringify({ schemaVersion: 1, artifactRoot });
+  const plan = {
+    operation: "publish-synthetic",
+    workflow: "publish",
+    destination: "release@fixture.invalid",
+    configurationDigest: digest(bytes),
+  };
+  const calls = [];
+  const stages = await productionStages(f.root, plan, {
+    environment: { CI: "true", SITUATE_RELEASE_CONFIG_JSON: bytes },
+    publicationAdapter: {
+      downloadRelease: async ({ destination }) => {
+        calls.push(destination);
+        mkdirSync(destination, { mode: 0o700 });
+        return { receipt: {} };
+      },
+    },
+  });
+  await stages.download();
+  assert.deepEqual(calls, [join(artifactRoot, plan.operation)]);
+  assert.equal(lstatSync(artifactRoot).mode & 0o777, 0o700);
+  rmSync(artifactRoot, { recursive: true });
+  symlinkSync(f.directory, artifactRoot);
+  await assert.rejects(stages.download(), /owned private directory/);
+  assert.equal(calls.length, 1);
+});
 
 test("production publication and reconciliation acknowledge complete journal checkpoints before releasing their claim", async (t) => {
   for (const path of ["ordinary", "reconcile"])
@@ -261,7 +293,7 @@ test("publication forwards public verification identity and GitHub reads but no 
   );
 });
 
-test("public notes use only the installed catalog entries and every catalog locale", () => {
+test("GitHub notes group current English entries by category and keep their order within each category", () => {
   const notes = notesForCatalog({
     installedVersion: "2026.11.1",
     releases: [
@@ -270,7 +302,33 @@ test("public notes use only the installed catalog entries and every catalog loca
         locales: {
           en: {
             title: "Changes",
-            entries: [{ title: "Search", paragraphs: ["Synthetic text."] }],
+            entries: [
+              {
+                type: "fixed",
+                title: "Drafts",
+                paragraphs: ["Resume drafts."],
+              },
+              {
+                type: "new",
+                title: "Search",
+                paragraphs: ["Find notes.", "Keep filters."],
+              },
+              {
+                type: "important",
+                title: "Back up",
+                paragraphs: ["Keep a copy of your workspace."],
+              },
+              {
+                type: "new",
+                title: "Filters",
+                paragraphs: ["Filter by date."],
+              },
+              {
+                type: "changed",
+                title: "History",
+                paragraphs: ["See the latest changes first."],
+              },
+            ],
           },
           de: {
             title: "Änderungen",
@@ -286,16 +344,36 @@ test("public notes use only the installed catalog entries and every catalog loca
       },
       {
         version: "2026.10.1",
-        locales: { en: { title: "Older entry", entries: [] } },
+        locales: {
+          en: {
+            title: "Changes",
+            entries: [{ title: "Older entry", paragraphs: ["Older change."] }],
+          },
+        },
       },
     ],
     emptyReason: "Internal synthetic reason",
   });
-  assert.match(notes, /## en/);
-  assert.match(notes, /## de/);
-  assert.match(notes, /## fr/);
-  assert.match(notes, /Texte synthétique\./);
-  assert.doesNotMatch(notes, /Older entry|Internal synthetic reason/);
+  assert.equal(
+    notes,
+    [
+      "## Important",
+      "### Back up",
+      "Keep a copy of your workspace.",
+      "## Features",
+      "### Search",
+      "Find notes.",
+      "Keep filters.",
+      "### Filters",
+      "Filter by date.",
+      "## Changes",
+      "### History",
+      "See the latest changes first.",
+      "## Fixes",
+      "### Drafts",
+      "Resume drafts.",
+    ].join("\n\n"),
+  );
   assert.equal(
     notesForCatalog({
       installedVersion: "2026.11.1",
@@ -304,7 +382,10 @@ test("public notes use only the installed catalog entries and every catalog loca
           version: "2026.11.1",
           locales: {
             en: { title: "Changes", entries: [] },
-            de: { title: "Änderungen", entries: [] },
+            de: {
+              title: "Änderungen",
+              entries: [{ title: "Suche", paragraphs: ["Nur Deutsch."] }],
+            },
           },
         },
       ],

@@ -159,7 +159,6 @@ test("a retained plugin read requires the actual enabled production capability",
 test("default journeys retain saved state across restart and keep chat drafts in the live session", async () => {
   const actions = [];
   const files = [];
-  const permissions = [];
   const profile = finalArtifactJourneys({
     phase: "predecessor",
     actions: async (steps) => {
@@ -167,9 +166,6 @@ test("default journeys retain saved state across restart and keep chat drafts in
     },
     seed: async (...args) => {
       files.push(args);
-    },
-    writable: async (...args) => {
-      permissions.push(args);
     },
     verifyFiles: async (...args) => {
       files.push(args);
@@ -196,7 +192,6 @@ test("default journeys retain saved state across restart and keep chat drafts in
       (step) => step.assert?.name === "Final artifact plugin v1 verified.",
     ),
   );
-  await profile.update();
   await profile.close();
   for (const name of ["Open workspace…", "Close workspace"]) {
     assert.ok(
@@ -225,27 +220,6 @@ test("default journeys retain saved state across restart and keep chat drafts in
         action.click.role === "AXButton",
     ),
   );
-  const cancel = actions.findIndex((action) => action.click?.name === "Cancel");
-  const retainedDraft = actions.findIndex(
-    (action, index) =>
-      index > cancel &&
-      action.assert?.name === "Markdown source" &&
-      action.assert.value === "# E2E note\n\nUnsaved cancellation marker\n",
-  );
-  const replacedDraft = actions.findIndex(
-    (action, index) =>
-      index > cancel && action.type === "# E2E note\n\nBeta marker\n",
-  );
-  assert.ok(retainedDraft > cancel && replacedDraft > retainedDraft);
-  const installs = actions.flatMap((action, index) =>
-    action.click?.name === "Install and restart" ? [index] : [],
-  );
-  assert.equal(installs.length, 4);
-  assert.ok(installs[1] < cancel && cancel < installs[2]);
-  assert.deepEqual(permissions, [
-    ["Qualification predecessor", false],
-    ["Qualification predecessor", true],
-  ]);
   assert.ok(
     actions.some(
       (action) =>

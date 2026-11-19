@@ -510,6 +510,8 @@ fn recommendations_follow_observation_but_explicit_choices_never_fall_back() {
     connection.catalog = Some(discovery::Catalog {
         source: discovery::Source::Account,
         models: vec!["gpt-4o-mini".into()],
+        checked_at: None,
+        selectable: vec![],
     });
     assert_eq!(
         admit_conversation(&storage, &connection, "one")

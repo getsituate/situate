@@ -120,10 +120,6 @@ export function validateReleaseEvidence(evidence, identity) {
     dmg && archive && names.has(`${archive}.sig`),
     "Incomplete direct package set",
   );
-  assert(
-    sha.test(evidence.notesSha256),
-    "Missing reviewed release-note digest",
-  );
   if (evidence.producer !== undefined) {
     for (const key of ["runId", "runAttempt", "workflowId"])
       id(evidence.producer[key]);
@@ -288,12 +284,7 @@ function verifyContents(files, evidence, { metadataOnly = false } = {}) {
   return manifest;
 }
 
-export function createEvidenceFromDirectory({
-  identity,
-  directory,
-  notes,
-  producer,
-}) {
+export function createEvidenceFromDirectory({ identity, directory, producer }) {
   validateIdentity(identity);
   const manifestPath = join(directory, "manifest.json");
   assert(
@@ -335,13 +326,44 @@ export function createEvidenceFromDirectory({
     identity,
     platform: "macos",
     distribution: "direct",
-    notesSha256: releaseHash(Buffer.from(notes)),
     assets,
     ...(producer ? { producer } : {}),
   };
   validateReleaseEvidence(evidence, identity);
   verifyContents(files, evidence);
   return { evidence, files };
+}
+
+function releaseLocales(catalog) {
+  const current = catalog.releases.find(
+    (entry) => entry.version === catalog.installedVersion,
+  );
+  assert(current, "Catalog is missing the candidate release");
+  return current.locales;
+}
+
+const entryNotes = (entries) =>
+  entries.flatMap(({ title, paragraphs }) => [`### ${title}`, ...paragraphs]);
+
+const noteSections = {
+  important: "Important",
+  new: "Features",
+  changed: "Changes",
+  fixed: "Fixes",
+};
+
+export function notesForCatalog(catalog) {
+  const en = releaseLocales(catalog).en;
+  assert(en, "Catalog is missing English notes");
+  const entries = Object.groupBy(en.entries, ({ type }) => {
+    assert(Object.hasOwn(noteSections, type), "Unknown release note category");
+    return type;
+  });
+  return Object.entries(noteSections)
+    .flatMap(([type, heading]) =>
+      entries[type] ? [`## ${heading}`, ...entryNotes(entries[type])] : [],
+    )
+    .join("\n\n");
 }
 
 function marker(evidence, digest) {
@@ -388,9 +410,16 @@ function verifyRelease(release, identity, evidenceDigest, complete) {
   id(release.id);
   if (identity.releaseId !== undefined)
     assert.equal(release.id, identity.releaseId, "Wrong release ID");
-  assert.equal(
-    release.html_url,
-    `https://github.com/${identity.repository}/releases/tag/${identity.tag}`,
+  const githubPage = `https://github.com/${identity.repository}/releases/tag/`;
+  assert(
+    release.html_url === githubPage + identity.tag ||
+      (release.draft === true &&
+        release.url ===
+          `https://api.github.com/repos/${identity.repository}/releases/${release.id}` &&
+        release.html_url?.startsWith(githubPage) &&
+        /^untagged-[a-f0-9]{20}$/.test(
+          release.html_url.slice(githubPage.length),
+        )),
     "Release repository differs",
   );
   assert.equal(release.tag_name, identity.tag, "Release tag differs");
@@ -417,7 +446,11 @@ export async function inspectGitHubOperation(
   const tag = await verifyTag(identity, github);
   const digest = evidence ? releaseHash(encoded(evidence)) : evidenceSha256;
   assert(sha.test(digest), "Supply exact evidence or its SHA-256");
-  if (evidence) validateReleaseEvidence(evidence, identity);
+  if (evidence) {
+    validateReleaseEvidence(evidence, identity);
+    if (evidenceSha256 !== undefined)
+      assert.equal(digest, evidenceSha256, "Retained release evidence differs");
+  }
   const matches = (await github.listReleases(identity.repository)).filter(
     (release) => release.tag_name === identity.tag,
   );
@@ -508,15 +541,6 @@ export async function inspectGitHubOperation(
     verifyRelease(release, identity, digest, true);
     assert.equal(missing.length, 0, "Completed release is missing assets");
   }
-  const notes = release.body.slice(
-    0,
-    release.body.lastIndexOf("\n\n<!-- situate-release:"),
-  );
-  assert.equal(
-    releaseHash(Buffer.from(notes)),
-    sealed.notesSha256,
-    "Reviewed notes differ",
-  );
   assert.equal(
     (await verifyTag(identity, github)).tagObject,
     tag.tagObject,
@@ -605,15 +629,6 @@ async function inspectReleaseData(
     files[expected.name] = data;
   }
   const manifest = verifyContents(files, sealed, { metadataOnly });
-  const publicNotes = release.body.slice(
-    0,
-    release.body.lastIndexOf("\n\n<!-- situate-release:"),
-  );
-  assert.equal(
-    releaseHash(Buffer.from(publicNotes)),
-    sealed.notesSha256,
-    "Reviewed notes differ",
-  );
   const receipt = {
     schemaVersion: 1,
     kind: "github-release-download",
@@ -685,18 +700,18 @@ function saveJournal(path, journal) {
 
 export async function createGitHubRelease(
   { identity, files, evidence, notes, journalPath },
-  { github = githubAdapter(), authorize, reconcile = false } = {},
+  {
+    github = githubAdapter(),
+    authorize,
+    reconcile = false,
+    expectedDraftId,
+  } = {},
 ) {
   validateReleaseEvidence(evidence, identity);
   assert.equal(
     identity.releaseId,
     undefined,
     "Creator resolves its reserved tag, not an unrelated release ID",
-  );
-  assert.equal(
-    releaseHash(Buffer.from(notes)),
-    evidence.notesSha256,
-    "Reviewed notes digest differs",
   );
   assert.deepEqual(
     Object.keys(files).sort(),
@@ -769,6 +784,22 @@ export async function createGitHubRelease(
   );
   assert(releases.length <= 1, "Duplicate releases for reserved tag");
   let release = releases[0];
+  if (expectedDraftId !== undefined) {
+    id(expectedDraftId);
+    assert(
+      reconcile &&
+        ((journal.state === "creating" && journal.releaseId === undefined) ||
+          (journal.state === "uploading:manifest.json" &&
+            journal.releaseId === expectedDraftId &&
+            evidence.assets[0]?.name === "manifest.json")) &&
+        release?.id === expectedDraftId &&
+        release.draft === true &&
+        release.target_commitish === identity.sourceRevision &&
+        Array.isArray(release.assets) &&
+        release.assets.length === 0,
+      "Draft creation recovery requires the exact empty draft",
+    );
+  }
   if (!release) {
     assert(!journal.releaseId, "Recorded release disappeared");
     release = await effect("creating", () =>
@@ -784,9 +815,11 @@ export async function createGitHubRelease(
   }
   if (journal.releaseId !== undefined)
     assert.equal(release.id, journal.releaseId, "Recovery release ID differs");
+  verifyRelease(release, identity, digest, false);
+  if (release.draft)
+    assert.equal(release.body, body, "Draft notes or identity changed");
   journal.releaseId = release.id;
   saveJournal(journalPath, journal);
-  verifyRelease(release, identity, digest, false);
   if (!release.draft) {
     const result = await inspectGitHubRelease(
       { identity: { ...identity, releaseId: release.id }, evidence },
@@ -796,7 +829,6 @@ export async function createGitHubRelease(
     saveJournal(journalPath, journal);
     return result;
   }
-  assert.equal(release.body, body, "Draft notes or identity changed");
   const expected = [
     ...evidence.assets,
     { name: EVIDENCE_ASSET, size: evidenceBytes.length, sha256: digest },

@@ -23,6 +23,7 @@ export async function restoreQualifiedCheckpoint(
     destination,
     inspection,
     confirmation,
+    draftId,
     environment = process.env,
     adapters,
   } = {},
@@ -73,6 +74,7 @@ export async function restoreQualifiedCheckpoint(
         checkpointId,
         destination,
         inspectionDigest: inspection.remote.checkpoints.inspectionDigest,
+        draftId,
       });
       const operation = JSON.parse(
         checkpointFile(join(destination, "operation.json")),

@@ -1260,8 +1260,12 @@ fn fingerprint(context: &Context, choice: &model::Choice) -> Result<String, Stri
         .app
         .state::<Ai>()
         .continuation_epoch(&context.scope, choice.connection.connection_id.as_deref())?;
-    let (protocol, _, _) = target(&choice.connection, &choice.model)?;
-    serde_json::to_vec(&json!({"choice":choice,"protocol":protocol,"credentials":epoch}))
+    let (protocol, _, _) = choice.target()?;
+    let mut snapshot = json!({"choice":choice,"protocol":protocol,"credentials":epoch});
+    if let Some(model) = &choice.discovered {
+        snapshot["discovered"] = json!(model);
+    }
+    serde_json::to_vec(&snapshot)
         .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
         .map_err(|_| NETWORK_ERROR.into())
 }

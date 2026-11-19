@@ -191,11 +191,29 @@ def checkpoint_state(identity, directory):
             raise ValueError('Checkpoint identity differs')
         checkpoint_verify(child, descriptor)
         checkpoints.append(descriptor)
-    unresolved_publication = False
+    github_stages = []
     for descriptor in checkpoints:
         snapshot = checkpoint_read(directory / descriptor['checkpointId'] / 'operation.json')
-        if any(stage.get('name') == 'github' for stage in snapshot.get('stages', [])):
-            unresolved_publication = True
+        stages = [stage for stage in snapshot.get('stages', []) if stage.get('name') == 'github']
+        if stages:
+            github_stages.append({'stages': stages, 'journal': snapshot.get('publicationJournal')})
+    draft_intent = None
+    if len(github_stages) in (2, 3):
+        stages = [item['stages'] for item in github_stages]
+        journals = [item['journal'] for item in github_stages if item['journal'] is not None]
+        creating = [journal for journal in journals
+                    if journal.get('state') == 'creating' and 'releaseId' not in journal]
+        if (len(journals) == len(github_stages) - 1 and len(creating) == 1
+                and all(stage == stages[0] for stage in stages)
+                and len(stages[0]) == 1 and stages[0][0].get('status') == 'running'):
+            if len(journals) == 1:
+                draft_intent = {'journal': creating[0], 'stage': stages[0][0]}
+            else:
+                upload = next(journal for journal in journals if journal != creating[0])
+                release_id = upload.get('releaseId')
+                initial = {**creating[0], 'state': 'uploading:manifest.json', 'releaseId': release_id}
+                if type(release_id) is int and release_id > 0 and upload == initial:
+                    draft_intent = {'journal': upload, 'stage': stages[0][0]}
     successful_notary = len(notary['operations']) >= 2
     for child in notary['operations']:
         records = child['records']
@@ -218,7 +236,9 @@ def checkpoint_state(identity, directory):
                     or (record['phase'] != 'intent' and record.get('submissionId') != submissions[0]['submissionId'])):
                 successful_notary = False
     state = {'coordination': coordination, 'notarization': notary, 'terminalNotary': terminal and successful_notary,
-             'publication': publication, 'unresolvedPublication': unresolved_publication, 'checkpoints': checkpoints}
+             'publication': publication, 'unresolvedPublication': bool(github_stages), 'checkpoints': checkpoints}
+    if draft_intent is not None:
+        state['draftIntent'] = draft_intent
     state['inspectionDigest'] = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
     return state
 
@@ -343,7 +363,11 @@ def checkpoint_main():
             return
         if action not in ('restore', 'restore-qualified') or request.get('inspectionDigest') != state['inspectionDigest']:
             raise ValueError('Restore requires exact fresh inspection')
-        if state['coordination']['active'] != identity or not state['terminalNotary'] or state['publication'] is not None or state['unresolvedPublication']:
+        draft_id = request.get('draftId')
+        reconcile_draft = (action == 'restore-qualified' and type(draft_id) is int and draft_id > 0
+                           and state.get('draftIntent') is not None)
+        if (state['coordination']['active'] != identity or not state['terminalNotary'] or state['publication'] is not None
+                or (state['unresolvedPublication'] and not reconcile_draft)):
             raise ValueError('Restore blocked by claim or unresolved external work')
         kind = 'build' if action == 'restore' else 'runtime-authorization'
         selected = [item for item in state['checkpoints'] if item['checkpointId'] == request['checkpointId'] and item['kind'] == kind]
@@ -362,10 +386,24 @@ def checkpoint_main():
             attempts = {}
             for value in state['checkpoints']:
                 if value['kind'] == 'runtime-authorization':
-                    attempt = checkpoint_read(directory / value['checkpointId'] / 'operation.json').get('qualificationAttempt', {})
-                    attempts.setdefault(attempt.get('authorizationDigest'), set()).add(attempt.get('status'))
-            if any(values != {'intent', 'passed'} for values in attempts.values()):
-                raise ValueError('Qualification family contains interrupted or unknown work')
+                    attempt_dir = directory / value['checkpointId']
+                    attempt = checkpoint_read(attempt_dir / 'operation.json').get('qualificationAttempt', {})
+                    nonce = checkpoint_read(attempt_dir / 'runtime-authorization.json')['routeNonce']
+                    attempts.setdefault(nonce, set()).add(attempt.get('status'))
+            selected_nonce = checkpoint_read(selected_directory / 'runtime-authorization.json')['routeNonce']
+            if attempts.get(selected_nonce) != {'intent', 'passed'}:
+                raise ValueError('Selected qualification does not have an exact intent and pass')
+            incomplete = {nonce for nonce, statuses in attempts.items() if statuses != {'intent', 'passed'}}
+            if incomplete:
+                if any(attempts[nonce] not in ({'intent'}, {'intent', 'unknown'}) for nonce in incomplete):
+                    raise ValueError('Qualification family contains invalid attempt history')
+                family = qualification_listener['read_family'](identity['operationId'])['operations']
+                cleaned = {member['operationNonce'] for member in family
+                           if member['status'] in ('cleaned', 'cleaned-retained')
+                           and member.get('uncertain', False) is False
+                           and member['containerRunning'] is False}
+                if len(cleaned) != len(family) or not incomplete <= cleaned:
+                    raise ValueError('Unresolved private listeners block qualified restoration')
             recovery = checkpoint_read(selected_directory / 'original-recovery-authorization.json')
             build = recovery.get('descriptor')
             if not build or build.get('kind') != 'build' or build not in state['checkpoints']:

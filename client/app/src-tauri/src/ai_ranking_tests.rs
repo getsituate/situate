@@ -273,6 +273,8 @@ fn a_custom_chat_choice_does_not_need_a_recommended_comment_model() {
     let observed = discovery::Catalog {
         source: discovery::Source::Provider,
         models: vec!["synthetic-chat".into()],
+        checked_at: None,
+        selectable: vec![],
     };
     initialize(&storage, &config, &observed).unwrap();
     assert!(required(&storage, &config).is_err());

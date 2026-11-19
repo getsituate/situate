@@ -16,6 +16,10 @@ on:
         description: Build checkpoint for qualification or passed attempt for continuation
         required: false
         type: string
+      draft_id:
+        description: Existing empty GitHub draft ID for an interrupted creation
+        required: false
+        type: string
       confirmation:
         description: Digest from a fresh inspection of this operation
         required: false
@@ -100,6 +104,7 @@ jobs:
       contents: write
       actions: read
     env:
+      RECOVERY_DRAFT_ID: ${{ inputs.draft_id }}
       RECOVERY_WORKFLOW: create
       RECOVERY_OPERATION: ${{ inputs.operation }}
       RECOVERY_ACTION: ${{ inputs.action }}

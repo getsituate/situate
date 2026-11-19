@@ -1,4 +1,4 @@
 {
-  "create": [{ "id": "used-workspace", "label": "Set up and in use" }],
+  "create": [{ "id": "used-workspace", "label": "Full Workspace" }],
   "apply": [{ "id": "chat-draft", "label": "Add chat draft" }]
 }

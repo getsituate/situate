@@ -3,10 +3,12 @@ import {
   computed,
   defineAsyncComponent,
   onBeforeUnmount,
+  onMounted,
   ref,
   useId,
   watch,
 } from "vue";
+import { listen } from "@tauri-apps/api/event";
 import { t, localizeError } from "@situate/localization";
 import { getStatus, refreshModels, type Status } from "../ai/api";
 import { useModelCatalog } from "../ai/useModelCatalog";
@@ -127,7 +129,17 @@ async function connectionsChanged(): Promise<void> {
 const statusError = ref(false);
 let revision = 0;
 let alive = true;
+let stopCatalogListener: (() => void) | undefined;
+onMounted(async () => {
+  const stop = await listen<string>("ai-models-changed", ({ payload }) => {
+    if (payload === props.workspaceScope && !refreshBlocked.value)
+      void refresh();
+  }).catch(() => undefined);
+  if (alive) stopCatalogListener = stop;
+  else stop?.();
+});
 onBeforeUnmount(() => {
+  stopCatalogListener?.();
   alive = false;
   revision++;
 });
@@ -161,6 +173,10 @@ const models = computed(() =>
 );
 const commentModels = computed(() =>
   models.value.filter((model) => {
+    if (
+      status.value?.catalog?.selectable?.some((entry) => entry.id === model.id)
+    )
+      return false;
     try {
       commentThinking(status.value!.config!, model.id, model);
       return true;

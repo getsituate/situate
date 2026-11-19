@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -222,26 +228,6 @@ export async function inspectCandidateReservation(request, adapter) {
       );
     return { status: ownPending ? "unresolved" : "reserved", reservation };
   });
-}
-
-export function notesForCatalog(catalog) {
-  const current = catalog.releases.find(
-    (entry) => entry.version === catalog.installedVersion,
-  );
-  assert(current, "Catalog is missing the candidate release");
-  return Object.entries(current.locales)
-    .filter(([, text]) => text.entries.length > 0)
-    .map(([locale, text]) =>
-      [
-        `## ${locale}`,
-        text.title,
-        ...text.entries.flatMap((entry) => [
-          `### ${entry.title}`,
-          ...entry.paragraphs,
-        ]),
-      ].join("\n\n"),
-    )
-    .join("\n\n");
 }
 
 export async function verifiedBuilds(
@@ -728,38 +714,36 @@ export async function productionStages(
       const built = previous(operation, "build");
       previous(operation, "qualify");
       const inputs = await preparedInputs(operation, operation.reservation);
-      const notes = notesForCatalog(inputs.catalog);
-      const { createEvidenceFromDirectory, createGitHubRelease } =
-        await import("./github-release.mjs");
+      const {
+        createEvidenceFromDirectory,
+        createGitHubRelease,
+        notesForCatalog,
+      } = await import("./github-release.mjs");
       const request = {
         identity: identity(operation),
         directory: built.directory,
-        notes,
       };
+      const journalPath = join(
+        operationDirectory(root, plan.operation),
+        "github-journal.json",
+      );
+      const prepared = (
+        publicationAdapter?.evidence ?? createEvidenceFromDirectory
+      )(request);
       const result = await (
         publicationAdapter?.createRelease ?? createGitHubRelease
       )(
         {
-          ...(publicationAdapter?.evidence ?? createEvidenceFromDirectory)(
-            request,
-          ),
+          ...prepared,
           identity: request.identity,
-          notes,
-          journalPath: join(
-            operationDirectory(root, plan.operation),
-            "github-journal.json",
-          ),
+          notes: notesForCatalog(inputs.catalog),
+          journalPath,
         },
         {
           github: checkpointGitHubWrites(
             publicationAdapter?.github ?? githubAdapter({ environment }),
             async () => {
-              const publicationJournal = json(
-                join(
-                  operationDirectory(root, plan.operation),
-                  "github-journal.json",
-                ),
-              );
+              const publicationJournal = json(journalPath);
               await checkpoint({ ...operation, publicationJournal }, "intent");
             },
           ),
@@ -780,8 +764,22 @@ export async function productionStages(
       });
     },
     download: async () => {
+      try {
+        mkdirSync(resolve(outputRoot), { mode: 0o700 });
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      }
+      const storage = lstatSync(resolve(outputRoot));
+      assert(
+        storage.isDirectory() &&
+          storage.uid === process.getuid() &&
+          (storage.mode & 0o077) === 0,
+        "Publication download root must be an owned private directory",
+      );
       const { downloadGitHubRelease } = await import("./github-release.mjs");
-      const result = await downloadGitHubRelease(
+      const result = await (
+        publicationAdapter?.downloadRelease ?? downloadGitHubRelease
+      )(
         {
           ...plan.release,
           destination: directory,
@@ -873,13 +871,13 @@ export async function productionStages(
         const record = json(githubJournal);
         const { inspectGitHubOperation, createEvidenceFromDirectory } =
           await import("./github-release.mjs");
-        const built = previous(operation, "build");
-        const inputs = await preparedInputs(operation, operation.reservation);
-        const { evidence } = createEvidenceFromDirectory({
-          identity: record.identity,
-          directory: built.directory,
-          notes: notesForCatalog(inputs.catalog),
-        });
+        const evidence =
+          record.state === "complete"
+            ? undefined
+            : createEvidenceFromDirectory({
+                identity: record.identity,
+                directory: previous(operation, "build").directory,
+              }).evidence;
         githubRelease = await inspectGitHubOperation(
           {
             identity: {

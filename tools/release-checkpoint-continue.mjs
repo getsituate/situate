@@ -28,8 +28,8 @@ import { githubAdapter } from "../infrastructure/releases/github.mjs";
 import {
   createEvidenceFromDirectory,
   createGitHubRelease,
+  notesForCatalog,
 } from "./github-release.mjs";
-import { notesForCatalog } from "./pipeline-operations.mjs";
 import { validateQualifiedRestore } from "./release-checkpoint-qualified.mjs";
 import { withReleaseSSH } from "./release-environment.mjs";
 import { coordinated, runCoordinated } from "./run-coordinated.mjs";
@@ -42,6 +42,7 @@ export async function continueQualifiedCheckpoint(
     qualificationInspection,
     publicationInspection,
     confirmation,
+    draftId,
     restoredDirectory,
     environment = process.env,
     adapters,
@@ -136,10 +137,18 @@ export async function continueQualifiedCheckpoint(
     checkpointIdentity(plan),
     "Publication requires the exact active claim",
   );
+  const draftIntent = draftId !== undefined ? state.draftIntent : undefined;
   assert(
     state.terminalNotary === true &&
       state.publication === null &&
-      state.unresolvedPublication === false,
+      (draftId === undefined
+        ? state.unresolvedPublication === false
+        : Number.isSafeInteger(draftId) &&
+          draftId > 0 &&
+          state.unresolvedPublication === true &&
+          (draftIntent?.journal?.state === "creating" ||
+            (draftIntent?.journal?.state === "uploading:manifest.json" &&
+              draftIntent.journal.releaseId === draftId))),
     "Publication inspection has unresolved work",
   );
   assert.deepEqual(
@@ -197,14 +206,14 @@ export async function continueQualifiedCheckpoint(
         operationId: plan.operation,
         inputSha256: reservation.generatedInputDigest,
       };
+      const prepared = await (
+        adapters?.evidence ?? createEvidenceFromDirectory
+      )({ identity, directory });
       const notes = notesForCatalog(
         JSON.parse(
           checkpointFile(join(directory, "situate-release-history.json")),
         ),
       );
-      const evidence = await (
-        adapters?.evidence ?? createEvidenceFromDirectory
-      )({ identity, directory, notes });
       const host = {
         WEBSITE_DEPLOY_HOST: plan.destination,
         WEBSITE_SSH_IDENTITY: environment.WEBSITE_SSH_IDENTITY,
@@ -248,24 +257,30 @@ export async function continueQualifiedCheckpoint(
           },
         ],
       };
-      const checkpoint = createCheckpoint({
-        kind: "intent",
-        operation,
-        planBytes,
-        configurationBytes: retained.configurationBytes,
-      });
-      const acknowledgement = await store.commit({
-        ...checkpoint,
-        inspectionDigest: state.inspectionDigest,
-      });
-      assert(
-        acknowledgement?.durable === true &&
-          acknowledgement.checkpointId === checkpoint.descriptor.checkpointId,
-        "Publication intent has no durable acknowledgement",
-      );
+      if (draftIntent) {
+        assert.deepEqual(draftIntent.stage, operation.stages.at(-1));
+        assert.deepEqual(draftIntent.journal.identity, identity);
+        atomicJson(journalPath, draftIntent.journal);
+      } else {
+        const checkpoint = createCheckpoint({
+          kind: "intent",
+          operation,
+          planBytes,
+          configurationBytes: retained.configurationBytes,
+        });
+        const acknowledgement = await store.commit({
+          ...checkpoint,
+          inspectionDigest: state.inspectionDigest,
+        });
+        assert(
+          acknowledgement?.durable === true &&
+            acknowledgement.checkpointId === checkpoint.descriptor.checkpointId,
+          "Publication intent has no durable acknowledgement",
+        );
+      }
       const publish = adapters?.createRelease ?? createGitHubRelease;
       const result = await publish(
-        { ...evidence, identity, notes, journalPath },
+        { ...prepared, identity, notes, journalPath },
         {
           github: checkpointGitHubWrites(
             adapters?.github ?? githubAdapter({ environment }),
@@ -287,6 +302,8 @@ export async function continueQualifiedCheckpoint(
               );
             },
           ),
+          reconcile: Boolean(draftIntent),
+          expectedDraftId: draftId,
           authorize: async (expected) => {
             assert.deepEqual(expected.identity, identity);
             const current = await coordinator.inspect();

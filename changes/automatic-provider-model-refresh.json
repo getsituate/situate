@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "automatic-provider-model-refresh",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "automatic-provider-model-refresh",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Automatic AI model updates",
+          "paragraphs": [
+            "Situate refreshes model lists in the background for connections that support live discovery. Compatible new chat models can appear without an app update. Your saved choice stays the same."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "automatic-provider-model-refresh",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Automatische Aktualisierung der KI-Modelle",
+          "paragraphs": [
+            "Situate aktualisiert die Modelllisten im Hintergrund, wenn die Verbindung einen Live-Abruf unterstützt. Neue kompatible Chatmodelle können ohne App-Update erscheinen. Deine gespeicherte Auswahl bleibt erhalten."
+          ]
+        }
+      ]
+    }
+  }
+}
