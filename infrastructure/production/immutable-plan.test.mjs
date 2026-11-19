@@ -248,13 +248,30 @@ test("traffic accepts only the expected provider-side attachment observation", (
   );
   const before = { ...volume, server_id: null, size: 50 };
   const observed = { ...before, server_id: 516 };
-  const withDrift = (after) => ({
+  const withDrift = (after, prior = before) => ({
     ...base,
-    resource_drift: [row(disk, "update", after, before)],
+    resource_drift: [row(disk, "update", after, prior)],
   });
-  assert.equal(
-    checkImmutablePlan(withDrift(observed), "traffic", undefined, operation),
-    2,
+  for (const server_id of [null, 515]) {
+    assert.equal(
+      checkImmutablePlan(
+        withDrift(observed, { ...before, server_id }),
+        "traffic",
+        undefined,
+        operation,
+      ),
+      2,
+    );
+  }
+  assert.throws(
+    () =>
+      checkImmutablePlan(
+        withDrift(observed, { ...before, server_id: 517 }),
+        "traffic",
+        undefined,
+        operation,
+      ),
+    /free of drift/,
   );
   assert.throws(
     () =>
