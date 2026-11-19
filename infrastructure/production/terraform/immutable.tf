@@ -89,7 +89,7 @@ resource "hcloud_server" "immutable" {
     enrollment_token    = lookup(var.enrollment_tokens, each.key, "")
   })
   delete_protection  = each.key != var.retiring_generation
-  rebuild_protection = true
+  rebuild_protection = each.key != var.retiring_generation
 
   lifecycle {
     # Instance bootstrap is written only on creation, never refreshed in place.

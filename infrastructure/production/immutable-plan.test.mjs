@@ -11,7 +11,12 @@ const ipv6 = "hcloud_zone_rrset.apex_ipv6";
 const mail = "hcloud_zone_rrset.mail";
 const legacy = { ipv4_address: "192.0.2.3", ipv6_address: "2001:db8::3" };
 const current = 'hcloud_server.immutable["current"]';
-const active = { ...legacy, id: "515", delete_protection: true };
+const active = {
+  ...legacy,
+  id: "515",
+  delete_protection: true,
+  rebuild_protection: true,
+};
 const candidatePin = {
   image: "223",
   labels: { source_revision: "a".repeat(40) },
@@ -342,10 +347,11 @@ test("the one-time retirement targets only the migrated legacy VM", () => {
   const live = records().map(({ address, change }) =>
     row(address, "no-op", change.after),
   );
-  const original = { ...legacy, id: "99", delete_protection: true };
+  const original = { ...active, id: "99" };
   const unlocked = {
     ...original,
     delete_protection: false,
+    rebuild_protection: false,
     ignore_remote_firewall_ids: false,
     keep_disk: false,
     shutdown_before_deletion: false,
@@ -374,6 +380,24 @@ test("the one-time retirement targets only the migrated legacy VM", () => {
   assert.equal(
     checkImmutablePlan(release, "unprotect", undefined, migration),
     1,
+  );
+  const shutdown = structuredClone(release);
+  shutdown.resource_drift = [
+    row(
+      "hcloud_server.production",
+      "update",
+      { ...original, status: "off" },
+      { ...original, status: "running" },
+    ),
+  ];
+  assert.equal(
+    checkImmutablePlan(shutdown, "unprotect", undefined, migration),
+    1,
+  );
+  shutdown.resource_drift[0].change.after.rebuild_protection = false;
+  assert.throws(
+    () => checkImmutablePlan(shutdown, "unprotect", undefined, migration),
+    /free of drift/,
   );
   const unsafe = structuredClone(release);
   unsafe.resource_changes[0].change.after.keep_disk = true;
@@ -420,12 +444,24 @@ test("retirement only changes the previous server after traffic and storage belo
     row(disk, "no-op", volume),
     row(link, "no-op", lease),
   ];
-  const unlocked = { ...active, delete_protection: false };
+  const unlocked = {
+    ...active,
+    delete_protection: false,
+    rebuild_protection: false,
+  };
   const unblock = plan(...base, row(current, "update", unlocked, active));
   unblock.variables.retiring_generation = { value: "current" };
   assert.equal(
     checkImmutablePlan(unblock, "unprotect", undefined, operation),
     1,
+  );
+  const mismatch = structuredClone(unblock);
+  mismatch.resource_changes.find(
+    ({ address }) => address === current,
+  ).change.after.rebuild_protection = true;
+  assert.throws(
+    () => checkImmutablePlan(mismatch, "unprotect", undefined, operation),
+    /only lift/,
   );
   const altered = structuredClone(unblock);
   altered.resource_changes.find(

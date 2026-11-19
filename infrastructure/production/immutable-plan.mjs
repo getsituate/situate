@@ -38,6 +38,24 @@ function allowsAttachmentDrift(drift, phase, operation, vars) {
   );
 }
 
+function allowsLegacyShutdown(drift, phase, operation) {
+  if (
+    phase !== "unprotect" ||
+    !operation?.migration ||
+    drift.address !== "hcloud_server.production" ||
+    !isDeepStrictEqual(drift.change?.actions, ["update"])
+  )
+    return false;
+  const { before, after } = drift.change;
+  if (!before || !after || String(before.id) !== operation.previousId)
+    return false;
+  const { status: previous, ...old } = before;
+  const { status: current, ...next } = after;
+  return (
+    previous === "running" && current === "off" && isDeepStrictEqual(old, next)
+  );
+}
+
 function allowsFirewallDrift(drift, phase, operation) {
   if (!drift.length) return true;
   if (
@@ -92,12 +110,13 @@ export function checkImmutablePlan(plan, phase, receiptBytes, operation) {
     !plan.deferred_changes?.length &&
     (allowsFirewallDrift(plan.resource_drift ?? [], phase, operation) ||
       (plan.resource_drift?.length === 1 &&
-        allowsAttachmentDrift(
+        (allowsAttachmentDrift(
           plan.resource_drift[0],
           phase,
           operation,
           plan.variables,
-        ))) &&
+        ) ||
+          allowsLegacyShutdown(plan.resource_drift[0], phase, operation)))) &&
     Array.isArray(
       plan.resource_changes,
     ), "plan must be complete, applyable and free of drift");
@@ -208,11 +227,13 @@ export function checkImmutablePlan(plan, phase, receiptBytes, operation) {
       const {
         id: beforeId,
         delete_protection: beforeProtection,
+        rebuild_protection: beforeRebuildProtection,
         ...before
       } = previous.before ?? {};
       const {
         id: afterId,
         delete_protection: afterProtection,
+        rebuild_protection: afterRebuildProtection,
         ...after
       } = previous.after ?? {};
       if (
@@ -236,16 +257,19 @@ export function checkImmutablePlan(plan, phase, receiptBytes, operation) {
         beforeId === afterId &&
         beforeProtection === true &&
         afterProtection === false &&
+        beforeRebuildProtection === true &&
+        afterRebuildProtection === false &&
         isDeepStrictEqual(before, after) &&
         Object.values(previous.after_unknown ?? {}).every(
           (field) => field === false,
-        ), "only lift the previous server's delete protection");
+        ), "only lift the previous server's delete and rebuild protection");
       return changed.size;
     }
     if (phase === "retire") {
       require(changed.size === 1 &&
         changed.get(previousAddress) === "delete" &&
         previous.before.delete_protection === false &&
+        previous.before.rebuild_protection === false &&
         previous.after === null &&
         value("retiring_generation") ==
           null, "only delete the accepted previous server");

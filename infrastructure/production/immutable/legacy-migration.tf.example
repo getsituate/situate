@@ -8,7 +8,7 @@ resource "hcloud_server" "production" {
   firewall_ids       = [hcloud_firewall.production.id]
   labels             = local.labels
   delete_protection  = var.retiring_generation != "legacy"
-  rebuild_protection = true
+  rebuild_protection = var.retiring_generation != "legacy"
 
   lifecycle {
     ignore_changes = [user_data, ssh_keys]
