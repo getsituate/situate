@@ -785,8 +785,10 @@ export async function createGitHubRelease(
     id(expectedDraftId);
     assert(
       reconcile &&
-        journal.state === "creating" &&
-        journal.releaseId === undefined &&
+        ((journal.state === "creating" && journal.releaseId === undefined) ||
+          (journal.state === "uploading:manifest.json" &&
+            journal.releaseId === expectedDraftId &&
+            evidence.assets[0]?.name === "manifest.json")) &&
         release?.id === expectedDraftId &&
         release.draft === true &&
         release.target_commitish === identity.sourceRevision &&
