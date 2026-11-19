@@ -165,12 +165,24 @@ test("the upgrade launches the installed updater and verifies cancellation befor
       notices[1] < indices[2],
   );
   assert.ok(indices[1] < cancellation && cancellation < indices[2]);
+  const unsaved = `${upgradeNoteAfter}\nUnsaved cancellation marker\n`;
+  const draft = steps.findIndex(
+    (step) =>
+      step.assert?.name === "Retained unsaved source" &&
+      step.assert.value === unsaved,
+  );
+  const reopened = steps.findIndex(
+    (step, index) => index > cancellation && step.click?.name === "Edit source",
+  );
+  const retained = steps.findIndex(
+    (step, index) =>
+      index > reopened &&
+      step.assert?.name === "Markdown source" &&
+      step.assert.value === unsaved,
+  );
+  assert.ok(indices[1] < draft && draft < cancellation);
   assert.ok(
-    steps.some(
-      (step) =>
-        step.assert?.value ===
-        `${upgradeNoteAfter}\nUnsaved cancellation marker\n`,
-    ),
+    cancellation < reopened && reopened < retained && retained < notices[1],
   );
   assert.deepEqual(
     steps.filter((step) => "writable" in step),
