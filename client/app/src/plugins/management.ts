@@ -1,6 +1,14 @@
 import type { DeepReadonly } from "vue";
 import type { RuntimePlugin } from "./runtime";
+import type { PluginManifest } from "./types";
 import type { WorkspaceUi } from "../layout/runtime";
+
+export function pluginManagementGroup(
+  manifest: DeepReadonly<PluginManifest> | null,
+) {
+  if (manifest?.exports?.includes("documentSourceDescribe")) return "source";
+  return manifest?.kind ?? "tool";
+}
 
 export function pluginSettingsId(
   plugin: DeepReadonly<RuntimePlugin> | undefined,
