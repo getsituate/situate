@@ -98,6 +98,24 @@ node website/site.mjs --build
 
 The browser check includes navigation between the landing page, product tour and legal pages, the product gallery and image viewer, narrow-screen reflow, keyboard access, reduced motion and no-JavaScript rendering. Legal-page checks also cover print output. Run `node website/legal/browser.test.mjs` for those checks alone. The browser check requires the client’s installed Playwright package and Google Chrome. `WEBSITE_PLAYWRIGHT_MODULE` can point to another existing Playwright installation; `WEBSITE_BROWSER_CHANNEL` selects an installed browser channel. It does not download browsers. Screenshots go to a temporary directory, or to `WEBSITE_SCREENSHOTS` when set. These are review images, not product visual-regression references or native-device qualification.
 
-The repository test runner includes website contracts in `design-unit` and the browser check in `design-website-browser`.
+The repository test runner includes website contracts in `design-unit`. The
+`design-website-browser` check runs on affected pull requests and merge groups.
+It opens the static build, checks internal links and anchors, and compares a
+full-height screenshot of each generated HTML page on Chromium desktop and
+mobile. The page list comes from the build, including pages not yet linked in
+navigation. It then runs the functional browser suite against that build.
+
+```sh
+python3 tools/pipeline-container.py website check
+# After an intentional visual change:
+python3 tools/pipeline-container.py website update
+python3 tools/pipeline-container.py website check
+```
+
+Both commands use the same pinned Linux/amd64 tool image. Review updated
+images under `website/visual/baselines/` and remove references for deleted
+pages. CI never writes references. Open
+`test-results/website-visual/html/index.html` for the comparison report; failed
+CI runs attach it as `website-visual-report`.
 
 The build writes the localized landing page and its assets to the ignored `website/dist/` directory. Its `index.html` is the site entry point; `product.html`, `legal-notice.html` and `privacy.html` are standalone pages with the same navigation. Rebuilding removes the former comparison stylesheet and variant directories from reused output folders. Serve that directory at an origin root because asset URLs are root-relative. The page retains `noindex, nofollow`; a build does not publish it or establish that its product claims are ready for publication.

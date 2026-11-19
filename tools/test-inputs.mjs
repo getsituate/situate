@@ -170,7 +170,13 @@ const rules = {
     design.test(file) || requirements(file) || isPlainDocumentation(file),
   "design-website-hosting": (file) =>
     /^(website|infrastructure\/(website|production))\//.test(file),
-  "design-website-browser": (file) => design.test(file),
+  "design-website-browser": (file) =>
+    (/^website\//.test(file) && !isPlainDocumentation(file)) ||
+    /^design\/brand\//.test(file) ||
+    file === "infrastructure/production/docker/nginx.conf" ||
+    file === ".github/workflows/deploy-website.yml" ||
+    file === "client/package-lock.json" ||
+    file === "client/docker/ci-browsers.json",
   "design-validation-browser": (file) => design.test(file),
   "design-reference-browser": (file) => design.test(file),
   "design-mini-reference-browser": (file) => design.test(file),

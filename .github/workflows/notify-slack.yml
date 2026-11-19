@@ -5,6 +5,7 @@ on:
     workflows:
       - Dependency monitoring
       - Deploy hosting
+      - Deploy website
       - Diagnostics
       - Publish macOS
       - Release launch trace

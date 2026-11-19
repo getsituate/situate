@@ -1,0 +1,42 @@
+name: Deploy website
+
+on:
+  workflow_run:
+    workflows: [Deploy hosting]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    if: github.repository == 'getsituate/situate' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') && vars.HOSTING_PRODUCTION_ENABLED == 'true' && vars.WEBSITE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: website-production
+    concurrency:
+      group: website-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node website/site.mjs --build
+        env:
+          WEBSITE_POSTHOG_TOKEN: ${{ vars.WEBSITE_POSTHOG_TOKEN }}
+      - run: python3 tools/pipeline-container.py website prepared website/dist
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: website-visual-report
+          path: test-results/website-visual/
+          if-no-files-found: ignore
+          retention-days: 7
+      - run: python3 infrastructure/production/immutable/website_content.py deploy website/dist "$WEBSITE_SOURCE_REVISION"
+        env:
+          WEBSITE_SOURCE_REVISION: ${{ github.event.workflow_run.head_sha }}
+          WEBSITE_CONTENT_KNOWN_HOSTS: ${{ vars.WEBSITE_CONTENT_KNOWN_HOSTS }}
+          WEBSITE_CONTENT_SSH_KEY: ${{ secrets.WEBSITE_CONTENT_SSH_KEY }}

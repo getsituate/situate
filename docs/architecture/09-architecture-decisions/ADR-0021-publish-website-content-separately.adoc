@@ -1,0 +1,31 @@
+[[adr-0021]]
+= ADR-0021: Publish website content independently of app releases
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-18
+Implementation:: Workflow and image receiver are versioned; production activation requires key enrollment and a qualified replacement.
+
+== Context
+
+Reviewed website changes should go live after merge without a second routine approval.
+The public site and app feeds share Nginx, but a website rollback must not rewind the app feed under link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068].
+
+== Decision
+
+Keep Caddy and Nginx on the immutable hosting generation defined in <<adr-0019>>. After the hosting workflow succeeds, publish the checked static build from protected `main` through a dedicated SSH entry point that can invoke only the website receiver.
+The receiver uses the existing content-addressed website store and shares the host's volume lock. Nginx reads website content and app distribution through separate read-only mounts.
+
+Automating the full service deploy would make the workflow a Docker operator and couple ordinary edits to runtime changes.
+A separate hosting platform would avoid that access but add another origin and a routing change for the existing app feed.
+The content-only path keeps the same public origin and does not require a public staging site.
+
+== Consequences
+
+Website revisions switch without restarting Nginx. A failed content check can restore the previous revision without touching app publication.
+The receiver is baked into the host image, and rollout enrolls the public key separately. Operators must retain the previous website version and reconcile an interrupted switch before publishing again.
+See the link:{architecture-repository-root}/infrastructure/production/immutable/README.md#enable-automatic-website-publication[production runbook].

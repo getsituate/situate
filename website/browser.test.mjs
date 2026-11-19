@@ -4,7 +4,7 @@ import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
-import { createPreviewServer } from "./site.mjs";
+import { createBuildServer, createPreviewServer } from "./site.mjs";
 import { checkWaitlist } from "./waitlist.browser.test.mjs";
 import { checkProduct } from "./product.browser.test.mjs";
 import { checkDownload } from "./download.browser.test.mjs";
@@ -16,7 +16,9 @@ const { chromium } = require(
     process.env.PLAYWRIGHT_MODULE ||
     "../client/node_modules/playwright",
 );
-const server = createPreviewServer();
+const server = process.env.WEBSITE_BUILD
+  ? createBuildServer(process.env.WEBSITE_BUILD)
+  : createPreviewServer();
 server.listen(0, "127.0.0.1");
 await once(server, "listening");
 const origin = `http://127.0.0.1:${server.address().port}`;
@@ -486,7 +488,7 @@ async function inspectNavigationGrowth() {
 
 try {
   browser = await chromium.launch({
-    channel: process.env.WEBSITE_BROWSER_CHANNEL || "chrome",
+    channel: (process.env.WEBSITE_BROWSER_CHANNEL ?? "chrome") || undefined,
     headless: true,
   });
   for (const size of [
@@ -1082,6 +1084,7 @@ try {
   await browser?.close();
   await new Promise((done) => {
     server.close(done);
+    server.closeAllConnections();
   });
 }
 

@@ -645,8 +645,25 @@ export function suiteInventory(files, host = process.platform) {
   node("design-contracts", "design", "unit", [
     "design/brand/validation/check.cjs",
   ]);
+  add(
+    "design-website-browser",
+    "design",
+    "browser",
+    ".",
+    process.execPath,
+    ["website/check.mjs"],
+    [
+      "website/browser.test.mjs",
+      "website/legal/browser.test.mjs",
+      "website/product.browser.test.mjs",
+      "website/waitlist.browser.test.mjs",
+      "website/download.browser.test.mjs",
+      "website/visual/pages.spec.mjs",
+    ],
+  );
+  suites.at(-1).npm = "client";
+  suites.at(-1).browsers = ["chromium"];
   for (const [id, file, args = []] of [
-    ["website", "website/browser.test.mjs"],
     ["validation", "design/brand/validation/browser.cjs"],
     ["reference", "design/brand/reference/reference.test.cjs", ["--browser"]],
     ["mini-reference", "design/brand/reference/mini-example.test.cjs"],
@@ -661,15 +678,7 @@ export function suiteInventory(files, host = process.platform) {
       "design",
       "browser",
       [file, ...args],
-      id === "website"
-        ? [
-            file,
-            "website/legal/browser.test.mjs",
-            "website/product.browser.test.mjs",
-            "website/waitlist.browser.test.mjs",
-            "website/download.browser.test.mjs",
-          ]
-        : [file],
+      [file],
       "design",
     );
 

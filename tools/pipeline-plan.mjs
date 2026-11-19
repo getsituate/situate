@@ -94,6 +94,7 @@ const families = [
       "client-browser-chromium",
       "client-browser-webkit",
       "client-executor-integration",
+      "design-website-browser",
     ],
   ],
   [
@@ -136,6 +137,7 @@ function select(paths, { mode, inventory, appImpact }) {
     const family = families.find(([, , ids]) => ids.includes(suite.id))[0];
     if (
       full &&
+      suite.id !== "design-website-browser" &&
       (["frontend", "rust", "browser", "macos-code", "macos-native"].includes(
         family,
       ) ||

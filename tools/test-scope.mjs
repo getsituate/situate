@@ -39,7 +39,11 @@ export function supportedSuiteEnabled(suite) {
   return (
     !diagnostics.has(suite.id) &&
     suite.kind !== "coverage" &&
-    !(suite.project === "design" && suite.kind === "browser")
+    !(
+      suite.project === "design" &&
+      suite.kind === "browser" &&
+      suite.id !== "design-website-browser"
+    )
   );
 }
 
