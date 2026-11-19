@@ -45,6 +45,11 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 - Do not record task narration, compliance claims, or conversation history in product copy, comments, or documentation.
 - In an otherwise usable view, show rejected or failed actions, including capacity limits, in the standard error dialog after the attempt. Do not put the error inline in a view or another dialog, or disable an action solely because a capacity limit was reached. If a view or workspace cannot be opened, show the general error screen with recovery and exit actions; dismissal must not expose an empty, unusable view. Keep field validation beside its field and retain recovery access for unresolved failures. Follow [error placement and recovery](design/brand/docs/layout-and-components.md#error-placement-and-recovery).
 
+## Development plans
+
+- Save temporary development plans as Markdown in the Git-ignored `.plan/` directory at the worktree root. Keep plans out of commits. Record durable product and architecture decisions in the requirements catalog or architecture documentation instead.
+- `.plan/` is worktree-local. Pass the relevant scope and decisions to delegates explicitly; do not assume they can see another worktree's plan.
+
 ## Delegation
 
 - Use Herdr for delegated tasks. Load `.pi/skills/delegate-with-herdr/SKILL.md` before starting another agent.
