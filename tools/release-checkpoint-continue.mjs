@@ -28,8 +28,8 @@ import { githubAdapter } from "../infrastructure/releases/github.mjs";
 import {
   createEvidenceFromDirectory,
   createGitHubRelease,
+  notesForCatalog,
 } from "./github-release.mjs";
-import { notesForCatalog } from "./pipeline-operations.mjs";
 import { validateQualifiedRestore } from "./release-checkpoint-qualified.mjs";
 import { withReleaseSSH } from "./release-environment.mjs";
 import { coordinated, runCoordinated } from "./run-coordinated.mjs";
@@ -206,14 +206,14 @@ export async function continueQualifiedCheckpoint(
         operationId: plan.operation,
         inputSha256: reservation.generatedInputDigest,
       };
+      const prepared = await (
+        adapters?.evidence ?? createEvidenceFromDirectory
+      )({ identity, directory });
       const notes = notesForCatalog(
         JSON.parse(
           checkpointFile(join(directory, "situate-release-history.json")),
         ),
       );
-      const evidence = await (
-        adapters?.evidence ?? createEvidenceFromDirectory
-      )({ identity, directory, notes });
       const host = {
         WEBSITE_DEPLOY_HOST: plan.destination,
         WEBSITE_SSH_IDENTITY: environment.WEBSITE_SSH_IDENTITY,
@@ -280,7 +280,7 @@ export async function continueQualifiedCheckpoint(
       }
       const publish = adapters?.createRelease ?? createGitHubRelease;
       const result = await publish(
-        { ...evidence, identity, notes, journalPath },
+        { ...prepared, identity, notes, journalPath },
         {
           github: checkpointGitHubWrites(
             adapters?.github ?? githubAdapter({ environment }),

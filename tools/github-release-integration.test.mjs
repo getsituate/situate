@@ -27,7 +27,6 @@ test("GitHub evidence consumes the canonical sealed qualification package withou
   const result = createEvidenceFromDirectory({
     identity,
     directory: f.directory,
-    notes: "",
   });
   assert.deepEqual(PUBLIC_METADATA_ASSETS, [
     "manifest.json",

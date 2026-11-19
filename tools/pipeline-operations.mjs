@@ -230,26 +230,6 @@ export async function inspectCandidateReservation(request, adapter) {
   });
 }
 
-export function notesForCatalog(catalog) {
-  const current = catalog.releases.find(
-    (entry) => entry.version === catalog.installedVersion,
-  );
-  assert(current, "Catalog is missing the candidate release");
-  return Object.entries(current.locales)
-    .filter(([, text]) => text.entries.length > 0)
-    .map(([locale, text]) =>
-      [
-        `## ${locale}`,
-        text.title,
-        ...text.entries.flatMap((entry) => [
-          `### ${entry.title}`,
-          ...entry.paragraphs,
-        ]),
-      ].join("\n\n"),
-    )
-    .join("\n\n");
-}
-
 export async function verifiedBuilds(
   root,
   plan,
@@ -734,38 +714,36 @@ export async function productionStages(
       const built = previous(operation, "build");
       previous(operation, "qualify");
       const inputs = await preparedInputs(operation, operation.reservation);
-      const notes = notesForCatalog(inputs.catalog);
-      const { createEvidenceFromDirectory, createGitHubRelease } =
-        await import("./github-release.mjs");
+      const {
+        createEvidenceFromDirectory,
+        createGitHubRelease,
+        notesForCatalog,
+      } = await import("./github-release.mjs");
       const request = {
         identity: identity(operation),
         directory: built.directory,
-        notes,
       };
+      const journalPath = join(
+        operationDirectory(root, plan.operation),
+        "github-journal.json",
+      );
+      const prepared = (
+        publicationAdapter?.evidence ?? createEvidenceFromDirectory
+      )(request);
       const result = await (
         publicationAdapter?.createRelease ?? createGitHubRelease
       )(
         {
-          ...(publicationAdapter?.evidence ?? createEvidenceFromDirectory)(
-            request,
-          ),
+          ...prepared,
           identity: request.identity,
-          notes,
-          journalPath: join(
-            operationDirectory(root, plan.operation),
-            "github-journal.json",
-          ),
+          notes: notesForCatalog(inputs.catalog),
+          journalPath,
         },
         {
           github: checkpointGitHubWrites(
             publicationAdapter?.github ?? githubAdapter({ environment }),
             async () => {
-              const publicationJournal = json(
-                join(
-                  operationDirectory(root, plan.operation),
-                  "github-journal.json",
-                ),
-              );
+              const publicationJournal = json(journalPath);
               await checkpoint({ ...operation, publicationJournal }, "intent");
             },
           ),
@@ -893,13 +871,13 @@ export async function productionStages(
         const record = json(githubJournal);
         const { inspectGitHubOperation, createEvidenceFromDirectory } =
           await import("./github-release.mjs");
-        const built = previous(operation, "build");
-        const inputs = await preparedInputs(operation, operation.reservation);
-        const { evidence } = createEvidenceFromDirectory({
-          identity: record.identity,
-          directory: built.directory,
-          notes: notesForCatalog(inputs.catalog),
-        });
+        const evidence =
+          record.state === "complete"
+            ? undefined
+            : createEvidenceFromDirectory({
+                identity: record.identity,
+                directory: previous(operation, "build").directory,
+              }).evidence;
         githubRelease = await inspectGitHubOperation(
           {
             identity: {

@@ -80,7 +80,8 @@ Returning from a year-based version to a lower technical `1.0.0` would be a down
 A calendar year does not grant new feature-promotion behavior or alter the optional, offline history under link:{architecture-repository-root}/requirements/data/requirements/REQ-0068-update-direct-desktop-installations.md[REQ-0068].
 
 Keep historical numeric versions, release catalogs, signatures, immutable URLs and migration checkpoints readable.
-Do not rename published releases, rewrite their bytes or require retroactive release notes.
+Do not rename published releases or replace their assets.
+Editorial changes to the GitHub release notes leave the release identity comment and the published catalog unchanged.
 Compatibility windows use actual publication evidence, not a date inferred from the version string.
 Test CalVer against supported earlier versions in update comparisons and minimum-app-version checks.
 
