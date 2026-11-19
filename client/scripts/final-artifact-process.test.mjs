@@ -74,6 +74,31 @@ test("a real launcher exit is observable before a descendant closes captured str
   assert.equal(existsSync(exited), true);
 });
 
+test("the Finder install helper uses the bounded accessibility command", async () => {
+  const events = [];
+  const execute = createQualificationProcess({
+    progress: (...event) => events.push(event),
+    execute: async () => "moved",
+  });
+  const args = [
+    "/fixture/qualification-finder-install.swift",
+    "/source",
+    "/destination",
+  ];
+  assert.equal(await execute("/usr/bin/swift", args), "moved");
+  assert.deepEqual(
+    events.map((event) => event.slice(1, 3)),
+    [
+      ["started", "accessibility"],
+      ["completed", "accessibility"],
+    ],
+  );
+  await assert.rejects(
+    execute("/usr/bin/swift", [...args, "unexpected"]),
+    /Unsupported qualification native command/,
+  );
+});
+
 test("only pre-abort launch exits produce nonterminal observations", async () => {
   const events = [],
     timeout = new AbortController();

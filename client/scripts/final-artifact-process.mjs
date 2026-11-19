@@ -29,8 +29,10 @@ function category(command, args) {
     case "swift":
       if (
         command === "/usr/bin/swift" &&
-        args.length === 4 &&
-        basename(args[0]) === "qualification-ax-text.swift"
+        ((args.length === 4 &&
+          basename(args[0]) === "qualification-ax-text.swift") ||
+          (args.length === 3 &&
+            basename(args[0]) === "qualification-finder-install.swift"))
       )
         return "accessibility";
       break;
