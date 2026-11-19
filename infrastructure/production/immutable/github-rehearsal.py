@@ -73,8 +73,21 @@ class Cloud:
         request = urllib.request.Request(f'https://api.hetzner.cloud/v1/{path}', method=method,
                                          headers=headers, data=None if payload is None else json.dumps(payload).encode())
         try:
-            with self.opener.open(request, timeout=20) as response:
-                body = response.read(2_000_001)
+            if method == 'GET':
+                for attempt in range(3):
+                    try:
+                        with self.opener.open(request, timeout=20) as response:
+                            body = response.read(2_000_001)
+                        break
+                    except urllib.error.HTTPError:
+                        raise
+                    except (OSError, http.client.HTTPException):
+                        if attempt == 2:
+                            raise
+                        time.sleep(2)
+            else:
+                with self.opener.open(request, timeout=30) as response:
+                    body = response.read(2_000_001)
         except urllib.error.HTTPError as error:
             if missing and error.code == 404:
                 return None
@@ -85,6 +98,9 @@ class Cloud:
             if not isinstance(code, str) or not re.fullmatch('[a-z_]{1,64}', code):
                 code = 'provider_error'
             raise RehearsalError(f'Hetzner {method} {path.split("?")[0]}: HTTP {error.code} ({code}).') from None
+        except (OSError, http.client.HTTPException) as error:
+            hint = 'No mutation was retried.' if method != 'GET' else 'Read did not settle.'
+            raise RehearsalError(f'Hetzner {method} {path.split("?")[0]}: {type(error).__name__}. {hint}') from None
         require(len(body) <= 2_000_000, 'Unexpectedly large provider response.')
         return json.loads(body) if body else {}
 
@@ -261,19 +277,23 @@ def snapshot(cloud, work, revision, firewall, operator_key, operator):
               '    shell: /bin/bash\n    lock_passwd: true\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    ssh_authorized_keys:\n'
             + f'      - {json.dumps(operator)}\nssh_pwauth: false\ndisable_root: true\n')
     builder = Host(make_server(cloud, 'builder', BASE_IMAGE, firewall, data), work, operator_key, 'rehearsal')
+    print('Builder allocated; verify pinned SSH identity.', flush=True)
     builder.pin(' '.join(public.split()[:2]))
     retry(lambda: builder.ssh('true'), 'pinned builder SSH')
     builder.ssh('cloud-init status --wait >/dev/null; rc=$?; { [ "$rc" = 0 ] || [ "$rc" = 2 ]; } && sudo -n passwd -l root >/dev/null')
     archive = run(['git', 'archive', revision, 'infrastructure/production/immutable',
                    'infrastructure/production/docker/nginx.conf', 'infrastructure/releases/remote.py']).stdout
     builder.ssh('mkdir -m700 "$HOME/build" && tar -xf - -C "$HOME/build"', archive)
+    print('Bake Ubuntu packages and container images.', flush=True)
     builder.ssh(f'bash -s -- {revision} {BASE_IMAGE}', BAKE_PREP.encode(), seconds=480)
+    print('Bake complete; stop builder and capture snapshot.', flush=True)
     cloud.action('servers', builder.id, 'shutdown')
     def off():
         require(cloud.call('GET', f'servers/{builder.id}')['server']['status'] == 'off', 'Builder is not off.')
     retry(off, 'powered-off builder')
     image = cloud.action('servers', builder.id, 'create_image', {'type': 'snapshot', 'description': f'{cloud.scope}-image', 'labels': {'rehearsal': cloud.scope}})['image']['id']
     cloud.drop('servers', builder.id)
+    print('Snapshot ready and builder deleted.', flush=True)
     return image
 
 
