@@ -1,0 +1,15 @@
+[Unit]
+Description=Publish the instance's short-lived SSH host key proof
+After=cloud-final.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/run/situate-enrollment-token
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/situate/host-enrollment.py
+ExecStopPost=/usr/bin/rm -f /run/situate-enrollment-token
+RuntimeMaxSec=5min
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/run
+PrivateTmp=yes

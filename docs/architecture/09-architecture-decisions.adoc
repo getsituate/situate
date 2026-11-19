@@ -41,6 +41,9 @@
 |link:09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[ADR-0018]
 |Versionless changelog declarations for client changes and localized release assembly.
 |Accepted; CI validates declarations and release assembly collects them.
+|link:09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[ADR-0019]
+|Replace the production VM from versioned images while keeping website deployments and app publication independent.
+|Accepted; image build and handoff tooling in repository; continuous deployment and production cutover remain pending
 |===
 
 :architecture-repository-root: ../..
@@ -71,6 +74,8 @@ include::09-architecture-decisions/ADR-0016-append-conversation-history.adoc[lev
 include::09-architecture-decisions/ADR-0017-calendar-versioned-app-releases.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

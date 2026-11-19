@@ -1,0 +1,28 @@
+#cloud-config
+package_update: false
+package_upgrade: false
+package_reboot_if_required: false
+ssh_pwauth: false
+disable_root: true
+ssh_deletekeys: true
+%{ if enrollment_token != "" ~}
+write_files:
+  - path: /run/situate-enrollment-token
+    owner: root:root
+    permissions: "0600"
+    content: ${jsonencode(enrollment_token)}
+%{ endif ~}
+users:
+  - name: situate-ops
+    groups: [sudo]
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${jsonencode(operator_public_key)}
+  - name: deploy
+    uid: 1100
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${jsonencode(ssh_public_key)}

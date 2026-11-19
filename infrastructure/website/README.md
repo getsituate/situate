@@ -4,7 +4,7 @@
 
 The separate `situate-reboot` website, its updater-test feed and `/opt/situate-reboot` storage have been removed. Preview releases and test artifacts are no longer available. Production app releases under `/opt/situate`, the shared Docker network, Caddy volumes and TLS certificates remain separate. External waitlist services are unaffected.
 
-Use the [production deployment guide](../production/README.md#production-services-and-traffic-activation) for website updates, SSH configuration and recovery. `deploy.mjs deploy`, `proxy` and `rollback` in this directory reject operations before loading credentials or connecting to the host. The development console's old landing-page deployment action also fails with this retirement message; it does not deploy production.
+Use the [immutable hosting guide](../production/immutable/README.md#website-only-publication) for website updates, SSH configuration and recovery. `deploy.mjs deploy`, `proxy` and `rollback` in this directory reject operations before loading credentials or connecting to the host. The development console's old landing-page deployment action also fails with this retirement message; it does not deploy production.
 
 `deploy.mjs check` remains a local build and Compose check. Shared configuration and archive helpers are still used by production tooling. The remaining preview shell scripts and Compose definition are legacy fixtures, not an active deployment path; do not recreate `/opt/situate-reboot` or restore `/config/sites/reboot.caddy` from an old backup. A restored preview snippet would conflict with the canonical redirect.
 

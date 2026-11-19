@@ -1,0 +1,81 @@
+name: Deploy hosting
+
+on:
+  push:
+    branches: [main, immutable-infrastructure]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/immutable-infrastructure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - name: Rehearse the deployment controller without cloud access
+        run: |
+          node --test infrastructure/production/{continuous-rollout,immutable-plan,rollout-journal,rollout-reconcile}.test.mjs infrastructure/production/immutable/{enrollment,probe}.test.mjs
+          python3 -B -m unittest discover -s infrastructure/production/immutable
+
+  hetzner-rehearsal:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/immutable-infrastructure'
+    needs: rehearse
+    runs-on: ubuntu-24.04
+    environment: hosting-rehearsal
+    concurrency:
+      group: hosting-hetzner-rehearsal
+      cancel-in-progress: false
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - name: Build the snapshot and verify the real Hetzner handoff
+        env:
+          HCLOUD_REHEARSAL_TOKEN: ${{ secrets.HCLOUD_REHEARSAL_TOKEN }}
+        run: timeout --signal=TERM --kill-after=30s 24m python3 -B infrastructure/production/immutable/github-rehearsal.py
+      - name: Confirm cleanup after success, failure or cancellation
+        if: always()
+        env:
+          HCLOUD_REHEARSAL_TOKEN: ${{ secrets.HCLOUD_REHEARSAL_TOKEN }}
+        run: python3 -B infrastructure/production/immutable/github-rehearsal.py cleanup
+
+  production:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on:
+      group: hosting-production
+      labels: linux
+    environment: hosting-production
+    concurrency:
+      group: hosting-production
+      cancel-in-progress: false
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - name: Replace the production host
+        run: |
+          set -euo pipefail
+          : "${SITUATE_CONTINUOUS_DIRECTORY:?Configure the durable hosting directory}"
+          test -d "$SITUATE_CONTINUOUS_DIRECTORY"
+          umask 077
+          flock -n "$SITUATE_CONTINUOUS_DIRECTORY/writer.lock" node infrastructure/production/immutable/continuous-deploy.mjs
+        env:
+          SITUATE_CONTINUOUS_DIRECTORY: ${{ vars.SITUATE_CONTINUOUS_DIRECTORY }}
+          SITUATE_HCP_WORKSPACE_ID: ${{ vars.SITUATE_HCP_WORKSPACE_ID }}
+          TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_APP_TERRAFORM_IO }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}

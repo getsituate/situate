@@ -1,9 +1,4 @@
 import {
-  to = hcloud_server.production
-  id = "163944733"
-}
-
-import {
   to = hcloud_firewall.production
   id = "11538639"
 }

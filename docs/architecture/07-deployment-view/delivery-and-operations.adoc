@@ -12,14 +12,35 @@ The tools and operator gates below remain current until that automation and its 
 
 link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0014-host-production-state-in-hcp-terraform.adoc[ADR-0014] selects HCP Terraform for authoritative infrastructure state, separate from the Hetzner application host and developer disk.
 The production workspace uses Local execution: Terraform runs on the operator's machine, while HCP stores state versions and coordinates locking.
-A future authorized GitHub Actions runner can use the same workspace without introducing another state owner.
-No CI apply or VCS-triggered infrastructure execution is enabled by this choice.
+The target GitHub Actions runner uses the same workspace, not a second state backend. Infrastructure CI applies are not enabled today.
 
 The production wrapper checks the organization, immutable workspace ID, execution mode and current state version before adoption.
 Plans are bound to that identity and their exact bytes; local inspection plans cannot be reused.
 Workspace setup, resource ownership handoff and restore verification remain operator gates, not consequences of adding configuration.
 Keep independent encrypted state exports and recoverable HCP account access; hosted history is not protection against account loss or workspace deletion.
 The link:{architecture-repository-root}/infrastructure/production/README.md[production runbook] describes credentials, operation boundaries and recovery.
+
+[[immutable-production-host]]
+==== Immutable production hosting (target)
+
+link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[ADR-0019] defines the replacement lifecycle for the Hetzner VM that serves the website and direct releases.
+The existing host remains authoritative until a separately approved cutover. The current checkout no longer exposes the in-place deployment commands.
+The link:{architecture-repository-root}/infrastructure/production/immutable/README.md[immutable hosting runbook] covers image qualification and the separately reviewed Terraform stages.
+
+[cols="2,3",options="header"]
+|===
+|Boundary |Lifecycle
+|Host image
+|The operating system, container runtime, Caddy, Nginx and serving configuration change by replacing the VM with one built from a tested image ID. First boot supplies instance-specific access and mounts; it does not assemble the serving stack.
+|Website and direct releases
+|Static website versions and their activation pointer change independently of the VM. A separate volume carries site content, signed app packages, publication state and TLS state. Only one host can attach the volume at a time; encrypted backups remain separate. Signing keys are not hosted on the VM.
+|Traffic and TLS
+|Apex A and AAAA records select the serving host. Fence the previous host before moving storage so clients with cached DNS cannot receive stale data. The domain, redirect behavior and public release URLs stay the same.
+|===
+
+After the one-time migration and explicit activation, changes to production infrastructure inputs merged to protected `main` trigger deployment automatically. Website-only, app-only and documentation-only changes do not trigger host replacement.
+The link:{architecture-repository-root}/docs/architecture/diagrams/immutable-production-host-cutover.svg[cutover diagram] shows the order of checks, traffic switch, and retirement.
+If the previous VM cannot serve the latest committed state, keep traffic paused rather than restore a stale snapshot; see <<production-publication-handoff-risk>>.
 
 ==== Distribution variants and update authority
 
@@ -168,8 +189,7 @@ Keep mutable metadata revalidated and versioned artifact URLs immutable; website
 The implemented publisher verifies and stages immutable releases, activates website/feed metadata through one atomic pointer and reconciles uncertain release publication only for the same version and identical bytes.
 See link:{architecture-repository-root}/infrastructure/releases/README.md[release publication] and link:{architecture-repository-root}/infrastructure/production/README.md[service and traffic activation] for the separate operator commands and recovery procedures.
 The production publisher remains restricted to `https://getsituate.com/releases/` and the production embedded feed endpoint.
-The public preview at `https://reboot.getsituate.com` can expose independently published test artifacts; its download page accepts only that preview origin, not production artifacts.
-Preview delivery does not establish Terraform adoption, apex cutover or production approval, and requires no additional DNS record.
+The retired preview host name `https://reboot.getsituate.com` redirects permanently to the production apex, preserving paths and query strings; it does not serve test artifacts.
 This hosting selection does not authorize release publication.
 
 ==== Faulty release handling

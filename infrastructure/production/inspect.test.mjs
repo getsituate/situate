@@ -263,8 +263,32 @@ test("adoption accepts imports and existing no-op resources only", () => {
   );
   assert.deepEqual(
     declared.sort(),
-    [...expectedAddresses, "hcloud_zone_rrset.dmarc"].sort(),
+    [
+      ...expectedAddresses.filter(
+        (address) => address !== "hcloud_server.production",
+      ),
+      "hcloud_zone_rrset.dmarc",
+    ].sort(),
   );
+});
+
+test("the normal root does not declare, import, or route to the legacy server", () => {
+  for (const name of ["main.tf", "imports.tf", "immutable.tf"]) {
+    const source = readFileSync(
+      new URL(`./terraform/${name}`, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      source,
+      /hcloud_server\.production|resource "hcloud_server" "production"/,
+    );
+  }
+  const migration = readFileSync(
+    new URL("./immutable/legacy-migration.tf.example", import.meta.url),
+    "utf8",
+  );
+  assert.match(migration, /resource "hcloud_server" "production"/);
+  assert.doesNotMatch(migration, /templatefile|runcmd|write_files/);
 });
 
 test("DMARC publishes a non-enforcing policy without changing adoption permissions", () => {
