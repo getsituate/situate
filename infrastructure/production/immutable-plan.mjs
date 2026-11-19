@@ -215,13 +215,28 @@ export function checkImmutablePlan(plan, phase, receiptBytes, operation) {
         delete_protection: afterProtection,
         ...after
       } = previous.after ?? {};
+      if (
+        operation.migration &&
+        previousAddress === "hcloud_server.production"
+      ) {
+        for (const field of [
+          "ignore_remote_firewall_ids",
+          "keep_disk",
+          "shutdown_before_deletion",
+        ]) {
+          if (before[field] == null && after[field] === false) {
+            delete before[field];
+            delete after[field];
+          }
+        }
+      }
       require(changed.size === 1 &&
         changed.get(previousAddress) === "update" &&
         value("retiring_generation") === operation.previous &&
         beforeId === afterId &&
         beforeProtection === true &&
         afterProtection === false &&
-        JSON.stringify(before) === JSON.stringify(after) &&
+        isDeepStrictEqual(before, after) &&
         Object.values(previous.after_unknown ?? {}).every(
           (field) => field === false,
         ), "only lift the previous server's delete protection");

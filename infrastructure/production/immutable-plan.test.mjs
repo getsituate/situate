@@ -343,7 +343,13 @@ test("the one-time retirement targets only the migrated legacy VM", () => {
     row(address, "no-op", change.after),
   );
   const original = { ...legacy, id: "99", delete_protection: true };
-  const unlocked = { ...original, delete_protection: false };
+  const unlocked = {
+    ...original,
+    delete_protection: false,
+    ignore_remote_firewall_ids: false,
+    keep_disk: false,
+    shutdown_before_deletion: false,
+  };
   const base = [
     ...live,
     row(host, "no-op", candidate),
@@ -368,6 +374,12 @@ test("the one-time retirement targets only the migrated legacy VM", () => {
   assert.equal(
     checkImmutablePlan(release, "unprotect", undefined, migration),
     1,
+  );
+  const unsafe = structuredClone(release);
+  unsafe.resource_changes[0].change.after.keep_disk = true;
+  assert.throws(
+    () => checkImmutablePlan(unsafe, "unprotect", undefined, migration),
+    /only lift/,
   );
   const destroy = onlyLegacy(
     row("hcloud_server.production", "delete", null, unlocked),
