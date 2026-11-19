@@ -79,6 +79,7 @@ export async function qualifyFinalArtifacts({
     environment: safeEnvironment,
     signal,
     execute,
+    progress: report,
   });
   return writeReceipt({
     directory,

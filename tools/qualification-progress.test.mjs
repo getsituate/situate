@@ -129,6 +129,21 @@ test("launch observations are restricted and cannot replace a native timeout", (
   observer.close();
 });
 
+test("updater codes are accepted only for the update phase and never include raw data", (t) => {
+  const emit = qualificationProgressWriter(fixture(t));
+  emit("update", "bundle_predecessor", "updater");
+  emit("update", "prepare_window:files_pending", "updater");
+  assert.throws(() =>
+    emit("update", "prepare_window:/private/path", "updater"),
+  );
+  assert.throws(() =>
+    emit("install", "prepare_window:files_pending", "updater"),
+  );
+  assert.throws(() =>
+    emit("update", "prepare_window:files_pending", "process"),
+  );
+});
+
 test("unknown fields, codes, linked files, permissions and excessive records fail closed without echoing input", (t) => {
   const path = fixture(t);
   const emit = qualificationProgressWriter(path);

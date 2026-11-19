@@ -151,6 +151,13 @@ for (const inheritedDesktop of [true, false])
         join(root, "client/scripts/final-artifact-process.mjs"),
         'export const createQualificationProcess = () => async () => "";',
       );
+      copyFileSync(
+        new URL(
+          "../client/scripts/qualification-updater-observation.mjs",
+          import.meta.url,
+        ),
+        join(root, "client/scripts/qualification-updater-observation.mjs"),
+      );
       const coordination = join(root, "coordination");
       writeFileSync(
         join(root, "tools/worktree-supervisor.py"),
