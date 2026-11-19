@@ -8,6 +8,7 @@ import {
   readSync,
   writeSync,
 } from "node:fs";
+import { isUpdaterObservation } from "../client/scripts/qualification-updater-observation.mjs";
 
 const maxBytes = 1024 * 1024;
 const maxEvents = 4096;
@@ -38,6 +39,7 @@ const commands = new Set([
   "quarantine",
   "launch",
   "terminate",
+  "updater",
 ]);
 const launchConfirmationStatuses = [
   "confirmation_baseline_blocked",
@@ -102,7 +104,11 @@ export function validateQualificationProgress(event) {
   assert(
     phases.has(event.phase) &&
       commands.has(event.command) &&
-      statuses.has(event.status) &&
+      (event.command === "updater"
+        ? event.phase === "update" &&
+          typeof event.status === "string" &&
+          isUpdaterObservation(event.status)
+        : statuses.has(event.status)) &&
       Number.isSafeInteger(event.elapsedMs) &&
       event.elapsedMs >= 0 &&
       event.elapsedMs <= 24 * 60 * 60 * 1000,

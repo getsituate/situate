@@ -45,6 +45,8 @@ import {
   verifyUpgradeWorkspace,
 } from "./upgrade-workspace-fixture.mjs";
 import { upgradeWorkspaceJourney } from "./upgrade-workspace-journey.mjs";
+import { observeUpdater } from "./qualification-updater-observation.mjs";
+import { qualificationProgressReporter } from "../../tools/qualification-progress.mjs";
 
 const hash = (path) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -590,8 +592,10 @@ export function createFinalArtifactQualificationHost(
     execute = createQualificationProcess(),
     environment = process.env,
     signal,
+    progress = () => {},
   } = {},
 ) {
+  const reporter = qualificationProgressReporter(progress);
   validateFinalArtifactConfiguration(configuration);
   const safeEnv = Object.fromEntries(
     ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "LANG", "LC_ALL"]
@@ -1005,18 +1009,49 @@ export function createFinalArtifactQualificationHost(
         report: () => provider.report(),
         update: async () => {
           const previousPid = pid;
-          if (upgrade) await upgrade.update();
-          else await actions(configuration.updateActions);
-          pid = undefined;
-          launchPending = true;
-          await waitFor(async () => {
+          const since = Date.now();
+          try {
+            if (upgrade) await upgrade.update();
+            else await actions(configuration.updateActions);
+            pid = undefined;
+            launchPending = true;
+            await waitFor(async () => {
+              try {
+                return bundleDigest(app) === artifact.bundleSha256;
+              } catch {
+                return false;
+              }
+            }, "production updater installation");
+            await launch(false, previousPid);
+          } catch (failure) {
+            let installed;
             try {
-              return bundleDigest(app) === artifact.bundleSha256;
+              installed = bundleDigest(app);
             } catch {
-              return false;
+              // Preserve the original failure when bundle identity cannot be observed.
             }
-          }, "production updater installation");
-          await launch(false, previousPid);
+            const previous = configuration.predecessor.manifest.artifacts[0];
+            reporter.emit(
+              "update",
+              installed === artifact.bundleSha256
+                ? "bundle_candidate"
+                : installed === previous.bundleSha256
+                  ? "bundle_predecessor"
+                  : "bundle_unverified",
+              "updater",
+            );
+            const events = observeUpdater({
+              ...configuration.account,
+              identifier,
+              version: previous.version,
+              since,
+            });
+            for (const event of events.length
+              ? events
+              : ["updater_unavailable"])
+              reporter.emit("update", event, "updater");
+            reporter.check(failure);
+          }
         },
         reopen: async (report) => {
           if (!upgrade) return reopenState(report);
