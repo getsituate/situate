@@ -76,8 +76,13 @@ export function upgradeWorkspaceJourney({ actions, verify, writable }) {
         await expect(text("Not saved"));
         await updates();
         await expect(text("Keep your unsaved changes"));
+        await expect({
+          ...editor,
+          name: "Retained unsaved source",
+          value: unsaved,
+        });
         await click(button("Cancel"));
-        await navigate("Files");
+        await openNote();
         await expect({ ...editor, value: unsaved });
         await verify(upgradeNoteAfter);
       } finally {
