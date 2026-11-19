@@ -493,6 +493,11 @@ function liveDriver(root, revision, inventory, credentials, event) {
     const run = (command, input) =>
       ssh(candidate.ipv4, command, { ...remote, input });
     run(`sudo -n /usr/local/lib/situate/verify-boot.sh ${revision}`);
+    if (credentials.websiteKey)
+      run(
+        "sudo -n /usr/bin/python3 -I /usr/local/lib/situate/website_content.py install-key",
+        `${credentials.websiteKey}\n`,
+      );
     execute("ssh-keygen", [
       "-q",
       "-s",
@@ -689,7 +694,14 @@ async function deploy(root, env, revision, gate) {
     ) && /^ws-[A-Za-z0-9]+$/.test(env.SITUATE_HCP_WORKSPACE_ID),
     "Provision the production cloud credentials and pin the HCP workspace ID.",
   );
+  const websiteKey = env.WEBSITE_CONTENT_PUBLIC_KEY?.trim();
+  ensure(
+    (!websiteKey && env.WEBSITE_DEPLOY_ENABLED !== "true") ||
+      /^ssh-ed25519 [A-Za-z0-9+/]{68}$/.test(websiteKey ?? ""),
+    "Expected a dedicated Ed25519 website publication public key.",
+  );
   const credentials = {
+    websiteKey,
     env: { ...childEnvironment(env), ...creds, CI: "true" },
     workspaceId: env.SITUATE_HCP_WORKSPACE_ID,
   };
@@ -714,6 +726,13 @@ async function deploy(root, env, revision, gate) {
     .slice(0, 2)
     .join(" ");
   const inventory = inventoryFromState(json(exportFile), operatorPublic);
+  ensure(
+    !websiteKey ||
+      (websiteKey !== operatorPublic &&
+        websiteKey !==
+          inventory.ssh_public_key.split(/\s+/).slice(0, 2).join(" ")),
+    "Website publication requires its own SSH key.",
+  );
   const last =
     inventory.qualified_hosts[inventory.traffic_host].source_revision;
   const baseline = spawnGitObjectType(last);

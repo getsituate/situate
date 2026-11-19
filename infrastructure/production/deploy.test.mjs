@@ -20,15 +20,6 @@ import { main, stage } from "./deploy.mjs";
 import { fileURLToPath } from "node:url";
 import { childEnvironment } from "../website/config.mjs";
 
-test("static website publication protocol and recovery", () => {
-  const result = spawnSync(
-    "python3",
-    ["-B", new URL("./website_content_test.py", import.meta.url).pathname],
-    { encoding: "utf8", env: childEnvironment() },
-  );
-  assert.equal(result.status, 0, result.error?.message ?? result.stderr);
-});
-
 function temporary(t) {
   const directory = mkdtempSync(join(tmpdir(), "situate-production-stage-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

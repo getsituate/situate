@@ -98,7 +98,7 @@ def settled(root):
     return target[1]
 
 
-def activate(root, version, source=None, *, seed=False):
+def activate(root, version, source=None, *, seed=False, confirm=lambda: True):
     if not VERSION.fullmatch(version):
         raise ValueError('Expected the reviewed website SHA-256.')
     previous = settled(root)
@@ -132,8 +132,16 @@ def activate(root, version, source=None, *, seed=False):
     temporary.symlink_to(f'versions/{version}')
     temporary.replace(root / 'current')
     sync_dir(root)
+    accepted = confirm()
+    if not accepted:
+        if previous is None:
+            raise ValueError('Cannot roll back the initial seed.')
+        temporary.symlink_to(f'versions/{previous}')
+        temporary.replace(root / 'current')
+        sync_dir(root)
     pending.unlink()
     sync_dir(root)
+    return accepted
 
 
 def main():

@@ -12,7 +12,7 @@ const websiteDeliveryCommands = [
   "python3 tools/pipeline-bootstrap.py",
   "node website/site.mjs --build",
   "python3 tools/pipeline-container.py website prepared website/dist",
-  'python3 infrastructure/production/website_content.py deploy website/dist "$GITHUB_SHA" "$GITHUB_RUN_NUMBER"',
+  'python3 infrastructure/production/immutable/website_content.py deploy website/dist "$WEBSITE_SOURCE_REVISION"',
 ];
 
 test("all npm projects inherit the root Volta pins", () => {

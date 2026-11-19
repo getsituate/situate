@@ -30,6 +30,10 @@ actual_packages=$(dpkg-query -W -f='${db:Status-Abbrev}\t${binary:Package}\t${Ve
 if findmnt -n -M /opt/situate >/dev/null || findmnt -n -M /srv/situate-state >/dev/null; then
   fail 'Run the boot check before attaching publication storage.'
 fi
+getent passwd situate-website >/dev/null || fail 'Missing website publication account.'
+[[ -x $root/website-ssh.sh && -s $root/website_content.py ]] || fail 'Missing website publication receiver.'
+visudo -cf /etc/sudoers.d/situate-website
+[[ ! -e /var/lib/situate-website/.ssh/authorized_keys ]] || fail 'The image contains a website publication key.'
 cd -- "$root"
 images=$(docker compose config --images)
 [[ $(printf '%s\n' "$images" | wc -l) -eq 2 ]] || fail 'Expected two baked images.'

@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 
 from rehearsal_fixture import fixtures, seed, update, receipt, transfer
+from website_content import line, send_line
 
 
 BASE_IMAGE = 161547269  # Ubuntu 24.04 amd64 in the Hetzner system-image catalog.
@@ -196,11 +197,14 @@ class Host:
     def pin(self, public):
         self.known.write_text(f'{self.ip} {public}\n')
 
+    def ssh_command(self, command, key=None, login=None):
+        return ['ssh', '-F', '/dev/null', '-T', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
+                '-o', 'StrictHostKeyChecking=yes', '-o', f'UserKnownHostsFile={self.known}',
+                '-o', 'GlobalKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=4', '-i', str(key or self.key),
+                f'{login or self.login}@{self.ip}', command]
+
     def ssh(self, command, data=None, seconds=120, key=None, login=None, allowed=(0,)):
-        return run(['ssh', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
-                    '-o', 'StrictHostKeyChecking=yes', '-o', f'UserKnownHostsFile={self.known}',
-                    '-o', 'GlobalKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=4', '-i', str(key or self.key),
-                    f'{login or self.login}@{self.ip}', command], data=data, seconds=seconds, allowed=allowed)
+        return run(self.ssh_command(command, key, login), data=data, seconds=seconds, allowed=allowed)
 
     def enroll(self, token, work):
         claim = work / f'claim-{self.id}.json'
@@ -343,6 +347,7 @@ def exercise(cloud, work, revision):
     runtime_fw = make_firewall(cloud, 'runtime', f'{client}/32', [22, 80, 443], offline=True)
     operator_key, operator = key(work, 'operator')
     publisher_key, publisher = key(work, 'publisher')
+    website_key, website_public = key(work, 'website')
     print('Build pinned serving stack and capture a snapshot.', flush=True)
     image = snapshot(cloud, work, revision, builder_fw, operator_key, operator)
     fixture, ca, tar = fixtures(work, run)
@@ -354,6 +359,8 @@ def exercise(cloud, work, revision):
         host = Host(server, work, operator_key, 'situate-ops')
         host.enroll(token, work)
         host.ssh(f'sudo -n /usr/local/lib/situate/verify-boot.sh {revision}')
+        host.ssh('sudo -n /usr/bin/python3 -I /usr/local/lib/situate/website_content.py install-key',
+                 data=(' '.join(website_public.split()[:2]) + '\n').encode())
         return host
 
     def volume(part):
@@ -388,6 +395,21 @@ def exercise(cloud, work, revision):
     activate(replacement, first)
     acceptance(replacement, ca, fixture, '1.2.3', 'site')
     replacement.ssh(f'{STATE} enable --confirm-publication')
+    rejected = replacement.ssh('true', key=website_key, login='situate-website', allowed=(1,))
+    require(b'Only website publication is permitted.' in rejected.stderr, 'The website key did not hit the forced command.')
+    command = replacement.ssh_command('publish-website', website_key, 'situate-website')
+    with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=MIN_ENV) as child:
+        try:
+            send_line(child.stdin, {'index.html': 'dHJpYWw='})
+            require('pending' in line(child.stdout, 4096), 'No pending website receipt.')
+            require(replacement.probe(ca, APEX, '/').stdout == b'trial', 'Trial website was not served.')
+            send_line(child.stdin, False)
+            require(line(child.stdout, 4096) == {'complete': False}, 'Website rollback was not acknowledged.')
+            require(child.wait(timeout=10) == 0, 'Website receiver did not close successfully.')
+        finally:
+            if child.poll() is None:
+                child.kill()
+    acceptance(replacement, ca, fixture, '1.2.3', 'site')
     transfer(replacement, tar)
     update(replacement)
     replacement.ssh(f'{STATE} freeze')
