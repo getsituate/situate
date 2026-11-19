@@ -1786,7 +1786,7 @@ async fn request_local_network_permission(
     }
     Ok(())
 }
-// Match Pi's HTTP idle timeout and Undici's connection deadline, not a total stream deadline.
+// Bound connection setup and gaps between reads without limiting total stream time.
 fn model_client() -> Result<reqwest::Client, String> {
     let transports: Value = serde_json::from_str(TRANSPORTS).map_err(|_| NETWORK_ERROR)?;
     reqwest::Client::builder()
@@ -2978,7 +2978,7 @@ pub(crate) mod tests {
         .unwrap();
         let request = server.join().unwrap().to_lowercase();
         assert!(request.contains("authorization: bearer test-secret-never-display"));
-        assert!(request.contains("user-agent: pi (browser)"));
+        assert!(request.contains("user-agent: situate\r\n"));
         let frames = frames.lock().unwrap().join("\n");
         assert!(frames.contains("headers"));
         assert!(frames.contains("data"));

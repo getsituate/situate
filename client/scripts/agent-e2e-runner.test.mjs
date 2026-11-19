@@ -154,11 +154,11 @@ test("child environments exclude keys, proxies, injected scripts and personal Pi
         "OPENAI_API_KEY",
         "NODE_OPTIONS",
         "HTTP_PROXY",
+        "PI_CODING_AGENT_DIR",
         "RUSTFLAGS",
       ])
         assert.equal(env[name], undefined);
       assert.equal(env.HOME, join(isolated.root, "home"));
-      assert.equal(env.PI_CODING_AGENT_DIR, join(isolated.root, "pi"));
       if (build) assert.equal(env.CARGO_HOME, join(isolated.root, "cargo"));
       assert.equal(env.VOLTA_HOME, build ? "/personal/.volta" : undefined);
       assert.equal(

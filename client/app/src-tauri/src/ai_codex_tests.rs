@@ -358,6 +358,7 @@ async fn codex_native_request_injects_bearer_account_and_fixed_headers_without_p
         "chatgpt-account-id: account-fixture",
         "openai-beta: responses=experimental",
         "originator: pi",
+        "user-agent: situate",
         "accept: text/event-stream",
         "content-type: application/json",
     ] {

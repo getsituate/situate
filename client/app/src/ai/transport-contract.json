@@ -1,5 +1,5 @@
 {
-  "userAgent": "pi (browser)",
+  "userAgent": "Situate",
   "modelHeaders": ["user-agent", "nvcf-poll-seconds"],
   "apis": {
     "openai-completions": { "suffix": "/chat/completions", "headers": {} },

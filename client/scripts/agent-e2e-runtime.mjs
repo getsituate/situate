@@ -90,7 +90,7 @@ export async function createIsolation(parent = tmpdir()) {
     flag: "wx",
     mode: 0o600,
   });
-  for (const name of ["home", "tmp", "config", "data", "cache", "cargo", "pi"])
+  for (const name of ["home", "tmp", "config", "data", "cache", "cargo"])
     await mkdir(join(root, name), { mode: 0o700 });
   return {
     root,
@@ -202,7 +202,6 @@ export function childEnvironment(
     XDG_CONFIG_HOME: join(root, "config"),
     XDG_DATA_HOME: join(root, "data"),
     XDG_CACHE_HOME: join(root, "cache"),
-    PI_CODING_AGENT_DIR: join(root, "pi"),
     LANG: "en_US.UTF-8",
     CI: "true",
   };
