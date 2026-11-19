@@ -27,6 +27,7 @@ test("the pipeline CLI loads host-Docker and portable lane dependencies without 
   for (const name of [
     "pipeline.mjs",
     "pipeline-state.mjs",
+    "test-scope.mjs",
     "source-verification-evidence.mjs",
     "pipeline-environment.mjs",
     "pipeline-container.mjs",
