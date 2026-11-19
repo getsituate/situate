@@ -4,9 +4,9 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 
 ## MVP platform scope
 
-- macOS is the only active product target. iOS, Windows, Linux desktop and Android are deferred and are not currently supported. Ordinary development does not need their SDKs, packaging, platform-specific compatibility fixes or CI gates unless explicitly requested.
+- macOS is the released product platform. Windows is the next delivery target and requires feature parity, native verification and direct distribution under [REQ-0012](requirements/data/requirements/REQ-0012-platform-availability.md). iOS, Linux desktop and Android remain deferred; ordinary development does not need their SDKs or packaging.
 - Preserve useful existing platform code and tests unless removal has a concrete benefit. Deferred targets are not supported or qualified by passing shared tests. Reintroducing a target requires an explicit scope decision and native verification.
-- Linux may still host shared CI tooling, security scans and other platform-independent checks. A CI host is not a product support commitment. Browser tests do not replace native macOS qualification; shared or historical mobile checks do not establish current iOS support.
+- Linux may still host shared CI tooling, security scans and other platform-independent checks. A CI host is not a product support commitment. Browser tests do not replace native macOS or Windows qualification; shared or historical mobile checks do not establish current iOS support.
 - Use focused tests within the default MVP scope for local development; CI runs the broader PR verification plan. Expensive workshop, design-browser and screenshot sweeps are opt-in through `node tools/test.mjs --extended` or their dedicated commands. Run focused deferred checks when changing the behavior they cover; do not present an MVP pass as exhaustive coverage.
 
 ## Released data and compatibility

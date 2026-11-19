@@ -35,7 +35,7 @@ The [Product Capability Catalog](docs/product-capability-catalog/README.md) reco
 
 ## Status and direction
 
-Situate is under active development. **macOS is the only active product platform.** iOS, Windows, Linux desktop and Android are deferred and are not currently supported.
+Situate is available on **macOS**. Windows is the next platform in development and is not yet available. iOS, Linux desktop and Android remain deferred.
 
 Notes and tasks live in local workspace files. AI features require configured access to a supported model provider; provider charges may apply, and workspace content used for AI requests can be sent to that provider. See [AI access and supported authentication](client/README.md#workspace-ai-access-and-chat).
 
