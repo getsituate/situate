@@ -97,11 +97,6 @@ $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsof
 $vs = (& $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -format json | ConvertFrom-Json | Select-Object -First 1)
 if (-not $vs) { throw 'MSVC is missing' }
 $msvc = Get-Content (Join-Path $vs.installationPath 'VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt') | Select-Object -First 1
-$edge = @('HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\*', 'HKCU:\Software\Microsoft\EdgeUpdate\Clients\*') |
-  ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } |
-  Where-Object { $_.name -eq 'Microsoft Edge WebView2 Runtime' -and $_.pv -match '^\d+\.\d+\.\d+\.\d+$' -and $_.pv -ne '0.0.0.0' } |
-  Select-Object -First 1
-if (-not $edge) { throw 'WebView2 Evergreen Runtime is missing' }
 $os = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-@{ osBuild = "$($os.CurrentBuildNumber).$($os.UBR)"; msvc = $msvc.Trim(); visualStudio = $vs.installationVersion; sdk = $sdk; webview2 = $edge.pv } | ConvertTo-Json -Compress
+@{ osBuild = "$($os.CurrentBuildNumber).$($os.UBR)"; msvc = $msvc.Trim(); visualStudio = $vs.installationVersion; sdk = $sdk } | ConvertTo-Json -Compress
 `;
