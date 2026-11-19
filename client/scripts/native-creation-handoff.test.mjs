@@ -15,6 +15,7 @@ async function journey({
   secondary = false,
   initialCurrent = false,
   replaceWindow = false,
+  dictationSupported = true,
   handoff = "create",
 } = {}) {
   let focused = false;
@@ -93,6 +94,8 @@ async function journey({
           focused = true;
         }
         return state();
+      case "dictation_snapshot":
+        return { supported: dictationSupported };
       case "smoke_phase":
         return { handoff, shellReady: childReady };
       case "smoke_progress":
@@ -196,6 +199,12 @@ test("primary creation activates its entry but yields foreground until the secon
   assert.equal(result.ready, 1);
   assert.equal(result.childReady, true);
   assert.ok(result.activations.length > 0);
+});
+
+test("the smoke test fails if dictation is unavailable on macOS", async () => {
+  const result = await journey({ dictationSupported: false });
+  assert.match(result.report, /Chat dictation is unavailable on this Mac/);
+  assert.equal(result.ready, 0);
 });
 
 test("the reopened entry waits for registry readiness without taking workspace focus", async () => {
