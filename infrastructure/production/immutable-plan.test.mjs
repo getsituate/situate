@@ -191,6 +191,48 @@ test("publication transfer separates detach and attach and does not automount", 
   );
 });
 
+test("detach only accepts firewall drift caused by adding the verified candidate", () => {
+  const planned = plan(
+    row(host, "no-op", candidate),
+    row(disk, "no-op", volume),
+    row(current, "no-op", active),
+    row(link, "delete", null, { ...lease, server_id: 515 }),
+  );
+  const member = (server) => ({ server, label_selector: "" });
+  const before = { apply_to: [member(515)], rule: [{ port: "443" }] };
+  const after = { ...before, apply_to: [member(515), member(516)] };
+  const observe = (effect) => ({
+    ...planned,
+    resource_drift: [
+      row("hcloud_firewall.production", "update", effect, before),
+    ],
+  });
+  assert.equal(
+    checkImmutablePlan(observe(after), "detach", undefined, operation),
+    1,
+  );
+  assert.throws(
+    () =>
+      checkImmutablePlan(
+        observe({ ...after, apply_to: [member(515), member(517)] }),
+        "detach",
+        undefined,
+        operation,
+      ),
+    /free of drift/,
+  );
+  assert.throws(
+    () =>
+      checkImmutablePlan(
+        observe({ ...after, rule: [{ port: "22" }] }),
+        "detach",
+        undefined,
+        operation,
+      ),
+    /free of drift/,
+  );
+});
+
 test("routing and partial-DNS reconciliation require both final records on the attached host", () => {
   const base = [
     row(host, "no-op", candidate),

@@ -1,0 +1,29 @@
+[[adr-0020]]
+= ADR-0020: Stop failed hosting deployments for operator recovery
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-19
+Implementation:: Local verification; production cutover and a live production workflow run remain pending.
+
+== Context
+
+link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[ADR-0019] replaces the serving VM while preserving publication state. The initial workflow retained each deployment phase on a dedicated runner to support resumption. Interruption can leave the volume, DNS and serving process in different phases. Correctly resuming each combination would require regularly exercising those recovery paths.
+
+== Decision
+
+Use a fresh GitHub-hosted runner for each production deployment. Read infrastructure state from HCP Terraform and supply credentials from the protected production environment. Keep phase results in the running job. Serialize GitHub production jobs and keep Terraform's workspace lock for individual applies.
+
+Before the first infrastructure change, create a GitHub deployment record. Mark it successful only after the public checks and predecessor retirement complete. If a step fails or the runner exits, stop; do not automatically roll back, resume or retry a write. An unresolved deployment record blocks the next run. The operator inspects HCP Terraform, Hetzner, DNS and the serving host, restores a consistent topology, and then marks the record inactive. GitHub records that an operation is unresolved, not the phase to replay.
+
+This replaces the automated recovery journal from ADR-0019. The volume, publication safety checks and requirement to verify the replacement before retiring the predecessor are unchanged. A read-only failure before the first infrastructure change need not block a later run.
+
+== Consequences
+
+No dedicated runner or separate journal store is required. An interruption can require operator intervention during a service outage. Terraform state and verified live observations remain authoritative; job logs help identify the failed step but cannot establish that a failed write had no effect.
+
+Retaining a dedicated runner and resumable journal would reduce some manual recovery work, but would add infrastructure and recovery paths to maintain. Use the link:{architecture-repository-root}/infrastructure/production/immutable/README.md#recover-an-interrupted-deployment[manual recovery runbook] instead.

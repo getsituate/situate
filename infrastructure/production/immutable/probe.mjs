@@ -137,7 +137,12 @@ const normalize6 = (value) => new URL(`http://[${value}]`).hostname;
 
 export async function observeHttps(
   expected,
-  { request = curl, lookup4 = resolve4, lookup6 = resolve6 } = {},
+  {
+    request = curl,
+    requestV6 = request,
+    lookup4 = resolve4,
+    lookup6 = resolve6,
+  } = {},
 ) {
   require(hash.test(expected.downloadSha256) &&
     hash.test(expected.updateSha256) &&
@@ -163,9 +168,12 @@ export async function observeHttps(
     const route = (name) =>
       address ? ["--resolve", `${name}:443:${address}`] : [];
     const obtain = (name, path, extra, capture) =>
-      request([...route(name), ...extra, `https://${name}${path}`], {
-        capture,
-      });
+      (address.startsWith("[") ? requestV6 : request)(
+        [...route(name), ...extra, `https://${name}${path}`],
+        {
+          capture,
+        },
+      );
     require((await obtain(apex, "/healthz", [], true)).toString() ===
       "ok\n", "Candidate did not return the hosting health response.");
     const home = await obtain(

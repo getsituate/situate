@@ -629,6 +629,8 @@ export function suiteInventory(files, host = process.platform) {
     "infrastructure/production/immutable-plan.test.mjs",
     "infrastructure/production/rollout-journal.test.mjs",
     "infrastructure/production/continuous-rollout.test.mjs",
+    "infrastructure/production/hosting-deployment.test.mjs",
+    "infrastructure/production/immutable/hosting-inventory.test.mjs",
     "infrastructure/production/immutable/enrollment.test.mjs",
     "infrastructure/production/rollout-reconcile.test.mjs",
     "infrastructure/production/immutable/probe.test.mjs",

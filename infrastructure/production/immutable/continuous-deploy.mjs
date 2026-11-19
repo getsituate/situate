@@ -1,18 +1,16 @@
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  writeFileSync,
-  renameSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { isIP } from "node:net";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { setTimeout as wait } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { childEnvironment, configuration } from "../../website/config.mjs";
-import { rollOut, directoryAccess } from "../continuous-rollout.mjs";
+import { rollOut } from "../continuous-rollout.mjs";
+import { deploymentGate } from "../hosting-deployment.mjs";
+import { main as terraformMain } from "../terraform.mjs";
+import { inventoryFromState } from "./hosting-inventory.mjs";
 import { observeHost, observeHttps } from "./probe.mjs";
 import { verifiedHostKey } from "./enrollment.mjs";
 
@@ -45,18 +43,6 @@ const write = (path, value) =>
     flush: true,
   });
 
-function privateFile(path) {
-  const info = lstatSync(path);
-  ensure(
-    info.isFile() &&
-      info.nlink === 1 &&
-      info.uid === process.getuid() &&
-      !(info.mode & 0o077),
-    "Expected a private owner-only file on the production runner.",
-  );
-  return path;
-}
-
 function execute(
   command,
   args,
@@ -74,9 +60,26 @@ function execute(
     }).trim();
   } catch {
     throw new Error(
-      `${command} failed; inspect the phase journal before continuing.`,
+      `${command} failed; inspect live state before making further changes.`,
     );
   }
+}
+
+function terraformCommand(env, ...args) {
+  return execute(process.execPath, [terraform, ...args], {
+    env,
+    timeout: 180_000,
+  });
+}
+
+function keyFile(root, value, name) {
+  ensure(
+    typeof value === "string" && value.trim(),
+    `Missing hosting ${name} SSH key.`,
+  );
+  const path = join(root, `${name}.key`);
+  writeFileSync(path, `${value.trim()}\n`, { mode: 0o600, flag: "wx" });
+  return path;
 }
 
 function git(...args) {
@@ -93,10 +96,19 @@ const deploymentInputs = [
   "infrastructure/production/rollout-journal.mjs",
   "infrastructure/production/rollout-reconcile.mjs",
   "infrastructure/production/continuous-rollout.mjs",
+  "infrastructure/production/hosting-deployment.mjs",
   "infrastructure/releases/remote.py",
   "infrastructure/website/config.mjs",
   ".github/workflows/deploy-hosting.yml",
 ];
+
+function spawnGitObjectType(revision) {
+  try {
+    return git("cat-file", "-t", revision);
+  } catch {
+    return null;
+  }
+}
 
 function inputDigest(revision) {
   return hash(
@@ -120,14 +132,7 @@ async function retryObservation(observe, repeats = 18, interval = 5000) {
   }
 }
 
-function liveDriver(
-  root,
-  revision,
-  inventory,
-  operationRoot,
-  credentials,
-  qualification,
-) {
+function liveDriver(root, revision, inventory, credentials, qualification) {
   const old = inventory.traffic_host;
   const generation = `g${revision.slice(0, 15)}`;
   const disks = inventory.publication_volumes;
@@ -161,17 +166,12 @@ function liveDriver(
       !Object.hasOwn(inventory, "enrollment_tokens"),
     "The runner needs the settled immutable production inventory and both installed identities.",
   );
-  const pass = { ...credentials.env, SITUATE_ROLLOUT_DIRECTORY: root };
-  const tf = (...args) =>
-    execute(process.execPath, [terraform, ...args], {
-      env: pass,
-      timeout: 20 * 60_000,
-    });
+  const tf = (...args) => terraformCommand(credentials.env, ...args);
   const caPublic = execute("ssh-keygen", ["-y", "-f", ca])
     .split(/\s+/)
     .slice(0, 2)
     .join(" ");
-  const caHosts = join(operationRoot, "publisher-known-hosts");
+  const caHosts = join(root, "publisher-known-hosts");
   function ssh(
     host,
     command,
@@ -209,6 +209,46 @@ function liveDriver(
         command,
       ],
       { input, timeout: 300_000 },
+    );
+  }
+
+  function verifyHttps(target, proof, peer, publicDns = false) {
+    // The hosted runner may only have IPv4. Use the other verified host as
+    // an independent IPv6 client, not the VM whose listener is being tested.
+    const quote = (arg) => `'${arg.replaceAll("'", "'\\''")}'`;
+    const requestV6 = (args, { capture }) => {
+      const command = [
+        "curl",
+        "--disable",
+        "--silent",
+        "--show-error",
+        "--fail",
+        "--ipv6",
+        "--noproxy",
+        "*",
+        "--proto",
+        "=https",
+        "--max-time",
+        "180",
+        ...args,
+      ]
+        .map(quote)
+        .join(" ");
+      const output = ssh(
+        peer.ipv4,
+        `bash -o pipefail -c ${quote(`${command} | ${capture ? "head -c 1048577 | base64 -w0" : "sha256sum"}`)}`,
+      );
+      if (!capture) return output.split(/\s+/)[0];
+      const bytes = Buffer.from(output, "base64");
+      ensure(
+        bytes.length <= 1048576,
+        "IPv6 probe exceeded its response limit.",
+      );
+      return bytes;
+    };
+    return observeHttps(
+      { ...target, ...proof, public: publicDns },
+      { requestV6 },
     );
   }
 
@@ -274,24 +314,13 @@ function liveDriver(
     return (await response.json()).volume.server;
   }
 
-  function beginStage(j, files) {
+  function prepareStage(files) {
     const proofFile = join(files, "qualification.json");
     writeFileSync(proofFile, qualification.bytes, {
       mode: 0o600,
       flag: "wx",
       flush: true,
     });
-    const previous = j.completed.qualify.previous;
-    const proposal = join(files, "proposal.json");
-    write(proposal, {
-      previous: old,
-      previousId: previous.serverId,
-      candidate: generation,
-      volumeId: previous.volumeId,
-      imageId: qualification.value.imageId,
-      sourceRevision: revision,
-    });
-    tf("rollout-begin", proposal);
   }
 
   function variables(step, j) {
@@ -335,25 +364,34 @@ function liveDriver(
     const next = variables(step, j);
     write(vars, next);
     const plan = join(files, `${phase}.tfplan`);
-    let evidence = join(files, "qualification.json");
-    if (step !== "stage") {
-      const terraformJournal = json(join(root, "active", "operation.json"));
-      evidence = join(files, `${phase}.evidence.json`);
-      const observations = {
-        detach: j.completed.fence,
-        attach: j.completed.detach,
-        route: j.completed.verifyCandidate,
-        unprotect: j.completed.resume,
-        retire: j.completed.resume,
-      };
-      write(evidence, {
-        ...observations[step],
-        operationId: terraformJournal.id,
-        candidateId: j.completed.stage.candidate.serverId,
-      });
-    }
-    tf("immutable-plan", phase, vars, plan, evidence);
-    tf("immutable-apply", phase, plan, "--confirm-immutable-change", evidence);
+    const previous = j.completed.qualify.previous;
+    const deployment = {
+      previous: old,
+      previousId: previous.serverId,
+      candidate: generation,
+      candidateId: j.completed.stage?.candidate.serverId,
+      volumeId: previous.volumeId,
+      imageId: qualification.value.imageId,
+      sourceRevision: revision,
+      deletedFirewallMembers: j.completed.qualify.deletedFirewallMembers,
+    };
+    const evidence =
+      step === "stage" ? [join(files, "qualification.json")] : [];
+    const options = { deployment, environment: credentials.env };
+    await terraformMain(
+      ["immutable-plan", phase, vars, plan, ...evidence],
+      options,
+    );
+    await terraformMain(
+      [
+        "immutable-apply",
+        phase,
+        plan,
+        "--confirm-immutable-change",
+        ...evidence,
+      ],
+      options,
+    );
     return phaseResult(step, files, next);
   }
 
@@ -461,22 +499,10 @@ function liveDriver(
           status.stateVersion,
         "Production state does not match the runner's provisioned workspace.",
       );
-      ensure(
-        !existsSync(join(root, "active")),
-        "An operator-controlled Terraform rollout is already active.",
-      );
-      if (existsSync(caHosts))
-        ensure(
-          readFileSync(privateFile(caHosts), "utf8") ===
-            `@cert-authority ${domain} ${caPublic}\n`,
-          "Publisher CA changed unexpectedly.",
-        );
-      else
-        writeFileSync(caHosts, `@cert-authority ${domain} ${caPublic}\n`, {
-          mode: 0o600,
-          flag: "wx",
-          flush: true,
-        });
+      writeFileSync(caHosts, `@cert-authority ${domain} ${caPublic}\n`, {
+        mode: 0o600,
+        flag: "wx",
+      });
     },
     async perform(step, j, files) {
       const previous = j.completed.qualify?.previous;
@@ -486,9 +512,29 @@ function liveDriver(
         const previous = snapshot(files, old);
         await observeHost(previous, { token: credentials.env.HCLOUD_TOKEN });
         ssh(previous.ipv4, `${stateTool} writable`);
-        return { previous };
+        const firewall = readState(files).find(
+          (row) =>
+            row.type === "hcloud_firewall" &&
+            row.name === "production" &&
+            !row.module,
+        )?.instances[0]?.attributes;
+        ensure(
+          Array.isArray(firewall?.apply_to),
+          "Terraform state is missing the production firewall membership.",
+        );
+        const deletedFirewallMembers = firewall.apply_to
+          .filter(({ server }) => String(server) !== previous.serverId)
+          .map(({ server }) => String(server));
+        for (const member of deletedFirewallMembers) {
+          ensure(
+            id.test(member) &&
+              (await provider(`servers/${member}`)).status === 404,
+            "Unexpected live server in the production firewall membership.",
+          );
+        }
+        return { previous, deletedFirewallMembers };
       }
-      if (step === "stage") beginStage(j, files);
+      if (step === "stage") prepareStage(files);
       if (phaseName[step]) return phase(step, j, files);
       if (step === "prepare") {
         const token = json(join(files, "stage.tfvars.json")).enrollment_tokens[
@@ -507,8 +553,7 @@ function liveDriver(
         );
         ssh(previous.ipv4, `${stateTool} freeze`);
         const proof = JSON.parse(ssh(previous.ipv4, `${stateTool} evidence`));
-        await observeHttps({ ...previous, ...proof, public: true });
-        write(join(files, "frozen-publication.json"), proof);
+        await verifyHttps(previous, proof, candidate, true);
         ssh(
           previous.ipv4,
           `sudo -n systemctl stop ${hostingService} && ${stateTool} unmount && ${stateTool} fenced`,
@@ -531,17 +576,12 @@ function liveDriver(
         runNew(
           `${stateTool} mount ${candidate.volumeId} && ${stateTool} bind ${proof.siteSha256} ${proof.downloadSha256} ${proof.updateSha256} && sudo -n systemctl start ${hostingService}`,
         );
-        await observeHttps({ ...candidate, ...proof });
+        await verifyHttps(candidate, proof, previous);
         return { volumeVerified: true, candidateHttpsVerified: true };
       }
       if (step === "verifyPublic") {
         await retryObservation(
-          () =>
-            observeHttps({
-              ...candidate,
-              ...j.completed.fence.proof,
-              public: true,
-            }),
+          () => verifyHttps(candidate, j.completed.fence.proof, previous, true),
           8,
           30000,
         );
@@ -555,60 +595,7 @@ function liveDriver(
       }
       throw new Error("Unknown production rollout step.");
     },
-    async observe(step, j, files) {
-      const phase = phaseName[step];
-      if (step === "qualify" || step === "verifyPublic")
-        return this.perform(step, j, files);
-      const candidate = j.completed.stage?.candidate;
-      if (
-        step === "fence" &&
-        existsSync(join(files, "frozen-publication.json"))
-      ) {
-        const previous = j.completed.qualify.previous;
-        ssh(previous.ipv4, `${stateTool} fenced`);
-        return {
-          proof: json(join(files, "frozen-publication.json")),
-          replacementReady: j.completed.prepare.ready,
-          publishersSettled: true,
-          oldHostFenced: true,
-        };
-      }
-      if (step === "verifyCandidate") {
-        await observeHost(candidate, { token: credentials.env.HCLOUD_TOKEN });
-        ssh(
-          candidate.ipv4,
-          `${stateTool} check && systemctl is-active --quiet ${hostingService}`,
-        );
-        await observeHttps({ ...candidate, ...j.completed.fence.proof });
-        return { volumeVerified: true, candidateHttpsVerified: true };
-      }
-      if (step === "resume") {
-        try {
-          ssh(j.completed.stage.candidate.ipv4, `${stateTool} writable`);
-        } catch {
-          return null;
-        }
-        return j.completed.verifyPublic;
-      }
-      if (!phase || !existsSync(join(files, `${phase}.tfplan`))) return null;
-      const plan = join(files, `${phase}.tfplan`);
-      const variables = join(files, `${phase}.tfvars.json`);
-      // A recorded completion can be observed; otherwise ask Terraform to
-      // compare the original attempted plan with a freshly refreshed no-op.
-      if (!existsSync(`${plan}.${phase}.json.complete`)) {
-        const args = [
-          phase,
-          plan,
-          variables,
-          join(files, `${phase}-${randomBytes(5).toString("hex")}.tfplan`),
-        ];
-        if (phase === "stage") args.push(join(files, "qualification.json"));
-        tf("rollout-reconcile", ...args);
-      }
-      return phaseResult(step, files, json(variables));
-    },
     async finish(j, files) {
-      const next = j.completed.retire.inventory;
       const response = await provider(
         `servers/${j.completed.qualify.previous.serverId}`,
       );
@@ -622,19 +609,6 @@ function liveDriver(
           Number(fresh.serverId) === (await attachment(fresh)),
         "The candidate is no longer the recorded volume owner.",
       );
-      const temporary = join(
-        files,
-        `final-${randomBytes(5).toString("hex")}.json`,
-      );
-      write(temporary, next);
-      renameSync(temporary, join(operationRoot, "inventory.tfvars.json"));
-      const marker = join(operationRoot, `accepted-${revision}.json`);
-      if (!existsSync(marker))
-        write(marker, {
-          revision,
-          digest: j.digest,
-          candidate: fresh.serverId,
-        });
     },
   };
 }
@@ -645,51 +619,86 @@ async function main() {
     process.argv.length === 2 &&
       env.CI &&
       env.GITHUB_REPOSITORY === "getsituate/situate" &&
-      env.GITHUB_EVENT_NAME === "push" &&
+      ["push", "workflow_dispatch"].includes(env.GITHUB_EVENT_NAME) &&
       env.GITHUB_REF === "refs/heads/main",
-    "Production deployment is restricted to pushes to the protected main branch.",
+    "Production deployment requires an authorized run on protected main.",
   );
   const revision = git("rev-parse", "HEAD");
   ensure(
     /^[a-f0-9]{40}$/.test(revision) && env.GITHUB_SHA === revision,
     "The checkout does not match the GitHub event.",
   );
-  const root = env.SITUATE_CONTINUOUS_DIRECTORY ?? "";
-  directoryAccess(root);
-  const ledger = join(root, "rollouts");
-  directoryAccess(ledger);
-  if (
-    existsSync(join(root, `accepted-${revision}.json`)) &&
-    !existsSync(join(ledger, "operation"))
-  )
-    return;
-  const activePath = join(ledger, "operation", "journal.json");
-  const active = existsSync(activePath) ? json(privateFile(activePath)) : null;
-  const inventory =
-    active?.inventory ?? json(privateFile(join(root, "inventory.tfvars.json")));
-  if (!active) {
-    const last =
-      inventory.qualified_hosts?.[inventory.traffic_host]?.source_revision;
-    ensure(
-      /^[a-f0-9]{40}$/.test(last),
-      "The serving generation needs its deployed source revision.",
-    );
-    if (inputDigest(last) === inputDigest(revision)) {
-      console.log("No production hosting inputs changed.");
-      return;
-    }
-    const latest = git(
-      "ls-remote",
-      "https://github.com/getsituate/situate.git",
-      "refs/heads/main",
-    ).split(/\s+/)[0];
-    ensure(
-      latest === revision,
-      "This is no longer the latest main revision. The newer workflow owns rollout selection.",
-    );
+  const gate = deploymentGate({
+    token: env.GITHUB_TOKEN,
+    revision,
+    runId: env.GITHUB_RUN_ID,
+  });
+  await gate.check();
+  const directory = mkdtempSync(join(tmpdir(), "situate-hosting-"));
+  try {
+    await deploy(directory, env, revision, gate);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
-  const bytes = readFileSync(
-    privateFile(join(root, "qualification", `${revision}.json`)),
+}
+
+async function deploy(root, env, revision, gate) {
+  const creds = configuration([
+    "HCLOUD_TOKEN",
+    "TF_CLOUD_ORGANIZATION",
+    "TF_TOKEN_app_terraform_io",
+  ]);
+  ensure(
+    Object.values(creds).every(
+      (value) => typeof value === "string" && value.trim(),
+    ) && /^ws-[A-Za-z0-9]+$/.test(env.SITUATE_HCP_WORKSPACE_ID),
+    "Provision the production cloud credentials and pin the HCP workspace ID.",
+  );
+  const credentials = {
+    env: { ...childEnvironment(env), ...creds, CI: "true" },
+    workspaceId: env.SITUATE_HCP_WORKSPACE_ID,
+  };
+  const tf = (...args) => terraformCommand(credentials.env, ...args);
+  const status = JSON.parse(tf("status"));
+  ensure(
+    status.workspaceId === credentials.workspaceId &&
+      !status.locked &&
+      status.stateVersion,
+    "Production state does not match the configured HCP workspace.",
+  );
+  tf("init");
+  const exportFile = join(root, "preflight.tfstate");
+  tf("export", exportFile);
+  credentials.operatorKey = keyFile(root, env.HOSTING_OPERATOR_KEY, "operator");
+  const operatorPublic = execute("ssh-keygen", [
+    "-y",
+    "-f",
+    credentials.operatorKey,
+  ])
+    .split(/\s+/)
+    .slice(0, 2)
+    .join(" ");
+  const inventory = inventoryFromState(json(exportFile), operatorPublic);
+  const last =
+    inventory.qualified_hosts[inventory.traffic_host].source_revision;
+  const baseline = spawnGitObjectType(last);
+  if (baseline === "commit" && inputDigest(last) === inputDigest(revision)) {
+    console.log("No production hosting inputs changed.");
+    return;
+  }
+  const latest = git(
+    "ls-remote",
+    "https://github.com/getsituate/situate.git",
+    "refs/heads/main",
+  ).split(/\s+/)[0];
+  ensure(
+    latest === revision,
+    "This is no longer the latest main revision. The newer workflow owns rollout selection.",
+  );
+  const bytes = Buffer.from(env.HOSTING_QUALIFICATION || "");
+  ensure(
+    bytes.length > 0 && bytes.length <= 16384,
+    "Supply the approved image qualification for this revision.",
   );
   const value = JSON.parse(bytes);
   ensure(
@@ -705,45 +714,20 @@ async function main() {
       ].every((gate) => value.gates?.[gate] === true),
     "The runner requires an approved image qualification for the merged revision.",
   );
-  const creds = configuration([
-    "HCLOUD_TOKEN",
-    "TF_CLOUD_ORGANIZATION",
-    "TF_TOKEN_app_terraform_io",
-  ]);
-  ensure(
-    Object.values(creds).every(
-      (value) => typeof value === "string" && value.trim(),
-    ) && /^ws-[A-Za-z0-9]+$/.test(env.SITUATE_HCP_WORKSPACE_ID),
-    "Provision the production cloud credentials and pin the HCP workspace ID.",
+  credentials.publisherKey = keyFile(
+    root,
+    env.HOSTING_PUBLISHER_KEY,
+    "publisher",
   );
-  const credentials = {
-    env: { ...childEnvironment(env), ...creds, CI: "true" },
-    workspaceId: env.SITUATE_HCP_WORKSPACE_ID,
-    operatorKey: privateFile(join(root, "operator.key")),
-    publisherKey: privateFile(join(root, "publisher.key")),
-    ca: privateFile(join(root, "host-ca.key")),
-  };
-  const status = JSON.parse(
-    execute(process.execPath, [terraform, "status"], { env: credentials.env }),
-  );
-  ensure(
-    status.workspaceId === credentials.workspaceId &&
-      !status.locked &&
-      status.stateVersion,
-    "Production state does not match the runner's provisioned workspace.",
-  );
-  execute(process.execPath, [terraform, "init"], {
-    env: credentials.env,
-    timeout: 180_000,
-  });
+  credentials.ca = keyFile(root, env.HOSTING_HOST_CA_KEY, "host-ca");
   await rollOut(
-    ledger,
-    { revision, target: "production", digest: hash(bytes), inventory },
-    liveDriver(ledger, revision, inventory, root, credentials, {
+    root,
+    liveDriver(root, revision, inventory, credentials, {
       bytes,
       value,
       hash: hash(bytes),
     }),
+    gate,
   );
   console.log("Production replacement verified and predecessor retired.");
 }

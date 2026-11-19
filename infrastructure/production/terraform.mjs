@@ -176,6 +176,7 @@ function checkPlanBackend(plan, target) {
 export async function main(
   args,
   {
+    deployment,
     directory = terraformDirectory,
     environment = process.env,
     execute = spawnSync,
@@ -442,18 +443,21 @@ export async function main(
         join(environment.SITUATE_ROLLOUT_DIRECTORY, ".check-location.json"),
         ".json",
       );
-    const operation = usesJournal
-      ? readRollout(
-          environment.SITUATE_ROLLOUT_DIRECTORY,
-          target,
-          phase,
-          phase === "stage" || !receiptBytes
-            ? undefined
-            : JSON.parse(receiptBytes),
-        )
-      : undefined;
+    const operation =
+      deployment ??
+      (usesJournal
+        ? readRollout(
+            environment.SITUATE_ROLLOUT_DIRECTORY,
+            target,
+            phase,
+            phase === "stage" || !receiptBytes
+              ? undefined
+              : JSON.parse(receiptBytes),
+          )
+        : undefined);
     if (
       (immutablePlan || immutableApply) &&
+      !deployment &&
       !usesJournal &&
       !["stage", "attach", "traffic"].includes(phase)
     )
@@ -535,7 +539,7 @@ export async function main(
       }) + "\n",
       { mode: 0o600, flag: "wx" },
     );
-    operation?.beginApply(digest(plan));
+    operation?.beginApply?.(digest(plan));
     let after;
     try {
       run(["apply", "-input=false", "-lock-timeout=30s", plan]);
@@ -543,7 +547,7 @@ export async function main(
       after = await inspect();
       await exportState(`${prefix}.after.tfstate`, after);
     }
-    operation?.complete(after);
+    operation?.complete?.(after);
     writeFileSync(
       `${journal}.complete`,
       JSON.stringify({ completedAt: new Date().toISOString() }) + "\n",

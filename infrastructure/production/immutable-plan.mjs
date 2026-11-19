@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
+import { isDeepStrictEqual } from "node:util";
 
 export const immutablePhases = [
   "stage",
@@ -15,6 +16,48 @@ const volume = /^hcloud_volume\.publication\["([a-z][a-z0-9-]{0,19})"\]$/;
 const attachment = "hcloud_volume_attachment.publication[0]";
 const apex = ["hcloud_zone_rrset.apex_ipv4", "hcloud_zone_rrset.apex_ipv6"];
 
+function allowsFirewallDrift(drift, phase, operation) {
+  if (!drift.length) return true;
+  if (
+    !operation ||
+    drift.length !== 1 ||
+    drift[0].address !== "hcloud_firewall.production" ||
+    !isDeepStrictEqual(drift[0].change?.actions, ["update"])
+  )
+    return false;
+  const { before, after } = drift[0].change;
+  if (!before || !after) return false;
+  const { apply_to: beforeLinks, ...beforePolicy } = before;
+  const { apply_to: afterLinks, ...afterPolicy } = after;
+  if (!isDeepStrictEqual(beforePolicy, afterPolicy)) return false;
+  const members = (links) =>
+    Array.isArray(links) &&
+    links.every(
+      (link) =>
+        Number.isSafeInteger(link?.server) &&
+        link.server > 0 &&
+        link.label_selector === "",
+    )
+      ? links.map(({ server }) => String(server)).sort()
+      : null;
+  if (phase === "detach")
+    return (
+      isDeepStrictEqual(members(beforeLinks), [operation.previousId]) &&
+      isDeepStrictEqual(
+        members(afterLinks),
+        [operation.previousId, operation.candidateId].sort(),
+      )
+    );
+  if (phase === "stage" && operation.deletedFirewallMembers?.length)
+    return (
+      isDeepStrictEqual(
+        members(beforeLinks),
+        [operation.previousId, ...operation.deletedFirewallMembers].sort(),
+      ) && isDeepStrictEqual(members(afterLinks), [operation.previousId])
+    );
+  return false;
+}
+
 export function checkImmutablePlan(plan, phase, receiptBytes, operation) {
   function require(condition, detail) {
     if (!condition) throw new Error(`Unsafe ${phase} plan: ${detail}.`);
@@ -25,7 +68,7 @@ export function checkImmutablePlan(plan, phase, receiptBytes, operation) {
     plan.applyable === true &&
     plan.errored === false &&
     !plan.deferred_changes?.length &&
-    !plan.resource_drift?.length &&
+    allowsFirewallDrift(plan.resource_drift ?? [], phase, operation) &&
     Array.isArray(
       plan.resource_changes,
     ), "plan must be complete, applyable and free of drift");

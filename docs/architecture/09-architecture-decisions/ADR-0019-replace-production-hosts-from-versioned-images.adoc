@@ -9,7 +9,7 @@ ifndef::architecture-diagrams-root[]
 :architecture-diagrams-root: ../diagrams
 endif::[]
 
-Status:: accepted
+Status:: accepted; automated recovery revised by link:ADR-0020-stop-failed-hosting-deployments.adoc[ADR-0020]
 Date:: 2026-11-19
 Implementation:: The normal Terraform root targets only immutable generations. GitHub Actions can rehearse rollout ordering on the migration branch and promote prequalified images through the production controller. An isolated Hetzner rehearsal verified snapshot boot, SSH enrollment, volume handoff and restore with synthetic data. End-to-end CI execution, automatic cloud image creation and production activation remain unverified.
 

@@ -9,6 +9,8 @@ on:
       - "tools/pipeline-bootstrap.py"
       - "client/docker/ci-volta.json"
       - "package.json"
+      - "tools/hosting-checks.mjs"
+      - ".github/workflows/deploy-hosting.yml"
       - ".github/workflows/verify-hosting.yml"
   push:
     branches: [main]
@@ -19,6 +21,8 @@ on:
       - "tools/pipeline-bootstrap.py"
       - "client/docker/ci-volta.json"
       - "package.json"
+      - "tools/hosting-checks.mjs"
+      - ".github/workflows/deploy-hosting.yml"
       - ".github/workflows/verify-hosting.yml"
 
 permissions:
@@ -33,11 +37,4 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - name: Test production plan guards and release handoff
-        run: |
-          node --test infrastructure/production/{continuous-rollout,immutable-plan,rollout-journal,rollout-reconcile,terraform}.test.mjs infrastructure/production/immutable/{enrollment,probe}.test.mjs
-          python3 -B -m unittest discover -s infrastructure/production/immutable
-      - name: Check serving configuration and scripts
-        run: |
-          docker compose -f infrastructure/production/immutable/compose.yaml config --quiet
-          shellcheck infrastructure/production/immutable/{bake,state,verify-boot}.sh
+      - run: node tools/hosting-checks.mjs

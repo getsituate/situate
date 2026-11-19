@@ -102,7 +102,17 @@ function checkWorkflowBootstrap(name, workflow) {
           command,
           name === "release-macos.yml" && id === "create"
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
-            : /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/,
+            : ({
+                "verify-hosting.yml: offline":
+                  /^node tools\/hosting-checks\.mjs$/,
+                "deploy-hosting.yml: rehearse":
+                  /^node tools\/hosting-checks\.mjs$/,
+                "deploy-hosting.yml: hetzner-rehearsal":
+                  /^(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?$/,
+                "deploy-hosting.yml: production":
+                  /^node infrastructure\/production\/immutable\/continuous-deploy\.mjs$/,
+              }[context] ??
+                /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/),
           context,
         );
     }
