@@ -106,6 +106,8 @@ Device-local formats, including `layout.json`, settings and provider connections
 - For public plugin interfaces, run unchanged plugins using the supported SDK and shared-component contracts. A newer plugin's minimum app version must not disable other compatible workspace functionality.
 - Add focused storage tests and native upgrade/restart journeys on the affected active platforms. Browser checks do not qualify native storage, Keychain access or signed-installation upgrades. Use isolated application identities and synthetic provider records, never production user data.
 
+The macOS release upgrade starts the verified predecessor with a fresh copy of the [0.1.6 workspace baseline](../../client/scripts/fixtures/upgrade-016/README.md). The predecessor saves a note through the editor and installs the signed candidate through its updater. The candidate must reopen the saved note, retained conversation and installed plugin before and after a restart. The separate fresh-workspace journey exercises current onboarding and plugin creation.
+
 Fresh-workspace tests remain necessary but do not establish upgrade safety. These are verification requirements, not a claim that the current runner already covers every published format. Report missing release fixtures, unavailable old binaries, untested migration boundaries and unavailable native qualification explicitly; do not present them as passed checks.
 
 ### Workspace migration checks

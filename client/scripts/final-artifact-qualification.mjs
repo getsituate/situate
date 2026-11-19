@@ -37,6 +37,12 @@ import {
   finalArtifactJourneys,
   startFinalArtifactProvider,
 } from "./final-artifact-journeys.mjs";
+import {
+  materializeUpgradeWorkspace,
+  upgradeWorkspaceName,
+  verifyUpgradeWorkspace,
+} from "./upgrade-workspace-fixture.mjs";
+import { upgradeWorkspaceJourney } from "./upgrade-workspace-journey.mjs";
 
 const hash = (path) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -431,7 +437,7 @@ export function accessibilityScript(pid, action) {
   const target =
     action.click ?? action.assert ?? action.focus ?? action.navigation;
   const selectWindow = target.window
-    ? `set ownedWindows to windows whose name is ${quote(target.window)}\nif count of ownedWindows is not 1 then error "Owned window must be unique"\nset ownedWindow to item 1 of ownedWindows\n${action.focus ? 'perform action "AXRaise" of ownedWindow\n' : ""}`
+    ? `set ownedWindows to windows whose name is ${quote(target.window)}\n${action.navigation ? 'if count of ownedWindows is 0 then return "pending"\n' : ""}if count of ownedWindows is not 1 then error "Owned window must be unique"\nset ownedWindow to item 1 of ownedWindows\n${action.focus ? 'perform action "AXRaise" of ownedWindow\n' : ""}`
     : "";
   const folderButton =
     target.role === "AXButton" && target.name === "Open" && !target.window;
@@ -791,11 +797,17 @@ export function createFinalArtifactQualificationHost(
       if (action.type !== undefined)
         action.type = action.type
           .replaceAll("{{workspace}}", join(stateRoot, "workspace"))
+          .replaceAll(
+            "{{upgradeWorkspace}}",
+            join(stateRoot, "workspace", upgradeWorkspaceName),
+          )
           .replaceAll("{{fixture.baseUrl}}", provider.baseUrl)
           .replaceAll("{{fixture.token}}", provider.token)
           .replaceAll("{{fixture.model}}", PINNED_AGENT_MODEL);
       if (action.folderField === "{{workspace}}")
         action.folderField = join(stateRoot, "workspace");
+      else if (action.folderField === "{{upgradeWorkspace}}")
+        action.folderField = join(stateRoot, "workspace", upgradeWorkspaceName);
       await waitFor(
         () => checkAccessibilityAction(pid, action, { execute, options }),
         "accessibility assertion",
@@ -948,6 +960,7 @@ export function createFinalArtifactQualificationHost(
         bundleDigest(app) === artifact.bundleSha256,
         "Installed candidate changed before update qualification",
       );
+      let upgrade;
       await qualifyPredecessorUpdate({
         install: async () => {
           deviceStateIsolationPending = true;
@@ -959,12 +972,26 @@ export function createFinalArtifactQualificationHost(
           await installDmg(previous.directory, previous.manifest.artifacts[0]);
           stateRoot = join(owned, "predecessor-state");
           seedWorkspace();
+          if (defaultProfile) {
+            const root = materializeUpgradeWorkspace(
+              join(stateRoot, "workspace"),
+            );
+            upgrade = upgradeWorkspaceJourney({
+              actions,
+              verify: (expected) => verifyUpgradeWorkspace(root, expected),
+              writable: (enabled) => chmodSync(root, enabled ? 0o700 : 0o500),
+            });
+          }
         },
-        author: exerciseState,
+        author: async () => {
+          if (!upgrade) return exerciseState();
+          await upgrade.open();
+          await upgrade.author();
+        },
         report: () => provider.report(),
         update: async () => {
           const previousPid = pid;
-          if (defaultProfile) await productJourneys.update();
+          if (upgrade) await upgrade.update();
           else await actions(configuration.updateActions);
           pid = undefined;
           launchPending = true;
@@ -977,7 +1004,11 @@ export function createFinalArtifactQualificationHost(
           }, "production updater installation");
           await launch(false, previousPid);
         },
-        reopen: reopenState,
+        reopen: async (report) => {
+          if (!upgrade) return reopenState(report);
+          await upgrade.reopen();
+          verifyNoProviderReplay(report);
+        },
         restart: async () => {
           await quit();
           await launch();
@@ -1081,8 +1112,6 @@ export function createFinalArtifactQualificationHost(
             flag: "wx",
             mode: 0o600,
           }),
-        writable: async (name, value) =>
-          chmodSync(fixturePath(name), value ? 0o700 : 0o500),
         verifyFiles: async (name, files) => {
           for (const [path, contents] of files)
             assert.equal(
@@ -1141,13 +1170,19 @@ export function createFinalArtifactQualificationHost(
     else
       for (const name of journeyNames)
         await actions(configuration.journeys[name].reopen);
+    verifyNoProviderReplay(report);
+    if (!defaultProfile) retainedFiles();
+  }
+  function verifyNoProviderReplay(report) {
+    const observed = provider.report();
     assert(
-      provider.report().failed !== true &&
-        provider.report().requests === report.requests &&
-        provider.report().pluginEffects.POST === report.pluginEffects.POST &&
-        provider.report().pluginEffects.DELETE === report.pluginEffects.DELETE,
+      !report.failed &&
+        !observed.failed &&
+        !observed.budgetDenials &&
+        observed.requests === report.requests &&
+        observed.pluginEffects.POST === report.pluginEffects.POST &&
+        observed.pluginEffects.DELETE === report.pluginEffects.DELETE,
       "Reopening replayed provider requests or plugin effects",
     );
-    if (!defaultProfile) retainedFiles();
   }
 }
