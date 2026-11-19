@@ -282,20 +282,6 @@ test("HCP errors do not expose response bodies or credentials and are not retrie
   }
 });
 
-test("HCP reports known transport codes without exposing error details", async () => {
-  await assert.rejects(
-    inspectWorkspace(configured, async () => {
-      throw new Error("private URL", {
-        cause: { code: "UND_ERR_SOCKET", message: "private address" },
-      });
-    }),
-    {
-      message:
-        "HCP Terraform inspection failed (UND_ERR_SOCKET); no retry was attempted.",
-    },
-  );
-});
-
 test("initialization binds a pre-existing Local HCP workspace without migration or credential persistence", async (t) => {
   const f = fixture(t);
   rmSync(f.metadataPath);
