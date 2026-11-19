@@ -34,7 +34,8 @@ function allowsAttachmentDrift(drift, phase, operation, vars) {
     isDeepStrictEqual(old, next) &&
     (phase === "attach"
       ? String(prior) === operation.previousId && current === null
-      : prior === null && String(current) === operation.candidateId)
+      : (prior === null || String(prior) === operation.previousId) &&
+        String(current) === operation.candidateId)
   );
 }
 
