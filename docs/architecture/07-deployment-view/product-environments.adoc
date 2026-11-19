@@ -4,8 +4,9 @@ endif::[]
 
 === Product environments
 
-The only active product target is macOS, delivered through the website DMG and direct updater.
-iOS, Windows, Linux desktop and Android remain deferred and are not currently supported.
+macOS is the released product platform, delivered through the website DMG and direct updater.
+Windows is the next delivery target and is not yet released.
+iOS, Linux desktop and Android remain deferred.
 See link:{architecture-repository-root}/requirements/data/foundations.md#mvp-platform-scope[platform scope] and link:{architecture-repository-root}/requirements/data/foundations.md#distribution[distribution constraints].
 
 ==== Software placement and control

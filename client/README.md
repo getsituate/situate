@@ -1,6 +1,6 @@
 # Situate client
 
-The active product target is **macOS only**. iOS, Windows, Linux desktop and Android are deferred and are not currently supported. Their source, build commands and diagnostic instructions below are retained for optional future work, not as current compatibility or release guarantees. Routine development does not require their SDKs or verification. See the [platform scope](../requirements/data/foundations.md#mvp-platform-scope).
+**macOS** is the released product platform. Windows is the next delivery target and is not yet qualified for release. iOS, Linux desktop and Android remain deferred; their build and diagnostic instructions are reference material, not support guarantees. See the [platform scope](../requirements/data/foundations.md#mvp-platform-scope).
 
 The client opens the last-open workspaces, or shows **Workspaces** when none can be reopened. Each macOS workspace has its own 1280 × 800 px window. The retained, deferred mobile implementation keeps multiple open sessions and displays one at a time. The main screen uses the [production app shell](app/src/components/AppShell.vue) and canonical brand assets. Below 1184 CSS px, the sidebar opens as a modal drawer with keyboard focus handling, Escape and backdrop dismissal.
 
