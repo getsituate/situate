@@ -72,23 +72,13 @@ jobs:
       - id: lane
         run: python3 tools/pipeline-container.py actions lane --workflow verify --lane tooling
 
-  macos-arm64:
+  tooling-macos:
     needs: plan
-    if: >-
-      contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos') ||
-      contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code') ||
-      contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native')
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos')
     runs-on: macos-latest
-    timeout-minutes: 360
+    timeout-minutes: 120
     outputs:
-      tooling-macos-result: ${{ steps.tooling-macos.outcome }}
-      tooling-macos-receipt: ${{ steps.tooling-macos.outputs.receipt }}
-      macos-code-result: ${{ steps.macos-code.outcome }}
-      macos-code-receipt: ${{ steps.macos-code.outputs.receipt }}
-      macos-code-evidence: ${{ steps.macos-code.outputs.evidence }}
-      macos-native-result: ${{ steps.macos-native.outcome }}
-      macos-native-receipt: ${{ steps.macos-native.outputs.receipt }}
-      macos-native-evidence: ${{ steps.macos-native.outputs.evidence }}
+      receipt: ${{ steps.lane.outputs.receipt }}
     env:
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
@@ -98,37 +88,10 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - id: bootstrap
-        run: python3 tools/pipeline-bootstrap.py
-      - id: setup-tooling-macos
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos') }}
-        run: node tools/actions-adapter.mjs setup --workflow verify --lane tooling-macos
-      - id: tooling-macos
-        name: tooling-macos
-        if: ${{ !cancelled() && steps.setup-tooling-macos.outcome == 'success' }}
-        timeout-minutes: 120
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane tooling-macos
+      - id: lane
         run: node tools/actions-adapter.mjs lane --workflow verify --lane tooling-macos
-      - id: setup-macos-code
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code') }}
-        run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-code
-      - id: macos-code
-        name: macos-code
-        if: ${{ !cancelled() && steps.setup-macos-code.outcome == 'success' }}
-        timeout-minutes: 120
-        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-code
-      - id: desktop
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native') }}
-        run: node tools/actions-adapter.mjs desktop
-      - id: setup-macos-native
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native') && steps.desktop.outcome == 'success' }}
-        run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-native
-      - id: macos-native
-        name: macos-native
-        if: ${{ !cancelled() && steps.setup-macos-native.outcome == 'success' }}
-        timeout-minutes: 120
-        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-native
-        env:
-          SITUATE_TOOL_BUILD_SLOTS: "1"
 
   docker-integration:
     needs: plan
@@ -191,6 +154,28 @@ jobs:
       - id: lane
         run: python3 tools/pipeline-container.py actions lane --workflow verify --lane rust
 
+  macos-code:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+      evidence: ${{ steps.lane.outputs.evidence }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-code
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-code
+
   browser:
     needs: plan
     if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'browser')
@@ -238,6 +223,30 @@ jobs:
       - id: lane
         run: python3 tools/pipeline-container.py actions lane --workflow verify --lane browser-webkit
 
+  macos-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native')
+    runs-on: macos-latest
+    timeout-minutes: 120
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+      evidence: ${{ steps.lane.outputs.evidence }}
+    env:
+      SITUATE_TOOL_BUILD_SLOTS: "1"
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs desktop
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-native
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-native
+
   macos-compatibility:
     needs: plan
     if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-compatibility')
@@ -262,6 +271,36 @@ jobs:
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-compatibility
 
+  windows-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'windows-native')
+    runs-on: windows-2025
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane windows-native
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane windows-native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-ci-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/situate-windows-ci/artifact/
+          if-no-files-found: error
+          retention-days: 7
+
   architecture:
     name: Architecture documentation
     runs-on: ubuntu-24.04
@@ -284,18 +323,19 @@ jobs:
         plan,
         policy,
         tooling,
-        macos-arm64,
+        tooling-macos,
         docker-integration,
         frontend,
         rust,
+        macos-code,
         browser,
         browser-webkit,
+        macos-native,
         macos-compatibility,
+        windows-native,
       ]
     if: always()
     runs-on: ubuntu-24.04
-    env:
-      PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"macos-arm64":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"browser":{7},"browser-webkit":{8},"macos-compatibility":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.macos-arm64), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.browser), toJSON(needs.browser-webkit), toJSON(needs.macos-compatibility)) }}
     permissions:
       contents: read
       actions: read
@@ -313,6 +353,7 @@ jobs:
         env:
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"browser-webkit":{9},"macos-native":{10},"macos-compatibility":{11},"windows-native":{12}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.browser-webkit), toJSON(needs.macos-native), toJSON(needs.macos-compatibility), toJSON(needs.windows-native)) }}
       - run: python3 tools/pipeline-bootstrap.py
       - id: evidence
         run: node tools/actions-adapter.mjs source-evidence --workflow verify
@@ -320,6 +361,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"browser-webkit":{9},"macos-native":{10},"macos-compatibility":{11},"windows-native":{12}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.browser-webkit), toJSON(needs.macos-native), toJSON(needs.macos-compatibility), toJSON(needs.windows-native)) }}
       - if: steps.evidence.outputs.created == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:

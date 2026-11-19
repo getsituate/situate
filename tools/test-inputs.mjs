@@ -1,3 +1,5 @@
+import { windowsNativeSuites } from "./test-scope.mjs";
+
 const shared =
   /^(package(?:-lock)?\.json|\.node-version|\.prettier[^/]*|prettier\.config\.[^/]+|eslint\.config\.[^/]+|\.editorconfig|\.gitignore)$/;
 const clientConfig =
@@ -59,12 +61,15 @@ const workshopInput = (file) =>
 const nativeHarness =
   /^(tools\/native-vm[^/]*\.(mjs|py)|client\/scripts\/(test-native[^/]*|test-agent-e2e|native-vm[^/]*|native-smoke[^/]*|native-desktop-session|coordinated-native[^/]*|agent-e2e-runtime|document-source-fixtures)\.mjs)$/;
 const native = (file) =>
-  product(file) ||
-  /^client\/app\//.test(file) ||
-  nativeHarness.test(file) ||
-  /^client\/scripts\/(?:qualification-accessibility\.mjs|qualification-ax-text\.swift|upgrade-workspace-(?:fixture|journey)\.mjs|fixtures\/upgrade-016\/workspace\.mjs)$/.test(
-    file,
-  );
+  product(file) || /^client\/app\//.test(file) || nativeHarness.test(file);
+const windowsNative = (file) =>
+  !isPlainDocumentation(file) &&
+  (native(file) ||
+    (/^client\/scripts\//.test(file) && !platformInput.test(file)) ||
+    file === ".github/workflows/verify.yml" ||
+    /^tools\/(?:test(?:-windows[^/]*)?|test-(?:inputs|scope)|pipeline(?:-[^/]*)?|source-verification[^/]*|actions-adapter)\.(?:mjs|py)$/.test(
+      file,
+    ));
 const requirements = (file) => file.startsWith("requirements/");
 const pi = (file) => file.startsWith(".pi/") || tools.test(file);
 const dev = (file) =>
@@ -174,6 +179,7 @@ const rules = {
     ) ||
     file === ".github/workflows/verify.yml" ||
     file === ".github/workflows/release-macos.yml",
+  ...Object.fromEntries(windowsNativeSuites.map((id) => [id, windowsNative])),
   "client-agent-e2e": native,
   "client-onboarding-e2e": native,
   "client-plugins-e2e": native,
@@ -278,6 +284,10 @@ export function suiteAffectedFiles(suite, files) {
       ].includes(id)
     )
       return true;
+    if (windowsNativeSuites.includes(id))
+      return (
+        requiresFullSelection(file) || clientConfig.test(file) || rule(file)
+      );
     if (file === ".env.example")
       return [
         "runner-unit",

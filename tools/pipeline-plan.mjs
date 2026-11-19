@@ -15,6 +15,7 @@ import {
   supportedSuiteEnabled,
   suiteHost,
   suiteExecution,
+  windowsNativeSuites,
 } from "./test-scope.mjs";
 
 const execute = promisify(execFile);
@@ -113,6 +114,7 @@ const families = [
     "macos",
     ["client-native-compatibility", "client-dictation-recognition"],
   ],
+  ["windows-native", "windows", windowsNativeSuites, "native"],
 ];
 
 function validateMode(mode) {
@@ -164,6 +166,8 @@ function select(paths, { mode, inventory, appImpact }) {
   }
   const full = mode === "release" && appImpact;
   const selected = mandatory.flatMap((suite) => {
+    // The current release workflow only publishes macOS.
+    if (mode === "release" && suiteHost(suite) === "windows") return [];
     const reasons = suiteSelectionReasons(suite, paths);
     const family = families.find(([, , ids]) => ids.includes(suite.id))[0];
     if (
@@ -213,7 +217,7 @@ function select(paths, { mode, inventory, appImpact }) {
             id,
             host,
             ...(execution ? { execution } : {}),
-            timeoutSeconds,
+            timeoutSeconds: id === "windows-native" ? 3015 : timeoutSeconds,
             suites: suites.map((suite) => suite.id),
             reasons: laneReasons(suites),
           },

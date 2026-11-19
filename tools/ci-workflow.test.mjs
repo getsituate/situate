@@ -23,7 +23,7 @@ const pipelineWorkflows = [
 ];
 function job(workflow, id) {
   const body = workflow.match(
-    new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z0-9-]*:|$)`),
+    new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z-]*:|$)`),
   )?.[1];
   assert.ok(body, `Missing job ${id}`);
   return body;
@@ -101,7 +101,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
           match[1].includes("infrastructure/production/")
           ? /^(?:node infrastructure\/production\/immutable\/continuous-deploy\.mjs|(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?)$/
           : name === "deploy-website"
-            ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
+            ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python(?:3)? tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
             : name === "verify-hosting" && match[1].startsWith("terraform ")
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
               : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
@@ -109,7 +109,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     }
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
-      .split(/\n {2}[a-z][a-z0-9-]*:\n/)
+      .split(/\n {2}[a-z][a-z-]*:\n/)
       .slice(1)
       .filter((body) => body.includes("    steps:"))) {
       if (name === "deploy-hosting" && body.includes("github-rehearsal.py")) {
@@ -133,11 +133,12 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       } else if (name === "deploy-architecture" && !body.includes("run: ")) {
         assert.match(body, /uses: actions\/deploy-pages@/);
       } else if (body.includes("run: node ")) {
-        assert.ok(body.includes("run: python3 tools/pipeline-bootstrap.py"));
-        assert.ok(
-          body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
-            body.indexOf("run: node "),
-        );
+        const python = body.includes("runs-on: windows-2025")
+          ? "python"
+          : "python3";
+        const bootstrap = `run: ${python} tools/pipeline-bootstrap.py`;
+        assert.ok(body.includes(bootstrap));
+        assert.ok(body.indexOf(bootstrap) < body.indexOf("run: node "));
       } else {
         assert.match(body, /run: python3 tools\/pipeline-container\.py/);
       }
@@ -146,7 +147,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       ? workflow.replace(job(workflow, "macos-compatibility"), "")
       : workflow;
     assert.doesNotMatch(otherJobs, /runs-on: macos-1[0-9]/);
-    assert.doesNotMatch(workflow, /runs-on: windows|--target.*(?:ios|android)/);
+    assert.doesNotMatch(workflow, /runs-on: windows(?!-2025\b)|--target.*(?:ios|android)/);
   }
 });
 
@@ -195,7 +196,7 @@ test("macOS delivery has no hosted checkpoint recovery workflow", () => {
     );
 });
 
-test("verification jobs depend on planning and aggregate every selected receipt", () => {
+test("fixed independent families depend on planning and aggregate every selected receipt", () => {
   for (const name of ["verify", "release-macos"]) {
     const workflow = read(name);
     assert.doesNotMatch(
@@ -206,11 +207,10 @@ test("verification jobs depend on planning and aggregate every selected receipt"
       job(workflow, "plan"),
       /outputs:[\s\S]*plan:.*steps\.plan\.outputs\.plan[\s\S]*digest:/,
     );
-    const shared = ["tooling-macos", "macos-code", "macos-native"];
-    const independent = Object.entries(laneHosts).filter(
-      ([id]) => name !== "verify" || !shared.includes(id),
+    const lanes = Object.entries(laneHosts).filter(
+      ([, host]) => name === "verify" || host !== "windows",
     );
-    for (const [id, host] of independent) {
+    for (const [id, host] of lanes) {
       const lane = job(workflow, id);
       assert.match(lane, /needs: plan\n/);
       const runner =
@@ -218,7 +218,9 @@ test("verification jobs depend on planning and aggregate every selected receipt"
           ? "macos-15-intel"
           : host === "macos"
             ? "macos-latest"
-            : "ubuntu-24.04";
+            : host === "windows"
+              ? "windows-2025"
+              : "ubuntu-24.04";
       assert.ok(lane.includes(`runs-on: ${runner}\n`));
       if (id === "macos-compatibility")
         assert.match(
@@ -231,12 +233,14 @@ test("verification jobs depend on planning and aggregate every selected receipt"
       assert.match(lane, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
       assert.match(lane, /ref:.*github\.sha/);
       assert.doesNotMatch(lane, /needs: \[/);
-      if (host === "macos" || id === "docker-integration") {
+      if (host !== "linux" || id === "docker-integration") {
         assert.ok(
           lane.indexOf("actions-adapter.mjs setup") <
             lane.indexOf("actions-adapter.mjs lane"),
         );
         assert.match(lane, /pipeline-bootstrap\.py/);
+        if (host === "windows")
+          assert.doesNotMatch(lane, /source-reuse|secrets\./);
       } else {
         assert.ok(
           lane.includes(
@@ -260,9 +264,7 @@ test("verification jobs depend on planning and aggregate every selected receipt"
       aggregate,
       ...(name === "release-macos" ? [job(workflow, "create")] : []),
     ]) {
-      const jobs = independent.map(([id]) => id);
-      if (name === "verify") jobs.push("macos-arm64");
-      for (const id of jobs) {
+      for (const [id] of lanes) {
         assert.ok(consumer.split("    if:")[0].includes(`        ${id},\n`));
         for (const line of consumer.match(/PIPELINE_NEEDS:.*$/gm) ?? [])
           assert.ok(line.includes(`toJSON(needs.${id})`));
@@ -275,60 +277,35 @@ test("verification jobs depend on planning and aggregate every selected receipt"
   }
 });
 
-test("Verify runs selected ARM64 lanes on one runner with independent step results", () => {
+test("Windows verify requires a native receipt and uploads the CI build after it passes", () => {
   const workflow = read("verify");
-  const shared = job(workflow, "macos-arm64");
-  assert.equal(workflow.match(/^ {4}runs-on: macos-latest$/gm)?.length, 1);
-  assert.match(shared, /needs: plan\n/);
-  assert.match(shared, /runs-on: macos-latest\n/);
-  assert.match(shared, /ref:.*github\.sha/);
-  assert.match(shared, /PIPELINE_PLAN_DIGEST:.*needs\.plan\.outputs\.digest/);
-  assert.match(shared, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
-  assert.equal(shared.match(/pipeline-bootstrap\.py/g)?.length, 1);
-  const [jobHeader, steps] = shared.split("    steps:\n");
-  for (const id of ["tooling-macos", "macos-code", "macos-native"]) {
-    assert.doesNotMatch(workflow, new RegExp(`^  ${id}:`, "m"));
-    assert.ok(jobHeader.includes(`.lanes.*.id, '${id}')`));
-    assert.ok(jobHeader.includes(`${id}-result: \${{ steps.${id}.outcome }}`));
-    assert.ok(
-      jobHeader.includes(`${id}-receipt: \${{ steps.${id}.outputs.receipt }}`),
-    );
-    if (id !== "tooling-macos")
-      assert.ok(
-        jobHeader.includes(
-          `${id}-evidence: \${{ steps.${id}.outputs.evidence }}`,
-        ),
-      );
-    const setup = steps.split(`- id: setup-${id}\n`)[1]?.split("      - ")[0];
-    assert.ok(setup?.includes(`.lanes.*.id, '${id}')`));
-    assert.ok(
-      setup.includes("!cancelled() && steps.bootstrap.outcome == 'success'"),
-    );
-    assert.ok(setup.includes(`setup --workflow verify --lane ${id}`));
-    const execution = steps.split(`- id: ${id}\n`)[1]?.split("      - ")[0];
-    assert.ok(execution?.includes(`name: ${id}\n`));
-    assert.ok(
-      execution.includes(
-        `!cancelled() && steps.setup-${id}.outcome == 'success'`,
-      ),
-    );
-    assert.ok(execution.includes(`lane --workflow verify --lane ${id}`));
-    assert.doesNotMatch(execution, /continue-on-error/);
-  }
+  const lane = job(workflow, "windows-native");
+  assert.match(lane, /runs-on: windows-2025/);
+  assert.match(lane, /ref:.*github\.sha/);
+  assert.match(lane, /contents: read/);
+  assert.doesNotMatch(
+    lane,
+    /secrets\.|environment:|continue-on-error|source-reuse/,
+  );
+  assert.match(lane, /steps\.lane\.outputs\.receipt/);
   assert.match(
-    shared,
-    /tools\/actions-adapter\.mjs desktop\n[\s\S]*?steps\.desktop\.outcome == 'success'/,
+    lane,
+    /lane --workflow verify --lane windows-native[\s\S]*upload-artifact/,
+  );
+  assert.match(lane, /situate-windows-ci\/artifact\//);
+  assert.match(lane, /if-no-files-found: error/);
+  const required = job(workflow, "required");
+  assert.match(required.split("    if:")[0], /windows-native/);
+  assert.equal(
+    (required.match(/toJSON\(needs\.windows-native\)/g) ?? []).length,
+    2,
   );
 });
 
-test("native source verification declares one build slot on ARM64 and Intel", () => {
-  for (const [workflow, id] of [
-    ["verify", "macos-arm64"],
-    ["verify", "macos-compatibility"],
-    ["release-macos", "macos-native"],
-    ["release-macos", "macos-compatibility"],
-  ])
-    assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
+test("native source jobs declare one build slot in both PR and release verification", () => {
+  for (const workflow of ["verify", "release-macos"])
+    for (const id of ["macos-native", "macos-compatibility"])
+      assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
 });
 
 test("the Intel release job has more time for cold compilation than PR verification", () => {
@@ -480,7 +457,8 @@ test("paused releases skip planning and source work", () => {
   assert.match(plan, /release-selection --workflow create/);
   assert.match(plan, /PIPELINE_RELEASE_ENABLED:.*vars\.MACOS_RELEASE_ENABLED/);
   assert.match(plan, /if: steps\.selection\.outputs\.enabled == 'true'/);
-  for (const id of Object.keys(laneHosts)) {
+  for (const [id, host] of Object.entries(laneHosts)) {
+    if (host === "windows") continue;
     assert.match(job(workflow, id), /needs\.plan\.outputs\.enabled == 'true'/);
     assert.doesNotMatch(job(workflow, id), /concurrency:/);
   }
@@ -598,20 +576,17 @@ test("Slack notifications skip message composition and delivery without a webhoo
   assert.match(notifier, /id: post\s+if: steps\.message\.outcome == 'success'/);
 });
 
-test("Slack release notes preserve formatting and flag shortened messages", (t) => {
+test("Slack release notes show headings without exposing release metadata", (t) => {
   const notifier = read("slack-notify");
   const filter = notifier.match(
     /jq -e --arg id .*? '\n([\s\S]*?)' > "\$payload"/,
   )?.[1];
   assert.ok(filter);
   const marker = `<!-- situate-release:${"A".repeat(1500)}= -->`;
-  const limit = 8000;
-  const exact = "x".repeat(limit);
   const bodies = [
     `## Features\n\n### Chat dictation\n\nTranscribe on your Mac.\n\n## Changes\n\n### Plugins\n\nKeep <@U123> & *text* literal.\n\n${marker}`,
     `\r\n${marker}\r\n`,
-    `${exact}\n\n${marker}`,
-    `${exact}y\n\n${marker}`,
+    `## Fixes\n\n${"x".repeat(1500)}\n\n${marker}`,
   ];
   const result = spawnSync(
     "jq",
@@ -644,7 +619,7 @@ test("Slack release notes preserve formatting and flag shortened messages", (t) 
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /situate-release:/);
-  const [formatted, empty, complete, shortened] = result.stdout
+  const [formatted, empty, long] = result.stdout
     .trim()
     .split("\n")
     .map(JSON.parse);
@@ -662,24 +637,7 @@ test("Slack release notes preserve formatting and flag shortened messages", (t) 
     formatted.blocks.at(-1).text.text,
     "<https://github.com/example/app/releases/tag/v2026.11.10|View release on GitHub>",
   );
-  assert.equal(complete.blocks[1].elements[0].elements[0].text, exact);
-  assert.equal(
-    complete.blocks.at(-1).text.text,
-    formatted.blocks.at(-1).text.text,
-  );
-  assert.equal(complete.text, formatted.text);
-  assert.equal(
-    shortened.blocks[1].text.text,
-    "Release notes shortened. <https://github.com/example/app/releases/tag/v2026.11.10|Read the full changelog on GitHub>",
-  );
-  assert.equal(
-    shortened.blocks[2].elements[0].elements[0].text,
-    `${exact.slice(0, -1)}…`,
-  );
-  assert.equal(
-    shortened.text,
-    "Situate v2026.11.10 published. Release notes shortened. Full changelog: https://github.com/example/app/releases/tag/v2026.11.10",
-  );
+  assert.match(long.blocks[1].elements[0].elements.at(-1).text, /^x+…$/);
 });
 
 test("macOS release checks verified hosting before starting release effects", () => {

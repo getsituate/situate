@@ -76,7 +76,10 @@ const command = (id, code) => ({
 test("extended plan includes every category and both reference modes", () => {
   const plan = createPlan({ extended: true, platform: "darwin" });
   assert.equal(plan.scope, "extended");
-  assert.deepEqual(plan.deferredSuiteIds, []);
+  assert.deepEqual(plan.deferredSuiteIds, [
+    "client-windows-build",
+    "client-windows-workspace",
+  ]);
   assert.equal(plan.profile, "all");
   assert.deepEqual(plan.projects, projects);
   assert.deepEqual(
@@ -154,6 +157,9 @@ test("supported selection separates diagnostics from unavailable native hosts", 
     const extended = createPlan({ platform, extended: true });
     const unavailable = [
       ...(platform === "darwin" ? [] : native),
+      ...(platform === "win32"
+        ? []
+        : ["client-windows-build", "client-windows-workspace"]),
       ...(platform === "win32"
         ? ["dev-tui-unit", "dev-tui-format", "dev-tui-clippy"]
         : []),

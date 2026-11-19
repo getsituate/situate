@@ -333,9 +333,9 @@ export async function runLane(
   validatePlan(plan);
   const lane = plan.lanes.find((entry) => entry.id === laneId);
   assert(lane, "Lane was not selected by this workflow plan");
-  const actualHost = host === "darwin" ? "macos" : host;
+  const actualHost = { darwin: "macos", win32: "windows" }[host] ?? host;
   assert(
-    ["linux", "macos"].includes(actualHost) &&
+    ["linux", "macos", "windows"].includes(actualHost) &&
       (lane.host === actualHost ||
         (actualHost === "macos" && lane.host === "linux")),
     "Selected lane requires a different execution host",
@@ -389,7 +389,7 @@ export async function runLane(
   const executionEnvironment =
     lane.execution === "host-docker"
       ? hostContainerEnvironment(environment)
-      : ordinaryEnvironment(environment);
+      : ordinaryEnvironment(environment, host);
   const report = await (runner ?? tests.runPlan)(
     { profile: "supported", suites },
     {
