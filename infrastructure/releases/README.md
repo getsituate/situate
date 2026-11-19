@@ -37,7 +37,9 @@ Use **Release recovery** on protected `main` for an existing creation operation:
 2. **qualify** takes a build checkpoint ID and that digest. It restores the original bytes, verifies a disposable macOS account and current routing/feed/predecessor facts, and authorizes a separate native qualification attempt. The original configuration and manifest remain unchanged.
 3. Inspect again before **continue**. Select the passed recovery-qualification checkpoint and the new confirmation digest. Continuation restores its retained receipt and original build on the new runner, then completes the original GitHub Release without building, signing, notarizing or qualifying again. Website promotion remains a separate **Publish macOS** dispatch using the returned release ID.
 
-The protected `release-recovery` environment needs `WEBSITE_DEPLOY_HOST` and the two SSH-content secrets listed above. Inspection and qualification receive read-only GitHub access; only continuation receives release-write access. Qualification workers receive neither SSH nor GitHub credentials. This workflow cannot abandon an operation or reconcile an uncertain publication.
+If continuation stopped during GitHub draft creation, inspect again and supply the exact existing draft ID as `draft_id`. Continuation accepts only a retained creation intent and its unchanged, empty draft. It does not create a replacement draft, retry an uncertain asset upload, or reconcile interrupted website publication.
+
+The protected `release-recovery` environment needs `WEBSITE_DEPLOY_HOST` and the two SSH-content secrets listed above. Inspection and qualification receive read-only GitHub access; only continuation receives release-write access. Qualification workers receive neither SSH nor GitHub credentials. This workflow cannot abandon an operation.
 
 For the same script-owned operations from the CLI, bootstrap the original metadata into a new private directory and inspect first. Output destinations must be fresh absolute paths with an existing private parent:
 

@@ -219,6 +219,7 @@ export function createHostCheckpointStore(
       inspectionDigest,
       destination,
       qualified = false,
+      draftId,
     }) {
       const staging = stagingDirectory(destination);
       const descriptor = await exchange(
@@ -227,6 +228,7 @@ export function createHostCheckpointStore(
           identity: checkpointIdentity(plan),
           checkpointId,
           inspectionDigest,
+          ...(draftId !== undefined ? { draftId } : {}),
         },
         [],
         async (stream) => {
