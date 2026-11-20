@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -73,6 +81,39 @@ test("all findings and unavailable services remain observable without suppressin
     JSON.parse(readFileSync(join(directory, "report.json"), "utf8")),
     report,
   );
+});
+
+test("report paths are checked before commands run, and replacement does not modify hard-link peers", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-monitor-paths-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const checkout = join(directory, "checkout");
+  mkdirSync(checkout);
+  const original = join(directory, "original.txt");
+  writeFileSync(original, "retain");
+  symlinkSync(directory, join(checkout, "test-results"), "dir");
+  const unexpected = () => assert.fail("Monitoring must not start");
+  assert.throws(
+    () => monitor({ directory: checkout, execute: unexpected }),
+    /Symlink not allowed/,
+  );
+  const reportDirectory = join(directory, "local reports");
+  mkdirSync(reportDirectory);
+  const report = join(reportDirectory, "report.json");
+  symlinkSync(original, report);
+  assert.throws(
+    () =>
+      monitor({ directory: checkout, reportDirectory, execute: unexpected }),
+    /Symlink not allowed/,
+  );
+  rmSync(report);
+  linkSync(original, report);
+  const result = monitor({
+    directory: checkout,
+    reportDirectory,
+    execute: () => ({ status: 0 }),
+  });
+  assert.deepEqual(JSON.parse(readFileSync(report, "utf8")), result);
+  assert.equal(readFileSync(original, "utf8"), "retain");
 });
 
 test("a complete clean monitoring run passes", (t) => {
