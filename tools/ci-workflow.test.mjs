@@ -207,6 +207,17 @@ test("native source jobs declare one build slot in both PR and release verificat
       assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
 });
 
+test("the Intel release job has more time for cold compilation than PR verification", () => {
+  assert.match(
+    job(read("release-macos"), "macos-compatibility"),
+    /^ {4}timeout-minutes: 75$/m,
+  );
+  assert.match(
+    job(read("verify"), "macos-compatibility"),
+    /^ {4}timeout-minutes: 60$/m,
+  );
+});
+
 test("only the release Intel lane persists its compiler cache after success and flush", () => {
   const intel = job(read("release-macos"), "macos-compatibility");
   assert.match(intel, /SITUATE_RELEASE_CACHE_SCOPE: intel-compatibility/);

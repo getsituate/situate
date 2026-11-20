@@ -279,7 +279,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'macos-compatibility')
     runs-on: macos-15-intel
-    timeout-minutes: 60
+    timeout-minutes: 75
     outputs:
       receipt: ${{ steps.lane.outputs.receipt }}
     env:
