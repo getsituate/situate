@@ -219,6 +219,16 @@ fn input_references_must_belong_to_the_captured_workspace() {
 }
 
 #[test]
+fn ordinary_chat_points_to_the_copy_import_skill_without_including_it() {
+    let instructions = run_instructions("", None, vec![], vec![], "");
+    let policy = instructions[0]["content"].as_str().unwrap();
+    assert!(policy.contains("call `load_copy_import_skill`"));
+    assert!(policy.contains("wait for its result before preparing or writing copies"));
+    assert!(!policy.contains("Run conversion code without saving helper scripts"));
+    assert!(!policy.contains("Count only acknowledged destinations as published"));
+}
+
+#[test]
 fn optional_instruction_sections_are_not_invented() {
     let instructions = run_instructions("", None, vec![], vec![], "");
     assert_eq!(instructions.len(), 1);
