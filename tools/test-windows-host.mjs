@@ -1,11 +1,12 @@
 // Start suspended so no descendant can escape assignment to the job object.
 export const windowsJob = String.raw`
-param([string]$Node, [string]$Script, [string]$Phase, [int]$Seconds, [string]$Workspace)
+param([string]$Node, [string]$Script, [string]$Phase, [int]$Seconds, [string]$Workspace, [string]$CancelFile)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -40,8 +41,9 @@ public static class SituateJob {
   const int LimitsSizeX64 = 144;  // JOBOBJECT_EXTENDED_LIMIT_INFORMATION
   const int AccountingSize = 48; // JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
 
-  public static int Run(string node, string script, string phase, int seconds, string workspace) {
-    if (IntPtr.Size != 8) throw new InvalidOperationException("An x64 job supervisor is required.");
+  public static int Run(string app, string arguments, int seconds, string cancelFile) {
+    if (IntPtr.Size != 8) throw new InvalidOperationException("A 64-bit job supervisor is required.");
+    bool console = String.IsNullOrEmpty(cancelFile);
     var job = CreateJobObject(IntPtr.Zero, IntPtr.Zero);
     Check(job != IntPtr.Zero);
     var buffer = Marshal.AllocHGlobal(LimitsSizeX64);
@@ -50,10 +52,15 @@ public static class SituateJob {
       Marshal.Copy(new byte[LimitsSizeX64], 0, buffer, LimitsSizeX64);
       Marshal.WriteInt32(buffer, 16, 0x2000); // KILL_ON_JOB_CLOSE
       Check(SetInformationJobObject(job, 9, buffer, LimitsSizeX64));
-      var start = new Startup { Size = Marshal.SizeOf(typeof(Startup)), Flags = 0x100,
-        Input = GetStdHandle(-10), Output = GetStdHandle(-11), Error = GetStdHandle(-12) };
-      var command = new StringBuilder("\"" + node + "\" \"" + script + "\" " + phase + " --child \"" + workspace + "\"");
-      Check(CreateProcess(node, command, IntPtr.Zero, IntPtr.Zero, true, 4, IntPtr.Zero, null, ref start, out child));
+      var start = new Startup { Size = Marshal.SizeOf(typeof(Startup)) };
+      if (console) {
+        start.Flags = 0x100;
+        start.Input = GetStdHandle(-10);
+        start.Output = GetStdHandle(-11);
+        start.Error = GetStdHandle(-12);
+      }
+      var command = new StringBuilder("\"" + app + "\" " + arguments);
+      Check(CreateProcess(app, command, IntPtr.Zero, IntPtr.Zero, console, 4, IntPtr.Zero, null, ref start, out child));
       if (!AssignProcessToJobObject(job, child.Process)) {
         var error = new Win32Exception();
         TerminateProcess(child.Process, 1);
@@ -61,9 +68,9 @@ public static class SituateJob {
       }
       Check(ResumeThread(child.Thread) != UInt32.MaxValue);
       uint result = 124;
-      var lease = Console.OpenStandardInput().ReadAsync(new byte[1], 0, 1);
+      var lease = console ? Console.OpenStandardInput().ReadAsync(new byte[1], 0, 1) : null;
       var deadline = Stopwatch.StartNew();
-      while (deadline.Elapsed.TotalSeconds < seconds && !lease.IsCompleted) {
+      while (deadline.Elapsed.TotalSeconds < seconds && !(console ? lease.IsCompleted : File.Exists(cancelFile))) {
         var wait = WaitForSingleObject(child.Process, 100);
         if (wait == 0) { Check(GetExitCodeProcess(child.Process, out result)); break; }
         Check(wait == 258);
@@ -85,7 +92,15 @@ public static class SituateJob {
   }
 }
 '@
-exit ([SituateJob]::Run($Node, $Script, $Phase, $Seconds, $Workspace))
+if ($CancelFile) {
+    $arguments = '-NoProfile -NonInteractive -File "{0}"' -f $Script
+    $status = [SituateJob]::Run($Node, $arguments, $Seconds, $CancelFile)
+    # This receipt is written only after the entire job has drained.
+    [IO.File]::WriteAllText((Join-Path $Workspace 'state\exit-code'), [string]$status)
+    exit $status
+}
+$arguments = '"{0}" {1} --child "{2}"' -f $Script, $Phase, $Workspace
+exit ([SituateJob]::Run($Node, $arguments, $Seconds, $null))
 `;
 
 export const windowsProbe = String.raw`

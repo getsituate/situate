@@ -258,6 +258,26 @@ Each guest executes one complete journey at a time across all worktrees, includi
 
 Re-run setup after changing the repository's Node/npm pins. Stop an idle guest with `tart stop situate-tests`. VM execution remains macOS host integration evidence, not a release, signing, or hardware qualification.
 
+### Windows startup smoke in UTM
+
+Use a dedicated Windows guest with the QEMU guest agent, WebView2, and an unlocked console signed into a disposable standard account. Connect UTM to a private virtual network. Run the host command from a single macOS account across your worktrees; its guest lock is shared by those worktrees.
+
+On a Windows build host with the pinned Volta and Rust toolchains, MSVC, and the Windows SDK, run this command from a clean client checkout:
+
+```powershell
+node tools/build-windows-smoke.mjs C:\Temp\situate-smoke-artifact
+```
+
+Copy only `manifest.json` and `situate-client.exe` to the Mac. The executable uses a profile directory relative to itself. Ordinary Verify executables are not suitable for this test because they use the standard application data directories.
+
+```sh
+node tools/windows-vm-smoke.mjs "$VM_UUID" "$HOST_BRIDGE_IP" 'WINDOWS-VM\test-account' --artifact "$ARTIFACT_DIRECTORY"
+```
+
+Use the exact guest UUID from `utmctl list` and the Mac's address on the private UTM network. The runner checks the artifact checksum, starts it with a fresh app and WebView2 profile, and verifies that an on-screen window shows the enabled Create and Open workspace buttons. A run on a Windows ARM64 guest with an x64 executable exercises x64 emulation, not native x64 behavior.
+
+`--fixture 15` in place of `--artifact ...` exercises the queue and process cleanup using a synthetic child process without launching Situate. `Ctrl+C` requests cancellation; let the command finish cleaning up. If cleanup cannot be confirmed, the host retains the UUID-specific lease in `~/.config/situate/windows-vm-queue/`. Do not remove it until the matching guest task, its process tree, and its run directory are gone.
+
 ### Local process connection qualification
 
 The default macOS native suite includes an offline process-backed connection and consumer. Run `node client/scripts/test-native-process.mjs` from the repository root to execute only that additional phase. It checks exact synthetic process fixtures without starting programs, then exercises direct execution without a command confirmation and cancellation through the production WebView and Rust host. The command writes only to the owned disposable workspace and returns fixed data. A second owned process verifies that cancelling workspace closure preserves running work, quit is blocked before file preparation, and explicit abort stops the worker and retains observed history before the workspace closes. No personal files, service accounts, network traffic or Notes automation are used.
