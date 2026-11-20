@@ -402,7 +402,9 @@ The `qualification-route` selection uses the protected `macos-release` environme
 
 ## CI gates
 
-GitHub requires `PR verification` and the SonarQube Cloud app’s `SonarCloud Code Analysis` check for merges into `main`. The separate `SonarCloud` code-scanning check is not the quality gate. SonarQube Cloud’s automatic analysis runs without coverage data, so a passing gate does not currently establish the 80% minimum on new code.
+GitHub requires `PR verification` and the SonarQube Cloud app’s `SonarCloud Code Analysis` check for merges into `main`. The separate `SonarCloud` code-scanning check is not the quality gate. Automatic analysis runs without coverage data. To report Vue app coverage, add an analysis token as the `SONAR_TOKEN` Actions secret, turn off automatic analysis in SonarQube Cloud, and set the `SONAR_CI_ANALYSIS` Actions variable to `true`. Run the [SonarQube Cloud workflow](../../.github/workflows/sonarcloud.yml) on `main` and confirm the report appears. Then verify that a PR below 80% coverage on new code fails the gate for coverage.
+
+CI analysis runs on `main` and same-repository PRs. Fork PRs do not receive the required check in this mode; keep automatic analysis if fork PRs must merge without a separate CI analysis path. The workflow imports only Vue app coverage. Before switching, check how SonarQube Cloud scores new code outside the report so unrelated changes do not fail for missing coverage.
 
 The [PR verification workflow](../../.github/workflows/verify.yml) and [macOS release workflow](../../.github/workflows/release-macos.yml) use the same script-owned plans as local execution:
 
