@@ -17,6 +17,7 @@ import { once } from "node:events";
 import { createReadStream } from "node:fs";
 import { sshArguments } from "./transport.mjs";
 import {
+  checkpointFile,
   checkpointIdentity,
   createRestoreDirectory,
   writeRestoredFile,
@@ -55,7 +56,7 @@ export function createHostCheckpointStore(
   );
   start ??= () =>
     spawn(
-      "ssh",
+      "/usr/bin/ssh",
       [
         ...sshArguments(config),
         `python3 -u -c 'import base64;exec(base64.b64decode("${code}"))'`,
@@ -76,7 +77,7 @@ export function createHostCheckpointStore(
   };
   const commitRestore = (staging, destination) =>
     execFileSync(
-      "python3",
+      "/usr/bin/python3",
       [
         fileURLToPath(new URL("./checkpoint-commit.py", import.meta.url)),
         staging,
@@ -186,19 +187,22 @@ export function createHostCheckpointStore(
           Buffer.from(result.metadata[name], "base64"),
         );
       }
-      const parent = openSync(staging, "r");
+      const parent = openSync(
+        staging,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+      );
       try {
         fsyncSync(parent);
       } finally {
         closeSync(parent);
       }
-      const plan = JSON.parse(readFileSync(`${staging}/plan.json`, "utf8"));
+      const plan = JSON.parse(checkpointFile(join(staging, "plan.json")));
       const { validatePlan, digest } =
         await import("../../tools/pipeline-state.mjs");
       validatePlan(plan);
       assert.deepEqual(checkpointIdentity(plan), result.descriptor.identity);
       assert.equal(
-        digest(readFileSync(`${staging}/configuration.json`)),
+        digest(checkpointFile(join(staging, "configuration.json"))),
         plan.configurationDigest,
       );
       commitRestore(staging, destination);
@@ -308,7 +312,10 @@ export function createHostCheckpointStore(
                 buffer.length === 0,
               "Incomplete checkpoint download",
             );
-            const parent = openSync(staging, "r");
+            const parent = openSync(
+              staging,
+              constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+            );
             try {
               fsyncSync(parent);
             } finally {
@@ -335,7 +342,10 @@ export function createHostCheckpointStore(
           },
           bytes,
         );
-        const parent = openSync(staging, "r");
+        const parent = openSync(
+          staging,
+          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        );
         try {
           fsyncSync(parent);
         } finally {

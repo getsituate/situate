@@ -55,10 +55,13 @@ export function createGitReservationAdapter({
         ]
       : args;
     if (input === undefined)
-      return (await executeFile("git", commandArgs, options)).stdout;
+      return (await executeFile("/usr/bin/git", commandArgs, options)).stdout;
     return new Promise((resolve, reject) => {
-      const child = execFile("git", commandArgs, options, (error, stdout) =>
-        error ? reject(error) : resolve(stdout),
+      const child = execFile(
+        "/usr/bin/git",
+        commandArgs,
+        options,
+        (error, stdout) => (error ? reject(error) : resolve(stdout)),
       );
       child.stdin.on("error", reject);
       child.stdin.end(input);

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -108,12 +107,12 @@ export async function main(
     values.plan && values.inspection,
     "Select original --plan FILE and fresh --inspection FILE",
   );
-  const observation = JSON.parse(readFileSync(values.inspection, "utf8"));
+  const observation = JSON.parse(checkpointFile(values.inspection));
   const inspection = observation.reconciliationDigest
     ? observation
     : { ...observation, reconciliationDigest: digest(observation) };
   return restoreQualifiedCheckpoint(root, {
-    plan: JSON.parse(readFileSync(values.plan, "utf8")),
+    plan: JSON.parse(checkpointFile(values.plan)),
     checkpointId: values.checkpoint,
     destination: values.destination,
     inspection,

@@ -8,7 +8,6 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
-  readFileSync,
   readSync,
   writeFileSync,
 } from "node:fs";
@@ -77,15 +76,9 @@ export const checkpointIdentity = (plan) => ({
   planDigest: plan.authorizationDigest,
   sourceRevision: plan.source,
 });
-export function checkpointFile(file) {
-  for (let parent = resolve(dirname(file)); ; parent = dirname(parent)) {
-    const stat = lstatSync(parent);
-    assert(
-      stat.isDirectory() && !stat.isSymbolicLink(),
-      "Checkpoint path traverses linked storage",
-    );
-    if (parent === dirname(parent)) break;
-  }
+export function checkpointFile(path) {
+  const file = resolve(path);
+  checkpointFileParent(file);
   const fd = openSync(
     file,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
@@ -97,7 +90,19 @@ export function checkpointFile(file) {
       "Checkpoint payload must be an owned single-link regular file",
     );
     assert(stat.size <= 8 * 1024 * 1024, "Checkpoint metadata exceeds bound");
-    return readFileSync(fd);
+    const bytes = Buffer.alloc(stat.size + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(fd, bytes, offset, bytes.length - offset);
+      if (count === 0) break;
+      offset += count;
+    }
+    assert.equal(
+      offset,
+      stat.size,
+      "Checkpoint metadata size changed while reading",
+    );
+    return bytes.subarray(0, offset);
   } finally {
     closeSync(fd);
   }
@@ -471,7 +476,10 @@ export function createRestoreDirectory(destination) {
   );
   checkpointFileParent(destination);
   mkdirSync(destination, { mode: 0o700 });
-  const parent = openSync(dirname(destination), "r");
+  const parent = openSync(
+    dirname(destination),
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
   try {
     fsyncSync(parent);
   } finally {

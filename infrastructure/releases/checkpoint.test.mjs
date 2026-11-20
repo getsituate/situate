@@ -20,9 +20,18 @@ import {
 import { createQualificationRuntimeAuthorization } from "../../tools/release-runtime-authorization.mjs";
 import { digest } from "../../tools/pipeline-state.mjs";
 import { inspectWorkflow, restoreWorkflow } from "../../tools/pipeline.mjs";
-import { requalifyCheckpoint } from "../../tools/release-checkpoint-qualify.mjs";
-import { restoreQualifiedCheckpoint } from "../../tools/release-checkpoint-restore-qualified.mjs";
-import { continueQualifiedCheckpoint } from "../../tools/release-checkpoint-continue.mjs";
+import {
+  main as qualifyMain,
+  requalifyCheckpoint,
+} from "../../tools/release-checkpoint-qualify.mjs";
+import {
+  main as restoreMain,
+  restoreQualifiedCheckpoint,
+} from "../../tools/release-checkpoint-restore-qualified.mjs";
+import {
+  main as continueMain,
+  continueQualifiedCheckpoint,
+} from "../../tools/release-checkpoint-continue.mjs";
 import {
   createCheckpoint,
   checkpointIdentity,
@@ -89,6 +98,35 @@ function host(
     });
   return { ...fixture, storage, identity, store, raw };
 }
+test("checkpoint recovery CLI inputs must be owned bounded single-link files", async (t) => {
+  const { root } = checkpointFixture(t);
+  const source = join(root, "observation.json");
+  const linked = join(root, "linked.json");
+  const large = join(root, "large.json");
+  const parent = join(root, "alias");
+  writeFileSync(source, "{}");
+  linkSync(source, linked);
+  symlinkSync(root, parent);
+  writeFileSync(large, Buffer.alloc(8 * 1024 * 1024 + 1, " "));
+  await assert.rejects(
+    continueMain(["--restore-authorization", linked]),
+    /single-link regular file/,
+  );
+  await assert.rejects(
+    qualifyMain(["--restore-authorization", large]),
+    /metadata exceeds bound/,
+  );
+  await assert.rejects(
+    restoreMain([
+      "--inspection",
+      join(parent, "observation.json"),
+      "--plan",
+      source,
+    ]),
+    /linked storage/,
+  );
+});
+
 test("committed packages restore exactly without a builder, and lost acknowledgements cannot replay", async (t) => {
   const f = host(t);
   const checkpoint = createCheckpoint({ kind: "build", ...f });
