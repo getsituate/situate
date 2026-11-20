@@ -29,7 +29,6 @@ pub enum Reply {
     Validate { manifest: Box<PluginManifest> },
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", test))]
 fn inspect(root: &std::path::Path, request: Request) -> Result<Reply, String> {
     use situate_core::plugins;
     match request {
@@ -49,7 +48,6 @@ fn inspect(root: &std::path::Path, request: Request) -> Result<Reply, String> {
     .map_err(|error| error.to_string())
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", test))]
 pub(crate) fn inspect_cancellable(
     root: &std::path::Path,
     request: Request,
