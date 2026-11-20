@@ -65,6 +65,12 @@ function assertSource(root, source) {
 
 export async function validateDeclarations(root, { source, base, heads }) {
   assert(
+    [source, base].every(
+      (commit) => typeof commit === "string" && /^[a-f0-9]{40}$/.test(commit),
+    ),
+    "Declaration review requires exact source and base commits",
+  );
+  assert(
     Array.isArray(heads) &&
       heads.length > 0 &&
       heads.length <= 100 &&

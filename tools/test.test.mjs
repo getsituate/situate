@@ -1840,6 +1840,31 @@ test("container transport preserves the host CI policy instead of adding a CI ma
   assert.equal(ordinary.status, "passed", ordinary.error);
 });
 
+test(
+  "Cargo discovery accepts an absolute toolchain path and rejects a relative result",
+  { skip: process.platform === "win32" },
+  async (t) => {
+    const directory = mkdtempSync(join(tmpdir(), "situate-cargo-discovery-"));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const rustup = join(directory, "rustup");
+    const suite = { ...command("cargo-toolchain", ""), command: "cargo" };
+    const options = {
+      directory,
+      environment: { PATH: directory },
+      output: silent(),
+      buildLease: false,
+    };
+    writeFileSync(rustup, "#!/bin/sh\nprintf '%s\\n' cargo\n", { mode: 0o700 });
+    assert.throws(() => executeSuite(suite, options), /absolute Cargo path/);
+    writeFileSync(rustup, `#!/bin/sh\nprintf '%s\\n' "$FIXTURE_CARGO"\n`);
+    const result = await executeSuite(suite, {
+      ...options,
+      environment: { ...options.environment, FIXTURE_CARGO: process.execPath },
+    });
+    assert.equal(result.status, "passed", result.error);
+  },
+);
+
 test("subprocess failures and missing executables return failure results", async () => {
   const result = await executeSuite(command("exit", "process.exit(7)"), {
     output: silent(),
