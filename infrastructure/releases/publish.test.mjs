@@ -32,6 +32,7 @@ import {
   verifyDownloadReceipt,
   verifyPublicationInputs,
   verifyPublicAvailability,
+  withPublicationArchive,
   qualifyPublicationCompatibility,
 } from "./publish.mjs";
 import { readPublicationHistory } from "./transport.mjs";
@@ -1334,6 +1335,43 @@ test("immutable input and download receipts bind public files without operationa
   );
 });
 
+test("publication archives keep exact bytes for reconciliation and require an unused destination for creation", (t) => {
+  const parent = temporary(t);
+  const stage = join(parent, "stage");
+  mkdirSync(stage);
+  writeFileSync(join(stage, "manifest.json"), "{}\n");
+  const inspect = (fd, digest) => {
+    const bytes = readFileSync(fd);
+    assert.equal(sha256(bytes), digest);
+    assert.equal(
+      execFileSync("/usr/bin/tar", ["-tf", "-"], {
+        input: bytes,
+        encoding: "utf8",
+      }),
+      "manifest.json\n",
+    );
+    return digest;
+  };
+  const digest = withPublicationArchive(
+    stage,
+    ["manifest.json"],
+    undefined,
+    inspect,
+  );
+  assert.equal(
+    withPublicationArchive(stage, ["manifest.json"], digest, inspect),
+    digest,
+  );
+  assert.throws(
+    () => withPublicationArchive(stage, [], undefined, assert.fail),
+    /already exists/,
+  );
+  assert.throws(
+    () => withPublicationArchive(stage, [], "0".repeat(64), assert.fail),
+    /differing transport archive/,
+  );
+});
+
 test("publication receipt must be a bounded single-link regular file", (t) => {
   const directory = temporary(t);
   const receipt = join(directory, "receipt.json");
@@ -1345,9 +1383,9 @@ test("publication receipt must be a bounded single-link regular file", (t) => {
   symlinkSync(receipt, symlink);
   linkSync(receipt, hardlink);
   for (const [releaseReceipt, error] of [
-    [directory, /single-link regular file/],
-    [symlink, /Cannot open release metadata/],
-    [hardlink, /single-link regular file/],
+    [directory, /single-link regular release file/],
+    [symlink, /Cannot open release file/],
+    [hardlink, /single-link regular release file/],
     [oversized, /exceeds 1 MiB/],
   ]) {
     assert.throws(

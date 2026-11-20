@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  readReleaseFileDescriptor,
+  withReleaseFile,
+} from "./updater-signing.mjs";
+import {
   lstatSync,
   mkdirSync,
   readFileSync,
@@ -29,17 +33,9 @@ const fixtures = {
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 function regularFile(path) {
-  const stat = lstatSync(path);
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    stat.nlink !== 1 ||
-    stat.size > 1024 * 1024
-  )
-    throw new Error(
-      "Expected a regular qualification file without links, at most 1 MiB.",
-    );
-  return readFileSync(path);
+  return withReleaseFile(path, (fd, stat) =>
+    readReleaseFileDescriptor(fd, stat.size, 1024 * 1024),
+  );
 }
 
 function canonicalDirectory(path) {

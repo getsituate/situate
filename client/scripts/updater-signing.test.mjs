@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  symlinkSync,
+  linkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { updaterSignatureFixture } from "./updater-signing-fixture.mjs";
@@ -52,6 +58,25 @@ test("verifies both minisign signatures and rejects bytes, version, key and trus
       verifyUpdaterSignature(path, signed.signature, signed.publicKey, "1.2.3"),
     /verification failed/,
   );
+});
+
+test("updater verification requires a single-link regular archive", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "situate-updater-file-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bytes = Buffer.from("synthetic archive");
+  const signed = updaterSignatureFixture(bytes);
+  const archive = join(root, "archive");
+  const alias = join(root, "alias");
+  const hardlink = join(root, "linked");
+  writeFileSync(archive, bytes);
+  symlinkSync(archive, alias);
+  linkSync(archive, hardlink);
+  const verify = (path) =>
+    verifyUpdaterSignature(path, signed.signature, signed.publicKey, "1.2.3");
+  assert.throws(() => verify(alias), /Cannot open release file/);
+  assert.throws(() => verify(hardlink), /single-link regular release file/);
+  rmSync(hardlink);
+  assert.doesNotThrow(() => verify(archive));
 });
 
 test("direct signing config parses only required root dotenv data and separates secrets from embedded config", (t) => {

@@ -10,7 +10,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { verifyUpdaterSignature } from "./updater-signing.mjs";
+import {
+  hashReleaseFileDescriptor,
+  readReleaseFileDescriptor,
+  updateReleaseFileDigest,
+  verifyUpdaterSignature,
+  withReleaseFile,
+} from "./updater-signing.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { run } from "./ios-xcode.mjs";
 import { verifyReleaseHistoryResource } from "./release-history.mjs";
@@ -35,7 +41,17 @@ export function bundleDigest(app) {
     else if (stat.isDirectory())
       for (const name of readdirSync(path).sort())
         visit(join(path, name), `${relative}/${name}`);
-    else if (stat.isFile() && stat.nlink === 1) hash.update(readFileSync(path));
+    else if (stat.isFile() && stat.nlink === 1)
+      withReleaseFile(path, (fd, opened) => {
+        if (
+          opened.dev !== stat.dev ||
+          opened.ino !== stat.ino ||
+          opened.size !== stat.size ||
+          opened.mode !== stat.mode
+        )
+          throw new Error("Bundle file changed while opening.");
+        updateReleaseFileDigest(hash, fd, opened.size);
+      });
     else throw new Error("Unsupported bundle file or hard link.");
   }
   visit(app, "Situate.app");
@@ -47,6 +63,7 @@ export async function verifyDirectPayloads(
   artifact,
   { execute = run, env, signal } = {},
 ) {
+  let signature;
   for (const item of [
     artifact,
     artifact.updater,
@@ -58,20 +75,21 @@ export async function verifyDirectPayloads(
     if (typeof item.path !== "string" || basename(item.path) !== item.path)
       throw new Error("Invalid direct package path.");
     const path = join(directory, item.path);
-    const stat = lstatSync(path);
-    if (
-      !stat.isFile() ||
-      stat.isSymbolicLink() ||
-      stat.nlink !== 1 ||
-      createHash("sha256").update(readFileSync(path)).digest("hex") !==
-        item.sha256
-    )
-      throw new Error("Final direct package hash does not match the manifest.");
+    withReleaseFile(path, (fd, stat) => {
+      const sidecar =
+        item.path === artifact.updater.signaturePath
+          ? readReleaseFileDescriptor(fd, stat.size, 1024 * 1024)
+          : undefined;
+      const digest = sidecar
+        ? createHash("sha256").update(sidecar).digest()
+        : hashReleaseFileDescriptor(fd, stat.size);
+      if (digest.toString("hex") !== item.sha256)
+        throw new Error(
+          "Final direct package hash does not match the manifest.",
+        );
+      if (sidecar) signature = sidecar.toString("utf8").trim();
+    });
   }
-  const signature = readFileSync(
-    join(directory, artifact.updater.signaturePath),
-    "utf8",
-  ).trim();
   if (signature !== artifact.updater.signature)
     throw new Error("Updater signature asset differs from the manifest.");
   verifyUpdaterSignature(

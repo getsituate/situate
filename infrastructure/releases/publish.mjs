@@ -4,13 +4,11 @@ import {
   constants,
   cpSync,
   existsSync,
-  fstatSync,
   fsyncSync,
   lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
-  readSync,
   readdirSync,
   realpathSync,
   renameSync,
@@ -27,7 +25,10 @@ import {
   loadAppleSettings,
 } from "../../client/scripts/apple-release.mjs";
 import {
+  hashReleaseFileDescriptor,
+  readReleaseFileDescriptor,
   updaterEndpoint,
+  withReleaseFile,
   verifyUpdaterSignature,
 } from "../../client/scripts/updater-signing.mjs";
 import { verifyDirectPayloads } from "../../client/scripts/direct-release-verification.mjs";
@@ -48,59 +49,42 @@ const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const environment = () => appleEnvironment(process.env, client);
 
 function readMetadata(path) {
-  let fd;
-  try {
-    fd = openSync(
-      path,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-    );
-  } catch {
-    throw new Error("Cannot open release metadata.");
-  }
-  try {
-    const stat = fstatSync(fd);
-    if (!stat.isFile() || stat.nlink !== 1)
-      throw new Error("Release metadata must be a single-link regular file.");
+  return withReleaseFile(path, (fd, stat) => {
     if (stat.size > 1024 * 1024)
       throw new Error("Release metadata exceeds 1 MiB.");
-    const bytes = Buffer.alloc(stat.size + 1);
-    let length = 0;
-    while (length < bytes.length) {
-      const count = readSync(fd, bytes, length, bytes.length - length);
-      if (count === 0) break;
-      length += count;
-    }
-    if (length !== stat.size)
-      throw new Error("Release metadata size changed while reading.");
-    return bytes.subarray(0, length);
-  } finally {
-    closeSync(fd);
-  }
+    return readReleaseFileDescriptor(fd, stat.size, 1024 * 1024);
+  });
 }
 
 function json(path) {
   return JSON.parse(readMetadata(path));
 }
 
-function file(directory, name, expected) {
-  if (!filename.test(name) || name.trim() !== name)
+function file(directory, name, expected, { limit, requireSize = true } = {}) {
+  if (typeof name !== "string" || !filename.test(name) || name.trim() !== name)
     throw new Error("Unsafe artifact path.");
   const path = join(directory, name);
-  const stat = lstatSync(path);
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    stat.nlink !== 1 ||
-    !Number.isSafeInteger(expected.size) ||
-    expected.size <= 0 ||
-    stat.size !== expected.size ||
-    !/^[a-f0-9]{64}$/.test(expected.sha256) ||
-    hash(readFileSync(path)) !== expected.sha256
-  )
-    throw new Error(
-      "Artifact bytes or size do not match the complete manifest.",
-    );
-  return path;
+  return withReleaseFile(path, (fd, stat) => {
+    if (
+      stat.size <= 0 ||
+      (requireSize && stat.size !== expected.size) ||
+      !/^[a-f0-9]{64}$/.test(expected.sha256)
+    )
+      throw new Error(
+        "Artifact bytes or size do not match the complete manifest.",
+      );
+    const bytes = limit
+      ? readReleaseFileDescriptor(fd, stat.size, limit)
+      : undefined;
+    const digest = bytes
+      ? hash(bytes)
+      : hashReleaseFileDescriptor(fd, stat.size).toString("hex");
+    if (digest !== expected.sha256)
+      throw new Error(
+        "Artifact bytes or size do not match the complete manifest.",
+      );
+    return bytes ?? path;
+  });
 }
 
 export function validateManifest(
@@ -183,11 +167,16 @@ export function validateManifest(
     throw new Error("Unexpected direct artifact names.");
   file(directory, artifact.path, artifact);
   const archive = file(directory, artifact.updater.path, artifact.updater);
-  const signaturePath = file(directory, artifact.updater.signaturePath, {
-    size: artifact.updater.signatureSize,
-    sha256: artifact.updater.signatureSha256,
-  });
-  if (readFileSync(signaturePath, "utf8").trim() !== artifact.updater.signature)
+  const signatureBytes = file(
+    directory,
+    artifact.updater.signaturePath,
+    {
+      size: artifact.updater.signatureSize,
+      sha256: artifact.updater.signatureSha256,
+    },
+    { limit: 1024 * 1024 },
+  );
+  if (signatureBytes.toString("utf8").trim() !== artifact.updater.signature)
     throw new Error("Updater signature sidecar differs from manifest.");
   verifyUpdaterSignature(
     archive,
@@ -214,10 +203,8 @@ export function verifyImmutableInputs(directory, manifest) {
     [inputs.path]: inputs.sha256,
     [inputs.catalogPath]: inputs.catalogSha256,
   };
-  for (const [name, sha256] of Object.entries(files)) {
-    const size = lstatSync(join(directory, name)).size;
-    file(directory, name, { size, sha256 });
-  }
+  for (const [name, sha256] of Object.entries(files))
+    file(directory, name, { sha256 }, { requireSize: false });
   return files;
 }
 
@@ -457,7 +444,7 @@ export function assertReviewedRevision(
     throw new Error(message);
   let type;
   try {
-    type = execFileSync("git", ["cat-file", "-t", revision], {
+    type = execFileSync("/usr/bin/git", ["cat-file", "-t", revision], {
       cwd,
       env: {
         ...env,
@@ -496,7 +483,14 @@ async function preflight(directory, revision, config) {
     const inputs = json(join(directory, manifest.releaseInputs.path));
     verifyReleaseInputs(
       inputs,
-      readFileSync(join(directory, manifest.releaseInputs.catalogPath), "utf8"),
+      file(
+        directory,
+        manifest.releaseInputs.catalogPath,
+        {
+          sha256: manifest.releaseInputs.catalogSha256,
+        },
+        { limit: 4 * 1024 * 1024, requireSize: false },
+      ).toString("utf8"),
     );
     if (
       inputs.source !== manifest.revision ||
@@ -546,7 +540,9 @@ function stage(directory, destination, manifest, artifact) {
 
 function inventory(destination) {
   const files = {};
-  for (const directory of [destination, join(destination, "metadata")])
+  for (const directory of [destination, join(destination, "metadata")]) {
+    if (!lstatSync(directory).isDirectory())
+      throw new Error("Expected a staged release directory without symlinks.");
     for (const name of readdirSync(directory).sort()) {
       const path = join(directory, name);
       if (
@@ -556,14 +552,15 @@ function inventory(destination) {
         !lstatSync(path).isSymbolicLink()
       )
         continue;
-      const stat = lstatSync(path);
-      if (!filename.test(name) || !stat.isFile() || stat.nlink !== 1)
+      if (!filename.test(name))
         throw new Error("Unexpected staged release entry.");
-      files[directory === destination ? name : `metadata/${name}`] = {
-        size: stat.size,
-        sha256: hash(readFileSync(path)),
-      };
+      files[directory === destination ? name : `metadata/${name}`] =
+        withReleaseFile(path, (fd, stat) => ({
+          size: stat.size,
+          sha256: hashReleaseFileDescriptor(fd, stat.size).toString("hex"),
+        }));
     }
+  }
   return files;
 }
 
@@ -577,7 +574,10 @@ function saveJournal(path, value, exclusive = false) {
     closeSync(handle);
   }
   if (!exclusive) renameSync(temporary, path);
-  const directory = openSync(resolve(path, ".."), "r");
+  const directory = openSync(
+    resolve(path, ".."),
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
   try {
     fsyncSync(directory);
   } finally {
@@ -585,17 +585,15 @@ function saveJournal(path, value, exclusive = false) {
   }
 }
 
-function remote(action, request, config, tar) {
+function remote(action, request, config, input) {
   const code = readFileSync(new URL("./remote.py", import.meta.url)).toString(
     "base64",
   );
   const encoded = Buffer.from(JSON.stringify(request)).toString("base64");
   const command = `python3 -c 'import base64;exec(base64.b64decode("${code}"))' ${action} ${encoded}`;
-  let input;
   try {
-    input = tar ? openSync(tar, "r") : undefined;
     return JSON.parse(
-      execFileSync("ssh", [...sshArguments(config), command], {
+      execFileSync("/usr/bin/ssh", [...sshArguments(config), command], {
         env: {
           ...environment(),
           ...(process.env.SSH_AUTH_SOCK
@@ -612,8 +610,6 @@ function remote(action, request, config, tar) {
     throw new Error(
       "SSH outcome is uncertain. Do not retry publication; inspect and explicitly reconcile the retained journal.",
     );
-  } finally {
-    if (input !== undefined) closeSync(input);
   }
 }
 
@@ -635,6 +631,48 @@ export async function qualifyPublicationCompatibility(
       "A newer release is already recorded; inspect its publication state before promoting this candidate.",
     );
   return { schemaVersion: 1, source: manifest.revision, qualification };
+}
+
+export function withPublicationArchive(
+  destination,
+  names,
+  expectedDigest,
+  useArchive,
+) {
+  const tar = `${destination}.tar`;
+  const retained = lstatSync(tar, { throwIfNoEntry: false });
+  if (retained && expectedDigest === undefined)
+    throw new Error(
+      "A transport archive already exists; inspect it before reconciliation.",
+    );
+  if (!retained) {
+    const output = openSync(tar, "wx");
+    try {
+      execFileSync(
+        "/usr/bin/tar",
+        ["-cf", "-", "-C", destination, "--", ...names],
+        {
+          env: { ...environment(), COPYFILE_DISABLE: "1" },
+          stdio: ["ignore", output, "pipe"],
+        },
+      );
+      fsyncSync(output);
+    } catch {
+      throw new Error("Cannot create publication archive.");
+    } finally {
+      closeSync(output);
+    }
+  }
+  return withReleaseFile(tar, (fd, stat) => {
+    const transportSha256 = hashReleaseFileDescriptor(fd, stat.size).toString(
+      "hex",
+    );
+    if (retained && expectedDigest !== transportSha256)
+      throw new Error(
+        "A differing transport archive exists; inspect it before reconciliation.",
+      );
+    return useArchive(fd, transportSha256);
+  });
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -799,32 +837,21 @@ export async function main(args = process.argv.slice(2)) {
         release.manifestSha256 === manifestSha256
       ),
   );
-  const tar = `${destination}.tar`;
-  if (existsSync(tar)) {
-    if (
-      action !== "reconcile" ||
-      journal.transportSha256 !== hash(readFileSync(tar))
-    )
-      throw new Error(
-        "A differing transport archive exists; inspect it before reconciliation.",
+  let result = withPublicationArchive(
+    destination,
+    Object.keys(staged),
+    action === "reconcile" ? (journal.transportSha256 ?? null) : undefined,
+    (fd, transportSha256) => {
+      journal.transportSha256 = transportSha256;
+      assertReviewedRevision(values["reviewed-revision"]);
+      saveJournal(
+        journalPath,
+        { ...journal, state: "pending", inspected: false },
+        action === "publish",
       );
-  } else {
-    execFileSync(
-      "tar",
-      ["-cf", tar, "-C", destination, ...Object.keys(staged)],
-      {
-        env: { ...environment(), COPYFILE_DISABLE: "1" },
-      },
-    );
-  }
-  journal.transportSha256 = hash(readFileSync(tar));
-  assertReviewedRevision(values["reviewed-revision"]);
-  saveJournal(
-    journalPath,
-    { ...journal, state: "pending", inspected: false },
-    action === "publish",
+      return remote(action, journal.request, config, fd);
+    },
   );
-  let result = remote(action, journal.request, config, tar);
   await verifyPublicAvailability(manifest, artifact);
   if (journal.request.publicVerificationRequired)
     result = remote("complete", journal.request, config);
