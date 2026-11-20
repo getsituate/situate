@@ -141,6 +141,8 @@ function checkWorkflowBootstrap(name, workflow) {
           name === "release-macos.yml" && id === "create"
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
             : ({
+                "verify.yml: windows-smoke-build":
+                  /^node tools\/build-windows-smoke\.mjs windows-smoke-artifact$/,
                 "verify-hosting.yml: offline":
                   /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
                 "deploy-hosting.yml: rehearse":
