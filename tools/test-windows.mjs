@@ -12,7 +12,11 @@ import {
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { windowsJob, windowsProbe } from "./test-windows-host.mjs";
+import {
+  windowsJob,
+  windowsProbe,
+  windowsTestLoaderReport,
+} from "./test-windows-host.mjs";
 import { prepareDependencies } from "./test.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -227,7 +231,24 @@ async function runPhase(phase, { directory, image, imageVersion }, workspace) {
     );
     return;
   }
-  for (const args of windowsCommands(phase, rust, directory)) run(...args);
+  try {
+    for (const args of windowsCommands(phase, rust, directory)) run(...args);
+  } catch (error) {
+    try {
+      const report = join(workspace, "loader-report.ps1");
+      await writeFile(report, windowsTestLoaderReport, { flag: "wx" });
+      const deps = join(directory, "target", windowsTarget, "debug", "deps");
+      const result = spawnSync(powerShell(), [...psArgs, report, deps], {
+        stdio: ["ignore", "inherit", "inherit"],
+        timeout: 30_000,
+      });
+      if (result.error || result.status !== 0)
+        console.error("Could not collect the Windows loader report.");
+    } catch {
+      console.error("Could not collect the Windows loader report.");
+    }
+    throw error;
+  }
 }
 
 export async function runWindowsJob(script, phase, seconds, workspace) {
