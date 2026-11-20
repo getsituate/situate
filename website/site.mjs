@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
+import { constants } from "node:fs";
 import {
+  open,
   readFile,
   lstat,
   readdir,
@@ -196,11 +198,24 @@ async function readPublicFile(base, file, root = base) {
   if (
     !contains(directory, actual) ||
     !relative(directory, actual).split(sep).every(publicSegment) ||
-    extname(actual) !== extname(file) ||
-    !(await lstat(actual)).isFile()
+    extname(actual) !== extname(file)
   )
     return null;
-  return readFile(actual);
+  let handle;
+  try {
+    handle = await open(
+      actual,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const info = await handle.stat();
+    if (!info.isFile() || info.nlink !== 1) return null;
+    return await handle.readFile();
+  } catch (error) {
+    if (error.code === "ELOOP") return null;
+    throw error;
+  } finally {
+    await handle?.close();
+  }
 }
 
 export function createPreviewServer({

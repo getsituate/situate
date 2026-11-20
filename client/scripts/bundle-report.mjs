@@ -1,4 +1,5 @@
-import { readFile, readdir } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open, readdir } from "node:fs/promises";
 import { resolve, dirname, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -15,8 +16,25 @@ export async function bundleReport(directory) {
     assertLocalPath(root, path);
     return path;
   }
+  async function readArtifact(file, encoding) {
+    const handle = await open(
+      artifactPath(file),
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    try {
+      const info = await handle.stat();
+      if (!info.isFile() || info.nlink !== 1)
+        throw new Error(
+          `Expected a single-link regular build artifact: ${file}`,
+        );
+      return await handle.readFile(encoding);
+    } finally {
+      await handle.close();
+    }
+  }
+
   const manifest = JSON.parse(
-    await readFile(artifactPath(".vite/manifest.json"), "utf8"),
+    await readArtifact(".vite/manifest.json", "utf8"),
   );
   const initial = new Set();
   function visit(key) {
@@ -42,7 +60,7 @@ export async function bundleReport(directory) {
   ].filter((file) => file.endsWith(".js"));
   const chunks = await Promise.all(
     files.sort().map(async (file) => {
-      const bytes = await readFile(artifactPath(file));
+      const bytes = await readArtifact(file);
       return {
         file,
         initial: initialFiles.has(file),

@@ -628,11 +628,15 @@ def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
                                     os.unlink(name, dir_fd=directory_fd)
                             except OSError:
                                 pass
-            if remove_directory:
-                try:
-                    path.parent.rmdir()
-                except OSError:
-                    pass
+                if remove_directory and (
+                    (path.name == 'container.json' and path.parent.name.startswith('situate-docker-lease-'))
+                    or (path.name == 'docker-lease.json' and path.parent.name.startswith('situate-tool-container-'))
+                ):
+                    try:
+                        if file_identity(path.parent.lstat()) == file_identity(os.fstat(directory_fd)):
+                            path.parent.rmdir()
+                    except OSError:
+                        pass
             return
         except (OSError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError):
             if not warned:

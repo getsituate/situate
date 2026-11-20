@@ -444,7 +444,7 @@ export function assertReviewedRevision(
     throw new Error(message);
   let type;
   try {
-    type = execFileSync("/usr/bin/git", ["cat-file", "-t", revision], {
+    type = execFileSync("/usr/bin/git", ["cat-file", "-t", "--", revision], {
       cwd,
       env: {
         ...env,
@@ -646,7 +646,7 @@ export function withPublicationArchive(
       "A transport archive already exists; inspect it before reconciliation.",
     );
   if (!retained) {
-    const output = openSync(tar, "wx");
+    const output = openSync(tar, "wx", 0o600);
     try {
       execFileSync(
         "/usr/bin/tar",
@@ -849,7 +849,9 @@ export async function main(args = process.argv.slice(2)) {
         { ...journal, state: "pending", inspected: false },
         action === "publish",
       );
-      return remote(action, journal.request, config, fd);
+      return action === "reconcile"
+        ? remote("reconcile", journal.request, config, fd)
+        : remote("publish", journal.request, config, fd);
     },
   );
   await verifyPublicAvailability(manifest, artifact);

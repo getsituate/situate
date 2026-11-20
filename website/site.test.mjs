@@ -1079,6 +1079,7 @@ test("built preview serves the generated files and excludes sources and escaping
   await writeFile(join(directory, "outside.html"), "private");
   await symlink(join(directory, "outside.html"), join(output, "escape.html"));
   await symlink("product.html", join(output, "tour.html"));
+  await link(join(directory, "outside.html"), join(output, "linked.html"));
   await writeFile(join(output, "draft notes.css"), "/* sample */");
   await writeFile(join(output, ".env"), "not public");
   await writeFile(join(output, "messages.en.json"), "{}");
@@ -1124,6 +1125,7 @@ test("built preview serves the generated files and excludes sources and escaping
     "/site.mjs",
     "/legal/review.md",
     "/escape.html",
+    "/linked.html",
     "/draft%20notes.css",
     "/%2e%2e%2foutside.html",
     "/%2e%2e%5coutside.html",

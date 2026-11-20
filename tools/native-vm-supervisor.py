@@ -191,7 +191,7 @@ def execute(root, request):
         # Keep the group leader alive until the supervisor releases it, so its PID
         # cannot be reused while remaining descendants are being drained.
         wrapper = "import subprocess,sys,signal,os; p=subprocess.Popen(sys.argv[2:]); c=p.wait(); f=open(sys.argv[1]+'.tmp','x'); f.write(str(c)); f.close(); os.rename(sys.argv[1]+'.tmp',sys.argv[1]); signal.pause()"
-        child = subprocess.Popen([sys.executable, "-c", wrapper, str(metadata(root) / ".native-vm-exit"), node, str(entrypoint), *args], cwd=root, env=environment, stdin=subprocess.DEVNULL, start_new_session=True)
+        child = subprocess.Popen([sys.executable, "-c", wrapper, str(metadata(root) / ".native-vm-exit"), node, "--", str(entrypoint), *args], cwd=root, env=environment, stdin=subprocess.DEVNULL, start_new_session=True)
         code = 130
         while True:
             stopped, last_heartbeat = disconnected(last_heartbeat)

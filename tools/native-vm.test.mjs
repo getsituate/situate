@@ -430,7 +430,7 @@ test("execution timeout does not include time waiting for the VM lease", async (
   const job = path.join(f.directory, "fixture-job");
   await writeFile(
     job,
-    '#!/bin/sh\nif [ "$2" = hold ]; then printf 1 > ready; exec sleep 60; fi\nprintf executed > completed\n',
+    '#!/bin/sh\n[ "$1" = -- ] || exit 2\nshift\nif [ "$2" = hold ]; then printf 1 > ready; exec sleep 60; fi\nprintf executed > completed\n',
     { mode: 0o700 },
   );
   await writeFile(f.configFile, JSON.stringify({ ...f.config, node: job }));

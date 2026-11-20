@@ -1358,6 +1358,7 @@ test("publication archives keep exact bytes for reconciliation and require an un
     undefined,
     inspect,
   );
+  assert.equal(statSync(`${stage}.tar`).mode & 0o777, 0o600);
   assert.equal(
     withPublicationArchive(stage, ["manifest.json"], digest, inspect),
     digest,

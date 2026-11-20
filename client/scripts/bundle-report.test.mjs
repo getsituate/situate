@@ -7,6 +7,7 @@ import {
   writeFile,
   rm,
   symlink,
+  link,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -111,6 +112,31 @@ test("rejects symbolic links for the manifest and chunk files", async (t) => {
   );
   await symlink(join(directory, "absent.js"), join(directory, "app.js"));
   await assert.rejects(bundleReport(directory), /must not use a symbolic link/);
+});
+
+test("rejects directories and multiply linked build artifacts", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-bundle-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(join(directory, ".vite"));
+  await writeFile(
+    join(directory, ".vite/manifest.json"),
+    JSON.stringify({ app: { file: "app.js", isEntry: true } }),
+  );
+  await writeFile(join(directory, "executor-supervisor.js"), "worker");
+  await writeFile(join(directory, "plugin-check-renderer.js"), "worker");
+  const entry = join(directory, "app.js");
+  await mkdir(entry);
+  await assert.rejects(
+    bundleReport(directory),
+    /single-link regular build artifact: app\.js/,
+  );
+  await rm(entry, { recursive: true });
+  await writeFile(join(directory, "fixture.txt"), "sample");
+  await link(join(directory, "fixture.txt"), entry);
+  await assert.rejects(
+    bundleReport(directory),
+    /single-link regular build artifact: app\.js/,
+  );
 });
 
 test("the raw limit fails while gzip excess only returns a warning", () => {

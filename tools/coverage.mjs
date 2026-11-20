@@ -6,7 +6,7 @@ import {
   openSync,
   readSync,
   writeFileSync,
-  rmSync,
+  unlinkSync,
 } from "node:fs";
 import { safePath } from "./release-catalog.mjs";
 import { createPlan, runPlan } from "./test.mjs";
@@ -125,13 +125,15 @@ export async function measure(directory, options = {}) {
     );
     if (!vue || !rust) return { status: "unavailable" };
     safePath(directory, "client/app");
-    const output = safePath(directory, "client/target/coverage");
-    const existing = lstatSync(output, { throwIfNoEntry: false });
-    if (existing && !existing.isDirectory()) return { status: "failed" };
-    rmSync(output, {
-      recursive: true,
-      force: true,
-    });
+    for (const report of [
+      "client/target/coverage/vue/lcov.info",
+      "client/target/coverage/rust.lcov",
+    ]) {
+      const file = safePath(directory, report);
+      const existing = lstatSync(file, { throwIfNoEntry: false });
+      if (existing && !existing.isFile()) return { status: "failed" };
+      if (existing) unlinkSync(file);
+    }
     // Source inclusion and report formats must match across both revisions.
     vue.args.push(
       "--coverage.provider=v8",

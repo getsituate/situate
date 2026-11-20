@@ -289,6 +289,30 @@ with tempfile.TemporaryDirectory() as temporary:
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("Docker cleanup preserves directories outside its temporary lease locations", () => {
+  const source = `import importlib.util, tempfile
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(modulePath)})
+s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+with tempfile.TemporaryDirectory() as temporary:
+    root=Path(temporary)
+    for folder, lease, remains in (
+        ('ordinary-folder', 'container.json', True),
+        ('situate-docker-lease-fixture', 'different.json', True),
+        ('situate-docker-lease-fixture', 'container.json', False),
+        ('situate-tool-container-fixture', 'docker-lease.json', False),
+    ):
+        directory=root/folder;directory.mkdir(mode=0o700, exist_ok=True)
+        s.cleanup_docker_lease(directory/lease, remove_directory=True)
+        assert directory.exists() == remains, (folder, lease)
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("build slot settings retain two host slots and permit one guest slot", () => {
   const source = `import importlib.util, os
 spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})
@@ -412,7 +436,7 @@ s.subprocess.run = no_docker
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     for failure in ('queued', 'popen'):
-        directory = root / failure
+        directory = root / ('situate-docker-lease-' + failure)
         directory.mkdir(mode=0o700)
         lease = directory / 'container.json'
         token = '11111111-1111-4111-8111-111111111111'
@@ -503,7 +527,7 @@ s.caller_closed = lambda: False
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     for prefix in (True, False):
-        lease_directory = root / ('lease-' + str(prefix))
+        lease_directory = root / ('situate-docker-lease-' + str(prefix))
         lease_directory.mkdir(mode=0o700)
         lease = lease_directory / 'container.json'
         marker = root / ('observed-' + str(prefix))

@@ -64,7 +64,11 @@ test("coverage consumes bounded regular reports from the checkout", async (t) =>
   const { root, checkout } = fixture(t);
   const outside = join(root, "outside.lcov");
   writeFileSync(outside, lcov);
-  for (const source of ["ordinary", "alias", "oversize"]) {
+  const output = join(checkout, "client/target/coverage");
+  mkdirSync(output, { recursive: true });
+  const retained = join(output, "keep.txt");
+  writeFileSync(retained, "keep");
+  for (const source of ["ordinary", "oversize", "alias"]) {
     const result = await measure(checkout, {
       platform: "darwin",
       prepare: async () => ({ release() {} }),
@@ -82,6 +86,7 @@ test("coverage consumes bounded regular reports from the checkout", async (t) =>
         return { status: "passed" };
       },
     });
+    assert.equal(readFileSync(retained, "utf8"), "keep");
     assert.deepEqual(
       result,
       source === "ordinary"
