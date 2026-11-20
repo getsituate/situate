@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
+  accessSync,
+  constants,
   existsSync,
   mkdirSync,
   realpathSync,
@@ -12,7 +14,7 @@ import {
   globSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { resolve, relative, isAbsolute, sep } from "node:path";
+import { delimiter, resolve, relative, isAbsolute, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { readImageLock, root, selectImagePlatform } from "./ci-image.mjs";
@@ -101,7 +103,6 @@ export function containerArguments({
   ];
   const env = {
     CI: "true",
-    HOME: "/tmp/situate-ci-home",
     CARGO_HOME: "/ci-cache/cargo",
     npm_config_cache: "/ci-cache/npm",
     RUSTUP_TOOLCHAIN: rust,
@@ -148,7 +149,7 @@ export function containerArguments({
   for (const [key, value] of Object.entries(env))
     args.push("--env", `${key}=${value}`);
   const setup =
-    'mkdir -p "$HOME" "$CARGO_HOME" "$npm_config_cache"; source /opt/ci-tools/ci-user.sh; git -C /tmp config --global --add safe.directory /workspace; df -h /workspace /ci-cache;';
+    'HOME=$(mktemp -d "${TMPDIR:-/tmp}/situate-ci-home.XXXXXXXX"); export HOME; mkdir -p "$CARGO_HOME" "$npm_config_cache"; source /opt/ci-tools/ci-user.sh; git -C /tmp config --global --add safe.directory /workspace; df -h /workspace /ci-cache;';
   let script;
   if (shard === "coverage") {
     const sourcePath = "/workspace/source";
@@ -226,6 +227,8 @@ export function containerArguments({
   return args;
 }
 export function validateCacheDirectory(cache, workspace, home = homedir()) {
+  if (cache.includes(","))
+    throw new Error("Docker mount paths cannot contain commas.");
   const contains = (parent, child) => {
     const path = relative(parent, child);
     return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
@@ -241,12 +244,31 @@ export function validateCacheDirectory(cache, workspace, home = homedir()) {
   if (
     readdirSync(cache, { withFileTypes: true }).some(
       (entry) =>
-        !["npm", "cargo", "browsers"].includes(entry.name) &&
-        !(entry.name === ".DS_Store" && entry.isFile()),
+        !(
+          ["npm", "cargo", "browsers"].includes(entry.name) &&
+          entry.isDirectory()
+        ) && !(entry.name === ".DS_Store" && entry.isFile()),
     )
   )
     throw new Error("The CI cache directory contains unrelated files.");
 }
+export function dockerExecutable(path = process.env.PATH ?? "") {
+  for (const directory of path.split(delimiter)) {
+    if (!isAbsolute(directory)) continue;
+    const candidate = resolve(directory, "docker");
+    try {
+      const executable = realpathSync(candidate);
+      if (!statSync(executable).isFile()) continue;
+      accessSync(executable, constants.X_OK);
+      return executable;
+    } catch (error) {
+      if (!["ENOENT", "ENOTDIR", "EACCES", "ELOOP"].includes(error.code))
+        throw error;
+    }
+  }
+  throw new Error("Docker must be executable in an absolute PATH directory.");
+}
+
 export function cleanupOwnedContainer(name, token, run = spawnSync) {
   const options = {
     encoding: "utf8",
@@ -358,6 +380,11 @@ async function main() {
     token,
     rust,
   });
+  const docker = dockerExecutable();
+  const cleanup = () =>
+    cleanupOwnedContainer(name, token, (_command, args, options) =>
+      spawnSync(docker, args, options),
+    );
   if (values.coverage) {
     if (
       process.env.GITHUB_STEP_SUMMARY &&
@@ -366,7 +393,7 @@ async function main() {
       throw new Error("The step summary must be a regular file.");
     writeFileSync(resolve(workspace, "report.json"), "", { flag: "wx" });
   }
-  const child = spawn("docker", args, { stdio: "inherit" });
+  const child = spawn(docker, args, { stdio: "inherit" });
   const signals = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
   let interrupted;
   let escalation;
@@ -378,7 +405,7 @@ async function main() {
       clearTimeout(escalation);
       escalation = setTimeout(
         () => {
-          const error = cleanupOwnedContainer(name, token);
+          const error = cleanup();
           if (error) errors.push(error);
           child.kill("SIGKILL");
         },
@@ -394,12 +421,12 @@ async function main() {
       child.once("exit", (status) => accept(status ?? 1));
     });
     process.exitCode = interrupted ?? code;
-    spawnSync("df", ["-h", workspace, cache], {
+    spawnSync("/bin/df", ["-h", workspace, cache], {
       stdio: ["ignore", 2, 2],
       timeout: 3000,
     });
     if (existsSync(resolve(source, "client/target")))
-      spawnSync("du", ["-sh", resolve(source, "client/target")], {
+      spawnSync("/usr/bin/du", ["-sh", resolve(source, "client/target")], {
         stdio: ["ignore", 2, 2],
         timeout: 3000,
       });
@@ -408,7 +435,7 @@ async function main() {
   } finally {
     for (const [signal, listener] of listeners) process.off(signal, listener);
     clearTimeout(escalation);
-    const cleanupError = cleanupOwnedContainer(name, token);
+    const cleanupError = cleanup();
     if (cleanupError) errors.push(cleanupError);
   }
   if (errors.length === 1) throw errors[0];

@@ -11,6 +11,7 @@ import {
   realpathSync,
   symlinkSync,
   readlinkSync,
+  statSync,
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
@@ -22,6 +23,7 @@ import {
   inside,
   validateCacheDirectory,
   cleanupOwnedContainer,
+  dockerExecutable,
   visualDependencyPaths,
 } from "./ci-container.mjs";
 import {
@@ -318,7 +320,7 @@ test(
       );
       writeFileSync(
         join(bin, "node"),
-        '#!/bin/sh\ntest -f "$CARGO_HOME/ready" || exit 1\nprintf "runner\\n" >> "$CALL_LOG"\n',
+        '#!/bin/sh\ntest -f "$CARGO_HOME/ready" || exit 1\nprintf "%s\\n" "$HOME" > "$HOME_LOG"\nprintf "runner\\n" >> "$CALL_LOG"\n',
         { mode: 0o755 },
       );
       const args = containerArguments(options);
@@ -344,7 +346,9 @@ test(
             env: {
               ...process.env,
               PATH: `${bin}:${process.env.PATH}`,
-              HOME: join(directory, "home"),
+              HOME: join(directory, "unused-home"),
+              TMPDIR: directory,
+              HOME_LOG: join(directory, "chosen-home"),
               CARGO_HOME: cache,
               npm_config_cache: join(directory, "npm"),
               CALL_LOG: log,
@@ -354,6 +358,14 @@ test(
         );
         assert.ifError(result.error);
         assert.equal(result.status, status, result.stderr);
+        if (status === 0) {
+          const home = readFileSync(
+            join(directory, "chosen-home"),
+            "utf8",
+          ).trim();
+          assert.ok(home.startsWith(join(directory, "situate-ci-home.")));
+          assert.equal(statSync(home).mode & 0o777, 0o700);
+        }
         assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), [
           `${join(directory, "client")}|fetch --locked`,
           ...(status === 0 ? ["runner"] : []),
@@ -517,6 +529,14 @@ test("dedicated cache accepts only regular Finder metadata alongside cache entri
     writeFileSync(metadata, "Finder metadata");
     validateCacheDirectory(directory, "/checkout", "/home");
     assert.equal(readFileSync(metadata, "utf8"), "Finder metadata");
+    rmSync(join(directory, "browsers"), { recursive: true });
+    symlinkSync("npm", join(directory, "browsers"));
+    assert.throws(
+      () => validateCacheDirectory(directory, "/checkout", "/home"),
+      /unrelated/,
+    );
+    rmSync(join(directory, "browsers"));
+    mkdirSync(join(directory, "browsers"));
     writeFileSync(join(directory, "unexpected"), "unrelated");
     assert.throws(
       () => validateCacheDirectory(directory, "/checkout", "/home"),
@@ -574,6 +594,25 @@ test("coverage keeps both checkouts and scalar metadata without forwarding write
   assert.ok(!command.includes("not-forwarded"));
   assert.ok(!command.includes("CARGO_PROFILE_TEST_DEBUG"));
   assert.ok(command.includes("export PREPARATION_STATUS=failure"));
+});
+
+test("Docker resolves once from absolute PATH entries and accepts installed symlinks", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-docker-path-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const desktop = join(directory, "desktop");
+  mkdirSync(desktop);
+  const binary = join(directory, "docker-client");
+  writeFileSync(binary, "fixture", { mode: 0o700 });
+  symlinkSync(binary, join(desktop, "docker"));
+  writeFileSync(join(directory, "docker"), "not executable");
+  assert.equal(
+    dockerExecutable(`.:relative:${directory}:${desktop}`),
+    realpathSync(binary),
+  );
+  assert.throws(
+    () => dockerExecutable(`.:relative:${directory}`),
+    /absolute PATH/,
+  );
 });
 
 test("container cleanup is bounded and only removes the verified owner", () => {
