@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "harden-security-boundaries",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Security hardening and regression tests without a change to the supported client interface."
+}
