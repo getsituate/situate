@@ -245,6 +245,40 @@ test("installation leaves a replacement staging directory untouched", async (t) 
   }
 });
 
+test("installation does not adopt a newly created proof directory", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "situate-export-install-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const staging = join(root, "staging");
+  await mkdir(staging, { mode: 0o700 });
+  await mkdir(join(staging, ".proofs"));
+  await writeFile(join(staging, ".proofs", "page.png"), "new proof");
+  const review = join(root, "review");
+  await mkdir(review);
+  const proofs = join(review, "proofs");
+  await mkdir(proofs);
+  await writeFile(join(proofs, "keep.txt"), "existing");
+  const stdio = ["pipe", "pipe", "pipe"];
+  for (const path of [root, staging, review]) {
+    const directory = await open(path, "r");
+    t.after(() => directory.close());
+    stdio.push(directory.fd);
+  }
+  const script = fileURLToPath(new URL("./install-export.py", import.meta.url));
+  const result = execFileSync("/usr/bin/python3", ["-IB", script], {
+    input: JSON.stringify({
+      staging: "staging",
+      output: "pack",
+      proofParts: ["proofs"],
+    }),
+    stdio,
+    encoding: "utf8",
+  });
+  assert.equal(JSON.parse(result).code, "EEXIST");
+  assert.deepEqual((await readdir(root)).sort(), ["review", "staging"]);
+  assert.deepEqual(await readdir(proofs), ["keep.txt"]);
+  assert.equal(await readFile(join(proofs, "keep.txt"), "utf8"), "existing");
+});
+
 test(
   "pack installation and proof rollback with Chromium",
   {

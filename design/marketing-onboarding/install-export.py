@@ -40,7 +40,8 @@ def install(request, parent, staging, review):
         staging_name = leaf(request['staging'])
 
         def verify_staging():
-            if identity(os.stat(staging_name, dir_fd=parent, follow_symlinks=False)) != identity(staged):
+            current = os.stat(staging_name, dir_fd=parent, follow_symlinks=False)
+            if not os.path.samestat(current, staged):
                 raise ValueError('Export directory changed while rendering')
 
         verify_staging()
