@@ -125,13 +125,23 @@ class Cloud:
         require(price and float(price['price_hourly']['gross']) <= 0.02, 'Test VM exceeds the permitted hourly rate.')
 
     def wait_action(self, action):
+        action_id = action.get('id')
+        require(type(action_id) is int and action_id > 0, 'Missing Hetzner action ID.')
         for _ in range(120):
-            data = self.call('GET', f'actions/{action["id"]}')['action']
+            data = self.call('GET', f'actions/{action_id}')['action']
+            require(data.get('id') == action_id, 'Hetzner returned a different action.')
             if data['status'] == 'success':
                 return
-            require(data['status'] == 'running', 'The provider rejected a rehearsal action.')
+            if data['status'] != 'running':
+                command = data.get('command')
+                code = (data.get('error') or {}).get('code')
+                if not isinstance(command, str) or not re.fullmatch('[a-z_]{1,64}', command):
+                    command = 'unknown_action'
+                if not isinstance(code, str) or not re.fullmatch('[a-z_]{1,64}', code):
+                    code = 'provider_error'
+                raise RehearsalError(f'Hetzner action {action_id} ({command}) failed: {code}.')
             time.sleep(2)
-        raise RehearsalError('Provider action did not settle; no mutation was retried.')
+        raise RehearsalError(f'Hetzner action {action_id} did not settle; no mutation was retried.')
 
     def create(self, kind, body):
         body['labels'] = {'rehearsal': self.scope}
@@ -466,7 +476,15 @@ def qualify(cloud, revision, receipt_path=None):
         with tempfile.TemporaryDirectory(prefix='situate-hosting-') as directory:
             image = exercise(cloud, Path(directory), revision)
     finally:
-        cloud.cleanup(production=production, keep_image=image if production else None)
+        interrupted = sys.exc_info()[0] is not None
+        try:
+            cloud.cleanup(production=production, keep_image=image if production else None)
+        except (RehearsalError, OSError, ValueError, http.client.HTTPException) as error:
+            detail = str(error) if isinstance(error, RehearsalError) else type(error).__name__
+            message = f'Rehearsal cleanup not verified for rehearsal={cloud.scope}: {detail}'
+            if not interrupted:
+                raise RehearsalError(message) from None
+            print(message, file=sys.stderr)
     if production:
         receipt = {'schemaVersion': 1, 'imageId': str(image), 'sourceRevision': revision,
                    'gates': dict.fromkeys(('offlineBoot', 'storageFence', 'httpsAndRedirects',

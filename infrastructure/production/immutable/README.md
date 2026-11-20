@@ -147,7 +147,9 @@ Establish the first immutable host's SSH host CA trust during migration. Configu
 
 ### Recover an interrupted deployment
 
-Do not rerun a failed production job. GitHub serializes production jobs; a GitHub deployment record in `hosting-production-operation` blocks subsequent deployments after an interrupted change. Use the logs to locate the failed step, then verify the HCP workspace and lock, the running servers and their delete protection, the volume attachment and mounts in Hetzner, the authoritative A and AAAA records, and live HTTPS. If qualification was interrupted, inspect resources labeled `rehearsal=sit-prod-RUN_ID-RUN_ATTEMPT`. Verify they are not referenced by any live host or Terraform state before cleaning up. The logs are not a recovery point.
+Do not rerun an interrupted production change. GitHub serializes production jobs. After the isolated rehearsal succeeds and before Terraform stages the replacement, the job opens a GitHub record in `hosting-production-operation`. If production staging or a later step stops, the unresolved record blocks subsequent deployments. Use the logs to locate the step, then verify the HCP workspace and lock, the running servers and their delete protection, the volume attachment and mounts in Hetzner, the authoritative A and AAAA records, and live HTTPS. The logs are not a recovery point.
+
+A failure during the isolated rehearsal creates no new production record. If cleanup is unverified, inspect the resources labeled `rehearsal=sit-prod-RUN_ID-RUN_ATTEMPT`. Verify that no live host or Terraform state references them before cleaning up. A fresh run uses its own label.
 
 Restore one serving immutable generation with its verified current volume and DNS pointing to it. Do not restore an older release feed or lift the predecessor's delete protection just to unblock CI. Keep the GitHub record unresolved while making repairs. Once no job or writer is active and the repaired state is verified, an authorized operator can mark the **exact** unresolved record inactive:
 

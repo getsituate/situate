@@ -40,7 +40,8 @@ The link:{architecture-repository-root}/infrastructure/production/immutable/READ
 
 After the one-time migration and explicit activation, changes to production infrastructure inputs merged to protected `main` trigger deployment automatically. Website-only, app-only and documentation-only changes do not trigger host replacement.
 The link:{architecture-repository-root}/docs/architecture/diagrams/immutable-production-host-cutover.svg[cutover diagram] shows the order of checks, traffic switch, and retirement.
-Under <<adr-0020,ADR-0020>>, a GitHub-hosted job stops on failure. The operator restores a consistent topology before clearing the block on the next deployment.
+The GitHub-hosted job stops on failure. The isolated image rehearsal finishes before the job opens the production recovery record, as described in <<adr-0023,ADR-0023>>.
+Once production staging starts, the operator must restore a consistent topology before clearing an unresolved record under <<adr-0020,ADR-0020>>.
 If the previous VM cannot serve the latest committed state, keep traffic paused rather than restore a stale snapshot; see <<production-publication-handoff-risk>>.
 
 ==== Distribution variants and update authority

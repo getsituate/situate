@@ -35,11 +35,23 @@ test("the gate precedes staging and success follows verified retirement", async 
   assert.deepEqual(calls, [
     "preflight",
     "qualify",
+    "rehearse",
     "begin",
-    ...rolloutSteps.slice(1),
+    ...rolloutSteps.slice(2),
     "finish",
     "success",
   ]);
+});
+
+test("failed qualification and rehearsal never create a production deployment record", async () => {
+  for (const failure of ["qualify", "rehearse"]) {
+    const { calls, run } = fixture(failure);
+    await assert.rejects(run(), new RegExp(`stopped at ${failure}`));
+    assert.deepEqual(calls, [
+      "preflight",
+      ...rolloutSteps.slice(0, rolloutSteps.indexOf(failure) + 1),
+    ]);
+  }
 });
 
 test("an unresolved deployment or failed stage leaves the old host alone", async () => {
@@ -47,6 +59,7 @@ test("an unresolved deployment or failed stage leaves the old host alone", async
     const { calls, run } = fixture(failure);
     await assert.rejects(run(), /stopped at (stage|prepare)/);
     assert.ok(!calls.includes("fence") && !calls.includes("success"));
+    assert.equal(calls.includes("stage"), failure !== "begin");
   }
 });
 
