@@ -16,6 +16,7 @@
     "unit-testing-best-practices",
     "risk-based-test-design",
     "architecture-code-review-refactoring",
-    "ponytail"
+    "ponytail",
+    "write-situate-prompts"
   ]
 }
