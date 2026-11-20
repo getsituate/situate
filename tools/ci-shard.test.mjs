@@ -132,6 +132,7 @@ test("integration diagnostics follow declared host availability while native jou
     native.suites.map(({ id }) => id),
     [
       "client-native",
+      "client-native-compatibility",
       "client-agent-e2e",
       "client-onboarding-e2e",
       "client-plugins-e2e",

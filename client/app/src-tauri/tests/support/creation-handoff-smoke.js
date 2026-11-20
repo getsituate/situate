@@ -157,6 +157,10 @@
       "Workspace startup did not finish",
       { foreground: false },
     );
+    assert(
+      (await invoke("dictation_snapshot")).supported,
+      "Chat dictation is unavailable on this Mac",
+    );
     const phase = (await invoke("smoke_phase")).handoff;
     const initial = await snapshot();
     await invoke("smoke_progress", {

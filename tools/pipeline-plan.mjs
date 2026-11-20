@@ -107,6 +107,11 @@ const families = [
       "client-plugins-e2e",
     ],
   ],
+  [
+    "macos-compatibility",
+    "macos",
+    ["client-native-compatibility", "client-dictation-recognition"],
+  ],
 ];
 
 function validateMode(mode) {
@@ -138,9 +143,14 @@ function select(paths, { mode, inventory, appImpact }) {
     if (
       full &&
       suite.id !== "design-website-browser" &&
-      (["frontend", "rust", "browser", "macos-code", "macos-native"].includes(
-        family,
-      ) ||
+      ([
+        "frontend",
+        "rust",
+        "browser",
+        "macos-code",
+        "macos-native",
+        "macos-compatibility",
+      ].includes(family) ||
         [
           "root-rust",
           "root-swift",
@@ -166,6 +176,7 @@ function select(paths, { mode, inventory, appImpact }) {
               "browser",
               "macos-code",
               "macos-native",
+              "macos-compatibility",
             ].includes(id)
               ? 1800
               : 600,

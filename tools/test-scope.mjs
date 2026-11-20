@@ -15,6 +15,8 @@ const appleHostOnly = new Set([
   "client-workshop-host",
   "client-workshop-clippy",
   "client-native",
+  "client-native-compatibility",
+  "client-dictation-recognition",
   "client-agent-e2e",
   "client-onboarding-e2e",
   "client-plugins-e2e",

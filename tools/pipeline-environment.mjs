@@ -14,6 +14,7 @@ export function ordinaryEnvironment(environment = process.env) {
     "RUSTUP_HOME",
     "CARGO_NET_OFFLINE",
     "RUSTUP_TOOLCHAIN",
+    "DEVELOPER_DIR",
     "npm_config_cache",
     "PLAYWRIGHT_BROWSERS_PATH",
     "CARGO_INCREMENTAL",

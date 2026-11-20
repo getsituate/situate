@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "intel-mac-dictation",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "intel-mac-dictation",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Chat dictation on Intel Macs",
+          "paragraphs": [
+            "On Intel Macs with macOS 14 or later, Situate transcribes speech on your Mac without sending audio to a server."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "intel-mac-dictation",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Chat-Diktat auf Intel-Macs",
+          "paragraphs": [
+            "Auf Intel-Macs ab macOS 14 wandelt Situate gesprochene Sprache direkt auf deinem Mac in Text um, ohne Audio an einen Server zu senden."
+          ]
+        }
+      ]
+    }
+  }
+}

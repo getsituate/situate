@@ -29,6 +29,7 @@ export const laneHosts = {
   "macos-code": "macos",
   browser: "linux",
   "macos-native": "macos",
+  "macos-compatibility": "macos",
 };
 export const repository = "getsituate/situate";
 export function digest(value) {
@@ -768,6 +769,10 @@ export async function main(
   if (command === "setup") {
     const lane = plan.lanes.find(({ id }) => id === values.lane);
     if (!lane) throw new Error("Lane was not selected.");
+    if (lane.id === "macos-compatibility" && process.arch !== "x64")
+      throw new Error(
+        "Hosted macOS compatibility checks require an Intel runner.",
+      );
     const { prepareLane } = await import("./pipeline-setup.mjs");
     return prepareLane(lane, { environment: env, execute });
   }
