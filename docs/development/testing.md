@@ -254,7 +254,7 @@ Re-run setup after changing the repository's Node/npm pins. Stop an idle guest w
 
 ### Windows startup smoke in UTM
 
-Use a dedicated Windows guest with the QEMU guest agent, WebView2, and an unlocked console signed into a disposable standard account. Connect UTM to a private virtual network. Run the host command from a single macOS account across your worktrees; its guest lock is shared by those worktrees.
+Use a dedicated Windows test guest with the QEMU guest agent, WebView2, and an unlocked console. You can use the guest's existing account, including an administrator account, as long as the test runs without elevated rights. Connect UTM to a private virtual network. Run the host command from a single macOS account across your worktrees; its guest lock is shared by those worktrees.
 
 On a Windows build host with the pinned Volta and Rust toolchains, MSVC, and the Windows SDK, run this command from a clean client checkout:
 
@@ -270,7 +270,7 @@ node tools/windows-vm-smoke.mjs "$VM_UUID" "$HOST_BRIDGE_IP" 'WINDOWS-VM\test-ac
 
 Use the exact guest UUID from `utmctl list` and the Mac's address on the private UTM network. The runner checks the artifact checksum, starts it with a fresh app and WebView2 profile, and verifies that an on-screen window shows the enabled Create and Open workspace buttons. A run on a Windows ARM64 guest with an x64 executable exercises x64 emulation, not native x64 behavior.
 
-`--fixture 15` in place of `--artifact ...` exercises the queue and process cleanup using a synthetic child process without launching Situate. `Ctrl+C` requests cancellation; let the command finish cleaning up. If cleanup cannot be confirmed, the host retains the UUID-specific lease in `~/.config/situate/windows-vm-queue/`. Do not remove it until the matching guest task, its process tree, and its run directory are gone.
+Use `--fixture 15` instead of `--artifact ...` to exercise the queue with a synthetic process tree without launching Situate. Use `--fixture timeout` to exercise guest-side timeout and cleanup; it should return status 124. `Ctrl+C` requests cancellation; let the command finish cleaning up. If cleanup cannot be confirmed, the host retains the UUID-specific lease in `~/.config/situate/windows-vm-queue/`. Do not remove it until the matching guest task, its process tree, and its run directory are gone.
 
 ### Local process connection qualification
 

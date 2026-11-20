@@ -66,37 +66,24 @@ async function run([vm, bind, user, mode, input, ...extra], signal) {
       user &&
       !/[\0\r\n]/.test(user) &&
       !extra.length,
-    "Usage: node tools/windows-vm-smoke.mjs VM_UUID VM_BRIDGE_IP WINDOWS_TEST_USER (--artifact DIR | --fixture SECONDS)",
+    "Usage: node tools/windows-vm-smoke.mjs VM_UUID VM_BRIDGE_IP WINDOWS_TEST_USER (--artifact DIR | --fixture SECONDS|timeout)",
   );
   const fixture = mode === "--fixture";
   assert(
     fixture
-      ? /^(0|[1-9]|[1-3][0-9]|40)$/.test(input ?? "")
+      ? /^(0|[1-9]|[1-3][0-9]|40|timeout)$/.test(input ?? "")
       : mode === "--artifact" && input,
-    "Choose a smoke artifact or a synthetic fixture duration (0–40 seconds)",
+    "Choose a smoke artifact or a fixture (0–40 seconds or timeout)",
   );
+  const timeoutFixture = fixture && input === "timeout";
+  const jobSeconds = timeoutFixture ? 12 : 65;
+  const fixtureSeconds = timeoutFixture ? "60" : input;
   const artifact = fixture ? null : await loadSmokeArtifact(input);
   const smoke = await readFile(
     new URL("./windows-vm-smoke.ps1", import.meta.url),
   );
   const utm = (...args) =>
     execute("utmctl", args, { timeout: 10_000, maxBuffer: 64 * 1024 });
-  const addresses = (await utm("ip-address", vm)).stdout
-    .trim()
-    .split(/\s+/)
-    .filter(isIPv4);
-  assert.equal(
-    addresses.length,
-    1,
-    "Expected one guest IPv4 address on the private VM network",
-  );
-  const [guest] = addresses;
-  assert(
-    bind !== guest &&
-      bind.split(".").slice(0, 3).join() ===
-        guest.split(".").slice(0, 3).join(),
-    "Use the private UTM bridge address on the guest subnet",
-  );
   const id = randomUUID();
   const name = `Situate-Smoke-${id}`;
   const directory = `C:\\Users\\Public\\${name}`;
@@ -110,6 +97,7 @@ async function run([vm, bind, user, mode, input, ...extra], signal) {
   const release = await reserveGuest(lease, name, signal);
   console.log(`${name}: acquired`);
   let active = false;
+  let prepareRequested = false;
   let certain = true;
   let server;
   async function control(body) {
@@ -151,6 +139,24 @@ try { ${body} } catch { $r.error=$_.Exception.Message }
   }
   try {
     signal.throwIfAborted();
+    const addresses = (await utm("ip-address", vm)).stdout
+      .trim()
+      .split(/\s+/)
+      .filter(isIPv4);
+    assert.equal(
+      addresses.length,
+      1,
+      "Expected one guest IPv4 address on the private VM network",
+    );
+    const [guest] = addresses;
+    assert(
+      bind !== guest &&
+        bind.split(".").slice(0, 3).join() ===
+          guest.split(".").slice(0, 3).join(),
+      "Use the private UTM bridge address on the guest subnet",
+    );
+    signal.throwIfAborted();
+    prepareRequested = true;
     certain = false;
     await control(String.raw`
 $console=(Get-CimInstance Win32_ComputerSystem).UserName
@@ -172,7 +178,7 @@ New-Item -ItemType Directory -Path (Join-Path $d 'state') | Out-Null
       ["job.ps1", Buffer.from(windowsJob)],
       ["smoke.ps1", smoke],
     ]);
-    if (fixture) files.set("fixture.txt", Buffer.from(input));
+    if (fixture) files.set("fixture.txt", Buffer.from(fixtureSeconds));
     else files.set("situate-client.exe", artifact.bytes);
     const secret = randomUUID();
     server = createServer((req, res) => {
@@ -212,9 +218,9 @@ if ((Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash -ne '${hash(bytes)}') 
     await control(String.raw`
 if ((Get-CimInstance Win32_ComputerSystem).UserName -ne ${quote(user)}) { throw 'The interactive account changed.' }
 $principal=New-ScheduledTaskPrincipal -UserId ${quote(user)} -LogonType Interactive -RunLevel Limited
-$arguments='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}\job.ps1" -Node "${shell}" -Script "{0}\smoke.ps1" -Seconds 65 -Workspace "{0}" -CancelFile "{0}\state\cancel"' -f $d
+$arguments='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}\job.ps1" -Node "${shell}" -Script "{0}\smoke.ps1" -Seconds ${jobSeconds} -Workspace "{0}" -CancelFile "{0}\state\cancel"' -f $d
 $action=New-ScheduledTaskAction -Execute '${shell}' -Argument $arguments
-$settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 100) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds ${jobSeconds + 35}) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $t -Principal $principal -Action $action -Settings $settings | Out-Null
 Start-ScheduledTask -TaskName $t
 `);
@@ -227,8 +233,10 @@ Start-ScheduledTask -TaskName $t
     if (!certain)
       console.error(`Guest operation unconfirmed; keep lease ${lease}`);
     else if (!active) {
-      const result = await control(RemoveRun);
-      assert(result.clean, `Guest cleanup not confirmed; keep ${lease}`);
+      if (prepareRequested) {
+        const result = await control(RemoveRun);
+        assert(result.clean, `Guest cleanup not confirmed; keep ${lease}`);
+      }
       await release();
     }
   }
@@ -237,7 +245,7 @@ Start-ScheduledTask -TaskName $t
   let cancelled = false;
   let fixtureStarted = false;
   try {
-    const deadline = Date.now() + 100_000;
+    const deadline = Date.now() + (jobSeconds + 40) * 1000;
     while (Date.now() < deadline) {
       const cancel = signal.aborted && !cancelled;
       const state = await control(String.raw`
