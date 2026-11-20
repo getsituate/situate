@@ -24,10 +24,8 @@ if (nativeVmConfiguration())
 requireNativeDesktop();
 const root = fileURLToPath(new URL("../", import.meta.url));
 const target = resolve(root, "target/native-smoke");
-const rustc = spawnSync("rustc", ["-vV"], { cwd: root, encoding: "utf8" });
-const host = rustc.stdout?.match(/^host: (.+)$/m)?.[1].trim();
-if (rustc.error || rustc.status !== 0 || !host)
-  throw new Error("Could not determine the Rust host target.");
+const { main: runNative, rustHostTarget } = await import("./test-native.mjs");
+const host = rustHostTarget();
 const controller = new AbortController();
 const interrupt = () => controller.abort();
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
@@ -92,8 +90,7 @@ try {
 if (!controller.signal.aborted && process.argv[3] !== "--connection-only") {
   process.argv = process.argv.slice(0, 2);
   try {
-    const { main } = await import("./test-native.mjs");
-    const code = await main([]);
+    const code = await runNative([]);
     if (code !== 0) throw new Error(`Native suite failed (exit ${code}).`);
   } catch (error) {
     failures.push(error);
