@@ -247,7 +247,11 @@ test("source preview keeps templates, catalogs and assets in their serving roots
   );
   const server = createPreviewServer();
   server.listen(0, "127.0.0.1");
-  t.after(() => new Promise((done) => server.close(done)));
+  t.after(() => {
+    return new Promise((done) => {
+      server.close(done);
+    });
+  });
   await once(server, "listening");
   const origin = `http://127.0.0.1:${server.address().port}`;
   assert.equal(await (await fetch(origin)).text(), "<h1>Preview</h1>");

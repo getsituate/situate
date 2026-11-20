@@ -1352,10 +1352,14 @@ test("publication receipt must be a bounded single-link regular file", (t) => {
   ]) {
     assert.throws(
       () =>
-        verifyPublicationInputs(directory, { releaseInputs: {} }, {
-          action: "publish",
-          releaseReceipt,
-        }),
+        verifyPublicationInputs(
+          directory,
+          { releaseInputs: {} },
+          {
+            action: "publish",
+            releaseReceipt,
+          },
+        ),
       error,
     );
   }
