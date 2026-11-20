@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "plugin-development-guidance",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "plugin-development-guidance",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Plugin development",
+          "paragraphs": [
+            "When the AI creates or changes a plugin view, it uses Situate’s design and writing guidance. If a plugin service is unavailable, the AI can continue with parts of the request that do not depend on it."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "plugin-development-guidance",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Plugin-Entwicklung",
+          "paragraphs": [
+            "Wenn die KI eine Plugin-Ansicht erstellt oder ändert, nutzt sie die Gestaltungs- und Schreibrichtlinien von Situate. Ist ein Plugin-Dienst nicht verfügbar, kann sie die Teile des Auftrags weiterbearbeiten, die nicht davon abhängen."
+          ]
+        }
+      ]
+    }
+  }
+}
