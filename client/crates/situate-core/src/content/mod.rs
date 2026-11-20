@@ -315,9 +315,23 @@ impl ContentStore {
         Ok(store)
     }
 
-    pub(crate) fn record_directory_replacement(&mut self, path: &Path) -> Result<String> {
-        self.root = Dir::open_ambient_dir(path, ambient_authority())?;
-        self.record_external_changes()
+    pub(crate) fn record_directory_replacement<E: From<io::Error>>(
+        mut self,
+        path: &Path,
+        replace: impl FnOnce() -> std::result::Result<(), E>,
+        recording_error: impl FnOnce() -> E,
+    ) -> std::result::Result<String, E> {
+        // Release the code handle before Windows renames it, without releasing history ownership.
+        #[cfg(windows)]
+        {
+            self.root = self.marker.try_clone()?;
+        }
+        replace()?;
+        let mut record = || -> Result<String> {
+            self.root = Dir::open_ambient_dir(path, ambient_authority())?;
+            self.record_external_changes()
+        };
+        record().map_err(|_| recording_error())
     }
 
     /// Lists user content and the editable working method, excluding other internals and symlinks.

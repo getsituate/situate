@@ -147,16 +147,18 @@ pub fn write_immutable(dir: &Dir, name: &str, payload: &[u8]) -> Result<(), Stri
     // Publish only complete immutable records; interrupted temporary files are never read.
     let temporary = format!("layout-record-{}.tmp", uuid::Uuid::new_v4());
     let mut file = dir.open_with(&temporary, &options).map_err(|_| INVALID)?;
-    let result = file
-        .write_all(payload)
-        .and_then(|_| file.sync_all())
-        .and_then(|_| dir.hard_link(&temporary, dir, name));
+    let result = file.write_all(payload).and_then(|_| file.sync_all());
+    drop(file);
+    let result = result.and_then(|_| dir.hard_link(&temporary, dir, name));
     let _ = dir.remove_file(&temporary);
     match result {
         Ok(()) => (),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             let mut options = OpenOptions::new();
-            options.read(true).follow(FollowSymlinks::No);
+            options
+                .read(true)
+                .write(cfg!(windows))
+                .follow(FollowSymlinks::No);
             #[cfg(unix)]
             {
                 use cap_std::fs::OpenOptionsExt;

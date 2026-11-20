@@ -133,6 +133,7 @@ fn migrate(root: &Path) -> Result<()> {
                 continue;
             }
             let target = ensure_child(&plugin, "drafts")?;
+            drop(dir);
             crate::durable_storage::rename_noreplace(&legacy, &id, &target, &id)?;
             sync(&target)?;
             sync(&legacy)?;
@@ -161,7 +162,9 @@ fn migrate(root: &Path) -> Result<()> {
             publication::fail_at("draft-orphan-archived")?;
         }
     }
-    if legacy.entries()?.next().transpose()?.is_none() {
+    let empty = legacy.entries()?.next().transpose()?.is_none();
+    drop(legacy);
+    if empty {
         marker.remove_dir("plugin-drafts")?;
     }
     sync(&marker)?;

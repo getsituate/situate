@@ -156,6 +156,9 @@ pub(super) fn commit_to_ref(
             Err(error) => return Err(error.into()),
         }
     };
+    // Detect a blocked control file before moving the reference, even with a cached durable head.
+    #[cfg(windows)]
+    sync_controls(directory)?;
     repo.reference(&name, oid, destination.is_none(), &message)?;
     #[cfg(test)]
     if FAIL_REF_SYNC.with(|failure| match failure.get() {
