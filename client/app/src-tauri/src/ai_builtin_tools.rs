@@ -1,9 +1,22 @@
 use serde_json::{Value, json};
 
+pub(crate) const COPY_IMPORT_SKILL: &str = include_str!("../../src/ai/copy-import-skill.md");
+
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({"name":name,"description":description,"parameters":{
         "type":"object","additionalProperties":false,"properties":properties,"required":required
     }})
+}
+
+pub(crate) const LOAD_PLUGIN_SKILL: &str = "load_plugin_skill";
+
+pub(crate) fn load_plugin_skill_definition() -> Value {
+    tool(
+        LOAD_PLUGIN_SKILL,
+        "Load the instructions of a skill listed in the plugin skill catalog. Pass the exact catalog ID.",
+        json!({"id":{"type":"string","minLength":1}}),
+        &["id"],
+    )
 }
 
 pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value> {
@@ -129,6 +142,14 @@ pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value
             &["conversationId"],
         ),
     ];
+    if role.is_none() && capabilities["writable"] == true {
+        tools.push(tool(
+            "load_copy_import_skill",
+            "Get instructions for bringing existing source data into the workspace as copies. Call before preparing or writing an import, not for ordinary editing or workspace file copies. This does not import anything or grant access.",
+            json!({}),
+            &[],
+        ));
+    }
     if capabilities["shell"]["available"] == true {
         tools.push(tool("shell", "Run a POSIX sh command directly from the workspace with the application's OS permissions. Not a sandbox: it can access other files and the network. No Bash guarantee or detached-daemon containment. Output is bounded to 32 KiB per stream; workspace history records observed changes, not certain attribution. Editor drafts block execution.", json!({"command":{"type":"string","minLength":1,"maxLength":65536},"timeoutMs":{"type":"integer","minimum":1,"maximum":300000}}), &["command"]));
     }
@@ -166,7 +187,10 @@ pub(crate) fn allowed(role: Option<&str>, name: &str) -> bool {
         }
         Some("import") => !matches!(
             name,
-            "start_plugin_development" | "mutate_plugin_draft" | "activate_plugin"
+            "start_plugin_development"
+                | "mutate_plugin_draft"
+                | "activate_plugin"
+                | "load_copy_import_skill"
         ),
         None => true,
         _ => false,
@@ -211,6 +235,23 @@ mod tests {
             for role in ["check", "inspect", "method", "support"] {
                 assert!(!allowed(Some(role), name));
             }
+        }
+    }
+
+    #[test]
+    fn copy_import_skill_is_offered_only_in_writable_ordinary_chat() {
+        let offered = |writable, role| {
+            definitions(&json!({"writable": writable}), role)
+                .into_iter()
+                .find(|tool| tool["name"] == "load_copy_import_skill")
+        };
+        let tool = offered(true, None).unwrap();
+        assert_eq!(tool["parameters"]["properties"], json!({}));
+        assert_eq!(tool["parameters"]["additionalProperties"], false);
+        assert!(offered(false, None).is_none());
+        for role in ["inspect", "method", "import", "support", "check"] {
+            assert!(offered(true, Some(role)).is_none());
+            assert!(!allowed(Some(role), "load_copy_import_skill"));
         }
     }
 

@@ -21,6 +21,7 @@ import {
   resolvePullRequestBase,
   validatePlan,
   diagnosticPlan,
+  sonarLcov,
 } from "./actions-adapter.mjs";
 
 test("the launch trace entrypoint sanitizes errors and removes its cancellation handlers", async () => {
@@ -74,6 +75,24 @@ test("desktop preflight uses the shared adapter without production credentials",
       throw new Error("Synthetic unavailable desktop");
     }),
     /Synthetic unavailable desktop/,
+  );
+});
+
+test("Sonar coverage maps Vue source paths without changing coverage records", () => {
+  assert.equal(
+    sonarLcov(
+      "TN:\nSF:src/App.vue\nDA:12,1\nend_of_record\n",
+      "/work/client/app",
+    ),
+    "TN:\nSF:/work/client/app/src/App.vue\nDA:12,1\nend_of_record\n",
+  );
+  assert.throws(
+    () => sonarLcov("TN:\n", "/work/client/app"),
+    /no source paths/,
+  );
+  assert.throws(
+    () => sonarLcov("SF:src/App.vue\nSF:other.ts\n", "/work/client/app"),
+    /relative to the Vue app/,
   );
 });
 

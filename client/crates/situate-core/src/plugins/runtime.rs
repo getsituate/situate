@@ -51,6 +51,35 @@ pub struct Skill {
     pub text: String,
 }
 
+pub fn skill_frontmatter(text: &str) -> (Option<String>, Option<String>) {
+    let mut lines = text.trim_start_matches('\u{feff}').lines();
+    if lines.next() != Some("---") {
+        return (None, None);
+    }
+    let mut header = String::new();
+    for line in lines {
+        if line == "---" {
+            let Ok(documents) = yaml_rust2::YamlLoader::load_from_str(&header) else {
+                break;
+            };
+            if let [doc] = documents.as_slice() {
+                let field = |key: &str, max| {
+                    doc[key]
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty() && value.chars().count() <= max)
+                        .map(str::to_owned)
+                };
+                return (field("name", 64), field("description", 1024));
+            }
+            break;
+        }
+        header.push_str(line);
+        header.push('\n');
+    }
+    (None, None)
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Sources {

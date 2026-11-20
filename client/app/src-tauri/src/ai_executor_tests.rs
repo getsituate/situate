@@ -845,28 +845,69 @@ fn unavailable_definitions_are_bound_to_the_captured_source_and_explicit_recover
 }
 
 #[test]
-fn skill_snapshots_keep_captured_text_and_package_provenance() {
-    let mut source = json!({"manifest":{"id":"knowledge","name":"Knowledge"},"serviceEntry":null,"uiEntry":null,"skills":[{"path":"SKILL.md","text":"Captured guidance"}]});
-    let skills = source_skills(
-        &source,
-        &Some("checked-revision".into()),
-        "captured-incarnation",
-    );
-    source["skills"][0]["text"] = json!("Later mutable content");
-    assert_eq!(
-        skills,
-        vec![
-            json!({"pluginId":"knowledge","pluginName":"Knowledge","path":"SKILL.md","text":"Captured guidance","revision":"checked-revision","incarnation":"captured-incarnation"})
-        ]
-    );
+fn skill_catalog_and_load_use_the_same_captured_package() {
+    let text = "---\nname: review\ndescription: >-\n  Review workspace\n  sources.\n---\nCaptured guidance";
+    let mut source = json!({"manifest":{"id":"knowledge","name":"Knowledge","description":"Manage sources"},"skills":[{"path":"SKILL.md","text":text},{"path":"legacy.md","text":"Legacy guidance"}]});
     let captured = CapturedTools {
-        skills: skills.clone(),
-        unavailable: vec![json!({"pluginId":"bad","error":UNAVAILABLE})],
+        skills: source_skills(&source, &Some("checked-revision".into()), "instance"),
         ..Default::default()
     };
-    assert_eq!(captured.skills(), skills);
-    assert!(captured.definitions().is_empty());
-    assert_eq!(captured.unavailable()[0]["pluginId"], "bad");
+    source["skills"][0]["text"] = json!("Later mutable content");
+    assert_eq!(
+        captured.skill_catalog(),
+        vec![
+            json!({"id":"knowledge/SKILL.md","pluginId":"knowledge","pluginName":"Knowledge","name":"review","description":"Review workspace sources."}),
+            json!({"id":"knowledge/legacy.md","pluginId":"knowledge","pluginName":"Knowledge","name":"legacy.md","description":"Manage sources"}),
+        ]
+    );
+    assert_eq!(captured.definitions().len(), 1);
+    assert_eq!(captured.definitions()[0]["name"], "load_plugin_skill");
+    assert!(CapturedTools::default().definitions().is_empty());
+    assert!(
+        captured
+            .load_skill("run-a", &json!({"id":"disabled/SKILL.md"}))
+            .is_err()
+    );
+    assert!(
+        captured
+            .load_skill(
+                "run-a",
+                &json!({"id":"knowledge/SKILL.md","path":"other.md"})
+            )
+            .is_err()
+    );
+
+    let result = captured
+        .load_skill("run-a", &json!({"id":"knowledge/SKILL.md"}))
+        .unwrap();
+    let receipt = json!({"role":"toolResult","toolName":"load_plugin_skill","isError":false,"content":result.content,"details":result.details});
+    assert!(!receipt.to_string().contains("Captured guidance"));
+
+    let mut current = receipt.clone();
+    captured.resolve_skill_result("run-a", &mut current);
+    let loaded: Value =
+        serde_json::from_str(current["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(loaded["text"], text);
+    assert_eq!(loaded["revision"], "checked-revision");
+    assert_eq!(loaded["incarnation"], "instance");
+
+    let mut later = receipt.clone();
+    captured.resolve_skill_result("run-b", &mut later);
+    assert!(!later.to_string().contains("Captured guidance"));
+
+    let recaptured = CapturedTools {
+        skills: source_skills(&source, &Some("checked-revision".into()), "instance"),
+        ..Default::default()
+    };
+    let mut changed = receipt;
+    recaptured.resolve_skill_result("run-a", &mut changed);
+    assert!(!changed.to_string().contains("Later mutable content"));
+    assert!(
+        changed["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Use the current catalog")
+    );
 }
 
 #[cfg(target_os = "macos")]

@@ -266,10 +266,25 @@ export async function main(
         maxBuffer: 16 * 1024 * 1024,
         stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
       });
-      if (result.error || result.status !== 0)
+      if (result.error || result.status !== 0) {
+        const operation =
+          command === "init" && parameters[0] === "init"
+            ? "init"
+            : command === "export" && parameters[0] === "state"
+              ? "state pull"
+              : null;
+        if (operation) {
+          const outcome = result.error
+            ? "could not start"
+            : result.signal
+              ? `signal ${result.signal}`
+              : `exit ${result.status}`;
+          throw new Error(`Terraform ${operation} failed (${outcome}).`);
+        }
         throw new Error(
           "Terraform failed. Inspect HCP state and pending operations before retrying; no automatic retry was attempted.",
         );
+      }
       return result.stdout;
     }
     if (command === "validate") {

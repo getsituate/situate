@@ -169,24 +169,29 @@ function select(paths, { mode, inventory, appImpact }) {
   });
   const lanes = families.flatMap(([id, host, ids, execution]) => {
     const suites = selected.filter((suite) => ids.includes(suite.id));
+    let timeoutSeconds = 600;
+    if (id === "windows-native") {
+      timeoutSeconds = 3015;
+    } else if (id === "macos-compatibility" && mode === "release") {
+      timeoutSeconds = 2700;
+    } else if (
+      [
+        "rust",
+        "browser",
+        "macos-code",
+        "macos-native",
+        "macos-compatibility",
+      ].includes(id)
+    ) {
+      timeoutSeconds = 1800;
+    }
     return suites.length
       ? [
           {
             id,
             host,
             ...(execution ? { execution } : {}),
-            timeoutSeconds:
-              id === "windows-native"
-                ? 3015
-                : [
-                      "rust",
-                      "browser",
-                      "macos-code",
-                      "macos-native",
-                      "macos-compatibility",
-                    ].includes(id)
-                  ? 1800
-                  : 600,
+            timeoutSeconds,
             suites: suites.map((suite) => suite.id),
             reasons: [...new Set(suites.flatMap((suite) => suite.reasons))],
           },

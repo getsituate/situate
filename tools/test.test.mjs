@@ -1963,6 +1963,9 @@ test("only npm-dependent suites request workspace setup", () => {
       "root-format",
       "runner-integration",
       "design-unit",
+      "pi-unit",
+      "pi-mcp",
+      "pi-test-hook",
     ],
   );
   assert.deepEqual(
@@ -2003,6 +2006,7 @@ test("only npm-dependent suites request workspace setup", () => {
       "requirements-unit",
       "requirements-catalog",
       "design-unit",
+      "pi-unit",
     ],
   );
 });
@@ -2059,7 +2063,7 @@ test("root suites install missing tools once and repair partial installations", 
   const suites = createPlan({ feedback: true }).suites.filter(
     (s) => s.npm === ".",
   );
-  assert.equal(suites.length, 4);
+  assert.equal(suites.length, 5);
   let installs = 0;
   let checks = 0;
   const options = {
@@ -2073,6 +2077,7 @@ test("root suites install missing tools once and repair partial installations", 
           installs++;
           for (const file of [
             ".package-lock.json",
+            "@earendil-works/pi-coding-agent/dist/index.js",
             "eslint/bin/eslint.js",
             "prettier/bin/prettier.cjs",
             "marked/package.json",
@@ -2095,6 +2100,7 @@ test("root suites install missing tools once and repair partial installations", 
     assert.equal(installs, 1);
   }
   for (const entry of [
+    "@earendil-works/pi-coding-agent/dist/index.js",
     "eslint/bin/eslint.js",
     "prettier/bin/prettier.cjs",
     "marked/package.json",
@@ -2105,8 +2111,8 @@ test("root suites install missing tools once and repair partial installations", 
       "passed",
     );
   }
-  assert.equal(installs, 4);
-  assert.equal(checks, 20);
+  assert.equal(installs, 5);
+  assert.equal(checks, 30);
   assert.equal(existsSync(dependencyLockPath(f.directory, ".")), false);
 });
 

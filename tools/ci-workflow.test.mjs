@@ -19,6 +19,7 @@ const pipelineWorkflows = [
   "release-launch-trace",
   "verify-hosting",
   "deploy-hosting",
+  "sonarcloud",
 ];
 function job(workflow, id) {
   const body = workflow.match(
@@ -68,6 +69,10 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     ]);
     if (name === "publish-macos")
       allowed.add("./.github/workflows/slack-notify.yml");
+    if (name === "sonarcloud")
+      allowed.add(
+        "SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4",
+      );
     for (const match of workflow.matchAll(/uses: (\S+)/g))
       assert(allowed.has(match[1]), match[1]);
     for (const step of workflow.split(/\n {6}- /).slice(1))
@@ -261,6 +266,17 @@ test("native source jobs declare one build slot in both PR and release verificat
   for (const workflow of ["verify", "release-macos"])
     for (const id of ["macos-native", "macos-compatibility"])
       assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
+});
+
+test("the Intel release job has more time for cold compilation than PR verification", () => {
+  assert.match(
+    job(read("release-macos"), "macos-compatibility"),
+    /^ {4}timeout-minutes: 75$/m,
+  );
+  assert.match(
+    job(read("verify"), "macos-compatibility"),
+    /^ {4}timeout-minutes: 60$/m,
+  );
 });
 
 test("only the release Intel lane persists its compiler cache after success and flush", () => {
