@@ -707,6 +707,7 @@ test("verification delegates selected lanes directly from planning without optio
       "browser-webkit",
       "macos-native",
       "macos-compatibility",
+      ...(name === "verify" ? ["windows-native"] : []),
     ]) {
       const job =
         name === "verify" && arm64Lanes.includes(lane) ? "macos-arm64" : lane;
@@ -720,7 +721,8 @@ test("verification delegates selected lanes directly from planning without optio
           `contains(fromJSON(${name === "release-macos" ? `needs.plan.outputs.plan || '{"lanes":[]}'` : "needs.plan.outputs.plan"}).lanes.*.id, '${lane}')`,
         ),
       );
-      const native = lane.startsWith("macos-") || lane === "tooling-macos";
+      const macos = lane.startsWith("macos-") || lane === "tooling-macos";
+      const native = macos || lane === "windows-native";
       const command =
         native || lane === "docker-integration"
           ? "node tools/actions-adapter.mjs"
@@ -734,7 +736,9 @@ test("verification delegates selected lanes directly from planning without optio
         block,
         /PIPELINE_PLAN_DIGEST: \$\{\{ needs.plan.outputs.digest \}\}/,
       );
-      if (native)
+      if (lane === "windows-native")
+        assert.match(block, /runs-on: windows-2025/);
+      else if (native)
         assert.ok(
           block.includes(
             lane === "macos-compatibility"
@@ -778,6 +782,7 @@ test("verification delegates selected lanes directly from planning without optio
         "browser",
         "browser-webkit",
         "macos-compatibility",
+        ...(name === "verify" ? ["windows-native"] : []),
       ].sort(),
     );
     assert.match(

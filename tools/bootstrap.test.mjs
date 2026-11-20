@@ -157,7 +157,14 @@ function checkWorkflowBootstrap(name, workflow) {
           context,
         );
     } else {
-      assert.equal(commands[0], "python3 tools/pipeline-bootstrap.py", context);
+      const python = /^ {4}runs-on: windows-2025$/m.test(block)
+        ? "python"
+        : "python3";
+      assert.equal(
+        commands[0],
+        `${python} tools/pipeline-bootstrap.py`,
+        context,
+      );
       assert.ok(commands.length > 1, context);
       for (const command of commands.slice(1))
         assert.match(
