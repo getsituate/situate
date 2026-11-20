@@ -8,6 +8,7 @@ endif::[]
 
 Status:: accepted
 Date:: 2026-11-18
+Hosting gate:: Revised by <<adr-0024,ADR-0024>>.
 Implementation:: Workflow and image receiver are versioned; production activation requires key enrollment and a qualified replacement.
 
 == Context

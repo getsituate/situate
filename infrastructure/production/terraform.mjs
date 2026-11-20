@@ -260,15 +260,30 @@ export async function main(
       env.HCLOUD_TOKEN = config.HCLOUD_TOKEN;
     }
     function run(parameters, capture = false) {
+      const init = parameters[0] === "init";
       const result = execute("terraform", parameters, {
         cwd: directory,
         env,
         encoding: "utf8",
         maxBuffer: 16 * 1024 * 1024,
-        stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+        stdio: capture || init ? ["ignore", "pipe", "pipe"] : "inherit",
+        ...(init ? { timeout: 180_000, killSignal: "SIGKILL" } : {}),
       });
       if (result.error || result.status !== 0) {
-        if (command === "init" && parameters[0] === "init") {
+        if (init) {
+          if (result.error?.code === "ETIMEDOUT") {
+            const lines = String(result.stdout ?? "").split(/\r?\n/);
+            const stage = lines.some(
+              (line) => line.trim() === "Initializing provider plugins...",
+            )
+              ? "provider initialization"
+              : lines.some(
+                    (line) => line.trim() === "Initializing HCP Terraform...",
+                  )
+                ? "HCP backend initialization"
+                : "before reporting an initialization phase";
+            throw new Error(`Terraform init timed out during ${stage}.`);
+          }
           const outcome = result.error
             ? "could not start"
             : result.signal
@@ -317,7 +332,7 @@ export async function main(
         throw new Error(
           "Backend metadata is missing; inspect the existing workspace binding before continuing.",
         );
-      run(["init", "-input=false", "-lockfile=readonly"]);
+      run(["init", "-no-color", "-input=false", "-lockfile=readonly"]);
       const after = await inspect();
       if (!same(targetIdentity(after), targetIdentity(target)))
         throw new Error(
