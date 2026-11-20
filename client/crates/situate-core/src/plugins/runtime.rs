@@ -591,6 +591,7 @@ pub fn uninstall(
             .map_err(|_| "native.plugins.stateOutcomeUnknown")?;
         return Err("native.plugins.stateOutcomeUnknown".into());
     }
+    drop(metadata);
     target
         .remove_open_dir_all()
         .map_err(|_| "native.plugins.stateOutcomeUnknown")?;

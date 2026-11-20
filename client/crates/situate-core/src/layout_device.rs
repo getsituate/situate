@@ -56,6 +56,7 @@ fn archive_tree(source: &Dir, destination: &Dir) -> Result<(), String> {
             let source_child = plugins::child(source, &name)?.ok_or(FAILED)?;
             let destination_child = child(destination, &name)?;
             archive_tree(&source_child, &destination_child)?;
+            drop(source_child);
             source.remove_dir(&name).map_err(|_| FAILED)?;
             crate::durable_storage::sync_directory(source).map_err(|_| FAILED)?;
         } else if metadata.is_file() {
@@ -93,6 +94,7 @@ fn archive_portable_layout_payloads(workspace: &Dir, device: &Dir) -> Result<(),
             let records = child(&recovery, "presentation")?;
             let destination = child(&records, &name)?;
             archive_tree(&presentation, &destination)?;
+            drop(presentation);
             runtime.remove_dir("presentation").map_err(|_| FAILED)?;
             crate::durable_storage::sync_directory(&runtime).map_err(|_| FAILED)?;
         }
@@ -172,7 +174,10 @@ impl LayoutStorage {
             // The rename may have survived a failed directory sync in an earlier process.
             use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
             let mut options = cap_std::fs::OpenOptions::new();
-            options.read(true).follow(FollowSymlinks::No);
+            options
+                .read(true)
+                .write(cfg!(windows))
+                .follow(FollowSymlinks::No);
             let file = device.dir.open_with(FILE, &options).map_err(|_| FAILED)?;
             file.sync_all().map_err(|_| FAILED)?;
             if !device.sync_directory() {
