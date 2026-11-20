@@ -4,9 +4,11 @@ The Terraform root in `terraform/` describes the existing Hetzner server, firewa
 
 Import blocks identify the existing resources; they are not instructions to provision a replacement server. Resource deletion and replacement are protected. The cloud-init template describes fresh-host bootstrap; imported server bootstrap inputs remain ignored and are not replayed during adoption. Cloud adoption does not deploy services, publish applications or change mail-provider accounts. The [former preview](../website/README.md) is retired; the production edge redirects `reboot.getsituate.com` to `getsituate.com`.
 
+The [immutable host runbook](immutable/README.md) covers image qualification, separate publication storage and operator-gated cutover. The existing host remains authoritative until that cutover. This checkout does not expose the former in-place deploy commands.
+
 ## Credentials and inventory
 
-Use the repository's Volta-pinned Node.js, Terraform 1.5+ and the committed provider lockfile. The Node commands read only their required variables from explicitly set environment values or the ignored repository-root `.env`. They parse that file as data, require owner-only permissions, and do not read it in CI. `inspect.mjs` consumes `HCLOUD_TOKEN`; HCP operations in `terraform.mjs` consume `TF_CLOUD_ORGANIZATION` and `TF_TOKEN_app_terraform_io`, with `HCLOUD_TOKEN` added only for plans and adoption. Explicit environment values, including empty ones, take precedence. Direct Terraform commands do not load the repository's `.env`.
+Use the repository's Volta-pinned Node.js, Terraform 1.5+ and the committed provider lockfile. The Node commands read only their required variables from explicitly set environment values or the ignored repository-root `.env`. They parse that file as data, require owner-only permissions, and do not read it in CI. `inspect.mjs` consumes `HCLOUD_TOKEN`; HCP operations in `terraform.mjs` consume `TF_CLOUD_ORGANIZATION` and `TF_TOKEN_app_terraform_io`, with `HCLOUD_TOKEN` added for plans and state-changing operations. Explicit environment values, including empty ones, take precedence. Direct Terraform commands do not load the repository's `.env`.
 
 The inventory command makes authenticated GET requests only. It exports the existing SSH **public** key and complete TXT RRSets to a new mode-0600 variable file. It rejects missing, duplicate or unrepresented DNS RRSets and never overwrites a file or follows an existing output symlink. TXT record strings retain Hetzner's quoting, including multi-part DKIM values. Empty record comments are normalized to the provider's null representation.
 
@@ -83,7 +85,7 @@ On a replacement computer, restore account access, credentials and the repositor
 
 ## GitHub Actions boundary
 
-A future trusted GitHub Actions job can use the same Local execution workspace. Supply tokens through protected environment secrets, serialize infrastructure writers and require explicit production approval. Never expose credentials or state to fork/untrusted PR jobs or upload state, plans or private inventories as public artifacts. Adoption tooling does not install such a workflow or authorize CI applies. Website and app publication remain separate from Terraform operations.
+`Verify hosting` checks the deployment definitions without cloud credentials. The target workflow in [ADR-0019](../../docs/architecture/09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc) uses the same Local execution workspace; CI applies are not enabled. Website and app publication remain separate from Terraform operations.
 
 ## Transfer ownership
 
@@ -96,9 +98,13 @@ A resource must have exactly one active Terraform owner. Before any state-changi
 5. Transfer the `reboot` RRSet from the preview state, or explicitly remove its old state ownership without destroying the record before importing it here. Do not leave two active states managing it. Retire the superseded DNS root, wrapper and old deployment automation in the same authorized handoff; leaving runnable old configuration permits ownership to be recreated accidentally.
 6. Generate a fresh plan against the chosen backend, run the no-change check and review it. Apply only that newly reviewed plan with explicit approval. Then verify the authoritative DNS responses, mail records, HTTPS site, reboot redirect and active state ownership.
 
+The original adoption included the legacy server; do not rerun that historical inventory or adoption procedure for the immutable deployment. Follow the [migration runbook](immutable/README.md#initial-handoff-and-traffic) in the existing workspace.
+
 Do not combine ownership adoption with provider upgrades, operating-system changes, SSH rotation, proxy replacement or website cutover. `prevent_destroy` is an additional guard, not a substitute for state backups and plan review. Later intentional infrastructure changes require their own reviewed plans; the adoption check deliberately rejects them. This includes creating the DMARC RRSet: the adoption inventory and checker cover only the eleven original resources, not subsequent additions. The wrapper has no general-purpose apply command.
 
 ## Production services and traffic activation
+
+The legacy commands below document the existing host and its recovery history. In this checkout `deploy.mjs` accepts only `check`; it no longer connects to a host or deploys in place. Use the [immutable host runbook](immutable/README.md) for the migration and subsequent website publication.
 
 `docker/compose.yaml` runs a non-root, read-only Nginx service on the existing external `getsituate_default` network. It mounts `/opt/situate` read-only for the [application publisher](../releases/README.md). Immutable artifacts live under `/opt/situate/releases/<version>/`; `/opt/situate/current-release` points to that version's `metadata/` directory. Nginx exposes only the two current JSON endpoints and safe versioned artifact filenames, not journals, staging directories or directory listings. Mutable metadata is not cached; versioned artifact URLs are immutable. Access logs and download tracking are disabled; Compose bounds operational logs to three 10 MiB files per container.
 

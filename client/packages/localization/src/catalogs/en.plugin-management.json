@@ -1,4 +1,7 @@
 {
+  "pluginManagement.connections": "Connections",
+  "pluginManagement.sources": "Sources",
+  "pluginManagement.sourceKind": "Document source",
   "pluginManagement.connectionKind": "Connection",
   "pluginManagement.toolKind": "Plugin",
   "pluginManagement.accessUnverified": "Account access and permissions have not been verified.",

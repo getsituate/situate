@@ -4,12 +4,15 @@ on:
   workflow_run:
     workflows:
       - Dependency monitoring
+      - Deploy hosting
+      - Deploy website
       - Diagnostics
       - Publish macOS
       - Release launch trace
       - Release macOS
       - Release recovery
       - Verify
+      - Verify hosting
       - Dependabot Updates
     types: [completed]
     branches: [main]

@@ -8,6 +8,13 @@ import { main, prerequisites, toolchainProblems } from "./bootstrap.mjs";
 const read = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
+const websiteDeliveryCommands = [
+  "python3 tools/pipeline-bootstrap.py",
+  "node website/site.mjs --build",
+  "python3 tools/pipeline-container.py website prepared website/dist",
+  'python3 infrastructure/production/immutable/website_content.py deploy website/dist "$WEBSITE_SOURCE_REVISION"',
+];
+
 test("all npm projects inherit the root Volta pins", () => {
   const { volta } = JSON.parse(read("package.json"));
   assert.match(volta.node, /^\d+\.\d+\.\d+$/);
@@ -86,7 +93,10 @@ function checkWorkflowBootstrap(name, workflow) {
     const metadata =
       (name === "release-macos.yml" && id === "plan") ||
       (name === "verify.yml" && id === "required");
-    if (metadata) {
+    if (name === "deploy-website.yml" && id === "website") {
+      assert.match(block, /^ {4}runs-on: ubuntu-24\.04$/m, context);
+      assert.deepEqual(commands, websiteDeliveryCommands, context);
+    } else if (metadata) {
       let bootstrapped = false;
       for (const command of commands) {
         if (command === "python3 tools/pipeline-bootstrap.py") {
@@ -123,7 +133,17 @@ function checkWorkflowBootstrap(name, workflow) {
           command,
           name === "release-macos.yml" && id === "create"
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
-            : /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/,
+            : ({
+                "verify-hosting.yml: offline":
+                  /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
+                "deploy-hosting.yml: rehearse":
+                  /^node tools\/hosting-checks\.mjs$/,
+                "deploy-hosting.yml: hetzner-rehearsal":
+                  /^(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?$/,
+                "deploy-hosting.yml: production":
+                  /^node infrastructure\/production\/immutable\/continuous-deploy\.mjs$/,
+              }[context] ??
+                /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/),
           context,
         );
     }
@@ -172,6 +192,19 @@ test("metadata controllers require bootstrap and cannot execute portable suites 
       ]),
     ),
   );
+});
+
+test("website delivery requires the pinned bootstrap and checks the build before publishing", () => {
+  const check = (commands) =>
+    checkWorkflowBootstrap(
+      "deploy-website.yml",
+      workflowJob("website", "ubuntu-24.04", commands),
+    );
+  const [bootstrap, build, verify, publish] = websiteDeliveryCommands;
+  check([bootstrap, build, verify, publish]);
+  assert.throws(() => check([build, verify, publish]));
+  assert.throws(() => check([bootstrap, build, publish]));
+  assert.throws(() => check([bootstrap, build, publish, verify]));
 });
 
 test("portable jobs reject host Node setup and unpinned checkout", () => {

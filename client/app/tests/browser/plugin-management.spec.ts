@@ -388,6 +388,73 @@ for (const width of [1440, 700, 375]) {
   );
 }
 
+test(
+  "plugin overview separates connections and sources",
+  { tag: "@visual-desktop" },
+  async ({ page, visual }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await workspaceFixture(page, shellState, {
+      installedPlugins: [
+        planning,
+        {
+          id: "calendar",
+          enabled: false,
+          error: null,
+          manifest: {
+            schemaVersion: 2,
+            id: "calendar",
+            name: "Calendar",
+            description: "Connect to your calendars.",
+            skills: [],
+            kind: "connection",
+            serviceEntry: "service.js",
+          },
+        },
+        {
+          id: "document-archive",
+          enabled: false,
+          error: null,
+          manifest: {
+            schemaVersion: 2,
+            id: "document-archive",
+            name: "Document archive",
+            description: "Find documents in your archive.",
+            skills: [],
+            kind: "connection",
+            serviceEntry: "service.js",
+            exports: ["documentSourceDescribe", "documentSourceSearch"],
+          },
+        },
+      ],
+    });
+    await page.goto("/");
+    await settings(page);
+    const overview = page.locator(".plugin-collection-view");
+    for (const [group, card] of [
+      ["Your plugins", "Weekly planning"],
+      ["Connections", "Calendar"],
+      ["Sources", "Document archive"],
+    ]) {
+      const section = overview.getByRole("region", {
+        name: group,
+        exact: true,
+      });
+      await expect(
+        section.getByRole("heading", { name: `${group} 1` }),
+      ).toBeVisible();
+      await expect(section.getByRole("article")).toHaveCount(1);
+      await expect(section.getByRole("article", { name: card })).toBeVisible();
+    }
+    await expect(
+      overview.getByText("Document source", { exact: true }),
+    ).toBeVisible();
+    await overview
+      .getByRole("region", { name: "Sources", exact: true })
+      .scrollIntoViewIfNeeded();
+    await visual.capture("plugins.management.groups");
+  },
+);
+
 for (const width of [1440, 700]) {
   test(
     `plugin cards, read-only instructions and reversible disabling at ${width}px`,

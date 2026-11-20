@@ -67,6 +67,28 @@ test("developer-only inputs and required declarations do not activate app lanes"
   );
 });
 
+test("public website inputs require browser verification without triggering an app release", () => {
+  for (const path of [
+    "website/styles.css",
+    ".github/workflows/deploy-website.yml",
+  ]) {
+    const plan = planPaths([path]);
+    assert.equal(plan.appImpact, false, path);
+    assert.deepEqual(
+      plan.lanes.find((lane) => lane.id === "browser")?.suites,
+      ["design-website-browser"],
+      path,
+    );
+  }
+  assert.ok(
+    suites(planPaths(["design/brand/tokens.css"])).includes(
+      "design-website-browser",
+    ),
+  );
+  const app = planPaths(["client/app/src/App.vue"], { mode: "release" });
+  assert.ok(!suites(app).includes("design-website-browser"));
+});
+
 test("app consumers and native harnesses have explicit host assignments", () => {
   const frontend = planPaths(["client/app/src/App.vue"]);
   assert.equal(frontend.appImpact, true);

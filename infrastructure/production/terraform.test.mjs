@@ -192,6 +192,7 @@ test("HCP inspection uses authenticated GET requests only and returns no token o
     assert.ok(url.startsWith("https://app.terraform.io/api/v2/"));
     assert.equal(options.method, "GET");
     assert.equal(options.headers.Authorization, "Bearer synthetic-hcp");
+    assert.equal(options.headers.Connection, "close");
     assert.equal(options.redirect, "error");
   }
   assert.doesNotMatch(JSON.stringify(result), /synthetic-hcp|download-url/);

@@ -6,6 +6,13 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { childEnvironment, configuration } from "../website/config.mjs";
 import { checkAdoptionPlan } from "./inspect.mjs";
+import { checkImmutablePlan, immutablePhases } from "./immutable-plan.mjs";
+import {
+  beginRollout,
+  pendingRollout,
+  readRollout,
+} from "./rollout-journal.mjs";
+import { verifyAppliedOutcome } from "./rollout-reconcile.mjs";
 import {
   hcpConfiguration,
   hostname,
@@ -17,7 +24,7 @@ const terraformDirectory = fileURLToPath(
   new URL("./terraform/", import.meta.url),
 );
 const usage =
-  "Usage: node infrastructure/production/terraform.mjs init|validate|status|export <new.tfstate>|plan <variables.tfvars.json> <new.tfplan>|show <saved.tfplan>|adopt <saved.tfplan> --confirm-ownership-handoff";
+  "Usage: node infrastructure/production/terraform.mjs init|validate|status|export <new.tfstate>|plan <variables.tfvars.json> <new.tfplan>|show <saved.tfplan>|adopt <saved.tfplan> --confirm-ownership-handoff\n       rollout-begin <proposal.json>\n       legacy-retirement-begin <proposal.json> --confirm-legacy-cutover\n       rollout-reconcile <phase> <attempted.tfplan> <variables.tfvars.json> <observation.tfplan> [qualification.json]\n       immutable-plan <phase> <variables.tfvars.json> <new.tfplan> [phase-evidence.json]\n       immutable-apply <phase> <saved.tfplan> --confirm-immutable-change [phase-evidence.json]";
 
 function privateFile(path) {
   const stat = lstatSync(path);
@@ -169,14 +176,45 @@ function checkPlanBackend(plan, target) {
 export async function main(
   args,
   {
+    deployment,
     directory = terraformDirectory,
     environment = process.env,
     execute = spawnSync,
     fetchImpl = fetch,
   } = {},
 ) {
-  const command = args[0];
+  const [command] = args;
+  const phase = args[1];
+  const takesReceipt = args.length === 5;
+  const legacyBegin =
+    command === "legacy-retirement-begin" &&
+    args.length === 3 &&
+    args[2] === "--confirm-legacy-cutover";
+  const rolloutBegin =
+    (command === "rollout-begin" && args.length === 2) || legacyBegin;
+  const immutablePlan =
+    command === "immutable-plan" &&
+    (args.length === 4 || takesReceipt) &&
+    immutablePhases.includes(phase);
+  const immutableApply =
+    command === "immutable-apply" &&
+    (args.length === 4 || takesReceipt) &&
+    immutablePhases.includes(phase) &&
+    args[3] === "--confirm-immutable-change";
+  const reconcile =
+    command === "rollout-reconcile" &&
+    immutablePhases.includes(phase) &&
+    (args.length === 5 || (phase === "stage" && args.length === 6));
+  const needsProvider =
+    immutablePlan ||
+    immutableApply ||
+    reconcile ||
+    ["plan", "adopt"].includes(command);
   if (
+    !immutablePlan &&
+    !immutableApply &&
+    !rolloutBegin &&
+    !reconcile &&
     !(["init", "validate", "status"].includes(command) && args.length === 1) &&
     !(command === "export" && args.length === 2) &&
     !(command === "plan" && args.length === 3) &&
@@ -188,13 +226,19 @@ export async function main(
     )
   )
     throw new Error(usage);
+  let receiptBytes;
+  if (takesReceipt && (immutablePlan || immutableApply)) {
+    const receiptPath = resolve(args[4]);
+    privateFile(receiptPath);
+    receiptBytes = readFileSync(receiptPath);
+  }
   const oldMask = process.umask(0o077);
   try {
     const needsHcp = command !== "validate" && command !== "show";
     const names = needsHcp
       ? ["TF_CLOUD_ORGANIZATION", "TF_TOKEN_app_terraform_io"]
       : [];
-    if (["plan", "adopt"].includes(command)) names.push("HCLOUD_TOKEN");
+    if (needsProvider) names.push("HCLOUD_TOKEN");
     const config = names.length ? configuration(names, environment) : {};
     const env = {
       ...childEnvironment(environment),
@@ -207,7 +251,7 @@ export async function main(
       env.TF_TOKEN_app_terraform_io = hcp.token;
       env.TF_WORKSPACE = workspaceName;
     }
-    if (["plan", "adopt"].includes(command)) {
+    if (needsProvider) {
       if (!config.HCLOUD_TOKEN)
         throw new Error(
           "Set HCLOUD_TOKEN before planning or adopting production resources.",
@@ -316,6 +360,24 @@ export async function main(
         );
       writeFileSync(destination, raw, { mode: 0o600, flag: "wx" });
     }
+    if (rolloutBegin) {
+      const input = resolve(args[1]);
+      privateFile(input);
+      const root = environment.SITUATE_ROLLOUT_DIRECTORY;
+      if (!root)
+        throw new Error(
+          "Set SITUATE_ROLLOUT_DIRECTORY to the durable journal directory.",
+        );
+      privateDestination(join(root, ".check-location.json"), ".json");
+      const operation = beginRollout(
+        environment.SITUATE_ROLLOUT_DIRECTORY,
+        target,
+        JSON.parse(readFileSync(input, "utf8")),
+        legacyBegin,
+      );
+      console.log(`Rollout ${operation.id} recorded.`);
+      return;
+    }
     if (command === "export") {
       const destination = privateDestination(args[1], ".tfstate");
       if (!target.stateVersion)
@@ -324,12 +386,103 @@ export async function main(
       console.log(`Private state export: ${destination}`);
       return;
     }
-    if (command === "plan") {
-      const variables = resolve(args[1]);
+    if (reconcile) {
+      const root = environment.SITUATE_ROLLOUT_DIRECTORY;
+      if (!root)
+        throw new Error(
+          "Set SITUATE_ROLLOUT_DIRECTORY to the durable journal directory.",
+        );
+      privateDestination(join(root, ".check-location.json"), ".json");
+      const pending = pendingRollout(root, target, phase);
+      const attempted = savedPlan(args[2]);
+      checkPlanBackend(attempted, pending.before);
+      const planHash = digest(attempted);
+      if (planHash !== pending.planSha256)
+        throw new Error("The saved plan does not match the pending operation.");
+      const operation = readRollout(
+        root,
+        pending.before,
+        phase,
+        pending.evidence,
+      );
+      const original = JSON.parse(run(["show", "-json", attempted], true));
+      let qualification;
+      if (args[5]) {
+        privateFile(resolve(args[5]));
+        qualification = readFileSync(resolve(args[5]));
+      }
+      checkImmutablePlan(original, phase, qualification, operation);
+      const variables = resolve(args[3]);
       if (!variables.endsWith(".tfvars.json"))
         throw new Error("Use a private .tfvars.json inventory file.");
       privateFile(variables);
-      const output = privateDestination(args[2], ".tfplan");
+      const observation = privateDestination(args[4], ".tfplan");
+      run([
+        "plan",
+        "-input=false",
+        "-lock-timeout=30s",
+        `-var-file=${variables}`,
+        `-out=${observation}`,
+      ]);
+      verifyAppliedOutcome(
+        original,
+        JSON.parse(run(["show", "-json", observation], true)),
+      );
+      const current = await inspect();
+      if (!same(current, target))
+        throw new Error("HCP state changed during reconciliation.");
+      operation.acknowledge(planHash, current);
+      console.log("Confirmed the attempted phase without replaying it.");
+      return;
+    }
+    const usesJournal =
+      (immutablePlan || immutableApply) &&
+      Boolean(environment.SITUATE_ROLLOUT_DIRECTORY);
+    if (usesJournal)
+      privateDestination(
+        join(environment.SITUATE_ROLLOUT_DIRECTORY, ".check-location.json"),
+        ".json",
+      );
+    const operation =
+      deployment ??
+      (usesJournal
+        ? readRollout(
+            environment.SITUATE_ROLLOUT_DIRECTORY,
+            target,
+            phase,
+            phase === "stage" || !receiptBytes
+              ? undefined
+              : JSON.parse(receiptBytes),
+          )
+        : undefined);
+    if (
+      (immutablePlan || immutableApply) &&
+      !deployment &&
+      !usesJournal &&
+      !["stage", "attach", "traffic"].includes(phase)
+    )
+      throw new Error("This phase requires the production rollout journal.");
+    const checkPlan = (path) => {
+      const plan = JSON.parse(run(["show", "-json", path], true));
+      return immutablePlan || immutableApply
+        ? checkImmutablePlan(
+            plan,
+            phase,
+            phase === "stage" ? receiptBytes : undefined,
+            operation,
+          )
+        : checkAdoptionPlan(plan);
+    };
+    if ((immutablePlan || immutableApply) && !target.stateVersion)
+      throw new Error(
+        "Adopt existing production ownership before using immutable operations.",
+      );
+    if (command === "plan" || immutablePlan) {
+      const variables = resolve(args[immutablePlan ? 2 : 1]);
+      if (!variables.endsWith(".tfvars.json"))
+        throw new Error("Use a private .tfvars.json inventory file.");
+      privateFile(variables);
+      const output = privateDestination(args[immutablePlan ? 3 : 2], ".tfplan");
       if (pathExists(`${output}.state.json`))
         throw new Error("Private output files are never overwritten.");
       run([
@@ -339,9 +492,7 @@ export async function main(
         `-var-file=${variables}`,
         `-out=${output}`,
       ]);
-      const checked = checkAdoptionPlan(
-        JSON.parse(run(["show", "-json", output], true)),
-      );
+      const checked = checkPlan(output);
       const after = await inspect();
       if (!same(after, target))
         throw new Error(
@@ -361,34 +512,42 @@ export async function main(
         { mode: 0o600, flag: "wx" },
       );
       console.log(
-        `${checked.resources} resources, ${checked.imports} imports, no resource changes. Plan: ${output}`,
+        immutablePlan
+          ? `${checked} resource changes allowed for ${phase}. Review plan: ${output}`
+          : `${checked.resources} resources, ${checked.imports} imports, no resource changes. Plan: ${output}`,
       );
       return;
     }
-    const plan = savedPlan(args[1]);
+    const plan = savedPlan(args[immutableApply ? 2 : 1]);
     checkPlanBackend(plan, target);
-    checkAdoptionPlan(JSON.parse(run(["show", "-json", plan], true)));
-    const journal = privateDestination(`${plan}.adoption.json`, ".json");
+    checkPlan(plan);
+    const action = immutableApply ? phase : "adoption";
+    const journal = privateDestination(`${plan}.${action}.json`, ".json");
     const prefix = `${plan}.${new Date().toISOString().replaceAll(":", "-")}`;
     await exportState(`${prefix}.before.tfstate`, target);
     if (!same(await inspect(), target))
       throw new Error(
-        "The HCP workspace or state changed before adoption; generate a new plan.",
+        "The HCP workspace or state changed before apply; generate a new plan.",
       );
     writeFileSync(
       journal,
       JSON.stringify({
         target,
+        operation: action,
         sha256: digest(plan),
         startedAt: new Date().toISOString(),
       }) + "\n",
       { mode: 0o600, flag: "wx" },
     );
+    operation?.beginApply?.(digest(plan));
+    let after;
     try {
       run(["apply", "-input=false", "-lock-timeout=30s", plan]);
     } finally {
-      await exportState(`${prefix}.after.tfstate`, await inspect());
+      after = await inspect();
+      await exportState(`${prefix}.after.tfstate`, after);
     }
+    operation?.complete?.(after);
     writeFileSync(
       `${journal}.complete`,
       JSON.stringify({ completedAt: new Date().toISOString() }) + "\n",

@@ -25,14 +25,6 @@ function temporary(t) {
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   return directory;
 }
-const environment = {
-  CI: "true",
-  WEBSITE_DEPLOY_HOST: "deploy@example.test",
-  HCLOUD_TOKEN: "not-for-ssh",
-  TAURI_SIGNING_PRIVATE_KEY: "not-for-ssh",
-  PATH: process.env.PATH,
-};
-
 test("production stage contains public website/download assets and repository-owned service configuration", async (t) => {
   const directory = temporary(t);
   await stage(directory);
@@ -76,124 +68,47 @@ test("local production check only builds and validates Compose without host conf
     environment: { CI: "true" },
     execute: (...args) => calls.push(args),
   });
-  assert.equal(calls.length, 2);
-  for (const [command, args] of calls) {
-    assert.equal(command, "docker");
-    assert.deepEqual(args.slice(-2), ["config", "--quiet"]);
-  }
-});
-
-test("feed routing and full website activation are distinct explicitly confirmed SSH actions", async () => {
-  for (const [args, mode] of [
-    [["feeds", "--confirm-domain", "getsituate.com"], "feeds"],
-    [
-      [
-        "activate",
-        "--confirm-domain",
-        "getsituate.com",
-        "--confirm-public-content",
-      ],
-      "website",
-    ],
-  ]) {
-    const calls = [];
-    await main(args, { environment, execute: (...call) => calls.push(call) });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0][0], "ssh");
-    assert.ok(calls[0][1].includes("StrictHostKeyChecking=yes"));
-    assert.ok(calls[0][1].includes("deploy@example.test"));
-    assert.equal(
-      calls[0][1].at(-1),
-      `bash /opt/situate-production/current/configure-proxy.sh ${mode}`,
-    );
-    assert.equal(calls[0][2].env.HCLOUD_TOKEN, undefined);
-    assert.equal(calls[0][2].env.TAURI_SIGNING_PRIVATE_KEY, undefined);
-  }
-});
-
-test("edge relocation requires a confirmed production domain and forwards no signing or cloud secrets", async () => {
-  const calls = [];
-  await main(["edge", "--confirm-domain", "getsituate.com"], {
-    environment,
-    execute: (...args) => calls.push(args),
-  });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "ssh");
-  assert.ok(calls[0][1].includes("StrictHostKeyChecking=yes"));
-  assert.equal(
-    calls[0][1].at(-1),
-    "bash /opt/situate-production/current/relocate-edge.sh",
-  );
-  assert.equal(calls[0][2].env.HCLOUD_TOKEN, undefined);
-  assert.equal(calls[0][2].env.TAURI_SIGNING_PRIVATE_KEY, undefined);
+  const [[command, args]] = calls;
+  assert.equal(command, "docker");
+  assert.match(args[2], /immutable\/compose\.yaml$/);
+  assert.deepEqual(args.slice(-2), ["config", "--quiet"]);
 });
 
-test("unsafe or unconfirmed production commands fail before executing anything", async () => {
+test("legacy production commands fail locally without invoking SSH", async () => {
   for (const args of [
     [],
-    ["activate"],
-    ["feeds"],
-    ["edge"],
-    ["retire", "inventory.json"],
+    ["prepare"],
+    ["deploy"],
+    ["edge", "--confirm-domain", "getsituate.com"],
+    ["feeds", "--confirm-domain", "getsituate.com"],
     [
-      "retire",
-      "inventory.json",
-      "--confirm-host",
-      "wrong-host",
-      "--confirm-discard-prototype",
+      "activate",
+      "--confirm-domain",
+      "getsituate.com",
+      "--confirm-public-content",
     ],
-    ["edge", "--confirm-domain", "example.test"],
-    ["feeds", "--confirm-domain", "example.test"],
-    ["activate", "--confirm-domain", "getsituate.com"],
-    ["deploy", "extra"],
-    ["rollback", "1.2.3"],
-  ])
-    await assert.rejects(
-      main(args, { execute: () => assert.fail("unexpected execution") }),
-      /Usage:/,
-    );
-});
-
-test("retirement sends reviewed inventory only after exact destructive confirmation", async (t) => {
-  const path = join(temporary(t), "inventory.json");
-  writeFileSync(path, '{"synthetic":true}');
-  const calls = [];
-  await main(
+    ["inventory"],
     [
-      "retire",
-      path,
+      "quiesce",
+      "inventory.json",
       "--confirm-host",
       "getsituate-production",
       "--confirm-discard-prototype",
     ],
-    {
-      environment,
-      execute: (...args) => calls.push(args),
-    },
-  );
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "ssh");
-  assert.match(
-    calls[0][1].at(-1),
-    /^sudo -n python3 .*retire-prototype.py retire --confirm-host getsituate-production --confirm-discard-prototype$/,
-  );
-  assert.equal(calls[0][2].input.toString(), '{"synthetic":true}');
-  assert.equal(calls[0][2].env.HCLOUD_TOKEN, undefined);
-});
-
-test("a failed SSH operation is not automatically retried", async () => {
-  let attempts = 0;
-  await assert.rejects(
-    main(["feeds", "--confirm-domain", "getsituate.com"], {
-      environment,
-      execute: () => {
-        attempts++;
-        throw new Error("synthetic uncertain transport");
-      },
-    }),
-    /uncertain transport/,
-  );
-  assert.equal(attempts, 1);
+    [
+      "retire",
+      "inventory.json",
+      "--confirm-host",
+      "getsituate-production",
+      "--confirm-discard-prototype",
+    ],
+    ["rollback", "1.2.3"],
+  ])
+    await assert.rejects(
+      main(args, { execute: () => assert.fail("unexpected execution") }),
+      /In-place deployment is disabled/,
+    );
 });
 
 function activationFixture(t, failure = "", previous = true) {

@@ -10,12 +10,15 @@ const read = (name) =>
   );
 const pipelineWorkflows = [
   "verify",
+  "deploy-website",
   "release-macos",
   "publish-macos",
   "dependency-monitoring",
   "diagnostics",
   "release-recovery",
   "release-launch-trace",
+  "verify-hosting",
+  "deploy-hosting",
 ];
 function job(workflow, id) {
   const body = workflow.match(
@@ -50,6 +53,12 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
           ]
         : []),
+      ...(["deploy-hosting", "verify-hosting"].includes(name)
+        ? ["hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd"]
+        : []),
+      ...(name === "deploy-website"
+        ? ["actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"]
+        : []),
       ...(name === "verify"
         ? [
             "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
@@ -68,14 +77,34 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     for (const match of workflow.matchAll(/run: ([^\n]+)/g))
       assert.match(
         match[1],
-        /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
+        name === "deploy-hosting" &&
+          match[1].includes("infrastructure/production/")
+          ? /^(?:node infrastructure\/production\/immutable\/continuous-deploy\.mjs|(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?)$/
+          : name === "deploy-website"
+            ? /^(?:python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
+            : name === "verify-hosting" && match[1].startsWith("terraform ")
+              ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
+              : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
       );
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
       .split(/\n {2}[a-z][a-z-]*:\n/)
       .slice(1)
       .filter((body) => body.includes("    steps:"))) {
-      if (body.includes("run: node ")) {
+      if (name === "deploy-hosting" && body.includes("github-rehearsal.py")) {
+        assert.ok(
+          body.indexOf("run: python3 tools/pipeline-bootstrap.py") >= 0,
+        );
+        assert.ok(
+          body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
+            body.indexOf("github-rehearsal.py"),
+        );
+        assert.match(body, /environment: hosting-rehearsal/);
+        assert.doesNotMatch(
+          body,
+          /HOSTING_(?:OPERATOR|PUBLISHER|HOST_CA)_KEY|secrets\.HCLOUD_TOKEN|TF_TOKEN/,
+        );
+      } else if (body.includes("run: node ")) {
         assert.ok(body.includes("run: python3 tools/pipeline-bootstrap.py"));
         assert.ok(
           body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
@@ -254,6 +283,32 @@ test("paused release skips planning and source work while only effect jobs share
     assert.match(effect, /group: situate-release-effects/);
     assert.match(effect, /cancel-in-progress: false/);
   }
+});
+
+test("website publication follows trusted hosting runs and uses only website credentials", () => {
+  const workflow = read("deploy-website");
+  assert.match(
+    workflow,
+    /workflow_run:\n {4}workflows: \[Deploy hosting\]\n {4}branches: \[main\]\n {4}types: \[completed\]/,
+  );
+  const body = job(workflow, "website");
+  assert.match(body, /head_repository\.full_name == github\.repository/);
+  assert.match(body, /head_branch == 'main'/);
+  assert.match(body, /conclusion == 'success'/);
+  assert.match(
+    body,
+    /workflow_run\.event == 'push' \|\| github\.event\.workflow_run\.event == 'workflow_dispatch'/,
+  );
+  assert.match(
+    body,
+    /vars\.HOSTING_PRODUCTION_ENABLED == 'true' && vars\.WEBSITE_DEPLOY_ENABLED == 'true'/,
+  );
+  assert.match(body, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(body, /environment: website-production/);
+  assert.deepEqual(
+    [...body.matchAll(/secrets\.([A-Z_]+)/g)].map((match) => match[1]),
+    ["WEBSITE_CONTENT_SSH_KEY"],
+  );
 });
 
 test("the Slack failure notifier observes repository workflows on main", () => {

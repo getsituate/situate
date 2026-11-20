@@ -288,6 +288,7 @@ mod tests {
             ..Default::default()
         };
         menu.scenario(Task::FixtureCreate).unwrap();
+        assert_eq!(menu.scenarios[0].label, "Full Workspace");
         assert!(menu.key(KeyCode::Enter, dir.path()).unwrap().is_none());
         menu.key(KeyCode::Delete, dir.path()).unwrap();
         for c in "Sample workspace".chars() {

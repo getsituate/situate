@@ -1,4 +1,7 @@
 {
+  "pluginManagement.connections": "Verbindungen",
+  "pluginManagement.sources": "Quellen",
+  "pluginManagement.sourceKind": "Dokumentquelle",
   "pluginManagement.connectionKind": "Verbindung",
   "pluginManagement.toolKind": "Plugin",
   "pluginManagement.accessUnverified": "Kontozugriff und Berechtigungen wurden nicht geprüft.",
