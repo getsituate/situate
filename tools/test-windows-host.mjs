@@ -100,3 +100,20 @@ $msvc = Get-Content (Join-Path $vs.installationPath 'VC\Auxiliary\Build\Microsof
 $os = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
 @{ osBuild = "$($os.CurrentBuildNumber).$($os.UBR)"; msvc = $msvc.Trim(); visualStudio = $vs.installationVersion; sdk = $sdk } | ConvertTo-Json -Compress
 `;
+
+export const windowsTestLoaderReport = String.raw`
+param([string]$TestDirectory)
+$ErrorActionPreference = 'Stop'
+$events = Get-WinEvent -FilterHashtable @{
+  LogName = 'System'; ProviderName = 'Application Popup'; Id = 26; StartTime = (Get-Date).AddMinutes(-5)
+} -ErrorAction SilentlyContinue
+$events | Where-Object { $_.Message -match 'situate_client-[a-f0-9]+\.exe' } |
+  Select-Object -First 4 -ExpandProperty Message
+$vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+$dumpbin = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+if ($dumpbin -and (Test-Path -LiteralPath $TestDirectory -PathType Container)) {
+  Get-ChildItem -LiteralPath $TestDirectory -Filter 'situate_client-*.exe' -File | ForEach-Object {
+    & $dumpbin /nologo /imports $_.FullName
+  }
+}
+`;
