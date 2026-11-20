@@ -664,7 +664,19 @@ test("verification delegates selected lanes directly from planning without optio
               : "runs-on: macos-latest\n",
           ),
         );
-      assert.doesNotMatch(block, /continue-on-error/);
+      const steps = block.split(/\n {6}- /).slice(1);
+      const optional = steps.filter((step) =>
+        step.includes("continue-on-error"),
+      );
+      if (name === "release-macos" && lane === "macos-compatibility") {
+        for (const step of optional)
+          assert.match(
+            step,
+            /(?:node tools\/release-build-cache\.mjs (?:prepare|plan|start|report)\b|uses: actions\/cache\/(?:restore|save)@)/,
+          );
+      } else {
+        assert.equal(optional.length, 0, `${name}: ${lane}`);
+      }
     }
     const required = source
       .split("  required:\n")[1]

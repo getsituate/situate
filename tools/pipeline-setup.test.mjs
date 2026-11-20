@@ -80,9 +80,10 @@ test("native macOS setup retains pinned Rust and exposes its binary path", async
       execute: (...args) => calls.push(args),
     },
   );
-  assert.equal(calls.length, 2);
-  assert.ok(calls[1][1].includes("fetch"));
-  assert.ok(calls[0][1].includes("1.98.1"));
+  assert.equal(calls.length, 3);
+  assert.ok(calls[2][1].includes("fetch"));
+  assert.ok(calls[1][1].includes("1.98.1"));
+  assert.equal(calls[0][2].env.RUSTUP_AUTO_INSTALL, "0");
   assert.match(readFileSync(githubPath, "utf8"), /situate-tools-.*\/bin/);
   await assert.rejects(
     prepareLane({ host: "macos", suites: [] }, { platform: "linux" }),
@@ -101,7 +102,7 @@ test("native client setup installs every declared component before Cargo resolut
       execute: (...args) => calls.push(args),
     },
   );
-  const install = calls[0][1];
+  const install = calls[1][1];
   assert.ok(install.includes("install"));
   const declared = JSON.parse(
     readFileSync(join(root, "client/rust-toolchain.toml"), "utf8").match(
@@ -117,7 +118,51 @@ test("native client setup installs every declared component before Cargo resolut
       ),
       component,
     );
-  assert.ok(calls[1][1].includes("fetch"));
+  assert.ok(calls[2][1].includes("fetch"));
+});
+
+test("native setup reuses only a complete pinned Rust toolchain for the host", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-warm-rust-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const host = process.arch === "arm64" ? "aarch64" : "x86_64";
+  const other = host === "aarch64" ? "x86_64" : "aarch64";
+  const components = [
+    "rustc",
+    "cargo",
+    "rust-std",
+    "rustfmt",
+    "clippy",
+    "llvm-tools",
+  ];
+  const installed = components.map((name) => `${name}-${host}-apple-darwin`);
+  for (const [inventory, needsInstall] of [
+    [installed, false],
+    [[...installed.slice(0, -1), `llvm-tools-${other}-apple-darwin`], true],
+  ]) {
+    const calls = [];
+    await prepareLane(
+      {
+        id: "macos-compatibility",
+        host: "macos",
+        suites: ["client-native-compatibility"],
+      },
+      {
+        platform: "darwin",
+        environment: { RUNNER_TEMP: directory },
+        execute: (command, args) => {
+          calls.push(args);
+          if (command === "rustup") return inventory.join("\n");
+        },
+      },
+    );
+    assert.equal(
+      calls.some((args) => args.includes("install")),
+      needsInstall,
+    );
+    assert(
+      calls.some((args) => args.includes("fetch") && args.includes("--locked")),
+    );
+  }
 });
 
 test("Python bootstrap verifies archive before installation and invokes Node only through Volta shims", (t) => {

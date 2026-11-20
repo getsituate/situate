@@ -207,6 +207,28 @@ test("native source jobs declare one build slot in both PR and release verificat
       assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
 });
 
+test("only the release Intel lane persists its compiler cache after success and flush", () => {
+  const intel = job(read("release-macos"), "macos-compatibility");
+  assert.match(intel, /SITUATE_RELEASE_CACHE_SCOPE: intel-compatibility/);
+  for (const step of ["prepare", "plan", "start", "report"])
+    assert.match(
+      intel,
+      new RegExp(`run: node tools/release-build-cache.mjs ${step}`),
+    );
+  assert.match(
+    intel,
+    /SITUATE_SCCACHE: .*steps\.cache_start\.outputs\.ready == 'true'/,
+  );
+  assert.match(
+    intel,
+    /steps\.lane\.outcome == 'success' && steps\.cache_report\.outputs\.flushed == 'true'/,
+  );
+  assert.doesNotMatch(
+    job(read("verify"), "macos-compatibility"),
+    /release-build-cache|actions\/cache/,
+  );
+});
+
 test("source reuse controllers can read merged pull-request associations", () => {
   const text = read("release-macos");
   for (const id of [
