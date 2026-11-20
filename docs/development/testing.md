@@ -402,6 +402,8 @@ The `qualification-route` selection uses the protected `macos-release` environme
 
 ## CI gates
 
+GitHub requires `PR verification` and the SonarQube Cloud app’s `SonarCloud Code Analysis` check for merges into `main`. The separate `SonarCloud` code-scanning check is not the quality gate. SonarQube Cloud’s automatic analysis runs without coverage data, so a passing gate does not currently establish the 80% minimum on new code.
+
 The [PR verification workflow](../../.github/workflows/verify.yml) and [macOS release workflow](../../.github/workflows/release-macos.yml) use the same script-owned plans as local execution:
 
 ```sh
