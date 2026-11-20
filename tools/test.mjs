@@ -739,7 +739,8 @@ export function suiteInventory(files, host = process.platform) {
         "design-unit",
         "runner-unit",
         "runner-integration",
-      ].includes(suite.id)
+      ].includes(suite.id) ||
+      suite.environment === "pi"
     )
       suite.npm = ".";
     if (
@@ -1291,6 +1292,7 @@ export function executeSuite(
 
 const npmEntrypoints = {
   ".": [
+    "@earendil-works/pi-coding-agent/dist/index.js",
     "eslint/bin/eslint.js",
     "prettier/bin/prettier.cjs",
     "marked/package.json",
