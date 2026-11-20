@@ -40,9 +40,10 @@ def fingerprint(source, destination=None):
             if stat.S_ISDIR(info.st_mode):
                 catalog.append(['directory', name.as_posix()])
                 if output:
-                    output.mkdir(mode=0o755)
+                    output.mkdir(mode=0o700)
                 scan(name)
                 if output:
+                    output.chmod(0o755)
                     sync_dir(output)
                 continue
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -115,7 +116,7 @@ def activate(root, version, source=None, *, seed=False, confirm=lambda: True):
     if previous == version:
         raise ValueError('Website version is already active.')
     pending = root / 'website.pending'
-    with pending.open('x') as stream:
+    with os.fdopen(os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as stream:
         json.dump({'previous': previous, 'next': version}, stream)
         stream.flush()
         os.fsync(stream.fileno())
@@ -159,8 +160,7 @@ def main():
         return
     if os.geteuid() != 0 or args.confirm_website != args.version:
         raise ValueError('Run as root and confirm the exact reviewed website digest.')
-    # The incoming directory is a private, root-controlled reviewed artifact.
-    os.umask(0o022)
+    os.umask(0o077)
     with open('/run/situate-state/lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         subprocess.run(['/usr/local/lib/situate/state.sh', 'mounted'], check=True)

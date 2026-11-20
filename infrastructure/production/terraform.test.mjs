@@ -16,8 +16,44 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { main } from "./terraform.mjs";
+import { main, resolveTerraform } from "./terraform.mjs";
 import { hcpConfiguration, inspectWorkspace } from "./hcp.mjs";
+
+test("hosted Terraform uses only the runner's unwrapped setup installation", (t) => {
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "situate-terraform-tools-")),
+  );
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const temp = join(root, "runner-temp");
+  const install = join(temp, "12345678-1234-1234-1234-123456789abc");
+  const other = join(root, "other");
+  mkdirSync(install, { recursive: true });
+  mkdirSync(other);
+  const outside = join(other, "terraform");
+  writeFileSync(outside, "fixture", { mode: 0o700 });
+  const env = {
+    GITHUB_ACTIONS: "true",
+    RUNNER_TEMP: temp,
+    PATH: other,
+    SITUATE_TERRAFORM_EXECUTABLE: outside,
+  };
+  const binary = join(install, "terraform");
+  symlinkSync(outside, binary);
+  assert.throws(() => resolveTerraform(env), /setup-terraform/);
+  rmSync(binary);
+  writeFileSync(binary, "fixture", { mode: 0o700 });
+  assert.equal(resolveTerraform(env), binary);
+  chmodSync(binary, 0o770);
+  assert.throws(() => resolveTerraform(env), /setup-terraform/);
+  assert.throws(
+    () =>
+      resolveTerraform({
+        SITUATE_TERRAFORM_EXECUTABLE: "terraform",
+        PATH: other,
+      }),
+    /trusted absolute executable path/,
+  );
+});
 
 function fixture(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "situate-hcp-")));
@@ -30,7 +66,10 @@ function fixture(t) {
   const bindingPath = join(directory, ".terraform/situate-backend.json");
   const variables = join(root, "production.tfvars.json");
   writeFileSync(variables, "{}", { mode: 0o600 });
+  const terraformExecutable = join(root, "terraform-fixture");
+  writeFileSync(terraformExecutable, "fixture", { mode: 0o700 });
   const environment = {
+    SITUATE_TERRAFORM_EXECUTABLE: terraformExecutable,
     CI: "true",
     PATH: process.env.PATH,
     HOME: process.env.HOME,
@@ -292,7 +331,9 @@ test("initialization binds a pre-existing Local HCP workspace without migration 
     "-input=false",
     "-lockfile=readonly",
   ]);
+  assert.equal(f.calls[0].command, f.environment.SITUATE_TERRAFORM_EXECUTABLE);
   const env = f.calls[0].options.env;
+  assert.equal(env.PATH, "/usr/bin:/bin:/usr/sbin:/sbin");
   assert.equal(env.TF_CLOUD_ORGANIZATION, "example-org");
   assert.equal(env.TF_WORKSPACE, "situate-production");
   assert.equal(env.TF_TOKEN_app_terraform_io, "synthetic-hcp");

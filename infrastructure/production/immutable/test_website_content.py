@@ -1,7 +1,11 @@
 from base64 import b64encode
+import os
 from pathlib import Path
+import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import website
 import website_content as delivery
@@ -46,6 +50,37 @@ class WebsiteContentTest(unittest.TestCase):
         self.assertEqual(self.publish('wrong', reject)[-1], {'complete': False})
         self.assertEqual(website.settled(self.site), self.initial)
         self.assertEqual(self.feed.read_text(), 'unchanged')
+
+    def test_private_receiver_umask_keeps_nested_public_assets_readable(self):
+        assets = self.build / 'assets'
+        assets.mkdir()
+        (assets / 'style.css').write_text('body {}')
+
+        def accept():
+            self.assertEqual(stat.S_IMODE((self.site / 'website.pending').stat().st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE((self.site / 'current/assets').stat().st_mode), 0o755)
+            self.assertEqual(stat.S_IMODE((self.site / 'current/assets/style.css').stat().st_mode), 0o644)
+            return True
+
+        mask = os.umask(0o077)
+        try:
+            self.assertEqual(self.publish('updated', accept)[-1], {'complete': True})
+        finally:
+            os.umask(mask)
+
+    def test_publication_key_is_readable_only_by_owner_and_service_group(self):
+        path = self.root / 'authorized_keys'
+        public_key = 'ssh-ed25519 ' + 'A' * 68
+        with patch.object(delivery, 'KEY_FILE', path), patch.object(delivery.os, 'geteuid', return_value=0), patch.object(
+                delivery.pwd, 'getpwnam', return_value=SimpleNamespace(pw_gid=123)) as lookup, patch.object(
+                delivery.os, 'fchown') as ownership:
+            delivery.install_key(public_key)
+            lookup.assert_called_once_with('situate-website')
+            self.assertEqual(ownership.call_args.args[1:], (-1, 123))
+            with self.assertRaises(FileExistsError):
+                delivery.install_key(public_key)
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o640)
+        self.assertEqual(path.read_text(), f'restrict,command="/usr/local/lib/situate/website-ssh.sh" {public_key}\n')
 
     def test_lost_confirmation_preserves_pending_evidence(self):
         with self.assertRaisesRegex(ValueError, 'No website decision'):

@@ -30,16 +30,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
         super().setup()
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def instance_id():
+    # Hetzner exposes metadata over HTTP only on the link-local interface.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    with opener.open('http://169.254.169.254/hetzner/v1/metadata/instance-id', timeout=5) as response:
+        value = response.read(65)
+    if len(value) > 64 or not re.fullmatch(rb'[1-9][0-9]{0,14}', value.strip()):
+        raise ValueError('Invalid provider instance ID')
+    return value.strip().decode('ascii')
+
+
 def main():
     token_path = Path('/run/situate-enrollment-token')
     token = token_path.read_text().strip()
     if not re.fullmatch(r'[a-f0-9]{64}', token):
         raise ValueError('Invalid enrollment capability')
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open('http://169.254.169.254/hetzner/v1/metadata/instance-id', timeout=5) as response:
-        server_id = response.read(64).decode('ascii').strip()
-    if not re.fullmatch(r'[1-9][0-9]{0,14}', server_id):
-        raise ValueError('Invalid provider instance ID')
+    server_id = instance_id()
     key = ' '.join(Path('/etc/ssh/ssh_host_ed25519_key.pub').read_text().split()[:2])
     proof = hmac.new(bytes.fromhex(token), f'{server_id}\n{key}\n'.encode(), hashlib.sha256).hexdigest()
     with http.server.HTTPServer(('0.0.0.0', 80), Handler) as endpoint:

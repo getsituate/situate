@@ -26,7 +26,8 @@ HERE = Path(__file__).resolve().parent
 STATE = 'sudo -n /usr/local/lib/situate/state.sh'
 SERVICE = 'situate-serving.service'
 MOUNT = '/srv/situate-state'
-MIN_ENV = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR') if key in os.environ}
+MIN_ENV = {key: os.environ[key] for key in ('HOME', 'TMPDIR') if key in os.environ}
+MIN_ENV['PATH'] = '/usr/bin:/bin:/usr/sbin:/sbin'
 
 
 class RehearsalError(Exception):
@@ -36,6 +37,13 @@ class RehearsalError(Exception):
 def require(condition, message):
     if not condition:
         raise RehearsalError(message)
+
+
+def qualification_node():
+    node = Path(os.environ.get('SITUATE_QUALIFICATION_NODE') or
+                Path(os.environ.get('VOLTA_HOME') or Path.home() / '.volta') / 'bin/node')
+    require(node.is_absolute(), 'Expected an absolute Node executable for enrollment.')
+    return str(node)
 
 
 def run(args, *, data=None, seconds=120, allowed=(0,)):
@@ -219,13 +227,15 @@ class Host:
     def enroll(self, token, work):
         claim = work / f'claim-{self.id}.json'
         def proof():
-            value = run(['curl', '-q', '--noproxy', '*', '-fsS', '--max-time', '3', '--max-filesize', '1024',
+            # The HMAC binds the proof to the provider instance and SSH key before SSH is trusted.
+            value = run(['/usr/bin/curl', '-q', '--noproxy', '*', '--proto', '=http',
+                         '-fsS', '--max-time', '3', '--max-filesize', '1024',
                          f'http://{self.ip}/.well-known/situate-host-key'], seconds=5).stdout
             claim.write_bytes(value)
             source = ('import fs from "node:fs"; import {verifiedHostKey} from '
                       '"./infrastructure/production/immutable/enrollment.mjs"; '
                       'const [path,id]=process.argv.slice(1); console.log(verifiedHostKey(JSON.parse(fs.readFileSync(path)),id,fs.readFileSync(0,"utf8")));')
-            return run(['node', '--input-type=module', '-e', source, str(claim), str(self.id)], data=token.encode()).stdout.decode().strip()
+            return run([qualification_node(), '--input-type=module', '-e', source, str(claim), str(self.id)], data=token.encode()).stdout.decode().strip()
         self.pin(retry(proof, 'authenticated SSH enrollment'))
         self.ssh('sudo -n passwd -l root >/dev/null && sudo -n systemctl stop situate-enrollment.path situate-enrollment.service')
 
@@ -280,6 +290,7 @@ def boot_data(operator, publisher, token):
 def make_firewall(cloud, part, client, ports, offline=False):
     rules = [{'direction': 'in', 'protocol': 'tcp', 'port': str(port), 'source_ips': [client]} for port in ports]
     if offline:
+        # Offline guests need only the provider's link-local metadata endpoint.
         rules += [{'direction': 'out', 'protocol': 'tcp', 'port': '80', 'destination_ips': ['169.254.169.254/32']}]
     return cloud.create('firewalls', {'name': f'{cloud.scope}-{part}', 'rules': rules})['id']
 

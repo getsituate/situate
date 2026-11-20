@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { childEnvironment, configuration } from "../../website/config.mjs";
 import { rollOut } from "../continuous-rollout.mjs";
 import { deploymentGate } from "../hosting-deployment.mjs";
-import { main as terraformMain } from "../terraform.mjs";
+import { main as terraformMain, systemPath } from "../terraform.mjs";
 import { inventoryFromState } from "./hosting-inventory.mjs";
 import { observeHost, observeHttps } from "./probe.mjs";
 import { verifiedHostKey } from "./enrollment.mjs";
@@ -46,7 +46,11 @@ const write = (path, value) =>
 function execute(
   command,
   args,
-  { env = childEnvironment(), input, timeout = 120_000 } = {},
+  {
+    env = { ...childEnvironment(), PATH: systemPath },
+    input,
+    timeout = 120_000,
+  } = {},
 ) {
   try {
     return execFileSync(command, args, {
@@ -83,7 +87,7 @@ function keyFile(root, value, name) {
 }
 
 function git(...args) {
-  return execute("git", args);
+  return execute("/usr/bin/git", args);
 }
 
 const deploymentInputs = [
@@ -138,11 +142,17 @@ function qualifyImage(root, revision, token, event) {
     new URL("github-rehearsal.py", import.meta.url),
   );
   const result = spawnSync(
-    "python3",
+    "/usr/bin/python3",
     ["-B", builder, "qualify-production", path],
     {
       cwd: repository,
-      env: { ...childEnvironment(), ...event, HCLOUD_TOKEN: token },
+      env: {
+        ...childEnvironment(),
+        PATH: systemPath,
+        ...event,
+        HCLOUD_TOKEN: token,
+        SITUATE_QUALIFICATION_NODE: process.execPath,
+      },
       stdio: ["ignore", "inherit", "inherit"],
       timeout: 1_800_000,
     },
@@ -177,11 +187,15 @@ function liveDriver(root, revision, inventory, credentials, event) {
   const operatorKey = credentials.operatorKey;
   const publisherKey = credentials.publisherKey;
   const ca = credentials.ca;
-  const publicKey = execute("ssh-keygen", ["-y", "-f", operatorKey])
+  const publicKey = execute("/usr/bin/ssh-keygen", ["-y", "-f", operatorKey])
     .split(/\s+/)
     .slice(0, 2)
     .join(" ");
-  const publisherPublic = execute("ssh-keygen", ["-y", "-f", publisherKey])
+  const publisherPublic = execute("/usr/bin/ssh-keygen", [
+    "-y",
+    "-f",
+    publisherKey,
+  ])
     .split(/\s+/)
     .slice(0, 2)
     .join(" ");
@@ -204,7 +218,7 @@ function liveDriver(root, revision, inventory, credentials, event) {
     "The runner needs the settled immutable production inventory and both installed identities.",
   );
   const tf = (...args) => terraformCommand(credentials.env, ...args);
-  const caPublic = execute("ssh-keygen", ["-y", "-f", ca])
+  const caPublic = execute("/usr/bin/ssh-keygen", ["-y", "-f", ca])
     .split(/\s+/)
     .slice(0, 2)
     .join(" ");
@@ -222,7 +236,7 @@ function liveDriver(root, revision, inventory, credentials, event) {
   ) {
     ensure(isIP(host) === 4, "Invalid SSH destination.");
     return execute(
-      "ssh",
+      "/usr/bin/ssh",
       [
         "-F",
         "/dev/null",
@@ -498,7 +512,7 @@ function liveDriver(root, revision, inventory, credentials, event) {
         "sudo -n /usr/bin/python3 -I /usr/local/lib/situate/website_content.py install-key",
         `${credentials.websiteKey}\n`,
       );
-    execute("ssh-keygen", [
+    execute("/usr/bin/ssh-keygen", [
       "-q",
       "-s",
       ca,
@@ -711,7 +725,14 @@ async function deploy(root, env, revision, gate) {
   );
   const credentials = {
     websiteKey,
-    env: { ...childEnvironment(env), ...creds, CI: "true" },
+    env: {
+      ...childEnvironment(env),
+      ...creds,
+      PATH: systemPath,
+      CI: "true",
+      GITHUB_ACTIONS: env.GITHUB_ACTIONS,
+      RUNNER_TEMP: env.RUNNER_TEMP,
+    },
     workspaceId: env.SITUATE_HCP_WORKSPACE_ID,
   };
   const tf = (...args) => terraformCommand(credentials.env, ...args);
@@ -726,7 +747,7 @@ async function deploy(root, env, revision, gate) {
   const exportFile = join(root, "preflight.tfstate");
   tf("export", exportFile);
   credentials.operatorKey = keyFile(root, env.HOSTING_OPERATOR_KEY, "operator");
-  const operatorPublic = execute("ssh-keygen", [
+  const operatorPublic = execute("/usr/bin/ssh-keygen", [
     "-y",
     "-f",
     credentials.operatorKey,

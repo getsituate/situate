@@ -164,7 +164,11 @@ test("coverage requests allow one artifact redirect without forwarding authoriza
     token: "fixture",
     fetchImpl: async (url, options) => {
       calls.push({ url: url.href, options });
-      if (url.href === storage) return new Response("fixture archive");
+      if (url.href === storage) {
+        assert.equal(options.credentials, "omit");
+        assert.equal(options.referrerPolicy, "no-referrer");
+        return new Response("fixture archive");
+      }
       if (url.pathname.endsWith("/zip"))
         return new Response(null, {
           status: 302,

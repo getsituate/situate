@@ -138,13 +138,15 @@ export function validArtifact(artifact, run) {
 export function readArchive(buffer) {
   if (buffer.length > 16384) throw new Error("Oversized coverage archive");
   return execFileSync(
-    "python3",
+    "/usr/bin/python3",
     [
+      "-I",
       "-c",
       "import sys,io,zipfile\nz=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read()))\nassert z.namelist()==['report.json']\ni=z.getinfo('report.json')\nassert i.file_size<=4096\nsys.stdout.buffer.write(z.read(i))",
     ],
     {
       input: buffer,
+      env: {},
       maxBuffer: 4096,
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
@@ -174,6 +176,7 @@ export function createCoverageApi({ token, fetchImpl = fetch }) {
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
         redirect: archive ? "manual" : "error",
+        credentials: "omit",
         signal,
       });
       if (archive && response.status === 302) {
@@ -192,6 +195,8 @@ export function createCoverageApi({ token, fetchImpl = fetch }) {
           method: "GET",
           headers: { Accept: "application/octet-stream" },
           redirect: "error",
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
           signal,
         });
       }
