@@ -1,5 +1,6 @@
 export const rolloutSteps = [
   "qualify",
+  "rehearse",
   "stage",
   "prepare",
   "fence",

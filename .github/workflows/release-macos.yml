@@ -285,6 +285,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       SITUATE_TOOL_BUILD_SLOTS: "1"
+      SITUATE_RELEASE_CACHE_SCOPE: intel-compatibility
       PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
       PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
     steps:
@@ -296,8 +297,39 @@ jobs:
       - run: python3 tools/pipeline-bootstrap.py
       - run: node tools/actions-adapter.mjs desktop
       - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-compatibility
+      - id: cache_tool
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs prepare
+      - id: cache_plan
+        if: steps.cache_tool.outcome == 'success'
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs plan
+      - id: cache_restore
+        if: steps.cache_plan.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ steps.cache_plan.outputs.paths }}
+          key: ${{ steps.cache_plan.outputs.key }}
+          restore-keys: ${{ steps.cache_plan.outputs.restore-key }}
+      - id: cache_start
+        if: steps.cache_plan.outputs.enabled == 'true'
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs start
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow create --lane macos-compatibility
+        env:
+          SITUATE_SCCACHE: ${{ steps.cache_start.outputs.ready == 'true' && '1' || '0' }}
+      - id: cache_report
+        if: always() && steps.cache_start.outcome == 'success' && steps.cache_start.outputs.ready == 'true'
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs report
+      - if: always() && steps.lane.outcome == 'success' && steps.cache_report.outputs.flushed == 'true' && steps.cache_restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ steps.cache_plan.outputs.paths }}
+          key: ${{ steps.cache_plan.outputs.key }}
 
   required:
     name: Integrated verification
@@ -329,12 +361,32 @@ jobs:
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
           PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
 
+  hosting-ready:
+    name: Wait for hosting on this revision
+    needs: plan
+    if: needs.plan.outputs.enabled == 'true' && needs.plan.outputs.app_impact == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 155
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/wait-for-hosting.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   create:
     name: Create GitHub Release
     needs:
       [
         plan,
         required,
+        hosting-ready,
         policy,
         tooling,
         tooling-macos,
@@ -347,7 +399,7 @@ jobs:
         macos-compatibility,
       ]
     # Implicit success() rejects skipped lanes; the aggregate verifies selected receipts.
-    if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' && needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
+    if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' && needs.required.result == 'success' && needs.hosting-ready.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
     concurrency:
       group: situate-release-effects
       cancel-in-progress: false

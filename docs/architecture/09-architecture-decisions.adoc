@@ -46,10 +46,16 @@
 |Accepted; recovery revised by ADR-0020; production cutover remains pending
 |link:09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[ADR-0020]
 |GitHub-hosted production deployments stop on failure and block further runs until operator recovery.
-|Accepted; locally verified; live production run pending
+|Accepted; recovery boundary refined by ADR-0023
 |link:09-architecture-decisions/ADR-0021-publish-website-content-separately.adoc[ADR-0021]
 |Publish checked static website builds to the immutable host's persistent website store.
 |Accepted; requires production key enrollment.
+|link:09-architecture-decisions/ADR-0022-serve-release-qualification-on-host-loopback.adoc[ADR-0022]
+|Serve private macOS candidates through the existing TLS proxy on host loopback.
+|Accepted; production rollout pending
+|link:09-architecture-decisions/ADR-0023-open-hosting-recovery-at-production-staging.adoc[ADR-0023]
+|Open production recovery after the isolated image rehearsal and before Terraform staging.
+|Accepted
 |===
 
 :architecture-repository-root: ../..
@@ -86,6 +92,10 @@ include::09-architecture-decisions/ADR-0019-replace-production-hosts-from-versio
 include::09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0021-publish-website-content-separately.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0022-serve-release-qualification-on-host-loopback.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0023-open-hosting-recovery-at-production-staging.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

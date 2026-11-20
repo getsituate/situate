@@ -15,6 +15,7 @@ import {
 } from "./compiler-cache.mjs";
 import { childEnvironment } from "../client/scripts/agent-e2e-runtime.mjs";
 import { suiteEnvironment } from "./test.mjs";
+import { ordinaryEnvironment } from "./pipeline-environment.mjs";
 import { tauriDevCommand } from "../client/scripts/tauri-dev.mjs";
 import { buildEnvironment } from "../client/scripts/ios-xcode.mjs";
 
@@ -78,6 +79,32 @@ test("automatic local caching preserves Cargo profiles and targets", () => {
   assert.equal(result.CARGO_INCREMENTAL, "1");
   assert.equal(result.CARGO_PROFILE_DEV_DEBUG, undefined);
   assert.equal(environment.SCCACHE_BUCKET, "not-local");
+});
+
+test("ordinary lane environment connects the native compiler to its owned cache socket", () => {
+  const socket = "/tmp/situate-run/s";
+  const env = ordinaryEnvironment({
+    ...enabled,
+    SITUATE_COMPILER_CACHE_SOCKET: socket,
+    SCCACHE_DIR: "/synthetic/cache",
+    SCCACHE_CACHE_SIZE: "2G",
+    CARGO_INCREMENTAL: "0",
+    SCCACHE_BUCKET: "not-local",
+    RUSTC_WRAPPER: "/foreign/wrapper",
+  });
+  const compiled = compilerCacheEnvironment(env, available);
+  assert.equal(compiled.SCCACHE_SERVER_UDS, socket);
+  assert.equal(compiled.SCCACHE_SERVER_PORT, undefined);
+  assert.equal(compiled.SCCACHE_DIR, "/synthetic/cache");
+  assert.equal(compiled.SCCACHE_CACHE_SIZE, "2G");
+  assert.equal(compiled.CARGO_INCREMENTAL, "0");
+  assert.equal(compiled.SCCACHE_BUCKET, undefined);
+  assert.equal(compiled.RUSTC_WRAPPER, "/synthetic/bin/sccache");
+  assert.equal(
+    compilerCacheEnvironment({ ...env, SITUATE_SCCACHE: "0" }, available)
+      .RUSTC_WRAPPER,
+    undefined,
+  );
 });
 
 test("automatic caching requires a stable release with client-side support", () => {

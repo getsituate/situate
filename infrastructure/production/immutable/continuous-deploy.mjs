@@ -170,7 +170,6 @@ function qualifyImage(root, revision, token, event) {
 }
 
 function liveDriver(root, revision, inventory, credentials, event) {
-  let qualification;
   const old = inventory.traffic_host;
   const generation = `g${revision.slice(0, 15)}`;
   const disks = inventory.publication_volumes;
@@ -353,6 +352,7 @@ function liveDriver(root, revision, inventory, credentials, event) {
   }
 
   function variables(step, j) {
+    const qualification = j.completed.rehearse;
     const stage = step === "stage";
     const candidate = {
       image_id: qualification.value.imageId,
@@ -400,7 +400,7 @@ function liveDriver(root, revision, inventory, credentials, event) {
       candidate: generation,
       candidateId: j.completed.stage?.candidate.serverId,
       volumeId: previous.volumeId,
-      imageId: qualification.value.imageId,
+      imageId: j.completed.rehearse.value.imageId,
       sourceRevision: revision,
       deletedFirewallMembers: j.completed.qualify.deletedFirewallMembers,
     };
@@ -568,8 +568,8 @@ function liveDriver(root, revision, inventory, credentials, event) {
         }
         return { previous, deletedFirewallMembers };
       }
-      if (step === "stage")
-        qualification = qualifyImage(
+      if (step === "rehearse")
+        return qualifyImage(
           files,
           revision,
           credentials.env.HCLOUD_TOKEN,
@@ -617,6 +617,15 @@ function liveDriver(root, revision, inventory, credentials, event) {
           `${stateTool} mount ${candidate.volumeId} && ${stateTool} bind ${proof.siteSha256} ${proof.downloadSha256} ${proof.updateSha256} && sudo -n systemctl start ${hostingService}`,
         );
         await verifyHttps(candidate, proof, previous);
+        const privateStatus = ssh(
+          candidate.ipv4,
+          "curl -qfsS --noproxy '*' --max-time 10 --connect-to getsituate.com:443:127.0.0.1:24443 -o /dev/null -w '%{http_code}' https://getsituate.com/healthz",
+          { key: publisherKey, login: "deploy" },
+        );
+        ensure(
+          privateStatus.trim() === "204",
+          "The candidate's private release qualification route is unavailable.",
+        );
         return { volumeVerified: true, candidateHttpsVerified: true };
       }
       if (step === "verifyPublic") {

@@ -31,7 +31,10 @@ export function ordinaryEnvironment(
     "SITUATE_NATIVE_EXECUTOR",
     "SITUATE_NATIVE_VM_CONFIG",
     "SITUATE_COMPILER_CACHE",
+    "SITUATE_COMPILER_CACHE_SOCKET",
+    "SITUATE_SCCACHE",
     "SCCACHE_DIR",
+    "SCCACHE_CACHE_SIZE",
   ];
   if (environment.SITUATE_TOOL_BUILD_SLOTS === "1")
     names.push("SITUATE_TOOL_BUILD_SLOTS");

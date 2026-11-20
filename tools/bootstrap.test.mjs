@@ -96,6 +96,16 @@ function checkWorkflowBootstrap(name, workflow) {
     if (name === "deploy-website.yml" && id === "website") {
       assert.match(block, /^ {4}runs-on: ubuntu-24\.04$/m, context);
       assert.deepEqual(commands, websiteDeliveryCommands, context);
+    } else if (name === "release-macos.yml" && id === "hosting-ready") {
+      assert.match(block, /^ {4}runs-on: ubuntu-24\.04$/m, context);
+      assert.deepEqual(
+        commands,
+        [
+          "python3 tools/pipeline-bootstrap.py",
+          "node tools/wait-for-hosting.mjs",
+        ],
+        context,
+      );
     } else if (metadata) {
       let bootstrapped = false;
       for (const command of commands) {
@@ -138,7 +148,8 @@ function checkWorkflowBootstrap(name, workflow) {
       for (const command of commands.slice(1))
         assert.match(
           command,
-          name === "release-macos.yml" && id === "create"
+          name === "release-macos.yml" &&
+            ["create", "macos-compatibility"].includes(id)
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
             : ({
                 "verify.yml: windows-smoke-build":

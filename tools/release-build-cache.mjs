@@ -166,6 +166,9 @@ export async function prepareReleaseCacheTool({
   }
 }
 
+const intelCompatibility = (env) =>
+  env.SITUATE_RELEASE_CACHE_SCOPE === "intel-compatibility";
+
 export function trustedReleaseCacheHost(env) {
   return (
     env.CI === "true" &&
@@ -173,6 +176,8 @@ export function trustedReleaseCacheHost(env) {
     env.RUNNER_ENVIRONMENT === "github-hosted" &&
     env.RUNNER_OS === "macOS" &&
     ["ARM64", "X64"].includes(env.RUNNER_ARCH) &&
+    (env.SITUATE_RELEASE_CACHE_SCOPE === undefined ||
+      (intelCompatibility(env) && env.RUNNER_ARCH === "X64")) &&
     env.GITHUB_REPOSITORY === repository &&
     env.GITHUB_REF === "refs/heads/main" &&
     env.GITHUB_REF_PROTECTED === "true" &&
@@ -186,7 +191,11 @@ export function trustedReleaseCacheHost(env) {
 }
 
 export function releaseCachePaths(env) {
-  const root = join(env.HOME, "Library/Caches/situate/release-build-v1");
+  const root = join(
+    env.HOME,
+    "Library/Caches/situate",
+    intelCompatibility(env) ? "intel-compatibility-v1" : "release-build-v1",
+  );
   return {
     compiler: join(root, "sccache"),
     cargoHome: join(root, "cargo"),
@@ -315,7 +324,9 @@ export function releaseBuildCachePlan({
       !/^Apple clang version \d+\./.test(runtime[5]) ||
       !/^\d+(\.\d+)+$/.test(runtime[6]) ||
       !/^[A-Za-z0-9]+$/.test(runtime[7]) ||
-      !/^sccache \d+\.\d+\.\d+$/.test(runtime[8])
+      !/^sccache \d+\.\d+\.\d+$/.test(runtime[8]) ||
+      (intelCompatibility(env) &&
+        !/^host: x86_64-apple-darwin$/m.test(runtime[0]))
     )
       return disabled;
     const inputs = [
@@ -324,16 +335,21 @@ export function releaseBuildCachePlan({
       "client/Cargo.toml",
     ].map((path) => hash(read(join(root, path))));
     const toolDigest = sccacheRelease.checksums[env.RUNNER_ARCH];
-    const prefix = `release-build-v1-main-macos-${env.RUNNER_ARCH}-universal-release-${hash(JSON.stringify({ runtime, inputs, toolDigest }))}-`;
+    const scope = intelCompatibility(env)
+      ? "intel-compatibility"
+      : "universal-release";
+    const prefix = `release-build-v1-main-macos-${env.RUNNER_ARCH}-${scope}-${hash(JSON.stringify({ runtime, inputs, toolDigest }))}-`;
     const paths = releaseCachePaths(env);
     return {
       enabled: true,
       key: `${prefix}${env.GITHUB_SHA}`,
       restoreKey: prefix,
-      paths: [paths.compiler, ...paths.downloads],
+      paths: intelCompatibility(env)
+        ? [paths.compiler]
+        : [paths.compiler, ...paths.downloads],
       environment: {
         SITUATE_RELEASE_BUILD_CACHE: "1",
-        CARGO_HOME: paths.cargoHome,
+        ...(!intelCompatibility(env) ? { CARGO_HOME: paths.cargoHome } : {}),
         SITUATE_RELEASE_CACHE_SOCKET: releaseCacheEndpoint(env),
       },
     };
@@ -537,6 +553,22 @@ export function releaseCacheMeasurement(
   return result;
 }
 
+export function compatibilityCacheEnvironment(env) {
+  if (
+    !trustedReleaseCacheHost(env) ||
+    !intelCompatibility(env) ||
+    env.SITUATE_RELEASE_BUILD_CACHE !== "1" ||
+    env.SITUATE_RELEASE_CACHE_SOCKET !== releaseCacheEndpoint(env)
+  )
+    return {};
+  return {
+    SITUATE_COMPILER_CACHE_SOCKET: env.SITUATE_RELEASE_CACHE_SOCKET,
+    SCCACHE_DIR: releaseCachePaths(env).compiler,
+    SCCACHE_CACHE_SIZE: "2G",
+    CARGO_INCREMENTAL: "0",
+  };
+}
+
 function emitPlan(plan) {
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${plan.enabled}\n`);
@@ -574,6 +606,21 @@ if (
       emitPlan(releaseBuildCachePlan());
     } else if (["start", "report"].includes(command)) {
       const measurement = releaseCacheMeasurement(command);
+      if (
+        command === "start" &&
+        intelCompatibility(process.env) &&
+        measurement.statisticsAvailable === true &&
+        process.env.GITHUB_ENV
+      ) {
+        appendFileSync(
+          process.env.GITHUB_ENV,
+          Object.entries(compatibilityCacheEnvironment(process.env))
+            .map(([key, value]) => `${key}=${value}\n`)
+            .join(""),
+        );
+        if (process.env.GITHUB_OUTPUT)
+          appendFileSync(process.env.GITHUB_OUTPUT, "ready=true\n");
+      }
       if (command === "report" && process.env.GITHUB_OUTPUT)
         appendFileSync(
           process.env.GITHUB_OUTPUT,

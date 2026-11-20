@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "macos-shell-process-cleanup",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "macOS shell process cleanup reliability; no interface or workflow changes."
+}

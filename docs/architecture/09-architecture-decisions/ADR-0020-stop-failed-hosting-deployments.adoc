@@ -6,7 +6,7 @@ ifndef::architecture-repository-root[]
 :architecture-repository-root: ../../..
 endif::[]
 
-Status:: accepted
+Status:: accepted; the start of the production recovery record is refined by <<adr-0023,ADR-0023>>.
 Date:: 2026-11-19
 Implementation:: Local verification; production cutover and a live production workflow run remain pending.
 

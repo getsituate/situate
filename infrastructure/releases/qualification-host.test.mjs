@@ -115,9 +115,11 @@ function harness(t) {
   const payload = join(root, "payload");
   mkdirSync(join(payload, "releases/current"), { recursive: true });
   writeFileSync(join(payload, config.feedPath), '{"version":"1.2.3"}\n');
-  writeFileSync(join(payload, "candidate.tar.gz"), "synthetic signed package");
+  const artifact = "releases/1.2.3/candidate.tar.gz";
+  mkdirSync(join(payload, "releases/1.2.3"));
+  writeFileSync(join(payload, artifact), "synthetic signed package");
   const files = Object.fromEntries(
-    [config.feedPath, "candidate.tar.gz"].map((name) => {
+    [config.feedPath, artifact].map((name) => {
       const bytes = readFileSync(join(payload, name));
       return [name, { size: bytes.length, sha256: sha(bytes) }];
     }),
@@ -149,6 +151,7 @@ function harness(t) {
   return {
     root,
     payload,
+    artifact,
     files,
     tar,
     request,
@@ -274,6 +277,59 @@ test("host prepares immutable identity before staging and privately serves exact
       .filter((args) => args[0] === "docker" && args[1] === "exec")
       .every((args) => args[5].startsWith("test -f")),
   );
+});
+
+test("immutable host stages and retires the exact private view without Docker", (t) => {
+  const h = harness(t);
+  const baked = `m.IMMUTABLE_UID=os.getuid()
+m.IMMUTABLE_HOSTNAME=request['config']['hostname']
+m.immutable_host=lambda: True
+m.probe_immutable_listener=lambda: None
+def forbidden(args):
+    raise AssertionError('Publisher cannot invoke privileged tools')
+m.command=forbidden`;
+  const run = (action, request) => h.success(action, request, undefined, baked);
+  assert.equal(run("inspect").status, "absent");
+  const prepared = run("prepare");
+  assert.equal(prepared.listenerProfile, "immutable-loopback-v1");
+  assert.equal(prepared.certificateVolume, undefined);
+  run("stage");
+  const view = join(h.root, ".qualification-view");
+  assert(!existsSync(view));
+  assert.equal(run("serve").status, "serving");
+  assert.equal(
+    sha(readFileSync(join(view, prepared.identityPath))),
+    prepared.identitySha256,
+  );
+  assert.equal(
+    sha(readFileSync(join(view, h.artifact))),
+    h.files[h.artifact].sha256,
+  );
+  assert.equal(run("inspect").containerRunning, true);
+
+  const other = {
+    ...h.request,
+    operationId: "another",
+    operationNonce: "another",
+  };
+  run("prepare", other);
+  run("stage", other);
+  const conflict = h.invoke("serve", other, undefined, baked);
+  assert.match(conflict.stderr, /view already exists/);
+  run("cleanup", other);
+  assert.equal(run("inspect").containerRunning, true);
+
+  run("cleanup", { ...h.request, retainArtifacts: true });
+  assert(!existsSync(view));
+  const retained = join(
+    h.root,
+    "private",
+    sha(operation.operationNonce),
+    "payload",
+    h.artifact,
+  );
+  assert.equal(sha(readFileSync(retained)), h.files[h.artifact].sha256);
+  assert.equal(run("inspect-family").operations[0].containerRunning, false);
 });
 
 test("host lock rejects concurrent mutations without changing prepared state", (t) => {

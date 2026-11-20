@@ -13,3 +13,7 @@ getsituate.com {
 
 	reverse_proxy website:8080
 }
+
+https://getsituate.com:8443 {
+	reverse_proxy website:8081
+}

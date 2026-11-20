@@ -17,6 +17,7 @@ import { join } from "node:path";
 import {
   releaseBuildCachePlan,
   releaseCacheEndpoint,
+  compatibilityCacheEnvironment,
   releaseCompilerCacheEnvironment,
   downloadReleaseTool,
   prepareReleaseCacheTool,
@@ -123,6 +124,61 @@ test("cache plan contains only bounded compiler and public Cargo download paths"
     plan.environment.SITUATE_RELEASE_CACHE_SOCKET,
   );
   assert.equal(compiler.SCCACHE_SERVER_PORT, undefined);
+});
+
+test("Intel compatibility persists only compiler objects under a separate trusted scope", () => {
+  const intel = {
+    ...env,
+    RUNNER_ARCH: "X64",
+    SITUATE_RELEASE_CACHE_SCOPE: "intel-compatibility",
+  };
+  const options = fixture({
+    env: intel,
+    execute: (...args) =>
+      execute(...args)?.replace("host: aarch64-", "host: x86_64-"),
+  });
+  const plan = releaseBuildCachePlan(options);
+  assert.deepEqual(releaseBuildCachePlan(fixture({ env: intel })), {
+    enabled: false,
+  });
+  assert.match(
+    plan.key,
+    /^release-build-v1-main-macos-X64-intel-compatibility-/,
+  );
+  assert.deepEqual(plan.paths, [
+    "/Users/runner/Library/Caches/situate/intel-compatibility-v1/sccache",
+  ]);
+  assert.equal(plan.environment.CARGO_HOME, undefined);
+  const prepared = { ...intel, ...plan.environment };
+  const forLane = compatibilityCacheEnvironment(prepared);
+  const forDaemon = releaseCompilerCacheEnvironment(prepared, compilerOptions);
+  assert.deepEqual(forLane, {
+    SITUATE_COMPILER_CACHE_SOCKET: forDaemon.SCCACHE_SERVER_UDS,
+    SCCACHE_DIR: forDaemon.SCCACHE_DIR,
+    SCCACHE_CACHE_SIZE: forDaemon.SCCACHE_CACHE_SIZE,
+    CARGO_INCREMENTAL: "0",
+  });
+  assert.deepEqual(
+    compatibilityCacheEnvironment({
+      ...prepared,
+      SITUATE_RELEASE_CACHE_SOCKET: "/tmp/foreign",
+    }),
+    {},
+  );
+  for (const change of [
+    { RUNNER_ARCH: "ARM64" },
+    { SITUATE_RELEASE_CACHE_SCOPE: "unknown" },
+    { GITHUB_EVENT_NAME: "pull_request" },
+  ]) {
+    assert.deepEqual(
+      releaseBuildCachePlan({ ...options, env: { ...intel, ...change } }),
+      { enabled: false },
+    );
+    assert.deepEqual(
+      compatibilityCacheEnvironment({ ...prepared, ...change }),
+      {},
+    );
+  }
 });
 
 test("runtime, architecture, image, toolchain, manifest and lock changes invalidate restore scope", () => {

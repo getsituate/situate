@@ -718,6 +718,7 @@ export function suiteInventory(files, host = process.platform) {
     "unit",
     [
       ".pi/extensions/role-switcher/index.test.mjs",
+      ".pi/extensions/sonarqube/index.test.mjs",
       ".pi/extensions/test-suite/index.test.mjs",
     ],
     "pi",

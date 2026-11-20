@@ -105,13 +105,13 @@
     );
   }
   function fill(element, value) {
-    assert(
-      element && !element.disabled && !element.readOnly,
-      "input-unavailable",
-    );
+    assert(editableInput(element), "input-unavailable");
     element.focus();
     element.value = value;
     element.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function editableInput(element) {
+    return !!element && !element.disabled && !element.readOnly && element;
   }
   async function click(label) {
     const target = await wait(
@@ -867,13 +867,13 @@
       );
       fill(
         await wait("onboarding-initial-sources", () =>
-          query('textarea[id$="-sources"]'),
+          editableInput(query('textarea[id$="-sources"]')),
         ),
         "I will attach a JSON task export and a Markdown note. Wait for the attachments before importing.",
       );
       fill(
         await wait("onboarding-initial-preferences", () =>
-          query('textarea[id$="-preferences"]'),
+          editableInput(query('textarea[id$="-preferences"]')),
         ),
         "[e2e:onboarding-method] Review tasks each Friday. Keep notes and tasks in Markdown with task identities. Preserve source content and task metadata, and keep created and due dates distinct. Never change source originals.",
       );

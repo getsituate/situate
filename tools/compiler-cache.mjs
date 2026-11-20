@@ -63,6 +63,15 @@ export function compilerCacheEnvironment(
   if (!/^[1-9][0-9]*[KMGT]?$/.test(size))
     throw new Error("SCCACHE_CACHE_SIZE must be a positive size such as 50G.");
 
+  const socket = configuration.SITUATE_COMPILER_CACHE_SOCKET;
+  if (
+    socket !== undefined &&
+    (!isAbsolute(socket) ||
+      /[\r\n\0]/.test(socket) ||
+      Buffer.byteLength(socket) > 90)
+  )
+    throw new Error("Invalid compiler-cache socket.");
+
   // Keep the shared local server independent of remote-cache settings and homes.
   for (const name of Object.keys(env))
     if (name.startsWith("SCCACHE_")) delete env[name];
@@ -74,7 +83,9 @@ export function compilerCacheEnvironment(
     SCCACHE_CONF: "/dev/null",
     // Compiler temporaries must belong to the client, not a daemon outliving it.
     SCCACHE_CLIENT_SIDE: "1",
-    SCCACHE_SERVER_PORT: "4227",
+    ...(socket
+      ? { SCCACHE_SERVER_UDS: socket }
+      : { SCCACHE_SERVER_PORT: "4227" }),
     SCCACHE_IGNORE_SERVER_IO_ERROR: "1",
   };
 }

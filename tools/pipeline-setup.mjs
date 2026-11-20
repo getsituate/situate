@@ -107,20 +107,50 @@ export async function prepareLane(
       ).match(/channel\s*=\s*"([^"]+)"/)?.[1];
       if (!/^\d+\.\d+\.\d+$/.test(toolchain ?? ""))
         throw new Error("Missing pinned Rust toolchain.");
-      coordinated("rustup", [
-        "toolchain",
-        "install",
-        toolchain,
-        "--profile",
-        "minimal",
-        "--component",
+      const components = [
+        "cargo",
+        "rustc",
+        "rust-std",
         "clippy",
-        "--component",
         "rustfmt",
         ...(packageDirectory === "client" || selected.coverage
-          ? ["--component", "llvm-tools"]
+          ? ["llvm-tools"]
           : []),
-      ]);
+      ];
+      const host = { x64: "x86_64", arm64: "aarch64" }[process.arch];
+      const target = `${host}-apple-darwin`;
+      let installed;
+      // An explicit toolchain and disabled auto-install make this a local probe.
+      try {
+        installed = execute(
+          "rustup",
+          ["component", "list", "--installed", "--toolchain", toolchain],
+          {
+            cwd: join(directory, packageDirectory),
+            env: { ...environment, RUSTUP_AUTO_INSTALL: "0" },
+            stdio: ["ignore", "pipe", "ignore"],
+          },
+        );
+      } catch {
+        // Cargo still requires the exact pinned toolchain on a cold runner.
+      }
+      const inventory = new Set(
+        String(installed ?? "")
+          .trim()
+          .split(/\s+/),
+      );
+      if (
+        !host ||
+        !components.every((name) => inventory.has(`${name}-${target}`))
+      )
+        coordinated("rustup", [
+          "toolchain",
+          "install",
+          toolchain,
+          "--profile",
+          "minimal",
+          ...components.slice(3).flatMap((name) => ["--component", name]),
+        ]);
       coordinated(
         "rustup",
         ["run", toolchain, "cargo", "fetch", "--locked"],
