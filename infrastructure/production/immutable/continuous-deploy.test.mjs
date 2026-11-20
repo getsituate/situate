@@ -3,13 +3,14 @@ import test from "node:test";
 import { runHostingTerraform } from "./continuous-deploy.mjs";
 
 function failingCommand(stderr, code) {
-  return () => {
-    throw Object.assign(new Error("private command arguments"), {
-      code,
-      stderr,
-      stdout: "private Terraform state",
-    });
-  };
+  return () => ({
+    status: code ? null : 1,
+    error: code
+      ? Object.assign(new Error("private command arguments"), { code })
+      : undefined,
+    stderr,
+    stdout: "private Terraform state",
+  });
 }
 
 test("reports the failed Terraform operation and only an approved diagnostic", () => {

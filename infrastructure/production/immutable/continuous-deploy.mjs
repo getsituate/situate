@@ -79,30 +79,25 @@ const terraformDiagnostics = [
   /^Terraform (?:init|state pull) failed \((?:exit [0-9]+|signal SIG[A-Z0-9]+|could not start)\)\.$/,
 ];
 
-export function runHostingTerraform(env, args, run = execFileSync) {
+export function runHostingTerraform(env, args, run = spawnSync) {
   const [operation] = args;
-  try {
-    return run(process.execPath, [terraform, ...args], {
-      cwd: repository,
-      env,
-      timeout: 180_000,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      maxBuffer: 8 * 1024 * 1024,
-    }).trim();
-  } catch (error) {
-    const diagnostic = String(error.stderr ?? "")
-      .trimEnd()
-      .split(/\r?\n/)
-      .at(-1);
-    const detail =
-      error.code === "ETIMEDOUT"
-        ? "The command timed out."
-        : terraformDiagnostics.some((pattern) => pattern.test(diagnostic))
-          ? diagnostic
-          : "Inspect live state before making further changes.";
-    throw new Error(`Hosting Terraform ${operation} failed: ${detail}`);
-  }
+  const result = run(process.execPath, [terraform, ...args], {
+    cwd: repository,
+    env,
+    timeout: 180_000,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (!result.error && result.status === 0) return result.stdout.trim();
+  const diagnostic = (result.stderr ?? "").trimEnd().split(/\r?\n/).at(-1);
+  const detail =
+    result.error?.code === "ETIMEDOUT"
+      ? "The command timed out."
+      : terraformDiagnostics.some((pattern) => pattern.test(diagnostic))
+        ? diagnostic
+        : "Inspect live state before making further changes.";
+  throw new Error(`Hosting Terraform ${operation} failed: ${detail}`);
 }
 
 function terraformCommand(env, ...args) {
