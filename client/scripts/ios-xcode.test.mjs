@@ -54,7 +54,7 @@ targets:
   situate-client_iOS:
     scheme:
       environmentVariables:
-        RUST_LOG: info
+        RUST_LOG: generated-only
     sources:
       - path: Sources
       - path: Externals
@@ -207,7 +207,8 @@ test("generated Xcode integration is deterministic and quotes executable paths",
   assert.equal(prepareProjectSpec(spec, paths, node), prepared);
   assert.match(prepared, /runPostActionsOnFailure: true/);
   assert.match(prepared, /--finish-build/);
-  assert.doesNotMatch(prepared, /^ {4}scheme:/m);
+  assert.doesNotMatch(prepared, /^ {4}scheme:|^ {8}RUST_LOG: generated-only/m);
+  assert.match(prepared, /^ {4}sources:\n {6}- path: Sources/m);
   assert.match(prepared, /excludes: \["\*\*\/\*\.a"\]/);
   const quotedNode = "'/node with spaces'\\'' and quotes/node'";
   const quotedScript = [

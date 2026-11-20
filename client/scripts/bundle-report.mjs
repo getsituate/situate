@@ -1,11 +1,22 @@
 import { readFile, readdir } from "node:fs/promises";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
+import { assertLocalPath } from "./ios-project-lock.mjs";
 
 export async function bundleReport(directory) {
+  const root = resolve(directory);
+  function artifactPath(file) {
+    const path = resolve(root, file);
+    if (isAbsolute(file) || isAbsolute(relative(root, path)))
+      throw new Error(
+        "Build artifact paths must be relative to the output directory.",
+      );
+    assertLocalPath(root, path);
+    return path;
+  }
   const manifest = JSON.parse(
-    await readFile(resolve(directory, ".vite/manifest.json"), "utf8"),
+    await readFile(artifactPath(".vite/manifest.json"), "utf8"),
   );
   const initial = new Set();
   function visit(key) {
@@ -24,14 +35,14 @@ export async function bundleReport(directory) {
   const files = [
     ...new Set([
       ...Object.values(manifest).map((chunk) => chunk.file),
-      ...(await readdir(directory, { recursive: true })),
+      ...(await readdir(root, { recursive: true })),
       "executor-supervisor.js",
       "plugin-check-renderer.js",
     ]),
   ].filter((file) => file.endsWith(".js"));
   const chunks = await Promise.all(
     files.sort().map(async (file) => {
-      const bytes = await readFile(resolve(directory, file));
+      const bytes = await readFile(artifactPath(file));
       return {
         file,
         initial: initialFiles.has(file),

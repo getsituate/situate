@@ -5,6 +5,34 @@ import { compileTemplate } from "./compiler";
 import { loadHostModules } from "./module";
 
 describe("local plugin template compiler", () => {
+  it("compiles elements and selector templates through the public Vue API", async () => {
+    const { vue: hostVue } = await loadHostModules();
+    const template = document.createElement("template");
+    template.id = "plugin-compiler-fixture";
+    template.innerHTML = "<p>{{ message }}</p>";
+    document.body.append(template);
+    try {
+      for (const source of [template, "#plugin-compiler-fixture"]) {
+        const wrapper = mount(
+          hostVue.defineComponent({
+            setup: () => ({ message: "fixture" }),
+            render: hostVue.compile(source),
+          }),
+        );
+        try {
+          expect(wrapper.get("p").text()).toBe("fixture");
+        } finally {
+          wrapper.unmount();
+        }
+      }
+      expect(() => hostVue.compile("#[")).toThrow(
+        "plugins.invalidContributions",
+      );
+    } finally {
+      template.remove();
+    }
+  });
+
   it("renders dynamic components and slots using the shared runtime context", () => {
     const key = Symbol("context");
     const child = vue.defineComponent({

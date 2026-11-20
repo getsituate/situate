@@ -27,6 +27,7 @@ export function compileTemplate(
       onWarn: () => undefined,
       ...options,
     });
+    // Installed plugin UI already runs as trusted code; template compilation is not a sandbox.
     const render = new Function("Vue", code)(Vue) as RenderFunction & {
       _rc: boolean;
     };
