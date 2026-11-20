@@ -1,0 +1,28 @@
+[[adr-0023]]
+= ADR-0023: Open hosting recovery at production staging
+:lang: en
+
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+Status:: accepted
+Date:: 2026-11-20
+
+== Context
+
+The image rehearsal provisions run-scoped Hetzner resources and exercises a storage handoff with synthetic data before Terraform stages a production replacement.
+Opening the production recovery record before that rehearsal made a test capacity failure block subsequent deployments even after the test resources were gone.
+
+== Decision
+
+Keep the existing deployment check at the beginning of the job.
+Run the image rehearsal and verify its receipt before creating a new recovery record.
+Create the record before Terraform stages any production resources, so a lost response to the first apply still requires inspection.
+The remaining production recovery rules in <<adr-0020,ADR-0020>> are unchanged.
+
+A failed rehearsal stops its run without opening a production recovery record.
+It reports an unverified cleanup separately with the resource label; operators use that label to inspect only the rehearsal inventory.
+Later runs use distinct labels and do not resume or delete another run's resources.
+This avoids unnecessary production recovery, but unresolved test resources can still consume quota and need operator cleanup.
+See the link:{architecture-repository-root}/infrastructure/production/immutable/README.md#recover-an-interrupted-deployment[hosting runbook].

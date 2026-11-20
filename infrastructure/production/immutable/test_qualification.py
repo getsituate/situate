@@ -1,4 +1,6 @@
 import importlib.util
+import io
+from contextlib import redirect_stderr
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +12,26 @@ spec.loader.exec_module(rehearsal)
 
 
 class QualificationTest(unittest.TestCase):
+    def test_action_failure_reports_only_the_id_command_and_error_code(self):
+        cloud = rehearsal.Cloud('unused', 'sit-prod-42-1')
+        data = {'id': 42, 'status': 'error', 'command': 'create_server',
+                'error': {'code': 'resource_unavailable', 'message': 'private provider data'}}
+        with patch.object(cloud, 'call', return_value={'action': data}) as call:
+            with self.assertRaisesRegex(rehearsal.RehearsalError,
+                                        r'^Hetzner action 42 \(create_server\) failed: resource_unavailable\.$'):
+                cloud.wait_action({'id': 42})
+            call.assert_called_once_with('GET', 'actions/42')
+
+    def test_reporting_cleanup_failure_preserves_an_earlier_rehearsal_error(self):
+        cloud = rehearsal.Cloud('unused', 'sit-prod-42-1')
+        output = io.StringIO()
+        with patch.object(cloud, 'preflight'), patch.object(
+                cloud, 'cleanup', side_effect=rehearsal.RehearsalError('cleanup failed')), patch.object(
+                rehearsal, 'exercise', side_effect=rehearsal.RehearsalError('provisioning failed')):
+            with redirect_stderr(output), self.assertRaisesRegex(rehearsal.RehearsalError, 'provisioning failed'):
+                rehearsal.qualify(cloud, 'a' * 40)
+        self.assertIn('Rehearsal cleanup not verified for rehearsal=sit-prod-42-1: cleanup failed', output.getvalue())
+
     def test_production_cleanup_leaves_live_resources_and_the_qualified_image(self):
         scope = 'sit-prod-42-1'
         scoped = {'rehearsal': scope}
