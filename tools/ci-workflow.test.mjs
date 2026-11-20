@@ -19,6 +19,7 @@ const pipelineWorkflows = [
   "release-launch-trace",
   "verify-hosting",
   "deploy-hosting",
+  "sonarcloud",
 ];
 function job(workflow, id) {
   const body = workflow.match(
@@ -68,6 +69,10 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     ]);
     if (name === "publish-macos")
       allowed.add("./.github/workflows/slack-notify.yml");
+    if (name === "sonarcloud")
+      allowed.add(
+        "SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4",
+      );
     for (const match of workflow.matchAll(/uses: (\S+)/g))
       assert(allowed.has(match[1]), match[1]);
     for (const step of workflow.split(/\n {6}- /).slice(1))
