@@ -382,7 +382,10 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
         visiting.add(plugin.id);
         const platform =
           !plugin.manifest?.platforms ||
-          plugin.manifest.platforms.includes(options.platform ?? "macos");
+          plugin.manifest.platforms.some(
+            (allowed) =>
+              allowed === (result.platform ?? options.platform ?? "macos"),
+          );
         if (!platform)
           plugin.blockedBy = { reason: "platform", pluginId: plugin.id };
         const usable =

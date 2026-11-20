@@ -150,6 +150,37 @@ afterEach(() => {
 });
 
 describe("plugin UI runtime", () => {
+  it("does not load a macOS-only UI entry on Windows", async () => {
+    const portable = definition();
+    const restricted = definition("mac-only");
+    definitions = [
+      portable,
+      {
+        ...restricted,
+        source: {
+          ...restricted.source,
+          manifest: { ...restricted.source.manifest, platforms: ["macos"] },
+        },
+      },
+    ];
+    const native = mocks.invoke.getMockImplementation()!;
+    mocks.invoke.mockImplementation(async (command, args) => {
+      if (command === "plugin_runtime" && args.request.operation === "list")
+        return { ...(await native(command, args)), platform: "windows" };
+      return native(command, args);
+    });
+
+    const { runtime } = setup();
+    await runtime.ready;
+
+    expect(
+      runtime.state.plugins.find((plugin) => plugin.id === "mac-only"),
+    ).toMatchObject({
+      blockedBy: { reason: "platform", pluginId: "mac-only" },
+    });
+    expect(mocks.importModule).toHaveBeenCalledExactlyOnceWith("demo:ui");
+  });
+
   it("keeps healthy capabilities available and exposes native initialization failures", async () => {
     definitions = [definition("broken"), definition()];
     const native = mocks.invoke.getMockImplementation()!;

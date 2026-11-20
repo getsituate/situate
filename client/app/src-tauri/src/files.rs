@@ -1332,7 +1332,11 @@ pub(crate) fn agent_request(
         } else {
             shell
         };
-        let plugin_sources = cfg!(any(target_os = "macos", target_os = "ios")) && root.is_some();
+        let plugin_sources = cfg!(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "windows"
+        )) && root.is_some();
         #[cfg(feature = "native-smoke")]
         let plugin_sources = plugin_sources && !crate::agent_e2e::enabled();
         return Ok(

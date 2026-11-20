@@ -531,7 +531,12 @@ async fn request_inner(
     let label = context.window.clone();
     let scope = context.scope.clone();
     let conversation = context.conversation.clone();
-    if !cfg!(any(target_os = "macos", target_os = "ios", test)) {
+    if !cfg!(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "windows",
+        test
+    )) {
         return Err("native.plugins.unavailable".into());
     }
     let authorization = context.authorization.clone();

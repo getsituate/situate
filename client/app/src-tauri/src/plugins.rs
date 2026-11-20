@@ -70,7 +70,7 @@ pub async fn plugins_source(
     scope: String,
     request: Request,
 ) -> Result<Reply, String> {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
     {
         let label = window.label().to_owned();
         let authorization = crate::workspaces::authorization_session(&app, &label, &scope)?;
@@ -89,7 +89,7 @@ pub async fn plugins_source(
         .await
         .map_err(|_| "native.plugins.readFailed".to_owned())?
     }
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
     {
         let _ = (app, window, scope, request);
         Err("native.plugins.unavailable".into())

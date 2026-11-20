@@ -28,6 +28,7 @@ export interface InstalledPlugin {
   error: string | null;
 }
 export interface PluginList {
+  platform?: "macos" | "ios" | "windows";
   plugins: InstalledPlugin[];
   revision: string | null;
 }

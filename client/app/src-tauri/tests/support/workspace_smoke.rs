@@ -9,13 +9,21 @@ pub async fn smoke_parent(app: tauri::AppHandle) -> Result<Entry, String> {
         let mut inner = state.inner.lock().unwrap();
         #[cfg(desktop)]
         let location = {
-            let path = inner.path.parent().unwrap().join(format!(
-                "workspace-smoke-{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            ));
+            let name = if cfg!(windows)
+                && std::env::var("SITUATE_PLUGIN_CHECKS_PHASE").as_deref() == Ok("windows")
+            {
+                // The isolated profile is already unique; leave room for nested Git staging paths.
+                "w".into()
+            } else {
+                format!(
+                    "workspace-smoke-{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                )
+            };
+            let path = inner.path.parent().unwrap().join(name);
             fs::create_dir(&path).map_err(|e| e.to_string())?;
             situate_core::workspaces::location(&path)?
         };

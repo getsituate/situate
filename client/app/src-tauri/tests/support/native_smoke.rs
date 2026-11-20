@@ -489,6 +489,12 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                             include_str!("plugin-checks-smoke.js"),
                         ))
                         .expect("load native editor smoke test");
+                    #[cfg(target_os = "windows")]
+                    if std::env::var("SITUATE_PLUGIN_CHECKS_PHASE").as_deref() == Ok("windows") {
+                        webview
+                            .eval(include_str!("windows-plugin-smoke.js"))
+                            .expect("load Windows plugin smoke");
+                    }
                     webview
                         .eval(if webview.label() == "main" {
                             include_str!("workspace-smoke.js")
