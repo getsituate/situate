@@ -5,17 +5,11 @@ export function installInputModality(document: Document): () => void {
     root.dataset.inputModality = "pointer";
   }
   function keyboard(event: KeyboardEvent) {
-    if (event.isComposing) return;
-    switch (event.key) {
-      case "Shift":
-      case "Control":
-      case "Alt":
-      case "Meta":
-      case "CapsLock":
-        return;
-      default:
-        root.dataset.inputModality = "keyboard";
-    }
+    if (
+      !event.isComposing &&
+      !["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(event.key)
+    )
+      root.dataset.inputModality = "keyboard";
   }
   document.addEventListener("pointerdown", pointer, true);
   document.addEventListener("keydown", keyboard, true);
