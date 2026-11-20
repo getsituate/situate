@@ -75,11 +75,16 @@ test("Windows runs the full locked client workspace on the native MSVC target", 
     "--target-dir",
     join(temporary, "target"),
   ]);
-  const [[node, [cli, ...flags], cwd]] = windowsCommands(
+  const [frontend, [node, [cli, ...flags], cwd]] = windowsCommands(
     "client-windows-build",
     "1.98.1",
     temporary,
   );
+  assert.deepEqual(frontend, [
+    "volta",
+    ["run", "npm", "run", "build"],
+    join(cwd, ".."),
+  ]);
   assert.equal(node, process.execPath);
   assert.equal(cli, join(cwd, "../node_modules/@tauri-apps/cli/tauri.js"));
   assert.deepEqual(flags, [
@@ -87,6 +92,8 @@ test("Windows runs the full locked client workspace on the native MSVC target", 
     "--no-bundle",
     "--target",
     windowsTarget,
+    "--config",
+    '{"build":{"beforeBuildCommand":""}}',
     "--",
     "--locked",
   ]);
