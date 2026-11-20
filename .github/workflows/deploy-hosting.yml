@@ -64,11 +64,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+      - id: select
+        run: node tools/wait-for-hosting.mjs --select
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - if: steps.select.outputs.needed == 'true'
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         with:
           terraform_version: "1.12.2"
           terraform_wrapper: false
       - name: Replace the production host
+        if: steps.select.outputs.needed == 'true'
         run: node infrastructure/production/immutable/continuous-deploy.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -102,7 +102,10 @@ Instrumented native smoke builds cannot substitute for these exact artifacts.
 The update test must retain the embedded production HTTPS endpoint and TLS validation without advertising the unqualified candidate as the current public update.
 On immutable hosting, the existing TLS proxy serves the candidate through a separate loopback port, reached through a restricted SSH forward from the runner.
 The release account stages the candidate files without access to Docker or TLS keys; see <<adr-0022>>.
-Release creation waits for the hosting workflow for its exact `main` revision.
+Release creation requires a successful production deployment whose hosting inputs match the candidate's.
+App-only revisions can use the already verified generation without running Terraform.
+Before release work and before artifact qualification, macOS verifies the running image's provenance and private HTTPS response over authenticated SSH.
+An unresolved hosting operation or an undeployed hosting change blocks release creation; the artifact qualification itself is unchanged.
 Changing the embedded endpoint or manually replacing the app does not establish production updater qualification.
 
 After final qualification, complete a GitHub Release containing sealed packages, generated inputs and public qualification evidence; exclude keys, private journals and raw diagnostics.

@@ -1,0 +1,33 @@
+[[adr-0024]]
+= ADR-0024: Gate delivery on verified hosting
+
+Status:: accepted
+Date:: 2026-11-20
+Implementation:: Workflow and offline verification; live delivery remains to be verified.
+
+== Context
+
+Website and macOS delivery used the success of the hosting workflow for their own commit as evidence that hosting was ready.
+The workflow initialized Terraform even when the active host already matched the desired configuration.
+A read-only infrastructure failure could therefore block publication to a healthy host.
+
+== Decision
+
+Compare the Git tree of the desired Terraform topology and immutable runtime inputs with the most recent successful production operation's source.
+Equal inputs do not require Terraform setup or a host replacement.
+Using the last verified operation, rather than the preceding commit, keeps an undeployed hosting change visible after subsequent app or website merges.
+
+Website and macOS delivery require this same match but do not wait for a hosting workflow to finish for each commit.
+The website still publishes through the restricted receiver and verifies the public site and feeds.
+macOS checks baked image provenance and private HTTPS over verified SSH before proceeding to the existing artifact qualification and publication checks.
+This revises the delivery gates in <<adr-0021,ADR-0021>> and <<adr-0022,ADR-0022>>, not their transports.
+
+== Alternatives and consequences
+
+Checking only live HTTPS would avoid the deployment lookup but could accept a healthy predecessor lacking a required change.
+Keeping the per-commit workflow gate would catch that case, but would keep read-only infrastructure maintenance on the delivery path.
+
+The latest production record must be successful; an unresolved or inactive record cannot authorize delivery by falling back to an earlier success.
+Operator recovery remains mandatory after an interrupted production write, as defined by <<adr-0020,ADR-0020>> and <<adr-0023,ADR-0023>>.
+The record is evidence of the last completed GitHub-managed rollout, not a lease.
+The host's publication locks, volume fencing, and live checks still apply.

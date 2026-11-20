@@ -56,6 +56,9 @@
 |link:09-architecture-decisions/ADR-0023-open-hosting-recovery-at-production-staging.adoc[ADR-0023]
 |Open production recovery after the isolated image rehearsal and before Terraform staging.
 |Accepted
+|link:09-architecture-decisions/ADR-0024-gate-delivery-on-verified-hosting.adoc[ADR-0024]
+|Gate delivery on the verified serving generation, without running Terraform for unchanged hosting inputs.
+|Accepted; live workflow verification pending
 |===
 
 :architecture-repository-root: ../..
@@ -96,6 +99,8 @@ include::09-architecture-decisions/ADR-0021-publish-website-content-separately.a
 include::09-architecture-decisions/ADR-0022-serve-release-qualification-on-host-loopback.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0023-open-hosting-recovery-at-production-staging.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0024-gate-delivery-on-verified-hosting.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

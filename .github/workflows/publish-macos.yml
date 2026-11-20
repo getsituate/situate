@@ -29,6 +29,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      deployments: read
     env:
       PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_PUBLICATION_ENABLED }}
       SITUATE_RELEASE_CONFIG_SHA256: ${{ vars.SITUATE_RELEASE_CONFIG_SHA256 }}
@@ -47,6 +48,13 @@ jobs:
           PIPELINE_RELEASE_ID: ${{ inputs.release_id }}
           SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}
           GH_TOKEN: ${{ github.token }}
+      - run: node tools/wait-for-hosting.mjs --probe
+        if: steps.plan.outputs.selected == 'true'
+        env:
+          HOSTING_SOURCE_REVISION: ${{ github.workflow_sha }}
+          GH_TOKEN: ${{ github.token }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
       - id: promote
         run: node tools/actions-adapter.mjs publish-run --workflow publish
         if: steps.plan.outputs.selected == 'true'

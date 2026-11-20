@@ -300,6 +300,7 @@ test("initialization binds a pre-existing Local HCP workspace without migration 
   await main(["init"], f);
   assert.deepEqual(f.calls[0].args, [
     "init",
+    "-no-color",
     "-input=false",
     "-lockfile=readonly",
   ]);
@@ -318,6 +319,31 @@ test("initialization binds a pre-existing Local HCP workspace without migration 
     assert.equal(env[key], undefined, key);
   assert.doesNotMatch(readFileSync(f.bindingPath, "utf8"), /synthetic-hcp/);
   await main(["init"], f);
+});
+
+test("initialization timeout reports only the last known phase", async (t) => {
+  const f = fixture(t);
+  rmSync(f.metadataPath);
+  rmSync(f.bindingPath);
+  await assert.rejects(
+    main(["init"], {
+      ...f,
+      execute: (_command, _args, options) => {
+        assert.equal(options.timeout, 180_000);
+        return {
+          error: Object.assign(new Error("private failure"), {
+            code: "ETIMEDOUT",
+          }),
+          stdout:
+            "Initializing HCP Terraform...\nInitializing provider plugins...\nprivate output",
+          stderr: "private stderr",
+          status: null,
+        };
+      },
+    }),
+    { message: "Terraform init timed out during provider initialization." },
+  );
+  assert.equal(existsSync(f.bindingPath), false);
 });
 
 test("initialization refuses existing local state, old backends and unbound metadata", async (t) => {
