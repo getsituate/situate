@@ -379,6 +379,26 @@ test("range validation rejects reused identities, missing locales, symlinks and 
   );
 });
 
+test("authoring reads bounded regular input before creating output", (t) => {
+  const repo = repository(t);
+  const input = path.join(repo.root, "localized input.json");
+  const alias = path.join(repo.root, "alias.json");
+  fs.writeFileSync(input, JSON.stringify(draft().locales));
+  fs.symlinkSync(input, alias);
+  const author = (file) =>
+    runFragmentCli(["author", "--id", "localized", "--input", file], repo.root);
+  assert.throws(() => author(alias), { code: "ELOOP" });
+  assert.throws(() => author(repo.root), /must be a regular file/);
+  fs.truncateSync(input, 4 * 1024 * 1024 + 1);
+  assert.throws(() => author(input), /at most 4 MiB/);
+  assert.equal(
+    fs.existsSync(path.join(repo.root, "changes/localized.json")),
+    false,
+  );
+  fs.writeFileSync(input, JSON.stringify(draft().locales));
+  assert.deepEqual(author(input), { id: "localized" });
+});
+
 test("CLI authors versionless declarations and validates them without approval", (t) => {
   const repo = repository(t);
   const authored = runFragmentCli(

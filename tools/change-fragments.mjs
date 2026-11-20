@@ -251,6 +251,32 @@ export function collectFragments(root, options) {
   });
 }
 
+function readAuthorInput(file) {
+  const fd = fs.openSync(
+    file,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+  );
+  try {
+    const { size, mode } = fs.fstatSync(fd);
+    assert(
+      (mode & fs.constants.S_IFMT) === fs.constants.S_IFREG &&
+        size <= 4 * 1024 * 1024,
+      "Localized input must be a regular file of at most 4 MiB",
+    );
+    const bytes = Buffer.alloc(size + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = fs.readSync(fd, bytes, length, bytes.length - length, null);
+      if (!count) break;
+      length += count;
+    }
+    assert(length === size, "Localized input changed while reading");
+    return JSON.parse(bytes.toString("utf8", 0, length));
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export function runFragmentCli(
   args = process.argv.slice(2),
   root = process.cwd(),
@@ -295,7 +321,7 @@ export function runFragmentCli(
     schemaVersion: 2,
     id,
     locales: values.input
-      ? JSON.parse(fs.readFileSync(values.input, "utf8"))
+      ? readAuthorInput(values.input)
       : Object.fromEntries(
           locales.map((locale) => [
             locale,
@@ -305,12 +331,11 @@ export function runFragmentCli(
     ...(values.reason ? { emptyReason: values.reason } : {}),
   };
   validateFragment(fragment, { locales });
-  fs.mkdirSync(path.join(root, "changes"), { recursive: true });
-  fs.writeFileSync(
-    safePath(root, fragmentPath(id)),
-    `${JSON.stringify(fragment, null, 2)}\n`,
-    { flag: "wx" },
-  );
+  const output = safePath(root, fragmentPath(id));
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, `${JSON.stringify(fragment, null, 2)}\n`, {
+    flag: "wx",
+  });
   return { id };
 }
 
