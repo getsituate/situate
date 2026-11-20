@@ -4,7 +4,41 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { loadSmokeArtifact, reserveGuest } from "./windows-vm-smoke.mjs";
+import {
+  guestAcknowledgment,
+  loadSmokeArtifact,
+  reserveGuest,
+  supportsGuestExec,
+} from "./windows-vm-smoke.mjs";
+
+test("guest execution requires the UTM release with reliable exit codes", () => {
+  for (const version of ["5.0.8", "4.9.10", ""]) {
+    assert.equal(supportsGuestExec(version), false, version);
+  }
+  for (const version of ["5.0.9\n", "5.0.10", "5.1.0", "6.0.0"]) {
+    assert.equal(supportsGuestExec(version), true, version);
+  }
+});
+
+test("only the current guest response acknowledges an operation", () => {
+  assert.throws(
+    () => guestAcknowledgment("", "run"),
+    /No guest acknowledgment/,
+  );
+  assert.throws(
+    () => guestAcknowledgment('{"nonce":"stale","clean":true}', "run"),
+    /Unexpected guest acknowledgment/,
+  );
+  assert.throws(
+    () =>
+      guestAcknowledgment('{"nonce":"run","error":"cleanup failed"}', "run"),
+    /cleanup failed/,
+  );
+  assert.deepEqual(
+    guestAcknowledgment('{"nonce":"run","clean":true}\n', "run"),
+    { nonce: "run", clean: true },
+  );
+});
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), "situate-windows-vm-"));

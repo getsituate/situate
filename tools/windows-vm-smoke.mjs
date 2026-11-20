@@ -17,6 +17,21 @@ const shell = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
 const quote = (s) => `'${s.replaceAll("'", "''")}'`;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
+export function supportsGuestExec(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return false;
+  const [, major, minor, patch] = match.map(Number);
+  return major > 5 || (major === 5 && (minor > 0 || patch >= 9));
+}
+
+export function guestAcknowledgment(stdout, nonce) {
+  assert(stdout.trim(), "No guest acknowledgment");
+  const data = JSON.parse(stdout);
+  assert.equal(data?.nonce, nonce, "Unexpected guest acknowledgment");
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 export async function loadSmokeArtifact(directory) {
   const manifest = JSON.parse(
     await readFile(join(directory, "manifest.json"), "utf8"),
@@ -66,17 +81,18 @@ async function run([vm, bind, user, mode, input, ...extra], signal) {
       user &&
       !/[\0\r\n]/.test(user) &&
       !extra.length,
-    "Usage: node tools/windows-vm-smoke.mjs VM_UUID VM_BRIDGE_IP WINDOWS_TEST_USER (--artifact DIR | --fixture SECONDS|timeout)",
+    "Usage: node tools/windows-vm-smoke.mjs VM_UUID VM_BRIDGE_IP WINDOWS_TEST_USER (--artifact DIR | --workspace DIR | --fixture SECONDS|timeout)",
   );
   const fixture = mode === "--fixture";
+  const workspace = mode === "--workspace";
   assert(
     fixture
       ? /^(0|[1-9]|[1-3][0-9]|40|timeout)$/.test(input ?? "")
-      : mode === "--artifact" && input,
+      : (mode === "--artifact" || workspace) && input,
     "Choose a smoke artifact or a fixture (0–40 seconds or timeout)",
   );
   const timeoutFixture = fixture && input === "timeout";
-  const jobSeconds = timeoutFixture ? 12 : 65;
+  const jobSeconds = timeoutFixture ? 12 : workspace ? 160 : 65;
   const fixtureSeconds = timeoutFixture ? "60" : input;
   const artifact = fixture ? null : await loadSmokeArtifact(input);
   const smoke = await readFile(
@@ -102,18 +118,19 @@ async function run([vm, bind, user, mode, input, ...extra], signal) {
   let server;
   async function control(body) {
     const nonce = randomUUID();
-    const response = `C:\\Windows\\Temp\\Situate-Control-${nonce}.json`;
     const script = String.raw`
 $ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $d=${quote(directory)}
 $t=${quote(name)}
 $r=@{nonce=${quote(nonce)}}
 try { ${body} } catch { $r.error=$_.Exception.Message }
-[IO.File]::WriteAllText('${response}.tmp',($r | ConvertTo-Json -Compress))
-[IO.File]::Move('${response}.tmp','${response}')
+[Console]::WriteLine(($r | ConvertTo-Json -Compress))
 `;
-    const exec = (source) =>
-      utm(
+    const { stdout } = await execute(
+      "utmctl",
+      [
         "exec",
         vm,
         "--cmd",
@@ -121,24 +138,19 @@ try { ${body} } catch { $r.error=$_.Exception.Message }
         "-NoProfile",
         "-NonInteractive",
         "-EncodedCommand",
-        Buffer.from(source, "utf16le").toString("base64"),
-      );
-    await exec(script).catch(() => {}); // A guest result, not the Apple event, acknowledges an operation.
-    for (let i = 0; i < 18; i++) {
-      const { stdout } = await utm("file", "pull", vm, response);
-      if (stdout) {
-        const data = JSON.parse(stdout);
-        assert.equal(data.nonce, nonce);
-        await exec(`[IO.File]::Delete('${response}')`).catch(() => {});
-        if (data.error) throw new Error(data.error);
-        return data;
-      }
-      await delay(300);
-    }
-    throw new Error(`No guest acknowledgment for ${name}`);
+        Buffer.from(script, "utf16le").toString("base64"),
+      ],
+      { timeout: 35_000, maxBuffer: 64 * 1024 },
+    );
+    return guestAcknowledgment(stdout, nonce);
   }
   try {
     signal.throwIfAborted();
+    const { stdout: version } = await utm("version");
+    assert(
+      supportsGuestExec(version),
+      "UTM 5.0.9 or newer is required for reliable guest exit status",
+    );
     const addresses = (await utm("ip-address", vm)).stdout
       .trim()
       .split(/\s+/)
@@ -180,6 +192,11 @@ New-Item -ItemType Directory -Path (Join-Path $d 'state') | Out-Null
     ]);
     if (fixture) files.set("fixture.txt", Buffer.from(fixtureSeconds));
     else files.set("situate-client.exe", artifact.bytes);
+    if (workspace)
+      files.set(
+        "workspace.ps1",
+        await readFile(new URL("./windows-vm-workspace.ps1", import.meta.url)),
+      );
     const secret = randomUUID();
     server = createServer((req, res) => {
       const prefix = `/${secret}/`;
@@ -297,7 +314,9 @@ ${RemoveRun}
     return 130;
   }
   if (status === 0 && artifact)
-    console.log(`Visible workspace chooser (${artifact.manifest.source})`);
+    console.log(
+      `${workspace ? "Workspace file saved and reopened" : "Visible workspace chooser"} (${artifact.manifest.source})`,
+    );
   return status === 0 || status === 124 ? status : 1;
 }
 

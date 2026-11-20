@@ -19,6 +19,20 @@ using System.Text;
 public static class SmokeDesktop {
     [DllImport("kernel32.dll")]
     public static extern uint WTSGetActiveConsoleSessionId();
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, string text, uint flags, uint milliseconds, out IntPtr result);
+    [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern IntPtr ReadControlText(IntPtr window, uint message, IntPtr capacity, StringBuilder text, uint flags, uint milliseconds, out IntPtr result);
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowEnabled(IntPtr window);
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", SetLastError=true)]
+    public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")]
+    public static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
     [DllImport("user32.dll", SetLastError=true)]
     public static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
     [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
@@ -85,6 +99,8 @@ while ($clock.Elapsed.TotalSeconds -lt 45) {
                 }
                 if ($create -and $open) {
                     Assert-Desktop
+                    $journey = Join-Path $PSScriptRoot 'workspace.ps1'
+                    if (Test-Path -LiteralPath $journey) { & $journey }
                     exit 0
                 }
             }
