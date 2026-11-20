@@ -14,7 +14,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
 import {
@@ -222,6 +222,52 @@ test("preview serves the landing page at the root and only public assets", async
     (await fetch(`${origin}/design/brand/bend/svg/carry-welcome.svg`)).status,
     200,
   );
+});
+
+test("source preview keeps templates, catalogs and assets in their serving roots", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-source-preview-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = join(directory, "website");
+  await mkdir(join(source, "legal"), { recursive: true });
+  await mkdir(join(source, "media"));
+  for (const file of ["site.mjs", "components.mjs", "legal/render.mjs"])
+    await copyFile(new URL(`./${file}`, import.meta.url), join(source, file));
+  await writeFile(join(source, "index.html"), "<h1>{{title}}</h1>");
+  await writeFile(join(source, "messages.en.json"), '{"title":"Preview"}');
+  await writeFile(join(directory, "product.html"), "<h1>Sample</h1>");
+  await symlink(join(directory, "product.html"), join(source, "product.html"));
+  await writeFile(join(source, "sample.svg"), "<svg/>");
+  await symlink(
+    join(source, "sample.svg"),
+    join(source, "media", "sample.svg"),
+  );
+
+  const { createPreviewServer } = await import(
+    pathToFileURL(join(source, "site.mjs")).href
+  );
+  const server = createPreviewServer();
+  server.listen(0, "127.0.0.1");
+  t.after(() => new Promise((done) => server.close(done)));
+  await once(server, "listening");
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  assert.equal(await (await fetch(origin)).text(), "<h1>Preview</h1>");
+  for (const file of ["/product.html", "/media/sample.svg"])
+    assert.equal((await fetch(origin + file)).status, 404, file);
+
+  const outsideMedia = join(directory, "media");
+  await mkdir(outsideMedia);
+  await writeFile(join(outsideMedia, "sample.svg"), "<svg/>");
+  await rm(join(source, "media"), { recursive: true });
+  await symlink(outsideMedia, join(source, "media"), "dir");
+  assert.equal((await fetch(origin + "/media/sample.svg")).status, 404);
+
+  await writeFile(join(directory, "messages.en.json"), '{"title":"Sample"}');
+  await rm(join(source, "messages.en.json"));
+  await symlink(
+    join(directory, "messages.en.json"),
+    join(source, "messages.en.json"),
+  );
+  assert.equal((await fetch(origin)).status, 404);
 });
 
 test("all pages share navigation and footer in preview and static output", async (t) => {
@@ -1026,6 +1072,8 @@ test("built preview serves the generated files and excludes sources and escaping
   await build(output);
   await writeFile(join(directory, "outside.html"), "private");
   await symlink(join(directory, "outside.html"), join(output, "escape.html"));
+  await symlink("product.html", join(output, "tour.html"));
+  await writeFile(join(output, "draft notes.css"), "/* sample */");
   await writeFile(join(output, ".env"), "not public");
   await writeFile(join(output, "messages.en.json"), "{}");
   const server = createBuildServer(output);
@@ -1041,6 +1089,7 @@ test("built preview serves the generated files and excludes sources and escaping
   for (const file of [
     "index.html",
     "product.html",
+    "tour.html",
     "product.css",
     "legal-notice.html",
     "privacy.html",
@@ -1069,6 +1118,7 @@ test("built preview serves the generated files and excludes sources and escaping
     "/site.mjs",
     "/legal/review.md",
     "/escape.html",
+    "/draft%20notes.css",
     "/%2e%2e%2foutside.html",
     "/%2e%2e%5coutside.html",
     "/media/",

@@ -118,15 +118,18 @@ async function html(path) {
   return render(template, JSON.parse(catalog), { pathname });
 }
 
-function location(pathname) {
-  if (pathname === "/" || pathname === "/product.html")
-    return {
-      path: resolve(website, pathname === "/" ? "index.html" : "product.html"),
-      base: website,
-    };
-  const parts = pathname.split("/").filter(Boolean);
-  if (parts.some((part) => part.startsWith(".") || part.includes("\\")))
-    return null;
+const contains = (parent, child) => {
+  const path = relative(parent, child);
+  return !isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`);
+};
+
+const publicSegment = (part) => /^[a-z\d_-][a-z\d_.-]*$/i.test(part);
+
+function location(pathname, parts) {
+  if (pathname === "/")
+    return { file: "index.html", base: website, page: true };
+  if (pathname === "/product.html")
+    return { file: "product.html", base: website, page: true };
   if (
     ["/system", "/system/", "/system/index.html", "/index.html"].includes(
       pathname,
@@ -148,26 +151,43 @@ function location(pathname) {
       "/legal/styles.css",
     ].includes(pathname)
   )
-    return { path: resolve(website, `.${pathname}`), base: website };
+    return { file: parts.join("/"), base: website };
   if (
     pathname === "/media/provider-icons-license.txt" ||
     (parts[0] === "media" &&
       [".svg", ".png", ".jpg", ".webp"].includes(extname(pathname)))
   )
     return {
-      path: resolve(website, `.${pathname}`),
+      file: parts.slice(1).join("/"),
       base: resolve(website, "media"),
+      root: website,
     };
   if (
     pathname === "/design/brand/tokens.css" ||
     /^\/design\/brand\/(assets|bend)\/[\w/-]+\.(svg|js)$/.test(pathname)
   ) {
     return {
-      path: resolve(repository, `.${pathname}`),
+      file: parts.slice(2).join("/"),
       base: resolve(repository, "design/brand"),
+      root: repository,
     };
   }
   return null;
+}
+
+async function readPublicFile(base, file, root = base) {
+  const directory = await realpath(base);
+  if (root !== base && !contains(await realpath(root), directory)) return null;
+  const path = resolve(directory, file);
+  if (!contains(directory, path)) return null;
+  const actual = await realpath(path);
+  if (
+    !contains(directory, actual) ||
+    !relative(directory, actual).split(sep).every(publicSegment) ||
+    extname(actual) !== extname(file)
+  )
+    return null;
+  return readFile(actual);
 }
 
 export function createPreviewServer({
@@ -210,7 +230,10 @@ export function createPreviewServer({
         response.end(request.method === "HEAD" ? undefined : content);
         return;
       }
-      const target = location(pathname);
+      const parts = pathname.split("/").filter(Boolean);
+      const target = parts.every(publicSegment)
+        ? location(pathname, parts)
+        : null;
       if (target?.redirect) {
         response.writeHead(308, { Location: target.redirect }).end();
         return;
@@ -219,15 +242,23 @@ export function createPreviewServer({
         response.writeHead(404).end();
         return;
       }
-      const actual = await realpath(target.path);
-      const within = relative(await realpath(target.base), actual);
-      if (within.startsWith(`..${sep}`) || within === "..") {
+      const bytes = await readPublicFile(target.base, target.file, target.root);
+      if (!bytes) {
         response.writeHead(404).end();
         return;
       }
-      const extension = extname(actual);
-      const content =
-        extension === ".html" ? await html(actual) : await readFile(actual);
+      const extension = extname(target.file);
+      let content = bytes;
+      if (target.page) {
+        const catalog = await readPublicFile(website, "messages.en.json");
+        if (!catalog) {
+          response.writeHead(404).end();
+          return;
+        }
+        content = render(bytes.toString("utf8"), JSON.parse(catalog), {
+          pathname,
+        });
+      }
       response.writeHead(200, {
         "Content-Type": mime[extension] || "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
@@ -238,7 +269,11 @@ export function createPreviewServer({
     } catch (error) {
       response
         .writeHead(
-          error.code === "ENOENT" ? 404 : error instanceof URIError ? 400 : 500,
+          error.code === "ENOENT" || error.code === "EISDIR"
+            ? 404
+            : error instanceof URIError
+              ? 400
+              : 500,
         )
         .end();
     }
@@ -260,7 +295,7 @@ export function createBuildServer(directory) {
       const file = pathname === "/" ? "index.html" : parts.join("/");
       const extension = extname(file);
       if (
-        parts.some((part) => part.startsWith(".") || part.includes("\\")) ||
+        !parts.every(publicSegment) ||
         (!mime[extension] &&
           ![
             "media/provider-icons-license.txt",
@@ -270,17 +305,11 @@ export function createBuildServer(directory) {
         response.writeHead(404).end();
         return;
       }
-      const actual = await realpath(resolve(root, file));
-      const within = relative(await realpath(root), actual);
-      if (
-        isAbsolute(within) ||
-        within === ".." ||
-        within.startsWith(`..${sep}`)
-      ) {
+      const content = await readPublicFile(root, file);
+      if (!content) {
         response.writeHead(404).end();
         return;
       }
-      const content = await readFile(actual);
       response.writeHead(200, {
         "Content-Type": mime[extension] || "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
@@ -313,10 +342,6 @@ export async function build(
       : analyticsToken,
   );
   destination = resolve(destination);
-  const contains = (parent, child) => {
-    const path = relative(parent, child);
-    return !isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`);
-  };
   if (
     contains(destination, website) ||
     (contains(website, destination) && destination !== resolve(website, "dist"))

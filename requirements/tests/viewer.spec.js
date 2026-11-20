@@ -98,7 +98,11 @@ test("milestone scope, unplanned criteria and shareable routes", async ({
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Not planned",
   );
-  await page.goto("/#milestones?name=missing");
+  const unknownName = "Planning <em>draft</em> & review";
+  await page.goto(`/#milestones?name=${encodeURIComponent(unknownName)}`);
+  const heading = page.getByRole("heading", { level: 1 });
+  await expect(heading).toHaveText(unknownName);
+  await expect(heading.locator("*")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "Milestone not found" }),
   ).toBeVisible();
