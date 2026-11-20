@@ -20,36 +20,39 @@ def identity(info):
 
 
 def leaf(name):
-    if not name or name in ('.', '..') or '/' in name:
+    if not isinstance(name, str) or not name or name in ('.', '..') or '/' in name or '\0' in name:
         raise ValueError('Expected a single file name')
     return name
 
 
-def install(request, parent, review):
+def install(request, parent, staging, review):
     with ExitStack() as stack:
         created = []
 
-        def open_directory(name, parent, expected=None):
+        def open_directory(name, parent):
             fd = os.open(name, DIRECTORY, dir_fd=parent)
             stack.callback(os.close, fd)
-            if expected is not None and identity(os.fstat(fd)) != expected:
-                raise ValueError('Export directory changed while rendering')
             return fd
 
+        staged = os.fstat(staging)
+        if not stat.S_ISDIR(staged.st_mode) or staged.st_uid != os.getuid() or staged.st_mode & 0o077:
+            raise ValueError('Expected a private staging directory')
         staging_name = leaf(request['staging'])
-        staging = open_directory(staging_name, parent, request['stagingIdentity'])
+
+        def verify_staging():
+            if identity(os.stat(staging_name, dir_fd=parent, follow_symlinks=False)) != identity(staged):
+                raise ValueError('Export directory changed while rendering')
+
+        verify_staging()
         try:
             if request['proofParts'] is not None:
                 target = review
                 for name in request['proofParts']:
                     name = leaf(name)
-                    try:
-                        os.mkdir(name, dir_fd=target)
-                    except FileExistsError:
-                        pass
-                    else:
-                        created.append((os.rmdir, target, name, identity(os.stat(name, dir_fd=target, follow_symlinks=False))))
-                    target = open_directory(name, target)
+                    os.mkdir(name, dir_fd=target)
+                    child = open_directory(name, target)
+                    created.append((os.rmdir, target, name, identity(os.fstat(child))))
+                    target = child
                 source = open_directory('.proofs', staging)
                 for name in sorted(os.listdir(source)):
                     src = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=source)
@@ -62,8 +65,7 @@ def install(request, parent, review):
                             shutil.copyfileobj(reader, writer)
                     os.unlink(name, dir_fd=source)
                 os.rmdir('.proofs', dir_fd=staging)
-            if identity(os.stat(staging_name, dir_fd=parent, follow_symlinks=False)) != request['stagingIdentity']:
-                raise ValueError('Export directory changed while rendering')
+            verify_staging()
             rename_exclusive(parent, staging_name, leaf(request['output']))
         except Exception as error:
             cleanup_failed = False
@@ -83,7 +85,7 @@ def install(request, parent, review):
 if __name__ == '__main__':
     try:
         # Only the launching exporter selects destination directories.
-        install(json.load(sys.stdin), 3, 4)
+        install(json.load(sys.stdin), 3, 4, 5)
     except OSError as error:
         print(json.dumps({'code': errno.errorcode.get(error.errno), 'message': error.strerror}))
     except ValueError as error:

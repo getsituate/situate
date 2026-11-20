@@ -484,7 +484,9 @@ export async function exportPack({ date, output, proofs }) {
     browser = undefined;
     const destination = await openExportDirectory(parent, parentIdentity);
     let review;
+    let rendered;
     try {
+      rendered = await openExportDirectory(staging, stagingIdentity);
       if (proofTarget)
         review = await openExportDirectory(
           proofTarget.anchor,
@@ -494,13 +496,19 @@ export async function exportPack({ date, output, proofs }) {
         env: {},
         input: JSON.stringify({
           staging: basename(staging),
-          stagingIdentity: directoryIdentity(stagingIdentity),
           output: basename(output),
           proofParts: proofTarget
             ? relative(proofTarget.anchor, proofs).split(sep).filter(Boolean)
             : null,
         }),
-        stdio: ["pipe", "pipe", "pipe", destination.fd, review?.fd ?? "ignore"],
+        stdio: [
+          "pipe",
+          "pipe",
+          "pipe",
+          destination.fd,
+          rendered.fd,
+          review?.fd ?? "ignore",
+        ],
         encoding: "utf8",
       });
       if (result) {
@@ -508,7 +516,11 @@ export async function exportPack({ date, output, proofs }) {
         throw Object.assign(new Error(message), { code });
       }
     } finally {
-      await Promise.all([review?.close(), destination.close()]);
+      await Promise.all([
+        review?.close(),
+        rendered?.close(),
+        destination.close(),
+      ]);
     }
   } finally {
     try {

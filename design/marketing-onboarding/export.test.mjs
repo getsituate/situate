@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
-  lstat,
   mkdir,
   mkdtemp,
   open,
@@ -221,14 +220,11 @@ test("installation leaves a replacement staging directory untouched", async (t) 
   t.after(() => rm(root, { recursive: true, force: true }));
   const parent = join(root, "destination");
   const staging = join(parent, "staging");
-  await mkdir(staging, { recursive: true });
-  const identity = async (path) => {
-    const { dev, ino } = await lstat(path, { bigint: true });
-    return `${dev}:${ino}`;
-  };
+  await mkdir(staging, { recursive: true, mode: 0o700 });
+  const rendered = await open(staging, "r");
+  t.after(() => rendered.close());
   const request = {
     staging: "staging",
-    stagingIdentity: await identity(staging),
     output: "pack",
     proofParts: null,
   };
@@ -239,7 +235,7 @@ test("installation leaves a replacement staging directory untouched", async (t) 
   try {
     const result = execFileSync("/usr/bin/python3", ["-IB", script], {
       input: JSON.stringify(request),
-      stdio: ["pipe", "pipe", "pipe", directory.fd],
+      stdio: ["pipe", "pipe", "pipe", directory.fd, rendered.fd],
       encoding: "utf8",
     });
     assert.match(JSON.parse(result).message, /directory changed/);
