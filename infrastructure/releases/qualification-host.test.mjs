@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -110,7 +111,6 @@ request=json.loads(sys.argv[4])
 `;
 function harness(t) {
   const root = temporary(t);
-  mkdirSync(join(root, "history"));
   writeFileSync(join(root, "hosts"), "127.0.0.1 localhost\n::1 localhost\n");
   const payload = join(root, "payload");
   mkdirSync(join(payload, "releases/current"), { recursive: true });
@@ -524,6 +524,30 @@ test("runner reserves hostname/alias exclusively and restores exact original hos
       ),
     ),
   );
+});
+
+test("runner refuses unsafe history storage and preserves legacy retained evidence", (t) => {
+  const h = harness(t);
+  const history = join(h.root, "history");
+  const legacy = join(
+    h.root,
+    "situate-qualification-route-" + sha(routeRequest.operationNonce),
+  );
+  const before = readFileSync(join(h.root, "hosts"));
+  mkdirSync(legacy, { mode: 0o700 });
+  writeFileSync(join(legacy, "state.json"), "retained snapshot");
+  assert.match(h.invoke("runner-prepare", routeRequest).stderr, /already used/);
+  assert.equal(
+    readFileSync(join(legacy, "state.json"), "utf8"),
+    "retained snapshot",
+  );
+  chmodSync(history, 0o755);
+  assert.match(
+    h.invoke("runner-prepare", routeRequest).stderr,
+    /Unsafe runner history directory/,
+  );
+  assert.deepEqual(readFileSync(join(h.root, "hosts")), before);
+  assert(!existsSync(join(h.root, "runner-lock")));
 });
 
 test("runner retains its reservation while an SSH control socket remains", (t) => {
