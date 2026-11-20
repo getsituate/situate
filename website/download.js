@@ -6,7 +6,8 @@
     if (platform === "MacIntel" && maxTouchPoints > 1) return "ios";
     if (/Android/i.test(userAgent)) return "android";
     if (/CrOS/i.test(userAgent)) return null;
-    const system = navigator.userAgentData?.platform || platform || userAgent;
+    const reportedPlatform = navigator.userAgentData?.platform;
+    const system = reportedPlatform || platform || userAgent;
     if (/Mac/i.test(system)) return "macos";
     if (/Win/i.test(system)) return "windows";
     if (/Linux/i.test(system)) return "linux";

@@ -7,13 +7,13 @@ pub const fn application_version() -> &'static str {
     APPLICATION_VERSION
 }
 
-const fn resolve(release: Option<&'static str>, source: &'static str) -> &'static str {
+const fn resolve(release: Option<&'static str>, fallback: &'static str) -> &'static str {
     match release {
         Some(version) => {
             assert!(valid_release(version), "Invalid SITUATE_RELEASE_VERSION");
             version
         }
-        None => source,
+        None => fallback,
     }
 }
 

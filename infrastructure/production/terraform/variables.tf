@@ -1,5 +1,5 @@
 variable "ssh_public_key" {
-  description = "Public key of the existing production SSH key. Never supply a private key."
+  description = "Existing production SSH public key. Never supply a private key."
   type        = string
 }
 
