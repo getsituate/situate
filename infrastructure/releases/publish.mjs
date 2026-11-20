@@ -1,13 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
+  constants,
   cpSync,
   existsSync,
+  fstatSync,
   fsyncSync,
   lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   readdirSync,
   realpathSync,
   renameSync,
@@ -44,10 +47,39 @@ const filename = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const environment = () => appleEnvironment(process.env, client);
 
+function readMetadata(path) {
+  let fd;
+  try {
+    fd = openSync(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+  } catch {
+    throw new Error("Cannot open release metadata.");
+  }
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1)
+      throw new Error("Release metadata must be a single-link regular file.");
+    if (stat.size > 1024 * 1024)
+      throw new Error("Release metadata exceeds 1 MiB.");
+    const bytes = Buffer.alloc(stat.size + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length !== stat.size)
+      throw new Error("Release metadata size changed while reading.");
+    return bytes.subarray(0, length);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function json(path) {
-  if (lstatSync(path).size > 1024 * 1024)
-    throw new Error("Release metadata exceeds 1 MiB.");
-  return JSON.parse(readFileSync(path, "utf8"));
+  return JSON.parse(readMetadata(path));
 }
 
 function file(directory, name, expected) {
@@ -261,13 +293,14 @@ export function verifyPublicationInputs(
       "Publication requires exact GitHub Release, immutable inputs and qualification.",
     );
   if (!manifest.releaseInputs) return {};
+  const receiptBytes = readMetadata(resolve(releaseReceipt));
   return {
     releaseIdentity: verifyDownloadReceipt(
       directory,
       manifest,
-      json(resolve(releaseReceipt)),
+      JSON.parse(receiptBytes),
     ),
-    releaseReceiptSha256: hash(readFileSync(resolve(releaseReceipt))),
+    releaseReceiptSha256: hash(receiptBytes),
   };
 }
 
@@ -444,10 +477,7 @@ export function assertReviewedRevision(
 async function preflight(directory, revision, config) {
   const env = environment();
   assertReviewedRevision(revision);
-  const manifestPath = join(directory, "manifest.json");
-  if (lstatSync(manifestPath).size > 1024 * 1024)
-    throw new Error("Release metadata exceeds 1 MiB.");
-  const manifestBytes = readFileSync(manifestPath);
+  const manifestBytes = readMetadata(join(directory, "manifest.json"));
   const manifest = JSON.parse(manifestBytes);
   const settings = loadAppleSettings(client);
   const identifier = json(
@@ -459,6 +489,7 @@ async function preflight(directory, revision, config) {
     teamId: settings.teamId,
     publicKey: config.SITUATE_UPDATER_PUBLIC_KEY,
   });
+  let qualificationSha256;
   if (manifest.releaseInputs) {
     const { verifyReleaseInputs } =
       await import("../../tools/release-inputs.mjs");
@@ -476,20 +507,18 @@ async function preflight(directory, revision, config) {
       );
     const { verifyQualificationReceipt } =
       await import("../../tools/release-qualification.mjs");
-    verifyQualificationReceipt(
-      directory,
-      manifest,
-      json(join(directory, "release-qualification.json")),
+    const receiptBytes = readMetadata(
+      join(directory, "release-qualification.json"),
     );
+    verifyQualificationReceipt(directory, manifest, JSON.parse(receiptBytes));
+    qualificationSha256 = hash(receiptBytes);
   }
   await verifyDirectPayloads(directory, artifact, { env });
   return {
     manifest,
     artifact,
     manifestSha256: hash(manifestBytes),
-    qualificationSha256: manifest.releaseInputs
-      ? hash(readFileSync(join(directory, "release-qualification.json")))
-      : undefined,
+    qualificationSha256,
   };
 }
 
@@ -701,7 +730,7 @@ export async function main(args = process.argv.slice(2)) {
       manifestSha256,
       qualificationSha256,
     );
-    console.log(`Staged ${manifest.version}: ${destination}`);
+    console.log(`Staged direct release ${manifest.version}.`);
     return;
   }
   if (values.confirm !== `${config.WEBSITE_DEPLOY_HOST}:${manifest.version}`)

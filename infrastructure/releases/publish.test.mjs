@@ -1278,7 +1278,7 @@ test("immutable input and download receipts bind public files without operationa
     receipt.identity,
   );
   const releaseReceipt = join(directory, "github-release-receipt.json");
-  const receiptBytes = JSON.stringify(receipt);
+  const receiptBytes = `${JSON.stringify(receipt, null, 2)}\n`;
   writeFileSync(releaseReceipt, receiptBytes);
   for (const action of ["publish", "reconcile"])
     assert.deepEqual(
@@ -1332,6 +1332,33 @@ test("immutable input and download receipts bind public files without operationa
       }),
     /bytes or size/,
   );
+});
+
+test("publication receipt must be a bounded single-link regular file", (t) => {
+  const directory = temporary(t);
+  const receipt = join(directory, "receipt.json");
+  const oversized = join(directory, "oversized.json");
+  const symlink = join(directory, "linked.json");
+  const hardlink = join(directory, "hardlink.json");
+  writeFileSync(receipt, "{}");
+  writeFileSync(oversized, Buffer.alloc(1024 * 1024 + 1, " "));
+  symlinkSync(receipt, symlink);
+  linkSync(receipt, hardlink);
+  for (const [releaseReceipt, error] of [
+    [directory, /single-link regular file/],
+    [symlink, /Cannot open release metadata/],
+    [hardlink, /single-link regular file/],
+    [oversized, /exceeds 1 MiB/],
+  ]) {
+    assert.throws(
+      () =>
+        verifyPublicationInputs(directory, { releaseInputs: {} }, {
+          action: "publish",
+          releaseReceipt,
+        }),
+      error,
+    );
+  }
 });
 
 test("staged generated releases reject changed receipts and private extra files", (t) => {
