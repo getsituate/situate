@@ -198,7 +198,17 @@ test("a reserved name and proof paths inside the pack are refused before renderi
     exportPack({ ...options, proofs: join(parentAlias, "pack", "proofs") }),
     /outside the pack destination/,
   );
-  assert.deepEqual(await readdir(directory), ["alias"]);
+  const file = join(directory, "existing.txt");
+  await writeFile(file, "keep");
+  await assert.rejects(
+    exportPack({ ...options, proofs: file }),
+    /Proof destination must be a directory/,
+  );
+  assert.equal(await readFile(file, "utf8"), "keep");
+  assert.deepEqual((await readdir(directory)).sort(), [
+    "alias",
+    "existing.txt",
+  ]);
 });
 
 test(

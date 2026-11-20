@@ -511,6 +511,7 @@ test("SSH has verified host keys, bounded connection attempts and no shell-injec
     WEBSITE_SSH_KNOWN_HOSTS: "/private/known_hosts",
   });
   assert.ok(args.includes("UserKnownHostsFile=/private/known_hosts"));
+  assert.deepEqual(args.slice(-2), ["--", "release@release-host"]);
   for (const invalid of [
     "relative/known_hosts",
     "/private/known_hosts\ncommand",
@@ -1340,6 +1341,17 @@ test("publication archives keep exact bytes for reconciliation and require an un
   const stage = join(parent, "stage");
   mkdirSync(stage);
   writeFileSync(join(stage, "manifest.json"), "{}\n");
+  for (const names of [
+    [],
+    ["manifest.json", "manifest.json"],
+    ["nested/report.json"],
+  ]) {
+    assert.throws(
+      () => withPublicationArchive(stage, names, undefined, assert.fail),
+      /Invalid publication archive inventory/,
+    );
+    assert.equal(existsSync(`${stage}.tar`), false);
+  }
   const inspect = (fd, digest) => {
     const bytes = readFileSync(fd);
     assert.equal(sha256(bytes), digest);

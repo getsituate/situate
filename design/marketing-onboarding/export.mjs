@@ -289,6 +289,13 @@ export async function exportPack({ date, output, proofs }) {
   );
   if (proofs) {
     proofs = await proofPath(resolve(proofs));
+    const existing = await lstat(proofs).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    assert(
+      !existing || existing.isDirectory(),
+      "Proof destination must be a directory.",
+    );
     const within = relative(output, proofs);
     assert(
       isAbsolute(within) || within === ".." || within.startsWith(`..${sep}`),
@@ -443,7 +450,9 @@ export async function exportPack({ date, output, proofs }) {
     reserved = true;
     if (proofs) {
       firstProofDirectory = await mkdir(proofs, { recursive: true });
-      for (const filename of (await readdir(stagedProofs)).sort()) {
+      for (const filename of (await readdir(stagedProofs)).sort((a, b) =>
+        a.localeCompare(b, "en"),
+      )) {
         const target = join(proofs, filename);
         await copyFile(
           join(stagedProofs, filename),

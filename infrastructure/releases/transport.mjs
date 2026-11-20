@@ -43,7 +43,7 @@ export function sshArguments(config) {
       throw new Error("WEBSITE_SSH_KNOWN_HOSTS must be an absolute path.");
     args.push("-o", `UserKnownHostsFile=${config.WEBSITE_SSH_KNOWN_HOSTS}`);
   }
-  return [...args, config.WEBSITE_DEPLOY_HOST];
+  return [...args, "--", config.WEBSITE_DEPLOY_HOST];
 }
 
 export function readPublicationHistory(

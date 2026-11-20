@@ -224,8 +224,17 @@ def build_slots():
     return int(value)
 
 
+def require_leaf(name):
+    value = os.fspath(name)
+    if value in ('', '.', '..') or '/' in value or '\\0' in value:
+        raise ValueError('Expected one protocol file name.')
+    return value
+
+
 @contextmanager
 def private_directory(path, error, *, parent_fd=None):
+    if parent_fd is not None:
+        path = require_leaf(path)
     fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
     try:
         info = os.fstat(fd)
@@ -292,10 +301,11 @@ def file_identity(info):
 
 
 def entry_identity(directory_fd, name):
-    return file_identity(os.stat(name, dir_fd=directory_fd, follow_symlinks=False))
+    return file_identity(os.stat(require_leaf(name), dir_fd=directory_fd, follow_symlinks=False))
 
 
 def read_private_file(directory_fd, name, limit):
+    name = require_leaf(name)
     try:
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
     except FileNotFoundError:
@@ -462,6 +472,8 @@ PHASE_DIRECTORY_ERROR = 'Container phase admission directory must be private and
 
 
 def publish_phase(root, name, token, withdraw=False):
+    if name not in ('request.json', 'release.json', 'grant.json', 'released.json'):
+        raise ValueError('Unexpected container phase file.')
     with private_directory(root, PHASE_DIRECTORY_ERROR) as root_fd:
         if withdraw:
             try:
@@ -495,6 +507,7 @@ def phase_token(contents):
 def cleanup_phase_directory(parent_fd, name, files, child=False):
     # Docker absence has been verified; remove only the finite protocol files.
     try:
+        name = require_leaf(name)
         with private_directory(name, PHASE_DIRECTORY_ERROR, parent_fd=parent_fd) as root_fd:
             for file in files:
                 try:
@@ -616,7 +629,7 @@ def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
                     for name, expected in owned:
                         if expected is not None and entry_identity(directory_fd, name) != expected:
                             raise ValueError('Docker acknowledgement changed during cleanup.')
-                    os.unlink(path.name, dir_fd=directory_fd)
+                    os.unlink(require_leaf(path.name), dir_fd=directory_fd)
                     if value.get('phaseAdmission'):
                         cleanup_phase_directory(directory_fd, prefix + '.admission',
                                                 ('request.json', 'grant.json', 'release.json', 'released.json',

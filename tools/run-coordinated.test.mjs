@@ -241,6 +241,10 @@ with tempfile.TemporaryDirectory() as temporary:
     s.publish_phase(phase,'grant.json',token)
     grant=phase/'grant.json'
     assert s.read_phase_request(phase,grant)==token
+    try: s.publish_phase(phase,'notes.json',token,withdraw=True)
+    except ValueError: pass
+    else: raise AssertionError('A non-protocol file name was accepted')
+    assert grant.is_file() and not (phase/'notes.json').exists()
     alias=root/'alias';alias.symlink_to(phase, target_is_directory=True)
     for directory in (alias, phase):
         if directory == phase:

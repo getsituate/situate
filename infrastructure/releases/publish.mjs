@@ -651,6 +651,18 @@ export function withPublicationArchive(
       "A transport archive already exists; inspect it before reconciliation.",
     );
   if (!retained) {
+    if (
+      !lstatSync(destination).isDirectory() ||
+      !names.length ||
+      new Set(names).size !== names.length ||
+      names.some(
+        (name) =>
+          typeof name !== "string" ||
+          !filename.test(name) ||
+          name.trim() !== name,
+      )
+    )
+      throw new Error("Invalid publication archive inventory.");
     const output = openSync(tar, "wx", 0o600);
     try {
       execFileSync(

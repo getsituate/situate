@@ -61,7 +61,11 @@ export function createGitReservationAdapter({
         "/usr/bin/git",
         commandArgs,
         options,
-        (error, stdout) => (error ? reject(error) : resolve(stdout)),
+        (error, stdout) => {
+          if (error)
+            reject(error instanceof Error ? error : new Error(String(error)));
+          else resolve(stdout);
+        },
       );
       child.stdin.on("error", reject);
       child.stdin.end(input);
