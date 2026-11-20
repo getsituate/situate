@@ -10,6 +10,7 @@ Object.assign(child, {
   stderr: new PassThrough(),
   exitCode: null,
   signalCode: null,
+  unref: () => assert.fail("Confirmed cleanup must not detach the child"),
   kill(signal) {
     assert.equal(signal, "SIGTERM");
     return true;
@@ -22,7 +23,7 @@ mock.module("node:child_process", {
     spawn: () => child,
     spawnSync: () => assert.fail("Unexpected subprocess"),
     execFileSync(command) {
-      assert.equal(command, "ps");
+      assert.equal(command, "/bin/ps");
       snapshots++;
       return present ? "4242 1 S Thu Nov 12 12:00:00 2026\n" : "";
     },
