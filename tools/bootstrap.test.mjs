@@ -10,8 +10,10 @@ const read = (path) =>
 
 const websiteDeliveryCommands = [
   "python3 tools/pipeline-bootstrap.py",
+  "node tools/wait-for-hosting.mjs",
   "node website/site.mjs --build",
   "python3 tools/pipeline-container.py website prepared website/dist",
+  "node tools/wait-for-hosting.mjs --check",
   'python3 infrastructure/production/immutable/website_content.py deploy website/dist "$WEBSITE_SOURCE_REVISION"',
 ];
 
@@ -150,7 +152,7 @@ function checkWorkflowBootstrap(name, workflow) {
           command,
           name === "release-macos.yml" &&
             ["create", "macos-compatibility"].includes(id)
-            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
+            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report)|wait-for-hosting\.mjs --(?:probe|check))$/
             : ({
                 "verify.yml: windows-smoke-build":
                   /^node tools\/build-windows-smoke\.mjs windows-smoke-artifact$/,
@@ -161,7 +163,9 @@ function checkWorkflowBootstrap(name, workflow) {
                 "deploy-hosting.yml: hetzner-rehearsal":
                   /^(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?$/,
                 "deploy-hosting.yml: production":
-                  /^node infrastructure\/production\/immutable\/continuous-deploy\.mjs$/,
+                  /^node (?:infrastructure\/production\/immutable\/continuous-deploy\.mjs|tools\/wait-for-hosting\.mjs --select)$/,
+                "publish-macos.yml: publish":
+                  /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|wait-for-hosting\.mjs --probe)$/,
               }[context] ??
                 /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/),
           context,
@@ -220,11 +224,15 @@ test("website delivery requires the pinned bootstrap and checks the build before
       "deploy-website.yml",
       workflowJob("website", "ubuntu-24.04", commands),
     );
-  const [bootstrap, build, verify, publish] = websiteDeliveryCommands;
-  check([bootstrap, build, verify, publish]);
-  assert.throws(() => check([build, verify, publish]));
-  assert.throws(() => check([bootstrap, build, publish]));
-  assert.throws(() => check([bootstrap, build, publish, verify]));
+  const [bootstrap, wait, build, verify, readiness, publish] =
+    websiteDeliveryCommands;
+  check(websiteDeliveryCommands);
+  assert.throws(() => check([wait, build, verify, readiness, publish]));
+  assert.throws(() => check([bootstrap, wait, build, readiness, publish]));
+  assert.throws(() => check([bootstrap, wait, build, verify, publish]));
+  assert.throws(() =>
+    check([bootstrap, wait, build, verify, publish, readiness]),
+  );
 });
 
 test("portable jobs reject host Node setup and unpinned checkout", () => {

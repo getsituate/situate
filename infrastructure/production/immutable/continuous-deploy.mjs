@@ -74,9 +74,13 @@ const terraformDiagnostics = [
   /^The HCP workspace is locked; inspect its owner before continuing\.$/,
   /^The HCP workspace changed during initialization; inspect it before continuing\.$/,
   /^The HCP workspace has no state to export\.$/,
+  /^HCP Terraform did not provide a trusted state download URL\.$/,
+  /^HCP Terraform state download (?:did not complete|is missing or too large|returned invalid JSON)\.$/,
+  /^HCP Terraform state download failed: HTTP [45][0-9]{2}\.$/,
   /^The exported state does not match the inspected HCP state version\.$/,
   /^The HCP state changed during export; inspect it before continuing\.$/,
-  /^Terraform (?:init|state pull) failed \((?:exit [0-9]+|signal SIG[A-Z0-9]+|could not start)\)\.$/,
+  /^Terraform init timed out during (?:provider initialization|HCP backend initialization|before reporting an initialization phase)\.$/,
+  /^Terraform init failed \((?:exit [0-9]+|signal SIG[A-Z0-9]+|could not start)\)\.$/,
 ];
 
 export function runHostingTerraform(env, args, run = spawnSync) {
@@ -84,7 +88,7 @@ export function runHostingTerraform(env, args, run = spawnSync) {
   const result = run(process.execPath, [terraform, ...args], {
     cwd: repository,
     env,
-    timeout: 180_000,
+    timeout: operation === "init" ? 330_000 : 180_000,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 8 * 1024 * 1024,
@@ -94,9 +98,11 @@ export function runHostingTerraform(env, args, run = spawnSync) {
   const detail =
     result.error?.code === "ETIMEDOUT"
       ? "The command timed out."
-      : terraformDiagnostics.some((pattern) => pattern.test(diagnostic))
-        ? diagnostic
-        : "Inspect live state before making further changes.";
+      : result.error?.code === "ENOBUFS"
+        ? "The command exceeded its output limit."
+        : terraformDiagnostics.some((pattern) => pattern.test(diagnostic))
+          ? diagnostic
+          : "Inspect live state before making further changes.";
   throw new Error(`Hosting Terraform ${operation} failed: ${detail}`);
 }
 
@@ -116,41 +122,6 @@ function keyFile(root, value, name) {
 
 function git(...args) {
   return execute("git", args);
-}
-
-const deploymentInputs = [
-  "infrastructure/production/terraform",
-  "infrastructure/production/docker/nginx.conf",
-  "infrastructure/production/immutable",
-  "infrastructure/production/terraform.mjs",
-  "infrastructure/production/hcp.mjs",
-  "infrastructure/production/immutable-plan.mjs",
-  "infrastructure/production/rollout-journal.mjs",
-  "infrastructure/production/rollout-reconcile.mjs",
-  "infrastructure/production/continuous-rollout.mjs",
-  "infrastructure/production/hosting-deployment.mjs",
-  "infrastructure/releases/remote.py",
-  "infrastructure/website/config.mjs",
-  ".github/workflows/deploy-hosting.yml",
-];
-
-function spawnGitObjectType(revision) {
-  try {
-    return git("cat-file", "-t", revision);
-  } catch {
-    return null;
-  }
-}
-
-function inputDigest(revision) {
-  return hash(
-    git("ls-tree", "-r", revision, "--", ...deploymentInputs)
-      .split("\n")
-      .filter(
-        (entry) => !/\.(test\.mjs|md|example)$|\/test_[^/]+\.py$/.test(entry),
-      )
-      .join("\n"),
-  );
 }
 
 async function retryObservation(observe, repeats = 18, interval = 5000) {
@@ -714,7 +685,10 @@ async function main() {
     revision,
     runId: env.GITHUB_RUN_ID,
   });
-  await gate.check();
+  if ((await gate.check()).ready) {
+    console.log("The verified host already matches the hosting inputs.");
+    return;
+  }
   const directory = mkdtempSync(join(tmpdir(), "situate-hosting-"));
   try {
     await deploy(directory, env, revision, gate);
@@ -774,13 +748,6 @@ async function deploy(root, env, revision, gate) {
           inventory.ssh_public_key.split(/\s+/).slice(0, 2).join(" ")),
     "Website publication requires its own SSH key.",
   );
-  const last =
-    inventory.qualified_hosts[inventory.traffic_host].source_revision;
-  const baseline = spawnGitObjectType(last);
-  if (baseline === "commit" && inputDigest(last) === inputDigest(revision)) {
-    console.log("No production hosting inputs changed.");
-    return;
-  }
   const latest = git(
     "ls-remote",
     "https://github.com/getsituate/situate.git",
