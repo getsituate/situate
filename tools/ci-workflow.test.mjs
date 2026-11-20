@@ -262,7 +262,7 @@ test("creator can follow a successful aggregate when unselected lanes were skipp
   const creator = job(read("release-macos"), "create");
   assert.match(
     creator,
-    /if: \$\{\{ !cancelled\(\) && needs\.plan\.outputs\.enabled == 'true' && needs\.required\.result == 'success' && needs\.plan\.outputs\.app_impact == 'true' \}\}/,
+    /if: \$\{\{ !cancelled\(\) && needs\.plan\.outputs\.enabled == 'true' && needs\.required\.result == 'success' && needs\.hosting-ready\.result == 'success' && needs\.plan\.outputs\.app_impact == 'true' \}\}/,
   );
 });
 
@@ -367,6 +367,38 @@ test("Slack notifications skip message composition and delivery without a webhoo
     /id: message\s+if: steps\.webhook\.outputs\.configured == 'true'/,
   );
   assert.match(notifier, /id: post\s+if: steps\.message\.outcome == 'success'/);
+});
+
+test("hosting status requires the exact successful main push for this repository", async () => {
+  const { hostingState } = await import("./wait-for-hosting.mjs");
+  const repository = "getsituate/situate";
+  const sha = "a".repeat(40);
+  const run = {
+    head_sha: sha,
+    head_branch: "main",
+    head_repository: { full_name: repository },
+    event: "push",
+    status: "completed",
+    conclusion: "success",
+  };
+  const state = (runs) => hostingState(runs, { repository, sha });
+  assert.equal(state([]), "waiting");
+  assert.equal(state([{ ...run, event: "workflow_dispatch" }]), "waiting");
+  assert.equal(state([{ ...run, head_sha: "b".repeat(40) }]), "waiting");
+  assert.equal(state([{ ...run, status: "in_progress" }]), "waiting");
+  assert.equal(state([{ ...run, conclusion: "failure" }]), "failure");
+  assert.equal(state([run]), "success");
+  assert.throws(() => state([run, run]), /Multiple hosting runs/);
+});
+
+test("macOS release waits for hosting before starting release effects", () => {
+  const workflow = read("release-macos");
+  const hosting = job(workflow, "hosting-ready");
+  assert.match(hosting, /needs: plan/);
+  assert.match(hosting, /actions: read/);
+  assert.match(hosting, /run: node tools\/wait-for-hosting\.mjs/);
+  assert.doesNotMatch(hosting, /secrets\.|contents: write/);
+  assert.match(job(workflow, "create"), /needs:[\s\S]*hosting-ready,/);
 });
 
 test("creator and publisher have gated execution paths with signing scoped to build only", () => {

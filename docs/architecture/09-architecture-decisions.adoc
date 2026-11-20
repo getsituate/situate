@@ -50,6 +50,9 @@
 |link:09-architecture-decisions/ADR-0021-publish-website-content-separately.adoc[ADR-0021]
 |Publish checked static website builds to the immutable host's persistent website store.
 |Accepted; requires production key enrollment.
+|link:09-architecture-decisions/ADR-0022-serve-release-qualification-on-host-loopback.adoc[ADR-0022]
+|Serve private macOS candidates through the existing TLS proxy on host loopback.
+|Accepted; production rollout pending
 |===
 
 :architecture-repository-root: ../..
@@ -86,6 +89,8 @@ include::09-architecture-decisions/ADR-0019-replace-production-hosts-from-versio
 include::09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0021-publish-website-content-separately.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0022-serve-release-qualification-on-host-loopback.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

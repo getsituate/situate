@@ -70,7 +70,7 @@ main() {
 
   install -d -m 0755 "$install_dir" /etc/docker
   install -d -m 0700 /opt/situate /srv/situate-state
-  install -m 0644 "$here/"{compose.yaml,Caddyfile,website.py,website_content.py,verify-state.py,freeze-release.py,host-enrollment.py} "$install_dir/"
+  install -m 0644 "$here/"{compose.yaml,Caddyfile,qualification-nginx.conf,website.py,website_content.py,verify-state.py,freeze-release.py,host-enrollment.py} "$install_dir/"
   install -m 0644 "$here/../../releases/remote.py" "$install_dir/release_storage.py"
   install -m 0755 "$here/"{state.sh,verify-boot.sh,website-ssh.sh} "$install_dir/"
   install -m 0644 "$here/"{situate-serving.service,situate-enrollment.service,situate-enrollment.path} /etc/systemd/system/
@@ -80,8 +80,9 @@ main() {
   visudo -cf /etc/sudoers.d/situate-website
   install -m 0644 "$here/sshd.conf" /etc/ssh/sshd_config.d/00-situate.conf
   install -m 0644 "$here/docker-daemon.json" /etc/docker/daemon.json
-  # Only the website document root differs; release routing is shared with the legacy stack.
-  awk '{if ($0 == "        root /usr/share/nginx/html;") {hits++; print "        root /srv/website/current;"} else {print}} END {if (hits != 1) exit 1}' \
+  awk '$0 == "http {" {print; print "    include /etc/nginx/qualification.conf;"; sections++; next}
+       $0 == "        root /usr/share/nginx/html;" {print "        root /srv/website/current;"; roots++; next}
+       {print} END {if (sections != 1 || roots != 1) exit 1}' \
     "$here/../docker/nginx.conf" > "$install_dir/nginx.conf"
   cd -- "$install_dir"
   systemctl daemon-reload

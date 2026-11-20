@@ -13,6 +13,11 @@ services:
         read_only: true
         bind: { create_host_path: false }
       - type: bind
+        source: ./qualification-nginx.conf
+        target: /etc/nginx/qualification.conf
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
         source: /srv/situate-state/website
         target: /srv/website
         read_only: true
@@ -51,6 +56,7 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+      - "127.0.0.1:24443:8443/tcp"
     volumes:
       - type: bind
         source: ./Caddyfile

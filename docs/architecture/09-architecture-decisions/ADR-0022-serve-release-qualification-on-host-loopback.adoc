@@ -1,0 +1,32 @@
+[[adr-0022]]
+= ADR-0022: Serve release qualification on host loopback
+
+Status:: Accepted
+Date:: 2026-11-20
+Implementation:: Hosting image and release tooling updated; production rollout and native qualification are separate gates.
+
+== Context
+
+The signed macOS update test uses the production HTTPS URL without offering an unqualified build to users.
+The legacy test starts its own Caddy container and mounts a named certificate volume.
+The immutable host keeps the TLS bind mount private and does not give the release account Docker access.
+
+== Decision
+
+Bake a second HTTPS listener into the existing Caddy service, mapped only to host loopback.
+Caddy uses its existing certificate and proxies to a separate internal Nginx server that serves only the active candidate feed, packages, and operation identity.
+The runner reaches this listener through the release account's restricted SSH forward.
+The release account controls the candidate files, never the TLS keys, proxy configuration, or Docker.
+
+Stage candidates outside the serving view; activate or retire a single complete view with a directory rename.
+Keep its ownership journal on the publication volume and require inspection if ownership is uncertain.
+A failed hosting rollout blocks release creation for that revision; source checks can still run independently.
+
+== Alternatives and consequences
+
+Granting Docker access would reuse the legacy implementation but would give the release account host-level authority.
+A separate privileged listener would require its own control interface and certificate access.
+Reusing the existing TLS proxy avoids both, but makes rollout of the serving image a prerequisite for release qualification.
+
+Verify that the loopback route presents valid TLS, that the public feed and public release routes never serve candidates, and that retiring the view stops serving it.
+See the link:{architecture-repository-root}/infrastructure/production/immutable/README.md[immutable hosting runbook] for rollout.
