@@ -11,6 +11,7 @@ Resolve routine implementation choices locally. Ask about uncertainty that mater
 - Load `unit-testing-best-practices` when writing or changing tests.
 - Load `risk-based-test-design` when coverage spans multiple boundaries, complex states, or high-impact security, privacy, or data-integrity risks.
 - Load `architecture-code-review-refactoring` for responsibility-boundary reviews or scoped structural changes.
+- Load `write-situate-prompts` when writing or reviewing Situate's runtime instructions or their composition.
 
 ## Implementing designs
 
