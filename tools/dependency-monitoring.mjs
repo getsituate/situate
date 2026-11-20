@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
 import { safePath } from "./release-catalog.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -132,10 +131,14 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  const { values } = parseArgs({
-    options: { "report-directory": { type: "string" } },
-  });
-  const report = monitor({ reportDirectory: values["report-directory"] });
-  console.log(JSON.stringify(report));
-  if (report.status !== "passed") process.exitCode = 1;
+  if (process.argv.length !== 2) {
+    console.error(
+      "Set a report directory using the pipeline container launcher.",
+    );
+    process.exitCode = 2;
+  } else {
+    const report = monitor();
+    console.log(JSON.stringify(report));
+    if (report.status !== "passed") process.exitCode = 1;
+  }
 }

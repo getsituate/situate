@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   linkSync,
   mkdirSync,
@@ -11,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { monitor, monitoringCommands } from "./dependency-monitoring.mjs";
 
 test("monitoring covers npm locks and supported Darwin Rust graphs without fixing dependencies", () => {
@@ -114,6 +116,21 @@ test("report paths are checked before commands run, and replacement does not mod
   });
   assert.deepEqual(JSON.parse(readFileSync(report, "utf8")), result);
   assert.equal(readFileSync(original, "utf8"), "retain");
+});
+
+test("direct monitoring leaves output selection to the container launcher", () => {
+  const script = fileURLToPath(
+    new URL("./dependency-monitoring.mjs", import.meta.url),
+  );
+  const result = spawnSync(
+    process.execPath,
+    [script, "--report-directory", "fixture"],
+    {
+      encoding: "utf8",
+    },
+  );
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /pipeline container launcher/);
 });
 
 test("a complete clean monitoring run passes", (t) => {

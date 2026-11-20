@@ -251,45 +251,32 @@ export function collectFragments(root, options) {
   });
 }
 
-function readAuthorInput(file) {
-  const fd = fs.openSync(
-    file,
-    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
-  );
-  try {
-    const { size, mode } = fs.fstatSync(fd);
-    assert(
-      (mode & fs.constants.S_IFMT) === fs.constants.S_IFREG &&
-        size <= 4 * 1024 * 1024,
-      "Localized input must be a regular file of at most 4 MiB",
-    );
-    const bytes = Buffer.alloc(size + 1);
-    let length = 0;
-    while (length < bytes.length) {
-      const count = fs.readSync(fd, bytes, length, bytes.length - length, null);
-      if (!count) break;
-      length += count;
-    }
-    assert(length === size, "Localized input changed while reading");
-    return JSON.parse(bytes.toString("utf8", 0, length));
-  } finally {
-    fs.closeSync(fd);
+async function readAuthorInput() {
+  assert(!process.stdin.isTTY, "Redirect or pipe localized JSON to --stdin");
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of process.stdin) {
+    length += chunk.length;
+    assert(length <= 4 * 1024 * 1024, "Localized input must be at most 4 MiB");
+    chunks.push(chunk);
   }
+  return JSON.parse(Buffer.concat(chunks, length).toString("utf8"));
 }
 
-export function runFragmentCli(
+export async function runFragmentCli(
   args = process.argv.slice(2),
   root = process.cwd(),
 ) {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: Object.fromEntries(
-      ["id", "input", "reason", "base", "head"].map((name) => [
-        name,
-        { type: "string" },
-      ]),
-    ),
+    options: {
+      id: { type: "string" },
+      stdin: { type: "boolean" },
+      reason: { type: "string" },
+      base: { type: "string" },
+      head: { type: "string" },
+    },
   });
   const [command] = positionals;
   assert(
@@ -314,14 +301,14 @@ export function runFragmentCli(
   const id = values.id ?? `change-${randomUUID()}`;
   assert(idPattern.test(id), "Invalid fragment ID");
   assert(
-    Boolean(values.input) !== Boolean(values.reason),
-    "Provide either --input localized content or --reason",
+    Boolean(values.stdin) !== Boolean(values.reason),
+    "Provide either --stdin localized content or --reason",
   );
   const fragment = {
     schemaVersion: 2,
     id,
-    locales: values.input
-      ? readAuthorInput(values.input)
+    locales: values.stdin
+      ? await readAuthorInput()
       : Object.fromEntries(
           locales.map((locale) => [
             locale,
@@ -344,7 +331,7 @@ if (
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
   try {
-    console.log(JSON.stringify(runFragmentCli(), null, 2));
+    console.log(JSON.stringify(await runFragmentCli(), null, 2));
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

@@ -19,7 +19,7 @@ Omit `--id` to generate a unique identifier before the PR exists. Do not reuse a
 For public entries, supply a JSON file containing one locale object per supported language:
 
 ```sh
-node tools/change-fragments.mjs author --id keep-drafts --input /PATH/TO/localized-draft.json
+node tools/change-fragments.mjs author --id keep-drafts --stdin < /PATH/TO/localized-draft.json
 node tools/change-fragments.mjs validate --id keep-drafts
 ```
 

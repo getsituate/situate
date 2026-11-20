@@ -9,10 +9,6 @@ export async function bundleReport(directory) {
   const root = resolve(directory);
   function artifactPath(file) {
     const path = resolve(root, file);
-    if (isAbsolute(file) || isAbsolute(relative(root, path)))
-      throw new Error(
-        "Build artifact paths must be relative to the output directory.",
-      );
     assertLocalPath(root, path);
     return path;
   }
@@ -49,15 +45,24 @@ export async function bundleReport(directory) {
     throw new Error("No entry points in the build manifest.");
   for (const [key] of entries) visit(key);
   const initialFiles = new Set([...initial].map((key) => manifest[key].file));
-  // Native execution loads this asset on demand, outside Vite's entry graph.
-  const files = [
-    ...new Set([
-      ...Object.values(manifest).map((chunk) => chunk.file),
-      ...(await readdir(root, { recursive: true })),
-      "executor-supervisor.js",
-      "plugin-check-renderer.js",
-    ]),
-  ].filter((file) => file.endsWith(".js"));
+  const files = (await readdir(root, { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.name.endsWith(".js"))
+    .map((entry) => relative(root, resolve(entry.parentPath, entry.name)));
+  const present = new Set(files);
+  // The native assets load outside Vite's entry graph but must still exist.
+  for (const file of [
+    ...Object.values(manifest).map((chunk) => chunk.file),
+    "executor-supervisor.js",
+    "plugin-check-renderer.js",
+  ]) {
+    if (typeof file !== "string" || isAbsolute(file))
+      throw new Error(
+        "Build artifact paths must be relative to the output directory.",
+      );
+    if (!file.endsWith(".js")) continue;
+    if (!present.has(file))
+      throw new Error(`Build manifest references a missing output: ${file}`);
+  }
   const chunks = await Promise.all(
     files.sort().map(async (file) => {
       const bytes = await readArtifact(file);
@@ -100,9 +105,12 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   try {
-    const directory =
-      process.argv[2] ??
-      resolve(dirname(fileURLToPath(import.meta.url)), "../app/dist");
+    if (process.argv.length !== 2)
+      throw new Error("Bundle reporting uses the app/dist build output.");
+    const directory = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../app/dist",
+    );
     const report = await bundleReport(directory);
     console.log(JSON.stringify(report, null, 2));
     for (const warning of checkBudget(report)) console.warn(warning);

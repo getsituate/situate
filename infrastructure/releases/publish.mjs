@@ -442,23 +442,28 @@ export function assertReviewedRevision(
     !/^[a-f0-9]{40}$/.test(revision)
   )
     throw new Error(message);
-  let type;
+  let object;
   try {
-    type = execFileSync("/usr/bin/git", ["cat-file", "-t", "--", revision], {
-      cwd,
-      env: {
-        ...env,
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_NO_REPLACE_OBJECTS: "1",
-        GIT_TERMINAL_PROMPT: "0",
+    object = execFileSync(
+      "/usr/bin/git",
+      ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+      {
+        cwd,
+        env: {
+          ...env,
+          GIT_NO_LAZY_FETCH: "1",
+          GIT_NO_REPLACE_OBJECTS: "1",
+          GIT_TERMINAL_PROMPT: "0",
+        },
+        input: `${revision}\n`,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
       },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
+    ).trim();
   } catch {
     throw new Error(message);
   }
-  if (type !== "commit") throw new Error(message);
+  if (object !== `${revision} commit`) throw new Error(message);
 }
 
 async function preflight(directory, revision, config) {

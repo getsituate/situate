@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { digest } from "./release-catalog.mjs";
 import {
@@ -134,7 +135,7 @@ test("Git ranges require new immutable declarations, ancestry and historical cat
   );
 });
 
-test("range validation requires a declaration only for client inputs", (t) => {
+test("range validation requires a declaration only for client inputs", async (t) => {
   const repo = repository(t);
   for (const file of [
     ".github/workflows/verify.yml",
@@ -153,7 +154,7 @@ test("range validation requires a declaration only for client inputs", (t) => {
   }
   const internal = repo.commit();
   assert.deepEqual(
-    runFragmentCli(
+    await runFragmentCli(
       ["validate", "--base", repo.base, "--head", internal],
       repo.root,
     ),
@@ -379,54 +380,64 @@ test("range validation rejects reused identities, missing locales, symlinks and 
   );
 });
 
-test("authoring reads bounded regular input before creating output", (t) => {
+function authorFromStdin(root, id, input) {
+  const script = fileURLToPath(
+    new URL("./change-fragments.mjs", import.meta.url),
+  );
+  return spawnSync(
+    process.execPath,
+    [script, "author", "--id", id, "--stdin"],
+    {
+      cwd: root,
+      input,
+      encoding: "utf8",
+    },
+  );
+}
+
+test("authoring rejects oversized stdin before creating output", (t) => {
   const repo = repository(t);
-  const input = path.join(repo.root, "localized input.json");
-  const alias = path.join(repo.root, "alias.json");
-  fs.writeFileSync(input, JSON.stringify(draft().locales));
-  fs.symlinkSync(input, alias);
-  const author = (file) =>
-    runFragmentCli(["author", "--id", "localized", "--input", file], repo.root);
-  assert.throws(() => author(alias), { code: "ELOOP" });
-  assert.throws(() => author(repo.root), /must be a regular file/);
-  fs.truncateSync(input, 4 * 1024 * 1024 + 1);
-  assert.throws(() => author(input), /at most 4 MiB/);
+  const result = authorFromStdin(
+    repo.root,
+    "localized",
+    Buffer.alloc(4 * 1024 * 1024 + 1, 32),
+  );
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /at most 4 MiB/);
   assert.equal(
     fs.existsSync(path.join(repo.root, "changes/localized.json")),
     false,
   );
-  fs.writeFileSync(input, JSON.stringify(draft().locales));
-  assert.deepEqual(author(input), { id: "localized" });
 });
 
-test("CLI authors versionless declarations and validates them without approval", (t) => {
+test("CLI authors versionless declarations and validates them without approval", async (t) => {
   const repo = repository(t);
-  const authored = runFragmentCli(
+  const authored = await runFragmentCli(
     ["author", "--id", "tooling", "--reason", "Test runner maintenance."],
     repo.root,
   );
   assert.deepEqual(
-    runFragmentCli(["validate", "--id", "tooling"], repo.root),
+    await runFragmentCli(["validate", "--id", "tooling"], repo.root),
     authored,
   );
-  const input = path.join(repo.root, "localized.json");
-  repo.write("localized.json", JSON.stringify(draft().locales));
-  assert.deepEqual(
-    runFragmentCli(
-      ["author", "--id", "navigation", "--input", input],
-      repo.root,
-    ),
-    { id: "navigation" },
+  const localized = authorFromStdin(
+    repo.root,
+    "navigation",
+    JSON.stringify(draft().locales),
   );
+  assert.equal(localized.status, 0, localized.stderr);
+  assert.deepEqual(JSON.parse(localized.stdout), { id: "navigation" });
   const head = repo.commit();
   assert.deepEqual(
-    runFragmentCli(
-      ["validate", "--base", repo.base, "--head", head],
-      repo.root,
+    (
+      await runFragmentCli(
+        ["validate", "--base", repo.base, "--head", head],
+        repo.root,
+      )
     ).map(({ id }) => id),
     ["navigation", "tooling"],
   );
-  assert.throws(
+  await assert.rejects(
     () =>
       runFragmentCli(
         ["author", "--id", "tooling", "--reason", "Another declaration."],
