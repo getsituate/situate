@@ -513,6 +513,50 @@ test("explicit state export is private, independent of cloud credentials and nev
   await assert.rejects(main(["export", path], f), /never overwritten/);
 });
 
+test("state export keeps only JSON after Terraform cloud retry notices", async (t) => {
+  const f = fixture(t);
+  f.current = { id: "sv-Current", serial: 1 };
+  const { stdout } = f.execute("terraform", ["state", "pull"]);
+  for (const [index, service] of [
+    "HCP Terraform",
+    "Terraform Cloud",
+  ].entries()) {
+    const path = join(f.privateDirectory, `retry-${index}.tfstate`);
+    await main(["export", path], {
+      ...f,
+      execute: () => ({
+        status: 0,
+        stdout:
+          `\x1b[0m\x1b[33mThere was an error connecting to ${service}. Please do not exit\n` +
+          "Terraform to prevent data loss! Trying to restore the connection...\n\x1b[0m\n" +
+          "\x1b[33mStill trying to restore the connection... (1m2s elapsed)\x1b[0m\n" +
+          stdout,
+      }),
+    });
+    assert.equal(readFileSync(path, "utf8"), stdout);
+  }
+});
+
+test("state export refuses unknown output and malformed JSON without reporting their contents", async (t) => {
+  const f = fixture(t);
+  f.current = { id: "sv-Current", serial: 1 };
+  const path = join(f.privateDirectory, "state.tfstate");
+  const { stdout } = f.execute("terraform", ["state", "pull"]);
+  for (const [output, diagnostic] of [
+    [`private notice\n${stdout}`, "unexpected output"],
+    [`${stdout}\nprivate notice`, "invalid JSON"],
+  ]) {
+    await assert.rejects(
+      main(["export", path], {
+        ...f,
+        execute: () => ({ status: 0, stdout: output }),
+      }),
+      { message: `Terraform state pull returned ${diagnostic}.` },
+    );
+    assert.equal(existsSync(path), false);
+  }
+});
+
 test("preflight distinguishes Terraform init and state pull failures without reporting their output", async (t) => {
   const f = fixture(t);
   f.current = { id: "sv-Current", serial: 1 };
