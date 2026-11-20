@@ -1120,61 +1120,10 @@ fn build_image(parent: &Dir, stage: &str, image: &Image) -> Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 pub(super) fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> Result<()> {
     crate::durable_storage::rename_noreplace(from, old, to, new)?;
     Ok(())
 }
-#[cfg(windows)]
-fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> Result<()> {
-    use std::os::windows::{ffi::OsStrExt, ffi::OsStringExt, io::AsRawHandle};
-    use windows_sys::Win32::Storage::FileSystem::{GetFinalPathNameByHandleW, MoveFileExW};
-    fn path(dir: &Dir, name: &str) -> io::Result<Vec<u16>> {
-        let file = dir.try_clone()?.into_std_file();
-        let mut buffer = vec![0u16; 32768];
-        // The directory handle was opened without following symlinks. Windows
-        // publication still requires ancestors to stay put until MoveFileExW.
-        let size = unsafe {
-            GetFinalPathNameByHandleW(
-                file.as_raw_handle(),
-                buffer.as_mut_ptr(),
-                buffer.len() as u32,
-                0,
-            )
-        };
-        if size == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if size as usize >= buffer.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "native.content.path.tooLong",
-            ));
-        }
-        buffer.truncate(size as usize);
-        let path = PathBuf::from(std::ffi::OsString::from_wide(&buffer)).join(name);
-        Ok(path.as_os_str().encode_wide().chain(Some(0)).collect())
-    }
-    let from = path(from, old)?;
-    let to = path(to, new)?;
-    // Zero flags exclude replacement, including an existing empty directory.
-    if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == 0 {
-        return Err(io::Error::last_os_error().into());
-    }
-    Ok(())
-}
-#[cfg(not(any(
-    target_vendor = "apple",
-    target_os = "linux",
-    target_os = "android",
-    windows
-)))]
-fn rename_noreplace(_from: &Dir, _old: &str, _to: &Dir, _new: &str) -> Result<()> {
-    Err(unsupported(
-        "native.content.operation.publicationUnsupported",
-    ))
-}
-
 fn retarget_image(
     image: &mut Image,
     source: &str,
