@@ -494,7 +494,9 @@ export function createRestoreDirectory(destination) {
     checkParent();
     mkdirSync(destination, { mode: 0o700 });
     checkParent();
+    const { dev, ino } = lstatSync(destination, { bigint: true });
     fsyncSync(parent);
+    return `${dev}:${ino}`;
   } finally {
     closeSync(parent);
   }

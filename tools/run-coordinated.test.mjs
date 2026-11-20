@@ -60,6 +60,19 @@ with tempfile.TemporaryDirectory() as temporary:
         raise AssertionError('unsafe lease accepted')
     save()
     assert s.read_docker_lease(lease)[0] == value
+    private = root / 'situate-docker-lease-fixture'
+    private.mkdir(mode=0o700)
+    with s.private_directory(private, s.DOCKER_DIRECTORY_ERROR) as descriptor:
+        binding = s.DockerLease(private / 'container.json', descriptor)
+        assert s.read_docker_lease(binding) is None
+        private.rename(root / 'retained')
+        private.mkdir(mode=0o700)
+        try:
+            s.read_docker_lease(binding)
+        except ValueError as error:
+            assert 'directory changed' in str(error)
+        else:
+            raise AssertionError('Replacement lease directory accepted')
     lease.chmod(0o644)
     rejected()
     lease.unlink()

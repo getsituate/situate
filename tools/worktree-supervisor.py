@@ -1,6 +1,6 @@
 """Own a command's resource lease and descendants independently of its caller."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import fcntl
 import hashlib
 import json
@@ -322,10 +322,28 @@ def read_private_file(directory_fd, name, limit):
     return data, identity
 
 
+class DockerLease:
+    def __init__(self, path, directory_fd):
+        self.path = path
+        self.name = require_leaf(path.name)
+        self.directory_fd = directory_fd
+
+
+@contextmanager
+def docker_lease_directory(lease):
+    if isinstance(lease, DockerLease):
+        if file_identity(lease.path.parent.lstat()) != file_identity(os.fstat(lease.directory_fd)):
+            raise ValueError('Docker lease directory changed.')
+        yield lease.directory_fd
+    else:
+        if not lease.is_absolute():
+            raise ValueError('Docker lease path must be absolute.')
+        with private_directory(lease.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+            yield directory_fd
+
+
 def read_docker_lease(path):
-    if not path.is_absolute():
-        raise ValueError('Docker lease path must be absolute.')
-    with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+    with docker_lease_directory(path) as directory_fd:
         return read_lease_entry(directory_fd, path.name)
 
 
@@ -355,7 +373,7 @@ def read_lease_entry(directory_fd, name):
 
 
 def docker_build_ack(path, value):
-    with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+    with docker_lease_directory(path) as directory_fd:
         return read_build_ack(directory_fd, path.name + '.' + value['token'] + '.build', value)
 
 
@@ -405,7 +423,7 @@ class DockerBuildAdmission:
         if self.fd is None:
             return False
         self.identity = identity
-        with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+        with docker_lease_directory(path) as directory_fd:
             fresh = read_lease_entry(directory_fd, path.name)
             if caller_closed() or child.poll() is not None:
                 return False
@@ -429,21 +447,40 @@ class DockerBuildAdmission:
 
 
     def poll_phase(self, path, lease, child):
-        root = Path(str(path) + '.' + lease[0]['token'] + '.admission')
-        request = root / 'request.json'
+        name = path.name + '.' + lease[0]['token'] + '.admission'
         try:
-            token = read_phase_request(root, request)
-            withdrawn = read_phase_request(root, root / 'release.json')
+            with docker_lease_directory(path) as directory_fd:
+                with private_directory(name, PHASE_DIRECTORY_ERROR, parent_fd=directory_fd) as phase_fd:
+                    return self.poll_open_phase(path, lease, child, directory_fd, name, phase_fd)
         except (OSError, ValueError, TypeError):
             report('Cannot inspect container phase admission; retaining the resource lease.')
             return True
+
+    def poll_open_phase(self, path, lease, child, directory_fd, name, phase_fd):
+        def current_phase():
+            try:
+                return entry_identity(directory_fd, name) == file_identity(os.fstat(phase_fd))
+            except FileNotFoundError:
+                return False
+
+        def pending():
+            try:
+                return (current_phase() and read_phase_request(phase_fd, 'request.json') == token
+                        and read_phase_request(phase_fd, 'release.json') != token)
+            except (OSError, ValueError, TypeError):
+                return False
+
+        token = read_phase_request(phase_fd, 'request.json')
+        withdrawn = read_phase_request(phase_fd, 'release.json')
         if token is not None and withdrawn == token:
             if self.phase_token is not None and self.phase_token != token:
                 report('Container phase withdrawal differs; retaining the resource lease.')
                 return True
+            if not current_phase():
+                return True
             self.release()
             self.phase_token = None
-            publish_phase(root, 'released.json', token, withdraw=True)
+            publish_phase(phase_fd, 'released.json', token, withdraw=True)
             return True
         if self.phase_token is not None and token not in (None, self.phase_token):
             report('Container phase changed without release; retaining the resource lease.')
@@ -453,17 +490,20 @@ class DockerBuildAdmission:
             return True
         if token is None or token == self.phase_token:
             return True
-        self.fd = acquire('build', self.directory, self.base, child=child, pending=lambda:
-                          read_phase_request(root, request) == token
-                          and read_phase_request(root, root / 'release.json') != token)
+        self.fd = acquire('build', self.directory, self.base, child=child, pending=pending)
         if self.fd is None:
             return not caller_closed() and child.poll() is None
         if caller_closed() or child.poll() is not None:
             return False
-        if read_docker_lease(path) != lease or read_phase_request(root, request) != token:
+        try:
+            if (not current_phase() or read_docker_lease(path) != lease
+                    or read_phase_request(phase_fd, 'request.json') != token):
+                self.release()
+                return True
+            publish_phase(phase_fd, 'grant.json', token)
+        except (OSError, ValueError, TypeError):
             self.release()
-            return True
-        publish_phase(root, 'grant.json', token)
+            raise
         self.phase_token = token
         return True
 
@@ -474,7 +514,7 @@ PHASE_DIRECTORY_ERROR = 'Container phase admission directory must be private and
 def publish_phase(root, name, token, withdraw=False):
     if name not in ('request.json', 'release.json', 'grant.json', 'released.json'):
         raise ValueError('Unexpected container phase file.')
-    with private_directory(root, PHASE_DIRECTORY_ERROR) as root_fd:
+    with phase_directory(root) as root_fd:
         if withdraw:
             try:
                 os.unlink('grant.json', dir_fd=root_fd)
@@ -490,9 +530,13 @@ def publish_phase(root, name, token, withdraw=False):
         os.replace(temporary, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
 
 
+def phase_directory(root):
+    return nullcontext(root) if isinstance(root, int) else private_directory(root, PHASE_DIRECTORY_ERROR)
+
+
 def read_phase_request(root, path):
-    with private_directory(root, PHASE_DIRECTORY_ERROR) as root_fd:
-        entry = read_private_file(root_fd, path.name, 256)
+    with phase_directory(root) as root_fd:
+        entry = read_private_file(root_fd, Path(path).name, 256)
     return phase_token(entry[0]) if entry else None
 
 
@@ -537,7 +581,7 @@ def docker_build_unstarted(path):
 
 
 def docker_cid(path, token):
-    with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+    with docker_lease_directory(path) as directory_fd:
         return read_cid(directory_fd, path.name + '.' + token + '.cid')
 
 
@@ -556,7 +600,7 @@ def wait_for_docker_creation(path):
     warned = False
     while True:
         try:
-            lease = read_docker_lease(Path(path))
+            lease = read_docker_lease(path)
             if lease is None or not lease[0].get('creationPending') or docker_cid(path, lease[0]['token']) is not None:
                 return warned
         except (OSError, ValueError, TypeError):
@@ -596,13 +640,13 @@ def managed_lease_location(path):
 
 
 def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
-    path = Path(path)
+    if not isinstance(path, DockerLease):
+        path = Path(path)
+    lease_path = path.path if isinstance(path, DockerLease) else path
     warned = False
     while True:
         try:
-            if not path.is_absolute():
-                raise ValueError('Docker lease path must be absolute.')
-            with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+            with docker_lease_directory(path) as directory_fd:
                 lease = read_lease_entry(directory_fd, path.name)
                 if lease is not None:
                     value, identity = lease
@@ -648,10 +692,10 @@ def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
                                     os.unlink(name, dir_fd=directory_fd)
                             except OSError:
                                 pass
-                if remove_directory and managed_lease_location(path):
+                if remove_directory and managed_lease_location(lease_path):
                     try:
-                        if file_identity(path.parent.lstat()) == file_identity(os.fstat(directory_fd)):
-                            path.parent.rmdir()
+                        if file_identity(lease_path.parent.lstat()) == file_identity(os.fstat(directory_fd)):
+                            lease_path.parent.rmdir()
                     except OSError:
                         pass
             return
@@ -693,11 +737,17 @@ def main(coordination_directory=None):
             raise ValueError('Only a worktree owner can supervise a Docker lease.')
         if not managed_lease_location(docker_lease) or '..' in docker_lease.parts:
             raise ValueError('Use a private temporary Docker lease created by the launcher.')
-        with private_directory(docker_lease.parent, DOCKER_DIRECTORY_ERROR):
-            pass
     directory = Path(directory).resolve(strict=True)
-    if docker_lease is not None and docker_lease.resolve().is_relative_to(worktree_root(directory)):
+    if docker_lease is None:
+        return supervise(resource, directory, command, args, cleanup_grace_ms, coordination_directory)
+    if docker_lease.parent.resolve(strict=True).is_relative_to(worktree_root(directory)):
         raise ValueError('Docker control leases must remain outside the checkout.')
+    with private_directory(docker_lease.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+        return supervise(resource, directory, command, args, cleanup_grace_ms, coordination_directory,
+                         DockerLease(docker_lease, directory_fd))
+
+
+def supervise(resource, directory, command, args, cleanup_grace_ms, coordination_directory, docker_lease=None):
     enable_subreaper()
     for name in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(name, cancel)
@@ -720,7 +770,7 @@ def main(coordination_directory=None):
             return 130
         env = dict(os.environ)
         if docker_lease is not None:
-            env['SITUATE_DOCKER_LEASE'] = str(docker_lease)
+            env['SITUATE_DOCKER_LEASE'] = str(docker_lease.path)
         if resource == "worktree":
             env["SITUATE_COORDINATED_WORKTREE"] = str(worktree_root(directory))
             env["SITUATE_WORKTREE_WAIT_MS"] = str(wait_ms)

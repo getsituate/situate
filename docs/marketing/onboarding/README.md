@@ -37,7 +37,7 @@ Refresh the prose against these sources before making a later extract. Exporting
 
 ## Build an extract
 
-Use the repository's Volta-pinned Node.js and local root/client dependencies. If they are absent, install them through `node tools/npm-ci.mjs` and `node tools/npm-ci.mjs client`. An installed Playwright Chromium browser is required; the exporter does not download one.
+Use the repository's Volta-pinned Node.js and local root/client dependencies. If they are absent, install them through `node tools/npm-ci.mjs` and `node tools/npm-ci.mjs client`. The exporter requires `/usr/bin/python3` and an installed Playwright Chromium browser. It does not download a browser.
 
 From the repository root:
 
@@ -50,7 +50,7 @@ node tools/run-coordinated.mjs -- node design/marketing-onboarding/export.mjs \
 
 For a new extract, replace `YYYY-MM-DD` with the extraction date. To revise a delivered pack while retaining its filenames, use its existing date and a fresh temporary output destination. Back up the delivered pack, inspect the new PDFs, then replace only the corresponding PDFs and editable copies. Keep existing assets and unrelated files intact.
 
-The output destination must not exist; its parent must exist. The exporter never replaces existing material. It builds a complete pack in a temporary sibling directory and moves it into the exclusively reserved destination only after successful rendering. The optional `--proofs` directory contains HTML page review images for the five rendered guides. Inspect the preserved product PDF separately.
+The output destination must not exist; its parent must exist. The exporter never replaces existing material. It builds the complete pack in a temporary sibling directory and moves it into place only after successful rendering. The move fails if the destination already exists. The optional `--proofs` directory contains HTML page review images for the five rendered guides. Inspect the preserved product PDF separately.
 
 The result contains:
 

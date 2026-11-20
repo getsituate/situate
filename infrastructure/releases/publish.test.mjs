@@ -1388,6 +1388,30 @@ test("publication archives keep exact bytes for reconciliation and require an un
   );
 });
 
+test("publication archives reject a linked metadata directory", (t) => {
+  const parent = temporary(t);
+  const stage = join(parent, "stage");
+  const metadata = join(parent, "unrelated");
+  mkdirSync(stage);
+  mkdirSync(metadata);
+  writeFileSync(join(metadata, "update.json"), "unchanged");
+  symlinkSync(metadata, join(stage, "metadata"));
+  assert.throws(
+    () =>
+      withPublicationArchive(
+        stage,
+        ["metadata/update.json"],
+        undefined,
+        assert.fail,
+      ),
+    /Cannot create publication archive/,
+  );
+  assert.equal(
+    readFileSync(join(metadata, "update.json"), "utf8"),
+    "unchanged",
+  );
+});
+
 test("publication receipt must be a bounded single-link regular file", (t) => {
   const directory = temporary(t);
   const receipt = join(directory, "receipt.json");

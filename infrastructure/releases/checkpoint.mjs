@@ -63,7 +63,11 @@ export function createHostCheckpointStore(
       ],
       { env, stdio: ["pipe", "pipe", "pipe"] },
     );
+  const identity = ({ dev, ino }) => `${dev}:${ino}`;
+  const parentIdentity = (destination) =>
+    identity(lstatSync(dirname(destination), { bigint: true }));
   const stagingDirectory = (destination) => {
+    const parent = parentIdentity(destination);
     assert(
       !lstatSync(destination, { throwIfNoEntry: false }),
       "Restore destination already exists",
@@ -72,18 +76,38 @@ export function createHostCheckpointStore(
       dirname(destination),
       `.release-restore-incomplete-${randomUUID()}`,
     );
-    createRestoreDirectory(staging);
-    return staging;
+    const original = createRestoreDirectory(staging);
+    assert.equal(
+      parentIdentity(destination),
+      parent,
+      "Restore parent directory changed",
+    );
+    const verify = () => {
+      assert.equal(
+        parentIdentity(destination),
+        parent,
+        "Restore parent directory changed",
+      );
+      assert.equal(
+        identity(lstatSync(staging, { bigint: true })),
+        original,
+        "Restore staging directory changed",
+      );
+    };
+    return { staging, parent, original, verify };
   };
-  const commitRestore = (staging, destination) =>
+  const commitRestore = ({ staging, parent, original }, destination) =>
     execFileSync(
       "/usr/bin/python3",
       [
+        "-IB",
         fileURLToPath(new URL("./checkpoint-commit.py", import.meta.url)),
         staging,
         destination,
+        parent,
+        original,
       ],
-      { env, stdio: ["ignore", "pipe", "pipe"] },
+      { env: {}, stdio: ["ignore", "pipe", "pipe"] },
     );
   async function exchange(request, files = [], receive) {
     const child = start();
@@ -173,7 +197,8 @@ export function createHostCheckpointStore(
         identity: { operationId },
       });
       assert.equal(result.descriptor.identity.operationId, operationId);
-      const staging = stagingDirectory(destination);
+      const local = stagingDirectory(destination);
+      const { staging, verify } = local;
       for (const name of [
         "plan.json",
         "configuration.json",
@@ -181,6 +206,7 @@ export function createHostCheckpointStore(
       ]) {
         const item = result.descriptor.files.find((item) => item.name === name);
         assert(item, "Missing bootstrap metadata");
+        verify();
         writeRestoredFile(
           staging,
           item,
@@ -210,7 +236,7 @@ export function createHostCheckpointStore(
         digest(checkpointFile(join(staging, "configuration.json"))),
         plan.configurationDigest,
       );
-      commitRestore(staging, destination);
+      commitRestore(local, destination);
       return {
         directory: destination,
         planFile: `${destination}/plan.json`,
@@ -230,7 +256,8 @@ export function createHostCheckpointStore(
       qualified = false,
       draftId,
     }) {
-      const staging = stagingDirectory(destination);
+      const local = stagingDirectory(destination);
+      const { staging, verify } = local;
       const descriptor = await exchange(
         {
           action: qualified ? "restore-qualified" : "restore",
@@ -288,6 +315,7 @@ export function createHostCheckpointStore(
                       item.size <= 16 * 1024 ** 3,
                     "Invalid checkpoint inventory",
                   );
+                  verify();
                   fd = openSync(join(staging, item.name), "wx", 0o600);
                   size = 0;
                   hash = createHash("sha256");
@@ -332,11 +360,13 @@ export function createHostCheckpointStore(
           }
         },
       );
+      verify();
       let retained;
       if (qualified) {
         const { validateQualifiedRestore } =
           await import("../../tools/release-checkpoint-qualified.mjs");
         retained = validateQualifiedRestore(descriptor, staging, plan);
+        verify();
         const bytes = Buffer.from(`${JSON.stringify(descriptor)}\n`);
         writeRestoredFile(
           staging,
@@ -357,7 +387,7 @@ export function createHostCheckpointStore(
           closeSync(parent);
         }
       } else validateRestoredCheckpoint(descriptor, staging, plan);
-      commitRestore(staging, destination);
+      commitRestore(local, destination);
       return qualified
         ? {
             ...retained,

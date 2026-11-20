@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { constants } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import {
   lstat,
@@ -7,12 +7,8 @@ import {
   mkdir,
   mkdtemp,
   readFile,
-  readdir,
   realpath,
-  rename,
   rm,
-  rmdir,
-  unlink,
   writeFile,
 } from "node:fs/promises";
 import {
@@ -31,6 +27,10 @@ import { marked } from "marked";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const sources = join(root, "docs/marketing/onboarding");
 const require = createRequire(import.meta.url);
+const installProgram = fileURLToPath(
+  new URL("./install-export.py", import.meta.url),
+);
+const directoryIdentity = ({ dev, ino }) => `${dev}:${ino}`;
 
 export const documents = [
   "01-welcome-to-situate",
@@ -275,7 +275,7 @@ async function proofPath(path) {
   });
   if (entry) {
     const anchor = await realpath(path);
-    const identity = await lstat(anchor);
+    const identity = await lstat(anchor, { bigint: true });
     assert(identity.isDirectory(), "Proof destination must be a directory.");
     return { path: anchor, anchor, identity };
   }
@@ -283,14 +283,16 @@ async function proofPath(path) {
   return { ...parent, path: join(parent.path, basename(path)) };
 }
 
-async function checkExportDirectory(path, identity) {
-  const current = await lstat(path);
-  assert(
-    current.isDirectory() &&
-      current.dev === identity.dev &&
-      current.ino === identity.ino &&
-      (await realpath(path)) === path,
-    "Export directory changed while rendering.",
+async function sameDirectory(path, identity) {
+  const current = await lstat(path, {
+    bigint: true,
+    throwIfNoEntry: false,
+  }).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+  });
+  return (
+    current?.isDirectory() &&
+    directoryIdentity(current) === directoryIdentity(identity)
   );
 }
 
@@ -298,7 +300,7 @@ export async function exportPack({ date, output, proofs }) {
   validateDate(date);
   output = resolve(output);
   const parent = await realpath(dirname(output));
-  const parentIdentity = await lstat(parent);
+  const parentIdentity = await lstat(parent, { bigint: true });
   assert(parentIdentity.isDirectory(), "Export parent must be a directory.");
   output = join(parent, basename(output));
   await assert.rejects(
@@ -316,12 +318,14 @@ export async function exportPack({ date, output, proofs }) {
     );
   }
   const prepared = await prepare(date);
+  assert(
+    await sameDirectory(parent, parentIdentity),
+    "Export directory changed while preparing.",
+  );
   const staging = await mkdtemp(join(parent, ".situate-onboarding-"));
+  const stagingIdentity = await lstat(staging, { bigint: true });
   const stagedProofs = join(staging, ".proofs");
-  const copiedProofs = [];
   let browser;
-  let reserved = false;
-  let firstProofDirectory;
   try {
     const { chromium } = require("../../client/node_modules/playwright");
     const { launchBrowser } = require("../brand/browser-launch.cjs");
@@ -458,65 +462,36 @@ export async function exportPack({ date, output, proofs }) {
     );
     await browser.close();
     browser = undefined;
-    await checkExportDirectory(parent, parentIdentity);
-    if (proofTarget) {
-      await checkExportDirectory(proofTarget.anchor, proofTarget.identity);
-      assert.equal(
-        (await proofPath(proofs)).path,
-        proofs,
-        "Proof destination changed while rendering.",
-      );
+    const request = {
+      parent,
+      parentIdentity: directoryIdentity(parentIdentity),
+      staging: basename(staging),
+      stagingIdentity: directoryIdentity(stagingIdentity),
+      output: basename(output),
+      proofs: proofTarget && {
+        anchor: proofTarget.anchor,
+        identity: directoryIdentity(proofTarget.identity),
+        parts: relative(proofTarget.anchor, proofs).split(sep).filter(Boolean),
+      },
+    };
+    const result = execFileSync("/usr/bin/python3", ["-IB", installProgram], {
+      env: {},
+      input: JSON.stringify(request),
+      encoding: "utf8",
+    });
+    if (result) {
+      const { code, message } = JSON.parse(result);
+      throw Object.assign(new Error(message), { code });
     }
-    // Reserve the destination exclusively. Never replace a pre-existing pack or user folder.
-    await mkdir(output);
-    reserved = true;
-    if (proofs) {
-      firstProofDirectory = await mkdir(proofs, { recursive: true });
-      for (const filename of (await readdir(stagedProofs)).sort((a, b) =>
-        a.localeCompare(b, "en"),
-      )) {
-        const target = join(proofs, filename);
-        await copyFile(
-          join(stagedProofs, filename),
-          target,
-          constants.COPYFILE_EXCL,
-        );
-        copiedProofs.push(target);
-      }
-      await rm(stagedProofs, { recursive: true });
-    }
-    await rename(staging, output);
-  } catch (error) {
-    const cleanup = await Promise.allSettled([
-      ...copiedProofs.map((path) => unlink(path)),
-      ...(reserved ? [rmdir(output)] : []),
-    ]);
-    const failures = cleanup.flatMap((result) =>
-      result.status === "rejected" ? [result.reason] : [],
-    );
-    if (firstProofDirectory) {
-      for (let directory = proofs; ; directory = dirname(directory)) {
-        try {
-          await rmdir(directory);
-        } catch (cleanupError) {
-          failures.push(cleanupError);
-          break;
-        }
-        if (directory === firstProofDirectory) break;
-      }
-    }
-    if (failures.length)
-      throw new AggregateError(
-        failures,
-        "Export failed and cleanup was incomplete.",
-        { cause: error },
-      );
-    throw error;
   } finally {
     try {
       await browser?.close();
     } finally {
-      await rm(staging, { recursive: true, force: true });
+      if (
+        (await sameDirectory(parent, parentIdentity)) &&
+        (await sameDirectory(staging, stagingIdentity))
+      )
+        await rm(staging, { recursive: true, force: true });
     }
   }
   console.log(`Created ${output}`);

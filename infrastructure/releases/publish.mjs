@@ -12,7 +12,6 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
-  renameSync,
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
@@ -48,6 +47,11 @@ const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const filename = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const archiveMemberName = /^(?:metadata\/)?[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const storageProgram = fileURLToPath(
+  new URL("./publication-storage.py", import.meta.url),
+);
+const directoryFlags =
+  constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 const environment = () => appleEnvironment(process.env, client);
 
 function readMetadata(path) {
@@ -571,41 +575,29 @@ function inventory(destination) {
   return files;
 }
 
-function saveJournal(path, value, exclusive = false) {
-  const parent = resolve(path, "..");
-  const directory = openSync(
-    parent,
-    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-  );
+function saveJournal(releaseDirectory, original, value, exclusive = false) {
+  const directory = openSync(releaseDirectory, directoryFlags);
   try {
-    const original = fstatSync(directory);
-    const checkParent = () => {
-      const current = lstatSync(parent);
-      if (
-        !current.isDirectory() ||
-        current.dev !== original.dev ||
-        current.ino !== original.ino
-      )
-        throw new Error("Publication journal directory changed.");
-    };
-    const temporary = exclusive ? path : `${path}.${randomUUID()}.tmp`;
-    checkParent();
-    const handle = openSync(temporary, "wx", 0o600);
-    try {
-      writeFileSync(handle, `${JSON.stringify(value, null, 2)}\n`);
-      fsyncSync(handle);
-    } finally {
-      closeSync(handle);
-    }
-    checkParent();
-    if (!exclusive) renameSync(temporary, path);
-    fsyncSync(directory);
+    const current = fstatSync(directory, { bigint: true });
+    if (current.dev !== original.dev || current.ino !== original.ino)
+      throw new Error("Publication journal directory changed.");
+    execFileSync(
+      "/usr/bin/python3",
+      ["-IB", storageProgram, exclusive ? "create-journal" : "replace-journal"],
+      {
+        env: {},
+        input: `${JSON.stringify(value, null, 2)}\n`,
+        stdio: ["pipe", "ignore", "pipe", directory],
+      },
+    );
   } finally {
     closeSync(directory);
   }
 }
 
 function remote(action, request, config, input) {
+  if (!["inspect", "publish", "reconcile", "complete"].includes(action))
+    throw new Error("Unknown publication transport action.");
   const code = readFileSync(new URL("./remote.py", import.meta.url)).toString(
     "base64",
   );
@@ -678,33 +670,23 @@ export function withPublicationArchive(
       )
     )
       throw new Error("Invalid publication archive inventory.");
-    if (
-      names.some((name) => name.startsWith("metadata/")) &&
-      !lstatSync(join(destination, "metadata")).isDirectory()
-    )
-      throw new Error("Expected an ordinary publication metadata directory.");
-    for (const name of names) {
-      const entry = lstatSync(join(destination, name));
-      if (!entry.isFile() || entry.nlink !== 1)
-        throw new Error(
-          "Expected single-link regular publication archive members.",
-        );
-    }
-    const output = openSync(tar, "wx", 0o600);
+    const directory = openSync(destination, directoryFlags);
     try {
-      execFileSync(
-        "/usr/bin/tar",
-        ["-cf", "-", "-C", destination, "--", ...names],
-        {
-          env: { ...environment(), COPYFILE_DISABLE: "1" },
-          stdio: ["ignore", output, "pipe"],
-        },
-      );
-      fsyncSync(output);
-    } catch {
-      throw new Error("Cannot create publication archive.");
+      const output = openSync(tar, "wx", 0o600);
+      try {
+        execFileSync("/usr/bin/python3", ["-IB", storageProgram, "archive"], {
+          env: {},
+          input: JSON.stringify(names),
+          stdio: ["pipe", output, "pipe", directory],
+        });
+        fsyncSync(output);
+      } catch {
+        throw new Error("Cannot create publication archive.");
+      } finally {
+        closeSync(output);
+      }
     } finally {
-      closeSync(output);
+      closeSync(directory);
     }
   }
   return withReleaseFile(tar, (fd, stat) => {
@@ -770,12 +752,17 @@ export async function main(args = process.argv.slice(2)) {
       }
     : configuration();
   const journalPath = join(directory, "publication-journal.json");
+  const journalDirectory = lstatSync(directory, { bigint: true });
   if (action === "inspect") {
     const journal = json(journalPath);
     if (journal.host !== config.WEBSITE_DEPLOY_HOST)
       throw new Error("Journal SSH destination differs from configuration.");
     const observed = remote("inspect", journal.request, config);
-    saveJournal(journalPath, { ...journal, inspected: true, observed });
+    saveJournal(directory, journalDirectory, {
+      ...journal,
+      inspected: true,
+      observed,
+    });
     console.log(JSON.stringify(observed, null, 2));
     return;
   }
@@ -889,7 +876,8 @@ export async function main(args = process.argv.slice(2)) {
       journal.transportSha256 = transportSha256;
       assertReviewedRevision(values["reviewed-revision"]);
       saveJournal(
-        journalPath,
+        directory,
+        journalDirectory,
         { ...journal, state: "pending", inspected: false },
         action === "publish",
       );
@@ -901,7 +889,11 @@ export async function main(args = process.argv.slice(2)) {
   await verifyPublicAvailability(manifest, artifact);
   if (journal.request.publicVerificationRequired)
     result = remote("complete", journal.request, config);
-  saveJournal(journalPath, { ...journal, state: "complete", result });
+  saveJournal(directory, journalDirectory, {
+    ...journal,
+    state: "complete",
+    result,
+  });
   console.log(JSON.stringify(result));
 }
 

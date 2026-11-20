@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -11,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   artwork,
   documents,
@@ -209,6 +213,35 @@ test("a reserved name and proof paths inside the pack are refused before renderi
     "alias",
     "existing.txt",
   ]);
+});
+
+test("installation leaves a replacement directory untouched", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "situate-export-install-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const parent = join(root, "destination");
+  const staging = join(parent, "staging");
+  await mkdir(staging, { recursive: true });
+  const identity = async (path) => {
+    const { dev, ino } = await lstat(path, { bigint: true });
+    return `${dev}:${ino}`;
+  };
+  const request = {
+    parent,
+    parentIdentity: await identity(parent),
+    staging: "staging",
+    stagingIdentity: await identity(staging),
+    output: "pack",
+  };
+  await rename(parent, join(root, "original"));
+  await mkdir(staging, { recursive: true });
+  const script = fileURLToPath(new URL("./install-export.py", import.meta.url));
+  const result = execFileSync("/usr/bin/python3", ["-IB", script], {
+    input: JSON.stringify(request),
+    encoding: "utf8",
+  });
+  assert.match(JSON.parse(result).message, /directory changed/);
+  assert.deepEqual(await readdir(parent), ["staging"]);
+  assert.deepEqual(await readdir(join(root, "original")), ["staging"]);
 });
 
 test(
