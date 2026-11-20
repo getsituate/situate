@@ -1,3 +1,6 @@
 * text=auto eol=lf
 
 LICENSES/CC-BY-4.0.txt whitespace=-blank-at-eof
+
+# Catalog verification hashes the notice's exact bytes.
+client/app/public/licenses/ai-catalog.txt -text
