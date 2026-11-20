@@ -386,7 +386,7 @@ Production frontend builds report initial and lazy JavaScript sizes using [`bund
 
 ## Coverage
 
-Coverage is opt-in and does not gate PRs or releases. On macOS, `node tools/test.mjs --coverage` measures Vue with the pinned Vitest coverage provider and Rust with `cargo-llvm-cov`. Install the pinned Rust/LLVM tools before running native coverage. A shared-host measurement does not qualify macOS behavior.
+Local coverage is opt-in. On macOS, `node tools/test.mjs --coverage` measures Vue with the pinned Vitest coverage provider and Rust with `cargo-llvm-cov`. Install the pinned Rust/LLVM tools before running native coverage. A shared-host measurement does not qualify macOS behavior.
 
 Reports live under `client/target/coverage/`: Vue HTML/LCOV in `vue/` and Rust LCOV in `rust.lcov`. Coverage does not execute signed-installation/update journeys or impose a universal percentage threshold. Inspect uncovered behavior rather than treating aggregate percentages as acceptance evidence.
 
@@ -404,7 +404,7 @@ The `qualification-route` selection uses the protected `macos-release` environme
 
 GitHub requires `PR verification` and the SonarQube Cloud app’s `SonarCloud Code Analysis` check for merges into `main`. The separate `SonarCloud` code-scanning check is not the quality gate. Automatic analysis runs without coverage data. To report Vue app coverage, add an analysis token as the `SONAR_TOKEN` Actions secret, turn off automatic analysis in SonarQube Cloud, and set the `SONAR_CI_ANALYSIS` Actions variable to `true`. Run the [SonarQube Cloud workflow](../../.github/workflows/sonarcloud.yml) on `main` and confirm the report appears. Then verify that a PR below 80% coverage on new code fails the gate for coverage.
 
-CI analysis runs on `main` and same-repository PRs. Fork PRs do not receive the required check in this mode; keep automatic analysis if fork PRs must merge without a separate CI analysis path. The workflow imports only Vue app coverage. Before switching, check how SonarQube Cloud scores new code outside the report so unrelated changes do not fail for missing coverage.
+CI analysis runs on `main` and same-repository PRs. Fork PRs do not receive the required check in this mode; keep automatic analysis if fork PRs must merge without a separate CI analysis path. The 80% coverage condition applies to new TypeScript and Vue code under `client/app/src`, excluding test files and type declarations. [`sonar-project.properties`](../../sonar-project.properties) excludes the rest of the repository from coverage, not from static analysis. Update the exclusions if the source layout or coverage report scope changes. Rust and TypeScript outside the Vue app still run through the existing verification suites.
 
 The [PR verification workflow](../../.github/workflows/verify.yml) and [macOS release workflow](../../.github/workflows/release-macos.yml) use the same script-owned plans as local execution:
 
