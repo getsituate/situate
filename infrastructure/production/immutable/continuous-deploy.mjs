@@ -74,10 +74,12 @@ const terraformDiagnostics = [
   /^The HCP workspace is locked; inspect its owner before continuing\.$/,
   /^The HCP workspace changed during initialization; inspect it before continuing\.$/,
   /^The HCP workspace has no state to export\.$/,
+  /^HCP Terraform did not provide a trusted state download URL\.$/,
+  /^HCP Terraform state download (?:did not complete|is missing or too large|returned invalid JSON)\.$/,
+  /^HCP Terraform state download failed: HTTP [45][0-9]{2}\.$/,
   /^The exported state does not match the inspected HCP state version\.$/,
   /^The HCP state changed during export; inspect it before continuing\.$/,
-  /^Terraform state pull returned (?:unexpected output|invalid JSON)\.$/,
-  /^Terraform (?:init|state pull) failed \((?:exit [0-9]+|signal SIG[A-Z0-9]+|could not start)\)\.$/,
+  /^Terraform init failed \((?:exit [0-9]+|signal SIG[A-Z0-9]+|could not start)\)\.$/,
 ];
 
 export function runHostingTerraform(env, args, run = spawnSync) {
@@ -95,9 +97,11 @@ export function runHostingTerraform(env, args, run = spawnSync) {
   const detail =
     result.error?.code === "ETIMEDOUT"
       ? "The command timed out."
-      : terraformDiagnostics.some((pattern) => pattern.test(diagnostic))
-        ? diagnostic
-        : "Inspect live state before making further changes.";
+      : result.error?.code === "ENOBUFS"
+        ? "The command exceeded its output limit."
+        : terraformDiagnostics.some((pattern) => pattern.test(diagnostic))
+          ? diagnostic
+          : "Inspect live state before making further changes.";
   throw new Error(`Hosting Terraform ${operation} failed: ${detail}`);
 }
 

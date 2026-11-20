@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripVTControlCharacters } from "node:util";
 import { childEnvironment, configuration } from "../website/config.mjs";
 import { checkAdoptionPlan } from "./inspect.mjs";
 import { checkImmutablePlan, immutablePhases } from "./immutable-plan.mjs";
@@ -15,6 +14,7 @@ import {
 } from "./rollout-journal.mjs";
 import { verifyAppliedOutcome } from "./rollout-reconcile.mjs";
 import {
+  downloadCurrentState,
   hcpConfiguration,
   hostname,
   inspectWorkspace,
@@ -86,25 +86,6 @@ function privateDestination(path, extension) {
   if (pathExists(absolute))
     throw new Error("Private output files are never overwritten.");
   return absolute;
-}
-
-function pulledStateJson(output) {
-  // The cloud backend writes retry notices to stdout before the state JSON.
-  const start = output.indexOf("{");
-  if (start !== -1) {
-    const prefix = stripVTControlCharacters(output.slice(0, start));
-    const remainder = prefix
-      .replace(
-        /^There was an error connecting to (?:HCP Terraform|Terraform Cloud)\. Please do not exit\r?\nTerraform to prevent data loss! Trying to restore the connection\.\.\.$/gm,
-        "",
-      )
-      .replace(
-        /^Still trying to restore the connection\.\.\. \((?:[0-9]+[hms])+ elapsed\)$/gm,
-        "",
-      );
-    if (!remainder.trim()) return output.slice(start);
-  }
-  throw new Error("Terraform state pull returned unexpected output.");
 }
 
 function digest(path) {
@@ -287,19 +268,13 @@ export async function main(
         stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
       });
       if (result.error || result.status !== 0) {
-        const operation =
-          command === "init" && parameters[0] === "init"
-            ? "init"
-            : command === "export" && parameters[0] === "state"
-              ? "state pull"
-              : null;
-        if (operation) {
+        if (command === "init" && parameters[0] === "init") {
           const outcome = result.error
             ? "could not start"
             : result.signal
               ? `signal ${result.signal}`
               : `exit ${result.status}`;
-          throw new Error(`Terraform ${operation} failed (${outcome}).`);
+          throw new Error(`Terraform init failed (${outcome}).`);
         }
         throw new Error(
           "Terraform failed. Inspect HCP state and pending operations before retrying; no automatic retry was attempted.",
@@ -377,17 +352,15 @@ export async function main(
         );
         return;
       }
-      const raw = pulledStateJson(run(["state", "pull"], true));
+      const raw = await downloadCurrentState(hcp, snapshot, fetchImpl);
       let state;
       try {
-        state = JSON.parse(raw);
-      } catch (error) {
-        if (!(error instanceof SyntaxError)) throw error;
+        state = JSON.parse(raw.toString("utf8"));
+      } catch {
+        throw new Error("HCP Terraform state download returned invalid JSON.");
       }
-      if (!state || typeof state !== "object")
-        throw new Error("Terraform state pull returned invalid JSON.");
       if (
-        state.version !== 4 ||
+        state?.version !== 4 ||
         typeof state.lineage !== "string" ||
         state.serial !== snapshot.stateVersion.serial ||
         !Array.isArray(state.resources)
