@@ -785,8 +785,10 @@ async function deploy(root, env, revision, gate) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
     await main();
-  } catch (error) {
-    console.error(error.message);
+  } catch {
+    console.error(
+      "Production deployment stopped. Inspect the GitHub deployment gate, Terraform, Hetzner and DNS before retrying or clearing the gate.",
+    );
     process.exitCode = 1;
   }
 }

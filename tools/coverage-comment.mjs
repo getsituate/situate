@@ -6,6 +6,10 @@ import { percentage, delta } from "./coverage.mjs";
 
 export const marker = "<!-- situate-coverage-v1 -->";
 const sha = /^[a-f0-9]{40}$/;
+const repositoryName = "getsituate/situate";
+const apiRoot = `https://api.github.com/repos/${repositoryName}/`;
+const validId = (value) => Number.isSafeInteger(value) && value > 0;
+const validSha = (value) => typeof value === "string" && sha.test(value);
 export function validateReport(text, expected) {
   if (Buffer.byteLength(text) > 4096)
     throw new Error("Oversized coverage report");
@@ -27,10 +31,8 @@ export function validateReport(text, expected) {
     !data ||
     Object.keys(data).some((key) => !keys.includes(key)) ||
     data.version !== 1 ||
-    typeof data.head !== "string" ||
-    typeof data.main !== "string" ||
-    !sha.test(data.head) ||
-    !sha.test(data.main) ||
+    !validSha(data.head) ||
+    !validSha(data.main) ||
     !["measured", "unavailable", "failed"].includes(data.status)
   )
     throw new Error("Invalid coverage report");
@@ -114,12 +116,14 @@ export function ownComment(comment) {
   return (
     comment.user?.login === "github-actions[bot]" &&
     comment.user?.type === "Bot" &&
-    comment.body?.startsWith(marker)
+    typeof comment.body === "string" &&
+    comment.body.startsWith(marker)
   );
 }
 
 export function validArtifact(artifact, run) {
   return (
+    validId(artifact.id) &&
     !artifact.expired &&
     Number.isSafeInteger(artifact.size_in_bytes) &&
     artifact.size_in_bytes > 0 &&
@@ -148,37 +152,82 @@ export function readArchive(buffer) {
   ).toString();
 }
 
-async function main() {
-  const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
-  const repository = process.env.GITHUB_REPOSITORY;
-  const api = async (path, options = {}) => {
-    const response = await fetch(
-      `https://api.github.com/repos/${repository}/${path}`,
-      {
-        ...options,
+export function createCoverageApi({ token, fetchImpl = fetch }) {
+  if (typeof token !== "string" || !token.trim())
+    throw new Error("Missing GitHub coverage authorization");
+  return async (path, { method = "GET", body } = {}) => {
+    const url = new URL(path, apiRoot);
+    if (!url.href.startsWith(apiRoot))
+      throw new Error("Invalid GitHub coverage endpoint");
+    const archive =
+      method === "GET" && /^actions\/artifacts\/[1-9][0-9]*\/zip$/.test(path);
+    const signal = AbortSignal.timeout(15_000);
+    let response;
+    try {
+      response = await fetchImpl(url, {
+        method,
+        body,
         headers: {
-          Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+          Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(body ? { "Content-Type": "application/json" } : {}),
         },
-      },
-    );
+        redirect: archive ? "manual" : "error",
+        signal,
+      });
+      if (archive && response.status === 302) {
+        await response.body?.cancel();
+        const location = new URL(response.headers.get("location"));
+        // Match the storage boundary used for source verification evidence.
+        if (
+          location.protocol !== "https:" ||
+          location.username ||
+          location.password ||
+          location.port ||
+          !/^[a-z0-9-]+\.blob\.core\.windows\.net$/.test(location.hostname)
+        )
+          throw new Error("Invalid artifact storage URL");
+        response = await fetchImpl(location, {
+          method: "GET",
+          headers: { Accept: "application/octet-stream" },
+          redirect: "error",
+          signal,
+        });
+      }
+    } catch {
+      throw new Error("GitHub coverage request failed");
+    }
     if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
     return response;
   };
-  await publishCoverage({ event, repository, api });
+}
+
+async function main() {
+  if (process.env.GITHUB_REPOSITORY !== repositoryName)
+    throw new Error("Unexpected GitHub coverage repository");
+  const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+  await publishCoverage({
+    event,
+    repository: repositoryName,
+    api: createCoverageApi({ token: process.env.GITHUB_TOKEN }),
+  });
 }
 
 export async function publishCoverage({ event, repository, api }) {
-  const run = await (await api(`actions/runs/${event.workflow_run.id}`)).json();
+  const { id: runId, run_attempt: attempt } = event?.workflow_run ?? {};
+  if (!validId(runId) || !validId(attempt)) return;
+  const run = await (await api(`actions/runs/${runId}`)).json();
   const workflow = await (await api("actions/workflows/coverage.yml")).json();
   if (
+    run.id !== runId ||
     run.repository?.full_name !== repository ||
+    !validId(workflow.id) ||
     run.workflow_id !== workflow.id ||
     run.event !== "pull_request" ||
     run.status !== "completed" ||
-    !sha.test(run.head_sha) ||
-    run.run_attempt !== event.workflow_run.run_attempt
+    !validSha(run.head_sha) ||
+    run.run_attempt !== attempt
   )
     return;
   let pr;
@@ -186,7 +235,7 @@ export async function publishCoverage({ event, repository, api }) {
   if (run.pull_requests?.length) {
     if (run.pull_requests.length !== 1) return;
     const number = run.pull_requests[0].number;
-    if (!Number.isSafeInteger(number) || number < 1) return;
+    if (!validId(number)) return;
     pr = await (await api(`pulls/${number}`)).json();
     if (pr.number !== number || !eligible(run, pr, repository, workflow.id))
       return;
@@ -197,7 +246,7 @@ export async function publishCoverage({ event, repository, api }) {
     const candidates = commitPulls.filter((candidate) =>
       eligible(run, candidate, repository, workflow.id),
     );
-    if (candidates.length !== 1) return;
+    if (candidates.length !== 1 || !validId(candidates[0].number)) return;
     pr = candidates[0];
   }
   let body;
@@ -252,7 +301,7 @@ export async function publishCoverage({ event, repository, api }) {
       if (reports.head.main !== reports.main.main)
         throw new Error("Baseline mismatch");
       const currentMain = await (await api("commits/main")).json();
-      if (!sha.test(currentMain.sha)) throw new Error("Invalid main revision");
+      if (!validSha(currentMain.sha)) throw new Error("Invalid main revision");
       const comparison = await (
         await api(`compare/${reports.head.main}...${currentMain.sha}`)
       ).json();
@@ -287,9 +336,13 @@ export async function publishCoverage({ event, repository, api }) {
   }
   const existing = comments.find(ownComment);
   const fresh = await (await api(`pulls/${pr.number}`)).json();
-  if (!eligible(run, fresh, repository, workflow.id)) return;
+  if (
+    fresh.number !== pr.number ||
+    !eligible(run, fresh, repository, workflow.id)
+  )
+    return;
   const latest = await (await api(`actions/runs/${run.id}`)).json();
-  if (latest.run_attempt !== run.run_attempt) return;
+  if (latest.id !== run.id || latest.run_attempt !== run.run_attempt) return;
   const recent = await (
     await api(
       `actions/workflows/${workflow.id}/runs?event=pull_request&head_sha=${run.head_sha}&per_page=100`,
@@ -318,6 +371,8 @@ export async function publishCoverage({ event, repository, api }) {
       if (candidates.length === 1 && candidates[0].number === pr.number) return;
     }
   }
+  if (existing && !validId(existing.id))
+    throw new Error("Invalid GitHub coverage comment identity");
   await api(
     existing
       ? `issues/comments/${existing.id}`
