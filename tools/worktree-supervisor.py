@@ -1,5 +1,6 @@
 """Own a command's resource lease and descendants independently of its caller."""
 
+from contextlib import contextmanager
 import fcntl
 import hashlib
 import json
@@ -72,7 +73,7 @@ def caller_closed():
 
 def snapshot():
     listing = subprocess.check_output(
-        ["ps", "-A", "-o", "pid=,ppid=,pgid=,stat=,lstart="],
+        ["/bin/ps", "-A", "-o", "pid=,ppid=,pgid=,stat=,lstart="],
         text=True, timeout=10,
     )
     result = {}
@@ -223,25 +224,36 @@ def build_slots():
     return int(value)
 
 
+@contextmanager
+def private_directory(path, error):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ValueError(error)
+        yield fd
+    finally:
+        os.close(fd)
+
+
 def acquire(resource, directory, base=None, child=None, pending=None):
     # App fixtures override TMPDIR; the desktop lease must still be machine-local.
     if base is None:
         base = Path("/tmp").resolve() / ("situate-coordination-" + str(os.getuid()))
     base.mkdir(mode=0o700, exist_ok=True)
-    info = base.lstat()
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
-        raise RuntimeError("The coordination directory must be private and owned by the current user.")
     keys = ([f"build:{index}" for index in range(build_slots())] if resource == "build" else
             [resource if resource == "desktop" else "worktree:" + str(worktree_root(directory))])
     descriptors = []
     try:
-        for key in keys:
-            name = hashlib.sha256(key.encode()).hexdigest() + ".lock"
-            fd = os.open(base / name, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-            descriptors.append(fd)
-            info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_mode & 0o077:
-                raise RuntimeError("The coordination lock must be a private regular file.")
+        with private_directory(base, "The coordination directory must be private and owned by the current user.") as base_fd:
+            for key in keys:
+                name = hashlib.sha256(key.encode()).hexdigest() + ".lock"
+                fd = os.open(name, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             0o600, dir_fd=base_fd)
+                descriptors.append(fd)
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_mode & 0o077:
+                    raise RuntimeError("The coordination lock must be a private regular file.")
     except Exception:
         for fd in descriptors:
             os.close(fd)
@@ -391,7 +403,6 @@ class DockerBuildAdmission:
     def poll_phase(self, path, lease, child):
         root = Path(str(path) + '.' + lease[0]['token'] + '.admission')
         request = root / 'request.json'
-        grant = root / 'grant.json'
         try:
             token = read_phase_request(root, request)
             withdrawn = read_phase_request(root, root / 'release.json')
@@ -404,8 +415,7 @@ class DockerBuildAdmission:
                 return True
             self.release()
             self.phase_token = None
-            grant.unlink(missing_ok=True)
-            publish_phase(root, 'released.json', token)
+            publish_phase(root, 'released.json', token, withdraw=True)
             return True
         if self.phase_token is not None and token not in (None, self.phase_token):
             report('Container phase changed without release; retaining the resource lease.')
@@ -430,31 +440,39 @@ class DockerBuildAdmission:
         return True
 
 
-def publish_phase(root, name, token):
-    temporary = root / (name + '.publishing')
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        json.dump({'token': token}, stream)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, root / name)
+PHASE_DIRECTORY_ERROR = 'Container phase admission directory must be private and owned.'
+
+
+def publish_phase(root, name, token, withdraw=False):
+    with private_directory(root, PHASE_DIRECTORY_ERROR) as root_fd:
+        if withdraw:
+            try:
+                os.unlink('grant.json', dir_fd=root_fd)
+            except FileNotFoundError:
+                pass
+        temporary = name + '.publishing'
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=root_fd)
+        with os.fdopen(fd, 'w') as stream:
+            json.dump({'token': token}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
 
 
 def read_phase_request(root, path):
-    parent = root.lstat()
-    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
-        raise ValueError('Container phase admission directory must be private and owned.')
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    except FileNotFoundError:
-        return None
-    with os.fdopen(fd, 'rb') as stream:
-        info = os.fstat(stream.fileno())
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > 256):
-            raise ValueError('Invalid container phase request.')
-        data = json.loads(stream.read(257))
-    current = path.lstat()
+    with private_directory(root, PHASE_DIRECTORY_ERROR) as root_fd:
+        try:
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
+        except FileNotFoundError:
+            return None
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                    or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > 256):
+                raise ValueError('Invalid container phase request.')
+            data = json.loads(stream.read(257))
+        current = os.stat(path.name, dir_fd=root_fd, follow_symlinks=False)
     if (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino):
         raise ValueError('Container phase changed during inspection.')
     if (not isinstance(data, dict) or set(data) != {'token'} or not isinstance(data['token'], str)

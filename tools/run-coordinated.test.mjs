@@ -229,6 +229,37 @@ with tempfile.TemporaryDirectory() as temporary:
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("phase protocol rejects public and aliased directories without touching their files", () => {
+  const source = `import importlib.util, tempfile
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(modulePath)})
+s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+with tempfile.TemporaryDirectory() as temporary:
+    root=Path(temporary)
+    phase=root/'phase';phase.mkdir(mode=0o700)
+    token='11111111-1111-4111-8111-111111111111'
+    s.publish_phase(phase,'grant.json',token)
+    grant=phase/'grant.json'
+    assert s.read_phase_request(phase,grant)==token
+    alias=root/'alias';alias.symlink_to(phase, target_is_directory=True)
+    for directory in (alias, phase):
+        if directory == phase:
+            phase.chmod(0o755)
+        for check in (lambda: s.publish_phase(directory,'released.json',token,withdraw=True),
+                      lambda: s.read_phase_request(directory,directory/'grant.json')):
+            try: check()
+            except (OSError, ValueError): pass
+            else: raise AssertionError('Invalid phase directory accepted')
+        assert grant.is_file()
+        assert not (phase/'released.json').exists()
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("build slot settings retain two host slots and permit one guest slot", () => {
   const source = `import importlib.util, os
 spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})

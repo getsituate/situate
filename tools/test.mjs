@@ -1022,11 +1022,12 @@ export function suiteEnvironment(
 }
 
 function processSnapshot() {
-  const listing = execFileSync("ps", ["-A", "-o", "pid=,ppid=,stat=,lstart="], {
-    encoding: "utf8",
-    timeout: 2000,
-    maxBuffer: 8 * 1024 * 1024,
-  });
+  // Process ownership must not depend on the suite's selected toolchain.
+  const listing = execFileSync(
+    "/bin/ps",
+    ["-A", "-o", "pid=,ppid=,stat=,lstart="],
+    { encoding: "utf8", timeout: 2000, maxBuffer: 8 * 1024 * 1024 },
+  );
   const snapshot = new Map();
   for (const line of listing.split("\n")) {
     const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/);

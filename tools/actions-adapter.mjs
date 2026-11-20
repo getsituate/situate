@@ -2,8 +2,13 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
+  closeSync,
+  constants,
+  fstatSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -108,6 +113,35 @@ export function aggregate(plan, receipts, needs) {
     lanes: plan.lanes.map(({ id }) => id),
   };
 }
+function readPlanFile(path) {
+  const fd = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  try {
+    const { size, mode } = fstatSync(fd);
+    if (
+      (mode & constants.S_IFMT) !== constants.S_IFREG ||
+      size > 16 * 1024 * 1024
+    )
+      throw new Error(
+        "Workflow plan must be a regular file of at most 16 MiB.",
+      );
+    const bytes = Buffer.alloc(size + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length !== size)
+      throw new Error("Workflow plan file changed while reading.");
+    return bytes.toString("utf8", 0, length);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: root,
@@ -115,6 +149,7 @@ function run(command, args, options = {}) {
     stdio: ["ignore", "pipe", "inherit"],
     maxBuffer: 16 * 1024 * 1024,
     ...options,
+    shell: false,
   });
   if (result.error || result.status !== 0)
     throw new Error(
@@ -167,6 +202,12 @@ export function eventSelection(env, event) {
   return { source, base, ...(declarationHead ? { declarationHead } : {}) };
 }
 export function resolvePullRequestBase(source, base, head, execute = run) {
+  if (
+    ![source, base, head].every(
+      (value) => typeof value === "string" && sha.test(value),
+    )
+  )
+    throw new Error("Exact PR source, base and head commits are required.");
   const parents = execute("git", ["rev-list", "--parents", "-n", "1", source])
     .trim()
     .split(/\s+/);
@@ -688,7 +729,7 @@ export async function main(
   }
   const plan = validatePlan(
     JSON.parse(
-      values.plan ? readFileSync(values.plan, "utf8") : env.PIPELINE_PLAN,
+      values.plan === undefined ? env.PIPELINE_PLAN : readPlanFile(values.plan),
     ),
   );
   if (digest(plan) !== env.PIPELINE_PLAN_DIGEST)

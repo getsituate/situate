@@ -2,12 +2,32 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   hasSuiteInputRule,
+  requiresChangelog,
   requiresFullSelection,
   suiteAffectedFiles,
 } from "./test-inputs.mjs";
 import { root, sourceFiles, suiteInventory } from "./test.mjs";
 
 const affected = (id, ...files) => suiteAffectedFiles({ id }, files);
+
+test("changelog filtering recognizes test paths and keeps similarly named app inputs", () => {
+  for (const name of [
+    "tests/view.ts",
+    "View.spec.tsx",
+    "test-setup.ts",
+    "vitest.config.ts",
+    "playwright.desktop.local.config.mjs",
+    `vitest.${"local.".repeat(100)}config.ts`,
+  ])
+    assert.equal(requiresChangelog(`client/app/${name}`), false, name);
+  for (const name of [
+    "contest/view.ts",
+    "View.test.",
+    "vitest..config.ts",
+    "playwright.config./view.ts",
+  ])
+    assert.equal(requiresChangelog(`client/app/${name}`), true, name);
+});
 
 test("plain documentation is not a runtime input, but remains a link contract input", () => {
   const files = [

@@ -5,6 +5,8 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -492,6 +494,35 @@ test("aggregate distinguishes deliberate unselection from failure, cancellation,
   assert.throws(() =>
     aggregate(plan, [receipt], { ...statuses(), plan: { result: "failure" } }),
   );
+});
+
+test("explicit plan inputs accept ordinary local files and reject unbounded or aliased inputs", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-adapter-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const file = join(directory, "local plan.json");
+  const alias = join(directory, "alias.json");
+  writeFileSync(file, JSON.stringify(plan));
+  symlinkSync(file, alias);
+  const env = { PIPELINE_PLAN_DIGEST: digest(plan) };
+  const run = (path) =>
+    main(["lane", "--lane", "policy", "--plan", path], env, () => {
+      throw new Error("Reached checkout verification");
+    });
+  await assert.rejects(run(file), /Reached checkout verification/);
+  await assert.rejects(run(alias), { code: "ELOOP" });
+  await assert.rejects(run(directory), /must be a regular file/);
+  truncateSync(file, 16 * 1024 * 1024 + 1);
+  await assert.rejects(run(file), /at most 16 MiB/);
+});
+
+test("PR base resolution rejects non-commit identities before executing Git", () => {
+  const never = () => assert.fail("Git must not run for an invalid identity");
+  for (const inputs of [
+    ["HEAD", base, source],
+    [source, "main", base],
+    [source, base, "HEAD"],
+  ])
+    assert.throws(() => resolvePullRequestBase(...inputs, never), /Exact PR/);
 });
 
 test("adapter subprocess transports plan-bound receipts and reports planner failures without Actions APIs", (t) => {

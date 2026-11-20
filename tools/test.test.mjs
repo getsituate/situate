@@ -1902,6 +1902,33 @@ test("suite deadlines stop a process instead of hanging the runner", async () =>
   assert.equal(result.status, "timed-out");
 });
 
+test(
+  "suite timeout can verify process cleanup without PATH entries",
+  { skip: process.platform === "win32" },
+  () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+    import { executeSuite } from './tools/test.mjs';
+    const result = await executeSuite({
+      id: 'timeout', command: process.execPath, cwd: '.',
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+    }, { timeout: 0.1 });
+    console.log(JSON.stringify(result));
+  `,
+      ],
+      { cwd: root, env: { PATH: "" }, encoding: "utf8", timeout: 8000 },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const suite = JSON.parse(result.stdout);
+    assert.equal(suite.status, "timed-out");
+    assert.equal(suite.cleanupIncomplete, undefined, suite.error);
+  },
+);
+
 test("JSON list output is parseable and does not execute tests from a different cwd", () => {
   const result = spawnSync(
     process.execPath,

@@ -320,8 +320,16 @@ export function suiteAffectedFiles(suite, files) {
   });
 }
 
-const clientTest =
-  /(?:^|\/)(?:tests?|__tests__|__fixtures__)(?:\/|$)|\.(?:test|spec)\.[^/]+$|(?:^|\/)(?:test-setup\.[^/]+|(?:playwright|vitest)(?:\.[^/]+)*\.config\.[^/]+)$/;
+function isClientTest(file) {
+  if (/(?:^|\/)(?:tests?|__tests__|__fixtures__)(?:\/|$)/.test(file))
+    return true;
+  const name = file.slice(file.lastIndexOf("/") + 1);
+  return (
+    /\.(?:test|spec)\..+/s.test(name) ||
+    /^test-setup\..+/s.test(name) ||
+    /^(?:playwright|vitest)(?:\..+)?\.config\..+/s.test(name)
+  );
+}
 const bundledBrand =
   /^design\/brand\/(?:tokens\.(?:css|json)|assets\/[^/]+\.svg|bend\/(?:svg\/[^/]+\.svg|performance\.js|mini\/mini\.js))$/;
 const clientBuildScript =
@@ -331,7 +339,7 @@ const clientBuildScript =
 export function requiresChangelog(file) {
   if (
     isPlainDocumentation(file) ||
-    clientTest.test(file) ||
+    isClientTest(file) ||
     file.endsWith("/.gitignore")
   )
     return false;
