@@ -80,12 +80,18 @@ test("desktop preflight uses the shared adapter without production credentials",
 
 test("Sonar coverage maps Vue source paths without changing coverage records", () => {
   assert.equal(
-    sonarLcov("TN:\nSF:src/App.vue\nDA:12,1\nend_of_record\n"),
-    "TN:\nSF:client/app/src/App.vue\nDA:12,1\nend_of_record\n",
+    sonarLcov(
+      "TN:\nSF:src/App.vue\nDA:12,1\nend_of_record\n",
+      "/work/client/app",
+    ),
+    "TN:\nSF:/work/client/app/src/App.vue\nDA:12,1\nend_of_record\n",
   );
-  assert.throws(() => sonarLcov("TN:\n"), /no source paths/);
   assert.throws(
-    () => sonarLcov("SF:src/App.vue\nSF:other.ts\n"),
+    () => sonarLcov("TN:\n", "/work/client/app"),
+    /no source paths/,
+  );
+  assert.throws(
+    () => sonarLcov("SF:src/App.vue\nSF:other.ts\n", "/work/client/app"),
     /relative to the Vue app/,
   );
 });

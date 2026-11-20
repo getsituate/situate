@@ -293,13 +293,13 @@ export async function diagnosticPlan(selection, target) {
   return { ...plan, suites };
 }
 
-export function sonarLcov(report) {
+export function sonarLcov(report, appRoot) {
   let sources = 0;
   const normalized = report.replace(/^SF:(.*)$/gm, (_, path) => {
     if (!path.startsWith("src/"))
       throw new Error("Expected an LCOV source path relative to the Vue app.");
     sources++;
-    return `SF:client/app/${path}`;
+    return `SF:${join(appRoot, path)}`;
   });
   if (!sources) throw new Error("Vue LCOV report has no source paths.");
   return normalized;
@@ -345,7 +345,10 @@ export async function main(
       join(root, "client/target/coverage/vue/lcov.info"),
       "utf8",
     );
-    writeFileSync(join(env.RUNNER_TEMP, "situate-vue.lcov"), sonarLcov(report));
+    writeFileSync(
+      join(env.RUNNER_TEMP, "situate-vue.lcov"),
+      sonarLcov(report, join(root, suite.cwd)),
+    );
     return;
   }
   if (command === "desktop") {
