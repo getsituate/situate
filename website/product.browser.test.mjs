@@ -179,7 +179,7 @@ export async function checkProduct(browser, origin, proofs, inspect) {
         const chapter = page.locator(`.product-contents a[href="#${id}"]`);
         await chapter.focus();
         await page.keyboard.press("Enter");
-        assert.equal(new URL(page.url()).hash, `#${id}`);
+        await page.waitForURL((url) => url.hash === `#${id}`);
         assert.ok(
           await page
             .locator(`#${id}`)
