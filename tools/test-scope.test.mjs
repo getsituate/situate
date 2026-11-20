@@ -246,7 +246,7 @@ test("app release verification keeps native gates alongside portable code and br
     ["browser", 1800],
     ["macos-code", 1800],
     ["macos-native", 1800],
-    ["macos-compatibility", 1800],
+    ["macos-compatibility", 2700],
   ])
     assert.equal(
       plan.lanes.find((lane) => lane.id === id).timeoutSeconds,
