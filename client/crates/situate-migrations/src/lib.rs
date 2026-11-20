@@ -6,6 +6,7 @@ mod migrations;
 mod registry;
 mod runner;
 
+pub use filesystem::directory_for_sync;
 pub use migration::{
     ManifestConversion, Migration, MigrationDescriptor, MigrationId, MigrationWorkspace,
     PluginHistoryMigration,
