@@ -65,11 +65,48 @@ function execute(
   }
 }
 
+const terraformDiagnostics = [
+  /^HCP Terraform inspection failed; no retry was attempted\.$/,
+  /^HCP Terraform inspection failed: HTTP [45][0-9]{2}\.$/,
+  /^HCP Terraform returned (?:invalid JSON|an unexpected workspace|an incomplete or invalid state version)\.$/,
+  /^The HCP token must be able to read this workspace's state versions\.$/,
+  /^Set the HCP workspace execution mode to Local before continuing\.$/,
+  /^The HCP workspace is locked; inspect its owner before continuing\.$/,
+  /^The HCP workspace changed during initialization; inspect it before continuing\.$/,
+  /^The HCP workspace has no state to export\.$/,
+  /^The exported state does not match the inspected HCP state version\.$/,
+  /^The HCP state changed during export; inspect it before continuing\.$/,
+  /^Terraform (?:init|state pull) failed \((?:exit [0-9]+|signal SIG[A-Z0-9]+|could not start)\)\.$/,
+];
+
+export function runHostingTerraform(env, args, run = execFileSync) {
+  const [operation] = args;
+  try {
+    return run(process.execPath, [terraform, ...args], {
+      cwd: repository,
+      env,
+      timeout: 180_000,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 8 * 1024 * 1024,
+    }).trim();
+  } catch (error) {
+    const diagnostic = String(error.stderr ?? "")
+      .trimEnd()
+      .split(/\r?\n/)
+      .at(-1);
+    const detail =
+      error.code === "ETIMEDOUT"
+        ? "The command timed out."
+        : terraformDiagnostics.some((pattern) => pattern.test(diagnostic))
+          ? diagnostic
+          : "Inspect live state before making further changes.";
+    throw new Error(`Hosting Terraform ${operation} failed: ${detail}`);
+  }
+}
+
 function terraformCommand(env, ...args) {
-  return execute(process.execPath, [terraform, ...args], {
-    env,
-    timeout: 180_000,
-  });
+  return runHostingTerraform(env, args);
 }
 
 function keyFile(root, value, name) {

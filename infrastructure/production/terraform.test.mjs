@@ -513,6 +513,24 @@ test("explicit state export is private, independent of cloud credentials and nev
   await assert.rejects(main(["export", path], f), /never overwritten/);
 });
 
+test("preflight distinguishes Terraform init and state pull failures without reporting their output", async (t) => {
+  const f = fixture(t);
+  f.current = { id: "sv-Current", serial: 1 };
+  const options = {
+    ...f,
+    execute: () => ({ status: 1, stderr: "private Terraform diagnostics" }),
+  };
+  await assert.rejects(
+    main(["export", join(f.privateDirectory, "state.tfstate")], options),
+    { message: "Terraform state pull failed (exit 1)." },
+  );
+  rmSync(f.metadataPath);
+  rmSync(f.bindingPath);
+  await assert.rejects(main(["init"], options), {
+    message: "Terraform init failed (exit 1).",
+  });
+});
+
 test("status remains read-only even when a workspace is locked", async (t) => {
   const f = fixture(t);
   f.locked = true;

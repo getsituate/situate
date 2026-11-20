@@ -14,7 +14,7 @@ const tests = [
     "rollout-reconcile",
     "terraform",
   ].map((name) => `${hosting}/${name}.test.mjs`),
-  ...["enrollment", "hosting-inventory", "probe"].map(
+  ...["continuous-deploy", "enrollment", "hosting-inventory", "probe"].map(
     (name) => `${immutable}/${name}.test.mjs`,
   ),
 ];
