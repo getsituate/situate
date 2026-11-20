@@ -268,10 +268,25 @@ export function createHostReleaseCoordinator(
         );
       const snapshot = inspectionDigest;
       inspectionDigest = undefined;
-      return invoke(
+      const result = await invoke(
         "release-claim",
         resume ? { inspectionDigest: snapshot } : {},
       );
+      if (result?.rejected === "another-release-active")
+        throw new Error(
+          "Another release operation is still active. Inspect it with Release recovery before starting a new release.",
+        );
+      if (result?.rejected === "release-inspection-required")
+        throw new Error(
+          "This release operation is already active. Inspect it with Release recovery before resuming.",
+        );
+      if (result?.rejected === "release-already-completed")
+        throw new Error("A completed release operation cannot be reused.");
+      assert(
+        result?.durable === true && result.operationId === operationId,
+        "The host did not acknowledge this release claim.",
+      );
+      return result;
     },
     complete: () => invoke("release-complete"),
     inspect: async () => {

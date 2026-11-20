@@ -996,7 +996,7 @@ test("release coordinator retains claims across processes and requires inspect-f
   assert.equal((await first.claim()).durable, true);
   const journal = readFileSync(join(root, "release-operations.jsonl"), "utf8");
   const reopened = createHostReleaseCoordinator({}, options);
-  await assert.rejects(reopened.claim(), /connection lost/u);
+  await assert.rejects(reopened.claim(), /already active.*Release recovery/u);
   await assert.rejects(reopened.claim({ resume: true }), /inspection first/u);
   const inspected = await reopened.inspect();
   assert.deepEqual(inspected.active, {
@@ -1013,7 +1013,14 @@ test("release coordinator retains claims across processes and requires inspect-f
     {},
     { ...options, operationId: "release-two" },
   );
-  await assert.rejects(competitor.claim(), /connection lost/u);
+  await assert.rejects(
+    competitor.claim(),
+    /Another release operation is still active/u,
+  );
+  assert.equal(
+    readFileSync(join(root, "release-operations.jsonl"), "utf8"),
+    journal,
+  );
   await assert.rejects(
     createHostReleaseCoordinator(
       {},
@@ -1050,7 +1057,10 @@ test("release coordinator rejects stale inspection and never permits two concurr
   const winner = outcomes[0].status === "fulfilled" ? a : b;
   await winner.inspect();
   await winner.complete();
-  await assert.rejects(winner.claim({ resume: true }), /connection lost/u);
+  await assert.rejects(
+    winner.claim({ resume: true }),
+    /completed release operation cannot be reused/u,
+  );
 });
 
 test("unknown notary operations block new submissions until explicit reconciliation", async (t) => {

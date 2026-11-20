@@ -115,12 +115,12 @@ def release_coordination(request):
     if action == 'release-claim':
         if active is not None:
             if active != identity:
-                raise ValueError('Another release operation requires inspection')
+                return {'rejected': 'another-release-active'}
             if request.get('inspectionDigest') != snapshot:
-                raise ValueError('Existing release claim requires explicit fresh inspection')
+                return {'rejected': 'release-inspection-required'}
             return {'durable': True, 'operationId': identity['operationId'], 'resumed': True}
         if selected:
-            raise ValueError('A completed release operation cannot be reused')
+            return {'rejected': 'release-already-completed'}
         state = 'claimed'
     elif action == 'release-complete':
         if selected and selected[-1]['state'] == 'completed':
