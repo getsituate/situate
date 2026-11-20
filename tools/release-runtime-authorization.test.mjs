@@ -21,6 +21,24 @@ test("fresh route authorization allows the same disposable VM account tuple with
   assert.equal(JSON.stringify(input.configuration), before);
   assert.equal(auth.runtime.qualification.account.uid, 501);
 });
+test("a retained legacy package can qualify through the baked listener", (t) => {
+  const input = runtimeFixture(t);
+  const facts = input.runtime.qualificationResources.facts;
+  delete facts.imageId;
+  delete facts.certificateVolume;
+  facts.listenerProfile = "immutable-loopback-v1";
+  const auth = createQualificationRuntimeAuthorization(input);
+  assert.deepEqual(
+    validateQualificationRuntimeAuthorization(auth, input),
+    input.runtime,
+  );
+  facts.certificateVolume = "unexpected";
+  assert.throws(
+    () => createQualificationRuntimeAuthorization(input),
+    /Controller facts fields differ/,
+  );
+});
+
 test("unchanged custom qualification behavior remains valid but runtime overlays cannot alter it", (t) => {
   const input = runtimeFixture(t);
   const assertion = {

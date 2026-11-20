@@ -2,11 +2,14 @@
 import base64
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import socket
+import ssl
 import stat
 import subprocess
 import sys
@@ -14,6 +17,11 @@ import tarfile
 
 ROOT = Path('/opt/situate/.qualification-host')
 HOST_UID = 1000
+IMMUTABLE_UID = 1100
+IMMUTABLE_CONFIG = Path('/usr/local/lib/situate/qualification-nginx.conf')
+IMMUTABLE_PROFILE = 'immutable-loopback-v1'
+IMMUTABLE_HOSTNAME = 'getsituate.com'
+IMMUTABLE_PORT = 24443
 LABEL = 'com.situate.qualification-operation'
 
 
@@ -97,7 +105,31 @@ def validate(request):
     return nonce, config
 
 
+def immutable_host():
+    try:
+        info = regular(IMMUTABLE_CONFIG)
+    except FileNotFoundError:
+        return False
+    require(info.st_uid == 0 and not info.st_mode & 0o022, 'Unsafe baked qualification configuration')
+    return True
+
+
+def probe_immutable_listener():
+    context = ssl.create_default_context()
+    with socket.create_connection(('127.0.0.1', IMMUTABLE_PORT), timeout=10) as sock:
+        with context.wrap_socket(sock, server_hostname=IMMUTABLE_HOSTNAME) as secured:
+            connection = http.client.HTTPConnection(IMMUTABLE_HOSTNAME, timeout=10)
+            connection.sock = secured
+            connection.request('GET', '/healthz')
+            require(connection.getresponse().status == 204, 'Private qualification HTTPS listener is not ready')
+
+
 def discover(config):
+    if immutable_host():
+        require(config['hostname'] == IMMUTABLE_HOSTNAME and config['hostPort'] == IMMUTABLE_PORT
+                and config['feedPath'] == 'releases/current/update.json', 'Configuration differs from the baked qualification route')
+        probe_immutable_listener()
+        return {'listenerProfile': IMMUTABLE_PROFILE}
     production = json.loads(command(['docker', 'container', 'inspect', config['caddyContainer']]))[0]
     require(production['State']['Running'] is True, 'Production Caddy is not running')
     image = production['Image']
@@ -115,7 +147,8 @@ def discover(config):
 
 def facts(state):
     config = state['config']
-    result = {key: state[key] for key in ['operationId', 'operationNonce', 'status', 'identityPath', 'identitySha256', 'imageId', 'certificateVolume', 'containerName']}
+    result = {key: state[key] for key in ['operationId', 'operationNonce', 'status', 'identityPath', 'identitySha256', 'containerName']}
+    result.update(listener_binding(state))
     result.update({'privateAddress': '127.0.0.2', 'interface': 'lo0',
                    'hostAddress': '127.0.0.1', 'hostPort': config['hostPort'], 'runnerPort': 443,
                    'endpoint': 'https://' + config['hostname'] + '/' + config['feedPath'],
@@ -169,6 +202,70 @@ def caddy_config(state):
           'automatic_https': {'disable': True}, 'tls_connection_policies': [{}], 'routes': routes}}}}}
 
 
+def listener_binding(state):
+    if state.get('listenerProfile') == IMMUTABLE_PROFILE:
+        return {'listenerProfile': IMMUTABLE_PROFILE}
+    require('listenerProfile' not in state, 'Unknown qualification listener profile')
+    return {key: state[key] for key in ['imageId', 'certificateVolume']}
+
+
+def active_view():
+    return ROOT.parent / '.qualification-view'
+
+
+def view_owned(state):
+    view = active_view()
+    if not view.exists() and not view.is_symlink():
+        return False
+    ancestors(view)
+    require(view.stat().st_uid == os.getuid(), 'Qualification view has a different owner')
+    identity = view / state['identityPath'].lstrip('/')
+    if not identity.exists() and not identity.is_symlink():
+        return False
+    ancestors(identity.parent)
+    require(sha(read(identity)) == state['identitySha256'], 'Active qualification identity differs')
+    return True
+
+
+def listener_running(state):
+    if state.get('listenerProfile') == IMMUTABLE_PROFILE:
+        return view_owned(state)
+    if immutable_host():
+        require(state['status'] in ('cleaned', 'cleaned-retained') and not state.get('uncertain', False),
+                'Unresolved legacy qualification must be settled on its original host')
+        return False
+    item = owned_container(state)
+    return item is not None and item['State']['Running'] is True
+
+
+def publish_view(operation, state):
+    target = active_view()
+    require(not target.exists() and not target.is_symlink(), 'Private qualification view already exists; inspect before recovery')
+    payload = operation / 'payload'
+    identity = payload / state['identityPath'].lstrip('/')
+    identity.parent.mkdir(mode=0o755, parents=True)
+    for path in (identity.parent, identity.parent.parent):
+        os.chmod(path, 0o755)
+    write_new(identity, read(operation / 'identity' / 'identity.json'))
+    os.chmod(identity, 0o644)
+    sync_private_directory(identity.parent)
+    sync_private_directory(identity.parent.parent)
+    sync_private_directory(identity.parent.parent.parent)
+    os.rename(payload, target)
+    sync_private_directory(operation)
+    sync_private_directory(target.parent)
+
+
+def retire_view(operation, state):
+    if view_owned(state):
+        target = active_view()
+        payload = operation / 'payload'
+        require(not payload.exists() and not payload.is_symlink(), 'Cannot move the active qualification view back to staging')
+        os.rename(target, payload)
+        sync_private_directory(target.parent)
+        sync_private_directory(operation)
+
+
 def owned_container(state):
     name = state['containerName']
     found = command(['docker', 'container', 'ls', '--all', '--filter', 'name=^/' + name + '$', '--format', '{{.ID}}'])
@@ -217,8 +314,8 @@ def inspect_family(operation_id):
                 'cleaned', 'cleaned-retained'), 'Unknown qualification state')
         if state['operationId'] == operation_id:
             result = facts(state)
-            item = owned_container(state)
-            result['containerRunning'] = item is not None and item['State']['Running'] is True
+            # Retain the observation key used by existing checkpoint receipts.
+            result['containerRunning'] = listener_running(state)
             operations.append(result)
     return {'operations': operations}
 
@@ -237,7 +334,8 @@ def read_family(operation_id):
 
 def perform(action, request, source=None):
     nonce, config = validate(request)
-    require(os.getuid() == HOST_UID, 'Qualification host requires uid 1000')
+    baked = immutable_host()
+    require(os.getuid() == (IMMUTABLE_UID if baked else HOST_UID), 'Qualification host account or baked listener is missing')
     token = sha(nonce.encode())
     operation = ROOT / token
     require(not ROOT.is_symlink(), 'Qualification resource root must not be a symlink')
@@ -294,18 +392,22 @@ def perform(action, request, source=None):
         require(state['operationNonce'] == nonce and state['operationId'] == request['operationId'] and state['config'] == config, 'Operation ownership or configuration differs')
         if action == 'inspect':
             result = facts(state)
-            item = owned_container(state)
-            result['containerRunning'] = item is not None and item['State']['Running'] is True
+            result['containerRunning'] = listener_running(state)
             return result
         if action == 'prepare':
             raise ValueError('Operation already exists; inspect before recovery')
         if action == 'cleanup' and state['status'] in ['cleaned', 'cleaned-retained']:
             return facts(state)
         require(action in ['stage', 'serve', 'cleanup'], 'Unknown qualification operation')
+        require(baked == (state.get('listenerProfile') == IMMUTABLE_PROFILE), 'Qualification listener profile changed')
         if action == 'stage':
             require(state['status'] == 'prepared', 'Stage requires a fresh prepared operation')
             files = inventory(request['files'])
             require(config['feedPath'] in files, 'Candidate feed is not in the exact inventory')
+            if baked:
+                require(all(name == config['feedPath'] or re.fullmatch(
+                    r'releases/[0-9]+\.[0-9]+\.[0-9]+/[A-Za-z0-9][A-Za-z0-9._+-]*\.(dmg|tar\.gz|sig)', name)
+                    for name in files), 'Candidate file is outside the baked qualification routes')
             state['files'] = files
         if action == 'serve':
             require(state['status'] == 'staged', 'Serve requires verified staged bytes')
@@ -341,7 +443,12 @@ def perform(action, request, source=None):
             elif action == 'serve':
                 verify(operation / 'payload', state['files'])
                 require(sha(read(operation / 'identity' / 'identity.json')) == state['identitySha256'], 'Listener identity differs')
-                require(discover(config) == {key: state[key] for key in ['imageId', 'certificateVolume']}, 'Production Caddy image or certificate volume changed')
+                require(discover(config) == listener_binding(state), 'Production qualification listener binding changed')
+                if baked:
+                    publish_view(operation, state)
+                    state['status'] = 'serving'
+                    save(operation / 'state.json', state)
+                    return facts(state)
                 require(owned_container(state) is None, 'Listener already exists; inspect before recovery')
                 write_new(operation / 'caddy.json', encoded(caddy_config(state)))
                 os.chmod(operation / 'caddy.json', 0o644)
@@ -361,10 +468,13 @@ def perform(action, request, source=None):
                 require(item['HostConfig']['PortBindings'] == {'8443/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(config['hostPort'])}]}, 'Listener port binding differs')
                 state['status'] = 'serving'
             else:
-                item = owned_container(state)
-                if item is not None:
-                    command(['docker', 'container', 'rm', '--force', item['Id']])
-                require(owned_container(state) is None, 'Listener removal is uncertain')
+                if baked:
+                    retire_view(operation, state)
+                else:
+                    item = owned_container(state)
+                    if item is not None:
+                        command(['docker', 'container', 'rm', '--force', item['Id']])
+                require(not listener_running(state), 'Listener removal is uncertain')
                 if not state['artifactsRetained']:
                     for name in ['payload', 'identity']:
                         path = operation / name

@@ -395,6 +395,12 @@ def exercise(cloud, work, revision):
     activate(replacement, first)
     acceptance(replacement, ca, fixture, '1.2.3', 'site')
     replacement.ssh(f'{STATE} enable --confirm-publication')
+    qualification = (f"curl -q -sS --noproxy '*' --max-time 10 --cacert /dev/stdin "
+                     f"--connect-to {APEX}:443:127.0.0.1:24443")
+    for path, status in (('/healthz', b'204'), ('/releases/current/update.json', b'404')):
+        reply = replacement.ssh(f"{qualification} -o /dev/null -w '%{{http_code}}' https://{APEX}{path}",
+                                data=ca.read_bytes(), key=publisher_key, login='deploy')
+        require(reply.stdout == status, 'Private TLS route is unavailable or serves an unstaged candidate.')
     rejected = replacement.ssh('true', key=website_key, login='situate-website', allowed=(1,))
     require(b'Only website publication is permitted.' in rejected.stderr, 'The website key did not hit the forced command.')
     command = replacement.ssh_command('publish-website', website_key, 'situate-website')

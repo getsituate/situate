@@ -617,6 +617,15 @@ function liveDriver(root, revision, inventory, credentials, event) {
           `${stateTool} mount ${candidate.volumeId} && ${stateTool} bind ${proof.siteSha256} ${proof.downloadSha256} ${proof.updateSha256} && sudo -n systemctl start ${hostingService}`,
         );
         await verifyHttps(candidate, proof, previous);
+        const privateStatus = ssh(
+          candidate.ipv4,
+          "curl -qfsS --noproxy '*' --max-time 10 --connect-to getsituate.com:443:127.0.0.1:24443 -o /dev/null -w '%{http_code}' https://getsituate.com/healthz",
+          { key: publisherKey, login: "deploy" },
+        );
+        ensure(
+          privateStatus.trim() === "204",
+          "The candidate's private release qualification route is unavailable.",
+        );
         return { volumeVerified: true, candidateHttpsVerified: true };
       }
       if (step === "verifyPublic") {

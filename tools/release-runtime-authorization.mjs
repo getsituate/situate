@@ -116,9 +116,36 @@ function validateRuntime(configuration, runtime, operation) {
       !Array.isArray(resources.facts),
     "Missing fresh controller facts",
   );
+  const bindingKeys = ["imageId", "certificateVolume", "listenerProfile"];
+  function listenerKeys(facts) {
+    if (facts.listenerProfile === "immutable-loopback-v1")
+      return ["listenerProfile"];
+    assert(
+      facts.listenerProfile === undefined,
+      "Unknown controller listener profile",
+    );
+    return bindingKeys.slice(0, 2).filter((key) => Object.hasOwn(facts, key));
+  }
+  const previousBinding = listenerKeys(previous.facts);
+  const currentBinding = listenerKeys(resources.facts);
+  if (currentBinding.includes("listenerProfile")) {
+    assert(
+      previousBinding.length === 2 ||
+        previousBinding.includes("listenerProfile"),
+      "Missing original controller binding",
+    );
+  } else {
+    assert.deepEqual(
+      currentBinding,
+      previousBinding,
+      "Controller binding differs",
+    );
+  }
   exactKeys(
     resources.facts,
-    Object.keys(previous.facts),
+    Object.keys(previous.facts)
+      .filter((key) => !bindingKeys.includes(key))
+      .concat(currentBinding),
     "Controller facts fields differ",
   );
   const freshFacts = new Set([
@@ -126,8 +153,7 @@ function validateRuntime(configuration, runtime, operation) {
     "operationNonce",
     "identityPath",
     "identitySha256",
-    "imageId",
-    "certificateVolume",
+    ...bindingKeys,
     "containerName",
   ]);
   for (const key of Object.keys(previous.facts))

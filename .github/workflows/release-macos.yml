@@ -329,12 +329,32 @@ jobs:
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
           PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
 
+  hosting-ready:
+    name: Wait for hosting on this revision
+    needs: plan
+    if: needs.plan.outputs.enabled == 'true' && needs.plan.outputs.app_impact == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 155
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/wait-for-hosting.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   create:
     name: Create GitHub Release
     needs:
       [
         plan,
         required,
+        hosting-ready,
         policy,
         tooling,
         tooling-macos,
@@ -347,7 +367,7 @@ jobs:
         macos-compatibility,
       ]
     # Implicit success() rejects skipped lanes; the aggregate verifies selected receipts.
-    if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' && needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
+    if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' && needs.required.result == 'success' && needs.hosting-ready.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
     concurrency:
       group: situate-release-effects
       cancel-in-progress: false

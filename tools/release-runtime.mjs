@@ -636,6 +636,7 @@ export async function runPreparedQualification(
       "identitySha256",
       "imageId",
       "certificateVolume",
+      "listenerProfile",
     ])
       assert(
         state[name] === runtime.facts[name],
