@@ -9,7 +9,16 @@ pub(super) fn bridge() -> &'static str {
 pub(super) fn configure(builder: Builder<Wry>) -> Builder<Wry> {
     builder
         .register_uri_scheme_protocol("situate-executor", |context, request| {
-            let id = request.uri().path().trim_start_matches('/');
+            let id = context.webview_label();
+            if request.method() != tauri::http::Method::GET
+                || request.uri().path().strip_prefix('/') != Some(id)
+                || request.uri().query().is_some()
+            {
+                return tauri::http::Response::builder()
+                    .status(404)
+                    .body(Vec::new())
+                    .unwrap();
+            }
             let html = context
                 .app_handle()
                 .state::<Sessions>()
@@ -90,7 +99,14 @@ pub(super) async fn open(handle: &ExecutorHandle) -> Result<(), String> {
         let url: tauri::Url = format!("situate-executor://localhost/{}", target.session.id)
             .parse()
             .unwrap();
+        #[cfg(target_os = "macos")]
         let expected_url = url.clone();
+        // Wry presents custom schemes to WebView2 as an HTTPS .localhost origin.
+        #[cfg(target_os = "windows")]
+        let expected_url: tauri::Url =
+            format!("https://situate-executor.localhost/{}", target.session.id)
+                .parse()
+                .unwrap();
         let first_navigation = AtomicBool::new(true);
         let navigation_target = target.clone();
         let builder = WebviewWindowBuilder::new(
@@ -116,6 +132,8 @@ pub(super) async fn open(handle: &ExecutorHandle) -> Result<(), String> {
             });
             false
         });
+        #[cfg(target_os = "windows")]
+        let builder = builder.use_https_scheme(true);
         let builder = if target.session.document_kind == DocumentKind::Preview {
             builder
                 .inner_size(1024.0, 768.0)
