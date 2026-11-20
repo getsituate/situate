@@ -25,25 +25,23 @@ def leaf(name):
     return name
 
 
-def install(request):
+def install(request, parent, review):
     with ExitStack() as stack:
         created = []
 
-        def open_directory(name, parent=None, expected=None):
+        def open_directory(name, parent, expected=None):
             fd = os.open(name, DIRECTORY, dir_fd=parent)
             stack.callback(os.close, fd)
             if expected is not None and identity(os.fstat(fd)) != expected:
                 raise ValueError('Export directory changed while rendering')
             return fd
 
-        parent = open_directory(request['parent'], expected=request['parentIdentity'])
         staging_name = leaf(request['staging'])
         staging = open_directory(staging_name, parent, request['stagingIdentity'])
         try:
-            if request['proofs']:
-                proofs = request['proofs']
-                target = open_directory(proofs['anchor'], expected=proofs['identity'])
-                for name in proofs['parts']:
+            if request['proofParts'] is not None:
+                target = review
+                for name in request['proofParts']:
                     name = leaf(name)
                     try:
                         os.mkdir(name, dir_fd=target)
@@ -64,11 +62,11 @@ def install(request):
                             shutil.copyfileobj(reader, writer)
                     os.unlink(name, dir_fd=source)
                 os.rmdir('.proofs', dir_fd=staging)
-            if (identity(os.stat(staging_name, dir_fd=parent, follow_symlinks=False)) != request['stagingIdentity']
-                    or identity(os.stat(request['parent'], follow_symlinks=False)) != request['parentIdentity']):
+            if identity(os.stat(staging_name, dir_fd=parent, follow_symlinks=False)) != request['stagingIdentity']:
                 raise ValueError('Export directory changed while rendering')
             rename_exclusive(parent, staging_name, leaf(request['output']))
         except Exception as error:
+            cleanup_failed = False
             for remove, fd, name, expected in reversed(created):
                 try:
                     if identity(os.stat(name, dir_fd=fd, follow_symlinks=False)) == expected:
@@ -76,13 +74,16 @@ def install(request):
                 except FileNotFoundError:
                     pass
                 except OSError:
-                    raise ValueError('Export failed and cleanup was incomplete') from error
+                    cleanup_failed = True
+            if cleanup_failed:
+                raise ValueError('Export failed and cleanup was incomplete') from error
             raise
 
 
 if __name__ == '__main__':
     try:
-        install(json.load(sys.stdin))
+        # Only the launching exporter selects destination directories.
+        install(json.load(sys.stdin), 3, 4)
     except OSError as error:
         print(json.dumps({'code': errno.errorcode.get(error.errno), 'message': error.strerror}))
     except ValueError as error:

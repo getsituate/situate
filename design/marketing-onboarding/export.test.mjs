@@ -4,6 +4,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
   rename,
@@ -215,7 +216,7 @@ test("a reserved name and proof paths inside the pack are refused before renderi
   ]);
 });
 
-test("installation leaves a replacement directory untouched", async (t) => {
+test("installation leaves a replacement staging directory untouched", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "situate-export-install-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const parent = join(root, "destination");
@@ -226,22 +227,26 @@ test("installation leaves a replacement directory untouched", async (t) => {
     return `${dev}:${ino}`;
   };
   const request = {
-    parent,
-    parentIdentity: await identity(parent),
     staging: "staging",
     stagingIdentity: await identity(staging),
     output: "pack",
+    proofParts: null,
   };
-  await rename(parent, join(root, "original"));
-  await mkdir(staging, { recursive: true });
+  await rename(staging, join(parent, "original"));
+  await mkdir(staging);
   const script = fileURLToPath(new URL("./install-export.py", import.meta.url));
-  const result = execFileSync("/usr/bin/python3", ["-IB", script], {
-    input: JSON.stringify(request),
-    encoding: "utf8",
-  });
-  assert.match(JSON.parse(result).message, /directory changed/);
-  assert.deepEqual(await readdir(parent), ["staging"]);
-  assert.deepEqual(await readdir(join(root, "original")), ["staging"]);
+  const directory = await open(parent, "r");
+  try {
+    const result = execFileSync("/usr/bin/python3", ["-IB", script], {
+      input: JSON.stringify(request),
+      stdio: ["pipe", "pipe", "pipe", directory.fd],
+      encoding: "utf8",
+    });
+    assert.match(JSON.parse(result).message, /directory changed/);
+    assert.deepEqual((await readdir(parent)).sort(), ["original", "staging"]);
+  } finally {
+    await directory.close();
+  }
 });
 
 test(

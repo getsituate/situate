@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { constants } from "node:fs";
 import { createRequire } from "node:module";
 import {
   lstat,
   copyFile,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   realpath,
   rm,
@@ -296,6 +298,24 @@ async function sameDirectory(path, identity) {
   );
 }
 
+async function openExportDirectory(path, expected) {
+  const directory = await open(
+    path,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
+  try {
+    assert.equal(
+      directoryIdentity(await directory.stat({ bigint: true })),
+      directoryIdentity(expected),
+      "Export directory changed while rendering.",
+    );
+    return directory;
+  } catch (error) {
+    await directory.close();
+    throw error;
+  }
+}
+
 export async function exportPack({ date, output, proofs }) {
   validateDate(date);
   output = resolve(output);
@@ -462,26 +482,33 @@ export async function exportPack({ date, output, proofs }) {
     );
     await browser.close();
     browser = undefined;
-    const request = {
-      parent,
-      parentIdentity: directoryIdentity(parentIdentity),
-      staging: basename(staging),
-      stagingIdentity: directoryIdentity(stagingIdentity),
-      output: basename(output),
-      proofs: proofTarget && {
-        anchor: proofTarget.anchor,
-        identity: directoryIdentity(proofTarget.identity),
-        parts: relative(proofTarget.anchor, proofs).split(sep).filter(Boolean),
-      },
-    };
-    const result = execFileSync("/usr/bin/python3", ["-IB", installProgram], {
-      env: {},
-      input: JSON.stringify(request),
-      encoding: "utf8",
-    });
-    if (result) {
-      const { code, message } = JSON.parse(result);
-      throw Object.assign(new Error(message), { code });
+    const destination = await openExportDirectory(parent, parentIdentity);
+    let review;
+    try {
+      if (proofTarget)
+        review = await openExportDirectory(
+          proofTarget.anchor,
+          proofTarget.identity,
+        );
+      const result = execFileSync("/usr/bin/python3", ["-IB", installProgram], {
+        env: {},
+        input: JSON.stringify({
+          staging: basename(staging),
+          stagingIdentity: directoryIdentity(stagingIdentity),
+          output: basename(output),
+          proofParts: proofTarget
+            ? relative(proofTarget.anchor, proofs).split(sep).filter(Boolean)
+            : null,
+        }),
+        stdio: ["pipe", "pipe", "pipe", destination.fd, review?.fd ?? "ignore"],
+        encoding: "utf8",
+      });
+      if (result) {
+        const { code, message } = JSON.parse(result);
+        throw Object.assign(new Error(message), { code });
+      }
+    } finally {
+      await Promise.all([review?.close(), destination.close()]);
     }
   } finally {
     try {

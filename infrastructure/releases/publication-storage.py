@@ -29,19 +29,27 @@ def save_journal(directory, exclusive):
 
 
 def write_archive(directory, names):
-    if (not isinstance(names, list) or not names
-            or any(not isinstance(name, str) or not re.fullmatch(r'(?:metadata/)?[A-Za-z0-9][A-Za-z0-9._+-]*', name)
-                   for name in names)
+    if (not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names)
             or len(set(names)) != len(names)):
         raise ValueError('Invalid publication archive inventory')
+    requested = set(names)
     metadata = None
     try:
+        parents = [('', directory)]
         if any(name.startswith('metadata/') for name in names):
             metadata = os.open('metadata', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            parents.append(('metadata/', metadata))
+        members = {
+            prefix + member: (parent, member)
+            for prefix, parent in parents
+            for member in sorted(os.listdir(parent))
+            if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', member)
+            and prefix + member in requested
+        }
+        if requested != members.keys():
+            raise ValueError('Publication archive inventory does not match staged files')
         with tarfile.open(fileobj=sys.stdout.buffer, mode='w|') as archive:
-            for name in names:
-                member = name.rsplit('/', 1)[-1]
-                parent = metadata if name.startswith('metadata/') else directory
+            for name, (parent, member) in members.items():
                 fd = os.open(member, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
                 with os.fdopen(fd, 'rb') as source:
                     info = os.fstat(source.fileno())
