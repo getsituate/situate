@@ -76,6 +76,7 @@ const terraformDiagnostics = [
   /^The HCP workspace has no state to export\.$/,
   /^The exported state does not match the inspected HCP state version\.$/,
   /^The HCP state changed during export; inspect it before continuing\.$/,
+  /^Terraform state pull returned (?:unexpected output|invalid JSON)\.$/,
   /^Terraform (?:init|state pull) failed \((?:exit [0-9]+|signal SIG[A-Z0-9]+|could not start)\)\.$/,
 ];
 

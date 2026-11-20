@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { childEnvironment, configuration } from "../website/config.mjs";
 import { checkAdoptionPlan } from "./inspect.mjs";
 import { checkImmutablePlan, immutablePhases } from "./immutable-plan.mjs";
@@ -85,6 +86,25 @@ function privateDestination(path, extension) {
   if (pathExists(absolute))
     throw new Error("Private output files are never overwritten.");
   return absolute;
+}
+
+function pulledStateJson(output) {
+  // The cloud backend writes retry notices to stdout before the state JSON.
+  const start = output.indexOf("{");
+  if (start !== -1) {
+    const prefix = stripVTControlCharacters(output.slice(0, start));
+    const remainder = prefix
+      .replace(
+        /^There was an error connecting to (?:HCP Terraform|Terraform Cloud)\. Please do not exit\r?\nTerraform to prevent data loss! Trying to restore the connection\.\.\.$/gm,
+        "",
+      )
+      .replace(
+        /^Still trying to restore the connection\.\.\. \((?:[0-9]+[hms])+ elapsed\)$/gm,
+        "",
+      );
+    if (!remainder.trim()) return output.slice(start);
+  }
+  throw new Error("Terraform state pull returned unexpected output.");
 }
 
 function digest(path) {
@@ -357,8 +377,15 @@ export async function main(
         );
         return;
       }
-      const raw = run(["state", "pull"], true);
-      const state = JSON.parse(raw);
+      const raw = pulledStateJson(run(["state", "pull"], true));
+      let state;
+      try {
+        state = JSON.parse(raw);
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+      }
+      if (!state || typeof state !== "object")
+        throw new Error("Terraform state pull returned invalid JSON.");
       if (
         state.version !== 4 ||
         typeof state.lineage !== "string" ||
