@@ -454,6 +454,8 @@ const nativeStages = new Set([
   "exercise-complete",
   "reopen-complete",
   "plugins-complete",
+  "plugins-draft-ready",
+  "plugins-first-request",
   "startup",
   "script",
   "bootstrap",

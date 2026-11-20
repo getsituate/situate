@@ -659,7 +659,7 @@ fn seed_plugin_capabilities(root: &Path, scope: &str) -> Result<(), String> {
         Some(ID),
         None,
         "Plugin capability graph",
-        "Check and activate the candidate capability, then use the current tool.",
+        "[e2e:plugins] Check and activate the candidate capability, then use the current tool.",
         "",
     )?;
     Ok(())
