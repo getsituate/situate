@@ -149,8 +149,10 @@ fn admit(
     if exclusive {
         return Err(MigrationError::new(MigrationErrorKind::Busy));
     }
-    // No payload read above this point authorizes writes. Re-read under exclusive
-    // ownership after conversion; a competing opener may have completed the work.
+    // Windows cannot acquire an exclusive lock over our own shared lock.
+    // Recheck state after acquiring it; another opener may have migrated in the gap.
+    #[cfg(windows)]
+    lease.lock.unlock()?;
     lease
         .lock
         .try_lock()
@@ -158,6 +160,8 @@ fn admit(
     if !current(&managed, &control, &app, migrations)? {
         run(&managed, &control, &app, migrations)?;
     }
+    #[cfg(windows)]
+    lease.lock.unlock()?;
     lease
         .lock
         .try_lock_shared()
