@@ -7,6 +7,7 @@ import {
   rm,
   mkdir,
   writeFile,
+  link,
   symlink,
   copyFile,
   realpath,
@@ -23,6 +24,7 @@ import {
   createPreviewServer,
   createBuildServer,
   landingContentSecurityPolicy,
+  legalContent,
   render,
   build,
 } from "./site.mjs";
@@ -1209,11 +1211,85 @@ test("failed builds never announce a website server", async (t) => {
   assert.doesNotMatch(result.stdout, /Website preview:/);
 });
 
-test("build refuses destinations containing website sources", async () => {
+test("legal fixtures use only the two catalogs contained in the selected directory", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-legal-fixture-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const fixture = join(directory, "fixture");
+  await mkdir(fixture);
+  await writeFile(join(fixture, "pages.json"), '[{"path":"/privacy.html"}]');
+  await writeFile(join(fixture, "messages.en.json"), '{"test.title":"Sample"}');
+  const content = await legalContent(fixture);
+  assert.deepEqual(content.pages, [{ path: "/privacy.html" }]);
+  assert.equal(content.messages["test.title"], "Sample");
+
+  for (const [name, bytes] of [
+    ["pages.json", "[]"],
+    ["messages.en.json", "{}"],
+  ]) {
+    await writeFile(join(directory, name), bytes);
+    await rm(join(fixture, name));
+    await symlink(join(directory, name), join(fixture, name));
+    await assert.rejects(legalContent(fixture), { code: "ENOENT" });
+    await rm(join(fixture, name));
+    await writeFile(join(fixture, name), bytes);
+  }
+});
+
+test("build refuses destinations containing or inside repository sources, including aliases", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-build-alias-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const root = fileURLToPath(new URL("./", import.meta.url));
-  for (const destination of [root, resolve(root, ".."), resolve(root, "media")])
+  const alias = join(directory, "source");
+  await symlink(root, alias, "dir");
+  for (const destination of [
+    root,
+    resolve(root, ".."),
+    resolve(root, "media"),
+    resolve(root, "../design"),
+    alias,
+    join(alias, "new-output"),
+  ])
     await assert.rejects(
-      build(destination),
-      /must not contain or overwrite website source files/,
+      build(destination, { analyticsToken: "" }),
+      /must not contain or overwrite repository source files/,
     );
+});
+
+test("build rejects linked output entries before installing files and cleans staging", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-build-links-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const output = join(directory, "output");
+  const unrelated = join(directory, "unrelated");
+  await mkdir(output);
+  await mkdir(unrelated);
+  const sample = join(unrelated, "sample.css");
+  await writeFile(sample, "sample");
+  await writeFile(join(output, "index.html"), "previous build");
+
+  for (const [name, target, error] of [
+    ["legal", unrelated, /requires a real directory/],
+    ["styles.css", sample, /requires a regular file/],
+  ]) {
+    const entry = join(output, name);
+    await symlink(target, entry);
+    await assert.rejects(build(output, { analyticsToken: "" }), error);
+    assert.deepEqual(
+      (await readdir(output)).sort(),
+      ["index.html", name].sort(),
+    );
+    assert.deepEqual(await readdir(unrelated), ["sample.css"]);
+    assert.equal(
+      await readFile(join(output, "index.html"), "utf8"),
+      "previous build",
+    );
+    await rm(entry);
+  }
+
+  await link(sample, join(output, "styles.css"));
+  await symlink(unrelated, join(output, "system"), "dir");
+  await build(output, { analyticsToken: "" });
+  assert.equal(await readFile(sample, "utf8"), "sample");
+  assert.notEqual(await readFile(join(output, "styles.css"), "utf8"), "sample");
+  assert.ok(!(await readdir(output)).some((name) => name.startsWith(".")));
+  assert.ok(!(await readdir(output)).includes("system"));
 });

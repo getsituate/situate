@@ -7,10 +7,13 @@ import {
   writeFile,
   copyFile,
   realpath,
+  mkdtemp,
+  rename,
   rm,
 } from "node:fs/promises";
 import {
   resolve,
+  basename,
   dirname,
   extname,
   relative,
@@ -94,12 +97,21 @@ export function render(template, messages, { pathname = "/" } = {}) {
   });
 }
 
-async function legalContent(directory) {
+const defaultLegalDirectory = resolve(website, "legal");
+
+export async function legalContent(directory = defaultLegalDirectory) {
+  directory = resolve(directory);
+  const root = directory === defaultLegalDirectory ? website : directory;
   const [pages, legal, shared] = await Promise.all([
-    readFile(resolve(directory, "pages.json"), "utf8"),
-    readFile(resolve(directory, "messages.en.json"), "utf8"),
-    readFile(resolve(website, "messages.en.json"), "utf8"),
+    readPublicFile(directory, "pages.json", root),
+    readPublicFile(directory, "messages.en.json", root),
+    readPublicFile(website, "messages.en.json"),
   ]);
+  if (!pages || !legal || !shared)
+    throw Object.assign(
+      new Error("Legal catalogs must stay within their content directories."),
+      { code: "ENOENT" },
+    );
   return {
     pages: JSON.parse(pages),
     messages: { ...JSON.parse(shared), ...JSON.parse(legal) },
@@ -184,14 +196,15 @@ async function readPublicFile(base, file, root = base) {
   if (
     !contains(directory, actual) ||
     !relative(directory, actual).split(sep).every(publicSegment) ||
-    extname(actual) !== extname(file)
+    extname(actual) !== extname(file) ||
+    !(await lstat(actual)).isFile()
   )
     return null;
   return readFile(actual);
 }
 
 export function createPreviewServer({
-  legalDirectory = resolve(website, "legal"),
+  legalDirectory = defaultLegalDirectory,
 } = {}) {
   return createServer(async (request, response) => {
     if (!["GET", "HEAD"].includes(request.method)) {
@@ -332,23 +345,84 @@ export function createBuildServer(directory) {
   });
 }
 
+async function canonicalDestination(path) {
+  const entry = await lstat(path).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+  });
+  if (entry) return realpath(path);
+  return resolve(await canonicalDestination(dirname(path)), basename(path));
+}
+
+async function buildDestination(path) {
+  const source = await realpath(repository);
+  const defaultOutput = resolve(website, "dist");
+  const canonicalDefault = resolve(await realpath(website), "dist");
+  const requested = resolve(path);
+  const output = await canonicalDestination(requested);
+  if (
+    (contains(repository, requested) && requested !== defaultOutput) ||
+    contains(output, source) ||
+    (contains(source, output) && output !== canonicalDefault) ||
+    (requested === defaultOutput && output !== canonicalDefault)
+  )
+    throw new Error(
+      "Build output must not contain or overwrite repository source files.",
+    );
+  return output;
+}
+
+async function installBuild(staging, destination) {
+  const directories = [];
+  const files = [];
+  async function check(source, target) {
+    for (const entry of await readdir(source, { withFileTypes: true })) {
+      const from = resolve(source, entry.name);
+      const to = resolve(target, entry.name);
+      const existing = await lstat(to).catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+      if (entry.isDirectory()) {
+        if (existing && !existing.isDirectory())
+          throw new Error(`Build output requires a real directory: ${to}`);
+        if (!existing) directories.push(to);
+        await check(from, to);
+      } else {
+        if (existing && !existing.isFile())
+          throw new Error(`Build output requires a regular file: ${to}`);
+        files.push([from, to]);
+      }
+    }
+  }
+  await check(staging, destination);
+  for (const directory of directories) await mkdir(directory);
+  // Replace directory entries, not file contents that may be hard-linked elsewhere.
+  for (const [from, to] of files) await rename(from, to);
+  for (const legacy of ["system", "retrieve", "momentum", "hub.css"])
+    await rm(resolve(destination, legacy), { recursive: true, force: true });
+}
+
 export async function build(
   destination = resolve(website, "dist"),
   { analyticsToken } = {},
 ) {
+  const output = await buildDestination(destination);
+  await mkdir(output, { recursive: true });
+  const staging = await mkdtemp(resolve(output, ".situate-website-"));
+  try {
+    await renderBuild(staging, analyticsToken);
+    await installBuild(staging, output);
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+  return resolve(destination);
+}
+
+async function renderBuild(destination, analyticsToken) {
   const analytics = analyticsConfiguration(
     analyticsToken === undefined
       ? await websiteAnalyticsToken()
       : analyticsToken,
   );
-  destination = resolve(destination);
-  if (
-    contains(destination, website) ||
-    (contains(website, destination) && destination !== resolve(website, "dist"))
-  )
-    throw new Error(
-      "Build output must not contain or overwrite website source files.",
-    );
   async function emit(source, target) {
     await mkdir(dirname(target), { recursive: true });
     if (extname(source) === ".html")
@@ -384,7 +458,7 @@ export async function build(
   ])
     await emit(resolve(website, file), resolve(destination, file));
   await writeFile(resolve(destination, "analytics-config.js"), analytics);
-  const { pages, messages } = await legalContent(resolve(website, "legal"));
+  const { pages, messages } = await legalContent();
   for (const { href: path } of legalLinks) {
     const page = pages.find((entry) => entry.path === path);
     if (!page) throw new Error(`Missing legal page: ${path}`);
@@ -413,9 +487,6 @@ export async function build(
     resolve(repository, "design/brand/tokens.css"),
     resolve(destination, "design/brand/tokens.css"),
   );
-  for (const legacy of ["system", "retrieve", "momentum", "hub.css"])
-    await rm(resolve(destination, legacy), { recursive: true, force: true });
-  return destination;
 }
 
 if (
