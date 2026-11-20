@@ -57,6 +57,7 @@ export function windowsCommands(phase, rust, directory) {
       ];
     case "client-windows-build":
       return [
+        ["volta", ["run", "npm", "run", "build"], client],
         [
           process.execPath,
           [
@@ -65,6 +66,8 @@ export function windowsCommands(phase, rust, directory) {
             "--no-bundle",
             "--target",
             windowsTarget,
+            "--config",
+            JSON.stringify({ build: { beforeBuildCommand: "" } }),
             "--",
             "--locked",
           ],
@@ -125,7 +128,7 @@ function run(command, args, cwd = root, capture = false, env = process.env) {
     cwd,
     env,
     encoding: "utf8",
-    stdio: capture ? ["ignore", "pipe", "inherit"] : "inherit",
+    stdio: ["ignore", capture ? "pipe" : "inherit", "inherit"],
   });
   if (result.error) throw result.error;
   if (result.status !== 0)
@@ -202,13 +205,14 @@ async function runPhase(phase, { directory, image, imageVersion }, workspace) {
   const artifact = join(directory, "artifact");
   const destination = join(artifact, "situate-client.exe");
   if (phase === "client-windows-build") {
-    const [build] = windowsCommands(phase, rust, directory);
+    const [frontend, build] = windowsCommands(phase, rust, directory);
     assert.equal(
       process.env.TAURI_CONFIG,
       undefined,
-      "The CI artifact requires the default Tauri configuration",
+      "Unexpected inherited Tauri build configuration",
     );
     await mkdir(artifact);
+    run(...frontend);
     run(...build, false, {
       ...process.env,
       RUSTUP_TOOLCHAIN: rust,
