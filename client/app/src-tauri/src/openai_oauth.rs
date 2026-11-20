@@ -835,6 +835,35 @@ mod tests {
         let (result, ()) = tokio::join!(operation, cancellation);
         assert_eq!(result.unwrap_err(), CANCELLED);
     }
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    #[ignore = "requires an interactive desktop and a configured default browser"]
+    async fn windows_system_browser_reaches_the_oauth_callback() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let state = uuid::Uuid::new_v4().to_string();
+        let url = format!("http://{address}/auth/callback?state={state}&code=synthetic-code");
+        assert!(
+            crate::provider_platform::open_browser_for_test(&url),
+            "Windows did not open the loopback URL"
+        );
+        let (received, response) = tokio::time::timeout(
+            Duration::from_secs(20),
+            listen(
+                listener,
+                &state,
+                Some("synthetic-client"),
+                situate_core::localization::Language::En,
+            ),
+        )
+        .await
+        .expect("the default browser did not reach the callback")
+        .expect("the callback did not accept the synthetic code");
+        assert_eq!(received.code, "synthetic-code");
+        assert_eq!(received.client_id, "synthetic-client");
+        response.complete(true).await;
+    }
+
     #[tokio::test]
     async fn loopback_rejects_malicious_requests_then_accepts_one_correlated_callback() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
