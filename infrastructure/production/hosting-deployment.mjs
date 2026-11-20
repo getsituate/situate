@@ -2,12 +2,18 @@ import { hostingDigest, revisionPattern } from "./hosting-inputs.mjs";
 
 const repo = "getsituate/situate";
 const environment = "hosting-production-operation";
+const collection =
+  "https://api.github.com/repos/getsituate/situate/deployments";
+
+function statusPath(id) {
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw new Error("Unexpected GitHub deployment identity.");
+  return `/${encodeURIComponent(Number(id))}/statuses`;
+}
 
 function deploymentsApi(token, fetchImpl) {
   if (!token) throw new Error("GitHub deployments access is required.");
-  const collection = `repos/${repo}/deployments`;
-  return async (path, body) => {
-    const url = `https://api.github.com/${collection}${path}`;
+  return async (url, body) => {
     for (let attempt = 0; ; attempt += 1) {
       let response;
       try {
@@ -42,7 +48,9 @@ function deploymentsApi(token, fetchImpl) {
 }
 
 async function latest(request) {
-  const deployments = await request(`?environment=${environment}&per_page=1`);
+  const deployments = await request(
+    collection + "?environment=hosting-production-operation&per_page=1",
+  );
   if (!Array.isArray(deployments) || deployments.length > 1)
     throw new Error("Unexpected GitHub deployment inventory.");
   if (!deployments.length) return null;
@@ -53,7 +61,9 @@ async function latest(request) {
     previous.environment !== environment
   )
     throw new Error("Unexpected GitHub deployment identity.");
-  const statuses = await request(`/${previous.id}/statuses?per_page=1`);
+  const statuses = await request(
+    collection + statusPath(previous.id) + "?per_page=1",
+  );
   if (!Array.isArray(statuses) || statuses.length > 1)
     throw new Error("Unexpected GitHub deployment status.");
   return { deployment: previous, status: statuses[0] };
@@ -66,7 +76,7 @@ function readiness(record, revision, digest = hostingDigest) {
   if (status?.state !== "success")
     return {
       ready: false,
-      reason: `Hosting deployment ${deployment.id} is unresolved.`,
+      reason: "A production hosting operation is unresolved.",
     };
   if (
     deployment.creator?.login !== "github-actions[bot]" ||
@@ -128,7 +138,7 @@ export function deploymentGate({
     return readiness(record, revision, digest);
   }
   function status(state) {
-    return request(`/${id}/statuses`, {
+    return request(collection + statusPath(id), {
       state,
       log_url: logUrl,
       auto_inactive: false,
@@ -138,7 +148,7 @@ export function deploymentGate({
     check,
     async begin() {
       await check();
-      const deployment = await request("", {
+      const deployment = await request(collection, {
         ref: revision,
         environment,
         auto_merge: false,

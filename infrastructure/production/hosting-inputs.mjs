@@ -22,7 +22,14 @@ export function hostingDigest(revision, git = execFileSync) {
   try {
     const tree = git(
       "git",
-      ["ls-tree", "-r", revision + "^{commit}", "--", ...inputs],
+      [
+        "ls-tree",
+        "-r",
+        "--end-of-options",
+        Buffer.from(revision, "hex").toString("hex") + "^{commit}",
+        "--",
+        ...inputs,
+      ],
       {
         cwd: repository,
         encoding: "utf8",

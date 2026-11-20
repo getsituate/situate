@@ -18,12 +18,22 @@ export async function main(
     (mode && !["--check", "--select", "--probe"].includes(mode))
   )
     throw new Error("Hosting readiness requires a trusted main revision.");
-  const git = (args) =>
-    execFileSync("git", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 15_000,
-    }).trim();
+  const git = (args) => {
+    try {
+      return execFileSync("/usr/bin/git", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          PATH: "/usr/bin:/bin",
+          HOME: env.HOME,
+          GIT_TERMINAL_PROMPT: "0",
+        },
+        timeout: 15_000,
+      }).trim();
+    } catch {
+      throw new Error("Cannot verify the current Git revision for delivery.");
+    }
+  };
   if (git(["rev-parse", "HEAD"]) !== revision)
     throw new Error(
       "The checkout does not match the hosting readiness revision.",
