@@ -1,16 +1,29 @@
 import assert from "node:assert/strict";
+import { constants } from "node:fs";
 import { createRequire } from "node:module";
 import {
-  access,
+  lstat,
   copyFile,
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
+  realpath,
   rename,
   rm,
+  rmdir,
+  unlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { marked } from "marked";
@@ -256,17 +269,39 @@ export async function prepare(date) {
   return result;
 }
 
+async function proofPath(path) {
+  const entry = await lstat(path).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+  });
+  if (entry) return realpath(path);
+  return join(await proofPath(dirname(path)), basename(path));
+}
+
 export async function exportPack({ date, output, proofs }) {
-  const prepared = await prepare(date);
+  validateDate(date);
   output = resolve(output);
+  const parent = await realpath(dirname(output));
+  output = join(parent, basename(output));
   await assert.rejects(
-    access(output),
+    lstat(output),
     { code: "ENOENT" },
     "Output already exists; choose a new empty destination.",
   );
-  const staging = await mkdtemp(join(dirname(output), ".situate-onboarding-"));
+  if (proofs) {
+    proofs = await proofPath(resolve(proofs));
+    const within = relative(output, proofs);
+    assert(
+      isAbsolute(within) || within === ".." || within.startsWith(`..${sep}`),
+      "Choose a proof directory outside the pack destination.",
+    );
+  }
+  const prepared = await prepare(date);
+  const staging = await mkdtemp(join(parent, ".situate-onboarding-"));
+  const stagedProofs = join(staging, ".proofs");
+  const copiedProofs = [];
   let browser;
   let reserved = false;
+  let firstProofDirectory;
   try {
     const { chromium } = require("../../client/node_modules/playwright");
     const { launchBrowser } = require("../brand/browser-launch.cjs");
@@ -282,7 +317,7 @@ export async function exportPack({ date, output, proofs }) {
     });
     const page = await context.newPage();
     await page.emulateMedia({ media: "print", reducedMotion: "reduce" });
-    if (proofs) await mkdir(proofs, { recursive: true });
+    if (proofs) await mkdir(stagedProofs);
     const editableDirectory = join(staging, "editable-sources");
     await mkdir(editableDirectory);
     for (const document of prepared) {
@@ -344,7 +379,7 @@ export async function exportPack({ date, output, proofs }) {
             .locator(".sheet")
             .nth(index)
             .screenshot({
-              path: join(proofs, `${document.id}-${index + 1}.png`),
+              path: join(stagedProofs, `${document.id}-${index + 1}.png`),
             });
       }
       console.log(`${document.id}: ${document.pages} pages`);
@@ -406,15 +441,54 @@ export async function exportPack({ date, output, proofs }) {
     // Reserve the destination exclusively. Never replace a pre-existing pack or user folder.
     await mkdir(output);
     reserved = true;
+    if (proofs) {
+      firstProofDirectory = await mkdir(proofs, { recursive: true });
+      for (const filename of (await readdir(stagedProofs)).sort()) {
+        const target = join(proofs, filename);
+        await copyFile(
+          join(stagedProofs, filename),
+          target,
+          constants.COPYFILE_EXCL,
+        );
+        copiedProofs.push(target);
+      }
+      await rm(stagedProofs, { recursive: true });
+    }
     await rename(staging, output);
-    console.log(`Created ${output}`);
   } catch (error) {
-    if (reserved) await rm(output, { recursive: true, force: true });
+    const cleanup = await Promise.allSettled([
+      ...copiedProofs.map((path) => unlink(path)),
+      ...(reserved ? [rmdir(output)] : []),
+    ]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (firstProofDirectory) {
+      for (let directory = proofs; ; directory = dirname(directory)) {
+        try {
+          await rmdir(directory);
+        } catch (cleanupError) {
+          failures.push(cleanupError);
+          break;
+        }
+        if (directory === firstProofDirectory) break;
+      }
+    }
+    if (failures.length)
+      throw new AggregateError(
+        failures,
+        "Export failed and cleanup was incomplete.",
+        { cause: error },
+      );
     throw error;
   } finally {
-    await browser?.close();
-    await rm(staging, { recursive: true, force: true });
+    try {
+      await browser?.close();
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
   }
+  console.log(`Created ${output}`);
 }
 
 if (

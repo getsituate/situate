@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -175,3 +183,69 @@ test("an existing destination is refused before launching a browser or changing 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("a reserved name and proof paths inside the pack are refused before rendering", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-onboarding-paths-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const output = join(directory, "pack");
+  await symlink(join(directory, "unused"), output, "dir");
+  const options = { date: "2026-11-04", output };
+  await assert.rejects(exportPack(options), /Output already exists/);
+  await rm(output);
+  const parentAlias = join(directory, "alias");
+  await symlink(directory, parentAlias, "dir");
+  await assert.rejects(
+    exportPack({ ...options, proofs: join(parentAlias, "pack", "proofs") }),
+    /outside the pack destination/,
+  );
+  assert.deepEqual(await readdir(directory), ["alias"]);
+});
+
+test(
+  "pack installation and proof rollback with Chromium",
+  {
+    skip: process.env.MARKETING_EXPORT_BROWSER_TEST !== "1",
+    timeout: 60_000,
+  },
+  async (t) => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "situate-onboarding-browser-"),
+    );
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const alias = join(directory, "alias");
+    await symlink(directory, alias, "dir");
+    const proofs = join(directory, "proofs");
+    const output = join(alias, "pack");
+    await mkdir(proofs);
+    const existing = join(proofs, "03-audience-problems-and-positioning-1.png");
+    await writeFile(existing, "existing proof");
+    const options = { date: "2026-11-04", output, proofs };
+
+    await assert.rejects(exportPack(options), { code: "EEXIST" });
+    assert.deepEqual(await readdir(proofs), [
+      "03-audience-problems-and-positioning-1.png",
+    ]);
+    assert.equal(await readFile(existing, "utf8"), "existing proof");
+    assert.deepEqual((await readdir(directory)).sort(), ["alias", "proofs"]);
+    const newProofs = join(directory, "review", "proofs");
+    await exportPack({ ...options, proofs: newProofs });
+    const pack = join(directory, "pack");
+    assert.deepEqual((await readdir(pack)).sort(), [
+      ...documents,
+      "editable-sources",
+    ]);
+    assert.equal((await readdir(newProofs)).length, 12);
+    assert.equal(await readFile(existing, "utf8"), "existing proof");
+    const pdf = join(
+      pack,
+      productIntroduction.id,
+      "02-product-introduction-2026-11-04.pdf",
+    );
+    assert.deepEqual(
+      await readFile(pdf),
+      await readFile(
+        new URL(`../../${productIntroduction.pdf}`, import.meta.url),
+      ),
+    );
+  },
+);
