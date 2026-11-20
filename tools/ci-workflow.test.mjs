@@ -237,6 +237,26 @@ test("Windows verify requires a native receipt and uploads the CI build after it
   );
 });
 
+test("the Windows VM artifact is separate from required verification and release builds", () => {
+  const workflow = read("verify");
+  const smoke = job(workflow, "windows-smoke-build");
+  assert.match(smoke, /head\.repo\.full_name == github\.repository/);
+  assert.match(smoke, /github\.head_ref == 'windows-support'/);
+  assert.match(smoke, /runs-on: windows-2025/);
+  assert.match(smoke, /ref:.*github\.sha/);
+  assert.match(
+    smoke,
+    /build-windows-smoke\.mjs windows-smoke-artifact[\s\S]*upload-artifact/,
+  );
+  assert.match(smoke, /name: windows-smoke-x64-/);
+  assert.match(smoke, /path: windows-smoke-artifact\//);
+  assert.doesNotMatch(job(workflow, "required"), /windows-smoke-build/);
+  assert.doesNotMatch(
+    read("release-macos"),
+    /windows-smoke-build|build-windows-smoke/,
+  );
+});
+
 test("native source jobs declare one build slot in both PR and release verification", () => {
   for (const workflow of ["verify", "release-macos"])
     for (const id of ["macos-native", "macos-compatibility"])
