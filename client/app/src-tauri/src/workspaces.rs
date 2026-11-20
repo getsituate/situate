@@ -1627,7 +1627,7 @@ pub(crate) fn with_retained_control<R: tauri::Runtime, T>(
         .with_authorized_control(window, session, || false, operation)
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
 pub(crate) fn with_authorized_read<P, T>(
     app: &tauri::AppHandle,
     window: &str,

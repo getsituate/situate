@@ -91,14 +91,18 @@
       return;
     }
     if (phase.pluginChecksMode) {
-      if (phase.pluginChecksMode === "block") {
+      if (["block", "windows"].includes(phase.pluginChecksMode)) {
         assert(
           (await state()).open.length === 0,
-          "Blocking check started with an open workspace",
+          "Plugin check began with an open workspace",
         );
         const parent = await invoke("smoke_parent");
         await invoke("smoke_checkpoint", { restart: true });
-        await act("create", parent.id, "Plugin-Checks");
+        await act(
+          "create",
+          parent.id,
+          phase.pluginChecksMode === "windows" ? "Plugins" : "Plugin-Checks",
+        );
       } else {
         assert(
           (await state()).open.length === 1,

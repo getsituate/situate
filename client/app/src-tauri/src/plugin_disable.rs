@@ -374,7 +374,7 @@ pub async fn plugin_disable(
     scope: String,
     request: Request,
 ) -> Result<Snapshot, String> {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
     {
         let label = window.label().to_owned();
         tauri::async_runtime::spawn_blocking(move || match request {
@@ -495,7 +495,7 @@ pub async fn plugin_disable(
         .await
         .map_err(|_| UNKNOWN.to_owned())?
     }
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
     {
         let _ = (app, window, scope, request);
         Err(UNAVAILABLE.into())
