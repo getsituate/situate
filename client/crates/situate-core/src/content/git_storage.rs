@@ -140,9 +140,6 @@ pub(super) fn commit_fact(
             .to_owned(),
         Err(error) => return Err(error.into()),
     };
-    // Detect a blocked control file before moving the reference, even with a cached durable head.
-    #[cfg(windows)]
-    sync_controls(directory)?;
     repo.reference(&name, oid, true, &message)?;
     #[cfg(test)]
     if FAIL_REF_SYNC.with(|failure| match failure.get() {
@@ -200,7 +197,7 @@ fn sync_object_directories(
     Ok(())
 }
 
-fn sync_controls(directory: &Dir) -> Result<()> {
+pub(super) fn sync_controls(directory: &Dir) -> Result<()> {
     let mut batch = crate::durable_storage::SyncBatch::default();
     for entry in directory.entries()? {
         let entry = entry?;

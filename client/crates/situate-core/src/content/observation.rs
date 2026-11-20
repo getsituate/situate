@@ -50,10 +50,14 @@ pub(super) struct CachedBlob {
 impl ContentStore {
     pub(super) fn sync_observed_history(&self) -> Result<()> {
         let head = self.repo.head()?.peel_to_commit()?.id();
-        if self.observations.durable_head.get() != Some(head) {
-            git_storage::sync_history(&self.history_dir)?;
-            self.observations.durable_head.set(Some(head));
+        if self.observations.durable_head.get() == Some(head) {
+            // Windows sharing restrictions can change even when the revision has not.
+            #[cfg(windows)]
+            git_storage::sync_controls(&self.history_dir)?;
+            return Ok(());
         }
+        git_storage::sync_history(&self.history_dir)?;
+        self.observations.durable_head.set(Some(head));
         Ok(())
     }
 
