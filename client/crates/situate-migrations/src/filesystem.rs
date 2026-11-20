@@ -166,6 +166,8 @@ pub(crate) fn remove_tree(parent: &Dir, name: &str) -> Result<()> {
         for entry in names(&dir)? {
             remove_tree(&dir, &entry)?;
         }
+        // Windows directory capabilities deny deletion until closed.
+        drop(dir);
         parent.remove_dir(name)?;
     } else if meta.is_file() {
         parent.remove_file(name)?;

@@ -79,7 +79,9 @@ export function windowsCommands(phase, rust, directory) {
         ],
       ];
     case "client-windows-workspace":
-      return [cargo("test", "--workspace", "--locked", ...target)];
+      return [
+        cargo("test", "--workspace", "--locked", "--no-fail-fast", ...target),
+      ];
     default:
       throw new Error("Unknown Windows build phase");
   }

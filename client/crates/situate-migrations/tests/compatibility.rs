@@ -80,17 +80,21 @@ fn semantic_version_precedence_ignores_build_metadata() {
     );
 }
 #[test]
-fn retained_lease_rejects_a_replacement_at_the_original_path() {
+fn retained_lease_prevents_or_rejects_marker_replacement() {
     let root = workspace(Some(
         r#"{"minimumAppVersion":"0.0.0","lastAppliedMigration":3}"#,
     ));
     let lease = prepare(root.path(), "0.1.3").unwrap();
     lease.validate().unwrap();
-    fs::rename(
-        root.path().join(".situate"),
-        root.path().join(".situate-original"),
-    )
-    .unwrap();
+    let moved = root.path().join(".situate-original");
+    let rename = fs::rename(root.path().join(".situate"), &moved);
+    if cfg!(windows) {
+        assert!(matches!(rename.unwrap_err().raw_os_error(), Some(5 | 32)));
+        assert!(!moved.exists());
+        lease.validate().unwrap();
+        return;
+    }
+    rename.unwrap();
     fs::create_dir(root.path().join(".situate")).unwrap();
     let replacement = br#"{"minimumAppVersion":"9999.0.0","lastAppliedMigration":1}"#;
     fs::write(root.path().join(".situate/migrations.json"), replacement).unwrap();
