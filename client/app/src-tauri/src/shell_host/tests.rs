@@ -188,12 +188,20 @@ async fn leader_exit_does_not_leave_background_writer_alive() {
     let root = TempDir::new().unwrap();
     let result = run(request(
         root.path(),
-        "(sleep 1; printf escaped > late) & printf done; exit 3",
+        "(
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+                (sleep 1; printf escaped > late) &
+            done
+            wait
+        ) &
+        printf done
+        exit 3",
     ))
     .await;
     assert_eq!(result.exit_code, Some(3));
     assert_eq!(result.stdout.text, "done");
     assert!(!result.stdout.incomplete);
+    assert!(!result.stderr.incomplete);
     tokio::time::sleep(Duration::from_millis(1100)).await;
     assert!(!root.path().join("late").exists());
 }

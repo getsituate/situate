@@ -319,6 +319,54 @@ async function pollSetup({
   return { result, diskReads };
 }
 
+test("onboarding waits for visible setup fields to become editable", async () => {
+  const start = source.indexOf('      await click("Check and continue");');
+  const setup = source.slice(
+    start,
+    source.indexOf("      const firstMethodQuestion", start),
+  );
+  const inputHelpers = source.slice(
+    source.indexOf("  function fill("),
+    source.indexOf("  async function click("),
+  );
+  const fields = {
+    'textarea[id$="-sources"]': { disabled: true, readOnly: false },
+    'textarea[id$="-preferences"]': { disabled: false, readOnly: true },
+  };
+  const actions = [];
+  for (const [selector, field] of Object.entries(fields)) {
+    field.focus = () => {};
+    field.dispatchEvent = (event) => {
+      assert.equal(event.type, "input");
+      actions.push(selector);
+    };
+  }
+  await runInNewContext(`(async () => {${inputHelpers}\n${setup}})()`, {
+    assert: (condition, code) => assert.ok(condition, code),
+    click: async (label) => actions.push(label),
+    load: async () => ({ record: { step: "method" } }),
+    query: (selector) => fields[selector],
+    Event,
+    wait: async (name, check) => {
+      if (name === "onboarding-access-checked") return check();
+      const field =
+        name === "onboarding-initial-sources"
+          ? fields['textarea[id$="-sources"]']
+          : fields['textarea[id$="-preferences"]'];
+      assert.equal(check(), false, name);
+      field.disabled = false;
+      field.readOnly = false;
+      return check();
+    },
+  });
+  assert.deepEqual(actions, [
+    "Check and continue",
+    'textarea[id$="-sources"]',
+    'textarea[id$="-preferences"]',
+    "Start setting up my workspace",
+  ]);
+});
+
 test("onboarding waits for the live owner before inspecting reconstructed terminal runs", async () => {
   for (const live of [{ taskActive: true }, { questionBusy: true }]) {
     assert.deepEqual(await pollSetup({ ...live, diskState: "interrupted" }), {
