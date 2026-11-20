@@ -225,8 +225,8 @@ def build_slots():
 
 
 @contextmanager
-def private_directory(path, error):
-    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+def private_directory(path, error, *, parent_fd=None):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
     try:
         info = os.fstat(fd)
         if info.st_uid != os.getuid() or info.st_mode & 0o077:
@@ -248,8 +248,11 @@ def acquire(resource, directory, base=None, child=None, pending=None):
         with private_directory(base, "The coordination directory must be private and owned by the current user.") as base_fd:
             for key in keys:
                 name = hashlib.sha256(key.encode()).hexdigest() + ".lock"
-                fd = os.open(name, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK,
-                             0o600, dir_fd=base_fd)
+                flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK
+                try:
+                    fd = os.open(name, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=base_fd)
+                except FileExistsError:
+                    fd = os.open(name, flags, dir_fd=base_fd)
                 descriptors.append(fd)
                 info = os.fstat(fd)
                 if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_mode & 0o077:
@@ -281,25 +284,46 @@ def acquire(resource, directory, base=None, child=None, pending=None):
     return None
 
 
-def read_docker_lease(path):
-    if not path.is_absolute():
-        raise ValueError('Docker lease path must be absolute.')
-    parent = path.parent.lstat()
-    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
-        raise ValueError('Docker lease directory must be private and owned.')
+DOCKER_DIRECTORY_ERROR = 'Docker lease directory must be private and owned.'
+
+
+def file_identity(info):
+    return info.st_dev, info.st_ino
+
+
+def entry_identity(directory_fd, name):
+    return file_identity(os.stat(name, dir_fd=directory_fd, follow_symlinks=False))
+
+
+def read_private_file(directory_fd, name, limit):
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
     except FileNotFoundError:
         return None
     with os.fdopen(fd, 'rb') as stream:
         info = os.fstat(stream.fileno())
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > 4096):
-            raise ValueError('Docker lease must be a private owned single-link regular file.')
-        data = stream.read(4097)
-    current = path.lstat()
-    if (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino):
-        raise ValueError('Docker lease changed during inspection.')
+                or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > limit):
+            raise ValueError('Protocol input must be a bounded private owned single-link regular file.')
+        data = stream.read(limit + 1)
+        identity = file_identity(info)
+        if len(data) != info.st_size or entry_identity(directory_fd, name) != identity:
+            raise ValueError('Protocol input changed during inspection.')
+    return data, identity
+
+
+def read_docker_lease(path):
+    if not path.is_absolute():
+        raise ValueError('Docker lease path must be absolute.')
+    with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+        return read_lease_entry(directory_fd, path.name)
+
+
+def read_lease_entry(directory_fd, name):
+    entry = read_private_file(directory_fd, name, 4096)
+    if entry is None:
+        return None
+    data, identity = entry
     value = json.loads(data)
     uuid = r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}'
     if (not isinstance(value, dict) or not {'name', 'token'} <= set(value)
@@ -317,26 +341,22 @@ def read_docker_lease(path):
         if (not isinstance(environment, dict) or set(environment) - DOCKER_ENVIRONMENT
                 or any(not isinstance(item, str) or '\0' in item for item in environment.values())):
             raise ValueError('Invalid Docker cleanup environment.')
-    return value, (info.st_dev, info.st_ino)
+    return value, identity
 
 
 def docker_build_ack(path, value):
-    ack = Path(str(path) + '.' + value['token'] + '.build')
-    try:
-        fd = os.open(ack, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    except FileNotFoundError:
+    with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+        return read_build_ack(directory_fd, path.name + '.' + value['token'] + '.build', value)
+
+
+def read_build_ack(directory_fd, name, value):
+    entry = read_private_file(directory_fd, name, 4096)
+    if entry is None:
         return None
-    with os.fdopen(fd, 'rb') as stream:
-        info = os.fstat(stream.fileno())
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > 4096):
-            raise ValueError('Docker build acknowledgement must be private and owned.')
-        contents = json.loads(stream.read(4097))
-    current = ack.lstat()
-    if ((info.st_dev, info.st_ino) != (current.st_dev, current.st_ino)
-            or contents != {'name': value['name'], 'token': value['token']}):
+    contents, identity = entry
+    if json.loads(contents) != {'name': value['name'], 'token': value['token']}:
         raise ValueError('Docker build acknowledgement differs from its attempt.')
-    return info.st_dev, info.st_ino
+    return identity
 
 
 class DockerBuildAdmission:
@@ -375,28 +395,26 @@ class DockerBuildAdmission:
         if self.fd is None:
             return False
         self.identity = identity
-        fresh = read_docker_lease(path)
-        if caller_closed() or child.poll() is not None:
-            return False
-        if fresh is None or fresh != lease:
-            self.release()
-            return True
-        ack = Path(str(path) + '.' + value['token'] + '.build')
-        temporary = Path(str(ack) + '.publishing')
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        try:
-            with os.fdopen(fd, 'w') as stream:
-                json.dump({'name': value['name'], 'token': value['token']}, stream, sort_keys=True)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.link(temporary, ack)
-        finally:
-            temporary.unlink()
-        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
+        with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+            fresh = read_lease_entry(directory_fd, path.name)
+            if caller_closed() or child.poll() is not None:
+                return False
+            if fresh != lease:
+                self.release()
+                return True
+            ack = path.name + '.' + value['token'] + '.build'
+            temporary = ack + '.publishing'
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=directory_fd)
+            try:
+                with os.fdopen(fd, 'w') as stream:
+                    json.dump({'name': value['name'], 'token': value['token']}, stream, sort_keys=True)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.link(temporary, ack, src_dir_fd=directory_fd, dst_dir_fd=directory_fd, follow_symlinks=False)
+            finally:
+                os.unlink(temporary, dir_fd=directory_fd)
             os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
         return True
 
 
@@ -462,41 +480,36 @@ def publish_phase(root, name, token, withdraw=False):
 
 def read_phase_request(root, path):
     with private_directory(root, PHASE_DIRECTORY_ERROR) as root_fd:
-        try:
-            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
-        except FileNotFoundError:
-            return None
-        with os.fdopen(fd, 'rb') as stream:
-            info = os.fstat(stream.fileno())
-            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                    or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > 256):
-                raise ValueError('Invalid container phase request.')
-            data = json.loads(stream.read(257))
-        current = os.stat(path.name, dir_fd=root_fd, follow_symlinks=False)
-    if (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino):
-        raise ValueError('Container phase changed during inspection.')
+        entry = read_private_file(root_fd, path.name, 256)
+    return phase_token(entry[0]) if entry else None
+
+
+def phase_token(contents):
+    data = json.loads(contents)
     if (not isinstance(data, dict) or set(data) != {'token'} or not isinstance(data['token'], str)
             or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', data['token'])):
         raise ValueError('Invalid container phase identity.')
     return data['token']
 
 
-def cleanup_phase_directory(root):
+def cleanup_phase_directory(parent_fd, name, files, child=False):
     # Docker absence has been verified; remove only the finite protocol files.
     try:
-        for path in (root / 'request.json', root / 'grant.json', root / 'release.json', root / 'released.json',
-                     root / 'grant.json.publishing', root / 'released.json.publishing', root / 'phase/request.json', root / 'phase/release.json'):
-            try:
-                read_phase_request(path.parent, path)
-                path.unlink(missing_ok=True)
-            except (OSError, ValueError, TypeError):
-                pass
-        try:
-            (root / 'phase').rmdir()
-        except OSError:
-            pass
-        root.rmdir()
-    except OSError:
+        with private_directory(name, PHASE_DIRECTORY_ERROR, parent_fd=parent_fd) as root_fd:
+            for file in files:
+                try:
+                    entry = read_private_file(root_fd, file, 256)
+                    if entry is not None:
+                        phase_token(entry[0])
+                        if entry_identity(root_fd, file) == entry[1]:
+                            os.unlink(file, dir_fd=root_fd)
+                except (OSError, ValueError, TypeError):
+                    pass
+            if child:
+                cleanup_phase_directory(root_fd, 'phase', ('request.json', 'release.json'))
+            if entry_identity(parent_fd, name) == file_identity(os.fstat(root_fd)):
+                os.rmdir(name, dir_fd=parent_fd)
+    except (OSError, ValueError):
         pass
 
 
@@ -511,21 +524,19 @@ def docker_build_unstarted(path):
 
 
 def docker_cid(path, token):
-    cid = Path(str(path) + '.' + token + '.cid')
-    try:
-        fd = os.open(cid, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    except FileNotFoundError:
+    with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+        return read_cid(directory_fd, path.name + '.' + token + '.cid')
+
+
+def read_cid(directory_fd, name):
+    entry = read_private_file(directory_fd, name, 128)
+    if entry is None:
         return None
-    with os.fdopen(fd, 'r') as stream:
-        info = os.fstat(stream.fileno())
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_nlink != 1 or info.st_mode & 0o077 or info.st_size > 128):
-            raise ValueError('Docker CID must be a private owned single-link regular file.')
-        value = stream.read(129).strip()
-    current = cid.lstat()
-    if (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino) or not re.fullmatch(r'[a-f0-9]{64}', value):
+    contents, identity = entry
+    value = contents.decode('ascii').strip()
+    if not re.fullmatch(r'[a-f0-9]{64}', value):
         raise ValueError('Invalid Docker creation acknowledgement.')
-    return value, (info.st_dev, info.st_ino)
+    return value, identity
 
 
 def wait_for_docker_creation(path):
@@ -569,57 +580,54 @@ def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
     warned = False
     while True:
         try:
-            lease = read_docker_lease(path)
-            if lease is not None:
-                value, identity = lease
-                cid = docker_cid(path, value['token']) if value.get('creationPending') else None
-                ack = docker_build_ack(path, value) if value.get('buildPending') else None
-                unstarted = creation_started is False and value.get('creationPending') and cid is None
-                if value.get('creationPending') and cid is None and not unstarted:
-                    raise RuntimeError('Docker creation remains unacknowledged.')
-                environment = None
-                if 'dockerEnvironment' in value:
-                    environment = {key: item for key, item in os.environ.items() if key not in DOCKER_ENVIRONMENT}
-                    environment.update(value['dockerEnvironment'])
-                container = None if unstarted else inspect_docker_container(value['name'], environment)
-                if container is not None:
-                    if cid is not None and container['Id'] != cid[0]:
-                        raise ValueError('Docker CID differs from the created container.')
-                    config = container.get('Config')
-                    labels = config.get('Labels') if isinstance(config, dict) else None
-                    if not isinstance(labels, dict) or labels.get('dev.situate.ci-run') != value['token']:
-                        raise ValueError('Docker container ownership differs.')
-                    # Names can be reused; only the inspected immutable ID may be removed.
-                    subprocess.run(['docker', 'container', 'rm', '--force', container['Id']],
-                                   capture_output=True, text=True, timeout=30, env=environment)
-                    if inspect_docker_container(value['name'], environment) is not None:
-                        raise RuntimeError('Docker container removal remains unresolved.')
-                current = path.lstat()
-                if (current.st_dev, current.st_ino) != identity:
-                    raise ValueError('Docker lease changed before cleanup completed.')
-                if cid is not None:
-                    acknowledged = Path(str(path) + '.' + value['token'] + '.cid')
-                    info = acknowledged.lstat()
-                    if (info.st_dev, info.st_ino) != cid[1]:
-                        raise ValueError('Docker CID changed during cleanup.')
-                if ack is not None:
-                    acknowledged_build = Path(str(path) + '.' + value['token'] + '.build')
-                    info = acknowledged_build.lstat()
-                    if (info.st_dev, info.st_ino) != ack:
-                        raise ValueError('Docker build acknowledgement changed during cleanup.')
-                path.unlink()
-                if value.get('phaseAdmission'):
-                    cleanup_phase_directory(Path(str(path) + '.' + value['token'] + '.admission'))
-                if ack is not None:
-                    try:
-                        acknowledged_build.unlink()
-                    except OSError:
-                        pass
-                if cid is not None:
-                    try:
-                        acknowledged.unlink()
-                    except OSError:
-                        pass
+            if not path.is_absolute():
+                raise ValueError('Docker lease path must be absolute.')
+            with private_directory(path.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
+                lease = read_lease_entry(directory_fd, path.name)
+                if lease is not None:
+                    value, identity = lease
+                    prefix = path.name + '.' + value['token']
+                    cid_name, ack_name = prefix + '.cid', prefix + '.build'
+                    cid = read_cid(directory_fd, cid_name) if value.get('creationPending') else None
+                    ack = read_build_ack(directory_fd, ack_name, value) if value.get('buildPending') else None
+                    unstarted = creation_started is False and value.get('creationPending') and cid is None
+                    if value.get('creationPending') and cid is None and not unstarted:
+                        raise RuntimeError('Docker creation remains unacknowledged.')
+                    environment = None
+                    if 'dockerEnvironment' in value:
+                        environment = {key: item for key, item in os.environ.items() if key not in DOCKER_ENVIRONMENT}
+                        environment.update(value['dockerEnvironment'])
+                    container = None if unstarted else inspect_docker_container(value['name'], environment)
+                    if container is not None:
+                        if cid is not None and container['Id'] != cid[0]:
+                            raise ValueError('Docker CID differs from the created container.')
+                        config = container.get('Config')
+                        labels = config.get('Labels') if isinstance(config, dict) else None
+                        if not isinstance(labels, dict) or labels.get('dev.situate.ci-run') != value['token']:
+                            raise ValueError('Docker container ownership differs.')
+                        # Names can be reused; only the inspected immutable ID may be removed.
+                        subprocess.run(['docker', 'container', 'rm', '--force', container['Id']],
+                                       capture_output=True, text=True, timeout=30, env=environment)
+                        if inspect_docker_container(value['name'], environment) is not None:
+                            raise RuntimeError('Docker container removal remains unresolved.')
+                    if entry_identity(directory_fd, path.name) != identity:
+                        raise ValueError('Docker lease changed before cleanup completed.')
+                    owned = [(cid_name, cid[1] if cid else None), (ack_name, ack)]
+                    for name, expected in owned:
+                        if expected is not None and entry_identity(directory_fd, name) != expected:
+                            raise ValueError('Docker acknowledgement changed during cleanup.')
+                    os.unlink(path.name, dir_fd=directory_fd)
+                    if value.get('phaseAdmission'):
+                        cleanup_phase_directory(directory_fd, prefix + '.admission',
+                                                ('request.json', 'grant.json', 'release.json', 'released.json',
+                                                 'grant.json.publishing', 'released.json.publishing'), child=True)
+                    for name, expected in owned:
+                        if expected is not None:
+                            try:
+                                if entry_identity(directory_fd, name) == expected:
+                                    os.unlink(name, dir_fd=directory_fd)
+                            except OSError:
+                                pass
             if remove_directory:
                 try:
                     path.parent.rmdir()

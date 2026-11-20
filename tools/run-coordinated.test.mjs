@@ -260,6 +260,35 @@ with tempfile.TemporaryDirectory() as temporary:
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("Docker cleanup only removes validated phase entries within its lease directory", () => {
+  const source = `import importlib.util, json, tempfile
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(modulePath)})
+s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+s.inspect_docker_container=lambda *args:None
+with tempfile.TemporaryDirectory() as temporary:
+    directory=Path(temporary)
+    token='11111111-1111-4111-8111-111111111111'
+    path=directory/'container.json'
+    path.write_text(json.dumps({'name':'situate-pipeline-'+token,'token':token,'phaseAdmission':True}))
+    path.chmod(0o600)
+    admission=Path(str(path)+'.'+token+'.admission');admission.mkdir(mode=0o700)
+    outside=directory/'outside';outside.mkdir(mode=0o700)
+    s.publish_phase(outside,'request.json',token)
+    (admission/'phase').symlink_to(outside, target_is_directory=True)
+    s.publish_phase(admission,'grant.json',token)
+    s.cleanup_docker_lease(path)
+    assert not path.exists() and not (admission/'grant.json').exists()
+    assert (admission/'phase').is_symlink()
+    assert s.read_phase_request(outside,outside/'request.json')==token
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("build slot settings retain two host slots and permit one guest slot", () => {
   const source = `import importlib.util, os
 spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})
@@ -309,17 +338,17 @@ with tempfile.TemporaryDirectory() as temporary:
         return path
     publish(first)
     old = acknowledge(first, 'a' * 64)
-    original_unlink = Path.unlink
+    original_unlink = os.unlink
     def preserve_old(path, *args, **kwargs):
-        if path == old:
+        if path == old.name:
             raise PermissionError('old acknowledgement retained')
         return original_unlink(path, *args, **kwargs)
     s.inspect_docker_container = lambda *args: None
-    Path.unlink = preserve_old
+    os.unlink = preserve_old
     try:
         s.cleanup_docker_lease(lease)
     finally:
-        Path.unlink = original_unlink
+        os.unlink = original_unlink
     assert not lease.exists() and old.exists()
     publish(second)
     legacy = Path(str(lease) + '.cid')

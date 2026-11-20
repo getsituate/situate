@@ -23,10 +23,11 @@ const supervisorSource = fileURLToPath(
   new URL("./worktree-supervisor.py", import.meta.url),
 );
 
-async function until(predicate) {
+async function until(predicate, diagnostic = () => "") {
   const end = performance.now() + 15000;
   while (!predicate()) {
-    assert.ok(performance.now() < end, "condition did not become true");
+    if (performance.now() >= end)
+      assert.fail(`condition did not become true ${diagnostic()}`);
     await delay(25);
   }
 }
@@ -918,18 +919,21 @@ test("nested desktop leases remain held until cancellation drains their descenda
 });
 
 test("an initial process inspection failure preserves the running command and its lease", async (t) => {
-  const { directory, run } = fixture(t);
-  const bin = join(directory, "bin");
-  mkdirSync(bin);
-  const marker = join(directory, "ps-failed");
-  writeFileSync(
-    join(bin, "ps"),
-    `#!/bin/sh\nif [ ! -f '${marker}' ]; then touch '${marker}'; exit 1; fi\nexec /bin/ps "$@"\n`,
-    { mode: 0o700 },
+  const { directory, run } = fixture(
+    t,
+    (root) => `
+marker = Path(${JSON.stringify(join(root, "ps-failed"))})
+actual_snapshot = supervisor.snapshot
+def first_failure():
+    if not marker.exists():
+        marker.touch()
+        raise OSError('Process inspection temporarily unavailable')
+    return actual_snapshot()
+supervisor.snapshot = first_failure
+`,
   );
-  const result = run(directory, gated(directory, "healthy"), "worktree", {
-    PATH: `${bin}:${process.env.PATH}`,
-  });
+  const marker = join(directory, "ps-failed");
+  const result = run(directory, gated(directory, "healthy"));
   await until(
     () =>
       existsSync(marker) &&
@@ -1094,10 +1098,12 @@ test("coordination fixtures do not share build or desktop slots", async (t) => {
       "desktop",
     ),
   ];
-  await until(() =>
-    ["build-one", "build-two", "desktop"].every((name) =>
-      existsSync(join(occupied.directory, name)),
-    ),
+  await until(
+    () =>
+      ["build-one", "build-two", "desktop"].every((name) =>
+        existsSync(join(occupied.directory, name)),
+      ),
+    () => owners.map(({ output }) => output).join("\n"),
   );
   for (const resource of ["build", "desktop"]) {
     const child = independent.run(
