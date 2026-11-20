@@ -30,21 +30,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/npm-ci.mjs client
       - name: Measure Vue coverage
-        working-directory: client/app
-        run: node ../../tools/run-coordinated.mjs -- node ../node_modules/vitest/vitest.mjs run --allowOnly=false --coverage
-      - name: Resolve LCOV paths from the repository root
-        run: |
-          awk '
-            /^SF:/ {
-              if ($0 !~ /^SF:src\//) exit 1
-              sub(/^SF:/, "SF:client/app/")
-              sources++
-            }
-            { print }
-            END { if (!sources) exit 1 }
-          ' client/target/coverage/vue/lcov.info > "$RUNNER_TEMP/situate-vue.lcov"
+        run: node tools/actions-adapter.mjs sonar-coverage
       - name: Publish analysis and Vue coverage
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:

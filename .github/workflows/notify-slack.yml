@@ -11,6 +11,7 @@ on:
       - Release launch trace
       - Release macOS
       - Release recovery
+      - SonarQube Cloud
       - Verify
       - Verify hosting
       - Dependabot Updates

@@ -293,6 +293,18 @@ export async function diagnosticPlan(selection, target) {
   return { ...plan, suites };
 }
 
+export function sonarLcov(report) {
+  let sources = 0;
+  const normalized = report.replace(/^SF:(.*)$/gm, (_, path) => {
+    if (!path.startsWith("src/"))
+      throw new Error("Expected an LCOV source path relative to the Vue app.");
+    sources++;
+    return `SF:client/app/${path}`;
+  });
+  if (!sources) throw new Error("Vue LCOV report has no source paths.");
+  return normalized;
+}
+
 export async function main(
   args = process.argv.slice(2),
   env = process.env,
@@ -312,6 +324,30 @@ export async function main(
   const workflow = values.workflow;
   if (!["verify", "create", "publish"].includes(workflow))
     throw new Error("Unknown pipeline workflow.");
+  if (command === "sonar-coverage") {
+    if (!env.RUNNER_TEMP) throw new Error("RUNNER_TEMP is required.");
+    const {
+      suites: [suite],
+    } = await diagnosticPlan("coverage", "portable");
+    const options = { env, stdio: "inherit" };
+    execute(process.execPath, ["tools/npm-ci.mjs", suite.npm], options);
+    execute(
+      process.execPath,
+      [
+        join(root, "tools/run-coordinated.mjs"),
+        "--",
+        suite.command,
+        ...suite.args,
+      ],
+      { ...options, cwd: join(root, suite.cwd) },
+    );
+    const report = readFileSync(
+      join(root, "client/target/coverage/vue/lcov.info"),
+      "utf8",
+    );
+    writeFileSync(join(env.RUNNER_TEMP, "situate-vue.lcov"), sonarLcov(report));
+    return;
+  }
   if (command === "desktop") {
     return JSON.parse(
       execute(process.execPath, [join(root, "tools/release-desktop.mjs")], {
