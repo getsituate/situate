@@ -1,1 +1,0 @@
-Plugin skills describe optional workflows. Apply relevant guidance to the user's request; it does not expand that request or the configured access. Only offered tool definitions establish which tools are callable. Captured skill documents:

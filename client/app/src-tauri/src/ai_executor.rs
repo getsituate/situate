@@ -1190,8 +1190,45 @@ fn disconnected(generation: u64, observations: Vec<Value>) -> ToolOutcome {
 }
 
 impl CapturedTools {
-    pub fn skills(&self) -> Vec<Value> {
-        self.skills.clone()
+    pub fn skill_catalog(&self) -> Vec<Value> {
+        self.skills.iter().map(|skill| {
+            json!({"id":skill["id"],"name":skill["name"],"description":skill["description"],"pluginId":skill["pluginId"],"pluginName":skill["pluginName"]})
+        }).collect()
+    }
+    fn skill(&self, id: &str) -> Option<&Value> {
+        self.skills.iter().find(|skill| skill["id"] == id)
+    }
+    pub fn load_skill(&self, run_id: &str, arguments: &Value) -> Result<ToolResult, String> {
+        let id = arguments["id"]
+            .as_str()
+            .ok_or("native.ai.tool.unavailable")?;
+        if arguments.as_object().is_none_or(|object| object.len() != 1) {
+            return Err("native.ai.tool.unavailable".into());
+        }
+        let skill = self.skill(id).ok_or("native.ai.tool.unavailable")?;
+        Ok(ToolResult::json(
+            json!({"skillId":id,"runId":run_id,"digest":skill_digest(skill)}),
+        ))
+    }
+    pub fn resolve_skill_result(&self, run_id: &str, message: &mut Value) {
+        if message["role"] != "toolResult"
+            || message["toolName"] != crate::ai_builtin_tools::LOAD_PLUGIN_SKILL
+            || message["isError"] != false
+        {
+            return;
+        }
+        // The host recaptures plugins between model requests; a receipt must not load changed guidance.
+        let receipt = &message["details"];
+        let skill = receipt["skillId"]
+            .as_str()
+            .filter(|_| receipt["runId"] == run_id)
+            .and_then(|id| self.skill(id))
+            .filter(|skill| receipt["digest"] == skill_digest(skill));
+        let text = skill.map_or_else(
+            || "Skill instructions are not loaded for this run. Use the current catalog to load a skill.".to_owned(),
+            |skill| skill.to_string(),
+        );
+        message["content"] = json!([{"type":"text","text":text}]);
     }
     pub fn unavailable(&self) -> Vec<Value> {
         self.unavailable.clone()
@@ -1200,6 +1237,10 @@ impl CapturedTools {
         self.plugins
             .iter()
             .flat_map(|p| p.generation.descriptors(&p.definitions))
+            .chain(
+                (!self.skills.is_empty())
+                    .then(crate::ai_builtin_tools::load_plugin_skill_definition),
+            )
             .collect()
     }
     pub async fn invoke(
@@ -1407,16 +1448,30 @@ fn source_metadata(source: &Value, revision: &Option<String>, incarnation: &str)
     }
     metadata
 }
+fn skill_digest(skill: &Value) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(skill.to_string()))
+}
+
 fn source_skills(source: &Value, revision: &Option<String>, incarnation: &str) -> Vec<Value> {
     source["skills"]
         .as_array()
         .into_iter()
         .flatten()
-        .map(|skill| {
+        .filter_map(|skill| {
+            let path = skill["path"].as_str()?;
+            let text = skill["text"].as_str()?;
+            let plugin_id = source["manifest"]["id"].as_str()?;
+            let (name, description) = situate_core::plugins::runtime::skill_frontmatter(text);
             let mut metadata = source_metadata(source, revision, incarnation);
-            metadata["path"] = skill["path"].clone();
-            metadata["text"] = skill["text"].clone();
-            metadata
+            metadata["id"] = json!(format!("{plugin_id}/{path}"));
+            metadata["name"] = name.map(Value::from).unwrap_or_else(|| json!(path));
+            metadata["description"] = description
+                .map(Value::from)
+                .unwrap_or_else(|| source["manifest"]["description"].clone());
+            metadata["path"] = json!(path);
+            metadata["text"] = json!(text);
+            Some(metadata)
         })
         .collect()
 }

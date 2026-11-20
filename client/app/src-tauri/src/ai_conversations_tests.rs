@@ -164,18 +164,15 @@ fn ordinary_chat_keeps_source_results_as_data_and_preserves_coverage_limits() {
 }
 
 #[test]
-fn skill_documents_and_service_failures_are_separate_from_tool_availability() {
-    let skill = json!({"pluginId":"tasks","pluginName":"Tasks","path":"SKILL.md","text":"Review overdue tasks first.","revision":"source-a","incarnation":"instance-a"});
+fn plugin_skill_catalog_and_service_failures_have_separate_context() {
+    let skill = json!({"id":"tasks/SKILL.md","pluginId":"tasks","pluginName":"Tasks","name":"review","description":"Review overdue tasks."});
     let warning = json!({"pluginId":"tasks","pluginName":"Tasks","reason":"initialization","error":"native.plugins.executor.failed"});
     let instructions = run_instructions("", None, vec![skill.clone()], vec![warning.clone()], "");
     assert_eq!(instructions.len(), 3);
     let skill_instruction = instructions[1]["content"].as_str().unwrap();
     let warning_instruction = instructions[2]["content"].as_str().unwrap();
-    assert!(
-        skill_instruction
-            .contains("Only offered tool definitions establish which tools are callable.")
-    );
-    assert!(skill_instruction.contains("does not expand that request or the configured access"));
+    assert!(skill_instruction.contains("call load_plugin_skill before applying its guidance"));
+    assert!(skill_instruction.contains("does not grant access or make tools available"));
     assert!(skill_instruction.ends_with(&json!([skill]).to_string()));
     assert!(warning_instruction.contains("Do not retry initialization automatically"));
     assert!(warning_instruction.ends_with(&json!([warning]).to_string()));

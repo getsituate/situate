@@ -8,6 +8,17 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
     }})
 }
 
+pub(crate) const LOAD_PLUGIN_SKILL: &str = "load_plugin_skill";
+
+pub(crate) fn load_plugin_skill_definition() -> Value {
+    tool(
+        LOAD_PLUGIN_SKILL,
+        "Load the instructions of a skill listed in the plugin skill catalog. Pass the exact catalog ID.",
+        json!({"id":{"type":"string","minLength":1}}),
+        &["id"],
+    )
+}
+
 pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value> {
     let path = json!({"type":"string","minLength":1,"maxLength":4096});
     let offset = json!({"type":"integer","minimum":0});

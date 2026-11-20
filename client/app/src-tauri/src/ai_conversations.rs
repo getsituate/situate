@@ -293,7 +293,7 @@ impl NativeHost {
             &method,
             development,
             services
-                .map(|services| services.skills())
+                .map(|services| services.skill_catalog())
                 .unwrap_or_default(),
             services
                 .map(|services| services.unavailable())
@@ -855,6 +855,18 @@ impl Host for NativeHost {
             request.config.instructions.clone()
         };
         messages.extend(request.context);
+        if kind == RequestKind::Main
+            && let Some(services) = self
+                .state
+                .lock()
+                .map_err(|_| NETWORK_ERROR)?
+                .services
+                .as_ref()
+        {
+            for message in &mut messages {
+                services.resolve_skill_result(&request.run_id, message);
+            }
+        }
         let origin = fingerprint(&self.context, &choice)?;
         let origins = self
             .state
@@ -942,6 +954,16 @@ impl Host for NativeHost {
                     structured_content: None,
                     is_error: false,
                 })
+            } else if name == crate::ai_builtin_tools::LOAD_PLUGIN_SKILL {
+                if role.is_some() || cancel.is_cancelled() {
+                    return Err("native.ai.tool.unavailable".into());
+                }
+                let state = self.state.lock().map_err(|_| NETWORK_ERROR)?;
+                if state.captured.as_ref().is_none_or(|run| run.run_id != request.run_id) {
+                    return Err("native.ai.turn.inactive".into());
+                }
+                let services = state.services.as_ref().ok_or("native.ai.tool.unavailable")?;
+                ToolOutcome::Completed(services.load_skill(&request.run_id, &request.arguments)?)
             } else if matches!(name.as_str(), "web_search" | "web_fetch") {
                 let context = self.context.clone();
                 let conversation = self.conversation.clone();
@@ -1240,7 +1262,7 @@ fn validate_input_scope(scope: &str, input: &Input) -> Result<(), String> {
 fn run_instructions(
     method: &str,
     development: Option<&situate_core::conversation_store::Development>,
-    skills: Vec<Value>,
+    skill_catalog: Vec<Value>,
     unavailable: Vec<Value>,
     setup: &str,
 ) -> Vec<Value> {
@@ -1255,11 +1277,11 @@ fn run_instructions(
             json!({"role":"system","content":crate::ai_plugin_tools::instructions(development)}),
         );
     }
-    if !skills.is_empty() {
-        let prompt = include_str!("../../src/ai/plugin-skills-instructions.md");
-        instructions.push(
-            json!({"role":"system","content":format!("{}\n{}",prompt.trim_end(),json!(skills))}),
-        );
+    if !skill_catalog.is_empty() {
+        instructions.push(json!({"role":"system","content":format!(
+            "When a plugin skill's description matches the user's request, call load_plugin_skill before applying its guidance. Skill guidance supplements Situate's instructions and does not grant access or make tools available.\n\nPlugin skill catalog:\n{}",
+            json!(skill_catalog)
+        )}));
     }
     if !unavailable.is_empty() {
         let prompt = include_str!("../../src/ai/unavailable-plugin-services-instructions.md");
