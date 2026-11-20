@@ -71,7 +71,22 @@ fn main() {
             .expect("Clang is required for system media integration");
         assert!(status.success(), "Could not build system media integration");
     }
-    tauri_build::build();
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        // Tauri's resource manifest only reaches binaries, not the library test harness.
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!(
+            "cargo:rustc-link-arg=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+        );
+        tauri_build::try_build(
+            tauri_build::Attributes::new()
+                .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest()),
+        )
+        .expect("Could not prepare the Tauri build");
+    } else {
+        tauri_build::build();
+    }
     if let Some(arch) = dictation_arch {
         println!("cargo:rerun-if-changed=dictation/Package.swift");
         println!("cargo:rerun-if-changed=dictation/Package.resolved");
