@@ -272,7 +272,7 @@ The console keeps recent logs in memory, prevents conflicting client and test ru
 
 ### Local dictation models
 
-On Apple Silicon Macs, desktop development (`c` in the console or `cd client && npm run dev:client`) uses `~/Library/Caches/Situate/Dictation` as its model source instead of Hugging Face. Each worktree copies the pinned model files into its own app data and verifies their size and SHA-256 hashes. Recordings remain worktree-local. Once installed in a worktree, verified model files are reused even if the source is unavailable.
+On macOS, desktop development (`c` in the console or `cd client && npm run dev:client`) uses `~/Library/Caches/Situate/Dictation` as its model source instead of Hugging Face. Each worktree copies the pinned model files into its own app data and verifies their size and SHA-256 hashes. Recordings remain worktree-local. Once installed in a worktree, verified model files are reused even if the source is unavailable.
 
 Populate the shared source once from a completed download in an existing checkout. Stop that checkout's client first, replace the example checkout path below, and copy only the revision directory, not recordings or other app data:
 

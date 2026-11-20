@@ -44,7 +44,7 @@ impl State {
 pub(crate) struct Dictation(Mutex<State>);
 static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn situate_dictation_setup(
         path: *const std::ffi::c_char,
@@ -56,17 +56,17 @@ unsafe extern "C" {
     fn situate_dictation_command(command: *const std::ffi::c_char, id: *const std::ffi::c_char);
 }
 fn command(action: &str, id: &str) {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[cfg(target_os = "macos")]
     {
         let action = std::ffi::CString::new(action).unwrap();
         let id = std::ffi::CString::new(id).unwrap();
         unsafe { situate_dictation_command(action.as_ptr(), id.as_ptr()) };
     }
-    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    #[cfg(not(target_os = "macos"))]
     let _ = (action, id);
 }
 
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(target_os = "macos")]
 extern "C" fn receive(data: *const std::ffi::c_char) {
     // Swift owns this string for the duration of the synchronous callback.
     let data = unsafe { std::ffi::CStr::from_ptr(data) };
@@ -129,7 +129,7 @@ extern "C" fn receive(data: *const std::ffi::c_char) {
 
 pub(crate) fn setup(app: &tauri::AppHandle) {
     let _ = APP.set(app.clone());
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[cfg(target_os = "macos")]
     if let Ok(directory) = app.path().app_data_dir() {
         let directory = directory.join("dictation");
         if let Ok(path) = std::ffi::CString::new(directory.to_string_lossy().as_bytes()) {
@@ -287,7 +287,7 @@ pub(crate) fn dictation_snapshot(
     let capability = app.state::<Dictation>();
     let state = capability.0.lock().map_err(|_| "dictation.failed")?;
     Ok(json!({
-        "supported": cfg!(all(target_os = "macos", target_arch = "aarch64")),
+        "supported": cfg!(target_os = "macos"),
         "model": state.model, "progress": state.progress, "busy": state.owner.is_some(),
         "owner": state.owner.as_ref().filter(|o| o.window == window.label()),
     }))
@@ -301,9 +301,7 @@ pub(crate) fn dictation_start(
     conversation: String,
     id: String,
 ) -> Result<(), String> {
-    if !cfg!(all(target_os = "macos", target_arch = "aarch64"))
-        || uuid::Uuid::parse_str(&id).is_err()
-    {
+    if !cfg!(target_os = "macos") || uuid::Uuid::parse_str(&id).is_err() {
         return Err("dictation.failed".into());
     }
     if crate::lifecycle::quit_pending(&app) {

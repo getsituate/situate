@@ -155,6 +155,16 @@ const rules = {
   "client-workshop-clippy": (file) => core(file) || workshopConfig.test(file),
   "workshop-format": (file) => rust.test(file) || workshopConfig.test(file),
   "client-native": native,
+  "client-native-compatibility": (file) =>
+    native(file) ||
+    file === ".github/workflows/verify.yml" ||
+    file === ".github/workflows/release-macos.yml",
+  "client-dictation-recognition": (file) =>
+    /^client\/app\/src-tauri\/(?:dictation\/|build\.rs$|src\/dictation\.rs$)/.test(
+      file,
+    ) ||
+    file === ".github/workflows/verify.yml" ||
+    file === ".github/workflows/release-macos.yml",
   ...Object.fromEntries(windowsNativeSuites.map((id) => [id, windowsNative])),
   "client-agent-e2e": native,
   "client-onboarding-e2e": native,

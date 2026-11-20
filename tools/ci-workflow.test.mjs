@@ -115,9 +115,13 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
         assert.match(body, /run: python3 tools\/pipeline-container\.py/);
       }
     }
+    const otherJobs = ["verify", "release-macos"].includes(name)
+      ? workflow.replace(job(workflow, "macos-compatibility"), "")
+      : workflow;
+    assert.doesNotMatch(otherJobs, /runs-on: macos-1[0-9]/);
     assert.doesNotMatch(
       workflow,
-      /runs-on: (?:windows(?!-2025\b)|macos-1[0-9])|--target.*(?:ios|android)/,
+      /runs-on: windows(?!-2025\b)|--target.*(?:ios|android)/,
     );
   }
 });
@@ -156,12 +160,20 @@ test("fixed independent families depend on planning and aggregate every selected
     for (const [id, host] of lanes) {
       const lane = job(workflow, id);
       assert.match(lane, /needs: plan\n/);
-      assert.match(
-        lane,
-        new RegExp(
-          `runs-on: ${{ macos: "macos-latest", linux: "ubuntu-24.04", windows: "windows-2025" }[host]}`,
-        ),
-      );
+      const runner =
+        id === "macos-compatibility"
+          ? "macos-15-intel"
+          : host === "macos"
+            ? "macos-latest"
+            : host === "windows"
+              ? "windows-2025"
+              : "ubuntu-24.04";
+      assert.ok(lane.includes(`runs-on: ${runner}\n`));
+      if (id === "macos-compatibility")
+        assert.match(
+          lane,
+          /DEVELOPER_DIR: \/Applications\/Xcode_26\.3\.app\/Contents\/Developer/,
+        );
       assert.ok(lane.includes(`.lanes.*.id, '${id}')`));
       assert.match(lane, /receipt:.*steps\.lane\.outputs\.receipt/);
       assert.match(lane, /PIPELINE_PLAN_DIGEST:.*needs\.plan\.outputs\.digest/);
@@ -227,10 +239,8 @@ test("Windows verify requires a native receipt and uploads the CI build after it
 
 test("native source jobs declare one build slot in both PR and release verification", () => {
   for (const workflow of ["verify", "release-macos"])
-    assert.match(
-      job(read(workflow), "macos-native"),
-      /SITUATE_TOOL_BUILD_SLOTS: "1"/,
-    );
+    for (const id of ["macos-native", "macos-compatibility"])
+      assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
 });
 
 test("source reuse controllers can read merged pull-request associations", () => {

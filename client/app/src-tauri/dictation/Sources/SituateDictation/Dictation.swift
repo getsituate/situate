@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import CoreML
 import FluidAudio
 import Foundation
 import Network
@@ -13,6 +14,16 @@ private func cancellableWork<T: Sendable>(_ work: @escaping @Sendable () async t
     } onCancel: {
         task.cancel()
     }
+}
+
+func loadDictationModels(from directory: URL) throws -> AsrModels {
+    #if arch(x86_64)
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = .cpuOnly
+        return try AsrModels.loadLocal(from: directory, version: .v3, configuration: configuration)
+    #else
+        return try AsrModels.loadLocal(from: directory, version: .v3)
+    #endif
 }
 
 func isStorageFailure(_ error: NSError) -> Bool {
@@ -174,7 +185,7 @@ final class Dictation: NSObject, AVAudioRecorderDelegate {
                         complete += file.size
                     }
                     await self.emit(["model": "preparing"])
-                    return try AsrModels.loadLocal(from: modelDirectory, version: .v3)
+                    return try loadDictationModels(from: modelDirectory)
                 }
                 manager = AsrManager(models: models)
                 emit(["model": "ready", "progress": 100])

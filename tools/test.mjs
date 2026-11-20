@@ -556,6 +556,29 @@ export function suiteInventory(files, host = process.platform) {
       : ["scripts/test-native.mjs"],
   );
   if (host === "darwin") {
+    add(
+      "client-native-compatibility",
+      "client",
+      "native",
+      "client",
+      process.execPath,
+      ["scripts/test-native.mjs"],
+    );
+    add(
+      "client-dictation-recognition",
+      "client",
+      "integration",
+      "client",
+      "swift",
+      [
+        "test",
+        "--package-path",
+        "app/src-tauri/dictation",
+        "--disable-automatic-resolution",
+        "--filter",
+        "recognizesSyntheticSpeechWithPinnedModel",
+      ],
+    );
     add("client-agent-e2e", "client", "native", "client", process.execPath, [
       "scripts/test-agent-e2e.mjs",
     ]);
@@ -740,6 +763,7 @@ export function suiteInventory(files, host = process.platform) {
         "client-visual",
         "client-visual-fixture",
         "client-native",
+        "client-native-compatibility",
         "client-agent-e2e",
         "client-onboarding-e2e",
         "client-plugins-e2e",
@@ -979,6 +1003,12 @@ export function suiteEnvironment(
     ...(cacheRust ? compilerCacheEnvironment(cargo) : cargo),
     CI: "true",
   };
+  if (suite.id === "client-native-compatibility") {
+    env.SITUATE_ONBOARDING_HANDOFF_ONLY = "1";
+    delete env.SITUATE_PROCESS_CONNECTION_ONLY;
+  }
+  if (suite.id === "client-dictation-recognition")
+    env.SITUATE_DICTATION_DOWNLOAD_FIXTURE = "1";
   // Node suppresses nested --test invocations when its worker marker is inherited.
   delete env.NODE_TEST_CONTEXT;
   if (suite.environment === "design") {

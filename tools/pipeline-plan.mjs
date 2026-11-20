@@ -108,6 +108,11 @@ const families = [
       "client-plugins-e2e",
     ],
   ],
+  [
+    "macos-compatibility",
+    "macos",
+    ["client-native-compatibility", "client-dictation-recognition"],
+  ],
   ["windows-native", "windows", windowsNativeSuites, "native"],
 ];
 
@@ -142,9 +147,14 @@ function select(paths, { mode, inventory, appImpact }) {
     if (
       full &&
       suite.id !== "design-website-browser" &&
-      (["frontend", "rust", "browser", "macos-code", "macos-native"].includes(
-        family,
-      ) ||
+      ([
+        "frontend",
+        "rust",
+        "browser",
+        "macos-code",
+        "macos-native",
+        "macos-compatibility",
+      ].includes(family) ||
         [
           "root-rust",
           "root-swift",
@@ -168,7 +178,13 @@ function select(paths, { mode, inventory, appImpact }) {
             timeoutSeconds:
               id === "windows-native"
                 ? 3015
-                : ["rust", "browser", "macos-code", "macos-native"].includes(id)
+                : [
+                      "rust",
+                      "browser",
+                      "macos-code",
+                      "macos-native",
+                      "macos-compatibility",
+                    ].includes(id)
                   ? 1800
                   : 600,
             suites: suites.map((suite) => suite.id),

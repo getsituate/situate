@@ -275,6 +275,30 @@ jobs:
         if: steps.reuse.outputs.reused != 'true'
         run: node tools/actions-adapter.mjs lane --workflow create --lane macos-native
 
+  macos-compatibility:
+    needs: plan
+    if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'macos-compatibility')
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      SITUATE_TOOL_BUILD_SLOTS: "1"
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs desktop
+      - run: node tools/actions-adapter.mjs setup --workflow create --lane macos-compatibility
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow create --lane macos-compatibility
+
   required:
     name: Integrated verification
     needs:
@@ -289,6 +313,7 @@ jobs:
         macos-code,
         browser,
         macos-native,
+        macos-compatibility,
       ]
     if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' }}
     runs-on: ubuntu-24.04
@@ -302,7 +327,7 @@ jobs:
         env:
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native)) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
 
   create:
     name: Create GitHub Release
@@ -319,6 +344,7 @@ jobs:
         macos-code,
         browser,
         macos-native,
+        macos-compatibility,
       ]
     # Implicit success() rejects skipped lanes; the aggregate verifies selected receipts.
     if: ${{ !cancelled() && needs.plan.outputs.enabled == 'true' && needs.required.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
@@ -350,7 +376,7 @@ jobs:
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native)) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
       - run: node tools/actions-adapter.mjs prepare-release-toolchain
       - id: cache_tool
         continue-on-error: true

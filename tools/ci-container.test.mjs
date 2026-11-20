@@ -630,6 +630,7 @@ test("verification delegates selected lanes directly from planning without optio
       "macos-code",
       "browser",
       "macos-native",
+      "macos-compatibility",
       ...(name === "verify" ? ["windows-native"] : []),
     ]) {
       const block = source
@@ -657,7 +658,14 @@ test("verification delegates selected lanes directly from planning without optio
         block,
         /PIPELINE_PLAN_DIGEST: \$\{\{ needs.plan.outputs.digest \}\}/,
       );
-      if (macos) assert.match(block, /runs-on: macos-latest/);
+      if (macos)
+        assert.ok(
+          block.includes(
+            lane === "macos-compatibility"
+              ? "runs-on: macos-15-intel\n"
+              : "runs-on: macos-latest\n",
+          ),
+        );
       if (lane === "windows-native")
         assert.match(block, /runs-on: windows-2025/);
       assert.doesNotMatch(block, /continue-on-error/);
@@ -684,6 +692,7 @@ test("verification delegates selected lanes directly from planning without optio
         "macos-code",
         "browser",
         "macos-native",
+        "macos-compatibility",
         ...(name === "verify" ? ["windows-native"] : []),
       ].sort(),
     );
