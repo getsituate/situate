@@ -141,7 +141,8 @@ function checkWorkflowBootstrap(name, workflow) {
       for (const command of commands.slice(1))
         assert.match(
           command,
-          name === "release-macos.yml" && id === "create"
+          name === "release-macos.yml" &&
+            ["create", "macos-compatibility"].includes(id)
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report))$/
             : ({
                 "verify-hosting.yml: offline":
