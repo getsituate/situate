@@ -447,6 +447,7 @@ export async function withQualificationRoute(
       controllerFailure,
       guardianFailure: [
         "prepare",
+        "ssh-destination",
         "ssh-start",
         "ssh-lost",
         "interrupted",
