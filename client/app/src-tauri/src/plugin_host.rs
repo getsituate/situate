@@ -1105,10 +1105,12 @@ fn migrate_credentials(
                 }
                 drop(_old_lock);
                 drop(old);
+                let parent =
+                    cap_std::fs::Dir::open_ambient_dir(legacy_base, cap_std::ambient_authority())
+                        .map_err(|_| ERROR)?;
                 std::fs::remove_dir_all(&path).map_err(|_| ERROR)?;
-                let parent = std::fs::File::open(legacy_base).map_err(|_| ERROR)?;
-                parent
-                    .sync_all()
+                situate_migrations::directory_for_sync(&parent)
+                    .and_then(|directory| directory.sync_all())
                     .map_err(|_| "native.plugins.stateOutcomeUnknown")?;
             }
             _ => return Err(ERROR.into()),

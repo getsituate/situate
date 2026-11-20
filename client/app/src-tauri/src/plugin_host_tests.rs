@@ -775,7 +775,8 @@ fn process_requests_execute_directly_and_reject_forged_fields() {
     assert!(!synthetic.detached_descendants_contained);
     assert_eq!(synthetic.max_output_bytes_per_stream, 32_768);
     assert_eq!(synthetic.max_timeout_ms, 300_000);
-    let valid = json!({"operation":"process","executable":"/usr/bin/tool"});
+    let tool = crate::plugin_checks::TEST_TOOL;
+    let valid = json!({"operation":"process","executable":tool});
     let Request::Process {
         args, timeout_ms, ..
     } = serde_json::from_value(valid.clone()).unwrap()
@@ -808,17 +809,19 @@ fn process_requests_execute_directly_and_reject_forged_fields() {
     }
     for (executable, args, timeout) in [
         ("relative", vec![], 30_000),
-        ("/tool\0", vec![], 30_000),
-        ("/tool", vec!["\0".into()], 30_000),
-        ("/tool", vec!["x".into(); 257], 30_000),
-        ("/tool", vec!["x".repeat(65_537)], 30_000),
-        ("/tool", vec![], 0),
-        ("/tool", vec![], 300_001),
+        (&format!("{tool}\0"), vec![], 30_000),
+        (tool, vec!["\0".into()], 30_000),
+        (tool, vec!["x".into(); 257], 30_000),
+        (tool, vec!["x".repeat(65_537)], 30_000),
+        (tool, vec![], 0),
+        (tool, vec![], 300_001),
     ] {
         assert!(crate::files::validate_process(executable, &args, timeout).is_err());
     }
-    assert!(crate::files::validate_process(&format!("/{}", "x".repeat(4096)), &[], 1).is_err());
-    assert!(crate::files::validate_process("/tool", &vec!["x".repeat(256); 256], 300_000).is_ok());
+    assert!(
+        crate::files::validate_process(&format!("{tool}{}", "x".repeat(4096)), &[], 1).is_err()
+    );
+    assert!(crate::files::validate_process(tool, &vec!["x".repeat(256); 256], 300_000).is_ok());
 }
 
 #[cfg(target_os = "macos")]
@@ -860,19 +863,15 @@ fn synthetic_shell_connections_use_declared_interpreter_with_offline_fixtures() 
 
 #[test]
 fn synthetic_processes_match_only_exact_argv_and_return_shell_wire_shape_offline() {
+    let tool = crate::plugin_checks::TEST_TOOL;
     let fixture: crate::plugin_checks::ProcessFixture = serde_json::from_value(json!({
-        "executable":"/not-installed/synthetic-tool", "args":["a b", ";exit"],
+        "executable":tool, "args":["a b", ";exit"],
         "exitCode":7, "stdout":"synthetic output", "stderr":"synthetic error"
     }))
     .unwrap();
     crate::plugin_checks::validate_processes(std::slice::from_ref(&fixture)).unwrap();
     let first = vec![fixture];
-    let reply = synthetic_process(
-        &first,
-        "/not-installed/synthetic-tool",
-        &["a b".into(), ";exit".into()],
-    )
-    .unwrap();
+    let reply = synthetic_process(&first, tool, &["a b".into(), ";exit".into()]).unwrap();
     assert_eq!(
         reply,
         json!({
@@ -885,38 +884,20 @@ fn synthetic_processes_match_only_exact_argv_and_return_shell_wire_shape_offline
         })
     );
     for (executable, args) in [
-        ("/not-installed/synthetic-tool", vec![]),
-        (
-            "/not-installed/synthetic-tool",
-            vec!["a".into(), "b".into(), ";exit".into()],
-        ),
-        (
-            "/not-installed/other-tool",
-            vec!["a b".into(), ";exit".into()],
-        ),
+        (tool, vec![]),
+        (tool, vec!["a".into(), "b".into(), ";exit".into()]),
+        (&format!("{tool}.other"), vec!["a b".into(), ";exit".into()]),
     ] {
         assert_eq!(
             synthetic_process(&first, executable, &args).unwrap_err(),
             "native.plugins.testProcessBlocked"
         );
     }
-    assert!(
-        synthetic_process(
-            &[],
-            "/not-installed/synthetic-tool",
-            &["a b".into(), ";exit".into()]
-        )
-        .is_err()
-    );
+    assert!(synthetic_process(&[], tool, &["a b".into(), ";exit".into()]).is_err());
     let mut second = first.clone();
     second[0].exit_code = 0;
     second[0].stdout = "other session".into();
-    let reply = synthetic_process(
-        &second,
-        "/not-installed/synthetic-tool",
-        &["a b".into(), ";exit".into()],
-    )
-    .unwrap();
+    let reply = synthetic_process(&second, tool, &["a b".into(), ";exit".into()]).unwrap();
     assert_eq!(reply["isError"], false);
     assert_eq!(
         reply["commandResult"]["Ok"]["stdout"]["text"],

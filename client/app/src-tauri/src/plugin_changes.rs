@@ -1172,8 +1172,7 @@ mod tests {
             timeout_ms: None,
         };
         assert!(validate(&[selection], &[test("assert")]).is_ok());
-        let fixture =
-            json!({"executable":"/synthetic/tool","args":[],"exitCode":0,"stdout":"","stderr":""});
+        let fixture = json!({"executable":crate::plugin_checks::TEST_TOOL,"args":[],"exitCode":0,"stdout":"","stderr":""});
         let wire = json!({"pluginId":"notes","script":"assert","processes":[fixture.clone()]});
         let parsed: Test = serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);

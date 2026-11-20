@@ -1,5 +1,6 @@
 use cap_std::fs::Dir;
-use std::{fs::File, io};
+use situate_migrations::directory_for_sync;
+use std::io;
 
 mod sync_batch;
 pub(crate) use sync_batch::SyncBatch;
@@ -71,39 +72,6 @@ pub(crate) fn rename_noreplace(_from: &Dir, _old: &str, _to: &Dir, _new: &str) -
 
 pub(crate) fn sync_directory(dir: &Dir) -> io::Result<()> {
     directory_for_sync(dir)?.sync_all()
-}
-
-fn directory_for_sync(dir: &Dir) -> io::Result<File> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        use rustix::fs::{Mode, OFlags, openat};
-        // No-follow directory capabilities can be O_PATH descriptors, which cannot
-        // be fsynced. Open the same directory through its handle, not its old path.
-        Ok(openat(
-            dir,
-            ".",
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?
-        .into())
-    }
-    #[cfg(windows)]
-    {
-        use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
-        let mut options = cap_std::fs::OpenOptions::new();
-        options
-            .write(true)
-            .maybe_dir(true)
-            .follow(FollowSymlinks::No);
-        // FlushFileBuffers needs write access, but ReOpenFile rejects directory
-        // handles. cap-std opens "." through NtCreateFile relative to the held handle.
-        dir.open_with(".", &options)
-            .map(cap_std::fs::File::into_std)
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
-    {
-        dir.try_clone().map(Dir::into_std_file)
-    }
 }
 
 #[cfg(test)]

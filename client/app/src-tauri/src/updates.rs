@@ -34,7 +34,7 @@ mod tests {
                 cmd: "updates_snapshot".into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "tauri://localhost".parse().unwrap(),
+                url: window.url().unwrap(),
                 body: tauri::ipc::InvokeBody::default(),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.into(),
