@@ -1388,6 +1388,18 @@ test("publication archives keep exact bytes for reconciliation and require an un
   );
 });
 
+test("publication archives reject files outside the approved inventory", (t) => {
+  const stage = join(temporary(t), "stage");
+  mkdirSync(stage);
+  writeFileSync(join(stage, "manifest.json"), "{}\n");
+  writeFileSync(join(stage, "unapproved.json"), "{}\n");
+  assert.throws(
+    () =>
+      withPublicationArchive(stage, ["manifest.json"], undefined, assert.fail),
+    /Cannot create publication archive/,
+  );
+});
+
 test("publication archives reject a linked metadata directory", (t) => {
   const parent = temporary(t);
   const stage = join(parent, "stage");

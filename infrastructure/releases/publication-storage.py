@@ -32,21 +32,20 @@ def write_archive(directory, names):
     if (not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names)
             or len(set(names)) != len(names)):
         raise ValueError('Invalid publication archive inventory')
-    requested = set(names)
     metadata = None
     try:
-        parents = [('', directory)]
-        if any(name.startswith('metadata/') for name in names):
+        top = sorted(os.listdir(directory))
+        parents = [('', directory, [name for name in top if name != 'metadata'])]
+        if 'metadata' in top:
             metadata = os.open('metadata', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
-            parents.append(('metadata/', metadata))
-        members = {
-            prefix + member: (parent, member)
-            for prefix, parent in parents
-            for member in sorted(os.listdir(parent))
-            if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', member)
-            and prefix + member in requested
-        }
-        if requested != members.keys():
+            parents.append(('metadata/', metadata, sorted(os.listdir(metadata))))
+        members = {}
+        for prefix, parent, entries in parents:
+            for member in entries:
+                if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', member):
+                    raise ValueError('Invalid staged publication file name')
+                members[prefix + member] = parent, member
+        if set(names) != members.keys():
             raise ValueError('Publication archive inventory does not match staged files')
         with tarfile.open(fileobj=sys.stdout.buffer, mode='w|') as archive:
             for name, (parent, member) in members.items():
