@@ -47,6 +47,9 @@
 |link:09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[ADR-0020]
 |GitHub-hosted production deployments stop on failure and block further runs until operator recovery.
 |Accepted; locally verified; live production run pending
+|link:09-architecture-decisions/ADR-0021-publish-website-content-separately.adoc[ADR-0021]
+|Publish checked static website builds to the immutable host's persistent website store.
+|Accepted; requires production key enrollment.
 |===
 
 :architecture-repository-root: ../..
@@ -81,6 +84,8 @@ include::09-architecture-decisions/ADR-0018-pull-request-changelog-fragments.ado
 include::09-architecture-decisions/ADR-0019-replace-production-hosts-from-versioned-images.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0021-publish-website-content-separately.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

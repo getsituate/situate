@@ -126,6 +126,28 @@ export async function main(
     const { monitor } = await import("./dependency-monitoring.mjs");
     return monitor({ directory: root, reportDirectory });
   }
+  if (mode === "website") {
+    const { checkWebsite } = await import("../website/check.mjs");
+    await prepareContainerLane(root, [
+      { npm: "client", browsers: ["chromium"] },
+    ]);
+    const { spawnSync } = await import("node:child_process");
+    const install = spawnSync(
+      process.execPath,
+      ["tools/npm-ci.mjs", "client"],
+      {
+        env: environment,
+        stdio: "inherit",
+      },
+    );
+    assert.equal(
+      install.status,
+      0,
+      "Website browser dependency installation failed",
+    );
+    await checkWebsite(rest);
+    return;
+  }
   if (mode === "suites") {
     assert.equal(rest.length, 2, "Invalid suite-plan inputs");
     const [planFile, reportFile] = rest;

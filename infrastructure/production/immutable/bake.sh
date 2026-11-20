@@ -70,10 +70,14 @@ main() {
 
   install -d -m 0755 "$install_dir" /etc/docker
   install -d -m 0700 /opt/situate /srv/situate-state
-  install -m 0644 "$here/"{compose.yaml,Caddyfile,website.py,verify-state.py,freeze-release.py,host-enrollment.py} "$install_dir/"
+  install -m 0644 "$here/"{compose.yaml,Caddyfile,website.py,website_content.py,verify-state.py,freeze-release.py,host-enrollment.py} "$install_dir/"
   install -m 0644 "$here/../../releases/remote.py" "$install_dir/release_storage.py"
-  install -m 0755 "$here/"{state.sh,verify-boot.sh} "$install_dir/"
+  install -m 0755 "$here/"{state.sh,verify-boot.sh,website-ssh.sh} "$install_dir/"
   install -m 0644 "$here/"{situate-serving.service,situate-enrollment.service,situate-enrollment.path} /etc/systemd/system/
+  useradd --system --home-dir /var/lib/situate-website --shell /bin/sh situate-website
+  install -d -m 0755 -o root -g root /var/lib/situate-website{,/.ssh}
+  install -m 0440 "$here/website.sudoers" /etc/sudoers.d/situate-website
+  visudo -cf /etc/sudoers.d/situate-website
   install -m 0644 "$here/sshd.conf" /etc/ssh/sshd_config.d/00-situate.conf
   install -m 0644 "$here/docker-daemon.json" /etc/docker/daemon.json
   # Only the website document root differs; release routing is shared with the legacy stack.

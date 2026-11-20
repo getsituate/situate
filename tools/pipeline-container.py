@@ -193,6 +193,10 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
         "WEBKIT_DISABLE_DMABUF_RENDERER": "1", "CARGO_INCREMENTAL": "0", "GIT_OPTIONAL_LOCKS": "0",
         "CARGO_PROFILE_DEV_DEBUG": "line-tables-only", "CARGO_PROFILE_TEST_DEBUG": "line-tables-only",
     }
+    if command == ['website', 'update']:
+        if environment.get('CI'):
+            raise ValueError('Update website baselines locally, not in CI.')
+        env['WEBSITE_BASELINE_UPDATE'] = '1'
     if admission is not None:
         env['SITUATE_HOST_ADMISSION'] = '/situate-admission'
     env.update({key: environment[key] for key in (*CONTEXT, "CARGO_NET_OFFLINE") if key in environment})
@@ -302,14 +306,22 @@ def main(argv=None, environment=None):
         if len(args) < 4:
             raise ValueError("Invalid internal Docker client request.")
         return docker_client(args[1], args[2], args[3:], environment)
-    if not args or args[0] not in ("actions", "lane", "suites", "monitoring"):
-        raise ValueError("Usage: python3 tools/pipeline-container.py actions|lane|suites|monitoring ARGUMENTS")
+    if not args or args[0] not in ("actions", "lane", "suites", "monitoring", "website"):
+        raise ValueError("Usage: python3 tools/pipeline-container.py actions|lane|suites|monitoring|website ARGUMENTS")
     if args[:2] == ["actions", "aggregate"]:
         needs = json.loads(environment.get("PIPELINE_NEEDS", "{}"))
         if needs.get("plan", {}).get("result") != "success":
             raise ValueError("Planning did not succeed; verification was not run. See the plan job for the original error.")
     lock = json.loads((ROOT / "tools/ci-image.lock.json").read_text())
-    platform = image_platform(lock)
+    pinned_browser_platform = (args[0] == 'website'
+                               or (args[0] == 'lane' and len(args) == 5 and args[3] == 'browser')
+                               or (args[:2] == ['actions', 'lane'] and args[-2:] == ['--lane', 'browser']))
+    if args[0] == 'suites' and len(args) == 3:
+        suite_ids = json.loads(Path(args[1]).read_bytes()).get('suiteIds', [])
+        pinned_browser_platform = 'design-website-browser' in suite_ids
+    platform = image_platform(lock, 'x86_64' if pinned_browser_platform else None)
+    if args == ['website', 'update'] and environment.get('CI'):
+        raise ValueError('Update website baselines locally, not in CI.')
     subprocess.run(["docker", "info"], check=True, stdout=subprocess.DEVNULL, env=environment)
     inspection = ["docker", "image", "inspect", *(["--platform", platform] if lock["version"] == 2 else []), lock["image"]]
     present = subprocess.run(inspection, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)

@@ -78,6 +78,38 @@ sudo python3 /usr/local/lib/situate/website.py activate SITE_SHA /root/reviewed-
 
 Use `seed` only for an empty website during initial import; use `activate` for later content changes. Activation copies new bytes into a content-addressed directory and atomically changes `website/current`; omit the path to select a stored website version. It cannot modify app publication or proxy configuration. Verify HTTPS and confirm both current JSON digests are unchanged. `website.pending`, `current.next` or `.incoming-*` behind an interruption block activation. Inspect the journal, pointer and version digests against the original reviewed input. Preserve evidence and reconcile while writers are frozen; never delete a marker to force a retry.
 
+### Enable automatic website publication
+
+The [website workflow](../../../.github/workflows/deploy-website.yml) publishes
+the checked build from the latest `main` after **Deploy hosting** succeeds. A
+website-only change does not replace the host. A change to the receiver
+requires a new image and a qualified host replacement.
+
+Before the first rollout with the receiver, set these GitHub settings:
+
+| Location                                  | Setting                       | Value                                                                                                          |
+| ----------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `hosting-production` environment variable | `WEBSITE_CONTENT_PUBLIC_KEY`  | Dedicated Ed25519 public key, without its comment. Enrolled on each replacement; never bake it into the image. |
+| `website-production` environment secret   | `WEBSITE_CONTENT_SSH_KEY`     | Matching private key.                                                                                          |
+| `website-production` environment variable | `WEBSITE_CONTENT_KNOWN_HOSTS` | Independently verified `@cert-authority getsituate.com` entry for the existing host CA.                        |
+| `website-production` environment variable | `WEBSITE_POSTHOG_TOKEN`       | Approved public project token to preserve analytics, or empty to disable it.                                   |
+| Repository variable                       | `WEBSITE_DEPLOY_ENABLED`      | Set to `true` after reviewing the first public build and configuring the environment.                          |
+
+Restrict `website-production` to `main`. Keep `PR verification` required on
+`main`; no second routine approval is needed for website content. Hosting must
+already be migrated and `HOSTING_PRODUCTION_ENABLED` enabled. Configure the
+public key **before** deploying the first image with the receiver: changing a
+GitHub variable alone does not replace the host. The CI key can invoke only the
+website receiver and cannot access the app publisher or the operator shell.
+
+The receiver uses the existing volume and holds the state lock through HTTPS
+verification. A confirmed mismatch restores the previous website pointer.
+An interrupted upload or inconclusive check may leave `website.pending`
+behind and blocks further publication. Freeze writers and reconcile the
+journal and both content digests before retrying. After a settled failure,
+dispatch **Deploy hosting** against `main` to run the website workflow again.
+Neither website deployment nor rollback changes the app update feed.
+
 ## Replace, fail back or restore
 
 For a normal replacement, use one operator and a private, durable `SITUATE_ROLLOUT_DIRECTORY` outside Git and outside the two VMs. Do not use a runner's temporary filesystem. Begin with `terraform.mjs rollout-begin PROPOSAL.json` before planning `stage`. The proposal contains `sourceRevision`, `previous`, `previousId`, `candidate`, `volumeId` and `imageId`; provider IDs are strings. Start with the currently serving immutable generation recorded in HCP.

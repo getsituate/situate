@@ -1,0 +1,1 @@
+situate-website ALL=(root) NOPASSWD: /usr/bin/python3 -I /usr/local/lib/situate/website_content.py receive

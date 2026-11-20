@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 
 const hosting = "infrastructure/production";
 const immutable = `${hosting}/immutable`;
-const scripts = ["bake", "state", "verify-boot"].map(
+const scripts = ["bake", "state", "verify-boot", "website-ssh"].map(
   (name) => `${immutable}/${name}.sh`,
 );
 const tests = [
