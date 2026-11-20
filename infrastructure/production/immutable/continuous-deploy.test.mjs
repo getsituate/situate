@@ -17,7 +17,8 @@ test("reports the failed Terraform operation and only an approved diagnostic", (
   for (const [operation, diagnostic] of [
     ["status", "HCP Terraform inspection failed: HTTP 401."],
     ["init", "Terraform init failed (exit 1)."],
-    ["export", "Terraform state pull failed (exit 1)."],
+    ["export", "HCP Terraform state download did not complete."],
+    ["export", "HCP Terraform state download failed: HTTP 503."],
   ]) {
     assert.throws(
       () =>

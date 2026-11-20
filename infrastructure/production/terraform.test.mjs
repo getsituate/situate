@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -55,6 +56,8 @@ function fixture(t) {
     calls: [],
     requests: [],
     current: null,
+    stateUrl:
+      "https://archivist.terraform.io/v1/object/synthetic-download-secret",
     workspaceId: "ws-Production1",
     executionMode: "local",
     locked: false,
@@ -116,6 +119,15 @@ function fixture(t) {
   f.bind();
   f.fetchImpl = async (url, options) => {
     f.requests.push({ url, options });
+    if (url === f.stateUrl)
+      return new Response(
+        JSON.stringify({
+          version: 4,
+          lineage: "synthetic-lineage",
+          serial: f.current.serial,
+          resources: [],
+        }),
+      );
     if (url.endsWith("/workspaces/situate-production"))
       return {
         ok: true,
@@ -144,7 +156,11 @@ function fixture(t) {
             data: {
               type: "state-versions",
               id: f.current.id,
-              attributes: { serial: f.current.serial, status: "finalized" },
+              attributes: {
+                serial: f.current.serial,
+                status: "finalized",
+                "hosted-state-download-url": f.stateUrl,
+              },
             },
           }),
         }
@@ -161,16 +177,11 @@ function fixture(t) {
         { mode: 0o600 },
       );
     if (args[0] === "apply") f.current = { id: "sv-Adopted", serial: 1 };
-    if (args[0] === "state")
-      return {
-        status: 0,
-        stdout: JSON.stringify({
-          version: 4,
-          lineage: "synthetic-lineage",
-          serial: f.current.serial,
-          resources: [],
-        }),
-      };
+    assert.notEqual(
+      args[0],
+      "state",
+      "Export must not invoke Terraform state pull",
+    );
     return { status: 0, stdout: JSON.stringify(f.plan) };
   };
   f.output = join(privateDirectory, "adoption.tfplan");
@@ -506,68 +517,95 @@ test("an uncertain adoption with unchanged remote state cannot reuse its journal
 test("explicit state export is private, independent of cloud credentials and never overwrites", async (t) => {
   const f = fixture(t);
   f.current = { id: "sv-Current", serial: 7 };
+  delete f.environment.HCLOUD_TOKEN;
   const path = join(f.privateDirectory, "recovery.tfstate");
   await main(["export", path], f);
   assert.equal(JSON.parse(readFileSync(path, "utf8")).serial, 7);
-  assert.equal(f.calls[0].options.env.HCLOUD_TOKEN, undefined);
+  assert.equal(lstatSync(path).mode & 0o777, 0o600);
+  assert.equal(f.calls.length, 0);
+  const downloads = f.requests.filter(({ url }) => url === f.stateUrl);
+  assert.equal(downloads.length, 1);
+  assert.equal(downloads[0].options.headers.Authorization, undefined);
+  assert.equal(downloads[0].options.redirect, "error");
+  assert.equal(downloads[0].options.method, "GET");
+  assert.equal(downloads[0].options.credentials, "omit");
+  assert.equal(downloads[0].options.referrerPolicy, "no-referrer");
+  assert.equal(downloads[0].options.signal.aborted, false);
   await assert.rejects(main(["export", path], f), /never overwritten/);
 });
 
-test("state export keeps only JSON after Terraform cloud retry notices", async (t) => {
-  const f = fixture(t);
-  f.current = { id: "sv-Current", serial: 1 };
-  const { stdout } = f.execute("terraform", ["state", "pull"]);
-  for (const [index, service] of [
-    "HCP Terraform",
-    "Terraform Cloud",
-  ].entries()) {
-    const path = join(f.privateDirectory, `retry-${index}.tfstate`);
-    await main(["export", path], {
-      ...f,
-      execute: () => ({
-        status: 0,
-        stdout:
-          `\x1b[0m\x1b[33mThere was an error connecting to ${service}. Please do not exit\n` +
-          "Terraform to prevent data loss! Trying to restore the connection...\n\x1b[0m\n" +
-          "\x1b[33mStill trying to restore the connection... (1m2s elapsed)\x1b[0m\n" +
-          stdout,
-      }),
-    });
-    assert.equal(readFileSync(path, "utf8"), stdout);
-  }
-});
-
-test("state export refuses unknown output and malformed JSON without reporting their contents", async (t) => {
-  const f = fixture(t);
-  f.current = { id: "sv-Current", serial: 1 };
-  const path = join(f.privateDirectory, "state.tfstate");
-  const { stdout } = f.execute("terraform", ["state", "pull"]);
-  for (const [output, diagnostic] of [
-    [`private notice\n${stdout}`, "unexpected output"],
-    [`${stdout}\nprivate notice`, "invalid JSON"],
+test("a mismatched or untrusted state download never leaves an export", async (t) => {
+  for (const [failure, diagnostic] of [
+    ["url", /trusted state download URL/],
+    ["transport", /state download did not complete/],
+    ["http", /state download failed: HTTP 503/],
+    ["size", /state download is missing or too large/],
+    ["json", /state download returned invalid JSON/],
+    ["serial", /does not match the inspected HCP state version/],
+    ["race", /state changed during export/],
+    ["version-before-download", /state changed during export/],
   ]) {
+    const f = fixture(t);
+    f.current = { id: "sv-Current", serial: 1 };
+    if (failure === "url") f.stateUrl = "https://untrusted.test/private";
+    const path = join(f.privateDirectory, "recovery.tfstate");
+    let attempts = 0;
+    let currentReads = 0;
+    const fetchImpl = async (url, options) => {
+      if (url !== f.stateUrl) {
+        if (
+          url.endsWith("/current-state-version") &&
+          ++currentReads === 2 &&
+          failure === "version-before-download"
+        )
+          f.current = { id: "sv-New", serial: 2 };
+        return f.fetchImpl(url, options);
+      }
+      attempts++;
+      if (failure === "url" || failure === "version-before-download")
+        assert.fail("Unexpected download");
+      if (failure === "transport") throw new Error("private download URL");
+      if (failure === "http")
+        return new Response("private response", { status: 503 });
+      if (failure === "size")
+        return new Response("bytes", {
+          headers: { "Content-Length": "16777217" },
+        });
+      if (failure === "json") return new Response("private non-JSON state");
+      if (failure === "serial")
+        return Response.json({
+          version: 4,
+          lineage: "synthetic",
+          serial: 9,
+          resources: [],
+        });
+      const response = await f.fetchImpl(url, options);
+      if (failure === "race") f.current = { id: "sv-New", serial: 2 };
+      return response;
+    };
     await assert.rejects(
-      main(["export", path], {
-        ...f,
-        execute: () => ({ status: 0, stdout: output }),
-      }),
-      { message: `Terraform state pull returned ${diagnostic}.` },
+      main(["export", path], { ...f, fetchImpl }),
+      (error) => {
+        assert.match(error.message, diagnostic, failure);
+        assert.doesNotMatch(error.message, /private|synthetic-download-secret/);
+        return true;
+      },
     );
+    assert.equal(
+      attempts,
+      ["url", "version-before-download"].includes(failure) ? 0 : 1,
+    );
+    assert.equal(f.calls.length, 0);
     assert.equal(existsSync(path), false);
   }
 });
 
-test("preflight distinguishes Terraform init and state pull failures without reporting their output", async (t) => {
+test("preflight reports Terraform init failure without private subprocess output", async (t) => {
   const f = fixture(t);
-  f.current = { id: "sv-Current", serial: 1 };
   const options = {
     ...f,
     execute: () => ({ status: 1, stderr: "private Terraform diagnostics" }),
   };
-  await assert.rejects(
-    main(["export", join(f.privateDirectory, "state.tfstate")], options),
-    { message: "Terraform state pull failed (exit 1)." },
-  );
   rmSync(f.metadataPath);
   rmSync(f.bindingPath);
   await assert.rejects(main(["init"], options), {
