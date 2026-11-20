@@ -156,9 +156,18 @@ test("private startup directories do not change the test process file-creation m
 root=pathlib.Path(${JSON.stringify(root)})
 args=m.arguments(root,root/'state','ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],{},'fixture','fixture')
 prefix=args[args.index('-c')+1].split('source /opt/ci-tools/ci-user.sh')[0]
-environment={**os.environ,**{key:str(root/key) for key in ('HOME','CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')}}
+environment={**os.environ,'TMPDIR':str(root),**{key:str(root/key) for key in ('CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')}}
 result=subprocess.run(['bash','-c',prefix+'umask'],env=environment,capture_output=True,text=True,check=True)
-print(json.dumps({'mask':result.stdout.strip(),'modes':[(root/key).stat().st_mode&0o777 for key in ('HOME','CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')]}))`);
+home,=root.glob('situate-ci-home.*')
+empty=root/'state/empty-env'
+assert empty.stat().st_size == 0 and stat.S_IMODE(empty.stat().st_mode) == 0o600
+try:
+    m.arguments(root,root/'state','ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],{},'fixture','fixture')
+except FileExistsError:
+    pass
+else:
+    raise AssertionError('Existing mask file was accepted')
+print(json.dumps({'mask':result.stdout.strip(),'modes':[path.stat().st_mode&0o777 for path in (home,*(root/key for key in ('CARGO_HOME','npm_config_cache','PLAYWRIGHT_BROWSERS_PATH')))]}))`);
   assert.equal(value.mask, "0022");
   assert.deepEqual(value.modes, [0o700, 0o700, 0o700, 0o700]);
 });
