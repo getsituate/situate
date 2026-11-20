@@ -439,6 +439,7 @@ def no_docker(*args, **kwargs):
 s.subprocess.run = no_docker
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
+    checkout = root / 'checkout'; checkout.mkdir()
     for failure in ('queued', 'popen'):
         directory = root / ('situate-docker-lease-' + failure)
         directory.mkdir(mode=0o700)
@@ -446,7 +447,7 @@ with tempfile.TemporaryDirectory() as temporary:
         token = '11111111-1111-4111-8111-111111111111'
         lease.write_text(json.dumps({'name': 'situate-pipeline-' + token, 'token': token, 'creationPending': True}))
         lease.chmod(0o600)
-        sys.argv = ['supervisor', 'worktree', str(root), '--docker-lease', str(lease), '/unstarted']
+        sys.argv = ['supervisor', 'worktree', str(checkout), '--docker-lease', str(lease), '/unstarted']
         if failure == 'queued':
             s.acquire = lambda *args: None
             assert s.main(root / 'coordination') == 130
@@ -530,6 +531,7 @@ spec.loader.exec_module(s)
 s.caller_closed = lambda: False
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
+    checkout = root / 'checkout'; checkout.mkdir()
     for prefix in (True, False):
         lease_directory = root / ('situate-docker-lease-' + str(prefix))
         lease_directory.mkdir(mode=0o700)
@@ -537,10 +539,18 @@ with tempfile.TemporaryDirectory() as temporary:
         marker = root / ('observed-' + str(prefix))
         command = [sys.executable, '-c', 'import os;from pathlib import Path;path=Path(os.environ["SITUATE_DOCKER_LEASE"]);assert not path.exists();Path(' + repr(str(marker)) + ').write_text(str(path))']
         option = ['--docker-lease', str(lease)]
-        sys.argv = ['supervisor', *(option if prefix else []), 'worktree', str(root), *(option if not prefix else []), *command]
+        sys.argv = ['supervisor', *(option if prefix else []), 'worktree', str(checkout), *(option if not prefix else []), *command]
         assert s.main(root / 'coordination') == 0
         assert marker.read_text() == str(lease)
         assert not lease_directory.exists()
+    for parent in (root/'ordinary', checkout/'situate-docker-lease-fixture'):
+        parent.mkdir(mode=0o700)
+        lease = parent/'container.json'
+        sys.argv = ['supervisor', '--docker-lease', str(lease), 'worktree', str(checkout), sys.executable, '-c', 'raise AssertionError("unexpected child")']
+        try: s.main(root/'coordination')
+        except ValueError as error: assert 'Docker lease' in str(error) or 'Docker control leases' in str(error)
+        else: raise AssertionError('Unexpected lease location accepted')
+        assert parent.exists()
 `;
   const result = spawnSync("python3", ["-c", source], {
     encoding: "utf8",

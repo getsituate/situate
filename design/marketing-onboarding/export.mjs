@@ -273,29 +273,42 @@ async function proofPath(path) {
   const entry = await lstat(path).catch((error) => {
     if (error.code !== "ENOENT") throw error;
   });
-  if (entry) return realpath(path);
-  return join(await proofPath(dirname(path)), basename(path));
+  if (entry) {
+    const anchor = await realpath(path);
+    const identity = await lstat(anchor);
+    assert(identity.isDirectory(), "Proof destination must be a directory.");
+    return { path: anchor, anchor, identity };
+  }
+  const parent = await proofPath(dirname(path));
+  return { ...parent, path: join(parent.path, basename(path)) };
+}
+
+async function checkExportDirectory(path, identity) {
+  const current = await lstat(path);
+  assert(
+    current.isDirectory() &&
+      current.dev === identity.dev &&
+      current.ino === identity.ino &&
+      (await realpath(path)) === path,
+    "Export directory changed while rendering.",
+  );
 }
 
 export async function exportPack({ date, output, proofs }) {
   validateDate(date);
   output = resolve(output);
   const parent = await realpath(dirname(output));
+  const parentIdentity = await lstat(parent);
+  assert(parentIdentity.isDirectory(), "Export parent must be a directory.");
   output = join(parent, basename(output));
   await assert.rejects(
     lstat(output),
     { code: "ENOENT" },
     "Output already exists; choose a new empty destination.",
   );
-  if (proofs) {
-    proofs = await proofPath(resolve(proofs));
-    const existing = await lstat(proofs).catch((error) => {
-      if (error.code !== "ENOENT") throw error;
-    });
-    assert(
-      !existing || existing.isDirectory(),
-      "Proof destination must be a directory.",
-    );
+  const proofTarget = proofs ? await proofPath(resolve(proofs)) : undefined;
+  if (proofTarget) {
+    proofs = proofTarget.path;
     const within = relative(output, proofs);
     assert(
       isAbsolute(within) || within === ".." || within.startsWith(`..${sep}`),
@@ -445,6 +458,15 @@ export async function exportPack({ date, output, proofs }) {
     );
     await browser.close();
     browser = undefined;
+    await checkExportDirectory(parent, parentIdentity);
+    if (proofTarget) {
+      await checkExportDirectory(proofTarget.anchor, proofTarget.identity);
+      assert.equal(
+        (await proofPath(proofs)).path,
+        proofs,
+        "Proof destination changed while rendering.",
+      );
+    }
     // Reserve the destination exclusively. Never replace a pre-existing pack or user folder.
     await mkdir(output);
     reserved = true;

@@ -192,6 +192,11 @@ export function createHostCheckpointStore(
         constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
       );
       try {
+        const info = fstatSync(parent);
+        assert(
+          info.uid === process.getuid() && !(info.mode & 0o077),
+          "Restore staging must be an owned private directory",
+        );
         fsyncSync(parent);
       } finally {
         closeSync(parent);

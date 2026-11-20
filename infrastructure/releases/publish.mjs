@@ -5,6 +5,7 @@ import {
   cpSync,
   existsSync,
   fsyncSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -45,6 +46,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const client = join(root, "client");
 const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const filename = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+const archiveMemberName = /^(?:metadata\/)?[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const environment = () => appleEnvironment(process.env, client);
 
@@ -570,20 +572,33 @@ function inventory(destination) {
 }
 
 function saveJournal(path, value, exclusive = false) {
-  const temporary = exclusive ? path : `${path}.${randomUUID()}.tmp`;
-  const handle = openSync(temporary, "wx", 0o600);
-  try {
-    writeFileSync(handle, `${JSON.stringify(value, null, 2)}\n`);
-    fsyncSync(handle);
-  } finally {
-    closeSync(handle);
-  }
-  if (!exclusive) renameSync(temporary, path);
+  const parent = resolve(path, "..");
   const directory = openSync(
-    resolve(path, ".."),
+    parent,
     constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
   );
   try {
+    const original = fstatSync(directory);
+    const checkParent = () => {
+      const current = lstatSync(parent);
+      if (
+        !current.isDirectory() ||
+        current.dev !== original.dev ||
+        current.ino !== original.ino
+      )
+        throw new Error("Publication journal directory changed.");
+    };
+    const temporary = exclusive ? path : `${path}.${randomUUID()}.tmp`;
+    checkParent();
+    const handle = openSync(temporary, "wx", 0o600);
+    try {
+      writeFileSync(handle, `${JSON.stringify(value, null, 2)}\n`);
+      fsyncSync(handle);
+    } finally {
+      closeSync(handle);
+    }
+    checkParent();
+    if (!exclusive) renameSync(temporary, path);
     fsyncSync(directory);
   } finally {
     closeSync(directory);
@@ -658,11 +673,23 @@ export function withPublicationArchive(
       names.some(
         (name) =>
           typeof name !== "string" ||
-          !filename.test(name) ||
+          !archiveMemberName.test(name) ||
           name.trim() !== name,
       )
     )
       throw new Error("Invalid publication archive inventory.");
+    if (
+      names.some((name) => name.startsWith("metadata/")) &&
+      !lstatSync(join(destination, "metadata")).isDirectory()
+    )
+      throw new Error("Expected an ordinary publication metadata directory.");
+    for (const name of names) {
+      const entry = lstatSync(join(destination, name));
+      if (!entry.isFile() || entry.nlink !== 1)
+        throw new Error(
+          "Expected single-link regular publication archive members.",
+        );
+    }
     const output = openSync(tar, "wx", 0o600);
     try {
       execFileSync(

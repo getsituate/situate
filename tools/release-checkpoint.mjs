@@ -475,12 +475,25 @@ export function createRestoreDirectory(destination) {
     "Restore requires an explicit absolute destination",
   );
   checkpointFileParent(destination);
-  mkdirSync(destination, { mode: 0o700 });
+  const parentPath = dirname(destination);
   const parent = openSync(
-    dirname(destination),
+    parentPath,
     constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
   );
   try {
+    const opened = fstatSync(parent);
+    const checkParent = () => {
+      const current = lstatSync(parentPath);
+      assert(
+        current.isDirectory() &&
+          current.dev === opened.dev &&
+          current.ino === opened.ino,
+        "Restore parent directory changed",
+      );
+    };
+    checkParent();
+    mkdirSync(destination, { mode: 0o700 });
+    checkParent();
     fsyncSync(parent);
   } finally {
     closeSync(parent);

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, realpathSync, rmdirSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export function worktreeRoot(directory) {
@@ -89,10 +89,23 @@ export async function runCoordinated({
         process.removeListener(name, handler);
     }
   }
-  const dockerLeaseDirectory =
-    resource === "worktree" && !coordinated(directory, environment)
-      ? mkdtempSync(join(tmpdir(), "situate-docker-lease-"))
-      : undefined;
+  let dockerLeaseDirectory;
+  if (resource === "worktree") {
+    const workspace = worktreeRoot(directory);
+    if (environment.SITUATE_COORDINATED_WORKTREE !== workspace) {
+      const temp = realpathSync(tmpdir());
+      const fromWorkspace = relative(workspace, temp);
+      const outside =
+        isAbsolute(fromWorkspace) ||
+        fromWorkspace === ".." ||
+        fromWorkspace.startsWith(`..${sep}`);
+      // The child keeps its TMPDIR, but Docker control files must not be mounted with the checkout.
+      const leaseRoot = outside ? temp : realpathSync("/tmp");
+      dockerLeaseDirectory = mkdtempSync(
+        join(leaseRoot, "situate-docker-lease-"),
+      );
+    }
+  }
   const dockerLease = dockerLeaseDirectory
     ? join(dockerLeaseDirectory, "container.json")
     : undefined;

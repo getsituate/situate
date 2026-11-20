@@ -588,6 +588,13 @@ def inspect_docker_container(name, environment=None):
     return container
 
 
+def managed_lease_location(path):
+    return path.is_absolute() and (
+        (path.name == 'container.json' and path.parent.name.startswith('situate-docker-lease-'))
+        or (path.name == 'docker-lease.json' and path.parent.name.startswith('situate-tool-container-'))
+    )
+
+
 def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
     path = Path(path)
     warned = False
@@ -641,10 +648,7 @@ def cleanup_docker_lease(path, remove_directory=False, creation_started=True):
                                     os.unlink(name, dir_fd=directory_fd)
                             except OSError:
                                 pass
-                if remove_directory and (
-                    (path.name == 'container.json' and path.parent.name.startswith('situate-docker-lease-'))
-                    or (path.name == 'docker-lease.json' and path.parent.name.startswith('situate-tool-container-'))
-                ):
+                if remove_directory and managed_lease_location(path):
                     try:
                         if file_identity(path.parent.lstat()) == file_identity(os.fstat(directory_fd)):
                             path.parent.rmdir()
@@ -684,9 +688,16 @@ def main(coordination_directory=None):
     command, *args = args
     if resource not in ("worktree", "desktop", "build"):
         raise ValueError("Unknown coordinated resource.")
-    if docker_lease is not None and resource != 'worktree':
-        raise ValueError('Only a worktree owner can supervise a Docker lease.')
+    if docker_lease is not None:
+        if resource != 'worktree':
+            raise ValueError('Only a worktree owner can supervise a Docker lease.')
+        if not managed_lease_location(docker_lease) or '..' in docker_lease.parts:
+            raise ValueError('Use a private temporary Docker lease created by the launcher.')
+        with private_directory(docker_lease.parent, DOCKER_DIRECTORY_ERROR):
+            pass
     directory = Path(directory).resolve(strict=True)
+    if docker_lease is not None and docker_lease.resolve().is_relative_to(worktree_root(directory)):
+        raise ValueError('Docker control leases must remain outside the checkout.')
     enable_subreaper()
     for name in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(name, cancel)

@@ -1341,6 +1341,9 @@ test("publication archives keep exact bytes for reconciliation and require an un
   const stage = join(parent, "stage");
   mkdirSync(stage);
   writeFileSync(join(stage, "manifest.json"), "{}\n");
+  mkdirSync(join(stage, "metadata"));
+  writeFileSync(join(stage, "metadata", "update.json"), "{}\n");
+  const releaseMembers = ["manifest.json", "metadata/update.json"];
   for (const names of [
     [],
     ["manifest.json", "manifest.json"],
@@ -1360,19 +1363,19 @@ test("publication archives keep exact bytes for reconciliation and require an un
         input: bytes,
         encoding: "utf8",
       }),
-      "manifest.json\n",
+      "manifest.json\nmetadata/update.json\n",
     );
     return digest;
   };
   const digest = withPublicationArchive(
     stage,
-    ["manifest.json"],
+    releaseMembers,
     undefined,
     inspect,
   );
   assert.equal(statSync(`${stage}.tar`).mode & 0o777, 0o600);
   assert.equal(
-    withPublicationArchive(stage, ["manifest.json"], digest, inspect),
+    withPublicationArchive(stage, releaseMembers, digest, inspect),
     digest,
   );
   assert.throws(
