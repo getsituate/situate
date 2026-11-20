@@ -5,6 +5,13 @@ trap {
 }
 $session = (Get-Process -Id $PID).SessionId
 if ($session -eq 0 -or -not [Environment]::UserInteractive) { exit 38 }
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+try {
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'Run the startup smoke without elevated administrator rights.'
+    }
+} finally { $identity.Dispose() }
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
