@@ -325,21 +325,21 @@ async function main() {
   const workspace = realpathSync(process.cwd());
   const harness = realpathSync(root);
   inside(workspace, harness);
-  const source = values.coverage
-    ? realpathSync(resolve(workspace, values.coverage))
+  const sourcePath = values.coverage
+    ? resolve(workspace, values.coverage)
     : harness;
+  inside(workspace, sourcePath);
+  const source = realpathSync(sourcePath);
   inside(workspace, source);
-  if (!values.visual) {
-    const gitDirectory = resolve(source, ".git");
-    const gitPath = existsSync(gitDirectory)
-      ? realpathSync(gitDirectory)
-      : null;
-    if (gitPath) inside(workspace, gitPath);
-    if (!gitPath || !statSync(gitPath).isDirectory())
-      throw new Error(
-        "Use a regular checkout with its .git directory inside the workspace, not a linked worktree.",
-      );
-  }
+  if (
+    !values.visual &&
+    !readdirSync(source, { withFileTypes: true }).some(
+      (entry) => entry.name === ".git" && entry.isDirectory(),
+    )
+  )
+    throw new Error(
+      "Use a regular checkout with its .git directory inside the workspace, not a linked worktree.",
+    );
   const cachePath =
     process.env.CI_CACHE_DIR ||
     (process.env.RUNNER_TEMP &&

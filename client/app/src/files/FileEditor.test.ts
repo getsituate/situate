@@ -555,6 +555,27 @@ describe("file panes", () => {
       ),
     ).toBe(false);
   });
+  it("makes history comparison scrollable by keyboard in a single named region", async () => {
+    const { session } = await setup();
+    const editor = await pane(
+      session.id,
+      "Notes/Garden.md",
+      { mode: "read" },
+      "earlier",
+    );
+    await button(editor, "⟦files.compareWithCurrent⟧").trigger("click");
+    const region = editor.get(
+      '[role="region"][aria-label="⟦files.compareWithCurrent⟧"]',
+    );
+    expect(region.attributes("tabindex")).toBe("0");
+    expect(region.findAll("pre")).toHaveLength(2);
+    expect(region.find("pre[tabindex]").exists()).toBe(false);
+    expect(region.text()).toContain("# Earlier garden");
+    await button(editor, "⟦files.compareWithCurrent⟧").trigger("click");
+    expect(
+      editor.find('[aria-label="⟦files.compareWithCurrent⟧"]').exists(),
+    ).toBe(false);
+  });
   it("retains the focused editor, caret and scroll when the host echoes source presentation", async () => {
     const { wrapper, session } = await setup();
     wrapper.unmount();

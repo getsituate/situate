@@ -1651,6 +1651,9 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           <div
             ref="documentScroll"
             class="document-scroll"
+            :role="comparison ? 'region' : undefined"
+            :aria-label="comparison ? t('files.compareWithCurrent') : undefined"
+            :tabindex="comparison ? 0 : undefined"
             @scroll="rememberScroll"
           >
             <SituateEmptyState v-if="historicalDeleted" class="empty-document">
@@ -1665,9 +1668,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               class="revision-comparison"
             >
               <section>
-                <h3 :id="`${browserId}-historical`">
-                  {{ t("files.historicalVersion") }}
-                </h3>
+                <h3>{{ t("files.historicalVersion") }}</h3>
                 <p
                   v-if="selectedVersion"
                   class="comparison-date"
@@ -1675,15 +1676,12 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
                 >
                   {{ versionDate(selectedVersion) }}
                 </p>
-                <pre
-                  role="region"
-                  :aria-labelledby="`${browserId}-historical`"
-                  tabindex="0"
-                  data-localization-content="user"
-                  >{{ historical.version.text }}</pre>
+                <pre data-localization-content="user">{{
+                  historical.version.text
+                }}</pre>
               </section>
               <section>
-                <h3 :id="`${browserId}-current`">
+                <h3>
                   {{
                     session.files[historyPath]?.dirty
                       ? t("files.currentUnsaved")
@@ -1691,9 +1689,6 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
                   }}
                 </h3>
                 <pre
-                  role="region"
-                  :aria-labelledby="`${browserId}-current`"
-                  tabindex="0"
                   :data-localization-content="
                     session.files[historyPath] ? 'user' : undefined
                   "
