@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "harden-release-ci-tooling",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Hardens release tools, the CI image, and deferred Android builds without changing the macOS app."
+}
