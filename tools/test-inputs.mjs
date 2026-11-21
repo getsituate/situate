@@ -201,7 +201,6 @@ const rules = {
   "root-format": () => true,
   "root-lint": (file) => /\.[cm]?[jt]sx?$|\.vue$/.test(file),
   "root-secrets": () => true,
-  "root-commits": () => true,
   "root-history-secrets": () => true,
   "root-audit": () => false,
   "root-rust": (file) => rust.test(file),
@@ -253,7 +252,6 @@ export function suiteAffectedFiles(suite, files) {
       [
         "root-format",
         "root-secrets",
-        "root-commits",
         "root-history-secrets",
         "quick-source",
       ].includes(id)

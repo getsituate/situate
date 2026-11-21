@@ -277,7 +277,6 @@ export function suiteInventory(files, host = process.platform) {
       : ["npm", ["run", script]];
   add("root-lint", "runner", "check", ".", ...npm("lint"));
   add("root-format", "runner", "check", ".", ...npm("format:check"));
-  node("root-commits", "runner", "check", ["tools/commit-check.mjs"]);
   add("root-history-secrets", "runner", "check", ".", "gitleaks", [
     "git",
     ".",

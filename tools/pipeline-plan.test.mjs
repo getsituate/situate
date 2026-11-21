@@ -54,7 +54,7 @@ test("developer-only inputs and required declarations do not activate app lanes"
         path,
       );
       assert.ok(suites(plan).includes("delivery-unit"));
-      assert.ok(suites(plan).includes("root-commits"));
+      assert.ok(!suites(plan).includes("root-commits"));
       assert.ok(suites(plan).includes("root-history-secrets"));
       assert.ok(!suites(plan).includes("root-audit"));
       assert.equal(plan.reasons.length, 0, path);

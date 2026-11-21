@@ -347,24 +347,6 @@ export async function runLane(
   const suites = lane.suites.map((id) => {
     const suite = available.find((entry) => entry.id === id);
     assert(suite, `Selected suite is unavailable on this host: ${id}`);
-    if (id === "root-commits")
-      return {
-        ...suite,
-        args: [
-          ...suite.args,
-          "--base",
-          plan.declaration?.base ??
-            git(root, ["merge-base", plan.base, plan.source]),
-          ...(plan.declaration?.heads?.length > 1
-            ? [
-                "--heads",
-                JSON.stringify(
-                  plan.declaration.heads.map((entry) => entry.source),
-                ),
-              ]
-            : ["--head", plan.declaration?.head ?? plan.source]),
-        ],
-      };
     if (id === "root-history-secrets")
       return {
         ...suite,

@@ -70,11 +70,11 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 
 ## Commit messages
 
-- Use an English Conventional Commit subject: `type: summary` or `type(scope): summary`. Allowed types are `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, `chore` and `revert`. Scopes are optional and have no fixed list.
+- Use a short, specific English commit subject, including for squash merges. Conventional Commit prefixes are optional.
 - Keep one coherent change with its relevant tests and documentation. Describe observable behavior for product changes; add a body explaining why or the prior failure when the subject is insufficient.
-- Mark incompatible changes with `!` before the colon or a `BREAKING CHANGE:` footer, and describe the incompatibility. A marker does not authorize a compatibility break.
+- Describe incompatible changes explicitly. A commit message does not authorize a compatibility break.
 - Do not invent user benefits for internal changes, require release prose or custom changelog trailers, or include credentials, private observations, personal paths, tool signatures or process narration.
-- Follow [commit conventions](docs/development/commit-conventions.md) for Git-generated merge/revert exceptions, squash subjects, grandfathered history, range checks and optional local hooks. Do not rewrite old commits merely to satisfy the convention.
+- See [commit conventions](docs/development/commit-conventions.md) for examples and optional local checks. Do not rewrite old commits merely to change their format.
 
 ## Changes and verification
 

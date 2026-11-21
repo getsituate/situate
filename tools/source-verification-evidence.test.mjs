@@ -555,7 +555,7 @@ test("a passing native receipt cannot bypass a failed aggregate policy lane", ()
         id: "policy",
         host: "linux",
         timeoutSeconds: 600,
-        suites: ["root-commits"],
+        suites: ["root-lint"],
         reasons: [],
       },
     ],
@@ -569,7 +569,7 @@ test("a passing native receipt cannot bypass a failed aggregate policy lane", ()
     host: "linux",
     executionHost: "linux",
     status: "passed",
-    results: [{ id: "root-commits", status: "passed", exitCode: 0 }],
+    results: [{ id: "root-lint", status: "passed", exitCode: 0 }],
   });
   evidence.aggregate = aggregateReceipts(evidence.plan, evidence.receipts);
   assert.equal(selectSourceVerificationEvidence(input).action, "reuse");
@@ -727,7 +727,7 @@ test("incomplete, failed, empty or modified receipts and plans are rejected", ()
 
 test("policy, history, unknown suites and unsupported lanes always execute", () => {
   for (const [laneId, suites] of [
-    ["policy", ["root-commits", "root-history-secrets"]],
+    ["policy", ["root-lint", "root-history-secrets"]],
     ["tooling", ["runner-unit"]],
     ["future-lane", ["future-suite"]],
     ["macos-native", ["future-suite"]],

@@ -34,8 +34,7 @@ test(
       "tools/ci-image.lock.json",
       "client/package-lock.json",
       "requirements/package-lock.json",
-      "tools/commit-check.mjs",
-      "tools/commit-policy.mjs",
+      ".gitleaks.toml",
     ]) {
       const destination = join(repository, name);
       mkdirSync(dirname(destination), { recursive: true });
@@ -56,7 +55,7 @@ test(
       ["config", "user.name", "Synthetic Maintainer"],
       ["config", "user.email", "maintainer@example.invalid"],
       ["add", "."],
-      ["commit", "-qm", "test: protocol fixture"],
+      ["commit", "-qm", "Add protocol fixture"],
     ]) {
       const git = spawnSync("git", args, { cwd: repository, encoding: "utf8" });
       assert.equal(git.status, 0, git.stderr);
@@ -68,7 +67,7 @@ test(
       JSON.stringify({
         profile: "supported",
         scope: "supported",
-        suiteIds: ["root-commits"],
+        suiteIds: ["root-history-secrets"],
       }),
     );
     const child = spawnSync(
@@ -96,13 +95,13 @@ test(
     );
     assert.deepEqual(
       events.map((event) => event.id ?? event.result.id),
-      ["root-commits", "root-commits"],
+      ["root-history-secrets", "root-history-secrets"],
     );
     const result = JSON.parse(readFileSync(report, "utf8"));
     assert.equal(result.status, "passed");
     assert.deepEqual(
       result.results.map(({ id, status }) => ({ id, status })),
-      [{ id: "root-commits", status: "passed" }],
+      [{ id: "root-history-secrets", status: "passed" }],
     );
   },
 );
