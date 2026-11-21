@@ -172,8 +172,8 @@ def build(manifest, manifest_path, inputs, output, cache):
     compiler = subprocess.check_output(["swift", "--version"], text=True).strip()
     require(compiler.splitlines()[0] == f"Swift version {manifest['compiler']['version']} (swift-{manifest['compiler']['version']}-RELEASE)", "Swift compiler differs from pinned image")
     retain_sources(manifest, output, cache)
-    build_root = pathlib.Path("/tmp/ci-swift-build")
-    build_root.mkdir()
+    build_root = pathlib.Path("/swift-build")
+    build_root.mkdir(mode=0o700)
     binaries = []
     for name, tool in manifest["tools"].items():
         source_archive = fetch(manifest["artifacts"][tool["source"]], cache)

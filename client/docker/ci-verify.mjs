@@ -138,7 +138,7 @@ const swiftSourcePins = {
   swiftManifest:
     "b0a38547657871ff600cd80f7cc8503e20f0444f57806e9958ba2f152d33f735",
   swiftVerifier:
-    "68f150ec1f737216d39fcb314d7c72b41cbbd8e96690f6c8d9abe9907ada4ee7",
+    "b9eda694a4c835fbc2918f307d9438e3e59b463dc727633ea8963602ae5c0b5b",
 };
 for (const [path, expected] of [
   ["/opt/ci-tools/ci-swift-tools.json", swiftSourcePins.swiftManifest],
@@ -250,6 +250,7 @@ for (const path of [
   "/root/.npm",
   "/root/.ssh",
   "/tmp/ci-swift-build",
+  "/swift-build",
   "/swift-input",
   "/usr/bin/swift",
   "/usr/bin/swiftc",

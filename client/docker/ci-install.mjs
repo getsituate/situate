@@ -47,6 +47,8 @@ for (const [name, tool] of Object.entries(assets)) {
     const asset = tool[arch];
     download(asset.url, archive, asset.sha256);
     run("tar", [
+      "--no-same-owner",
+      "--no-same-permissions",
       "-xzf",
       archive,
       "-C",
@@ -98,7 +100,15 @@ for (const project of ["client", "requirements"]) {
   const directory = `/opt/ci-tools/playwright-${core.version}`;
   mkdirSync(directory);
   download(core.resolved, archive, core.integrity.slice(7), "sha512");
-  run("tar", ["-xzf", archive, "-C", directory, "--strip-components=1"]);
+  run("tar", [
+    "--no-same-owner",
+    "--no-same-permissions",
+    "-xzf",
+    archive,
+    "-C",
+    directory,
+    "--strip-components=1",
+  ]);
   run("node", [`${directory}/cli.js`, "install-deps", "chromium", "webkit"]);
 }
 writeFileSync(

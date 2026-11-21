@@ -302,10 +302,10 @@ test("Swift source tools bind reviewed locks and a narrow Debian runtime export"
   assert.ok(dockerfile.includes(`FROM ${manifest.compiler.image} AS ci-swift`));
   assert.ok(
     dockerfile.includes(
-      "COPY --from=ci-swift /export/opt/ci-tools/ /opt/ci-tools/",
+      "COPY --from=ci-swift --chown=0:0 /export/opt/ci-tools/ /opt/ci-tools/",
     ),
   );
-  assert.doesNotMatch(dockerfile, /COPY --from=ci-swift \/(?: |$)/m);
+  assert.doesNotMatch(dockerfile, /COPY --from=ci-swift (?:--\S+ )*\/(?: |$)/m);
   assert.deepEqual(Object.keys(manifest.tools).sort(), [
     "swift-format",
     "swiftlint",
