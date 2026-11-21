@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createViewRegistry, type UiCoordinator } from "../layout/registry";
 import { createPluginRuntime } from "./runtime";
-import type { PluginUiHost } from "./types";
+import type { PluginManifest, PluginUiHost } from "./types";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -58,7 +58,11 @@ const descriptor = {
   description: "Run",
   parameters: { type: "object", properties: {} },
 };
-function definition(id = "demo", dependencies: string[] = []) {
+function definition(
+  id = "demo",
+  dependencies: string[] = [],
+  platforms?: PluginManifest["platforms"],
+) {
   return {
     pluginId: id,
     revision: "r1",
@@ -77,6 +81,7 @@ function definition(id = "demo", dependencies: string[] = []) {
         uiEntry: "ui.js",
         dependencies,
         exports: ["run"],
+        ...(platforms ? { platforms } : {}),
       },
       serviceEntry: "throw new Error('must not execute in UI')",
       uiEntry: "export default () => ({})",
@@ -151,18 +156,7 @@ afterEach(() => {
 
 describe("plugin UI runtime", () => {
   it("does not load a macOS-only UI entry on Windows", async () => {
-    const portable = definition();
-    const restricted = definition("mac-only");
-    definitions = [
-      portable,
-      {
-        ...restricted,
-        source: {
-          ...restricted.source,
-          manifest: { ...restricted.source.manifest, platforms: ["macos"] },
-        },
-      },
-    ];
+    definitions = [definition(), definition("mac-only", [], ["macos"])];
     const native = mocks.invoke.getMockImplementation()!;
     mocks.invoke.mockImplementation(async (command, args) => {
       if (command === "plugin_runtime" && args.request.operation === "list")
