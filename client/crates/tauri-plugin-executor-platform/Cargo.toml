@@ -21,5 +21,9 @@ objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std
 objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration", "WKSnapshotConfiguration", "block2", "objc2-app-kit", "objc2-core-foundation"] }
 objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGImage"] }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "=0.39.1"
+windows = { version = "=0.62.2", features = ["Win32_Foundation"] }
+
 [build-dependencies]
 tauri-plugin = { version = "=2.7.2", features = ["build"] }

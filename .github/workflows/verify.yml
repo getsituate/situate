@@ -251,6 +251,56 @@ jobs:
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-compatibility
 
+  windows-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'windows-native')
+    runs-on: windows-2025
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane windows-native
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane windows-native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-ci-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/situate-windows-ci/artifact/
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-smoke-build:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
+    runs-on: windows-2025
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - run: node tools/build-windows-smoke.mjs windows-smoke-artifact
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-smoke-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: windows-smoke-artifact/
+          if-no-files-found: error
+          retention-days: 7
+
   required:
     name: PR verification
     needs:
@@ -266,6 +316,7 @@ jobs:
         browser,
         macos-native,
         macos-compatibility,
+        windows-native,
       ]
     if: always()
     runs-on: ubuntu-24.04
@@ -284,7 +335,7 @@ jobs:
         env:
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10},"windows-native":{11}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility), toJSON(needs.windows-native)) }}
       - run: python3 tools/pipeline-bootstrap.py
       - id: evidence
         run: node tools/actions-adapter.mjs source-evidence --workflow verify
@@ -292,7 +343,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
           PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
-          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
+          PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10},"windows-native":{11}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility), toJSON(needs.windows-native)) }}
       - if: steps.evidence.outputs.created == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:

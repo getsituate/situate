@@ -29,7 +29,6 @@ pub enum Reply {
     Validate { manifest: Box<PluginManifest> },
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", test))]
 fn inspect(root: &std::path::Path, request: Request) -> Result<Reply, String> {
     use situate_core::plugins;
     match request {
@@ -49,7 +48,6 @@ fn inspect(root: &std::path::Path, request: Request) -> Result<Reply, String> {
     .map_err(|error| error.to_string())
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", test))]
 pub(crate) fn inspect_cancellable(
     root: &std::path::Path,
     request: Request,
@@ -72,7 +70,7 @@ pub async fn plugins_source(
     scope: String,
     request: Request,
 ) -> Result<Reply, String> {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
     {
         let label = window.label().to_owned();
         let authorization = crate::workspaces::authorization_session(&app, &label, &scope)?;
@@ -91,7 +89,7 @@ pub async fn plugins_source(
         .await
         .map_err(|_| "native.plugins.readFailed".to_owned())?
     }
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
     {
         let _ = (app, window, scope, request);
         Err("native.plugins.unavailable".into())

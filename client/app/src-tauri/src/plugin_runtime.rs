@@ -36,7 +36,7 @@ fn required_revision<'de, D: serde::Deserializer<'de>>(
     Option::<String>::deserialize(deserializer)
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", test))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows", test))]
 impl Request {
     fn mutates(&self) -> bool {
         // Listing can initialize identities, pin legacy source, and migrate credentials.
@@ -59,14 +59,24 @@ impl Request {
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum Reply {
-    List(Listing),
+    List {
+        #[serde(flatten)]
+        listing: Listing,
+        platform: &'static str,
+    },
     Load(Box<Sources>),
-    Check { enabled: bool },
-    SetEnabled { revision: String },
-    Uninstall { revision: Option<String> },
+    Check {
+        enabled: bool,
+    },
+    SetEnabled {
+        revision: String,
+    },
+    Uninstall {
+        revision: Option<String>,
+    },
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", test))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows", test))]
 fn prepare_listing(
     mut prepare: impl FnMut() -> Result<Listing, String>,
 ) -> Result<Listing, String> {
@@ -82,7 +92,7 @@ fn prepare_listing(
     result
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", test))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows", test))]
 pub(super) fn dispatch(
     root: &std::path::Path,
     recovery: bool,
@@ -93,7 +103,10 @@ pub(super) fn dispatch(
         return Err("native.plugins.recoveryBlocked".into());
     }
     match request {
-        Request::List {} => prepare_listing(|| runtime::prepare(root)).map(Reply::List),
+        Request::List {} => prepare_listing(|| runtime::prepare(root)).map(|listing| Reply::List {
+            listing,
+            platform: std::env::consts::OS,
+        }),
         Request::Load {
             plugin_id,
             revision,
@@ -160,7 +173,7 @@ pub async fn plugin_runtime(
     scope: String,
     request: Request,
 ) -> Result<Reply, String> {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
     {
         let label = window.label().to_owned();
         let authorization = crate::workspaces::authorization_session(&app, &label, &scope)?;
@@ -282,7 +295,7 @@ pub async fn plugin_runtime(
         .await
         .map_err(|_| failure.to_owned())?
     }
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
     {
         let _ = (app, window, scope, request);
         Err("native.plugins.unavailable".into())

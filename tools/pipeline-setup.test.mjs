@@ -9,10 +9,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { prerequisites, prepareLane } from "./pipeline-setup.mjs";
 
-const root = new URL("../", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../", import.meta.url));
 test("portable tools come from the image and native setup contains only Apple-host prerequisites", () => {
   assert.deepEqual(prerequisites({ host: "linux", suites: ["root-secrets"] }), {
     image: true,
@@ -165,6 +166,29 @@ test("native setup reuses only a complete pinned Rust toolchain for the host", a
   }
 });
 
+test("Windows setup rejects other hosts and delegates only to its native setup", async () => {
+  const lane = {
+    id: "windows-native",
+    host: "windows",
+    execution: "native",
+    suites: ["client-windows-build"],
+  };
+  const calls = [];
+  const execute = (...args) => calls.push(args);
+  await assert.rejects(
+    prepareLane(lane, { platform: "darwin", execute }),
+    /native Windows/,
+  );
+  assert.equal(calls.length, 0);
+  await prepareLane(lane, { platform: "win32", execute, directory: root });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], process.execPath);
+  assert.deepEqual(calls[0][1], [
+    join(root, "tools/test-windows.mjs"),
+    "setup",
+  ]);
+});
+
 test("Python bootstrap verifies archive before installation and invokes Node only through Volta shims", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-bootstrap-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -195,5 +219,49 @@ assert not (root/'bad/bin').exists()
     encoding: "utf8",
     env: { ...process.env, GITHUB_PATH: "", GITHUB_ENV: "" },
   });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("Windows Volta bootstrap validates zip members before extraction and uses cmd shims", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-win-bootstrap-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ volta: { node: "24.21.0", npm: "11.19.1" } }),
+  );
+  const script = `import hashlib,importlib.util,io,pathlib,types,zipfile
+spec=importlib.util.spec_from_file_location('bootstrap',${JSON.stringify(join(root, "tools/pipeline-bootstrap.py"))}); module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+root=pathlib.Path(${JSON.stringify(directory)}); calls=[]
+assert module.WINDOWS_X64['sha256']=='d7678a485e2fc9b1a3f7e9da256d8b88a97d7e4c45e63701c4874f6c2a587e0f'
+def execute(args,**kwargs):
+ calls.append(args);return types.SimpleNamespace(stdout={'node':'v24.21.0', 'npm':'11.19.1'}.get(args[3] if len(args)>3 else '', '2.0.2'))
+def archive(names):
+ buffer=io.BytesIO()
+ with zipfile.ZipFile(buffer,'w') as file:
+  for name in names: file.writestr(name,b'fixture')
+ return buffer.getvalue()
+names=['volta.exe','volta-shim.exe','volta-migrate.exe']
+for name,data in [('hash',b'wrong digest'),('entries',archive(names+['../unexpected']))]:
+ if name=='entries': module.WINDOWS_X64['sha256']=hashlib.sha256(data).hexdigest()
+ try: module.bootstrap(root=root,home=root/name,system='Windows',machine='AMD64',fetch=lambda url:data,execute=execute)
+ except ValueError: pass
+ else: raise AssertionError('invalid Windows archive accepted')
+ assert not (root/name).exists()
+ assert not calls
+data=archive(names);module.WINDOWS_X64['sha256']=hashlib.sha256(data).hexdigest()
+module.bootstrap(root=root,home=root/'valid',system='Windows',machine='AMD64',fetch=lambda url:data,execute=execute)
+assert calls[0]==[str(root/'valid/bin/volta.exe'),'--version']
+assert calls[1]==[str(root/'valid/bin/volta.exe'),'install','node@24.21.0','npm@11.19.1']
+assert calls[2:]==[['cmd.exe','/d','/c','node','--version'],['cmd.exe','/d','/c','npm','--version']]
+assert (root/'valid/bin/npm.cmd').read_bytes().endswith(b'volta run %~n0 %*\\r\\n')
+`;
+  const result = spawnSync(
+    process.platform === "win32" ? "python" : "python3",
+    ["-B", "-c", script],
+    {
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_PATH: "", GITHUB_ENV: "" },
+    },
+  );
   assert.equal(result.status, 0, result.stderr);
 });

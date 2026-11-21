@@ -1000,6 +1000,7 @@ test("missing hook policy disables only affected reuse without aborting executio
       "suite-cache.mjs",
       "suite-cache-config.mjs",
       "test-inputs.mjs",
+      "test-scope.mjs",
     ])
       await f.put(
         join(moduleDirectory, name),

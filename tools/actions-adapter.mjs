@@ -30,6 +30,7 @@ export const laneHosts = {
   browser: "linux",
   "macos-native": "macos",
   "macos-compatibility": "macos",
+  "windows-native": "windows",
 };
 export const repository = "getsituate/situate";
 export function digest(value) {
@@ -84,6 +85,7 @@ export function aggregate(plan, receipts, needs) {
   if (needs.plan?.result !== "success")
     throw new Error("Planning did not succeed.");
   for (const id of Object.keys(laneHosts)) {
+    if (id === "windows-native" && plan.workflow === "create") continue;
     const selected = plan.lanes.some((lane) => lane.id === id);
     if (needs[id]?.result !== (selected ? "success" : "skipped"))
       throw new Error(`Unexpected ${id} job result.`);
@@ -771,23 +773,42 @@ export async function main(
         throw new Error("Lane was not selected.");
       if (execute("git", ["rev-parse", "HEAD"]).trim() !== plan.source)
         throw new Error("Checkout does not match planned source.");
-      const receipt = join(directory, "runner.json");
-      execute(
-        process.execPath,
-        [
-          "tools/pipeline.mjs",
-          "run",
-          workflow,
-          "--plan",
-          planFile,
-          "--lane",
-          values.lane,
-          "--receipt",
-          receipt,
-        ],
-        { stdio: "inherit" },
-      );
-      const result = JSON.parse(readFileSync(receipt, "utf8"));
+      let result;
+      if (values.lane === "windows-native") {
+        const { runLane } = await import("./pipeline.mjs");
+        const controller = new AbortController();
+        const stop = () => controller.abort();
+        process.on("SIGINT", stop);
+        process.on("SIGTERM", stop);
+        try {
+          // Each Windows phase owns a Job Object on an isolated hosted runner.
+          result = await runLane(root, plan, values.lane, {
+            environment: env,
+            signal: controller.signal,
+          });
+        } finally {
+          process.removeListener("SIGINT", stop);
+          process.removeListener("SIGTERM", stop);
+        }
+      } else {
+        const receipt = join(directory, "runner.json");
+        execute(
+          process.execPath,
+          [
+            "tools/pipeline.mjs",
+            "run",
+            workflow,
+            "--plan",
+            planFile,
+            "--lane",
+            values.lane,
+            "--receipt",
+            receipt,
+          ],
+          { stdio: "inherit" },
+        );
+        result = JSON.parse(readFileSync(receipt, "utf8"));
+      }
       if (
         result.status !== "passed" ||
         result.source !== plan.source ||

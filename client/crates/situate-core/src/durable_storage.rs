@@ -1,5 +1,6 @@
 use cap_std::fs::Dir;
-use std::{fs::File, io};
+use situate_migrations::directory_for_sync;
+use std::io;
 
 mod sync_batch;
 pub(crate) use sync_batch::SyncBatch;
@@ -18,41 +19,59 @@ pub(crate) fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> io
     .map_err(io::Error::from)
 }
 
-pub(crate) fn sync_directory(dir: &Dir) -> io::Result<()> {
-    directory_for_sync(dir)?.sync_all()
+#[cfg(windows)]
+pub(crate) fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> io::Result<()> {
+    use std::os::windows::{ffi::OsStrExt, ffi::OsStringExt, io::AsRawHandle};
+    use windows_sys::Win32::Storage::FileSystem::{GetFinalPathNameByHandleW, MoveFileExW};
+    fn path(dir: &Dir, name: &str) -> io::Result<Vec<u16>> {
+        let file = dir.try_clone()?.into_std_file();
+        let mut buffer = vec![0u16; 32768];
+        // The directory handle was opened without following symlinks. Windows
+        // publication still requires ancestors to stay put until MoveFileExW.
+        let size = unsafe {
+            GetFinalPathNameByHandleW(
+                file.as_raw_handle(),
+                buffer.as_mut_ptr(),
+                buffer.len() as u32,
+                0,
+            )
+        };
+        if size == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if size as usize >= buffer.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "native.content.path.tooLong",
+            ));
+        }
+        buffer.truncate(size as usize);
+        let path = std::path::PathBuf::from(std::ffi::OsString::from_wide(&buffer)).join(name);
+        Ok(path.as_os_str().encode_wide().chain(Some(0)).collect())
+    }
+    let from = path(from, old)?;
+    let to = path(to, new)?;
+    // Zero flags exclude replacement, including an existing empty directory.
+    if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+#[cfg(not(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "android",
+    windows
+)))]
+pub(crate) fn rename_noreplace(_from: &Dir, _old: &str, _to: &Dir, _new: &str) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "native.content.operation.publicationUnsupported",
+    ))
 }
 
-fn directory_for_sync(dir: &Dir) -> io::Result<File> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        use rustix::fs::{Mode, OFlags, openat};
-        // No-follow directory capabilities can be O_PATH descriptors, which cannot
-        // be fsynced. Open the same directory through its handle, not its old path.
-        Ok(openat(
-            dir,
-            ".",
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?
-        .into())
-    }
-    #[cfg(windows)]
-    {
-        use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
-        let mut options = cap_std::fs::OpenOptions::new();
-        options
-            .write(true)
-            .maybe_dir(true)
-            .follow(FollowSymlinks::No);
-        // FlushFileBuffers needs write access, but ReOpenFile rejects directory
-        // handles. cap-std opens "." through NtCreateFile relative to the held handle.
-        dir.open_with(".", &options)
-            .map(cap_std::fs::File::into_std)
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
-    {
-        dir.try_clone().map(Dir::into_std_file)
-    }
+pub(crate) fn sync_directory(dir: &Dir) -> io::Result<()> {
+    directory_for_sync(dir)?.sync_all()
 }
 
 #[cfg(test)]

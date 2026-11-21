@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "windows-ci-build-compatibility",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Windows build compatibility only; no change to the released macOS experience."
+}

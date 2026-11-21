@@ -1198,7 +1198,9 @@ pub(crate) fn process_request(
 ) -> Result<Value, String> {
     let timeout_ms = timeout_ms.unwrap_or(30_000);
     validate_process(&executable, &args, timeout_ms)?;
-    if !cfg!(target_os = "macos") || !process_capability(location.kind == "path").available {
+    if !cfg!(any(target_os = "macos", target_os = "windows"))
+        || !process_capability(location.kind == "path").available
+    {
         return Err("native.files.operation.unavailable".into());
     }
     let mut content = session.inner.lock().map_err(err)?;
@@ -1332,7 +1334,11 @@ pub(crate) fn agent_request(
         } else {
             shell
         };
-        let plugin_sources = cfg!(any(target_os = "macos", target_os = "ios")) && root.is_some();
+        let plugin_sources = cfg!(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "windows"
+        )) && root.is_some();
         #[cfg(feature = "native-smoke")]
         let plugin_sources = plugin_sources && !crate::agent_e2e::enabled();
         return Ok(
@@ -1377,17 +1383,13 @@ pub(crate) fn agent_request(
             .filter(|_| capability.available)
             .ok_or("native.files.operation.unavailable")?;
         let command = request.command.ok_or("native.content.base.mismatch")?;
+        let args = crate::shell_host::script_args(&capability.interpreter_args, command);
         return execute_process(
             &mut content,
             crate::shell_host::CommandRequest {
                 cwd: root.ok_or("native.files.workspace.folderUnavailable")?,
                 executable: interpreter.into(),
-                args: capability
-                    .interpreter_args
-                    .iter()
-                    .map(|arg| (*arg).to_owned())
-                    .chain([command, "situate-command".into()])
-                    .collect(),
+                args,
                 timeout_ms: request.timeout_ms.unwrap_or(30_000),
                 output_limit_bytes: 32_768,
             },

@@ -631,6 +631,7 @@ test("verification delegates selected lanes directly from planning without optio
       "browser",
       "macos-native",
       "macos-compatibility",
+      ...(name === "verify" ? ["windows-native"] : []),
     ]) {
       const block = source
         .split(`  ${lane}:\n`)[1]
@@ -642,7 +643,8 @@ test("verification delegates selected lanes directly from planning without optio
           `contains(fromJSON(${name === "release-macos" ? `needs.plan.outputs.plan || '{"lanes":[]}'` : "needs.plan.outputs.plan"}).lanes.*.id, '${lane}')`,
         ),
       );
-      const native = lane.startsWith("macos-") || lane === "tooling-macos";
+      const macos = lane.startsWith("macos-") || lane === "tooling-macos";
+      const native = macos || lane === "windows-native";
       const command =
         native || lane === "docker-integration"
           ? "node tools/actions-adapter.mjs"
@@ -656,7 +658,7 @@ test("verification delegates selected lanes directly from planning without optio
         block,
         /PIPELINE_PLAN_DIGEST: \$\{\{ needs.plan.outputs.digest \}\}/,
       );
-      if (native)
+      if (macos)
         assert.ok(
           block.includes(
             lane === "macos-compatibility"
@@ -664,6 +666,8 @@ test("verification delegates selected lanes directly from planning without optio
               : "runs-on: macos-latest\n",
           ),
         );
+      if (lane === "windows-native")
+        assert.match(block, /runs-on: windows-2025/);
       const steps = block.split(/\n {6}- /).slice(1);
       const optional = steps.filter((step) =>
         step.includes("continue-on-error"),
@@ -701,6 +705,7 @@ test("verification delegates selected lanes directly from planning without optio
         "browser",
         "macos-native",
         "macos-compatibility",
+        ...(name === "verify" ? ["windows-native"] : []),
       ].sort(),
     );
     assert.match(

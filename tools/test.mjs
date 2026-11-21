@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import assert from "node:assert/strict";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -19,7 +20,11 @@ import { parseArgs } from "node:util";
 import { cachedQualitySuite } from "./quality-cache.mjs";
 import { cargoEnvironment } from "./cargo-environment.mjs";
 import { compilerCacheEnvironment } from "./compiler-cache.mjs";
-import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
+import {
+  supportedSuiteEnabled,
+  suiteAvailable,
+  windowsNativeSuites,
+} from "./test-scope.mjs";
 import {
   QUICK_BUDGET_MS,
   QUICK_EXECUTION_MS,
@@ -370,6 +375,8 @@ export function suiteInventory(files, host = process.platform) {
     "situate-core",
     "--locked",
   ]);
+  for (const id of windowsNativeSuites)
+    node(id, "client", "native", ["tools/test-windows.mjs", id]);
   add("client-core-macos", "client", "integration", "client", "cargo", [
     "test",
     "-p",
@@ -831,7 +838,9 @@ export function createPlan(
     const suite = inventory.find((entry) => entry.id === id);
     if (!suite) throw new Error(`Unknown suite: ${id}`);
     if (!suiteAvailable(suite, platform))
-      throw new Error(`Suite ${id} requires a macOS host.`);
+      throw new Error(
+        `Suite ${id} requires a ${windowsNativeSuites.includes(id) ? "Windows" : "macOS"} host.`,
+      );
   }
   const files = changed ? changedFiles(directory, base) : [];
   const selected = changed ? affectedProjects(files) : [...projects];
@@ -1021,6 +1030,24 @@ export function suiteEnvironment(
       );
   }
   return env;
+}
+
+export function dependencyOwnerBirth(pid) {
+  assert(Number.isInteger(pid) && pid > 0);
+  if (process.platform !== "win32") return processSnapshot().get(pid)?.born;
+  const birth = execFileSync(
+    "powershell.exe",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `$ErrorActionPreference = 'Stop'; $process = Get-Process | Where-Object Id -eq ${pid}; if ($process) { $start = $process.StartTime; if (!$start) { throw 'Cannot identify process start time' }; $start.ToUniversalTime().Ticks }`,
+    ],
+    { encoding: "utf8", timeout: 5000 },
+  ).trim();
+  assert(!birth || /^\d+$/.test(birth), "Invalid process start time");
+  return birth || undefined;
 }
 
 function processSnapshot() {
@@ -1378,7 +1405,7 @@ export async function prepareDependencies(
       }
       if (owner) {
         unidentifiedSince = undefined;
-        if (processSnapshot().get(owner.pid)?.born !== owner.born) {
+        if (dependencyOwnerBirth(owner.pid) !== owner.born) {
           // The previous owner may have released the lock while ps was running.
           try {
             const current = JSON.parse(readFileSync(ownerFile, "utf8"));
@@ -1424,7 +1451,7 @@ export async function prepareDependencies(
     rmdirSync(lock);
   };
   try {
-    const born = processSnapshot().get(process.pid)?.born;
+    const born = dependencyOwnerBirth(process.pid);
     if (!born) throw new Error("Could not identify dependency lock owner.");
     writeFileSync(ownerFile, JSON.stringify({ pid: process.pid, born }), {
       mode: 0o600,

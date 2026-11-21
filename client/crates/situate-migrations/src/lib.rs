@@ -6,6 +6,7 @@ mod migrations;
 mod registry;
 mod runner;
 
+pub use filesystem::directory_for_sync;
 pub use migration::{Migration, MigrationDescriptor, MigrationId, MigrationWorkspace};
 pub use registry::MIGRATIONS;
 pub use runner::{WorkspaceLease, initialize_fresh, lock_current_exclusively, prepare};

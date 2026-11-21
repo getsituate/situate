@@ -1371,10 +1371,11 @@
     }
     if (info.phase === "exercise") {
       const settings = await invoke("ai_settings_load", { scope: info.scope });
-      await send(
-        marker +
-          " Check and activate the candidate capability, then use the current tool.",
+      await wait("plugins-draft-ready", () =>
+        field()?.value.startsWith(`${marker} `),
       );
+      await click("Send message");
+      stage = "plugins-first-request";
       await invoke("agent_e2e_control", { action: "wait", marker });
       const changed = await invoke("ai_settings_save", {
         scope: info.scope,

@@ -16,7 +16,7 @@ Follow the [client setup guide](../../client/README.md) for native prerequisites
 - Python 3 for coordinated test and dependency commands.
 - [sccache](https://github.com/mozilla/sccache) is recommended for reusing Rust compilation results across local builds.
 
-Develop the current product on macOS with Xcode for macOS. iOS, Windows, Linux desktop and Android are deferred and do not require compatibility work, SDK setup, simulators or store provisioning. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
+Develop and verify the released macOS client with Xcode. Windows is the next delivery target; work on Windows-native features requires the relevant Windows toolchain and verification. iOS, Linux desktop and Android remain deferred and do not require compatibility work, SDK setup, simulators or store provisioning. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
 
 ## Install Volta
 

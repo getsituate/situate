@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createViewRegistry, type UiCoordinator } from "../layout/registry";
 import { createPluginRuntime } from "./runtime";
-import type { PluginUiHost } from "./types";
+import type { PluginManifest, PluginUiHost } from "./types";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -58,7 +58,11 @@ const descriptor = {
   description: "Run",
   parameters: { type: "object", properties: {} },
 };
-function definition(id = "demo", dependencies: string[] = []) {
+function definition(
+  id = "demo",
+  dependencies: string[] = [],
+  platforms?: PluginManifest["platforms"],
+) {
   return {
     pluginId: id,
     revision: "r1",
@@ -77,6 +81,7 @@ function definition(id = "demo", dependencies: string[] = []) {
         uiEntry: "ui.js",
         dependencies,
         exports: ["run"],
+        ...(platforms ? { platforms } : {}),
       },
       serviceEntry: "throw new Error('must not execute in UI')",
       uiEntry: "export default () => ({})",
@@ -150,6 +155,26 @@ afterEach(() => {
 });
 
 describe("plugin UI runtime", () => {
+  it("does not load a macOS-only UI entry on Windows", async () => {
+    definitions = [definition(), definition("mac-only", [], ["macos"])];
+    const native = mocks.invoke.getMockImplementation()!;
+    mocks.invoke.mockImplementation(async (command, args) => {
+      if (command === "plugin_runtime" && args.request.operation === "list")
+        return { ...(await native(command, args)), platform: "windows" };
+      return native(command, args);
+    });
+
+    const { runtime } = setup();
+    await runtime.ready;
+
+    expect(
+      runtime.state.plugins.find((plugin) => plugin.id === "mac-only"),
+    ).toMatchObject({
+      blockedBy: { reason: "platform", pluginId: "mac-only" },
+    });
+    expect(mocks.importModule).toHaveBeenCalledExactlyOnceWith("demo:ui");
+  });
+
   it("keeps healthy capabilities available and exposes native initialization failures", async () => {
     definitions = [definition("broken"), definition()];
     const native = mocks.invoke.getMockImplementation()!;

@@ -111,7 +111,12 @@ pub(super) fn sync_metadata(marker: &Dir) -> Result<(), String> {
                 flush(&child(dir, &name).map_err(|e| e.to_string())?)?;
             } else if meta.is_file() {
                 let mut options = OpenOptions::new();
-                options.read(true).follow(FollowSymlinks::No).nonblock(true);
+                // FlushFileBuffers requires write access on Windows.
+                options
+                    .read(true)
+                    .write(cfg!(windows))
+                    .follow(FollowSymlinks::No)
+                    .nonblock(true);
                 let file = dir.open_with(&name, &options).map_err(|_| INVALID)?;
                 if !file.metadata().map_err(|_| INVALID)?.is_file() {
                     return Err(INVALID.into());

@@ -1623,7 +1623,7 @@ pub(crate) fn with_retained_control<R: tauri::Runtime, T>(
         .with_authorized_control(window, session, || false, operation)
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
 pub(crate) fn with_authorized_read<P, T>(
     app: &tauri::AppHandle,
     window: &str,
@@ -1918,18 +1918,21 @@ mod scope_tests {
 
     #[cfg(not(target_os = "ios"))]
     #[test]
-    fn reopening_a_replaced_marker_does_not_reuse_old_admission() {
+    fn active_admission_prevents_or_rejects_marker_replacement() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join(".situate")).unwrap();
         let preparation =
             Arc::new(crate::workspace_preparation::prepare_local(root.path()).unwrap());
         let mut active = session("active", "workspace-1");
         active.preparation = Some(preparation);
-        std::fs::rename(
-            root.path().join(".situate"),
-            root.path().join(".situate-original"),
-        )
-        .unwrap();
+        let moved = root.path().join(".situate-original");
+        let rename = std::fs::rename(root.path().join(".situate"), &moved);
+        if cfg!(windows) {
+            assert!(matches!(rename.unwrap_err().raw_os_error(), Some(5 | 32)));
+            assert!(!moved.exists());
+            return;
+        }
+        rename.unwrap();
         std::fs::create_dir(root.path().join(".situate")).unwrap();
         let bytes = br#"{"minimumAppVersion":"9999.0.0","lastAppliedMigration":1}"#;
         std::fs::write(root.path().join(".situate/migrations.json"), bytes).unwrap();

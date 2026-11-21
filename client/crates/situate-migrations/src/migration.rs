@@ -1,4 +1,5 @@
 use crate::{MigrationError, MigrationErrorKind, Result, filesystem};
+use cap_fs_ext::OpenOptionsMaybeDirExt;
 use cap_std::fs::Dir;
 use std::path::{Component, Path};
 
@@ -72,17 +73,16 @@ impl MigrationWorkspace<'_> {
                 .to_str()
                 .ok_or_else(|| MigrationError::new(MigrationErrorKind::UnsafePath))?,
         )? {
+            let mut options = filesystem::options();
+            options.read(true).maybe_dir(true);
             let candidate = self
                 .managed
-                .open_with(Path::new(first), filesystem::options().read(true))?
+                .open_with(Path::new(first), &options)?
                 .into_std();
             let candidate = same_file::Handle::from_file(candidate)?;
             for reserved in [filesystem::CONTROL, crate::metadata::FILE] {
                 if filesystem::exists(self.managed, reserved)? {
-                    let protected = self
-                        .managed
-                        .open_with(reserved, filesystem::options().read(true))?
-                        .into_std();
+                    let protected = self.managed.open_with(reserved, &options)?.into_std();
                     if candidate == same_file::Handle::from_file(protected)? {
                         return Err(MigrationError::new(MigrationErrorKind::UnsafePath));
                     }

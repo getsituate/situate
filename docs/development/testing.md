@@ -252,6 +252,28 @@ Each guest executes one complete journey at a time across all worktrees, includi
 
 Re-run setup after changing the repository's Node/npm pins. Stop an idle guest with `tart stop situate-tests`. VM execution remains macOS host integration evidence, not a release, signing, or hardware qualification.
 
+### Windows startup smoke in UTM
+
+Use UTM 5.0.9 or newer and a dedicated Windows test guest with the QEMU guest agent, WebView2, and an unlocked console. You can use the guest's existing account, including an administrator account, as long as the test runs without elevated rights. Connect UTM to a private virtual network. Run the host command from a single macOS account across your worktrees; its guest lock is shared by those worktrees.
+
+On a Windows build host with the pinned Volta and Rust toolchains, MSVC, and the Windows SDK, run this command from a clean client checkout:
+
+```powershell
+node tools/build-windows-smoke.mjs C:\Temp\situate-smoke-artifact
+```
+
+Copy only `manifest.json` and `situate-client.exe` to the Mac. The executable uses a profile directory relative to itself. Ordinary Verify executables are not suitable for this test because they use the standard application data directories.
+
+```sh
+node tools/windows-vm-smoke.mjs "$VM_UUID" "$HOST_BRIDGE_IP" 'WINDOWS-VM\test-account' --artifact "$ARTIFACT_DIRECTORY"
+```
+
+Use the exact guest UUID from `utmctl list` and the Mac's address on the private UTM network. The runner checks the artifact checksum, starts it with a fresh app and WebView2 profile, and verifies that an on-screen window shows the enabled Create and Open workspace buttons. A run on a Windows ARM64 guest with an x64 executable exercises x64 emulation, not native x64 behavior.
+
+Use `--workspace "$ARTIFACT_DIRECTORY"` instead of `--artifact ...` to run the workspace journey. It creates a workspace with the native folder picker, skips provider setup, writes a Markdown file, then quits and reopens the workspace to verify the saved text. The journey uses the English and German UI labels. Keep the guest desktop in the foreground without interacting with it during the run.
+
+Use `--fixture 15` instead of `--artifact ...` to exercise the queue with a synthetic process tree without launching Situate. Use `--fixture timeout` to exercise guest-side timeout and cleanup; it should return status 124. `Ctrl+C` requests cancellation; let the command finish cleaning up. If cleanup cannot be confirmed, the host retains the UUID-specific lease in `~/.config/situate/windows-vm-queue/`. Do not remove it until the matching guest task, its process tree, and its run directory are gone.
+
 ### Local process connection qualification
 
 The default macOS native suite includes an offline process-backed connection and consumer. Run `node client/scripts/test-native-process.mjs` from the repository root to execute only that additional phase. It checks exact synthetic process fixtures without starting programs, then exercises direct execution without a command confirmation and cancellation through the production WebView and Rust host. The command writes only to the owned disposable workspace and returns fixed data. A second owned process verifies that cancelling workspace closure preserves running work, quit is blocked before file preparation, and explicit abort stops the worker and retains observed history before the workspace closes. No personal files, service accounts, network traffic or Notes automation are used.
@@ -413,7 +435,9 @@ node tools/pipeline.mjs plan verify --source SOURCE_SHA --base BASE_SHA --output
 node tools/pipeline.mjs run verify --plan /PATH/TO/verify-plan.json
 ```
 
-Use full commit SHAs and retain complete Git history. Plans report changed paths, suite IDs, execution hosts, relevance reasons and application impact before work starts. The Linux tool-container lanes are `policy`, `tooling`, `frontend`, `rust` and `browser`. `docker-integration` uses host Node/Docker orchestration without a nested daemon. Native macOS work belongs to `tooling-macos`, `macos-code` and `macos-native`. A local macOS invocation launches the same Linux tool image for portable lanes; it cannot substitute native-host results for those container results. A missing selected host, failed suite, cancellation, absent receipt or unexpected skip fails aggregation. Rust, product-browser and native lanes allow 1800 seconds per suite for cold builds and single-worker runs; other lanes use 600 seconds. The five-second quick budget is unchanged.
+Use full commit SHAs and retain complete Git history. Plans report changed paths, suite IDs, execution hosts, relevance reasons and application impact before work starts. The Linux tool-container lanes are `policy`, `tooling`, `frontend`, `rust` and `browser`. `docker-integration` uses host Node/Docker orchestration without a nested daemon. Native macOS work belongs to `tooling-macos`, `macos-code` and `macos-native`. A local macOS invocation launches the same Linux tool image for portable lanes; it cannot substitute native-host results for those container results. A missing selected host, failed suite, cancellation, absent receipt or unexpected skip fails aggregation. Linux Rust, product-browser and macOS app lanes allow 1800 seconds per suite for cold builds and single-worker runs. The five-second quick budget is unchanged.
+
+For relevant client changes, Verify selects `windows-native` on a GitHub-hosted `windows-2025` x64 runner. It builds the unbundled Tauri executable and runs the locked Rust workspace tests for the exact checkout. After both checks pass, download the short-lived `windows-ci-x64-…` artifact from that run. Its manifest records the checkout SHA, target, runner/toolchain versions and executable hash. The lane requires neither signing credentials nor an interactive desktop. It does not test WebView2 rendering, package an installer or qualify a Windows release. The Windows execution path currently requires the hosted runner; a local Verify invocation cannot substitute for it.
 
 GitHub Actions runs the broad Rust, Swift, and desktop suites on Apple Silicon (`macos-code` and `macos-native`). The `macos-compatibility` job runs on macOS 15 Intel. Client changes run the short launch and workspace-reopen test. Dictation changes also run a synthetic speech sample through the real recognizer with the pinned model. That test downloads and verifies the model in a temporary directory; a download or recognition failure fails the job. App releases require both checks. To run either locally on the current Mac, use `node tools/test.mjs --suite client-native-compatibility` or `node tools/test.mjs --suite client-dictation-recognition`.
 

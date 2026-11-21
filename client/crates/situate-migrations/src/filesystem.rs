@@ -30,21 +30,42 @@ pub(crate) fn ensure_child(dir: &Dir, name: &str) -> Result<Dir> {
 }
 pub(crate) fn sync(dir: &Dir) -> Result<()> {
     checkpoint("directory-sync")?;
-    #[cfg(target_os = "linux")]
+    directory_for_sync(dir)?.sync_all()?;
+    Ok(())
+}
+
+/// Opens the held directory with the access required to flush its metadata.
+pub fn directory_for_sync(dir: &Dir) -> std::io::Result<std::fs::File> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         use rustix::fs::{Mode, OFlags, openat};
-        let fd = openat(
+        // No-follow directory capabilities can be O_PATH descriptors, which cannot
+        // be fsynced. Open the same directory through its handle, not its old path.
+        Ok(openat(
             dir,
             ".",
             OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
             Mode::empty(),
-        )
-        .map_err(std::io::Error::from)?;
-        std::fs::File::from(fd).sync_all()?;
+        )?
+        .into())
     }
-    #[cfg(not(target_os = "linux"))]
-    dir.try_clone()?.into_std_file().sync_all()?;
-    Ok(())
+    #[cfg(windows)]
+    {
+        use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
+        let mut options = cap_std::fs::OpenOptions::new();
+        options
+            .write(true)
+            .maybe_dir(true)
+            .follow(FollowSymlinks::No);
+        // FlushFileBuffers needs write access, but ReOpenFile rejects directory
+        // handles. cap-std opens "." through NtCreateFile relative to the held handle.
+        dir.open_with(".", &options)
+            .map(cap_std::fs::File::into_std)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
+    {
+        dir.try_clone().map(Dir::into_std_file)
+    }
 }
 pub(crate) fn options() -> OpenOptions {
     let mut options = OpenOptions::new();
@@ -145,6 +166,8 @@ pub(crate) fn remove_tree(parent: &Dir, name: &str) -> Result<()> {
         for entry in names(&dir)? {
             remove_tree(&dir, &entry)?;
         }
+        // Windows directory capabilities deny deletion until closed.
+        drop(dir);
         parent.remove_dir(name)?;
     } else if meta.is_file() {
         parent.remove_file(name)?;

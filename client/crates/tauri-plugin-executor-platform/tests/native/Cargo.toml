@@ -12,10 +12,17 @@ tauri-plugin-executor-platform = { path = "../.." }
 serde_json = "1"
 tokio = { version = "1", features = ["sync", "time"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
 base64 = "0.22"
 objc2 = "=0.6.4"
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSData"] }
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSBitmapImageRep", "NSImageRep", "NSColor"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+base64 = "0.22"
+png = "0.18"
+webview2-com = "=0.39.1"
+windows = "=0.62.2"
 
 [build-dependencies]
 tauri-build = "=2.7.2"

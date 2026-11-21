@@ -515,7 +515,7 @@ impl Storage {
         metadata_references(&mut desired, &self.scope, true)?;
         desired.revision = expected_revision.checked_add(1).ok_or(CONFLICT)?;
         if value.revision == expected_revision && old == desired {
-            file(&dir, "metadata.json", false, false)?
+            file(&dir, "metadata.json", cfg!(windows), false)?
                 .ok_or(INVALID)?
                 .sync_all()
                 .map_err(|_| DURABILITY)?;

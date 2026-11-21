@@ -138,7 +138,14 @@ function checkWorkflowBootstrap(name, workflow) {
           context,
         );
     } else {
-      assert.equal(commands[0], "python3 tools/pipeline-bootstrap.py", context);
+      const python = /^ {4}runs-on: windows-2025$/m.test(block)
+        ? "python"
+        : "python3";
+      assert.equal(
+        commands[0],
+        `${python} tools/pipeline-bootstrap.py`,
+        context,
+      );
       assert.ok(commands.length > 1, context);
       for (const command of commands.slice(1))
         assert.match(
@@ -147,6 +154,8 @@ function checkWorkflowBootstrap(name, workflow) {
             ["create", "macos-compatibility"].includes(id)
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report)|wait-for-hosting\.mjs --(?:probe|check))$/
             : ({
+                "verify.yml: windows-smoke-build":
+                  /^node tools\/build-windows-smoke\.mjs windows-smoke-artifact$/,
                 "verify-hosting.yml: offline":
                   /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
                 "deploy-hosting.yml: rehearse":
