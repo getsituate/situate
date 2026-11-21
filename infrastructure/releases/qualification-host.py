@@ -510,7 +510,8 @@ def perform(action, request, source=None):
 
 RUNNER_UID = 0
 RUNNER_LOCK = Path('/private/var/run/situate-qualification-route')
-RUNNER_HISTORY = Path('/private/var/tmp/situate-qualification-history')
+RUNNER_HISTORY = Path('/private/var/db/situate-qualification-history')
+LEGACY_RUNNER_HISTORY = Path('/private/var/tmp/situate-qualification-history')
 HOSTS = Path('/private/etc/hosts')
 
 
@@ -530,12 +531,37 @@ def replace_hosts(expected, replacement, token):
         os.close(fd)
 
 
+def runner_history_parent(parent, *, allow_sticky=False):
+    for path in [*reversed(parent.parents), parent]:
+        info = path.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == RUNNER_UID
+                and (not info.st_mode & 0o022 or (allow_sticky and path == parent and info.st_mode & stat.S_ISVTX)),
+                'Unsafe runner history parent')
+
+
+def legacy_runner_directory(path):
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    if info.st_uid != RUNNER_UID:
+        return False
+    require(stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o700,
+            'Unsafe legacy runner history entry')
+    return True
+
+
 def runner_archive(token):
+    name = 'situate-qualification-route-' + token
+    used = 'Runner operation was already used; inspect retained evidence'
+    legacy_parent = LEGACY_RUNNER_HISTORY.parent
+    runner_history_parent(legacy_parent, allow_sticky=True)
+    require(not legacy_runner_directory(legacy_parent / name)
+            and not (legacy_runner_directory(LEGACY_RUNNER_HISTORY)
+                     and legacy_runner_directory(LEGACY_RUNNER_HISTORY / name)), used)
+
     parent = RUNNER_HISTORY.parent
-    ancestors(parent)
-    info = parent.lstat()
-    require(info.st_uid == RUNNER_UID and (not info.st_mode & 0o022 or info.st_mode & stat.S_ISVTX),
-            'Unsafe runner history parent')
+    runner_history_parent(parent)
     try:
         RUNNER_HISTORY.mkdir(mode=0o700)
         sync_private_directory(parent)
@@ -544,11 +570,12 @@ def runner_archive(token):
     info = RUNNER_HISTORY.lstat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid == RUNNER_UID and stat.S_IMODE(info.st_mode) == 0o700,
             'Unsafe runner history directory')
-    name = 'situate-qualification-route-' + token
-    for path in (RUNNER_HISTORY / name, parent / name):
-        require(not path.exists() and not path.is_symlink(),
-                'Runner operation was already used; inspect retained evidence')
-    return RUNNER_HISTORY / name
+    archive = RUNNER_HISTORY / name
+    try:
+        archive.lstat()
+    except FileNotFoundError:
+        return archive
+    raise ValueError(used)
 
 
 def runner_perform(action, request):

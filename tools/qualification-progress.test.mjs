@@ -6,12 +6,13 @@ import {
   statSync,
   writeFileSync,
   readFileSync,
+  renameSync,
   symlinkSync,
   linkSync,
   chmodSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   createQualificationProgressFile,
   qualificationProgressWriter,
@@ -22,7 +23,7 @@ import {
 } from "./qualification-progress.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "situate-progress-test-"));
+  const root = mkdtempSync(join(tmpdir(), "situate-qualification-progress-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const path = join(root, "progress.jsonl");
   createQualificationProgressFile(path);
@@ -165,10 +166,33 @@ test("unknown fields, codes, linked files, permissions and excessive records fai
   for (let index = 0; index < 4096; index++) bounded("install", "started");
   assert.throws(() => bounded("install", "started"), /event limit/);
   const link = `${path}.link`;
-  symlinkSync(path, link);
-  assert.throws(() => qualificationProgressWriter(link)("install", "started"));
+  renameSync(path, link);
+  symlinkSync(link, path);
+  assert.throws(() => emit("install", "started"), { code: "ELOOP" });
+  rmSync(path);
+  renameSync(link, path);
   linkSync(path, `${path}.hard`);
   assert.throws(() => emit("install", "started"));
+});
+
+test("the worker only writes progress in its private progress directory", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "unrelated-test-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const otherFile = join(root, "progress.jsonl");
+  writeFileSync(otherFile, "independent test data", { mode: 0o600 });
+  assert.throws(
+    () => qualificationProgressWriter(otherFile),
+    /Invalid qualification progress path/,
+  );
+  assert.equal(readFileSync(otherFile, "utf8"), "independent test data");
+
+  const path = fixture(t);
+  chmodSync(dirname(path), 0o755);
+  assert.throws(
+    () => qualificationProgressWriter(path),
+    /Unsafe qualification progress directory/,
+  );
+  assert.equal(statSync(path).size, 0);
 });
 
 test("malformed or truncated progress never becomes a valid completion", (t) => {

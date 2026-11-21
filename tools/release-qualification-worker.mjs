@@ -106,11 +106,13 @@ if (
       "runtime-authorization-sha256": { type: "string" },
     },
   });
-  const progress = values["progress-file"]
-    ? qualificationProgressWriter(resolve(values["progress-file"]))
-    : () => {};
+  const createProgress = () =>
+    values["progress-file"] !== undefined
+      ? qualificationProgressWriter(resolve(values["progress-file"]))
+      : () => {};
   if (process.env.SITUATE_COORDINATED_DESKTOP !== "1") {
     try {
+      const progress = createProgress();
       progress("desktop", "queued");
       process.exitCode = await runCoordinated({
         directory: fileURLToPath(new URL("../", import.meta.url)),
@@ -137,6 +139,7 @@ if (
     process.on("SIGINT", cancel);
     process.on("SIGTERM", cancel);
     try {
+      const progress = createProgress();
       assert(
         values.directory &&
           values.configuration &&

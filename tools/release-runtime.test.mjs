@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
   existsSync,
   rmSync,
   watch,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { qualificationProgressWriter } from "./qualification-progress.mjs";
 import {
@@ -331,6 +333,7 @@ test("qualification setup owns private resources while the native worker receive
       assert.deepEqual(options.env, {
         PATH: "/synthetic/bin",
         HOME: "/Users/runner",
+        TMPDIR: realpathSync(tmpdir()),
       });
       assert.equal(options.terminationGraceMs, 75_000);
       assert.equal(
@@ -491,6 +494,44 @@ test("live progress survives worker capture and cancellation without private out
   );
   assert.equal(existsSync(progressPath), false);
   assert.equal(existsSync(join(root, "release-qualification.json")), false);
+});
+
+test("the worker shares the controller temp root with a custom environment", async (t) => {
+  const root = temporary(t);
+  const file = join(root, "configuration.json");
+  writeFileSync(file, "{}", { mode: 0o600 });
+  const progressModule = new URL(
+    "./qualification-progress.mjs",
+    import.meta.url,
+  );
+  for (const environment of [{ TMPDIR: root }, { TMP: root, TEMP: root }]) {
+    const lines = [];
+    await runPreparedQualification(root, {
+      plan: {},
+      record: { file, sha256: "a".repeat(64) },
+      configuration: {},
+      directory: root,
+      environment,
+      progressOutput: { write: (line) => lines.push(line) },
+      executeWorker: async (command, args, { cwd, env }) => {
+        const path = args[args.indexOf("--progress-file") + 1];
+        assert.equal(dirname(dirname(path)), realpathSync(tmpdir()));
+        execFileSync(
+          command,
+          [
+            "--input-type=module",
+            "-e",
+            `import { qualificationProgressWriter } from ${JSON.stringify(progressModule.href)};
+qualificationProgressWriter(process.argv[1])("desktop", "queued");`,
+            path,
+          ],
+          { cwd, env },
+        );
+        return "{}";
+      },
+    });
+    assert.match(lines.join(""), /"status":"queued"/);
+  }
 });
 
 test("invalid worker progress blocks even a syntactically valid final response", async (t) => {

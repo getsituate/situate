@@ -12,6 +12,7 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -67,8 +68,19 @@ m.ROOT=base/'private'
 m.HOST_UID=os.getuid()
 m.RUNNER_UID=os.geteuid()
 m.RUNNER_LOCK=base/'runner-lock'
-m.RUNNER_HISTORY=base/'history'
+m.RUNNER_HISTORY=base/'db'/'history'
+m.LEGACY_RUNNER_HISTORY=base/'legacy-tmp'/'history'
 m.HOSTS=base/'hosts'
+actual_lstat=m.Path.lstat
+unowned=set()
+def fixture_lstat(path):
+    info=actual_lstat(path)
+    if path in base.parents:
+        return os.stat_result((m.stat.S_IFDIR | 0o755, *info[1:4], m.RUNNER_UID, *info[5:]))
+    if path in unowned:
+        return os.stat_result((*info[:4], m.RUNNER_UID + 1, *info[5:]))
+    return info
+m.Path.lstat=fixture_lstat
 sys.platform='darwin'
 trace=base/'commands.json'
 world=base/'world.json'
@@ -112,6 +124,9 @@ request=json.loads(sys.argv[4])
 function harness(t) {
   const root = temporary(t);
   writeFileSync(join(root, "hosts"), "127.0.0.1 localhost\n::1 localhost\n");
+  mkdirSync(join(root, "db"), { mode: 0o700 });
+  mkdirSync(join(root, "legacy-tmp"), { mode: 0o700 });
+  chmodSync(join(root, "legacy-tmp"), 0o1777);
   const payload = join(root, "payload");
   mkdirSync(join(payload, "releases/current"), { recursive: true });
   writeFileSync(join(payload, config.feedPath), '{"version":"1.2.3"}\n');
@@ -551,6 +566,7 @@ test("runner reserves hostname/alias exclusively and restores exact original hos
     existsSync(
       join(
         h.root,
+        "db",
         "history",
         "situate-qualification-route-" + sha(operation.operationNonce),
         "state.json",
@@ -559,22 +575,71 @@ test("runner reserves hostname/alias exclusively and restores exact original hos
   );
 });
 
-test("runner refuses unsafe history storage and preserves legacy retained evidence", (t) => {
+test("runner preserves and rejects replay from both legacy archive layouts", (t) => {
   const h = harness(t);
-  const history = join(h.root, "history");
-  const legacy = join(
-    h.root,
-    "situate-qualification-route-" + sha(routeRequest.operationNonce),
-  );
+  const legacy = join(h.root, "legacy-tmp");
+  const nested = join(legacy, "history");
+  mkdirSync(nested, { mode: 0o700 });
   const before = readFileSync(join(h.root, "hosts"));
-  mkdirSync(legacy, { mode: 0o700 });
-  writeFileSync(join(legacy, "state.json"), "retained snapshot");
-  assert.match(h.invoke("runner-prepare", routeRequest).stderr, /already used/);
-  assert.equal(
-    readFileSync(join(legacy, "state.json"), "utf8"),
-    "retained snapshot",
+  for (const [parent, operationNonce] of [
+    [legacy, "legacy-flat"],
+    [nested, "legacy-nested"],
+  ]) {
+    const archive = join(
+      parent,
+      "situate-qualification-route-" + sha(operationNonce),
+    );
+    mkdirSync(archive, { mode: 0o700 });
+    const snapshot = join(archive, "state.json");
+    writeFileSync(snapshot, "retained snapshot");
+    assert.match(
+      h.invoke("runner-prepare", { ...routeRequest, operationNonce }).stderr,
+      /already used/,
+    );
+    assert.equal(readFileSync(snapshot, "utf8"), "retained snapshot");
+  }
+  assert.deepEqual(readFileSync(join(h.root, "hosts")), before);
+  assert(!existsSync(join(h.root, "runner-lock")));
+});
+
+test("runner ignores unowned legacy names without following them and retains new replay evidence", (t) => {
+  const h = harness(t);
+  const name =
+    "situate-qualification-route-" + sha(routeRequest.operationNonce);
+  const legacy = join(h.root, "legacy-tmp");
+  const blocker = join(legacy, name);
+  const link = join(legacy, "history");
+  const before = readFileSync(join(h.root, "hosts"));
+  mkdirSync(blocker, { mode: 0o700 });
+  symlinkSync(legacy, link);
+  const ownership = `unowned.update([base/'legacy-tmp'/'${name}', m.LEGACY_RUNNER_HISTORY])`;
+  h.success("runner-prepare", routeRequest, undefined, ownership);
+  h.success("runner-cleanup", routeRequest, undefined, ownership);
+  const archive = join(h.root, "db", "history", name);
+  assert.equal(statSync(archive).mode & 0o777, 0o700);
+  assert.deepEqual(readFileSync(join(archive, "hosts.original")), before);
+  assert(!existsSync(join(blocker, "state.json")));
+  assert.match(
+    h.invoke("runner-prepare", routeRequest, undefined, ownership).stderr,
+    /already used/,
   );
-  chmodSync(history, 0o755);
+  assert.deepEqual(readFileSync(join(h.root, "hosts")), before);
+  assert(!existsSync(join(h.root, "runner-lock")));
+});
+
+test("runner refuses to create history in a writable parent or use unsafe history storage", (t) => {
+  const h = harness(t);
+  const parent = join(h.root, "db");
+  const history = join(parent, "history");
+  const before = readFileSync(join(h.root, "hosts"));
+  chmodSync(parent, 0o1777);
+  assert.match(
+    h.invoke("runner-prepare", routeRequest).stderr,
+    /Unsafe runner history parent/,
+  );
+  assert(!existsSync(history));
+  chmodSync(parent, 0o700);
+  mkdirSync(history, { mode: 0o755 });
   assert.match(
     h.invoke("runner-prepare", routeRequest).stderr,
     /Unsafe runner history directory/,
