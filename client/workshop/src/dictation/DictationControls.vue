@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import {
   SituateButton,
   SituateSelect,
@@ -9,6 +9,7 @@ import {
 } from "../ui";
 import { c } from "./content";
 import type { DictationState, DictationAction, Network } from "./model";
+const fieldId = useId();
 const props = defineProps<{
   state: DictationState;
   surface: "chat" | "download" | "session" | "notice";
@@ -29,9 +30,10 @@ function value(event: Event) {
   <section class="dictation-controls">
     <h2>{{ c.controls.title }}</h2>
     <p>{{ c.controls.note }}</p>
-    <label
+    <label :for="`${fieldId}-language`"
       >{{ c.controls.language }}
       <SituateSelect
+        :id="`${fieldId}-language`"
         :value="state.language"
         @change="
           emit('action', {
@@ -44,9 +46,10 @@ function value(event: Event) {
       >
     </label>
     <template v-if="surface === 'download'">
-      <label
+      <label :for="`${fieldId}-network`"
         >{{ c.controls.network }}
         <SituateSelect
+          :id="`${fieldId}-network`"
           :value="state.network"
           @change="
             emit('action', { type: 'network', value: value($event) as Network })
@@ -68,9 +71,10 @@ function value(event: Event) {
         </SituateSelect>
       </label>
       <template v-if="state.model === 'downloading'">
-        <label
+        <label :for="`${fieldId}-progress`"
           >{{ c.controls.progress
           }}<SituateInput
+            :id="`${fieldId}-progress`"
             type="number"
             min="0"
             max="100"
@@ -99,8 +103,9 @@ function value(event: Event) {
       >
     </template>
     <template v-if="surface === 'chat' || surface === 'session'">
-      <label>
+      <label :for="`${fieldId}-animate`">
         <SituateSwitch
+          :id="`${fieldId}-animate`"
           :model-value="!state.motionPaused"
           @update:model-value="
             emit('action', { type: 'motion-paused', value: !$event })
@@ -109,9 +114,10 @@ function value(event: Event) {
       </label>
     </template>
     <template v-if="surface === 'chat'">
-      <label
+      <label :for="`${fieldId}-permission`"
         >{{ c.controls.permission }}
         <SituateSelect
+          :id="`${fieldId}-permission`"
           :value="state.permission"
           :disabled="!!session"
           @change="
@@ -126,16 +132,18 @@ function value(event: Event) {
           <option value="denied">{{ c.controls.denied }}</option>
         </SituateSelect>
       </label>
-      <label
+      <label :for="`${fieldId}-connected`"
         ><SituateSwitch
+          :id="`${fieldId}-connected`"
           :model-value="state.connected"
           @update:model-value="
             emit('action', { type: 'connected', value: $event })
           "
         />{{ c.controls.connected }}</label
       >
-      <label
+      <label :for="`${fieldId}-agent`"
         ><SituateSwitch
+          :id="`${fieldId}-agent`"
           :model-value="state.drafts[owner]?.working"
           @update:model-value="
             emit('action', { type: 'working', owner, value: $event })
@@ -153,9 +161,10 @@ function value(event: Event) {
         >{{ c.controls.deny }}</SituateButton
       >
     </template>
-    <label v-if="session?.phase === 'recording'">
+    <label :for="`${fieldId}-speech`" v-if="session?.phase === 'recording'">
       {{ c.controls.speech }}
       <SituateSelect
+        :id="`${fieldId}-speech`"
         :value="state.speech"
         @change="
           emit('action', {
@@ -170,9 +179,10 @@ function value(event: Event) {
       </SituateSelect>
     </label>
     <template v-if="session?.phase === 'transcribing'">
-      <label
+      <label :for="`${fieldId}-result`"
         >{{ c.controls.result
         }}<SituateTextarea
+          :id="`${fieldId}-result`"
           :value="state.result"
           rows="3"
           @input="emit('action', { type: 'result', value: value($event) })"
@@ -212,8 +222,9 @@ function value(event: Event) {
       }}</SituateButton>
     </template>
     <template v-if="session && surface !== 'notice'">
-      <label
+      <label :for="`${fieldId}-file-error`"
         ><SituateSwitch
+          :id="`${fieldId}-file-error`"
           :model-value="fileError"
           @update:model-value="emit('fileError', $event)"
         />{{ c.controls.fileError }}</label

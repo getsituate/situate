@@ -57,7 +57,7 @@ export function callbackPage({ language = "en", accepted = true } = {}) {
     card,
     bend,
   };
-  const body = template.replaceAll(/\{\{([^}]+)\}\}/g, (_match, key) => {
+  const body = template.replaceAll(/\{\{([^{}]+)\}\}/g, (_match, key) => {
     if (Object.hasOwn(bindings, key)) return bindings[key];
     const copy = catalogs[language][key];
     if (!key.startsWith("native.ai.login.browser.") || !copy)

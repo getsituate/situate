@@ -65,8 +65,16 @@ function keyboard(event: Event): void {
     >
       Use profile size
     </SituateButton>
-    <label v-if="keyboardAvailable" class="keyboard">
-      <SituateCheckbox :checked="state.keyboardOpen" @change="keyboard" />
+    <label
+      v-if="keyboardAvailable"
+      class="keyboard"
+      :for="`${profileId}-keyboard`"
+    >
+      <SituateCheckbox
+        :id="`${profileId}-keyboard`"
+        :checked="state.keyboardOpen"
+        @change="keyboard"
+      />
       Keyboard occlusion
     </label>
     <p class="help">

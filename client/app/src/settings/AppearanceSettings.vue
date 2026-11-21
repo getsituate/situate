@@ -163,11 +163,13 @@ function colorName(color: Accent): string {
       <label
         v-for="color in accents"
         :key="color"
+        :for="`${id}-accent-${color}`"
         class="appearance-option"
         :style="accentStyle(color)"
         :title="colorName(color)"
       >
         <SituateRadio
+          :id="`${id}-accent-${color}`"
           appearance="plain"
           type="radio"
           :name="`${id}-workspace-accent`"

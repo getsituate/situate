@@ -958,9 +958,10 @@ function record(event: KeyboardEvent) {
           </template>
 
           <template v-else>
-            <label class="shortcut-search"
+            <label class="shortcut-search" for="settings-shortcut-search"
               ><span>Find an action</span
               ><SituateInput
+                id="settings-shortcut-search"
                 type="search"
                 :value="state.search"
                 placeholder="Search actions…"

@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import { useId } from "vue";
 import { SituateButton, SituateSelect } from "../ui";
 import copy from "../localization/en.support-plan.json";
 import type { OnboardingAction, OnboardingState } from "./model";
+const fieldId = useId();
 defineProps<{ state: OnboardingState }>();
 const emit = defineEmits<{ action: [action: OnboardingAction] }>();
 </script>
 <template>
   <section class="support-controls">
     <p>{{ copy.controls.detail }}</p>
-    <label>
+    <label :for="`${fieldId}-outcome`">
       {{ copy.controls.outcome }}
       <SituateSelect
+        :id="`${fieldId}-outcome`"
         :aria-label="copy.controls.outcome"
         :value="state.support.outcome"
         @change="
@@ -26,9 +29,10 @@ const emit = defineEmits<{ action: [action: OnboardingAction] }>();
         <option value="failure">{{ copy.controls.failure }}</option>
       </SituateSelect>
     </label>
-    <label>
+    <label :for="`${fieldId}-example`">
       {{ copy.controls.example }}
       <SituateSelect
+        :id="`${fieldId}-example`"
         :aria-label="copy.controls.example"
         :value="state.support.example"
         @change="
@@ -46,9 +50,11 @@ const emit = defineEmits<{ action: [action: OnboardingAction] }>();
     </label>
     <label
       v-if="state.support.phase === 'ready' && state.support.proposals.length"
+      :for="`${fieldId}-save-outcome`"
     >
       {{ copy.controls.saveOutcome }}
       <SituateSelect
+        :id="`${fieldId}-save-outcome`"
         :aria-label="copy.controls.saveOutcome"
         :value="state.support.saveOutcome"
         @change="

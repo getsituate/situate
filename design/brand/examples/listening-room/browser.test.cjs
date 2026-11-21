@@ -1,5 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
+const { test } = require("node:test");
 const { launchBrowser } = require("../../browser-launch.cjs");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -11,28 +12,30 @@ const output =
   process.env.LISTENING_SCREENSHOTS ||
   fs.mkdtempSync(path.join(os.tmpdir(), "listening-room-"));
 fs.mkdirSync(output, { recursive: true });
-for (const filename of ["index.html", "implementation.md"]) {
-  const source = fs.readFileSync(path.join(__dirname, filename), "utf8");
-  const links = filename.endsWith(".html")
-    ? [...source.matchAll(/(?:src|href)="([^"]+)"/g)].map((match) => match[1])
-    : [...source.matchAll(/\]\(([^)]+)\)/g)].map((match) => match[1]);
-  for (const link of links) {
-    assert.ok(!/^[a-z]+:/i.test(link), `Nonlocal link: ${link}`);
-    const target = link.split("#")[0];
-    if (target)
-      assert.ok(
-        fs.existsSync(path.resolve(__dirname, target)),
-        `Missing local link: ${link}`,
-      );
-    else
-      assert.ok(
-        source.includes(`id="${link.slice(1)}"`),
-        `Missing anchor: ${link}`,
-      );
+test("Listening Room links point to local files and anchors", () => {
+  for (const filename of ["index.html", "implementation.md"]) {
+    const source = fs.readFileSync(path.join(__dirname, filename), "utf8");
+    const links = filename.endsWith(".html")
+      ? [...source.matchAll(/(?:src|href)="([^"]+)"/g)].map((match) => match[1])
+      : [...source.matchAll(/\]\(([^)]+)\)/g)].map((match) => match[1]);
+    for (const link of links) {
+      assert.ok(!/^[a-z]+:/i.test(link), `Nonlocal link: ${link}`);
+      const target = link.split("#")[0];
+      if (target)
+        assert.ok(
+          fs.existsSync(path.resolve(__dirname, target)),
+          `Missing local link: ${link}`,
+        );
+      else
+        assert.ok(
+          source.includes(`id="${link.slice(1)}"`),
+          `Missing anchor: ${link}`,
+        );
+    }
   }
-}
+});
 
-(async () => {
+test("Listening Room layout, navigation and motion", async () => {
   const browser = await launchBrowser(chromium, {
     channel: process.env.BROWSER_CHANNEL,
     executablePath: process.env.BROWSER_EXECUTABLE,
@@ -538,7 +541,4 @@ for (const filename of ["index.html", "implementation.md"]) {
   } finally {
     await browser.close();
   }
-})().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
 });

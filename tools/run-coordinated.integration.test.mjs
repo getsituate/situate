@@ -12,7 +12,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -819,20 +819,22 @@ s=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(s)
 def acquire(*args,**kwargs): raise AssertionError('Invalid grace acquired a lease')
 s.acquire=acquire
-for value in ['0','-1','120001','1.5','NaN','']:
-    sys.argv=['supervisor','--cleanup-grace-ms',value,'worktree','/unstarted','/unstarted']
+for args in [[v,'worktree','/unstarted','/unstarted'] for v in ['0','-1','120001','1.5','NaN','']] + [[]]:
+    sys.argv=['supervisor','--cleanup-grace-ms',*args]
     try: s.main()
-    except ValueError as error: assert 'cleanup grace' in str(error)
-    else: raise AssertionError('Invalid grace accepted')
-sys.argv=['supervisor','--cleanup-grace-ms']
-try: s.main()
-except ValueError as error: assert 'cleanup grace' in str(error)
-else: raise AssertionError('Missing grace accepted')`;
-  execFileSync("python3", ["-c", source], { timeout: 5000 });
+    except ValueError as error: print(error)`;
+  const errors = execFileSync("python3", ["-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  })
+    .trim()
+    .split("\n");
+  assert.equal(errors.length, 7);
+  for (const error of errors) assert.match(error, /cleanup grace/u);
 });
 
 test("termination attempts are deduplicated by signal and owned PID birth across tree/group discovery", () => {
-  const source = `import importlib.util,signal
+  const source = `import importlib.util,json,signal
 spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(supervisorSource)})
 s=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(s)
@@ -845,12 +847,24 @@ s.os.kill=lambda pid,name:calls.append((pid,name))
 attempted=set()
 s.send_owned(known,processes,live,signal.SIGTERM,ancestors,attempted)
 s.send_owned(known,processes,live,signal.SIGTERM,ancestors,attempted)
-assert calls==[(20,signal.SIGTERM),(10,signal.SIGTERM)],calls
+after_duplicate=calls.copy()
 processes[20]=(10,10,'new-child')
 live=s.observe(known,processes,10,ancestors)
 s.send_owned(known,processes,live,signal.SIGTERM,ancestors,attempted)
-assert calls==[(20,signal.SIGTERM),(10,signal.SIGTERM),(20,signal.SIGTERM)],calls`;
-  execFileSync("python3", ["-c", source], { timeout: 5000 });
+print(json.dumps([after_duplicate,calls]))`;
+  const [afterDuplicate, afterNewBirth] = JSON.parse(
+    execFileSync("python3", ["-c", source], {
+      timeout: 5000,
+      encoding: "utf8",
+    }),
+  );
+  const { SIGTERM } = constants.signals;
+  const firstSignals = [
+    [20, SIGTERM],
+    [10, SIGTERM],
+  ];
+  assert.deepEqual(afterDuplicate, firstSignals);
+  assert.deepEqual(afterNewBirth, [...firstSignals, [20, SIGTERM]]);
 });
 
 test("cleanup grace is validated before starting a coordinated command", async (t) => {

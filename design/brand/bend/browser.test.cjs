@@ -1,5 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
+const { test } = require("node:test");
 const { launchBrowser } = require("../browser-launch.cjs");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -15,7 +16,7 @@ try {
   process.exit(2);
 }
 
-(async () => {
+test("Bend rendering, controls and motion", async () => {
   const browser = await launchBrowser(chromium, {
     channel: process.env.BEND_BROWSER_CHANNEL,
     executablePath: process.env.BROWSER_EXECUTABLE,
@@ -423,7 +424,4 @@ try {
   } finally {
     await browser.close();
   }
-})().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
 });

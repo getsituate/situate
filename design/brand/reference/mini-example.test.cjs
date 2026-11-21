@@ -1,5 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
+const { test } = require("node:test");
 const { launchBrowser } = require("../browser-launch.cjs");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -12,7 +13,7 @@ const output =
   fs.mkdtempSync(path.join(os.tmpdir(), "mini-bend-reference-"));
 fs.mkdirSync(output, { recursive: true });
 
-(async () => {
+test("Bend Mini placement in the brand reference", async () => {
   const browser = await launchBrowser(chromium, {
     headless: true,
     ...(process.env.BROWSER_EXECUTABLE
@@ -391,7 +392,4 @@ fs.mkdirSync(output, { recursive: true });
   } finally {
     await browser.close();
   }
-})().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
 });

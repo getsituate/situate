@@ -64,8 +64,12 @@ describe("SituateSelect", () => {
     wrapper.unmount();
   });
   it("offers a toolbar appearance without changing the field contract", async () => {
-    const wrapper = create();
+    const wrapper = create({ "aria-labelledby": "format-heading" });
+    const trigger = wrapper.get('[role="combobox"]');
+    const native = wrapper.get("select");
     expect(wrapper.classes()).not.toContain("situate-select-toolbar");
+    expect(trigger.attributes("aria-label")).toBe("Time format");
+    expect(trigger.attributes("aria-labelledby")).toBe("format-heading");
     await wrapper.setProps({ appearance: "toolbar", value: "12" });
     await nextTick();
     expect(wrapper.classes()).toContain("situate-select-toolbar");
@@ -75,7 +79,12 @@ describe("SituateSelect", () => {
     expect(wrapper.get('[role="combobox"]').attributes("data-value")).toBe(
       "12",
     );
-    expect(wrapper.get("select").element.value).toBe("12");
+    expect(trigger.attributes("aria-label")).toBe("Time format");
+    expect(trigger.attributes("aria-labelledby")).toBe("format-heading");
+    expect(native.attributes("aria-label")).toBeUndefined();
+    expect(native.attributes("aria-labelledby")).toBeUndefined();
+    expect(native.element.hidden).toBe(true);
+    expect(native.element.value).toBe("12");
     wrapper.unmount();
   });
   it("disables both the visible control and form field", async () => {

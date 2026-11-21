@@ -71,8 +71,9 @@ const emit = defineEmits<{ action: [action: CallbackAction] }>();
                 .replace("{duration}", String(handoffDuration))
         }}
       </p>
-      <label class="callback-still">
+      <label class="callback-still" for="callback-still">
         <SituateCheckbox
+          id="callback-still"
           :checked="state.still"
           @change="
             emit('action', {

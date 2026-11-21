@@ -12,6 +12,7 @@ const presentationId = useId(),
   connectionId = useId(),
   outcomeId = useId(),
   revisionId = useId();
+const fieldId = useId();
 import {
   hasImport,
   type OnboardingAction,
@@ -26,9 +27,13 @@ const patch = (patch: Partial<OnboardingState>) =>
 <template>
   <section>
     <p v-if="state.recovery">{{ sourceCopy.controls.recovery }}</p>
-    <label v-if="state.step === 'samples' && state.imported.length <= 50">
+    <label
+      v-if="state.step === 'samples' && state.imported.length <= 50"
+      :for="`${fieldId}-import-file`"
+    >
       {{ resultCopy.controls.viewer }}
       <SituateSelect
+        :id="`${fieldId}-import-file`"
         :aria-label="resultCopy.controls.viewer"
         :value="state.importFile ?? ''"
         @change="
@@ -65,9 +70,10 @@ const patch = (patch: Partial<OnboardingState>) =>
           state.importHandoff.status === 'playing'
         "
       >
-        <label
+        <label :for="`${fieldId}-handoff-frame`"
           >{{ resultCopy.controls.frame
           }}<SituateInput
+            :id="`${fieldId}-handoff-frame`"
             appearance="plain"
             type="range"
             min="0"
@@ -108,9 +114,10 @@ const patch = (patch: Partial<OnboardingState>) =>
       <p v-else-if="!['samples', 'plan'].includes(state.step)">
         {{ methodCopy.controls.intro }}
       </p>
-      <label v-if="state.step === 'method'"
+      <label v-if="state.step === 'method'" :for="`${fieldId}-method-info`"
         >{{ methodCopy.controls.explanation }}
         <SituateSelect
+          :id="`${fieldId}-method-info`"
           :aria-label="methodCopy.controls.explanation"
           :value="state.methodInfo ?? ''"
           :disabled="!!state.methodRequest"
@@ -131,9 +138,13 @@ const patch = (patch: Partial<OnboardingState>) =>
           </option>
         </SituateSelect>
       </label>
-      <label v-if="state.step === 'proposal' && !state.instructionsOpen">
+      <label
+        v-if="state.step === 'proposal' && !state.instructionsOpen"
+        :for="`${fieldId}-instruction-example`"
+      >
         {{ instructionsCopy.controls.example }}
         <SituateSelect
+          :id="`${fieldId}-instruction-example`"
           :aria-label="instructionsCopy.controls.example"
           :value="state.instructionExample"
           @change="
@@ -150,9 +161,12 @@ const patch = (patch: Partial<OnboardingState>) =>
           <option value="short">{{ instructionsCopy.controls.short }}</option>
         </SituateSelect>
       </label>
-      <label v-if="state.step === 'proposal'"
+      <label
+        v-if="state.step === 'proposal'"
+        :for="`${fieldId}-instruction-viewer`"
         >{{ instructionsCopy.controls.viewer }}
         <SituateSelect
+          :id="`${fieldId}-instruction-viewer`"
           :aria-label="instructionsCopy.controls.viewer"
           :value="String(state.instructionsOpen)"
           :disabled="
@@ -170,9 +184,10 @@ const patch = (patch: Partial<OnboardingState>) =>
         </SituateSelect>
       </label>
       <template v-if="state.step === 'proposal' && !state.instructionsOpen">
-        <label
+        <label :for="`${fieldId}-instruction-save`"
           >{{ instructionsCopy.controls.save }}
           <SituateSelect
+            :id="`${fieldId}-instruction-save`"
             :aria-label="instructionsCopy.controls.save"
             :value="state.instructionSaveOutcome"
             @change="

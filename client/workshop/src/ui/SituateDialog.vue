@@ -107,8 +107,7 @@ defineExpose({
   line-height: 1.4;
   letter-spacing: normal;
 }
-.situate-dialog > :slotted(h2),
-.situate-dialog > :slotted(h3),
+.situate-dialog :deep(> :is(h2, h3)),
 .situate-dialog .situate-dialog__header :deep(:is(h1, h2, h3)),
 .situate-dialog :deep([data-dialog-title]) {
   margin: 0 0 16px;
@@ -122,8 +121,7 @@ defineExpose({
 .situate-dialog .situate-dialog__header :deep(:is(h1, h2, h3)) {
   margin: 0;
 }
-.situate-dialog > :slotted(h2 + p),
-.situate-dialog > :slotted(h3 + p),
+.situate-dialog :deep(> :is(h2, h3) + p),
 .situate-dialog .situate-dialog__header + :deep(p),
 .situate-dialog
   :deep(

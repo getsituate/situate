@@ -1,5 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
+const { test } = require("node:test");
 const { launchBrowser } = require("../../browser-launch.cjs");
 const path = require("node:path");
 const os = require("node:os");
@@ -12,7 +13,7 @@ const output =
 fs.mkdirSync(output, { recursive: true });
 const url = pathToFileURL(path.join(__dirname, "index.html")).href;
 
-(async () => {
+test("First Hello layout, navigation and motion", async () => {
   const browser = await launchBrowser(chromium, {
     channel: process.env.BROWSER_CHANNEL,
     executablePath: process.env.BROWSER_EXECUTABLE,
@@ -568,7 +569,4 @@ const url = pathToFileURL(path.join(__dirname, "index.html")).href;
   } finally {
     await browser.close();
   }
-})().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
 });

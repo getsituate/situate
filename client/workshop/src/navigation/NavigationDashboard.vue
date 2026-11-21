@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { SituateCheckbox } from "../ui";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import SituateIcon from "./NavigationIcon.vue";
 import { events, tasks } from "./fixtures";
 import type { ViewId } from "./model";
 const props = defineProps<{ view: ViewId; completedTasks: boolean[] }>();
 defineEmits<{ toggleTask: [index: number] }>();
+const taskListId = useId();
 const remaining = computed(
   () => props.completedTasks.filter((value) => !value).length,
 );
@@ -44,8 +45,13 @@ const remaining = computed(
         <h3>Planned for today</h3>
         <span v-if="view === 'day'">All tasks ↗</span>
       </div>
-      <label v-for="(task, index) in tasks" :key="task" class="row task-row"
+      <label
+        v-for="(task, index) in tasks"
+        :key="task"
+        class="row task-row"
+        :for="`${taskListId}-task-${index}`"
         ><SituateCheckbox
+          :id="`${taskListId}-task-${index}`"
           appearance="plain"
           type="checkbox"
           :checked="completedTasks[index]"

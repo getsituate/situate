@@ -301,9 +301,10 @@ function stressChanges() {
       </fieldset>
       <fieldset v-if="connection">
         <legend>{{ copy.connection }}</legend>
-        <label
+        <label for="plugin-connection-platform"
           >{{ copy.platform
           }}<SituateSelect
+            id="plugin-connection-platform"
             :value="state.connectionPlatform"
             @change="
               update((s) => {
