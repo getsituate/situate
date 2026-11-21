@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { laneHosts } from "./actions-adapter.mjs";
@@ -387,6 +388,70 @@ test("Slack notifications skip message composition and delivery without a webhoo
     /id: message\s+if: steps\.webhook\.outputs\.configured == 'true'/,
   );
   assert.match(notifier, /id: post\s+if: steps\.message\.outcome == 'success'/);
+});
+
+test("Slack release notes show headings without exposing release metadata", (t) => {
+  const notifier = read("slack-notify");
+  const filter = notifier.match(
+    /jq -e --arg id .*? '\n([\s\S]*?)' > "\$payload"/,
+  )?.[1];
+  assert.ok(filter);
+  const marker = `<!-- situate-release:${"A".repeat(1500)}= -->`;
+  const bodies = [
+    `## Features\n\n### Chat dictation\n\nTranscribe on your Mac.\n\n## Changes\n\n### Plugins\n\nKeep <@U123> & *text* literal.\n\n${marker}`,
+    `\r\n${marker}\r\n`,
+    `## Fixes\n\n${"x".repeat(1500)}\n\n${marker}`,
+  ];
+  const result = spawnSync(
+    "jq",
+    [
+      "-ce",
+      "--arg",
+      "id",
+      "12",
+      "--arg",
+      "url",
+      "https://github.com/example/app/releases/tag/",
+      filter,
+    ],
+    {
+      encoding: "utf8",
+      input: bodies
+        .map((body) =>
+          JSON.stringify({
+            id: 12,
+            draft: false,
+            published_at: "2026-11-10T00:00:00Z",
+            tag_name: "v2026.11.10",
+            body,
+          }),
+        )
+        .join("\n"),
+    },
+  );
+  if (result.error?.code === "ENOENT") return t.skip("jq is not installed");
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /situate-release:/);
+  const [formatted, empty, long] = result.stdout
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  const notes = formatted.blocks[1].elements[0].elements;
+  assert.deepEqual(
+    notes.filter(({ style }) => style?.bold).map(({ text }) => text),
+    ["Features", "• Chat dictation", "Changes", "• Plugins"],
+  );
+  assert.equal(
+    notes.map(({ text }) => text).join(""),
+    "Features\n\n• Chat dictation\nTranscribe on your Mac.\n\nChanges\n\n• Plugins\nKeep <@U123> & *text* literal.",
+  );
+  assert.equal(empty.blocks.length, 2);
+  assert.equal(
+    formatted.blocks.at(-1).text.text,
+    "<https://github.com/example/app/releases/tag/v2026.11.10|View release on GitHub>",
+  );
+  assert.match(long.blocks[1].elements[0].elements.at(-1).text, /^x+…$/);
 });
 
 test("macOS release checks verified hosting before starting release effects", () => {

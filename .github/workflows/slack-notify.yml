@@ -71,18 +71,29 @@ jobs:
               [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
               gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" |
                 jq -e --arg id "$RELEASE_ID" --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/" '
-                def section($text): {type: "section", text: {type: "plain_text", text: $text}};
+                def release_notes:
+                  gsub("<!-- situate-release:[A-Za-z0-9+/=]+ -->"; "")
+                  | gsub("\r\n"; "\n")
+                  | gsub("^\\s+|\\s+$"; "")
+                  | gsub("(?m)^(?<heading>### [^\n]+)\n\n"; "\(.heading)\n");
+                def notes_block:
+                  {type: "rich_text", elements: [{type: "rich_text_section", elements: [
+                    scan("[^\n]+|\n+")
+                    | if startswith("### ") then {type: "text", text: ("• " + .[4:]), style: {bold: true}}
+                      elif startswith("## ") then {type: "text", text: .[3:], style: {bold: true}}
+                      else {type: "text", text: .} end
+                  ]}]};
                 select((.id | tostring) == $id and .draft == false
                   and (.published_at | type) == "string" and (.tag_name | type) == "string" and .tag_name != "")
-                | (.body // "" | gsub("(?m)^#{1,6} +"; "")) as $notes
+                | (.body // "" | release_notes) as $notes
                 | ("Situate " + .tag_name + " published") as $title
                 | {
                     text: $title, mrkdwn: false, unfurl_links: false, unfurl_media: false,
                     blocks: (
                       [{type: "header", text: {type: "plain_text", text: $title[:120]}}]
                       + (if $notes == "" then []
-                         elif ($notes | length) > 1400 then [section($notes[:1400] + "…")]
-                         else [section($notes)] end)
+                         elif ($notes | length) > 1400 then [($notes[:1400] + "…" | notes_block)]
+                         else [$notes | notes_block] end)
                       + [{type: "section", text: {
                           type: "mrkdwn", text: "<\($url)\(.tag_name | @uri)|View release on GitHub>"
                         }}]
