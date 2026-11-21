@@ -258,6 +258,16 @@ Each guest executes one complete journey at a time across all worktrees, includi
 
 Re-run setup after changing the repository's Node/npm pins. Stop an idle guest with `tart stop situate-tests`. VM execution remains macOS host integration evidence, not a release, signing, or hardware qualification.
 
+### Windows installer preview
+
+Build the unsigned, per-user NSIS installer in a dedicated Windows x64 checkout with the pinned Volta and Rust toolchains, Visual Studio C++ build tools, and the Windows SDK. Download the pinned [Sherpa-ONNX archive](https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/sherpa-onnx-v2.0.2-win-x64-shared-MT-Release.tar.bz2) and its matching [ONNX Runtime archive](https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.28.2/onnxruntime-win-x64-MT-Release-1.28.2.tar.bz2), then run:
+
+```powershell
+node client/scripts/windows-installer.mjs C:\Temp\swp C:\Temp\sherpa-onnx-v2.0.2-win-x64-shared-MT-Release.tar.bz2 C:\Temp\onnxruntime-win-x64-MT-Release-1.28.2.tar.bz2
+```
+
+Choose a short output path that does not exist yet. The script checks both archive hashes before extracting the runtime and notices. The installer appears under `target/x86_64-pc-windows-msvc/release/bundle/nsis/` in the output directory. It embeds Microsoft's WebView2 bootstrapper, which needs a network connection if the machine lacks WebView2. Situate downloads the dictation model separately. The preview installs as **Situate Preview**, with separate app data and no update artifacts. Use a disposable Windows test account and synthetic workspaces; the preview does not qualify the signed release installer.
+
 ### Windows startup smoke in UTM
 
 Use UTM 5.0.9 or newer and a dedicated Windows test guest with the QEMU guest agent, WebView2, and an unlocked console. You can use the guest's existing account, including an administrator account, as long as the test runs without elevated rights. Connect UTM to a private virtual network. Run the host command from a single macOS account across your worktrees; its guest lock is shared by those worktrees.
