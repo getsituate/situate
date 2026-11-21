@@ -514,6 +514,10 @@ async function buildMac({
       "--ci",
       "--target",
       plan.macosTarget,
+      "--runner",
+      fileURLToPath(
+        new URL("../../tools/release-build-cache-cargo.mjs", import.meta.url),
+      ),
       "--bundles",
       "app",
       "--config",

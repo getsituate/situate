@@ -31,7 +31,14 @@ const workflowPath = ".github/workflows/verify.yml";
 const maxArchive = MAX_SOURCE_EVIDENCE_BYTES + 1024 * 1024;
 const maxMetadata = 2 * 1024 * 1024;
 const revision = /^[a-f0-9]{40}$/;
-const families = ["frontend", "rust", "browser", "macos-code", "macos-native"];
+const families = [
+  "frontend",
+  "rust",
+  "browser",
+  "browser-webkit",
+  "macos-code",
+  "macos-native",
+];
 const artifactName = (attempt) => `source-verification-${attempt}`;
 const executeDefault = (command, args, options) => {
   const result = spawnSync(command, args, {
@@ -744,6 +751,7 @@ export async function selectActionsSourceEvidence(
       Array.isArray(response.workflow_runs) &&
         response.workflow_runs.length <= MAX_SOURCE_EVIDENCE_CANDIDATES,
     );
+    let reason;
     for (const listed of response.workflow_runs) {
       try {
         if (listed.conclusion !== "success") continue;
@@ -859,11 +867,12 @@ export async function selectActionsSourceEvidence(
             reviewedWorkflowDigest,
           };
         }
+        if (result.reason !== "no-matching-evidence") reason ??= result.reason;
       } catch {
         // A rejected candidate is not coverage; another bounded candidate may match.
       }
     }
-    return miss("no-matching-evidence");
+    return miss(reason ?? "no-matching-evidence");
   } catch {
     return miss("evidence-unavailable");
   }

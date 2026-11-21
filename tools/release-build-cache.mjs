@@ -310,10 +310,11 @@ export function releaseBuildCachePlan({
       execute("sw_vers", ["-buildVersion"], options),
       execute(compiler.RUSTC_WRAPPER, ["--version"], options),
       env.ImageOS,
-      env.ImageVersion,
     ];
     if (
-      runtime.some((value) => typeof value !== "string" || !value.trim()) ||
+      [...runtime, env.ImageVersion].some(
+        (value) => typeof value !== "string" || !value.trim(),
+      ) ||
       !/^rustc \d+\.\d+\.\d+ /m.test(runtime[0]) ||
       !/^commit-hash: [a-f0-9]{40}$/m.test(runtime[0]) ||
       !/^host: (aarch64|x86_64)-apple-darwin$/m.test(runtime[0]) ||
@@ -338,7 +339,10 @@ export function releaseBuildCachePlan({
     const scope = intelCompatibility(env)
       ? "intel-compatibility"
       : "universal-release";
-    const prefix = `release-build-v1-main-macos-${env.RUNNER_ARCH}-${scope}-${hash(JSON.stringify({ runtime, inputs, toolDigest }))}-`;
+    const keyVersion = intelCompatibility(env) ? "v1" : "v2";
+    // Release objects can survive image rebuilds with the same probed toolchain and SDK.
+    if (intelCompatibility(env)) runtime.push(env.ImageVersion);
+    const prefix = `release-build-${keyVersion}-main-macos-${env.RUNNER_ARCH}-${scope}-${hash(JSON.stringify({ runtime, inputs, toolDigest }))}-`;
     const paths = releaseCachePaths(env);
     return {
       enabled: true,
@@ -369,10 +373,23 @@ function measuredCounters(text) {
       throw new Error("Unavailable compiler-cache statistics.");
     return values.reduce((sum, value) => sum + value, 0);
   };
+  const { secs, nanos } = stats.compiler_write_duration;
+  if (
+    !Number.isSafeInteger(secs) ||
+    secs < 0 ||
+    !Number.isInteger(nanos) ||
+    nanos < 0 ||
+    nanos >= 1e9
+  )
+    throw new Error("Unavailable compiler-cache statistics.");
   const counters = {
-    compileRequests: stats.compile_requests,
+    compilations: stats.compilations,
+    compilerMilliseconds: secs * 1000 + Math.floor(nanos / 1e6),
     hits: total(stats.cache_hits.counts),
     misses: total(stats.cache_misses.counts),
+    cacheWrites: stats.cache_writes,
+    cacheReadErrors: stats.cache_read_errors,
+    cacheWriteErrors: stats.cache_write_errors,
   };
   if (
     Object.values(counters).some(
@@ -421,6 +438,52 @@ function sameSocket(a, b) {
   );
 }
 
+function sampleCounters(wrapper, options, execute) {
+  try {
+    return measuredCounters(
+      execute(wrapper, ["--show-stats", "--stats-format=json"], options),
+    );
+  } catch {
+    return null;
+  }
+}
+
+function counterDeltas(before, after) {
+  if (!before || !after) return null;
+  const entries = Object.entries(after).map(([key, value]) => [
+    key,
+    value - before[key],
+  ]);
+  return entries.every(([, value]) => Number.isSafeInteger(value) && value >= 0)
+    ? Object.fromEntries(entries)
+    : null;
+}
+
+export function cargoCacheSampler(
+  env,
+  execute = probe,
+  identify = socketIdentity,
+) {
+  const endpoint = env.SCCACHE_SERVER_UDS;
+  const generation = endpoint && identify(endpoint);
+  if (!generation || !isAbsolute(env.RUSTC_WRAPPER ?? "")) return () => null;
+  const options = {
+    env: {
+      PATH: env.PATH,
+      HOME: env.HOME,
+      SCCACHE_CONF: "/dev/null",
+      SCCACHE_SERVER_UDS: endpoint,
+    },
+  };
+  const sample = () => {
+    if (!sameSocket(generation, identify(endpoint))) return null;
+    const counters = sampleCounters(env.RUSTC_WRAPPER, options, execute);
+    return sameSocket(generation, identify(endpoint)) ? counters : null;
+  };
+  const before = sample();
+  return () => counterDeltas(before, sample());
+}
+
 export function releaseCacheMeasurement(
   command,
   {
@@ -444,19 +507,7 @@ export function releaseCacheMeasurement(
   );
   const retired = `${path}.reported`;
   const options = { env: { PATH: env.PATH, HOME: env.HOME, ...compiler } };
-  const sample = () => {
-    try {
-      return measuredCounters(
-        execute(
-          compiler.RUSTC_WRAPPER,
-          ["--show-stats", "--stats-format=json"],
-          options,
-        ),
-      );
-    } catch {
-      return null;
-    }
-  };
+  const sample = () => sampleCounters(compiler.RUSTC_WRAPPER, options, execute);
   if (command === "start") {
     // A retired claim must also prevent a second start for the same run.
     try {
@@ -526,13 +577,9 @@ export function releaseCacheMeasurement(
   const counters = sample();
   if (!counters || !sameSocket(baseline.generation, identify(endpoint)))
     return result;
-  const entries = Object.entries(counters).map(([key, value]) => [
-    key,
-    value - baseline.counters[key],
-  ]);
-  if (!entries.every(([, value]) => Number.isSafeInteger(value) && value >= 0))
-    return result;
-  Object.assign(result, Object.fromEntries(entries), {
+  const deltas = counterDeltas(baseline.counters, counters);
+  if (!deltas) return result;
+  Object.assign(result, deltas, {
     statisticsAvailable: true,
   });
   try {

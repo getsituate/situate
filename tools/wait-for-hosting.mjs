@@ -2,13 +2,22 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { hostingReadiness } from "../infrastructure/production/hosting-deployment.mjs";
+import {
+  HostingReadUnavailable,
+  hostingReadiness,
+  observeHostingProducer,
+} from "../infrastructure/production/hosting-deployment.mjs";
 import { revisionPattern } from "../infrastructure/production/hosting-inputs.mjs";
 
 export async function main(
   env,
   [mode] = [],
-  { observe = hostingReadiness, wait = delay } = {},
+  {
+    observe = hostingReadiness,
+    producer = observeHostingProducer,
+    wait = delay,
+    execute = execFileSync,
+  } = {},
 ) {
   const revision = env.HOSTING_SOURCE_REVISION ?? env.GITHUB_SHA;
   if (
@@ -20,7 +29,7 @@ export async function main(
     throw new Error("Hosting readiness requires a trusted main revision.");
   const git = (args) => {
     try {
-      return execFileSync("/usr/bin/git", args, {
+      return execute("/usr/bin/git", args, {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
         env: {
@@ -38,38 +47,85 @@ export async function main(
     throw new Error(
       "The checkout does not match the hosting readiness revision.",
     );
-  let previous;
+  const input = { token: env.GH_TOKEN, revision };
+  if (!mode) {
+    return waitForHosting(input, {
+      observe,
+      producer,
+      wait,
+      verifyMain: () => {
+        if (
+          git([
+            "ls-remote",
+            "https://github.com/getsituate/situate.git",
+            "refs/heads/main",
+          ]).split(/\s+/)[0] !== revision
+        )
+          throw new Error("A newer main revision owns this publication.");
+      },
+    });
+  }
+  const result = await observe(input);
+  if (mode === "--select") {
+    appendFileSync(env.GITHUB_OUTPUT, `needed=${!result.ready}\n`);
+    if (result.ready)
+      console.log("The verified host already matches the hosting inputs.");
+    return;
+  }
+  if (!result.ready) throw new Error(result.reason);
+  if (mode === "--probe") {
+    const { probeReleaseHost } =
+      await import("../infrastructure/releases/hosting-readiness.mjs");
+    probeReleaseHost(result.revision, env);
+    const final = await observe(input);
+    if (!final.ready || final.deploymentId !== result.deploymentId)
+      throw new Error("Hosting changed during the release host probe.");
+  }
+}
+
+export class HostingProducerFailed extends Error {}
+
+async function waitForHosting(input, { observe, producer, wait, verifyMain }) {
+  let previousFailure;
+  let previousReason;
   for (;;) {
-    const result = await observe({ token: env.GH_TOKEN, revision });
-    if (mode === "--select") {
-      appendFileSync(env.GITHUB_OUTPUT, `needed=${!result.ready}\n`);
-      if (result.ready)
-        console.log("The verified host already matches the hosting inputs.");
-      return;
-    }
-    if (result.ready) {
-      if (mode === "--probe") {
-        const { probeReleaseHost } =
-          await import("../infrastructure/releases/hosting-readiness.mjs");
-        probeReleaseHost(result.revision, env);
-        const final = await observe({ token: env.GH_TOKEN, revision });
-        if (!final.ready || final.deploymentId !== result.deploymentId)
-          throw new Error("Hosting changed during the release host probe.");
+    let failure;
+    let reason;
+    try {
+      const result = await observe(input);
+      if (result.ready) return;
+      reason = result.reason;
+      if (!result.changed) {
+        const run = await producer(input);
+        if (run.kind === "unavailable") reason = run.reason;
+        if (run.kind === "failed") {
+          failure = `${run.runId}/${run.attempt}/${run.conclusion}`;
+          // Give a replacement run or a just-written deployment time to become visible.
+          if (failure === previousFailure) {
+            const final = await observe(input);
+            verifyMain();
+            if (final.ready) return;
+            if (final.changed) {
+              failure = undefined;
+              reason = final.reason;
+            } else {
+              throw new HostingProducerFailed(
+                `Deploy hosting run ${run.runId} (attempt ${run.attempt}) concluded ${run.conclusion} without a verified deployment for this revision. Inspect the run before retrying delivery.`,
+              );
+            }
+          }
+        }
       }
-      return;
+    } catch (error) {
+      if (!(error instanceof HostingReadUnavailable)) throw error;
+      failure = undefined;
+      reason = error.message;
     }
-    if (mode) throw new Error(result.reason);
-    if (result.reason !== previous) console.log(result.reason);
-    previous = result.reason;
+    previousFailure = failure;
+    if (reason !== previousReason) console.log(reason);
+    previousReason = reason;
     await wait(20_000);
-    if (
-      git([
-        "ls-remote",
-        "https://github.com/getsituate/situate.git",
-        "refs/heads/main",
-      ]).split(/\s/)[0] !== revision
-    )
-      throw new Error("A newer main revision owns this publication.");
+    verifyMain();
   }
 }
 

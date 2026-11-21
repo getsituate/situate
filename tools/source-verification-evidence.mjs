@@ -15,11 +15,8 @@ const eligible = {
     "client-format",
     "client-clippy",
   ],
-  browser: [
-    "client-browser-chromium",
-    "client-browser-webkit",
-    "client-executor-integration",
-  ],
+  browser: ["client-browser-chromium", "client-executor-integration"],
+  "browser-webkit": ["client-browser-webkit-smoke"],
   "macos-code": [
     "client-core-macos",
     "client-host",
@@ -388,6 +385,7 @@ export function selectSourceVerificationEvidence({
   } catch {
     return miss("unresolved-target");
   }
+  let reason;
   for (const candidate of candidates) {
     try {
       const { evidence: input, observation } = candidate;
@@ -424,23 +422,48 @@ export function selectSourceVerificationEvidence({
       );
       assert.equal(evidence.tree, source.tree);
       const previousLane = evidence.plan.lanes.find(({ id }) => id === laneId);
-      assert(
-        previousLane &&
-          previousLane.host === lane.host &&
-          previousLane.execution === lane.execution &&
-          (previousLane.timeoutSeconds ?? 600) === (lane.timeoutSeconds ?? 600),
-      );
-      assert(previousLane.suites.every((id) => eligible[laneId].includes(id)));
       const entry = evidence.lanes.find(({ lane }) => lane === laneId);
-      assert(entry);
-      exact(entry.host, currentHost, "Host differs");
-      assert.equal(entry.contract.toolsDigest, currentContract.toolsDigest);
-      for (const suite of currentContract.suites)
-        exact(
-          entry.contract.suites.find(({ id }) => id === suite.id),
-          suite,
-          "Command or coverage differs",
-        );
+      if (!previousLane || !entry) {
+        reason ??= "lane-evidence-absent";
+        continue;
+      }
+      if (
+        previousLane.host !== lane.host ||
+        previousLane.execution !== lane.execution ||
+        (previousLane.timeoutSeconds ?? 600) !== (lane.timeoutSeconds ?? 600) ||
+        previousLane.suites.some(
+          (id) =>
+            !eligible[laneId].includes(id) &&
+            !(laneId === "browser" && id === "design-website-browser"),
+        )
+      ) {
+        reason ??= "lane-contract-differs";
+        continue;
+      }
+      if (lane.suites.some((id) => !previousLane.suites.includes(id))) {
+        reason ??= "suite-coverage-incomplete";
+        continue;
+      }
+      if (!isDeepStrictEqual(entry.host, currentHost)) {
+        reason ??= "host-differs";
+        continue;
+      }
+      if (entry.contract.toolsDigest !== currentContract.toolsDigest) {
+        reason ??= "tools-differ";
+        continue;
+      }
+      if (
+        currentContract.suites.some(
+          (suite) =>
+            !isDeepStrictEqual(
+              entry.contract.suites.find(({ id }) => id === suite.id),
+              suite,
+            ),
+        )
+      ) {
+        reason ??= "suite-command-differs";
+        continue;
+      }
       return {
         action: "reuse",
         evidence,
@@ -469,7 +492,7 @@ export function selectSourceVerificationEvidence({
       // Invalid or unavailable evidence never substitutes for executing a lane.
     }
   }
-  return miss("no-matching-evidence");
+  return miss(reason ?? "no-matching-evidence");
 }
 
 function reuseReceipt(plan, selection) {

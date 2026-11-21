@@ -125,6 +125,7 @@ const rules = {
     app.test(file) || frontend(file) || file === "tools/test.mjs",
   "client-browser-chromium": product,
   "client-browser-webkit": product,
+  "client-browser-webkit-smoke": product,
   "client-visual": product,
   "client-visual-fixture": product,
   "workshop-vue": workshopInput,

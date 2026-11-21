@@ -470,9 +470,13 @@ export function suiteInventory(files, host = process.platform) {
     "-D",
     "warnings",
   ]);
-  for (const engine of ["chromium", "webkit"])
+  for (const [engine, smoke] of [
+    ["chromium", false],
+    ["webkit", true],
+    ["webkit", false],
+  ])
     add(
-      `client-browser-${engine}`,
+      `client-browser-${engine}${smoke ? "-smoke" : ""}`,
       "client",
       "browser",
       "client",
@@ -485,8 +489,9 @@ export function suiteInventory(files, host = process.platform) {
         "app/playwright.config.ts",
         "--project",
         engine,
+        ...(smoke ? ["--grep", "(^|\\s)@webkit-smoke(\\s|$)"] : []),
         "--output",
-        `test-results/browser/${engine}`,
+        `test-results/browser/${engine}${smoke ? "-smoke" : ""}`,
       ],
       matching(/^client\/app\/tests\/browser\/.*\.(test|spec)\.[cm]?[jt]s$/),
     );
@@ -757,6 +762,7 @@ export function suiteInventory(files, host = process.platform) {
         "client-architecture",
         "client-browser-chromium",
         "client-browser-webkit",
+        "client-browser-webkit-smoke",
         "client-visual",
         "client-visual-fixture",
         "client-native",
@@ -774,7 +780,7 @@ export function suiteInventory(files, host = process.platform) {
       suite.npm = "client";
     if (suite.project === "requirements") suite.npm = "requirements";
     if (suite.id.startsWith("client-browser-"))
-      suite.browsers = [suite.id.slice("client-browser-".length)];
+      suite.browsers = [suite.args[suite.args.indexOf("--project") + 1]];
     if (
       [
         "client-executor-integration",

@@ -175,7 +175,11 @@ test("fixed independent families depend on planning and aggregate every selected
         );
         assert.match(lane, /pipeline-bootstrap\.py/);
       } else {
-        assert.match(lane, /pipeline-container\.py actions lane/);
+        assert.ok(
+          lane.includes(
+            `pipeline-container.py actions lane --workflow ${name === "verify" ? "verify" : "create"} --lane ${id}\n`,
+          ),
+        );
         assert.doesNotMatch(
           lane,
           /pipeline-bootstrap|run: node |actions-adapter\.mjs setup/,
@@ -189,8 +193,16 @@ test("fixed independent families depend on planning and aggregate every selected
         ? /if: always\(\)/
         : /needs\.plan\.outputs\.enabled == 'true'/,
     );
-    for (const id of Object.keys(laneHosts))
-      assert.ok(aggregate.split("    if:")[0].includes(id));
+    for (const consumer of [
+      aggregate,
+      ...(name === "release-macos" ? [job(workflow, "create")] : []),
+    ]) {
+      for (const id of Object.keys(laneHosts)) {
+        assert.ok(consumer.split("    if:")[0].includes(`        ${id},\n`));
+        for (const line of consumer.match(/PIPELINE_NEEDS:.*$/gm) ?? [])
+          assert.ok(line.includes(`toJSON(needs.${id})`));
+      }
+    }
     assert.match(aggregate, /PIPELINE_NEEDS:.*format\(/);
     assert.match(aggregate, /toJSON\(needs\.plan\.result\)/);
     assert.doesNotMatch(aggregate, /toJSON\(needs\)/);
@@ -244,6 +256,7 @@ test("source reuse controllers can read merged pull-request associations", () =>
     "rust",
     "macos-code",
     "browser",
+    "browser-webkit",
     "macos-native",
   ]) {
     const body = job(text, id);
@@ -312,6 +325,19 @@ test("paused release skips planning and source work while only effect jobs share
   for (const effect of [job(workflow, "create"), job(publisher, "publish")]) {
     assert.match(effect, /group: situate-release-effects/);
     assert.match(effect, /cancel-in-progress: false/);
+  }
+});
+
+test("hosting waiters can read producer runs without production write permissions", () => {
+  for (const [workflow, id] of [
+    ["deploy-website", "website"],
+    ["release-macos", "hosting-ready"],
+  ]) {
+    const body = job(read(workflow), id);
+    assert.match(body, /run: node tools\/wait-for-hosting\.mjs\n/);
+    assert.match(body, /permissions:\n {6}actions: read\n/);
+    assert.match(body, /^ {6}deployments: read$/m);
+    assert.doesNotMatch(body, /(?:actions|contents|deployments): write/);
   }
 });
 

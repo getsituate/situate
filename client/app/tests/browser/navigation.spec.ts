@@ -164,72 +164,76 @@ test("chat drafts survive visiting Files without admitting an AI request", async
   ).toBe(false);
 });
 
-test("drawer traps keyboard focus, closes with Escape and restores focus", async ({
-  page,
-  browserName,
-}) => {
-  const tab =
-    process.platform === "darwin" && browserName === "webkit"
-      ? "Alt+Tab"
-      : "Tab";
-  await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto("/");
-  const open = page.getByRole("button", {
-    name: keyLabel("navigation.openNavigation"),
-  });
-  await expect(open).toBeVisible();
-  await page.keyboard.press(tab);
-  await expect(open).toBeFocused();
-  await page.keyboard.press("Enter");
-  const close = page.getByRole("button", {
-    name: keyLabel("navigation.closeNavigation"),
-  });
-  await expect(close).toBeFocused();
-  const dialog = page.getByRole("dialog", {
-    name: keyLabel("navigation.workspaceNavigation"),
-  });
-  expect(await dialog.evaluate((element) => element.matches(":modal"))).toBe(
-    true,
-  );
-  for (const key of [
-    tab,
-    tab,
-    tab,
-    "Shift+" + tab,
-    "Shift+" + tab,
-    "Shift+" + tab,
-  ]) {
-    await page.keyboard.press(key);
+test(
+  "drawer traps keyboard focus, closes with Escape and restores focus",
+  { tag: "@webkit-smoke" },
+  async ({ page, browserName }) => {
+    const tab =
+      process.platform === "darwin" && browserName === "webkit"
+        ? "Alt+Tab"
+        : "Tab";
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/");
+    const open = page.getByRole("button", {
+      name: keyLabel("navigation.openNavigation"),
+    });
+    await expect(open).toBeVisible();
+    await page.keyboard.press(tab);
+    await expect(open).toBeFocused();
+    await page.keyboard.press("Enter");
+    const close = page.getByRole("button", {
+      name: keyLabel("navigation.closeNavigation"),
+    });
+    await expect(close).toBeFocused();
+    const dialog = page.getByRole("dialog", {
+      name: keyLabel("navigation.workspaceNavigation"),
+    });
+    expect(await dialog.evaluate((element) => element.matches(":modal"))).toBe(
+      true,
+    );
+    for (const key of [
+      tab,
+      tab,
+      tab,
+      "Shift+" + tab,
+      "Shift+" + tab,
+      "Shift+" + tab,
+    ]) {
+      await page.keyboard.press(key);
+      expect(
+        await page.evaluate(() => {
+          // Native dialog traversal may visit browser chrome, but never background content.
+          return (
+            !document.hasFocus() || !!document.activeElement?.closest("dialog")
+          );
+        }),
+      ).toBe(true);
+    }
+    await page
+      .getByRole("textbox", {
+        name: keyLabel("navigation.message"),
+        exact: true,
+      })
+      .evaluate((element) => (element as HTMLElement).focus());
     expect(
-      await page.evaluate(() => {
-        // Native dialog traversal may visit browser chrome, but never background content.
-        return (
-          !document.hasFocus() || !!document.activeElement?.closest("dialog")
-        );
-      }),
+      await page.evaluate(() => !!document.activeElement?.closest("dialog")),
     ).toBe(true);
-  }
-  await page
-    .getByRole("textbox", { name: keyLabel("navigation.message"), exact: true })
-    .evaluate((element) => (element as HTMLElement).focus());
-  expect(
-    await page.evaluate(() => !!document.activeElement?.closest("dialog")),
-  ).toBe(true);
-  await close.focus();
-  const tooltip = page.getByRole("tooltip", {
-    name: keyLabel("navigation.closeNavigation"),
-  });
-  await expect(tooltip).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(tooltip).toBeHidden();
-  await expect(dialog).toBeVisible();
-  await expect(close).toBeFocused();
-  await expect(open).toHaveAttribute("aria-expanded", "true");
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toBeHidden();
-  await expect(open).toBeFocused();
-  await expect(open).toHaveAttribute("aria-expanded", "false");
-});
+    await close.focus();
+    const tooltip = page.getByRole("tooltip", {
+      name: keyLabel("navigation.closeNavigation"),
+    });
+    await expect(tooltip).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(tooltip).toBeHidden();
+    await expect(dialog).toBeVisible();
+    await expect(close).toBeFocused();
+    await expect(open).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+    await expect(open).toBeFocused();
+    await expect(open).toHaveAttribute("aria-expanded", "false");
+  },
+);
 
 test("backdrop dismisses navigation and resizing releases modality", async ({
   page,

@@ -28,6 +28,7 @@ export const laneHosts = {
   rust: "linux",
   "macos-code": "macos",
   browser: "linux",
+  "browser-webkit": "linux",
   "macos-native": "macos",
   "macos-compatibility": "macos",
 };
@@ -385,9 +386,16 @@ export async function main(
       );
     if (!["true", "false"].includes(env.PIPELINE_RELEASE_ENABLED))
       throw new Error("Select an explicit release automation state.");
-    const enabled = env.PIPELINE_RELEASE_ENABLED === "true";
+    let reason = "paused";
+    if (env.PIPELINE_RELEASE_ENABLED === "true") {
+      const { releaseSourceIsCurrent } = await import("./actions-release.mjs");
+      reason = (await releaseSourceIsCurrent(env, execute))
+        ? "enabled"
+        : "superseded";
+    }
+    const enabled = reason === "enabled";
     output({ enabled: String(enabled) }, env);
-    return { enabled, reason: enabled ? "enabled" : "paused" };
+    return { enabled, reason };
   }
   if (command === "release-gate") {
     const { requireProvisioned } = await import("./actions-release.mjs");
@@ -801,9 +809,14 @@ export async function main(
         throw new Error("Lane receipt exceeds job output limit.");
       let evidence;
       if (
-        ["frontend", "rust", "browser", "macos-code", "macos-native"].includes(
-          values.lane,
-        )
+        [
+          "frontend",
+          "rust",
+          "browser",
+          "browser-webkit",
+          "macos-code",
+          "macos-native",
+        ].includes(values.lane)
       ) {
         const { captureLaneEvidence } =
           await import("./source-verification-actions.mjs");

@@ -247,29 +247,30 @@ test("live reduced motion removes the confetti and resizing does not replay it",
 
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
-  test("both browser responses retain their content and native return-help disclosure", async ({
-    page,
-    baseURL,
-  }) => {
-    for (const accepted of [true, false]) {
-      const evidence = await openCallback(page, baseURL!, "de", accepted);
-      await expect(
-        page.getByRole("heading", {
-          name: callbackText(
-            "de",
-            accepted ? "accepted.title" : "rejected.title",
+  test(
+    "both browser responses retain their content and native return-help disclosure",
+    { tag: "@webkit-smoke" },
+    async ({ page, baseURL }) => {
+      for (const accepted of [true, false]) {
+        const evidence = await openCallback(page, baseURL!, "de", accepted);
+        await expect(
+          page.getByRole("heading", {
+            name: callbackText(
+              "de",
+              accepted ? "accepted.title" : "rejected.title",
+            ),
+          }),
+        ).toBeVisible();
+        await page.locator("summary").focus();
+        await page.keyboard.press("Enter");
+        await expect(
+          page.getByText(
+            callbackText("de", accepted ? "accepted.helpBody" : "helpBody"),
           ),
-        }),
-      ).toBeVisible();
-      await page.locator("summary").focus();
-      await page.keyboard.press("Enter");
-      await expect(
-        page.getByText(
-          callbackText("de", accepted ? "accepted.helpBody" : "helpBody"),
-        ),
-      ).toBeVisible();
-      await expect(page.locator(".celebration-piece")).toHaveCount(0);
-      await evidence.check();
-    }
-  });
+        ).toBeVisible();
+        await expect(page.locator(".celebration-piece")).toHaveCount(0);
+        await evidence.check();
+      }
+    },
+  );
 });

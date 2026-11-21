@@ -4,6 +4,7 @@ const deferred = new Set([
   "workshop-webkit",
   "client-workshop-host",
   "client-workshop-clippy",
+  "client-browser-webkit",
   "client-visual",
   "client-visual-fixture",
 ]);

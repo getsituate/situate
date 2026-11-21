@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  HostingProducerFailed,
+  main as waitForHosting,
+} from "../../tools/wait-for-hosting.mjs";
 import { probeReleaseHost } from "../releases/hosting-readiness.mjs";
-import { deploymentGate, hostingReadiness } from "./hosting-deployment.mjs";
+import {
+  deploymentGate,
+  hostingReadiness,
+  HostingReadUnavailable,
+  observeHostingProducer,
+} from "./hosting-deployment.mjs";
 import { hostingDigest } from "./hosting-inputs.mjs";
 
 const revision = "a".repeat(40);
@@ -206,6 +215,22 @@ test("retries a transient GitHub read failure but never retries a write", async 
   assert.deepEqual(methods, ["GET", "GET", "POST"]);
 });
 
+test("readiness distinguishes transient deployment reads from permission errors", async () => {
+  const read = (status) =>
+    hostingReadiness({
+      token: "fixture",
+      revision,
+      fetchImpl: async () => new Response(null, { status }),
+    });
+  await assert.rejects(read(503), HostingReadUnavailable);
+  await assert.rejects(
+    read(403),
+    (error) =>
+      !(error instanceof HostingReadUnavailable) &&
+      error.message.includes("(403)"),
+  );
+});
+
 test("rejects invalid workflow run and deployment identities before using them", async () => {
   const fetchImpl = () => assert.fail("Unexpected API request");
   for (const runId of [0, "0", "001", "not-a-run", "9007199254740992"]) {
@@ -224,6 +249,222 @@ test("rejects invalid workflow run and deployment identities before using them",
     },
   });
   await assert.rejects(gate.check(), /Unexpected GitHub deployment identity/);
+});
+
+const failedRun = {
+  id: 12345,
+  run_number: 50,
+  run_attempt: 1,
+  status: "completed",
+  conclusion: "failure",
+  head_sha: revision,
+  head_branch: "main",
+  head_repository: { full_name: "getsituate/situate" },
+  event: "push",
+};
+const newerRun = {
+  ...failedRun,
+  id: failedRun.id + 1,
+  run_number: 51,
+  event: "workflow_dispatch",
+};
+const inventory = (...runs) =>
+  Response.json({ total_count: runs.length, workflow_runs: runs });
+
+function producerResponse(response, input = { token: "fixture", revision }) {
+  return observeHostingProducer({
+    ...input,
+    fetchImpl: async (url, options) => {
+      assert.equal(
+        url.origin + url.pathname,
+        "https://api.github.com/repos/getsituate/situate/actions/workflows/deploy-hosting.yml/runs",
+      );
+      assert.equal(url.searchParams.get("head_sha"), revision);
+      assert.equal(url.searchParams.get("branch"), "main");
+      assert.equal(options.method, "GET");
+      assert.equal(options.headers.Authorization, "Bearer fixture");
+      assert.equal(options.redirect, "error");
+      return response;
+    },
+  });
+}
+
+test("only the latest trusted completed unsuccessful producer is terminal evidence", async () => {
+  assert.deepEqual(await producerResponse(inventory(failedRun)), {
+    kind: "failed",
+    runId: failedRun.id,
+    attempt: 1,
+    conclusion: "failure",
+  });
+  assert.deepEqual(
+    await producerResponse(
+      inventory({ ...newerRun, run_attempt: 2 }, failedRun),
+    ),
+    {
+      kind: "failed",
+      runId: newerRun.id,
+      attempt: 2,
+      conclusion: "failure",
+    },
+  );
+  for (const [response, kind] of [
+    [inventory(), "absent"],
+    [
+      inventory(failedRun, { ...newerRun, status: "queued", conclusion: null }),
+      "pending",
+    ],
+    [
+      inventory(newerRun, {
+        ...failedRun,
+        run_attempt: 2,
+        status: "in_progress",
+        conclusion: null,
+      }),
+      "pending",
+    ],
+    [
+      inventory(failedRun, { ...newerRun, conclusion: "success" }),
+      "unconfirmed",
+    ],
+    [inventory({ ...failedRun, head_sha: "b".repeat(40) }), "unavailable"],
+    [
+      inventory({
+        ...failedRun,
+        head_repository: { full_name: "fork/situate" },
+      }),
+      "unavailable",
+    ],
+    [
+      Response.json({ total_count: 2, workflow_runs: [failedRun] }),
+      "unavailable",
+    ],
+    [new Response(null, { status: 503 }), "unavailable"],
+    [new Response(null, { status: 403 }), "unavailable"],
+  ]) {
+    assert.equal((await producerResponse(response)).kind, kind);
+  }
+});
+
+function consumer({
+  observe,
+  producer,
+  mainRevision = () => revision,
+  mode,
+} = {}) {
+  const waits = [];
+  let producerReads = 0;
+  let mainReads = 0;
+  const run = waitForHosting(
+    {
+      GITHUB_REPOSITORY: "getsituate/situate",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_SHA: revision,
+      GH_TOKEN: "fixture",
+    },
+    [mode],
+    {
+      observe,
+      producer: (input) => {
+        producerReads += 1;
+        return producer
+          ? producer(input, producerReads)
+          : producerResponse(inventory(failedRun), input);
+      },
+      wait: async (ms) => {
+        waits.push(ms);
+        assert.ok(waits.length <= 5, "The waiter never settled");
+      },
+      execute: (_command, args) =>
+        args[0] === "rev-parse"
+          ? revision
+          : `${mainRevision(++mainReads)}\trefs/heads/main`,
+    },
+  );
+  return { run, waits, producerReads: () => producerReads };
+}
+
+test("delivery fails promptly when hosting fails before creating a deployment", async () => {
+  const { run, waits, producerReads } = consumer({
+    observe: observe({ applied: null }).read,
+  });
+  await assert.rejects(
+    run,
+    (error) =>
+      error instanceof HostingProducerFailed &&
+      error.message.includes(
+        `run ${failedRun.id} (attempt 1) concluded failure`,
+      ),
+  );
+  assert.deepEqual(waits, [20_000]);
+  assert.equal(producerReads(), 2);
+});
+
+test("a verified matching host wins even if producer failure is visible", async () => {
+  const verifiedHost = observe().read;
+  const immediate = consumer({ observe: verifiedHost });
+  await immediate.run;
+  assert.equal(immediate.producerReads(), 0);
+
+  let reads = 0;
+  const absent = observe({ applied: null }).read;
+  const duringConfirmation = consumer({
+    observe: () => (++reads === 3 ? verifiedHost() : absent()),
+  });
+  await duringConfirmation.run;
+  assert.deepEqual(duringConfirmation.waits, [20_000]);
+});
+
+test("delivery waits through missing runs, read errors and a newer hosting attempt", async () => {
+  const absent = observe({ applied: null }).read;
+  const verifiedHost = observe().read;
+  let reads = 0;
+  const responses = [
+    inventory(),
+    inventory(failedRun),
+    new Response(null, { status: 503 }),
+    inventory(failedRun, {
+      ...newerRun,
+      status: "in_progress",
+      conclusion: null,
+    }),
+  ];
+  const { run, waits, producerReads } = consumer({
+    observe: () => {
+      reads += 1;
+      if (reads === 3)
+        throw new HostingReadUnavailable("Deployment read timed out.");
+      return reads === 6 ? verifiedHost() : absent();
+    },
+    producer: (input) => producerResponse(responses.shift(), input),
+  });
+  await run;
+  assert.equal(waits.length, 5);
+  assert.equal(producerReads(), 4);
+});
+
+test("a change to protected main takes precedence over a terminal producer observation", async () => {
+  const { run, waits } = consumer({
+    observe: observe({ applied: null }).read,
+    mainRevision: (read) => (read === 1 ? revision : "c".repeat(40)),
+  });
+  await assert.rejects(run, {
+    message: "A newer main revision owns this publication.",
+  });
+  assert.deepEqual(waits, [20_000]);
+});
+
+test("one-shot check and probe do not consult producer runs", async () => {
+  for (const mode of ["--check", "--probe"]) {
+    const { run, waits, producerReads } = consumer({
+      mode,
+      observe: observe({ applied: null }).read,
+    });
+    await assert.rejects(run, {
+      message: "No verified active hosting deployment.",
+    });
+    assert.deepEqual(waits, []);
+    assert.equal(producerReads(), 0);
+  }
 });
 
 test("deployment CLI reports a fixed diagnostic when authorization is absent", () => {
