@@ -619,6 +619,18 @@ test("coverage keeps both checkouts and scalar metadata without forwarding write
   assert.ok(command.includes("export PREPARATION_STATUS=failure"));
 });
 
+test("coverage requires contained checkout paths that Docker can mount literally", () => {
+  for (const [source, error] of [
+    ["/separate-checkout", /inside the checkout workspace/],
+    ["/checkout/source, renamed", /mount paths cannot contain commas/],
+  ]) {
+    assert.throws(
+      () => containerArguments({ ...options, shard: "coverage", source }),
+      error,
+    );
+  }
+});
+
 test("Docker resolves once from absolute PATH entries and accepts installed symlinks", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-docker-path-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

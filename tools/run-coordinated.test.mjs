@@ -105,6 +105,75 @@ with tempfile.TemporaryDirectory() as temporary:
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("desktop acquisition waits for an existing lease from another worktree", () => {
+  const source = `import fcntl, hashlib, importlib.util, os, tempfile
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})
+s = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(s)
+s.caller_closed = lambda: False
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    first = root / 'first-worktree'
+    second = root / 'second-worktree'
+    first.mkdir()
+    second.mkdir()
+    base = root / 'coordination'
+    base.mkdir(mode=0o700)
+    lock = base / (hashlib.sha256(b'desktop').hexdigest() + '.lock')
+    owner = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.write(owner, str(first).encode())
+        queued = []
+        s.report = queued.append
+        assert s.acquire('desktop', second, base, pending=lambda: not queued) is None
+        assert len(queued) == 1
+        assert lock.read_text() == str(first)
+    finally:
+        os.close(owner)
+    successor = s.acquire('desktop', second, base)
+    try:
+        assert os.fstat(successor).st_ino == lock.stat().st_ino
+    finally:
+        os.close(successor)
+`;
+  const result = spawnSync("python3", ["-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("desktop acquisition fails closed when the coordination directory is not private", () => {
+  const source = `import importlib.util, tempfile
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})
+s = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(s)
+s.caller_closed = lambda: False
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    base = root / 'coordination'
+    base.mkdir()
+    base.chmod(0o755)
+    try:
+        s.acquire('desktop', root, base)
+    except ValueError as error:
+        assert 'coordination directory must be private' in str(error)
+    else:
+        raise AssertionError('Desktop acquisition used an unsafe lease directory')
+    assert list(root.iterdir()) == [base]
+    assert not list(base.iterdir())
+    assert base.stat().st_mode & 0o777 == 0o755
+`;
+  const result = spawnSync("python3", ["-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("Docker build admissions retain one real flock across batches until confirmed cleanup", () => {
   const source = `import fcntl, hashlib, importlib.util, json, os, tempfile
 from pathlib import Path
