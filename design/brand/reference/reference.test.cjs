@@ -1,5 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
+const { test } = require("node:test");
 const { launchBrowser } = require("../browser-launch.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -7,132 +8,145 @@ const { pathToFileURL } = require("node:url");
 const { execFileSync, spawnSync } = require("node:child_process");
 const os = require("node:os");
 
-const bundledChannel =
-  process.platform === "linux" ? "chromium-headless-shell" : "chromium";
-for (const [options, expectedChannel] of [
-  [{}, bundledChannel],
-  [{ headless: true, args: Object.freeze(["--lang=en-US"]) }, bundledChannel],
-  [{ headless: false }, "chromium"],
-]) {
-  Object.freeze(options);
-  const launched = launchBrowser({ launch: (value) => value }, options);
-  assert.deepEqual(
-    launched,
-    { ...options, channel: expectedChannel },
-    "Headless Linux uses bundled Chromium shell without changing other launch settings",
-  );
-}
-for (const options of [
-  { channel: "chromium", headless: true },
-  { channel: "chrome", headless: true },
-  { executablePath: "/test/chromium" },
-  { channel: "chromium", executablePath: "/test/chromium" },
-]) {
-  Object.freeze(options);
-  assert.equal(
-    launchBrowser({ launch: (value) => value }, options),
-    options,
-    "Explicit browser channels and executable paths take precedence",
-  );
-}
-
 const brand = path.resolve(__dirname, "..");
-const tokens = JSON.parse(
-  fs.readFileSync(path.join(brand, "tokens.json"), "utf8"),
-);
-execFileSync(process.execPath, [
-  path.join(brand, "build-tokens.cjs"),
-  "--check",
-]);
-execFileSync(process.execPath, [
-  path.join(brand, "build-scenes.cjs"),
-  "--check",
-]);
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "situate-token-check-"));
-try {
-  for (const filename of ["build-tokens.cjs", "tokens.json", "tokens.css"])
-    fs.copyFileSync(path.join(brand, filename), path.join(scratch, filename));
-  fs.appendFileSync(path.join(scratch, "tokens.css"), "\n/* drift */\n");
-  assert.equal(
-    spawnSync(process.execPath, [
-      path.join(scratch, "build-tokens.cjs"),
-      "--check",
-    ]).status,
-    1,
-    "Token drift detection",
-  );
-  execFileSync(process.execPath, [path.join(scratch, "build-tokens.cjs")]);
-  assert.equal(
-    fs.readFileSync(path.join(scratch, "tokens.css"), "utf8"),
-    fs.readFileSync(path.join(brand, "tokens.css"), "utf8"),
-    "Deterministic token generation",
-  );
-} finally {
-  fs.rmSync(scratch, { recursive: true, force: true });
-}
-for (const filename of fs.readdirSync(path.join(brand, "assets"))) {
-  if (path.extname(filename) !== ".svg") {
-    assert.equal(filename, "wordmark-print-transparent.png");
-    continue;
-  }
-  const content = fs.readFileSync(path.join(brand, "assets", filename), "utf8");
-  assert.match(content, /<svg[^>]+viewBox=/, filename);
-  assert.match(content, /<title[^>]*>[^<]+<\/title>/, filename);
-  assert.doesNotMatch(content, /<(?:script|foreignObject|image)\b/i, filename);
-  for (const match of content.matchAll(/(?:href|src)="([^"]+)"/g))
-    assert.ok(
-      match[1].startsWith("#"),
-      `${filename}: external asset reference`,
+
+test("Brand reference launch settings, tokens and page structure", () => {
+  const bundledChannel =
+    process.platform === "linux" ? "chromium-headless-shell" : "chromium";
+  for (const [options, expectedChannel] of [
+    [{}, bundledChannel],
+    [{ headless: true, args: Object.freeze(["--lang=en-US"]) }, bundledChannel],
+    [{ headless: false }, "chromium"],
+  ]) {
+    Object.freeze(options);
+    const launched = launchBrowser({ launch: (value) => value }, options);
+    assert.deepEqual(
+      launched,
+      { ...options, channel: expectedChannel },
+      "Headless Linux uses bundled Chromium shell without changing other launch settings",
     );
-}
-for (const [name, hex] of Object.entries(tokens.colors))
-  assert.match(hex, /^#[a-f0-9]{6}$/, name);
-assert.equal(tokens.colors["bend-front"], "#a77bff");
-assert.equal(tokens.colors["bend-depth"], "#56329b");
-assert.equal(tokens.radii["radius-card"], "28px");
-assert.equal(tokens.radii["radius-note"], "15px");
-assert.equal(tokens.type["leading-body"], "1.55");
-for (const filename of ["index.html", "illustrations.html"]) {
-  const html = fs.readFileSync(path.join(__dirname, filename), "utf8");
-  assert.doesNotMatch(html, /(?:src|href)="https?:/i);
-  assert.doesNotMatch(html, /mascot-studies|brand-motion|brand-explorations/);
-  assert.equal((html.match(/<h1\b/g) || []).length, 1);
-  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(
-    new Set(ids).size,
-    ids.length,
-    `${filename}: duplicate HTML IDs`,
+  }
+  for (const options of [
+    { channel: "chromium", headless: true },
+    { channel: "chrome", headless: true },
+    { executablePath: "/test/chromium" },
+    { channel: "chromium", executablePath: "/test/chromium" },
+  ]) {
+    Object.freeze(options);
+    assert.equal(
+      launchBrowser({ launch: (value) => value }, options),
+      options,
+      "Explicit browser channels and executable paths take precedence",
+    );
+  }
+
+  const tokens = JSON.parse(
+    fs.readFileSync(path.join(brand, "tokens.json"), "utf8"),
   );
-  for (const match of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
-    const target = match[1];
-    if (target.startsWith("#"))
-      assert.ok(ids.includes(target.slice(1)), `Missing anchor: ${target}`);
-    else {
-      const [relativePath, fragment] = target.split("#");
-      const file = path.resolve(__dirname, relativePath);
-      assert.ok(fs.existsSync(file), `Missing local file: ${target}`);
-      if (fragment && relativePath.endsWith(".html"))
-        assert.ok(
-          fs.readFileSync(file, "utf8").includes(`id="${fragment}"`),
-          `Missing linked HTML anchor: ${target}`,
-        );
-      if (fragment && relativePath.endsWith(".md")) {
-        const headings = [
-          ...fs.readFileSync(file, "utf8").matchAll(/^#{1,6} (.+)$/gm),
-        ].map((match) =>
-          match[1]
-            .toLowerCase()
-            .replace(/[^\w\s-]/g, "")
-            .replace(/\s/g, "-"),
-        );
-        assert.ok(
-          headings.includes(fragment),
-          `Missing linked heading: ${target}`,
-        );
+  execFileSync(process.execPath, [
+    path.join(brand, "build-tokens.cjs"),
+    "--check",
+  ]);
+  execFileSync(process.execPath, [
+    path.join(brand, "build-scenes.cjs"),
+    "--check",
+  ]);
+  const scratch = fs.mkdtempSync(
+    path.join(os.tmpdir(), "situate-token-check-"),
+  );
+  try {
+    for (const filename of ["build-tokens.cjs", "tokens.json", "tokens.css"])
+      fs.copyFileSync(path.join(brand, filename), path.join(scratch, filename));
+    fs.appendFileSync(path.join(scratch, "tokens.css"), "\n/* drift */\n");
+    assert.equal(
+      spawnSync(process.execPath, [
+        path.join(scratch, "build-tokens.cjs"),
+        "--check",
+      ]).status,
+      1,
+      "Token drift detection",
+    );
+    execFileSync(process.execPath, [path.join(scratch, "build-tokens.cjs")]);
+    assert.equal(
+      fs.readFileSync(path.join(scratch, "tokens.css"), "utf8"),
+      fs.readFileSync(path.join(brand, "tokens.css"), "utf8"),
+      "Deterministic token generation",
+    );
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+  for (const filename of fs.readdirSync(path.join(brand, "assets"))) {
+    if (path.extname(filename) !== ".svg") {
+      assert.equal(filename, "wordmark-print-transparent.png");
+      continue;
+    }
+    const content = fs.readFileSync(
+      path.join(brand, "assets", filename),
+      "utf8",
+    );
+    assert.match(content, /<svg[^>]+viewBox=/, filename);
+    assert.match(content, /<title[^>]*>[^<]+<\/title>/, filename);
+    assert.doesNotMatch(
+      content,
+      /<(?:script|foreignObject|image)\b/i,
+      filename,
+    );
+    for (const match of content.matchAll(/(?:href|src)="([^"]+)"/g))
+      assert.ok(
+        match[1].startsWith("#"),
+        `${filename}: external asset reference`,
+      );
+  }
+  for (const [name, hex] of Object.entries(tokens.colors))
+    assert.match(hex, /^#[a-f0-9]{6}$/, name);
+  assert.equal(tokens.colors["bend-front"], "#a77bff");
+  assert.equal(tokens.colors["bend-depth"], "#56329b");
+  assert.equal(tokens.radii["radius-card"], "28px");
+  assert.equal(tokens.radii["radius-note"], "15px");
+  assert.equal(tokens.type["leading-body"], "1.55");
+  for (const filename of ["index.html", "illustrations.html"]) {
+    const html = fs.readFileSync(path.join(__dirname, filename), "utf8");
+    assert.doesNotMatch(html, /(?:src|href)="https?:/i);
+    assert.doesNotMatch(html, /mascot-studies|brand-motion|brand-explorations/);
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+    assert.equal(
+      new Set(ids).size,
+      ids.length,
+      `${filename}: duplicate HTML IDs`,
+    );
+    for (const match of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
+      const target = match[1];
+      if (target.startsWith("#"))
+        assert.ok(ids.includes(target.slice(1)), `Missing anchor: ${target}`);
+      else {
+        const [relativePath, fragment] = target.split("#");
+        const file = path.resolve(__dirname, relativePath);
+        assert.ok(fs.existsSync(file), `Missing local file: ${target}`);
+        if (fragment && relativePath.endsWith(".html"))
+          assert.ok(
+            fs.readFileSync(file, "utf8").includes(`id="${fragment}"`),
+            `Missing linked HTML anchor: ${target}`,
+          );
+        if (fragment && relativePath.endsWith(".md")) {
+          const headings = [
+            ...fs.readFileSync(file, "utf8").matchAll(/^#{1,6} (.+)$/gm),
+          ].map((match) =>
+            match[1]
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, "")
+              .replace(/\s/g, "-"),
+          );
+          assert.ok(
+            headings.includes(fragment),
+            `Missing linked heading: ${target}`,
+          );
+        }
       }
     }
   }
-}
+});
+
 const objectGroups = {
   collect: [
     "collection-folder",
@@ -190,161 +204,172 @@ const illustrationFiles = [
   ...backgroundFiles,
   ...compositionFiles,
 ];
-const excludedAssets = {
-  identity: ["app-icon", "wordmark", "wordmark-light"],
-  generatedPanoramaLayers: [
-    "panorama-back-ribbons",
-    "panorama-back-objects",
-    "panorama-front-ribbons",
-    "panorama-front-objects",
-  ],
-};
-const excludedRasterAssets = ["wordmark-print-transparent.png"];
-const specialistResources = {
-  characterConstructionAndExports: "../bend/index.html",
-  compactMarks: "index.html#mini-bend",
-  welcomeChoreography: "../examples/first-hello/index.html",
-  embeddedRecordSleeveAndCoverIllustrations:
-    "../examples/listening-room/index.html",
-};
-const library = fs.readFileSync(
-  path.join(__dirname, "illustrations.html"),
-  "utf8",
-);
-const overview = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
-const provenance = fs.readFileSync(
-  path.join(brand, "docs/provenance.md"),
-  "utf8",
-);
-const palette = new Set(Object.values(tokens.colors));
-const catalogued = [...library.matchAll(/data-asset="([^"]+)"/g)].map(
-  (match) => match[1],
-);
-assert.equal(
-  new Set(catalogued).size,
-  catalogued.length,
-  "No duplicate catalogue entries",
-);
-assert.deepEqual(
-  catalogued.toSorted(),
-  illustrationFiles.toSorted(),
-  "Complete illustration catalogue",
-);
-const classifiedAssets = [
-  ...illustrationFiles,
-  ...Object.values(excludedAssets).flat(),
-];
-assert.equal(
-  new Set(classifiedAssets).size,
-  classifiedAssets.length,
-  "Asset classifications are disjoint",
-);
-assert.deepEqual(
-  fs.readdirSync(path.join(brand, "assets"), { recursive: true }).toSorted(),
-  [
-    ...classifiedAssets.map((name) => `${name}.svg`),
-    ...excludedRasterAssets,
-  ].toSorted(),
-  "Every asset must be catalogued or explicitly classified as identity/generated artwork",
-);
-assert.doesNotMatch(
-  library,
-  /<(?:script|svg|iframe)\b/i,
-  "Static catalogue uses canonical external artwork",
-);
-for (const href of Object.values(specialistResources))
-  assert.ok(library.includes(`href="${href}"`), `Specialist resource: ${href}`);
-assert.ok(library.includes('href="index.html#identity"'), "Identity guidance");
-assert.ok(
-  library.includes('href="../docs/provenance.md#identity-marks"'),
-  "Identity source files remain discoverable",
-);
-assert.ok(
-  library.includes('href="../docs/illustration.md#panoramic-welcome"'),
-  "Generated layer recipe",
-);
-const overviewIllustration = overview.slice(
-  overview.indexOf('id="illustration"'),
-  overview.indexOf('id="motion"'),
-);
-assert.doesNotMatch(
-  overviewIllustration,
-  /asset-grid|href="\.\.\/assets\//,
-  "Asset selection belongs in the catalogue",
-);
-assert.equal(
-  (overviewIllustration.match(/href="illustrations.html"/g) || []).length,
-  1,
-);
-assert.ok(
-  overviewIllustration.includes('src="../assets/quiet-ribbon.svg"'),
-  "Composition grammar remains",
-);
-for (const name of illustrationFiles) {
-  const filename = `${name}.svg`;
-  const svg = fs.readFileSync(path.join(brand, "assets", filename), "utf8");
-  assert.equal(
-    [
-      ...library.matchAll(
-        new RegExp(`href="../assets/${filename.replace(".", "\\.")}"`, "g"),
-      ),
-    ].length,
-    1,
-    `${filename}: one source link`,
+test("Brand reference illustration catalog and assets", () => {
+  const tokens = JSON.parse(
+    fs.readFileSync(path.join(brand, "tokens.json"), "utf8"),
   );
-  assert.ok(
-    provenance.includes(`assets/${filename}`),
-    `${filename}: provenance`,
+  const excludedAssets = {
+    identity: ["app-icon", "wordmark", "wordmark-light"],
+    generatedPanoramaLayers: [
+      "panorama-back-ribbons",
+      "panorama-back-objects",
+      "panorama-front-ribbons",
+      "panorama-front-objects",
+    ],
+  };
+  const excludedRasterAssets = ["wordmark-print-transparent.png"];
+  const specialistResources = {
+    characterConstructionAndExports: "../bend/index.html",
+    compactMarks: "index.html#mini-bend",
+    welcomeChoreography: "../examples/first-hello/index.html",
+    embeddedRecordSleeveAndCoverIllustrations:
+      "../examples/listening-room/index.html",
+  };
+  const library = fs.readFileSync(
+    path.join(__dirname, "illustrations.html"),
+    "utf8",
+  );
+  const overview = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+  const provenance = fs.readFileSync(
+    path.join(brand, "docs/provenance.md"),
+    "utf8",
+  );
+  const palette = new Set(Object.values(tokens.colors));
+  const catalogued = [...library.matchAll(/data-asset="([^"]+)"/g)].map(
+    (match) => match[1],
+  );
+  assert.equal(
+    new Set(catalogued).size,
+    catalogued.length,
+    "No duplicate catalogue entries",
+  );
+  assert.deepEqual(
+    catalogued.toSorted(),
+    illustrationFiles.toSorted(),
+    "Complete illustration catalogue",
+  );
+  const classifiedAssets = [
+    ...illustrationFiles,
+    ...Object.values(excludedAssets).flat(),
+  ];
+  assert.equal(
+    new Set(classifiedAssets).size,
+    classifiedAssets.length,
+    "Asset classifications are disjoint",
+  );
+  assert.deepEqual(
+    fs.readdirSync(path.join(brand, "assets"), { recursive: true }).toSorted(),
+    [
+      ...classifiedAssets.map((name) => `${name}.svg`),
+      ...excludedRasterAssets,
+    ].toSorted(),
+    "Every asset must be catalogued or explicitly classified as identity/generated artwork",
   );
   assert.doesNotMatch(
-    svg,
-    /<(?:text|filter|linearGradient|radialGradient|animate\w*|set|style)\b|\son\w+\s*=|<!ENTITY/i,
-    `${filename}: static flat vector artwork`,
+    library,
+    /<(?:script|svg|iframe)\b/i,
+    "Static catalogue uses canonical external artwork",
   );
-  for (const [, color] of svg.matchAll(/(?:fill|stroke)="([^"]+)"/gi))
+  for (const href of Object.values(specialistResources))
     assert.ok(
-      color === "none" || palette.has(color.toLowerCase()),
-      `${filename}: palette color ${color}`,
+      library.includes(`href="${href}"`),
+      `Specialist resource: ${href}`,
     );
-  if (
-    Object.values(objectGroups).slice(0, 4).flat().includes(name) ||
-    name.startsWith("background-")
-  ) {
-    assert.match(svg, /<desc[^>]*>[^<]+<\/desc>/, `${filename}: description`);
-    assert.match(svg, /<svg[^>]*role="img"/, `${filename}: image role`);
-    assert.match(
-      svg,
-      /<svg[^>]*aria-labelledby="[^"]+"/,
-      `${filename}: accessible name`,
+  assert.ok(
+    library.includes('href="index.html#identity"'),
+    "Identity guidance",
+  );
+  assert.ok(
+    library.includes('href="../docs/provenance.md#identity-marks"'),
+    "Identity source files remain discoverable",
+  );
+  assert.ok(
+    library.includes('href="../docs/illustration.md#panoramic-welcome"'),
+    "Generated layer recipe",
+  );
+  const overviewIllustration = overview.slice(
+    overview.indexOf('id="illustration"'),
+    overview.indexOf('id="motion"'),
+  );
+  assert.doesNotMatch(
+    overviewIllustration,
+    /asset-grid|href="\.\.\/assets\//,
+    "Asset selection belongs in the catalogue",
+  );
+  assert.equal(
+    (overviewIllustration.match(/href="illustrations.html"/g) || []).length,
+    1,
+  );
+  assert.ok(
+    overviewIllustration.includes('src="../assets/quiet-ribbon.svg"'),
+    "Composition grammar remains",
+  );
+  for (const name of illustrationFiles) {
+    const filename = `${name}.svg`;
+    const svg = fs.readFileSync(path.join(brand, "assets", filename), "utf8");
+    assert.equal(
+      [
+        ...library.matchAll(
+          new RegExp(`href="../assets/${filename.replace(".", "\\.")}"`, "g"),
+        ),
+      ].length,
+      1,
+      `${filename}: one source link`,
     );
-  }
-  if (name.startsWith("background-")) {
+    assert.ok(
+      provenance.includes(`assets/${filename}`),
+      `${filename}: provenance`,
+    );
     assert.doesNotMatch(
       svg,
-      /<(?:image|foreignObject|script)\b|data-bend|@import|url\(\s*["']?(?!#)/i,
-      filename,
+      /<(?:text|filter|linearGradient|radialGradient|animate\w*|set|style)\b|\son\w+\s*=|<!ENTITY/i,
+      `${filename}: static flat vector artwork`,
     );
-    const viewBox = svg
-      .match(/<svg[^>]*viewBox="([^"]+)"/)?.[1]
-      .trim()
-      .split(/\s+/)
-      .map(Number);
-    assert.ok(
-      viewBox?.length === 4 &&
-        viewBox.every(Number.isFinite) &&
-        viewBox[2] > 0 &&
-        viewBox[3] > 0,
-      `${filename}: valid frame`,
-    );
-    assert.ok(
-      Buffer.byteLength(svg) < 50000,
-      `${filename}: lightweight background`,
-    );
+    for (const [, color] of svg.matchAll(/(?:fill|stroke)="([^"]+)"/gi))
+      assert.ok(
+        color === "none" || palette.has(color.toLowerCase()),
+        `${filename}: palette color ${color}`,
+      );
+    if (
+      Object.values(objectGroups).slice(0, 4).flat().includes(name) ||
+      name.startsWith("background-")
+    ) {
+      assert.match(svg, /<desc[^>]*>[^<]+<\/desc>/, `${filename}: description`);
+      assert.match(svg, /<svg[^>]*role="img"/, `${filename}: image role`);
+      assert.match(
+        svg,
+        /<svg[^>]*aria-labelledby="[^"]+"/,
+        `${filename}: accessible name`,
+      );
+    }
+    if (name.startsWith("background-")) {
+      assert.doesNotMatch(
+        svg,
+        /<(?:image|foreignObject|script)\b|data-bend|@import|url\(\s*["']?(?!#)/i,
+        filename,
+      );
+      const viewBox = svg
+        .match(/<svg[^>]*viewBox="([^"]+)"/)?.[1]
+        .trim()
+        .split(/\s+/)
+        .map(Number);
+      assert.ok(
+        viewBox?.length === 4 &&
+          viewBox.every(Number.isFinite) &&
+          viewBox[2] > 0 &&
+          viewBox[3] > 0,
+        `${filename}: valid frame`,
+      );
+      assert.ok(
+        Buffer.byteLength(svg) < 50000,
+        `${filename}: lightweight background`,
+      );
+    }
   }
-}
-console.log(
-  "Token generation, complete artwork inventory, provenance, HTML IDs and local links passed.",
-);
+  console.log(
+    "Token generation, complete artwork inventory, provenance, HTML IDs and local links passed.",
+  );
+});
 
 async function illustrationBrowserChecks(browser) {
   const context = await browser.newContext({
@@ -1038,7 +1063,4 @@ async function browserChecks() {
   }
 }
 if (process.argv.includes("--browser"))
-  browserChecks().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+  test("Brand reference layout and interactions in Chromium", browserChecks);

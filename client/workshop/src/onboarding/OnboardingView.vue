@@ -6,6 +6,7 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
+  useId,
   watch,
 } from "vue";
 import {
@@ -30,6 +31,7 @@ import {
   type OnboardingState,
   type Step,
 } from "./model";
+const fieldId = useId();
 const props = defineProps<{
   state: OnboardingState;
   developments: { id: string; title: string; phase: DevelopmentPhase }[];
@@ -390,8 +392,10 @@ onBeforeUnmount(() => {
                   <label
                     v-for="(task, i) in [c.taskOne, c.taskTwo]"
                     :key="task"
+                    :for="`${fieldId}-task-${i}`"
                     class="choice"
                     ><SituateCheckbox
+                      :id="`${fieldId}-task-${i}`"
                       appearance="plain"
                       type="checkbox"
                       :checked="state.tasks[i]"
@@ -515,9 +519,10 @@ onBeforeUnmount(() => {
           </template>
 
           <template v-else-if="state.step === 'note'">
-            <label class="field"
+            <label :for="`${fieldId}-note`" class="field"
               >{{ c.localNote
               }}<SituateTextarea
+                :id="`${fieldId}-note`"
                 appearance="plain"
                 class="note-editor"
                 :value="state.note"

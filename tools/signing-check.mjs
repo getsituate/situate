@@ -474,12 +474,9 @@ export async function checkSigning({
         } catch {
           cleanup.entryAbsent = null;
         }
-        cleanup.status =
-          cleanup.fileAbsent === false || cleanup.entryAbsent === false
-            ? "failed"
-            : cleanup.fileAbsent === true && cleanup.entryAbsent === true
-              ? "passed"
-              : "unknown";
+        const absence = [cleanup.fileAbsent, cleanup.entryAbsent];
+        if (absence.includes(false)) cleanup.status = "failed";
+        else if (!absence.includes(null)) cleanup.status = "passed";
       }
       if (cleanup.status !== "passed") {
         report.status = "failed";

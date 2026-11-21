@@ -4,6 +4,26 @@ import { expectDialogText, expectDialogTypography } from "./dialog-typography";
 
 test.use({ localizationMode: "real" });
 
+test("the plain-text reader scrolls from its keyboard tab stop", async ({
+  page,
+}) => {
+  await filesFixture(page, {
+    extraFiles: { "Notes/Long.txt": "A line of plain text.\n".repeat(200) },
+  });
+  await enterFiles(page);
+  await browse(page);
+  await page.getByRole("button", { name: "Long.txt", exact: true }).click();
+
+  const reader = page.getByRole("region", { name: "File source", exact: true });
+  await expect(reader).toBeVisible();
+  await expect(reader).toHaveAttribute("tabindex", "0");
+  await reader.focus();
+  await page.keyboard.press("PageDown");
+  await expect
+    .poll(() => reader.evaluate((node) => node.scrollTop))
+    .toBeGreaterThan(0);
+});
+
 async function enterFiles(page: Page, holdRead = false): Promise<void> {
   await page.goto("/");
   await expect(page.locator(".topic-window")).toBeVisible();

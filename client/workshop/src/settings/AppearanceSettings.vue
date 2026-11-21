@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from "vue";
 import { SituateRadio } from "../ui";
 import copy from "../localization/en.appearance.json";
 import { accents, accentStyle, type Accent } from "./accents";
@@ -10,6 +11,7 @@ defineProps<{
   disabled?: boolean;
 }>();
 const emit = defineEmits<{ select: [accent: Accent] }>();
+const appearanceId = useId();
 </script>
 
 <template>
@@ -27,9 +29,11 @@ const emit = defineEmits<{ select: [accent: Accent] }>();
         v-for="color in accents"
         :key="color"
         class="appearance-option"
+        :for="`${appearanceId}-accent-${color}`"
         :style="accentStyle(color)"
       >
         <SituateRadio
+          :id="`${appearanceId}-accent-${color}`"
           appearance="plain"
           type="radio"
           name="workspace-accent"

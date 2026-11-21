@@ -1,5 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
+const { test } = require("node:test");
 const { launchBrowser } = require("../../browser-launch.cjs");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -551,7 +552,7 @@ async function proofs(browser, directory, errors) {
   await page.close();
 }
 
-(async () => {
+test("Bend Mini rendering, accessibility and motion", async () => {
   const browser = await launchBrowser(chromium, {
     channel: process.env.PLAYWRIGHT_CHANNEL,
     executablePath: process.env.BROWSER_EXECUTABLE,
@@ -574,7 +575,4 @@ async function proofs(browser, directory, errors) {
   } finally {
     await browser.close();
   }
-})().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, useId, watch } from "vue";
 import { setupCopy } from "../workspaces/setup-content";
 import {
   accentStyle,
@@ -29,6 +29,7 @@ import {
   type SetupConversationState,
   type SetupConversationAction,
 } from "./conversation-setup";
+const fieldId = useId();
 
 const props = defineProps<{
   state: SetupConversationState;
@@ -441,8 +442,9 @@ watch(
               })
             "
         /></label>
-        <label class="fresh-choice"
+        <label :for="`${fieldId}-fresh`" class="fresh-choice"
           ><SituateCheckbox
+            :id="`${fieldId}-fresh`"
             :checked="state.fresh"
             @change="
               act({
@@ -457,9 +459,11 @@ watch(
           <label
             v-for="intent in ['keep', 'change', 'help'] as const"
             :key="intent"
+            :for="`${fieldId}-intent-${intent}`"
             class="intent-choice"
             :class="{ selected: state.intent === intent }"
             ><SituateRadio
+              :id="`${fieldId}-intent-${intent}`"
               name="setup-intent"
               :value="intent"
               :checked="state.intent === intent"

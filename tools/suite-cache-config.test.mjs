@@ -41,7 +41,10 @@ test("supported suite configurations pass eligibility checks", () => {
     "workshop-vue",
   ])
     for (const file of suiteConfigurationFiles(suite(id)))
-      validate(file, cacheConfigurations[file], id);
+      assert.deepEqual(
+        validate(file, cacheConfigurations[file], id),
+        file === workspaceFile ? [coreFile] : [],
+      );
 });
 
 test("Cargo accepts registry updates, feature changes and ordinary TOML formatting", () => {
@@ -67,14 +70,17 @@ test("Cargo accepts registry updates, feature changes and ordinary TOML formatti
     cacheConfigurations[coreFile] +
       '\n[dev-dependencies]\nother = { version = "1", optional = true, package = "renamed" }\n',
   ])
-    validate(coreFile, source, "client-core");
-  validate(
-    workspaceFile,
-    cacheConfigurations[workspaceFile].replace(
-      'version = "0.0.1"',
-      'version = "1.2.3"',
+    assert.deepEqual(validate(coreFile, source, "client-core"), []);
+  assert.deepEqual(
+    validate(
+      workspaceFile,
+      cacheConfigurations[workspaceFile].replace(
+        'version = "0.0.1"',
+        'version = "1.2.3"',
+      ),
+      "client-core",
     ),
-    "client-core",
+    [coreFile],
   );
 });
 
@@ -231,14 +237,25 @@ test("Vitest accepts literal options, comments and known bounded source roots", 
     ),
     cacheConfigurations[vitestFile].replace(
       "test: {",
-      'server: { fs: { allow: sourceRoots } }, test: { setupFiles: ["./src/test-setup.ts"],',
+      "server: { fs: { allow: sourceRoots } }, test: {",
     ),
     cacheConfigurations[vitestFile].replace(
       "clearMocks: true",
       'clearMocks: true, coverage: { provider: "v8", include: ["src/**/*.{ts,vue}"], exclude: ["src/**/*.test.ts"], reporter: ["text", "lcov", "html"], reportsDirectory: "../target/coverage/vue" }',
     ),
   ])
-    validate(vitestFile, source, "client-vue");
+    assert.deepEqual(validate(vitestFile, source, "client-vue"), []);
+  assert.deepEqual(
+    validate(
+      vitestFile,
+      cacheConfigurations[vitestFile].replace(
+        "test: {",
+        'test: { setupFiles: ["./src/test-setup.ts"],',
+      ),
+      "client-vue",
+    ),
+    ["client/app/src/test-setup.ts"],
+  );
 });
 
 test("Vitest unit exclusions accept only the literal default and executor boundary patterns", () => {

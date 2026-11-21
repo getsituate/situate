@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from "vue";
 import { SituateSelect, SituateButton } from "../ui";
 import copy from "../localization/en.import-preparation.json";
 import type {
@@ -6,15 +7,17 @@ import type {
   SourceConversation,
   SourceReply,
 } from "./source-conversation";
+const fieldId = useId();
 defineProps<{ state: SourceConversation }>();
 const emit = defineEmits<{ action: [action: SourceAction] }>();
 </script>
 <template>
   <section>
     <p>{{ copy.controls.intro }}</p>
-    <label
+    <label :for="`${fieldId}-outcome`"
       >{{ copy.controls.outcome }}
       <SituateSelect
+        :id="`${fieldId}-outcome`"
         :value="state.outcome"
         :aria-label="copy.controls.outcome"
         @change="
@@ -30,9 +33,10 @@ const emit = defineEmits<{ action: [action: SourceAction] }>();
         <option value="wait">{{ copy.controls.wait }}</option>
       </SituateSelect>
     </label>
-    <label
+    <label :for="`${fieldId}-reply`"
       >{{ copy.controls.reply }}
       <SituateSelect
+        :id="`${fieldId}-reply`"
         :value="state.reply"
         :aria-label="copy.controls.reply"
         @change="

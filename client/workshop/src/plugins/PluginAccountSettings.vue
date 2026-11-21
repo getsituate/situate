@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { SituateButton, SituateCheckbox } from "../ui";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import { c } from "./content";
 import { connectionAvailability } from "./connection-readiness";
 import {
@@ -16,6 +16,7 @@ const emit = defineEmits<{
   cancel: [];
   select: [pluginId: string, accountId: string, selected: boolean];
 }>();
+const accountListId = useId();
 const dependencies = computed(() =>
   connectorDependencies(props.state, props.plugin),
 );
@@ -122,8 +123,10 @@ const pending = computed(
         v-for="account in state.accounts[connector.id] ?? []"
         :key="account.id"
         class="plugin-account-choice"
+        :for="`${accountListId}-${connector.id}-${account.id}`"
       >
         <SituateCheckbox
+          :id="`${accountListId}-${connector.id}-${account.id}`"
           type="checkbox"
           :checked="
             state.accountSelections[plugin.id]?.includes(account.id) ?? false

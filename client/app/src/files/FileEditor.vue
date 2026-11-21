@@ -226,6 +226,12 @@ const fileCount = computed(
 const isMarkdown = computed(() =>
   /\.(?:md|markdown)$/iu.test(documentPath.value),
 );
+const documentScrollLabel = computed(() => {
+  if (comparison.value) return t("files.compareWithCurrent");
+  if (!historicalDeleted.value && mode.value !== "source" && !isMarkdown.value)
+    return t("files.textSource");
+  return undefined;
+});
 const wordCount = computed(() => markdownWordCount(displayedText.value));
 const tokens = computed(() =>
   highlightSource(displayedText.value, documentPath.value),
@@ -1651,9 +1657,9 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           <div
             ref="documentScroll"
             class="document-scroll"
-            :role="comparison ? 'region' : undefined"
-            :aria-label="comparison ? t('files.compareWithCurrent') : undefined"
-            :tabindex="comparison ? 0 : undefined"
+            :role="documentScrollLabel ? 'region' : undefined"
+            :aria-label="documentScrollLabel"
+            :tabindex="documentScrollLabel ? 0 : undefined"
             @scroll="rememberScroll"
           >
             <SituateEmptyState v-if="historicalDeleted" class="empty-document">
@@ -1717,9 +1723,6 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             <pre
               v-else-if="!isMarkdown"
               class="text-document"
-              role="region"
-              tabindex="0"
-              :aria-label="t('files.textSource')"
             ><SourceText :tokens="tokens" /></pre>
             <RenderedFile
               v-else
@@ -1926,9 +1929,13 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           <p v-if="action.kind === 'move'">
             {{ t("files.leaveTheFolderEmptyToMoveThisItemTo") }}
           </p>
-          <label v-if="needsDestination" class="destination-label"
+          <label
+            v-if="needsDestination"
+            class="destination-label"
+            :for="`${browserId}-destination`"
             >{{ destinationLabel
             }}<SituateInput
+              :id="`${browserId}-destination`"
               v-model="destination"
               autofocus
               :required="action.kind !== 'move'"
@@ -2074,9 +2081,10 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           <p>
             {{ t("files.theOriginalWasDeletedOutsideSituateYourDraftHas") }}
           </p>
-          <label class="destination-label"
+          <label class="destination-label" :for="`${browserId}-recovery-path`"
             >{{ t("files.newFilePath")
             }}<SituateInput
+              :id="`${browserId}-recovery-path`"
               v-model="destination"
               :disabled="busy"
               :placeholder="t('files.notesRecoveredMd')"
@@ -2177,15 +2185,17 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
         <form class="decision" @submit.prevent="resolve">
           <fieldset :disabled="busy || !writable">
             <legend>{{ t("files.whichCompleteVersionShouldBeSaved") }}</legend>
-            <label
+            <label :for="`${browserId}-keep-editor`"
               ><SituateRadio
+                :id="`${browserId}-keep-editor`"
                 appearance="plain"
                 v-model="choice"
                 type="radio"
                 value="editor"
               />{{ t("files.keepEditorText") }}</label
-            ><label
+            ><label :for="`${browserId}-keep-external`"
               ><SituateRadio
+                :id="`${browserId}-keep-external`"
                 appearance="plain"
                 v-model="choice"
                 type="radio"

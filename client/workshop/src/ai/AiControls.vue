@@ -29,8 +29,12 @@ function outcome(id: string) {
       commands, storage and chat handoffs do not contact services or change your
       device.
     </p>
-    <label v-if="['providers', 'methods'].includes(state.screen)">
+    <label
+      v-if="['providers', 'methods'].includes(state.screen)"
+      for="ai-exploration-mode"
+    >
       <SituateCheckbox
+        id="ai-exploration-mode"
         type="checkbox"
         :checked="state.explorationMode"
         @change="

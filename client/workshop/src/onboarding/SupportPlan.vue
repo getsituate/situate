@@ -137,10 +137,12 @@ const saveSummary = computed(() =>
               <label
                 v-for="choice in choices"
                 :key="choice"
+                :for="`${groupId}-${idea.id}-${choice}`"
                 class="choice"
                 :class="{ selected: state.support.choices[idea.id] === choice }"
               >
                 <SituateRadio
+                  :id="`${groupId}-${idea.id}-${choice}`"
                   appearance="plain"
                   :name="`${groupId}-${idea.id}`"
                   :value="choice"

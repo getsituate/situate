@@ -11,6 +11,7 @@ import supportCopy from "../localization/en.support-plan.json";
 import { c } from "./content";
 import { f } from "./flow-content";
 import type { OnboardingState, OnboardingAction } from "./model";
+const sourceId = useId();
 const sourceHelpId = useId();
 defineProps<{ state: OnboardingState }>();
 const emit = defineEmits<{
@@ -54,9 +55,10 @@ const input = (event: Event) => (event.target as HTMLInputElement).value;
       </template>
       <form v-else @submit.prevent="act({ type: 'start-source-chat' })">
         <p>{{ sourceCopy.intro }}</p>
-        <label class="field"
+        <label :for="sourceId" class="field"
           >{{ sourceCopy.label
           }}<SituateTextarea
+            :id="sourceId"
             appearance="plain"
             :value="state.source"
             :placeholder="sourceCopy.placeholder"

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { join } from "node:path";
 
 const formId = "45818df2-b1a5-11f1-aa1c-8b3425440a79";
@@ -139,336 +140,353 @@ export function providerFixture({
   });
 }
 
-export async function checkWaitlist(browser, origin, proofs) {
-  for (const width of [1440, 390, 320]) {
-    const context = await browser.newContext({
-      viewport: { width, height: 950 },
-      reducedMotion: "reduce",
-    });
-    const page = await context.newPage();
-    const external = [];
-    const requests = [];
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    page.on("request", (request) => {
-      if (!request.url().startsWith(origin)) external.push(request.url());
-    });
-    await page.route("https://**/*", async (route) => {
-      const request = route.request();
-      if (request.url() === `${endpoint}.js`) {
-        await route.fulfill({
-          contentType: "text/javascript",
-          body: `(${providerFixture.toString()})()`,
-        });
-      } else if (request.url() === endpoint && request.method() === "POST") {
-        requests.push(request.postData());
-        await route.fulfill({
-          json: { success: true },
-          headers: { "access-control-allow-origin": "*" },
-        });
-      } else await route.abort();
-    });
-    await page.goto(origin);
-    assert.deepEqual(
-      external,
-      [],
-      "no provider access before opening the form",
-    );
-    const section = page.locator("#platform-waitlist");
-    assert.ok(await section.locator("[data-waitlist-captcha]").isHidden());
-    assert.ok(await section.locator("[data-waitlist-help]").isHidden());
-    assert.ok(await section.locator("[data-waitlist-subscription]").isHidden());
-    assert.equal(
-      await section.locator("#platform-waitlist-privacy").count(),
-      0,
-    );
-    assert.ok((await section.boundingBox()).height < (width > 700 ? 260 : 370));
-    await section.screenshot({
-      path: join(proofs, `waitlist-closed-${width}.png`),
-    });
-    await page.locator('[data-waitlist-platform="windows"]').click();
-    await page.locator('[data-waitlist-platform="ios"]').click();
-    assert.deepEqual(
-      external,
-      [],
-      "platform navigation is not consent to load providers",
-    );
-    await page.locator("#load-platform-waitlist").focus();
-    await page.keyboard.press("Enter");
-    await page
-      .getByRole("textbox", { name: "Email address" })
-      .waitFor({ state: "visible" });
-    assert.ok(await section.locator("[data-waitlist-captcha]").isVisible());
-    assert.ok(await section.locator(".waitlist-entry").isHidden());
-    assert.ok(await section.locator("[data-waitlist-help]").isHidden());
-    assert.ok(
-      await section.locator("[data-waitlist-subscription]").isVisible(),
-    );
-    assert.equal(await page.locator("form").count(), 1);
-    assert.equal(external.filter((url) => url === `${endpoint}.js`).length, 1);
-    assert.equal(
+export function checkWaitlist(browser, origin, proofs) {
+  return test("Waitlist form and provider responses", async () => {
+    for (const width of [1440, 390, 320]) {
+      const context = await browser.newContext({
+        viewport: { width, height: 950 },
+        reducedMotion: "reduce",
+      });
+      const page = await context.newPage();
+      const external = [];
+      const requests = [];
+      const errors = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("request", (request) => {
+        if (!request.url().startsWith(origin)) external.push(request.url());
+      });
+      await page.route("https://**/*", async (route) => {
+        const request = route.request();
+        if (request.url() === `${endpoint}.js`) {
+          await route.fulfill({
+            contentType: "text/javascript",
+            body: `(${providerFixture.toString()})()`,
+          });
+        } else if (request.url() === endpoint && request.method() === "POST") {
+          requests.push(request.postData());
+          await route.fulfill({
+            json: { success: true },
+            headers: { "access-control-allow-origin": "*" },
+          });
+        } else await route.abort();
+      });
+      await page.goto(origin);
+      assert.deepEqual(
+        external,
+        [],
+        "no provider access before opening the form",
+      );
+      const section = page.locator("#platform-waitlist");
+      assert.ok(await section.locator("[data-waitlist-captcha]").isHidden());
+      assert.ok(await section.locator("[data-waitlist-help]").isHidden());
+      assert.ok(
+        await section.locator("[data-waitlist-subscription]").isHidden(),
+      );
+      assert.equal(
+        await section.locator("#platform-waitlist-privacy").count(),
+        0,
+      );
+      assert.ok(
+        (await section.boundingBox()).height < (width > 700 ? 260 : 370),
+      );
+      await section.screenshot({
+        path: join(proofs, `waitlist-closed-${width}.png`),
+      });
+      await page.locator('[data-waitlist-platform="windows"]').click();
+      await page.locator('[data-waitlist-platform="ios"]').click();
+      assert.deepEqual(
+        external,
+        [],
+        "platform navigation is not consent to load providers",
+      );
+      await page.locator("#load-platform-waitlist").focus();
+      await page.keyboard.press("Enter");
       await page
-        .getByRole("checkbox", { name: "Windows", exact: true })
-        .getAttribute("aria-checked"),
-      "true",
-    );
-    assert.equal(
-      await page
-        .getByRole("checkbox", { name: "iOS", exact: true })
-        .getAttribute("aria-checked"),
-      "true",
-    );
-    assert.equal(
-      await page.locator('[role="radio"][aria-checked="true"]').count(),
-      0,
-    );
-    await page
-      .getByRole("textbox", { name: "Email address" })
-      .fill("reader@example.invalid");
-    await page
-      .getByRole("checkbox", { name: "Windows", exact: true })
-      .press("Space");
-    await page.locator('[data-waitlist-platform="linux"]').click();
-    assert.ok(
-      await page
-        .getByRole("checkbox", { name: "Linux", exact: true })
-        .evaluate((option) =>
-          option.parentElement.hasAttribute("data-waitlist-choice"),
-        ),
-    );
-    assert.equal(
-      await page.getByRole("textbox", { name: "Email address" }).inputValue(),
-      "reader@example.invalid",
-    );
-    assert.equal(
-      await page
-        .getByRole("checkbox", { name: "Windows", exact: true })
-        .getAttribute("aria-checked"),
-      "false",
-    );
-    await page.locator('[data-waitlist-platform="linux"]').click();
-    assert.equal(
-      await page
-        .getByRole("checkbox", { name: "Linux", exact: true })
-        .getAttribute("aria-checked"),
-      "true",
-    );
-    await page
-      .getByRole("checkbox", { name: "Linux", exact: true })
-      .press("Space");
-    await page
-      .getByRole("checkbox", { name: "iOS", exact: true })
-      .press("Space");
-    await page
-      .getByRole("button", { name: "Join waitlist", exact: true })
-      .click();
-    assert.equal(requests.length, 0, "no submission without a platform");
-    assert.equal(
-      await page.locator("#platform-waitlist-status").innerText(),
-      "Choose at least one platform.",
-    );
-    await page
-      .getByRole("checkbox", { name: "Android", exact: true })
-      .press("Space");
-    await page
-      .getByRole("checkbox", { name: "iOS", exact: true })
-      .press("Space");
-    if (width === 1440) {
-      await page
-        .getByRole("radio", { name: "yes", exact: true })
-        .press("Space");
-      await page
-        .getByRole("radio", { name: "yes", exact: true })
-        .press("ArrowRight");
+        .getByRole("textbox", { name: "Email address" })
+        .waitFor({ state: "visible" });
+      assert.ok(await section.locator("[data-waitlist-captcha]").isVisible());
+      assert.ok(await section.locator(".waitlist-entry").isHidden());
+      assert.ok(await section.locator("[data-waitlist-help]").isHidden());
+      assert.ok(
+        await section.locator("[data-waitlist-subscription]").isVisible(),
+      );
+      assert.equal(await page.locator("form").count(), 1);
+      assert.equal(
+        external.filter((url) => url === `${endpoint}.js`).length,
+        1,
+      );
       assert.equal(
         await page
-          .getByRole("radio", { name: "no", exact: true })
+          .getByRole("checkbox", { name: "Windows", exact: true })
+          .getAttribute("aria-checked"),
+        "true",
+      );
+      assert.equal(
+        await page
+          .getByRole("checkbox", { name: "iOS", exact: true })
+          .getAttribute("aria-checked"),
+        "true",
+      );
+      assert.equal(
+        await page.locator('[role="radio"][aria-checked="true"]').count(),
+        0,
+      );
+      await page
+        .getByRole("textbox", { name: "Email address" })
+        .fill("reader@example.invalid");
+      await page
+        .getByRole("checkbox", { name: "Windows", exact: true })
+        .press("Space");
+      await page.locator('[data-waitlist-platform="linux"]').click();
+      assert.ok(
+        await page
+          .getByRole("checkbox", { name: "Linux", exact: true })
+          .evaluate((option) =>
+            option.parentElement.hasAttribute("data-waitlist-choice"),
+          ),
+      );
+      assert.equal(
+        await page.getByRole("textbox", { name: "Email address" }).inputValue(),
+        "reader@example.invalid",
+      );
+      assert.equal(
+        await page
+          .getByRole("checkbox", { name: "Windows", exact: true })
+          .getAttribute("aria-checked"),
+        "false",
+      );
+      await page.locator('[data-waitlist-platform="linux"]').click();
+      assert.equal(
+        await page
+          .getByRole("checkbox", { name: "Linux", exact: true })
           .getAttribute("aria-checked"),
         "true",
       );
       await page
-        .getByRole("radio", { name: "no", exact: true })
-        .press("ArrowLeft");
-    }
-    await page.locator("#platform-waitlist").scrollIntoViewIfNeeded();
-    assert.ok(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth + 1,
-      ),
-    );
-    await page.screenshot({ path: join(proofs, `waitlist-form-${width}.png`) });
-    await page
-      .getByRole("button", { name: "Join waitlist", exact: true })
-      .click();
-    await page.waitForFunction(
-      () => document.getElementById("platform-waitlist-form").hidden,
-    );
-    assert.ok(await section.locator("[data-waitlist-captcha]").isHidden());
-    assert.ok(await section.locator("[data-waitlist-help]").isVisible());
-    assert.equal(requests.length, 1);
-    assert.match(requests[0], /name="field_3\[\]"\r\n\r\n4/);
-    assert.match(requests[0], /name="field_3\[\]"\r\n\r\n3/);
-    if (width === 1440) assert.match(requests[0], /name="field_4"\r\n\r\n1/);
-    else assert.doesNotMatch(requests[0], /name="field_4"/);
-    assert.match(
-      await page.locator("#platform-waitlist-status").innerText(),
-      /Check your inbox to confirm/,
-    );
-    assert.deepEqual(errors, []);
-    await page.screenshot({
-      path: join(proofs, `waitlist-confirm-${width}.png`),
-    });
-    await context.close();
-  }
-
-  {
-    const context = await browser.newContext({ reducedMotion: "reduce" });
-    const page = await context.newPage();
-    await page.clock.install();
-    let submissions = 0;
-    await page.route("https://**/*", async (route) => {
-      if (route.request().url() === `${endpoint}.js`) {
-        return route.fulfill({
-          contentType: "text/javascript",
-          body: `(${providerFixture.toString()})({delayedCaptcha:true})`,
-        });
-      }
-      if (route.request().method() === "POST") {
-        submissions++;
-        return route.fulfill({
-          json: { success: true },
-          headers: { "access-control-allow-origin": "*" },
-        });
-      }
-      return route.abort();
-    });
-    await page.goto(origin);
-    await page.locator("#load-platform-waitlist").click();
-    await page
-      .getByRole("textbox", { name: "Email address" })
-      .waitFor({ state: "visible" });
-    await page
-      .getByRole("textbox", { name: "Email address" })
-      .fill("reader@example.invalid");
-    await page.getByRole("checkbox", { name: "Windows", exact: true }).click();
-    const submit = page.getByRole("button", {
-      name: "Join waitlist",
-      exact: true,
-    });
-    await submit.click();
-    await page.clock.fastForward(61000);
-    assert.equal(submissions, 0);
-    assert.match(
-      await page.locator("#platform-waitlist-status").innerText(),
-      /Complete the spam check/,
-    );
-    assert.ok(await submit.isEnabled());
-    await submit.click();
-    await page.evaluate(() => window.completeCaptcha());
-    await page.waitForFunction(
-      () => document.getElementById("platform-waitlist-form").hidden,
-    );
-    assert.equal(submissions, 1);
-    await context.close();
-  }
-
-  for (const scenario of [
-    "script-failure",
-    "missing-choices",
-    "changed-contract",
-    "submission-error",
-    "uncertain",
-  ]) {
-    const context = await browser.newContext({ reducedMotion: "reduce" });
-    const page = await context.newPage();
-    await page.clock.install();
-    let submissions = 0;
-    await page.route("https://**/*", async (route) => {
-      if (route.request().url() === `${endpoint}.js`) {
-        if (scenario === "script-failure") return route.abort();
-        return route.fulfill({
-          contentType: "text/javascript",
-          body: `(${providerFixture.toString()})(${JSON.stringify({ missingChoices: scenario === "missing-choices", changedContract: scenario === "changed-contract" })})`,
-        });
-      }
-      if (route.request().method() === "POST") {
-        submissions++;
-        return route.fulfill({
-          json: scenario === "uncertain" ? {} : { error: true },
-          headers: { "access-control-allow-origin": "*" },
-        });
-      }
-      return route.abort();
-    });
-    await page.goto(origin);
-    await page.locator("#load-platform-waitlist").click();
-    if (
-      ["script-failure", "missing-choices", "changed-contract"].includes(
-        scenario,
-      )
-    ) {
-      await page.clock.fastForward(21000);
-      await page.waitForFunction(() =>
-        document
-          .getElementById("platform-waitlist-status")
-          .textContent.includes("could not load"),
+        .getByRole("checkbox", { name: "Linux", exact: true })
+        .press("Space");
+      await page
+        .getByRole("checkbox", { name: "iOS", exact: true })
+        .press("Space");
+      await page
+        .getByRole("button", { name: "Join waitlist", exact: true })
+        .click();
+      assert.equal(requests.length, 0, "no submission without a platform");
+      assert.equal(
+        await page.locator("#platform-waitlist-status").innerText(),
+        "Choose at least one platform.",
       );
-      assert.ok(await page.locator("#platform-waitlist-form").isHidden());
+      await page
+        .getByRole("checkbox", { name: "Android", exact: true })
+        .press("Space");
+      await page
+        .getByRole("checkbox", { name: "iOS", exact: true })
+        .press("Space");
+      if (width === 1440) {
+        await page
+          .getByRole("radio", { name: "yes", exact: true })
+          .press("Space");
+        await page
+          .getByRole("radio", { name: "yes", exact: true })
+          .press("ArrowRight");
+        assert.equal(
+          await page
+            .getByRole("radio", { name: "no", exact: true })
+            .getAttribute("aria-checked"),
+          "true",
+        );
+        await page
+          .getByRole("radio", { name: "no", exact: true })
+          .press("ArrowLeft");
+      }
+      await page.locator("#platform-waitlist").scrollIntoViewIfNeeded();
       assert.ok(
-        await page.locator("#platform-waitlist a[href^='mailto:']").isVisible(),
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
       );
-      assert.equal(submissions, 0);
-    } else {
+      await page.screenshot({
+        path: join(proofs, `waitlist-form-${width}.png`),
+      });
+      await page
+        .getByRole("button", { name: "Join waitlist", exact: true })
+        .click();
+      await page.waitForFunction(
+        () => document.getElementById("platform-waitlist-form").hidden,
+      );
+      assert.ok(await section.locator("[data-waitlist-captcha]").isHidden());
+      assert.ok(await section.locator("[data-waitlist-help]").isVisible());
+      assert.equal(requests.length, 1);
+      assert.match(requests[0], /name="field_3\[\]"\r\n\r\n4/);
+      assert.match(requests[0], /name="field_3\[\]"\r\n\r\n3/);
+      if (width === 1440) assert.match(requests[0], /name="field_4"\r\n\r\n1/);
+      else assert.doesNotMatch(requests[0], /name="field_4"/);
+      assert.match(
+        await page.locator("#platform-waitlist-status").innerText(),
+        /Check your inbox to confirm/,
+      );
+      assert.deepEqual(errors, []);
+      await page.screenshot({
+        path: join(proofs, `waitlist-confirm-${width}.png`),
+      });
+      await context.close();
+    }
+
+    {
+      const context = await browser.newContext({ reducedMotion: "reduce" });
+      const page = await context.newPage();
+      await page.clock.install();
+      let submissions = 0;
+      await page.route("https://**/*", async (route) => {
+        if (route.request().url() === `${endpoint}.js`) {
+          return route.fulfill({
+            contentType: "text/javascript",
+            body: `(${providerFixture.toString()})({delayedCaptcha:true})`,
+          });
+        }
+        if (route.request().method() === "POST") {
+          submissions++;
+          return route.fulfill({
+            json: { success: true },
+            headers: { "access-control-allow-origin": "*" },
+          });
+        }
+        return route.abort();
+      });
+      await page.goto(origin);
+      await page.locator("#load-platform-waitlist").click();
       await page
         .getByRole("textbox", { name: "Email address" })
         .waitFor({ state: "visible" });
       await page
         .getByRole("textbox", { name: "Email address" })
         .fill("reader@example.invalid");
-      await page.getByRole("checkbox", { name: "Linux", exact: true }).click();
       await page
-        .getByRole("button", { name: "Join waitlist", exact: true })
+        .getByRole("checkbox", { name: "Windows", exact: true })
         .click();
-      if (scenario === "uncertain") {
-        await page.clock.fastForward(31000);
-        assert.match(
-          await page.locator("#platform-waitlist-status").innerText(),
-          /couldn’t confirm/,
+      const submit = page.getByRole("button", {
+        name: "Join waitlist",
+        exact: true,
+      });
+      await submit.click();
+      await page.clock.fastForward(61000);
+      assert.equal(submissions, 0);
+      assert.match(
+        await page.locator("#platform-waitlist-status").innerText(),
+        /Complete the spam check/,
+      );
+      assert.ok(await submit.isEnabled());
+      await submit.click();
+      await page.evaluate(() => window.completeCaptcha());
+      await page.waitForFunction(
+        () => document.getElementById("platform-waitlist-form").hidden,
+      );
+      assert.equal(submissions, 1);
+      await context.close();
+    }
+
+    for (const scenario of [
+      "script-failure",
+      "missing-choices",
+      "changed-contract",
+      "submission-error",
+      "uncertain",
+    ]) {
+      const context = await browser.newContext({ reducedMotion: "reduce" });
+      const page = await context.newPage();
+      await page.clock.install();
+      let submissions = 0;
+      await page.route("https://**/*", async (route) => {
+        if (route.request().url() === `${endpoint}.js`) {
+          if (scenario === "script-failure") return route.abort();
+          return route.fulfill({
+            contentType: "text/javascript",
+            body: `(${providerFixture.toString()})(${JSON.stringify({ missingChoices: scenario === "missing-choices", changedContract: scenario === "changed-contract" })})`,
+          });
+        }
+        if (route.request().method() === "POST") {
+          submissions++;
+          return route.fulfill({
+            json: scenario === "uncertain" ? {} : { error: true },
+            headers: { "access-control-allow-origin": "*" },
+          });
+        }
+        return route.abort();
+      });
+      await page.goto(origin);
+      await page.locator("#load-platform-waitlist").click();
+      if (
+        ["script-failure", "missing-choices", "changed-contract"].includes(
+          scenario,
+        )
+      ) {
+        await page.clock.fastForward(21000);
+        await page.waitForFunction(() =>
+          document
+            .getElementById("platform-waitlist-status")
+            .textContent.includes("could not load"),
         );
+        assert.ok(await page.locator("#platform-waitlist-form").isHidden());
         assert.ok(
           await page
-            .getByRole("button", { name: "Join waitlist", exact: true })
-            .isDisabled(),
+            .locator("#platform-waitlist a[href^='mailto:']")
+            .isVisible(),
         );
+        assert.equal(submissions, 0);
       } else {
-        await page.getByRole("alert").waitFor({ state: "visible" });
-        assert.equal(
-          await page
-            .getByRole("textbox", { name: "Email address" })
-            .inputValue(),
-          "reader@example.invalid",
-        );
-        assert.equal(
-          await page
-            .getByRole("checkbox", { name: "Linux", exact: true })
-            .getAttribute("aria-checked"),
-          "true",
-        );
-        assert.ok(
-          await page
-            .getByRole("button", { name: "Join waitlist", exact: true })
-            .isEnabled(),
-        );
+        await page
+          .getByRole("textbox", { name: "Email address" })
+          .waitFor({ state: "visible" });
+        await page
+          .getByRole("textbox", { name: "Email address" })
+          .fill("reader@example.invalid");
+        await page
+          .getByRole("checkbox", { name: "Linux", exact: true })
+          .click();
         await page
           .getByRole("button", { name: "Join waitlist", exact: true })
           .click();
-        await page.waitForTimeout(100);
-        assert.equal(submissions, 2);
+        if (scenario === "uncertain") {
+          await page.clock.fastForward(31000);
+          assert.match(
+            await page.locator("#platform-waitlist-status").innerText(),
+            /couldn’t confirm/,
+          );
+          assert.ok(
+            await page
+              .getByRole("button", { name: "Join waitlist", exact: true })
+              .isDisabled(),
+          );
+        } else {
+          await page.getByRole("alert").waitFor({ state: "visible" });
+          assert.equal(
+            await page
+              .getByRole("textbox", { name: "Email address" })
+              .inputValue(),
+            "reader@example.invalid",
+          );
+          assert.equal(
+            await page
+              .getByRole("checkbox", { name: "Linux", exact: true })
+              .getAttribute("aria-checked"),
+            "true",
+          );
+          assert.ok(
+            await page
+              .getByRole("button", { name: "Join waitlist", exact: true })
+              .isEnabled(),
+          );
+          await page
+            .getByRole("button", { name: "Join waitlist", exact: true })
+            .click();
+          await page.waitForTimeout(100);
+          assert.equal(submissions, 2);
+        }
       }
+      await context.close();
     }
-    await context.close();
-  }
-  console.log(
-    "Waitlist browser checks passed (provider requests intercepted).",
-  );
+    console.log(
+      "Waitlist browser checks passed (provider requests intercepted).",
+    );
+  });
 }

@@ -1,12 +1,25 @@
 import { Marked } from "marked";
 
+function stripClosedTags(text) {
+  const parts = [];
+  let start = 0;
+  for (;;) {
+    const open = text.indexOf("<", start);
+    if (open === -1) break;
+    const close = text.indexOf(">", open + 1);
+    if (close === -1) break;
+    parts.push(text.slice(start, open));
+    start = close + 1;
+  }
+  parts.push(text.slice(start));
+  return parts.join("");
+}
+
 function slugger() {
   const counts = new Map();
   return (text) => {
     const base =
-      text
-        .toLocaleLowerCase("en")
-        .replace(/<[^>]*(>|$)/g, (match, close) => (close ? "" : match))
+      stripClosedTags(text.toLocaleLowerCase("en"))
         .replace(/[^\p{L}\p{N}\s_-]/gu, "")
         .trim()
         .replace(/\s+/g, "-") || "section";

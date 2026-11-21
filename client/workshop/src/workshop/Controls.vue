@@ -392,8 +392,9 @@ onBeforeUnmount(() => {
       </div>
       <form @submit.prevent="resize">
         <div class="size-fields">
-          <label
+          <label for="preview-width"
             >Width<SituateInput
+              id="preview-width"
               v-model.number="width"
               type="number"
               min="320"
@@ -401,8 +402,9 @@ onBeforeUnmount(() => {
               step="1"
               required
           /></label>
-          <label
+          <label for="preview-height"
             >Height<SituateInput
+              id="preview-height"
               v-model.number="height"
               type="number"
               min="320"
@@ -635,8 +637,12 @@ onBeforeUnmount(() => {
           "
         />
       </template>
-      <label v-if="context.controls.includes('folder')" class="check"
+      <label
+        v-if="context.controls.includes('folder')"
+        class="check"
+        for="workspace-folder-exists"
         ><SituateCheckbox
+          id="workspace-folder-exists"
           :checked="state.folderExists"
           @change="
             dispatch({

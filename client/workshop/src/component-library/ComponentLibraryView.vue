@@ -310,8 +310,11 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
         </article>
         <article data-component="SituateSwitch">
           <h3>SituateSwitch</h3>
-          <label class="choice-example choice-example--switch"
+          <label
+            class="choice-example choice-example--switch"
+            for="example-reminders"
             ><SituateSwitch
+              id="example-reminders"
               :model-value="state.reminders"
               :disabled="disabled"
               @update:model-value="emit('patch', { reminders: $event })"
@@ -339,8 +342,9 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
         </article>
         <article data-component="SituateCheckbox">
           <h3>SituateCheckbox</h3>
-          <label class="choice-example"
+          <label class="choice-example" for="example-include-archived"
             ><SituateCheckbox
+              id="example-include-archived"
               :model-value="state.includeArchived"
               :disabled="disabled"
               @update:model-value="emit('patch', { includeArchived: $event })"
@@ -351,8 +355,9 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
           <h3>SituateRadio</h3>
           <fieldset>
             <legend>{{ c.radioLegend }}</legend>
-            <label class="choice-example"
+            <label class="choice-example" for="example-order-newest"
               ><SituateRadio
+                id="example-order-newest"
                 name="example-order"
                 value="newest"
                 :model-value="state.order"
@@ -360,8 +365,9 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
                 @update:model-value="emit('patch', { order: String($event) })"
               />{{ c.newest }}</label
             >
-            <label class="choice-example"
+            <label class="choice-example" for="example-order-oldest"
               ><SituateRadio
+                id="example-order-oldest"
                 name="example-order"
                 value="oldest"
                 :model-value="state.order"

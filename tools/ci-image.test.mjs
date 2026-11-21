@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
@@ -360,7 +360,7 @@ test("Swift source extraction rejects traversal, escaping links and unexpected r
   const helper = fileURLToPath(
     new URL("../client/docker/ci-swift-tools.py", import.meta.url),
   );
-  execFileSync(
+  const result = spawnSync(
     "python3",
     [
       "-c",
@@ -408,17 +408,18 @@ rejected(lambda: n.runtime_closure(["tool"], lambda _: "library => not found"))
 `,
     ],
     {
-      stdio: "pipe",
+      encoding: "utf8",
       env: { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1" },
     },
   );
+  assert.equal(result.status, 0, result.error?.message ?? result.stderr);
 });
 
 test("Swift source-build receipts reject changed outputs, aliases and compiler identity", () => {
   const helper = fileURLToPath(
     new URL("../client/docker/ci-swift-tools.py", import.meta.url),
   );
-  execFileSync(
+  const result = spawnSync(
     "python3",
     [
       "-c",
@@ -487,8 +488,9 @@ with tempfile.TemporaryDirectory() as temporary:
 `,
     ],
     {
-      stdio: "pipe",
+      encoding: "utf8",
       env: { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1" },
     },
   );
+  assert.equal(result.status, 0, result.error?.message ?? result.stderr);
 });

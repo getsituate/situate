@@ -319,3 +319,31 @@ impl Reply {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn snapshot_and_draft_require_nullable_fields() {
+        let snapshot = json!({
+            "writable": true, "reason": null, "entries": [],
+            "drafts": [{"path": "note.md", "base": null, "text": "Draft"}]
+        });
+        let parsed: Snapshot = serde_json::from_value(snapshot.clone()).unwrap();
+        assert!(parsed.reason.is_none());
+        assert!(parsed.drafts[0].base.is_none());
+
+        let mut missing_reason = snapshot.clone();
+        missing_reason.as_object_mut().unwrap().remove("reason");
+        assert!(serde_json::from_value::<Snapshot>(missing_reason).is_err());
+
+        let mut missing_base = snapshot;
+        missing_base["drafts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("base");
+        assert!(serde_json::from_value::<Snapshot>(missing_base).is_err());
+    }
+}

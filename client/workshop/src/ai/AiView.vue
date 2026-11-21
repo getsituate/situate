@@ -401,6 +401,7 @@ onBeforeUnmount(() => {
       <div class="identity">
         <img class="wordmark" :src="wordmark" alt="Situate" /><label
           class="workspace"
+          for="workspace"
           ><span>Open workspace</span
           ><SituateSelect
             id="workspace"
@@ -620,7 +621,7 @@ onBeforeUnmount(() => {
               >
               <template v-if="!policy.blocked">
                 <p class="muted">{{ securityCopy.responsibility }}</p>
-                <label class="warning-check">
+                <label class="warning-check" for="warning-ack">
                   <SituateCheckbox
                     appearance="plain"
                     id="warning-ack"

@@ -875,8 +875,9 @@ function shortcut(event: KeyboardEvent) {
                 ><small>{{ version.note }}</small>
               </SituateButton>
             </div>
-            <label class="history-controls"
+            <label :for="`${instanceId}-compare`" class="history-controls"
               ><SituateCheckbox
+                :id="`${instanceId}-compare`"
                 appearance="plain"
                 type="checkbox"
                 :checked="state.compare"
@@ -1116,8 +1117,9 @@ function shortcut(event: KeyboardEvent) {
                 : "Choose a name and a destination folder."
           }}
         </p>
-        <label
+        <label :for="`${instanceId}-name`"
           >Name<SituateInput
+            :id="`${instanceId}-name`"
             appearance="plain"
             :value="dialog.name"
             @input="
@@ -1133,8 +1135,9 @@ function shortcut(event: KeyboardEvent) {
             maxlength="120"
             autocomplete="off"
         /></label>
-        <label
+        <label :for="`${instanceId}-folder`"
           >Folder<SituateSelect
+            :id="`${instanceId}-folder`"
             :value="dialog.folder"
             @change="
               update((next) => {

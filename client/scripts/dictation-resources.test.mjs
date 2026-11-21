@@ -26,7 +26,7 @@ for (const mobile of [false, true]) {
     await put(join(content, "Resources/dictation/THIRD-PARTY-NOTICES.txt"));
     await put(join(content, "Resources/dictation/loader.pl"));
     await put(join(content, "Resources/en.lproj/InfoPlist.strings"));
-    await assertNoDictationTtsResources(app);
+    await assert.doesNotReject(() => assertNoDictationTtsResources(app));
   });
 }
 
