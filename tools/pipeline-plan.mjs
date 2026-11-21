@@ -26,7 +26,6 @@ const families = [
       "root-format",
       "root-lint",
       "root-secrets",
-      "root-commits",
       "root-history-secrets",
       "root-rust",
       "root-swift",

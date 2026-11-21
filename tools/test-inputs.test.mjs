@@ -60,7 +60,6 @@ test("security policy selects document checks without runtime or build suites", 
     "quick-source",
     "root-format",
     "root-secrets",
-    "root-commits",
     "root-history-secrets",
     "design-contracts",
   ]);

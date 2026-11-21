@@ -900,7 +900,7 @@ test("document selection is shared by unit, feedback and full changed profiles",
     for (const profile of [{ unit: true }, { feedback: true }, {}]) {
       const expected = profile.unit ? [] : ["root-format"];
       if (!profile.unit && !profile.feedback)
-        expected.push("root-commits", "root-history-secrets", "root-secrets");
+        expected.push("root-history-secrets", "root-secrets");
       if (file.startsWith("requirements/data/"))
         expected.push("requirements-unit", "requirements-catalog");
       expected.push("design-contracts");
