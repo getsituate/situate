@@ -15,6 +15,7 @@ import {
   ordinaryEnvironment,
   main,
   planWorkflow,
+  pipelineGitPath,
   runLane,
   runWorkflow,
   inspectWorkflow,
@@ -24,6 +25,18 @@ import {
 } from "./pipeline.mjs";
 import { main as actionsMain } from "./actions-adapter.mjs";
 import { digest, readOperation, sealPlan } from "./pipeline-state.mjs";
+
+test("lane source verification locates Git outside the checkout on Windows", () => {
+  assert.equal(
+    pipelineGitPath("win32", { ProgramFiles: "D:\\Program Files" }),
+    "D:\\Program Files\\Git\\bin\\git.exe",
+  );
+  assert.throws(
+    () => pipelineGitPath("win32", { ProgramFiles: "relative" }),
+    /Windows Program Files/,
+  );
+  assert.equal(pipelineGitPath("linux", {}), "/usr/bin/git");
+});
 
 const source = "a".repeat(40),
   base = "b".repeat(40);

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import {
@@ -38,8 +38,21 @@ const externalStages = new Set([
   "github",
   "promote",
 ]);
+export function pipelineGitPath(
+  platform = process.platform,
+  environment = process.env,
+) {
+  if (platform !== "win32") return "/usr/bin/git";
+  const directory = environment.ProgramFiles;
+  assert(
+    directory && win32.isAbsolute(directory),
+    "Windows Program Files directory is required",
+  );
+  return win32.join(directory, "Git", "bin", "git.exe");
+}
+
 const git = (root, args) =>
-  execFileSync("/usr/bin/git", args, {
+  execFileSync(pipelineGitPath(), args, {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
