@@ -101,10 +101,10 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
           match[1].includes("infrastructure/production/")
           ? /^(?:node infrastructure\/production\/immutable\/continuous-deploy\.mjs|(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?)$/
           : name === "deploy-website"
-            ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python(?:3)? tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
+            ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
             : name === "verify-hosting" && match[1].startsWith("terraform ")
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
-              : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
+              : /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
       );
     }
     assert.match(workflow, /persist-credentials: false/);
@@ -147,7 +147,10 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       ? workflow.replace(job(workflow, "macos-compatibility"), "")
       : workflow;
     assert.doesNotMatch(otherJobs, /runs-on: macos-1[0-9]/);
-    assert.doesNotMatch(workflow, /runs-on: windows(?!-2025\b)|--target.*(?:ios|android)/);
+    assert.doesNotMatch(
+      workflow,
+      /runs-on: windows(?!-2025\b)|--target.*(?:ios|android)/,
+    );
   }
 });
 
