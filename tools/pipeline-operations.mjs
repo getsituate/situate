@@ -565,13 +565,13 @@ export async function productionStages(
       if (!resume && environment.PIPELINE_REQUIRE_LATEST_MAIN === "true")
         await assertCurrentSource(plan, { environment });
       if (claim) await claim.claim({ resume });
-      const fresh = await readBaseline(root, {
+      const currentBaseline = await readBaseline(root, {
         repository: plan.repository,
         source: plan.source,
         environment,
       });
       assert.equal(
-        digest(fresh),
+        digest(currentBaseline),
         digest(plan.baseline),
         "Completed release history changed; inspect and plan a successor",
       );
