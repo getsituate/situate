@@ -27,11 +27,19 @@ export function releaseContent(catalog) {
   );
   if (catalog.schemaVersion !== 1 || !current)
     throw new Error("Release history must include the installed version.");
-  const locales = Object.keys(current.locales).sort();
+  const locales = Object.keys(current.locales).sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
   if (
     !locales.length ||
     catalog.releases.some(
-      (item) => !isDeepStrictEqual(Object.keys(item.locales).sort(), locales),
+      (item) =>
+        !isDeepStrictEqual(
+          Object.keys(item.locales).sort((a, b) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+          locales,
+        ),
     )
   )
     throw new Error(
@@ -56,7 +64,10 @@ export function validateReleaseContent(value, version) {
         typeof locale !== "string" ||
         !/^[a-z]{2}(?:-[A-Za-z0-9]+)*$/.test(locale),
     ) ||
-    !isDeepStrictEqual(value.locales, [...new Set(value.locales)].sort())
+    !isDeepStrictEqual(
+      value.locales,
+      [...new Set(value.locales)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    )
   )
     throw new Error("Invalid release-content binding.");
 }

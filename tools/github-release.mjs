@@ -197,11 +197,11 @@ function verifyContents(files, evidence, { metadataOnly = false } = {}) {
     artifact.updater?.signaturePath,
   ];
   assert.deepEqual(
-    [...packageNames].sort(),
+    [...packageNames].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     evidence.assets
       .filter((asset) => !PUBLIC_METADATA_ASSETS.includes(asset.name))
       .map((asset) => asset.name)
-      .sort(),
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     "Manifest package inventory differs",
   );
   for (const [name, digest] of [
@@ -714,8 +714,10 @@ export async function createGitHubRelease(
     "Creator resolves its reserved tag, not an unrelated release ID",
   );
   assert.deepEqual(
-    Object.keys(files).sort(),
-    evidence.assets.map((asset) => asset.name).sort(),
+    Object.keys(files).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    evidence.assets
+      .map((asset) => asset.name)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     "Only allowlisted public assets may be uploaded",
   );
   const bytes = Object.fromEntries(

@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
@@ -282,7 +282,7 @@ test("attachment checks require consumed original references, matching metadata 
 });
 
 const settledStart = source.indexOf("    const actionPending = (record) =>");
-assert.notEqual(settledStart, -1);
+before(() => assert.notEqual(settledStart, -1));
 const settledFlow = source.slice(
   settledStart,
   source.indexOf("    const saved = await load();", settledStart),
@@ -592,7 +592,7 @@ test("native publication acknowledgements must match saved destinations and revi
 const ordinaryStart = source.indexOf(
   '    await navigation();\n    await click("New chat");\n    await send(\n      "[e2e:ordinary-import]',
 );
-assert.notEqual(ordinaryStart, -1);
+before(() => assert.notEqual(ordinaryStart, -1));
 const ordinaryFlow = source.slice(
   ordinaryStart,
   source.indexOf('    await invoke("agent_e2e_ready");', ordinaryStart),
@@ -695,7 +695,7 @@ for (const [options, reason] of [
 }
 
 const batchPreviewStart = source.indexOf("        batchSummary.click();");
-assert.notEqual(batchPreviewStart, -1);
+before(() => assert.notEqual(batchPreviewStart, -1));
 const batchPreviewFlow = source.slice(
   batchPreviewStart,
   source.indexOf("\n      }\n      const imported =", batchPreviewStart),

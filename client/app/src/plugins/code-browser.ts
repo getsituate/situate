@@ -48,7 +48,7 @@ export function codeRows(
   function visit(path: string, depth: number) {
     for (const folder of [...folders]
       .filter((f) => parent(f) === path)
-      .sort()) {
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
       const expanded = !!query || state.expanded.includes(folder);
       rows.push({
         path: folder,

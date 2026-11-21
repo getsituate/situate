@@ -13,7 +13,7 @@ export function nativeDesktopIssue({
   });
   if (result.error || result.status !== 0) return "desktop-session-unavailable";
   const locked = result.stdout.match(
-    /^\s*"IOConsoleLocked"\s*=\s*(Yes|No)\s*$/m,
+    /^[^\S\r\n\u2028\u2029]*"IOConsoleLocked"\s*=\s*(Yes|No)\s*$/m,
   )?.[1];
   if (!locked) return "desktop-session-unavailable";
   return locked === "Yes" ? "desktop-session-locked" : null;

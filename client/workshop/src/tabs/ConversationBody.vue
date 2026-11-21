@@ -57,6 +57,7 @@ watch(empty, () => nextTick(focus));
     <template v-else>
       <div
         class="chat-scroll"
+        role="region"
         tabindex="0"
         :aria-label="copy.conversationHistory"
       >

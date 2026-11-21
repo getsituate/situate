@@ -526,7 +526,10 @@ try {
     assert.deepEqual(external, [], `${capture.file}: external requests`);
     assert(
       !/\/Users\/|\/home\/|sk-[a-zA-Z0-9]|@/.test(
-        audit.text.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.example\b/g, ""),
+        audit.text.replace(
+          /[a-zA-Z0-9._%+-]+(@[a-zA-Z0-9.-]+\.example\b)?/g,
+          (match, domain) => (domain ? "" : match),
+        ),
       ),
       `${capture.file}: unexpected identifying text`,
     );

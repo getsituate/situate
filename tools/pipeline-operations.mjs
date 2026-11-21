@@ -31,7 +31,7 @@ const hostFields = (plan, config) => ({
     : {}),
 });
 const git = (root, args) =>
-  execFileSync("git", args, {
+  execFileSync("/usr/bin/git", args, {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -49,7 +49,7 @@ const canonical = (value) =>
     entry && !Array.isArray(entry) && typeof entry === "object"
       ? Object.fromEntries(
           Object.keys(entry)
-            .sort()
+            .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
             .map((key) => [key, entry[key]]),
         )
       : entry,

@@ -20,7 +20,7 @@ export function imageInputs(directory = root) {
           /^ci-.*\.(?:mjs|py|sh|json)$/.test(name) || name === "ci-NOTICES.md",
       )
       .map((name) => `client/docker/${name}`),
-  ].sort();
+  ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 export function inputDigest(directory = root) {
   const hash = createHash("sha256");
@@ -42,8 +42,9 @@ export function validateLock(lock, digest) {
     lock?.version === 1
       ? lock.platform === "linux/amd64" && lock.platforms === undefined
       : lock?.version === 2 &&
-        Object.keys(lock).sort().join(",") ===
-          "image,inputsSha256,platforms,version" &&
+        Object.keys(lock)
+          .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+          .join(",") === "image,inputsSha256,platforms,version" &&
         lock.platform === undefined &&
         Array.isArray(lock.platforms) &&
         lock.platforms.length === imagePlatforms.length &&
@@ -179,5 +180,21 @@ if (
     checkBrowserPins(directory);
     checkToolPins(directory);
     console.log(inputDigest(directory));
-  } else console.log(JSON.stringify(readImageLock(directory)));
+  } else {
+    const lock = readImageLock(directory);
+    const fields = [
+      "version",
+      "image",
+      "inputsSha256",
+      "platform",
+      "platforms",
+    ];
+    console.log(
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(lock).filter(([key]) => fields.includes(key)),
+        ),
+      ),
+    );
+  }
 }

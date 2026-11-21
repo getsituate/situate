@@ -146,7 +146,7 @@ export function sanitizeAppleDiagnostic(value, clipped = false) {
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\r\n]*/gi, "[url]")
     .replace(/\bBearer\s+[^\s]+/gi, "Bearer [redacted]")
     .replace(
-      /\b(?:[a-z][a-z0-9_]*(?:token|secret|password|api_key)|authorization|token|password|secret|api[_-]?key)\s*["']?\s*[=:][^\r\n]*/gi,
+      /\b(?:[a-z][a-z0-9_]*(?:token|secret|password|api_key)|authorization|token|password|secret|api[_-]?key)\s*(?:["']\s*)?[=:][^\r\n]*/gi,
       "[redacted]",
     )
     .replace(/\b[a-f0-9]{32,}\b/gi, "[redacted]")

@@ -328,14 +328,18 @@ async function main() {
   const source = values.coverage
     ? realpathSync(resolve(workspace, values.coverage))
     : harness;
-  if (
-    !values.visual &&
-    (!existsSync(resolve(source, ".git")) ||
-      !statSync(resolve(source, ".git")).isDirectory())
-  )
-    throw new Error(
-      "Use a regular checkout with its .git directory inside the workspace, not a linked worktree.",
-    );
+  inside(workspace, source);
+  if (!values.visual) {
+    const gitDirectory = resolve(source, ".git");
+    const gitPath = existsSync(gitDirectory)
+      ? realpathSync(gitDirectory)
+      : null;
+    if (gitPath) inside(workspace, gitPath);
+    if (!gitPath || !statSync(gitPath).isDirectory())
+      throw new Error(
+        "Use a regular checkout with its .git directory inside the workspace, not a linked worktree.",
+      );
+  }
   const cachePath =
     process.env.CI_CACHE_DIR ||
     (process.env.RUNNER_TEMP &&

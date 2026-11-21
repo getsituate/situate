@@ -33,7 +33,7 @@ export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object")
     return `{${Object.keys(value)
-      .sort()
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
       .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
       .join(",")}}`;
   return JSON.stringify(value);
@@ -164,7 +164,10 @@ function keys(object, expected) {
     object &&
       typeof object === "object" &&
       !Array.isArray(object) &&
-      Object.keys(object).sort().join() === [...expected].sort().join(),
+      Object.keys(object)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .join() ===
+        [...expected].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).join(),
     "Unexpected release content fields",
   );
 }

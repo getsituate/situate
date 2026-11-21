@@ -5,7 +5,10 @@ import { validateSourceVerificationReuse } from "./source-verification-evidence.
 const revision = /^[a-f0-9]{40}$/;
 const sha256 = /^[a-f0-9]{64}$/;
 const sameKeys = (value, keys) =>
-  assert.deepEqual(Object.keys(value ?? {}).sort(), [...keys].sort());
+  assert.deepEqual(
+    Object.keys(value ?? {}).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    [...keys].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
 
 export function buildSourceVerification(plan, receipts) {
   const aggregate = aggregateReceipts(plan, receipts);
@@ -79,8 +82,10 @@ export function validateSourceVerification(
     );
     assert(Array.isArray(verification.results));
     assert.deepEqual(
-      verification.results.map(({ id }) => id).sort(),
-      [...lanes].sort(),
+      verification.results
+        .map(({ id }) => id)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+      [...lanes].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     );
     if (mixed) {
       validatePlan(verification.plan);
@@ -89,8 +94,10 @@ export function validateSourceVerification(
           verification.plan.authorizationDigest === verification.planDigest,
       );
       assert.deepEqual(
-        verification.plan.lanes.map(({ id }) => id).sort(),
-        [...lanes].sort(),
+        verification.plan.lanes
+          .map(({ id }) => id)
+          .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+        [...lanes].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
       );
       assert(
         Array.isArray(verification.reuse) &&

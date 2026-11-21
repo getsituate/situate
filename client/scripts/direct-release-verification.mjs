@@ -39,7 +39,9 @@ export function bundleDigest(app) {
     );
     if (stat.isSymbolicLink()) hash.update(readlinkSync(path));
     else if (stat.isDirectory())
-      for (const name of readdirSync(path).sort())
+      for (const name of readdirSync(path).sort((a, b) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      ))
         visit(join(path, name), `${relative}/${name}`);
     else if (stat.isFile() && stat.nlink === 1)
       withReleaseFile(path, (fd, opened) => {
@@ -199,8 +201,15 @@ export async function verifyDirectPayloads(
       )
         .trim()
         .split(/\s+/)
-        .sort();
-      if (!isDeepStrictEqual(architectures, [...artifact.architectures].sort()))
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      if (
+        !isDeepStrictEqual(
+          architectures,
+          [...artifact.architectures].sort((a, b) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        )
+      )
         throw new Error("App architectures do not match the manifest.");
       await execute(
         "codesign",

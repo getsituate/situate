@@ -84,7 +84,9 @@ export function changedFiles(directory, base) {
       ]),
     );
   }
-  return [...new Set(parts.flatMap(pathsFromGit))].sort();
+  return [...new Set(parts.flatMap(pathsFromGit))].sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
 }
 
 export function affectedProjects(files) {
@@ -146,7 +148,7 @@ export function sourceFiles(directory) {
     ),
   ]
     .filter((file) => existsSync(join(directory, file)))
-    .sort();
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 export function suiteInventory(files, host = process.platform) {
@@ -1032,7 +1034,7 @@ function processSnapshot() {
   );
   const snapshot = new Map();
   for (const line of listing.split("\n")) {
-    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/);
+    const match = line.trimEnd().match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S.*)$/);
     if (match && !match[3].startsWith("Z"))
       snapshot.set(Number(match[1]), {
         parent: Number(match[2]),
@@ -1600,7 +1602,7 @@ async function runHostPlan(
     // runner must not replace node_modules between parallel dependent suites.
     for (const workspace of [
       ...new Set(plan.suites.map((s) => s.npm).filter(Boolean)),
-    ].sort()) {
+    ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
       if (signal?.aborted) break;
       try {
         const dependencies = await prepare(workspace, { ...options, signal });
@@ -1911,7 +1913,7 @@ export async function main(args = process.argv.slice(2)) {
       ? (suite, executionOptions) =>
           executeSuite(cachedQualitySuite(suite, root), executionOptions)
       : executeSuite;
-    let describeCache = () => "";
+    let describeCache;
     if (options["success-cache"]) {
       const { createSuiteCacheExecutor, describeSuiteCacheResult } =
         await import("./suite-cache.mjs");
@@ -1961,7 +1963,7 @@ export async function main(args = process.argv.slice(2)) {
         ),
       onResult: (result) =>
         console.error(
-          `${result.id}: ${result.reused ? "reused" : result.status}${result.error ? ` — ${result.error}` : ""}${describeCache(result)}`,
+          `${result.id}: ${result.reused ? "reused" : result.status}${result.error ? ` — ${result.error}` : ""}${describeCache?.(result) ?? ""}`,
         ),
     });
     report.worktreeQueueWaitMs = worktreeQueueWaitMs;

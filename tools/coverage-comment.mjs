@@ -44,7 +44,9 @@ export function validateReport(text, expected) {
       if (metric !== undefined) throw new Error("Unexpected coverage counts");
     } else if (
       !metric ||
-      Object.keys(metric).sort().join() !== "found,hit" ||
+      Object.keys(metric)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .join() !== "found,hit" ||
       !Number.isSafeInteger(metric.found) ||
       !Number.isSafeInteger(metric.hit) ||
       metric.found < 1 ||

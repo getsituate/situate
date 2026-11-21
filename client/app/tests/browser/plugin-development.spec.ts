@@ -243,6 +243,16 @@ for (const width of [1440, 1000, 700]) {
         .filter({ hasText: "entry.js" })
         .click();
       await expect(changes.locator(".diff-lines")).toContainText(source);
+      const headers = changes.getByRole("table").getByRole("columnheader");
+      await expect(headers).toHaveCount(4);
+      for (const [index, name] of [
+        "Line before change",
+        "Line after change",
+        "Change",
+        "Line text",
+      ].entries()) {
+        await expect(headers.nth(index)).toHaveAccessibleName(name);
+      }
       await visual.capture("plugins.development.diff");
       if (width > 840) {
         await changes.locator(".inspection-header button").click();

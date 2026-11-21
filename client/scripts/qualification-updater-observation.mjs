@@ -87,7 +87,9 @@ export function observeUpdater({ home, uid, identifier, version, since }) {
     }
 
     const events = [];
-    for (const name of names.sort().slice(-2)) {
+    for (const name of names
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .slice(-2)) {
       const fd = openSync(
         join(directory, name),
         constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,

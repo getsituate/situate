@@ -118,9 +118,12 @@ def snapshot():
     output = subprocess.check_output(["/bin/ps", "-A", "-o", "pid=,ppid=,pgid=,stat=,lstart="], text=True, timeout=10)
     result = {}
     for line in output.splitlines():
-        match = re.match(r"\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$", line)
-        if match and not match[4].startswith("Z"):
-            result[int(match[1])] = (int(match[2]), int(match[3]), match[5])
+        fields = line.strip().split(maxsplit=4)
+        if len(fields) != 5:
+            continue
+        pid, parent, group, state, started = fields
+        if not state.startswith("Z") and all(field.isdecimal() for field in (pid, parent, group)):
+            result[int(pid)] = (int(parent), int(group), started)
     return result
 
 

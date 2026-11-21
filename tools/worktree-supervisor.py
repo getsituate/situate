@@ -78,7 +78,7 @@ def snapshot():
     )
     result = {}
     for line in listing.splitlines():
-        match = re.match(r"\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$", line)
+        match = re.match(r"\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S.*)$", line.rstrip())
         if match and not match[4].startswith("Z"):
             result[int(match[1])] = (int(match[2]), int(match[3]), match[5])
     return result

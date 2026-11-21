@@ -9,7 +9,7 @@ ADB_PORT=${ADB_PORT:-5049}
 EMULATOR_PORT=${EMULATOR_PORT:-5584}
 NETWORK_PORT=${NETWORK_PORT:-5599}
 APK="$HERE/build/outputs/apk/debug/provider-platform-lifecycle-debug.apk"
-test -f "$APK"
+[[ -f "$APK" ]]
 for port in "$ADB_PORT" "$EMULATOR_PORT" "$((EMULATOR_PORT + 1))" "$NETWORK_PORT"; do
     if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
         echo "Port $port is already in use" >&2

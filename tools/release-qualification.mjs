@@ -75,7 +75,10 @@ function verifyPackages(directory, manifest) {
     "Invalid universal package identity",
   );
   assert(
-    isDeepStrictEqual([...artifact.architectures].sort(), ["arm64", "x86_64"]),
+    isDeepStrictEqual(
+      [...artifact.architectures].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+      ["arm64", "x86_64"],
+    ),
     "Invalid universal architectures",
   );
   assert(sha.test(artifact.bundleSha256), "Missing final app digest");

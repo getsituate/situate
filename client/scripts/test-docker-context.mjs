@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { dockerExecutable } from "../../tools/ci-container.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const scratch = mkdtempSync(join(tmpdir(), "situate-context-"));
@@ -90,7 +91,7 @@ try {
   for (const file of ["Dockerfile", "Dockerfile.dockerignore"])
     cpSync(join(root, "docker", file), join(context, "client/docker", file));
   const result = spawnSync(
-    "docker",
+    dockerExecutable(),
     [
       "buildx",
       "build",

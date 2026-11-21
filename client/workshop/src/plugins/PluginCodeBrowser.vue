@@ -184,6 +184,7 @@ defineExpose({ showTree });
         <div
           ref="documentPane"
           class="code-document-scroll"
+          role="region"
           tabindex="0"
           :aria-label="c.fileContent"
           :id="id"

@@ -150,6 +150,7 @@ defineExpose({ focus: () => title.value?.focus() });
         <div
           ref="reader"
           class="file-reader"
+          role="region"
           data-dialog-document
           tabindex="0"
           :aria-label="copy.filename"

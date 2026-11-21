@@ -342,7 +342,9 @@ export function createDiagnostics(transport: Transport) {
             let duration: Attributes = {};
             try {
               const elapsed =
-                started === undefined ? NaN : performance.now() - started;
+                started === undefined
+                  ? Number.NaN
+                  : performance.now() - started;
               if (Number.isFinite(elapsed))
                 duration = {
                   duration_ms: Math.min(86400000, Math.max(0, elapsed)),

@@ -11,7 +11,7 @@
 static int component(JNIEnv *env, jstring value, char output[NAME_MAX + 1]) {
     if (value == NULL) return EINVAL;
     jsize length = (*env)->GetStringLength(env, value);
-    if (length == 0 || length > NAME_MAX) return EINVAL;
+    if (length <= 0 || length > NAME_MAX) return EINVAL;
     jchar chars[NAME_MAX];
     (*env)->GetStringRegion(env, value, 0, length, chars);
     if ((*env)->ExceptionCheck(env)) return EINVAL;

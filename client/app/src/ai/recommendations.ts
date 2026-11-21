@@ -150,13 +150,15 @@ export function rankModelChoices(
       ];
     });
 }
+const staticAvailability: ModelAvailability = {
+  source: "static",
+  models: staticModels,
+};
+
 export function recommendedChoice(
   config: Config,
   kind: "chat" | "comment" = "chat",
-  availability: ModelAvailability = {
-    source: "static",
-    models: staticModels,
-  },
+  availability: ModelAvailability = staticAvailability,
 ): ModelChoice | null {
   return rankModelChoices(config, kind, availability)[0] ?? null;
 }

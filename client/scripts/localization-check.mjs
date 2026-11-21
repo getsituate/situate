@@ -38,7 +38,7 @@ const parameters = (value) =>
         (match) => match[1],
       ),
     ),
-  ].sort();
+  ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
 export function validateCatalogs(catalogs) {
   const errors = [];
@@ -72,7 +72,7 @@ export function loadCatalogs(directory) {
   const errors = [];
   for (const name of readdirSync(directory)
     .filter((name) => name.endsWith(".json"))
-    .sort()) {
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
     const locale = name.split(".")[0];
     const source = readFileSync(join(directory, name), "utf8");
     const parsed = ts.parseJsonText(name, source);
@@ -460,7 +460,9 @@ export function checkSource(source, filename, catalog) {
               );
               if (
                 names.includes(null) ||
-                JSON.stringify([...names].sort()) !== JSON.stringify(expected)
+                JSON.stringify(
+                  [...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+                ) !== JSON.stringify(expected)
               )
                 report(
                   line(node),
@@ -529,7 +531,7 @@ export function checkSource(source, filename, catalog) {
           .trim();
         const decode = (input) =>
           input.replace(/\\([0-9a-f]{1,6})\s?|\\(.)/giu, (_match, hex, char) =>
-            hex ? String.fromCodePoint(parseInt(hex, 16)) : char,
+            hex ? String.fromCodePoint(Number.parseInt(hex, 16)) : char,
           );
         if (remainder || strings.some((match) => !structural(decode(match[2]))))
           report(

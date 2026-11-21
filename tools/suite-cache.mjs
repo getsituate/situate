@@ -111,7 +111,9 @@ async function snapshot(root, suite, options, affectedFiles) {
       "-z",
     ]);
     if (output.includes("\ufffd")) throw new Error("Unsupported filename");
-    return [...new Set(output.split("\0").filter(Boolean))].sort();
+    return [...new Set(output.split("\0").filter(Boolean))].sort((a, b) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    );
   };
   const configurations = suiteConfigurationFiles(suite);
   if (suite.id === "client-core") {
@@ -193,7 +195,9 @@ async function snapshot(root, suite, options, affectedFiles) {
       if (content) throw new Error("Source directory or submodule");
       if (visited.has(path)) return;
       visited.add(path);
-      const names = readdirSync(path).sort();
+      const names = readdirSync(path).sort((a, b) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      );
       for (const name of names) {
         if (
           name === ".git" ||
@@ -505,7 +509,10 @@ async function snapshot(root, suite, options, affectedFiles) {
         if (path === dirname(path)) break;
       }
     }
-    for (const path of [...dependencyRoots].sort()) await inspect(path);
+    for (const path of [...dependencyRoots].sort((a, b) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    ))
+      await inspect(path);
   }
   for (const file of [
     "package.json",
@@ -518,7 +525,9 @@ async function snapshot(root, suite, options, affectedFiles) {
     "client/rust-toolchain.toml",
   ])
     sources.add(file);
-  for (const file of [...sources].sort()) {
+  for (const file of [...sources].sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  )) {
     const path = resolve(root, file);
     if (!inside(root, path)) throw new Error("External source");
     await inspect(

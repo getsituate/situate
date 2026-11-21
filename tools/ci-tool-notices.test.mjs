@@ -342,7 +342,7 @@ test("committed inventory covers pflag and pins the source-free verifier inputs"
     const expected = createHash("sha256").update(contents).digest("hex");
     assert.ok(verify.includes(`${key}: "${expected}"`), key);
   }
-  assert.match(verify, /execFileSync\("python3"/);
+  assert.match(verify, /execFileSync\(\s*"\/usr\/bin\/python3"/);
   assert.ok(read("Dockerfile").includes("COPY LICENSE /LICENSE"));
   assert.ok(read("Dockerfile.dockerignore").includes("!LICENSE"));
   assert.ok(verify.includes("/opt/ci-tools/LICENSE-Situate.txt"));

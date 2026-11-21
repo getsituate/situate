@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from "vue";
 import {
   SituateButton,
   SituateCheckbox,
@@ -9,13 +10,15 @@ import copy from "../localization/en.updates.json" with { type: "json" };
 import type { UpdateAction, UpdateChannel, UpdateState } from "./model";
 defineProps<{ state: UpdateState }>();
 const emit = defineEmits<{ action: [action: UpdateAction] }>();
+const controlsId = useId();
 </script>
 <template>
   <div class="update-controls">
     <p class="design-note">{{ copy.controls.description }}</p>
-    <label
-      >{{ copy.controls.channel }}
+    <div class="select-field">
+      <label :for="`${controlsId}-channel`">{{ copy.controls.channel }}</label>
       <SituateSelect
+        :id="`${controlsId}-channel`"
         :value="state.channel"
         @change="
           emit('action', {
@@ -29,11 +32,12 @@ const emit = defineEmits<{ action: [action: UpdateAction] }>();
         <option value="homebrew">{{ copy.controls.homebrew }}</option>
         <option value="store">{{ copy.controls.store }}</option>
       </SituateSelect>
-    </label>
+    </div>
     <template v-if="state.channel === 'direct'">
-      <label v-if="state.phase === 'checking'"
-        >{{ copy.controls.state }}
+      <div v-if="state.phase === 'checking'" class="select-field">
+        <label :for="`${controlsId}-result`">{{ copy.controls.state }}</label>
         <SituateSelect
+          :id="`${controlsId}-result`"
           :value="state.result"
           @change="
             emit('action', {
@@ -47,7 +51,7 @@ const emit = defineEmits<{ action: [action: UpdateAction] }>();
           <option value="current">{{ copy.controls.current }}</option>
           <option value="offline">{{ copy.controls.offline }}</option>
         </SituateSelect>
-      </label>
+      </div>
       <SituateButton
         v-if="state.phase === 'checking'"
         size="small"
@@ -100,9 +104,12 @@ const emit = defineEmits<{ action: [action: UpdateAction] }>();
         >
       </template>
       <template v-if="state.preparation === 'pending'">
-        <label
-          >{{ copy.controls.preparationReason }}
+        <div class="select-field">
+          <label :for="`${controlsId}-preparation`">{{
+            copy.controls.preparationReason
+          }}</label>
           <SituateSelect
+            :id="`${controlsId}-preparation`"
             :value="state.preparationReason"
             @change="
               emit('action', {
@@ -120,7 +127,7 @@ const emit = defineEmits<{ action: [action: UpdateAction] }>();
               {{ label }}
             </option>
           </SituateSelect>
-        </label>
+        </div>
         <SituateButton
           size="small"
           @click="emit('action', { type: 'finish-preparation' })"
@@ -172,7 +179,8 @@ const emit = defineEmits<{ action: [action: UpdateAction] }>();
   display: grid;
   gap: 16px;
 }
-label {
+.update-controls label,
+.select-field {
   display: grid;
   gap: 8px;
   font-size: 13px;

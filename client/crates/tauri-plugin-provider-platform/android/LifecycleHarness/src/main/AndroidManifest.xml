@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <application android:label="Provider platform tests" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <application android:label="Provider platform tests" android:allowBackup="false" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <service android:name="dev.situate.providers.ProviderAuthService" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Synthetic browser authentication and native loopback lifecycle testing." />
         </service>

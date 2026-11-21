@@ -114,6 +114,12 @@ test("Markdown links respect code blocks, references and angle brackets", () => 
   assert.deepEqual(inspectMarkdown(body).links, ["goal.md", "other.md"]);
 });
 
+test("heading slugs strip closed tags and keep text after unmatched angle brackets", () => {
+  const body = "# One <em>Two</em> << Three";
+  assert.deepEqual(inspectMarkdown(body).headings, ["one-two-three"]);
+  assert.match(renderMarkdown(body), /id="section-one-two-three"/);
+});
+
 test("heading slugs and duplicate headings match generated HTML", () => {
   const body = "## Acceptance criteria\n\n## Acceptance criteria";
   assert.deepEqual(inspectMarkdown(body).headings, [

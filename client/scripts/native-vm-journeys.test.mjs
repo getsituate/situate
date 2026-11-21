@@ -61,6 +61,7 @@ test("host rejects non-system runtime libraries without executing the binary", (
   for (const library of [
     "/usr/lib/libSystem.B.dylib",
     "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+    "/System/Library/Synthetic Framework.framework/Versions/C/Synthetic Framework",
   ])
     verifyRuntimeDependencies(executable, inspect(output(library)));
   for (const library of [
@@ -72,6 +73,16 @@ test("host rejects non-system runtime libraries without executing the binary", (
       () => verifyRuntimeDependencies(executable, inspect(output(library))),
       /non-system/,
     );
+  assert.throws(
+    () =>
+      verifyRuntimeDependencies(
+        executable,
+        inspect(
+          `${executable}:\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0\n`,
+        ),
+      ),
+    /non-system/,
+  );
   assert.throws(
     () => verifyRuntimeDependencies(executable, () => ({ status: 1 })),
     /inspect/,

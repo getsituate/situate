@@ -22,7 +22,7 @@ export function digest(value) {
       : entry !== null && typeof entry === "object"
         ? Object.fromEntries(
             Object.keys(entry)
-              .sort()
+              .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
               .map((key) => [key, canonical(entry[key])]),
           )
         : entry;
@@ -151,8 +151,10 @@ export function aggregateReceipts(plan, receipts) {
     assert.equal(receipt.status, "passed", `Lane ${lane.id} did not pass`);
     assert(Array.isArray(receipt.results), "Missing suite results");
     assert.deepEqual(
-      receipt.results.map((result) => result.id).sort(),
-      [...lane.suites].sort(),
+      receipt.results
+        .map((result) => result.id)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+      [...lane.suites].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
       "Missing or unexpected suite results",
     );
     assert(
@@ -167,7 +169,7 @@ export function aggregateReceipts(plan, receipts) {
     status: "passed",
     source: plan.source,
     planDigest: plan.authorizationDigest,
-    lanes: [...received].sort(),
+    lanes: [...received].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
   };
 }
 

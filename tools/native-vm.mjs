@@ -40,8 +40,9 @@ export function nativeVmConfiguration(environment = process.env) {
   if (
     !config ||
     config.version !== 1 ||
-    Object.keys(config).sort().join(",") !==
-      "identityFile,knownHostsFile,node,user,version,vm" ||
+    Object.keys(config)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .join(",") !== "identityFile,knownHostsFile,node,user,version,vm" ||
     typeof config.vm !== "string" ||
     !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(config.vm) ||
     typeof config.user !== "string" ||

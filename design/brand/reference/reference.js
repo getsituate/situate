@@ -15,7 +15,7 @@
   const luminance = (hex) => {
     const rgb = hex
       .match(/[a-f0-9]{2}/gi)
-      .map((value) => parseInt(value, 16) / 255)
+      .map((value) => Number.parseInt(value, 16) / 255)
       .map((value) =>
         value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
       );
@@ -254,7 +254,8 @@
             { transform: "scale(1.025) translate(-3px, 0) rotate(-.3deg)" },
           ],
           {
-            duration: parseFloat(token("duration-ambient")) + index * 1000,
+            duration:
+              Number.parseFloat(token("duration-ambient")) + index * 1000,
             delay: -index * 4000,
             iterations: Infinity,
             easing: "ease-in-out",

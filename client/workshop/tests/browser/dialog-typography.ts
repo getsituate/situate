@@ -7,12 +7,14 @@ async function expectTextRole(
   weight: string,
 ) {
   const rootSize = await text.evaluate(() =>
-    parseFloat(getComputedStyle(document.documentElement).fontSize),
+    Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
   );
   await expect(text).toHaveCSS("font-size", `${rootSize * scale}px`);
   await expect
     .poll(() =>
-      text.evaluate((node) => parseFloat(getComputedStyle(node).lineHeight)),
+      text.evaluate((node) =>
+        Number.parseFloat(getComputedStyle(node).lineHeight),
+      ),
     )
     .toBeCloseTo(rootSize * scale * leading, 3);
   await expect(text).toHaveCSS("font-weight", weight);

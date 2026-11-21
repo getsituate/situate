@@ -5,8 +5,8 @@ import { digest, validatePlan } from "./pipeline-state.mjs";
 
 const exactKeys = (value, keys, message) =>
   assert.deepEqual(
-    Object.keys(value ?? {}).sort(),
-    keys.slice().sort(),
+    Object.keys(value ?? {}).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    keys.slice().sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     message,
   );
 const ownedPath = (value) =>

@@ -446,5 +446,5 @@
   syncMotion();
   if (ribbonGroup && "ResizeObserver" in window)
     new ResizeObserver(() => syncRibbon(true)).observe(ribbonGroup);
-  document.fonts.ready.then(() => syncRibbon(true));
+  void document.fonts.ready.then(() => syncRibbon(true));
 })();

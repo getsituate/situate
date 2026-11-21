@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import { sshArguments } from "./transport.mjs";
 
+const compareCodeUnits = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const maximumBytes = 256 * 1024;
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const failure = () =>
@@ -18,7 +19,7 @@ export function launchTraceProgram() {
 function binding(identity, traceId) {
   if (
     !identity ||
-    Object.keys(identity).sort().join() !==
+    Object.keys(identity).sort(compareCodeUnits).join() !==
       "operationId,planDigest,sourceRevision" ||
     ![
       identity.operationId,
@@ -135,7 +136,8 @@ async function exchange(
     if (action === "retain") {
       const result = JSON.parse(response.toString("utf8"));
       if (
-        Object.keys(result).sort().join() !== "durable,sha256,size,traceId" ||
+        Object.keys(result).sort(compareCodeUnits).join() !==
+          "durable,sha256,size,traceId" ||
         result.durable !== true ||
         result.traceId !== traceId ||
         result.sha256 !== request.sha256 ||
@@ -150,7 +152,7 @@ async function exchange(
     const metadata = JSON.parse(response.subarray(0, end).toString("utf8"));
     const retained = response.subarray(end + 1);
     if (
-      Object.keys(metadata).sort().join() !==
+      Object.keys(metadata).sort(compareCodeUnits).join() !==
         "identity,schemaVersion,sha256,size,traceId" ||
       metadata.schemaVersion !== 1 ||
       metadata.traceId !== traceId ||

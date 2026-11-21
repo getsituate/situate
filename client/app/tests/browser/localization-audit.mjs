@@ -11,6 +11,7 @@ export function installLocalizationAudit({ catalog, mode = "keys" }) {
   const domains = new Set(["user", "external", "formatted", "identity"]);
   const seen = new Set();
   const pending = new Set();
+  const compareKeys = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
   const removed = new Set();
   let timer;
   const renderer =
@@ -32,7 +33,7 @@ export function installLocalizationAudit({ catalog, mode = "keys" }) {
             (match) => match[1],
           ),
         ),
-      ].sort();
+      ].sort(compareKeys);
       let end = head[0].length;
       if (head[2] === ":") {
         let params;
@@ -59,7 +60,7 @@ export function installLocalizationAudit({ catalog, mode = "keys" }) {
         )
           return false;
         if (
-          JSON.stringify(Object.keys(params).sort()) !==
+          JSON.stringify(Object.keys(params).sort(compareKeys)) !==
           JSON.stringify(expected)
         )
           return false;
@@ -87,7 +88,12 @@ export function installLocalizationAudit({ catalog, mode = "keys" }) {
     seen.add(id);
     const delivery = globalThis.__situateReportLocalization(violation);
     pending.add(delivery);
-    delivery.finally(() => pending.delete(delivery));
+    delivery.then(
+      () => pending.delete(delivery),
+      () => {
+        // Keep failed deliveries for the audit flush to report.
+      },
+    );
   }
 
   function scan(root) {

@@ -39,7 +39,7 @@ const externalStages = new Set([
   "promote",
 ]);
 const git = (root, args) =>
-  execFileSync("git", args, {
+  execFileSync("/usr/bin/git", args, {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
