@@ -154,7 +154,7 @@ fn working_method_does_not_open_other_metadata_paths() {
 #[cfg(unix)]
 #[test]
 fn working_method_rejects_symlinked_files_and_metadata_directories() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let root = tempfile::tempdir().unwrap();
     let outside = tempfile::tempdir().unwrap();
     fs::write(outside.path().join("working-method.md"), "outside").unwrap();

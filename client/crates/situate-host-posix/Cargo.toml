@@ -1,0 +1,28 @@
+[package]
+name = "situate-host-posix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+situate-host-api = { path = "../situate-host-api" }
+cap-std = "3"
+cap-fs-ext = "3"
+same-file = "1"
+libc = { version = "0.2", optional = true }
+rustix = { version = "1", features = ["fs"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+tokio-util = "=0.7.19"
+libc = "0.2"
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt", "time"] }
+
+[features]
+test-support = ["dep:libc"]
+
+[dev-dependencies]
+cap-primitives = "3"
+libc = "0.2"
+serde_json = "1"
+tempfile = "3.23"

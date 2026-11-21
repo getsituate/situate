@@ -187,11 +187,7 @@ fn entry_identity(id: &str) -> bool {
 fn open_dir(parent: &Dir, name: &str, create: bool) -> Result<Option<Dir>, String> {
     if create {
         let mut builder = cap_std::fs::DirBuilder::new();
-        #[cfg(unix)]
-        {
-            use cap_std::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
+        situate_host::fs::private_dir_builder(&mut builder);
         match parent.create_dir_with(name, &builder) {
             Ok(()) => {
                 crate::durable_storage::sync_directory(parent).map_err(|_| DURABILITY)?;
@@ -221,28 +217,14 @@ fn file(
         .write(write)
         .create(create)
         .follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(libc::O_NONBLOCK);
-    }
+    situate_host::fs::private_file_options(&mut options);
+    situate_host::fs::nonblocking_file_options(&mut options);
     match dir.open_with(name, &options) {
         Ok(file) if file.metadata().map_err(|_| STORAGE)?.is_file() => {
-            #[cfg(unix)]
+            if write
+                && !situate_host::fs::enforce_single_link_on_write(&file).map_err(|_| STORAGE)?
             {
-                use std::os::unix::fs::MetadataExt;
-                if write
-                    && file
-                        .try_clone()
-                        .map_err(|_| STORAGE)?
-                        .into_std()
-                        .metadata()
-                        .map_err(|_| STORAGE)?
-                        .nlink()
-                        != 1
-                {
-                    return Err(STORAGE.into());
-                }
+                return Err(STORAGE.into());
             }
             Ok(Some(file))
         }
@@ -288,11 +270,7 @@ fn replace_metadata(dir: &Dir, value: &ConversationMetadata) -> Result<(), Strin
         .write(true)
         .create_new(true)
         .follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    situate_host::fs::private_file_options(&mut options);
     let mut output = dir.open_with(&temp, &options).map_err(|_| STORAGE)?;
     let result = (|| {
         output.write_all(&bytes).map_err(|_| STORAGE)?;
@@ -546,10 +524,15 @@ impl Storage {
         metadata_references(&mut desired, &self.scope, true)?;
         desired.revision = expected_revision.checked_add(1).ok_or(CONFLICT)?;
         if value.revision == expected_revision && old == desired {
-            file(&dir, "metadata.json", cfg!(windows), false)?
-                .ok_or(INVALID)?
-                .sync_all()
-                .map_err(|_| DURABILITY)?;
+            file(
+                &dir,
+                "metadata.json",
+                situate_host::fs::WRITABLE_SYNC_HANDLE,
+                false,
+            )?
+            .ok_or(INVALID)?
+            .sync_all()
+            .map_err(|_| DURABILITY)?;
             crate::durable_storage::sync_directory(&dir).map_err(|_| DURABILITY)?;
             metadata_references(&mut desired, &self.scope, false)?;
             return Ok(desired);
@@ -613,11 +596,7 @@ impl Storage {
                     .write(true)
                     .create_new(true)
                     .follow(FollowSymlinks::No);
-                #[cfg(unix)]
-                {
-                    use cap_std::fs::OpenOptionsExt;
-                    options.mode(0o600);
-                }
+                situate_host::fs::private_file_options(&mut options);
                 let mut preserved = dir.open_with(&backup, &options).map_err(|_| STORAGE)?;
                 history
                     .seek(SeekFrom::Start(index.length))

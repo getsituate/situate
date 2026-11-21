@@ -1,6 +1,6 @@
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
 #[derive(Clone, Serialize)]
@@ -42,38 +42,18 @@ impl State {
 }
 #[derive(Default)]
 pub(crate) struct Dictation(Mutex<State>);
-static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
-
 #[cfg(target_os = "macos")]
-unsafe extern "C" {
-    fn situate_dictation_setup(
-        path: *const std::ffi::c_char,
-        library: *const std::ffi::c_char,
-        loader: *const std::ffi::c_char,
-        source: *const std::ffi::c_char,
-        callback: extern "C" fn(*const std::ffi::c_char),
-    );
-    fn situate_dictation_command(command: *const std::ffi::c_char, id: *const std::ffi::c_char);
-}
+mod macos;
+
 fn command(action: &str, id: &str) {
     #[cfg(target_os = "macos")]
-    {
-        let action = std::ffi::CString::new(action).unwrap();
-        let id = std::ffi::CString::new(id).unwrap();
-        unsafe { situate_dictation_command(action.as_ptr(), id.as_ptr()) };
-    }
+    macos::command(action, id);
     #[cfg(not(target_os = "macos"))]
     let _ = (action, id);
 }
 
 #[cfg(target_os = "macos")]
-extern "C" fn receive(data: *const std::ffi::c_char) {
-    // Swift owns this string for the duration of the synchronous callback.
-    let data = unsafe { std::ffi::CStr::from_ptr(data) };
-    let Ok(event) = serde_json::from_slice::<Value>(data.to_bytes()) else {
-        return;
-    };
-    let Some(app) = APP.get() else { return };
+fn receive(app: &tauri::AppHandle, event: Value) {
     let capability = app.state::<Dictation>();
     let Ok(mut state) = capability.0.lock() else {
         return;
@@ -128,46 +108,10 @@ extern "C" fn receive(data: *const std::ffi::c_char) {
 }
 
 pub(crate) fn setup(app: &tauri::AppHandle) {
-    let _ = APP.set(app.clone());
     #[cfg(target_os = "macos")]
-    if let Ok(directory) = app.path().app_data_dir() {
-        let directory = directory.join("dictation");
-        if let Ok(path) = std::ffi::CString::new(directory.to_string_lossy().as_bytes()) {
-            let (library, loader) = if cfg!(debug_assertions) {
-                let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("dictation");
-                (
-                    root.join(".build/media/libSituateMedia.dylib"),
-                    root.join("Media/loader.pl"),
-                )
-            } else {
-                let Ok(resources) = app.path().resource_dir() else {
-                    return;
-                };
-                (
-                    resources.join("../Frameworks/libSituateMedia.dylib"),
-                    resources.join("dictation/loader.pl"),
-                )
-            };
-            let Ok(library) = std::ffi::CString::new(library.to_string_lossy().as_bytes()) else {
-                return;
-            };
-            let Ok(loader) = std::ffi::CString::new(loader.to_string_lossy().as_bytes()) else {
-                return;
-            };
-            let source =
-                std::ffi::CString::new(option_env!("SITUATE_DICTATION_MODEL_SOURCE").unwrap_or(""))
-                    .unwrap();
-            unsafe {
-                situate_dictation_setup(
-                    path.as_ptr(),
-                    library.as_ptr(),
-                    loader.as_ptr(),
-                    source.as_ptr(),
-                    receive,
-                )
-            };
-        }
-    }
+    macos::setup(app);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
 }
 
 pub(crate) fn active(app: &tauri::AppHandle, scope: &str) -> bool {

@@ -117,11 +117,8 @@ impl Storage {
             .write(true)
             .create(true)
             .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.mode(0o600).custom_flags(libc::O_NONBLOCK);
-        }
+        situate_host::fs::private_file_options(&mut options);
+        situate_host::fs::nonblocking_file_options(&mut options);
         let file = self
             .dir
             .open_with(name, &options)
@@ -191,11 +188,7 @@ impl Storage {
     pub(crate) fn read_named(&self, name: &str, limit: u64) -> Result<Option<Vec<u8>>, String> {
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NONBLOCK);
-        }
+        situate_host::fs::nonblocking_file_options(&mut options);
         let file = match self.dir.open_with(name, &options) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -322,73 +315,30 @@ impl Storage {
         crate::durable_storage::sync_directory(&self.dir).is_ok()
     }
     pub(crate) fn replace(&self, name: &str, temp: &str, bytes: &[u8]) -> Result<bool, String> {
-        Self::replace_in(&self.dir, name, temp, bytes)
-    }
-    pub(crate) fn replace_in(
-        dir: &Dir,
-        name: &str,
-        temp: &str,
-        bytes: &[u8],
-    ) -> Result<bool, String> {
         let mut options = OpenOptions::new();
         options
             .write(true)
             .create_new(true)
             .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = dir.open_with(temp, &options).map_err(|_| ERROR)?;
+        situate_host::fs::private_file_options(&mut options);
+        let mut file = self.dir.open_with(temp, &options).map_err(|_| ERROR)?;
         let result = (|| {
             file.write_all(bytes)?;
             file.sync_all()?;
-            dir.rename(temp, dir, name)
+            self.dir.rename(temp, &self.dir, name)
         })();
         if result.is_err() {
-            let _ = dir.remove_file(temp);
+            let _ = self.dir.remove_file(temp);
         }
-        // A failed directory sync is after the rename commit.
+        // A failed directory sync is after the rename commit: never delete its new key.
         result
-            .map(|_| crate::durable_storage::sync_directory(dir).is_ok())
+            .map(|_| self.sync_directory())
             .map_err(|_| ERROR.into())
     }
 }
 
 fn storage_root(path: &Path) -> Result<(std::path::PathBuf, std::path::Components<'_>), String> {
-    if !path.is_absolute() {
-        return Err(ERROR.into());
-    }
-    let mut components = path.components();
-    let mut root = std::path::PathBuf::new();
-    #[cfg(windows)]
-    let implicit_unc_root = {
-        use std::path::Prefix;
-        let Some(Component::Prefix(prefix)) = components.next() else {
-            return Err(ERROR.into());
-        };
-        match prefix.kind() {
-            Prefix::Disk(_)
-            | Prefix::VerbatimDisk(_)
-            | Prefix::UNC(_, _)
-            | Prefix::VerbatimUNC(_, _) => root.push(prefix.as_os_str()),
-            _ => return Err(ERROR.into()),
-        }
-        matches!(prefix.kind(), Prefix::VerbatimUNC(_, _))
-    };
-    #[cfg(not(windows))]
-    let implicit_unc_root = false;
-    match components.clone().next() {
-        Some(Component::RootDir) => {
-            components.next();
-        }
-        // A bare verbatim UNC share is absolute but has no RootDir component.
-        None if implicit_unc_root => {}
-        _ => return Err(ERROR.into()),
-    }
-    root.push(std::path::MAIN_SEPARATOR_STR);
-    Ok((root, components))
+    situate_host::fs::storage_root(path).map_err(|_| ERROR.into())
 }
 
 #[cfg(test)]
@@ -465,7 +415,11 @@ mod tests {
         let keys = Keys::default();
         storage.save(&keys, b"old").unwrap();
         std::fs::rename(path.join(".situate"), path.join("moved")).unwrap();
-        std::os::unix::fs::symlink(other.path().join(".situate"), path.join(".situate")).unwrap();
+        situate_host::unix_test_support::symlink(
+            other.path().join(".situate"),
+            path.join(".situate"),
+        )
+        .unwrap();
 
         storage.save(&keys, b"replacement").unwrap();
         storage.create_conversation("chat", "").unwrap();
@@ -638,9 +592,9 @@ mod tests {
         let dir = workspace();
         let other = workspace();
         let path = dir.path().canonicalize().unwrap();
-        std::os::unix::fs::symlink(other.path(), path.join("alias")).unwrap();
+        situate_host::unix_test_support::symlink(other.path(), path.join("alias")).unwrap();
         assert!(Storage::open(&path.join("alias"), "one").is_err());
-        std::os::unix::fs::symlink(
+        situate_host::unix_test_support::symlink(
             other.path().join("missing"),
             path.join(".situate").join(FILE),
         )
@@ -655,16 +609,12 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn fifo_is_rejected_without_waiting_for_a_writer() {
-        use std::os::unix::ffi::OsStrExt;
         let dir = workspace();
         let path = dir.path().canonicalize().unwrap();
         let storage = Storage::open(&path, "one").unwrap();
         std::fs::create_dir_all(path.join(".situate/conversations/chat")).unwrap();
         for name in [FILE, "conversations/chat/metadata.json", "chat-model.json"] {
-            let name =
-                std::ffi::CString::new(path.join(".situate").join(name).as_os_str().as_bytes())
-                    .unwrap();
-            assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+            situate_host::unix_test_support::make_fifo(&path.join(".situate").join(name)).unwrap();
         }
         assert!(storage.load(&Keys::default()).is_err());
         assert!(storage.read_conversation("chat").is_err());
@@ -710,7 +660,7 @@ mod tests {
         let external = path.join("external");
         std::fs::write(&external, b"external contents").unwrap();
         let preference = path.join(".situate/chat-model.json");
-        std::os::unix::fs::symlink(&external, &preference).unwrap();
+        situate_host::unix_test_support::symlink(&external, &preference).unwrap();
         let storage = Storage::open(&path, "one").unwrap();
         assert!(storage.read_model().is_err());
         storage.save_model(b"{}").unwrap();
@@ -751,50 +701,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn owner_drop_unlocks_while_an_unrelated_fork_still_holds_the_descriptor() {
-        use std::io::{Read, Write};
-        use std::os::fd::AsRawFd;
-        use std::os::unix::{net::UnixStream, process::CommandExt};
-        use std::process::Command;
-        use std::time::Duration;
-
         let directory = workspace();
         let storage = Storage::open(&directory.path().canonicalize().unwrap(), "one").unwrap();
         for name in ["ai-connection.lock", "conversations.lock"] {
             let lock = storage.lock_named(name).unwrap();
-            let (mut parent, child) = UnixStream::pair().unwrap();
-            parent
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
-            child
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
-            let worker = std::thread::spawn(move || {
-                let fd = child.as_raw_fd();
-                let mut command = Command::new("/bin/sh");
-                command.args(["-c", ":"]);
-                // Only async-signal-safe syscalls run between fork and exec.
-                unsafe {
-                    command.pre_exec(move || {
-                        let mut byte = 1u8;
-                        if libc::write(fd, (&byte as *const u8).cast(), 1) != 1
-                            || libc::read(fd, (&mut byte as *mut u8).cast(), 1) != 1
-                        {
-                            return Err(std::io::Error::last_os_error());
-                        }
-                        Ok(())
-                    });
-                }
-                let result = command.spawn();
-                drop(child);
-                result.unwrap().wait().unwrap()
-            });
-            let mut ready = [0];
-            parent.read_exact(&mut ready).unwrap();
+            let worker = situate_host::unix_test_support::PausedChild::spawn();
             let while_owned = storage.lock_named(name);
             drop(lock);
             let after_drop = storage.lock_named(name);
-            parent.write_all(&[1]).unwrap();
-            assert!(worker.join().unwrap().success());
+            worker.resume();
             assert!(
                 while_owned.is_err(),
                 "the owner must retain cross-process exclusion"
@@ -813,7 +728,7 @@ mod tests {
         let directory = workspace();
         let path = directory.path().canonicalize().unwrap();
         let lock = path.join(".situate/ai-connection.lock");
-        std::os::unix::fs::symlink(path.join("outside"), &lock).unwrap();
+        situate_host::unix_test_support::symlink(path.join("outside"), &lock).unwrap();
         let storage = Storage::open(&path, "one").unwrap();
         assert!(storage.lock_credentials().is_err());
         std::fs::remove_file(&lock).unwrap();

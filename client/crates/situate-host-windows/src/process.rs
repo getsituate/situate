@@ -1,4 +1,61 @@
-use super::{Capture, CommandOutcome, CommandRequest, CommandResult, ShellError};
+use situate_host_api::process::*;
+
+pub struct Host;
+
+impl ProcessHost for Host {
+    fn capability() -> ShellCapability {
+        capability()
+    }
+
+    fn script_args(prefix: &[&str], command: String) -> Vec<String> {
+        make_script_args(prefix, command)
+    }
+
+    async fn execute(
+        request: CommandRequest,
+        cancellation: CancellationToken,
+    ) -> Result<CommandResult, ShellError> {
+        execute(request, cancellation).await
+    }
+}
+
+fn capability() -> ShellCapability {
+    let interpreter = power_shell();
+    let installed = interpreter.is_some();
+    ShellCapability {
+        available: installed,
+        platform: "windows",
+        implementation: if installed {
+            "nativeProcess"
+        } else {
+            "unavailable"
+        },
+        interpreter,
+        interpreter_dialect: installed.then_some("windowsPowerShell"),
+        interpreter_args: if installed {
+            vec!["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]
+        } else {
+            vec![]
+        },
+        unavailable_reason: (!installed).then_some("systemInterpreterMissing"),
+        ownership: if installed { "jobObject" } else { "none" },
+        detached_descendants_contained: installed,
+        requires_path_backed_workspace: true,
+        max_timeout_ms: MAX_TIMEOUT_MS,
+        max_output_bytes_per_stream: MAX_OUTPUT_BYTES,
+    }
+}
+
+fn make_script_args(prefix: &[&str], command: String) -> Vec<String> {
+    prefix
+        .iter()
+        .map(|arg| (*arg).to_owned())
+        .chain([format!(
+            "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false);\n{command}"
+        )])
+        .collect()
+}
+
 use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
@@ -50,7 +107,7 @@ fn system_path(get: unsafe extern "system" fn(*mut u16, u32) -> u32) -> Option<P
     (len > 0 && len < buffer.len()).then(|| PathBuf::from(OsString::from_wide(&buffer[..len])))
 }
 
-pub(super) fn power_shell() -> Option<String> {
+fn power_shell() -> Option<String> {
     let path = system_path(GetSystemDirectoryW)?.join(r"WindowsPowerShell\v1.0\powershell.exe");
     if !path.is_file() {
         return None;
@@ -380,12 +437,16 @@ fn read_chunk(pipe: &mut File, capture: &mut Capture, limit: usize) -> bool {
     false
 }
 
-pub(super) async fn execute(
+async fn execute(
     request: CommandRequest,
     cancellation: CancellationToken,
 ) -> Result<CommandResult, ShellError> {
+    if !capability().available {
+        return Err(ShellError::Unavailable);
+    }
+    request.validate()?;
     if cancellation.is_cancelled() {
-        return Ok(super::cancelled_before_start());
+        return Ok(cancelled_before_start());
     }
     let deadline = Instant::now() + Duration::from_millis(request.timeout_ms);
     let mut child = Child::spawn(&request)?;
@@ -446,3 +507,6 @@ pub(super) async fn execute(
         stderr: err.finish(),
     })
 }
+
+#[cfg(test)]
+mod tests;

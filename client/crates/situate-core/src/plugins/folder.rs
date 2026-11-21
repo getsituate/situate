@@ -37,11 +37,7 @@ pub(super) fn replace(dir: &Dir, name: &str, bytes: &[u8]) -> Result<bool, Strin
         .write(true)
         .create_new(true)
         .follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    situate_host::fs::private_file_options(&mut options);
     let mut file = dir.open_with(&temp, &options).map_err(|_| INVALID)?;
     file.write_all(bytes)
         .and_then(|_| file.sync_all())
@@ -114,7 +110,7 @@ pub(super) fn sync_metadata(marker: &Dir) -> Result<(), String> {
                 // FlushFileBuffers requires write access on Windows.
                 options
                     .read(true)
-                    .write(cfg!(windows))
+                    .write(situate_host::fs::WRITABLE_SYNC_HANDLE)
                     .follow(FollowSymlinks::No)
                     .nonblock(true);
                 let file = dir.open_with(&name, &options).map_err(|_| INVALID)?;

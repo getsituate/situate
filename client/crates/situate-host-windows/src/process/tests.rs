@@ -19,7 +19,7 @@ fn request(cwd: &Path, script: &str) -> CommandRequest {
             .interpreter
             .expect("system PowerShell is required")
             .into(),
-        args: script_args(&shell.interpreter_args, script.into()),
+        args: make_script_args(&shell.interpreter_args, script.into()),
         timeout_ms: 15_000,
         output_limit_bytes: 32_768,
     }

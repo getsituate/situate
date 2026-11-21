@@ -1,60 +1,48 @@
-use super::directory_for_sync;
 use cap_std::fs::Dir;
-use std::{fs::File, io};
-
-#[cfg(target_vendor = "apple")]
-use std::{collections::BTreeMap, os::unix::fs::MetadataExt};
+pub use situate_host_posix::fs::*;
+use std::{collections::BTreeMap, fs::File, io, os::unix::fs::MetadataExt};
 
 /// The batch must finish before publishing references to its files or acknowledging persistence.
 #[derive(Default)]
 #[must_use]
-pub(crate) struct SyncBatch {
-    #[cfg(target_vendor = "apple")]
+pub struct SyncBatch {
     devices: BTreeMap<u64, File>,
 }
 
 impl SyncBatch {
-    pub(crate) fn sync_file(&mut self, file: File) -> io::Result<()> {
-        #[cfg(target_vendor = "apple")]
-        {
-            let device = file.metadata()?.dev();
-            rustix::io::retry_on_intr(|| rustix::fs::fsync(&file))?;
-            #[cfg(test)]
-            testing::record(testing::Event::Prepared(device));
-            self.devices.entry(device).or_insert(file);
-            Ok(())
-        }
-        #[cfg(not(target_vendor = "apple"))]
-        {
-            file.sync_all()
-        }
+    pub fn sync_file(&mut self, file: File) -> io::Result<()> {
+        let device = file.metadata()?.dev();
+        rustix::io::retry_on_intr(|| rustix::fs::fsync(&file))?;
+        #[cfg(any(test, feature = "test-support"))]
+        testing::record(testing::Event::Prepared(device));
+        self.devices.entry(device).or_insert(file);
+        Ok(())
     }
 
-    pub(crate) fn sync_directory(&mut self, directory: &Dir) -> io::Result<()> {
+    pub fn sync_directory(&mut self, directory: &Dir) -> io::Result<()> {
         self.sync_file(directory_for_sync(directory)?)
     }
 
-    pub(crate) fn finish(self) -> io::Result<()> {
-        #[cfg(target_vendor = "apple")]
+    pub fn finish(self) -> io::Result<()> {
         for (_device, file) in self.devices {
             // fsync flushes each entry to the device; F_FULLFSYNC then persists the
             // preceding flushes on that filesystem before publication can proceed.
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             testing::before_barrier()?;
             file.sync_all()?;
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             testing::record(testing::Event::Barrier(_device));
         }
         Ok(())
     }
 }
 
-#[cfg(all(test, target_vendor = "apple"))]
-pub(crate) mod testing {
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing {
     use std::{cell::RefCell, io, marker::PhantomData, rc::Rc};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub(crate) enum Event {
+    pub enum Event {
         Prepared(u64),
         Barrier(u64),
     }
@@ -69,12 +57,12 @@ pub(crate) mod testing {
         static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     }
 
-    pub(crate) struct Recording {
+    pub struct Recording {
         previous: Option<State>,
         _thread: PhantomData<Rc<()>>,
     }
 
-    pub(crate) fn start() -> Recording {
+    pub fn start() -> Recording {
         Recording {
             previous: STATE.replace(Some(State::default())),
             _thread: PhantomData,
@@ -82,11 +70,11 @@ pub(crate) mod testing {
     }
 
     impl Recording {
-        pub(crate) fn events(&self) -> Vec<Event> {
+        pub fn events(&self) -> Vec<Event> {
             STATE.with_borrow(|state| state.as_ref().unwrap().events.clone())
         }
 
-        pub(crate) fn fail_after(&self, successful_barriers: usize) {
+        pub fn fail_after(&self, successful_barriers: usize) {
             STATE.with_borrow_mut(|state| {
                 state.as_mut().unwrap().fail_after = Some(successful_barriers);
             });
@@ -124,7 +112,7 @@ pub(crate) mod testing {
     }
 }
 
-#[cfg(all(test, target_vendor = "apple"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use cap_std::ambient_authority;

@@ -153,7 +153,7 @@ fn deletion_rejects_invalid_paths_and_symlinked_conversations() {
     {
         let outside = tempfile::tempdir().unwrap();
         fs::write(outside.path().join("metadata.json"), "Unchanged").unwrap();
-        std::os::unix::fs::symlink(
+        situate_host::unix_test_support::symlink(
             outside.path(),
             temp.path().join(".situate/conversations/link"),
         )

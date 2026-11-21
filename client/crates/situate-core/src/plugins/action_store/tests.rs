@@ -171,7 +171,7 @@ fn obsolete_receipts_are_not_rewritten_or_reinitialized() {
 #[cfg(unix)]
 #[test]
 fn private_files_symlink_refusal_and_corruption_preserve_existing_content() {
-    use std::os::unix::fs::{PermissionsExt, symlink};
+    use situate_host::unix_test_support::{PermissionsExt, symlink};
     let (root, store, initial) = setup();
     let path = root.path().join(format!("plugin-actions/{ID}.json"));
     assert_eq!(

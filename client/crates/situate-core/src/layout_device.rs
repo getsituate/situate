@@ -3,11 +3,7 @@ use cap_std::fs::Dir;
 
 fn child(parent: &Dir, name: &str) -> Result<Dir, String> {
     let mut builder = cap_std::fs::DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use cap_std::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    situate_host::fs::private_dir_builder(&mut builder);
     match parent.create_dir_with(name, &builder) {
         Ok(()) => (),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
@@ -176,7 +172,7 @@ impl LayoutStorage {
             let mut options = cap_std::fs::OpenOptions::new();
             options
                 .read(true)
-                .write(cfg!(windows))
+                .write(situate_host::fs::WRITABLE_SYNC_HANDLE)
                 .follow(FollowSymlinks::No);
             let file = device.dir.open_with(FILE, &options).map_err(|_| FAILED)?;
             file.sync_all().map_err(|_| FAILED)?;

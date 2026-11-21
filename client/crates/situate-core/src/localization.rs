@@ -128,11 +128,7 @@ impl Storage {
     pub fn bytes(&self) -> Result<Option<Vec<u8>>, String> {
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NONBLOCK);
-        }
+        situate_host::fs::nonblocking_file_options(&mut options);
         let file = match self.dir.open_with(FILE, &options) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -157,11 +153,8 @@ impl Storage {
             .write(true)
             .create(true)
             .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.mode(0o600).custom_flags(libc::O_NONBLOCK);
-        }
+        situate_host::fs::private_file_options(&mut options);
+        situate_host::fs::nonblocking_file_options(&mut options);
         let file = self
             .dir
             .open_with("localization.lock", &options)
@@ -227,11 +220,7 @@ impl Storage {
             .write(true)
             .create_new(true)
             .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        situate_host::fs::private_file_options(&mut options);
         let mut file = self.dir.open_with(&temp, &options).map_err(|_| STORAGE)?;
         let result = (|| {
             file.write_all(&bytes).map_err(|_| STORAGE)?;
@@ -461,7 +450,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn read_only_local_settings_are_read_without_a_lock_or_migration() {
-        use std::os::unix::fs::PermissionsExt;
+        use situate_host::unix_test_support::PermissionsExt;
         let root = workspace();
         let directory = root.path().join(".situate");
         let path = directory.join("localization.json");
@@ -491,7 +480,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symlinks_and_non_regular_files_are_rejected() {
-        use std::os::unix::fs::symlink;
+        use situate_host::unix_test_support::symlink;
         let root = workspace();
         let external = tempfile::tempdir().unwrap();
         let path = root.path().join(".situate/localization.json");

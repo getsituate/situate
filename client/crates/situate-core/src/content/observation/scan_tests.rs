@@ -1,5 +1,6 @@
 use super::*;
-use std::{fs, os::unix::fs::symlink};
+use situate_host::unix_test_support::symlink;
+use std::fs;
 
 fn workspace() -> tempfile::TempDir {
     let temp = tempfile::tempdir().unwrap();
@@ -108,7 +109,7 @@ fn cached_files_replaced_by_symlinks_or_special_files_do_not_reuse_blobs() {
 #[cfg(target_vendor = "apple")]
 #[test]
 fn permission_changes_fail_without_acknowledging_a_new_snapshot() {
-    use std::os::unix::fs::PermissionsExt;
+    use situate_host::unix_test_support::PermissionsExt;
     let temp = workspace();
     let mut store = ContentStore::open(temp.path()).unwrap();
     let previous = store.repo.head().unwrap().target().unwrap();

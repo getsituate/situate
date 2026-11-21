@@ -273,8 +273,7 @@ impl ContentStore {
             reject_links(&directory)?;
             // Older Unix writers could leave unflushed, unreferenced objects.
             // Older Windows initialization failed before publishing history.git.
-            #[cfg(not(windows))]
-            if observe {
+            if observe && situate_host::fs::RECOVER_UNFLUSHED_HISTORY {
                 sync_tree(&directory)?;
             }
             let repo = Repository::open_bare(&history_path)?;
@@ -322,8 +321,7 @@ impl ContentStore {
         recording_error: impl FnOnce() -> E,
     ) -> std::result::Result<String, E> {
         // Release the code handle before Windows renames it, without releasing history ownership.
-        #[cfg(windows)]
-        {
+        if situate_host::fs::RELEASE_CHILD_BEFORE_MOVE {
             self.root = self.marker.try_clone()?;
         }
         replace()?;
@@ -930,8 +928,7 @@ fn initialize_history(root: &Dir, marker: &Dir, history_path: &Path) -> Result<R
     };
     let result = initialize();
     // Windows cleanup of READONLY objects could change their hardlink aliases.
-    #[cfg(not(windows))]
-    if result.is_err() {
+    if result.is_err() && situate_host::fs::REMOVE_FAILED_HISTORY_STAGE {
         // Only the uniquely owned staging directory is disposable; never history.git.
         let _ = marker.remove_dir_all(&stage);
     }
@@ -939,54 +936,9 @@ fn initialize_history(root: &Dir, marker: &Dir, history_path: &Path) -> Result<R
     Ok(Repository::open_bare(history_path)?)
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
-fn publish_history(marker: &Dir, stage: &str, _history_path: &Path) -> Result<()> {
-    let file = marker.try_clone()?.into_std_file();
-    rustix::fs::renameat_with(
-        &file,
-        stage,
-        &file,
-        "history.git",
-        rustix::fs::RenameFlags::NOREPLACE,
-    )
-    .map_err(io::Error::from)?;
+fn publish_history(marker: &Dir, stage: &str, history_path: &Path) -> Result<()> {
+    situate_host::fs::publish_history(marker, stage, history_path)?;
     Ok(())
-}
-#[cfg(windows)]
-fn publish_history(_marker: &Dir, stage: &str, history_path: &Path) -> Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    let from: Vec<u16> = history_path
-        .with_file_name(stage)
-        .as_os_str()
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
-    let to: Vec<u16> = history_path
-        .as_os_str()
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
-    // Zero flags deliberately omit MOVEFILE_REPLACE_EXISTING. Both buffers are NUL-terminated.
-    if unsafe {
-        windows_sys::Win32::Storage::FileSystem::MoveFileExW(from.as_ptr(), to.as_ptr(), 0)
-    } == 0
-    {
-        return Err(io::Error::last_os_error().into());
-    }
-    Ok(())
-}
-#[cfg(not(any(
-    target_vendor = "apple",
-    target_os = "linux",
-    target_os = "android",
-    windows
-)))]
-fn publish_history(_marker: &Dir, _stage: &str, _history_path: &Path) -> Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "native.content.history.initializationUnsupported",
-    )
-    .into())
 }
 
 fn is_markdown(path: &str) -> bool {
@@ -1050,10 +1002,7 @@ fn sync_dir(dir: &Dir) -> io::Result<()> {
     crate::durable_storage::sync_directory(dir)
 }
 fn publish_new_file(dir: &Dir, stage: &str, name: &str) -> Result<()> {
-    #[cfg(target_os = "android")]
-    let result = operations::rename_noreplace(dir, stage, dir, name);
-    #[cfg(not(target_os = "android"))]
-    let result = dir.hard_link(stage, dir, name).map_err(ContentError::from);
+    let result = situate_host::fs::publish_new_file(dir, stage, name).map_err(ContentError::from);
     let _ = dir.remove_file(stage);
     result
 }
@@ -1069,11 +1018,7 @@ fn temporary_file_with_permissions(
     let name = format!(".situate-write-{}", uuid::Uuid::new_v4());
     let mut opts = OpenOptions::new();
     opts.write(true).create_new(true).follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
+    situate_host::fs::private_file_options(&mut opts);
     let mut file = dir.open_with(&name, &opts)?;
     let write = || -> io::Result<()> {
         if let Some(permissions) = permissions {
@@ -1183,7 +1128,6 @@ fn snapshot_tree_cached(
             )?;
             tree.insert(&name, oid, 0o040000)?;
         } else if kind.is_file() {
-            #[cfg(unix)]
             if let Some(cached) = previous.get(&path) {
                 let stamp = observation::FileStamp::read(&dir.symlink_metadata(&name)?)?;
                 if cached.stamp.reusable(&stamp) {
@@ -1254,73 +1198,7 @@ fn sync_history_file(dir: &Dir, name: &std::ffi::OsStr) -> io::Result<()> {
     history_file_for_sync(dir, name)?.sync_all()
 }
 
-#[cfg(not(windows))]
-fn history_file_for_sync(dir: &Dir, name: &std::ffi::OsStr) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.read(true).follow(FollowSymlinks::No).nonblock(true);
-    Ok(dir.open_with(name, &options)?.into_std())
-}
-
-#[cfg(windows)]
-fn history_file_for_sync(dir: &Dir, name: &std::ffi::OsStr) -> io::Result<File> {
-    use cap_std::fs::OpenOptionsExt;
-    use std::os::windows::{
-        fs::MetadataExt,
-        io::{AsRawHandle, FromRawHandle},
-    };
-    use windows_sys::Win32::{
-        Foundation::{GENERIC_WRITE, INVALID_HANDLE_VALUE},
-        Storage::FileSystem::{
-            FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ, FILE_SHARE_WRITE, ReOpenFile,
-        },
-    };
-
-    let mut options = OpenOptions::new();
-    options
-        .access_mode(FILE_READ_ATTRIBUTES)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-        .follow(FollowSymlinks::No);
-    let file = dir.open_with(name, &options)?.into_std();
-    let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "History entry is not a regular file.",
-        ));
-    }
-    // Changing READONLY also changes every hard-link alias, including aliases
-    // outside history. Do not acquire write access by changing file attributes.
-    if metadata.permissions().readonly() {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "Read-only history files cannot be synchronized safely.",
-        ));
-    }
-    let identity = same_file::Handle::from_file(file.try_clone()?)?;
-    let handle = unsafe {
-        ReOpenFile(
-            file.as_raw_handle(),
-            GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            FILE_FLAG_OPEN_REPARSE_POINT,
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    let writable = unsafe { File::from_raw_handle(handle) };
-    let metadata = writable.metadata()?;
-    if !metadata.is_file()
-        || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        || same_file::Handle::from_file(writable.try_clone()?)? != identity
-    {
-        return Err(io::Error::other(
-            "History file identity changed before synchronization.",
-        ));
-    }
-    Ok(writable)
-}
+use situate_host::fs::history_file_for_sync;
 
 fn snapshot_blob(repo: &Repository, dir: &Dir, name: &str) -> Result<(Oid, i32)> {
     let mut options = OpenOptions::new();
@@ -1351,17 +1229,11 @@ fn snapshot_open_blob(repo: &Repository, file: &mut cap_std::fs::File) -> Result
         )
         .into());
     }
-    #[cfg(unix)]
-    let mode = {
-        use cap_std::fs::MetadataExt;
-        if before.mode() & 0o111 != 0 {
-            0o100755
-        } else {
-            0o100644
-        }
+    let mode = if situate_host::fs::executable(&before) {
+        0o100755
+    } else {
+        0o100644
     };
-    #[cfg(not(unix))]
-    let mode = 0o100644;
     Ok((writer.finish()?, mode))
 }
 
@@ -1386,7 +1258,6 @@ pub(crate) fn reject_links(dir: &Dir) -> Result<()> {
 
 #[cfg(test)]
 mod tests;
-#[cfg(all(test, windows))]
-mod windows_test_support;
+
 #[cfg(test)]
 mod working_method_tests;

@@ -428,7 +428,7 @@ fn malformed_empty_oversized_and_ambiguous_manifests_are_rejected() {
 #[cfg(unix)]
 #[test]
 fn symlinked_manifests_parents_and_destinations_are_not_followed() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let (temp, mut store) = workspace();
     let outside = tempfile::tempdir().unwrap();
     fs::write(
@@ -934,7 +934,7 @@ fn invalid_staging_sources_and_ambiguous_rows_publish_nothing() {
 #[cfg(unix)]
 #[test]
 fn staging_symlinks_and_special_files_are_not_followed() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let (temp, mut store) = workspace();
     let outside = tempfile::tempdir().unwrap();
     fs::write(outside.path().join("file"), b"outside").unwrap();
@@ -950,8 +950,10 @@ fn staging_symlinks_and_special_files_are_not_followed() {
         temp.path().join(".situate/import-files/file"),
     )
     .unwrap();
-    std::os::unix::net::UnixListener::bind(temp.path().join(".situate/import-files/socket"))
-        .unwrap();
+    situate_host::unix_test_support::UnixListener::bind(
+        temp.path().join(".situate/import-files/socket"),
+    )
+    .unwrap();
     for source in [
         ".situate/import-linked/file",
         ".situate/import-files/linked/file",

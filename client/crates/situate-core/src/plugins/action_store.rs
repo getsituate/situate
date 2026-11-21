@@ -264,18 +264,7 @@ impl Store {
         if create {
             match parent.create_dir(name) {
                 Ok(()) => {
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        parent
-                            .set_permissions(
-                                name,
-                                cap_std::fs::Permissions::from_std(
-                                    std::fs::Permissions::from_mode(0o700),
-                                ),
-                            )
-                            .map_err(|_| SAVE_FAILED)?;
-                    }
+                    situate_host::fs::restrict_directory(&parent, name).map_err(|_| SAVE_FAILED)?;
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(_) => return Err(SAVE_FAILED.into()),
@@ -298,12 +287,8 @@ impl Store {
         if !metadata.is_file() || metadata.len() > MAX_BYTES as u64 {
             return Err(INVALID.into());
         }
-        #[cfg(unix)]
-        {
-            use cap_std::fs::{MetadataExt, PermissionsExt};
-            if metadata.nlink() != 1 || metadata.permissions().mode() & 0o777 != 0o600 {
-                return Err(INVALID.into());
-            }
+        if !situate_host::fs::is_private_record(&metadata) {
+            return Err(INVALID.into());
         }
         let mut bytes = Vec::new();
         file.take(MAX_BYTES as u64 + 1)
@@ -330,11 +315,7 @@ impl Store {
                 .write(true)
                 .create_new(true)
                 .follow(FollowSymlinks::No);
-            #[cfg(unix)]
-            {
-                use cap_std::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
+            situate_host::fs::private_file_options(&mut options);
             let mut file = dir.open_with(&temp, &options).map_err(|_| SAVE_FAILED)?;
             file.write_all(&serde_json::to_vec(record).map_err(|_| INVALID)?)
                 .map_err(|_| SAVE_FAILED)?;

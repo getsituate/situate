@@ -4591,7 +4591,6 @@ dependencies = [
  "cap-std",
  "dom_query 0.29.0",
  "dom_smoothie",
- "dunce",
  "encoding_rs",
  "futures-util",
  "jsonwebtoken",
@@ -4615,6 +4614,9 @@ dependencies = [
  "situate-agent",
  "situate-core",
  "situate-fixtures",
+ "situate-host-macos",
+ "situate-host-posix",
+ "situate-host-windows",
  "situate-migrations",
  "system-configuration",
  "tauri",
@@ -4641,17 +4643,16 @@ dependencies = [
  "cap-std",
  "chacha20poly1305",
  "git2",
- "libc",
  "pulldown-cmark",
- "rustix",
  "same-file",
  "serde",
  "serde_json",
  "sha1collisiondetection",
+ "situate-host",
+ "situate-host-api",
  "situate-migrations",
  "tempfile",
  "uuid",
- "windows-sys 0.61.2",
  "yaml-rust2",
  "zeroize",
 ]
@@ -4668,17 +4669,78 @@ dependencies = [
 ]
 
 [[package]]
+name = "situate-host"
+version = "0.1.6"
+dependencies = [
+ "situate-host-macos",
+ "situate-host-posix",
+ "situate-host-windows",
+]
+
+[[package]]
+name = "situate-host-api"
+version = "0.1.6"
+dependencies = [
+ "cap-std",
+ "serde",
+ "tokio-util",
+]
+
+[[package]]
+name = "situate-host-macos"
+version = "0.1.6"
+dependencies = [
+ "cap-std",
+ "rustix",
+ "situate-host-posix",
+ "tempfile",
+]
+
+[[package]]
+name = "situate-host-posix"
+version = "0.1.6"
+dependencies = [
+ "cap-fs-ext",
+ "cap-primitives",
+ "cap-std",
+ "libc",
+ "rustix",
+ "same-file",
+ "serde_json",
+ "situate-host-api",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "situate-host-windows"
+version = "0.1.6"
+dependencies = [
+ "cap-fs-ext",
+ "cap-primitives",
+ "cap-std",
+ "dunce",
+ "same-file",
+ "situate-host-api",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "situate-migrations"
 version = "0.1.6"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
- "rustix",
  "same-file",
  "semver",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "situate-host",
  "tar",
  "tempfile",
 ]

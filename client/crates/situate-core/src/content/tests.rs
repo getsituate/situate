@@ -16,45 +16,13 @@ fn saved(outcome: SaveOutcome) -> TextVersion {
 #[cfg(unix)]
 #[test]
 fn content_owner_drop_unlocks_while_an_unrelated_child_holds_the_descriptor() {
-    use std::io::{Read, Write};
-    use std::os::fd::AsRawFd;
-    use std::os::unix::{net::UnixStream, process::CommandExt};
     let root = workspace();
     let store = ContentStore::open(root.path()).unwrap();
-    let (mut parent, child) = UnixStream::pair().unwrap();
-    parent
-        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
-        .unwrap();
-    child
-        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
-        .unwrap();
-    let worker = std::thread::spawn(move || {
-        let fd = child.as_raw_fd();
-        let mut command = std::process::Command::new("/bin/sh");
-        command.args(["-c", ":"]);
-        // Only async-signal-safe syscalls run between fork and exec.
-        unsafe {
-            command.pre_exec(move || {
-                let mut byte = 1u8;
-                if libc::write(fd, (&byte as *const u8).cast(), 1) != 1
-                    || libc::read(fd, (&mut byte as *mut u8).cast(), 1) != 1
-                {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-        let result = command.spawn();
-        drop(child);
-        result.unwrap().wait().unwrap()
-    });
-    let mut ready = [0];
-    parent.read_exact(&mut ready).unwrap();
+    let worker = situate_host::unix_test_support::PausedChild::spawn();
     let while_owned = ContentStore::open(root.path());
     drop(store);
     let after_drop = ContentStore::open(root.path());
-    parent.write_all(&[1]).unwrap();
-    assert!(worker.join().unwrap().success());
+    worker.resume();
     assert!(matches!(while_owned, Err(ContentError::Busy)));
     assert!(
         after_drop.is_ok(),
@@ -100,7 +68,8 @@ fn ignored_artifacts_do_not_enter_listings_or_create_history() {
     fs::write(root.path().join("nested/.note.md.swp"), "swap").unwrap();
     fs::create_dir(root.path().join(".AppleDouble")).unwrap();
     #[cfg(unix)]
-    std::os::unix::fs::symlink("/unavailable", root.path().join(".AppleDouble/link")).unwrap();
+    situate_host::unix_test_support::symlink("/unavailable", root.path().join(".AppleDouble/link"))
+        .unwrap();
     assert_eq!(store.record_external_changes().unwrap(), before);
     assert_eq!(
         store
@@ -146,16 +115,10 @@ fn history_tree_sync_preserves_nested_file_contents() {
 #[cfg(windows)]
 #[test]
 fn history_tree_sync_propagates_file_sharing_errors() {
-    use std::os::windows::fs::OpenOptionsExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("HEAD");
     fs::write(&path, b"original").unwrap();
-    let _reader = fs::OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ)
-        .open(&path)
-        .unwrap();
+    let _reader = situate_host::windows_test_support::deny_write_sharing(&path, false);
     let dir = Dir::open_ambient_dir(temp.path(), ambient_authority()).unwrap();
     match sync_tree(&dir).unwrap_err() {
         ContentError::Io(error) => assert_eq!(error.raw_os_error(), Some(32)),
@@ -167,7 +130,7 @@ fn history_tree_sync_propagates_file_sharing_errors() {
 #[cfg(windows)]
 mod windows_history_sync {
     use super::*;
-    use std::os::windows::fs::MetadataExt;
+    use situate_host::windows_test_support::MetadataExt;
 
     fn readonly_object() -> (tempfile::TempDir, std::path::PathBuf) {
         let temp = tempfile::tempdir().unwrap();
@@ -667,12 +630,14 @@ fn unsupported_entries_are_omitted_from_listing_and_initial_history_without_chan
     fs::write(temp.path().join("invalid:folder/keep.md"), "nested").unwrap();
     #[cfg(target_os = "linux")]
     let opaque = {
-        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        use situate_host::unix_test_support::RawName;
+        use std::ffi::OsStr;
         let path = temp.path().join(OsStr::from_bytes(b"opaque-\xff"));
         fs::write(&path, "opaque").unwrap();
         path
     };
-    let socket = std::os::unix::net::UnixListener::bind(temp.path().join("socket")).unwrap();
+    let socket =
+        situate_host::unix_test_support::UnixListener::bind(temp.path().join("socket")).unwrap();
     let mut store = ContentStore::open(temp.path()).unwrap();
     let revision = store.record_external_changes().unwrap();
     let expected = vec![ContentEntry {
@@ -761,7 +726,7 @@ fn failed_creation_preserves_existing_conflict_and_deleted_file_drafts() {
 #[cfg(unix)]
 #[test]
 fn readonly_target_is_not_replaced_and_pending_text_is_durable() {
-    use std::os::unix::fs::PermissionsExt;
+    use situate_host::unix_test_support::PermissionsExt;
     let temp = workspace();
     fs::write(temp.path().join("note.md"), "keep\n").unwrap();
     let mut store = ContentStore::open(temp.path()).unwrap();
@@ -866,7 +831,8 @@ fn recovery_drafts_remain_readable_when_history_cannot_open() {
     fs::create_dir(drafts.join("settings.json")).unwrap();
     #[cfg(target_os = "linux")]
     {
-        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        use situate_host::unix_test_support::RawName;
+        use std::ffi::OsStr;
         fs::write(drafts.join(OsStr::from_bytes(b"opaque-\xff.json")), "keep").unwrap();
     }
     assert_eq!(store.drafts().unwrap(), expected);
@@ -946,7 +912,8 @@ fn recovery_read_does_not_initialize_storage_and_preserves_invalid_drafts() {
 fn recovery_read_rejects_symlinked_draft_storage() {
     let temp = workspace();
     let outside = tempfile::tempdir().unwrap();
-    std::os::unix::fs::symlink(outside.path(), temp.path().join(".situate/drafts")).unwrap();
+    situate_host::unix_test_support::symlink(outside.path(), temp.path().join(".situate/drafts"))
+        .unwrap();
     assert!(read_recovery_drafts(temp.path()).is_err());
     assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
 }
@@ -954,7 +921,7 @@ fn recovery_read_rejects_symlinked_draft_storage() {
 #[cfg(unix)]
 #[test]
 fn replacement_preserves_private_permissions_and_raw_git_does_not_run_filters_or_hooks() {
-    use std::os::unix::fs::PermissionsExt;
+    use situate_host::unix_test_support::PermissionsExt;
     let temp = workspace();
     fs::write(temp.path().join("note.md"), "base\n").unwrap();
     fs::set_permissions(
@@ -1004,7 +971,7 @@ fn replacement_preserves_private_permissions_and_raw_git_does_not_run_filters_or
 #[cfg(unix)]
 #[test]
 fn symlink_targets_parents_markers_and_history_are_rejected() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let temp = workspace();
     let outside = tempfile::tempdir().unwrap();
     fs::write(outside.path().join("private.md"), "private").unwrap();

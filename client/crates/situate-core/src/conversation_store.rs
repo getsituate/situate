@@ -596,7 +596,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn listing_does_not_follow_conversation_symlinks() {
-        use std::os::unix::fs::symlink;
+        use situate_host::unix_test_support::symlink;
         let (temp, storage) = workspace();
         storage.create_conversation("good", "Readable").unwrap();
         let root = temp.path().join(".situate/conversations");

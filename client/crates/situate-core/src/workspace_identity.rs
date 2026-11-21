@@ -44,11 +44,7 @@ fn root(path: &Path) -> io::Result<Dir> {
 fn read_marker(marker: &Dir) -> io::Result<Option<String>> {
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_fs_ext::OpenOptionsSyncExt;
-        options.nonblock(true);
-    }
+    situate_host::fs::nonblocking_file_options(&mut options);
     let file = marker.open_with(FILE, &options)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
@@ -72,7 +68,6 @@ pub fn admit(path: &Path) -> Option<String> {
     admit_root(&root(path).ok()?).ok().flatten()
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(crate) fn initialize(root: &Dir) -> io::Result<String> {
     initialize_marker(&root.open_dir_nofollow(".situate")?)
 }
@@ -234,7 +229,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn read_only_workspace_can_read_but_does_not_initialize_identity() {
-        use std::os::unix::fs::PermissionsExt;
+        use situate_host::unix_test_support::PermissionsExt;
         let root = legacy();
         fs::set_permissions(root.path(), fs::Permissions::from_mode(0o500)).unwrap();
         assert_eq!(admit(root.path()), None);
@@ -249,7 +244,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symlinks_and_read_only_metadata_are_not_changed() {
-        use std::os::unix::fs::{PermissionsExt, symlink};
+        use situate_host::unix_test_support::{PermissionsExt, symlink};
         let root = legacy();
         let outside = legacy();
         let file = root.path().join(".situate/workspace.json");

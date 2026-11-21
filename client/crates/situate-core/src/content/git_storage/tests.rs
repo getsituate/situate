@@ -166,7 +166,7 @@ fn content_history_reopens_in_another_process() {
     const ROOT: &str = "SITUATE_HISTORY_REOPEN_ROOT";
     const NONCE: &str = "SITUATE_HISTORY_REOPEN_NONCE";
     #[cfg(windows)]
-    let _context = super::super::windows_test_support::restricted_context().unwrap();
+    let _context = situate_host::windows_test_support::restricted_context().unwrap();
     if let Some(path) = std::env::var_os(ROOT) {
         let path = PathBuf::from(path);
         let store = ContentStore::open(&path).unwrap();
@@ -221,18 +221,7 @@ fn content_history_reopens_in_another_process() {
 #[cfg(windows)]
 mod windows {
     use super::*;
-    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-    use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
-
-    fn blocker(path: &Path, directory: bool) -> File {
-        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
-        let mut options = fs::OpenOptions::new();
-        options.read(true).share_mode(FILE_SHARE_READ);
-        if directory {
-            options.custom_flags(FILE_FLAG_BACKUP_SEMANTICS);
-        }
-        options.open(path).unwrap()
-    }
+    use situate_host::windows_test_support::{MetadataExt, deny_write_sharing as blocker};
 
     fn assert_sharing_error(result: Result<String>) {
         match result.unwrap_err() {
@@ -243,7 +232,7 @@ mod windows {
 
     #[test]
     fn object_directory_failure_does_not_publish_the_new_reference() {
-        let _context = super::super::super::windows_test_support::restricted_context().unwrap();
+        let _context = situate_host::windows_test_support::restricted_context().unwrap();
         let temp = workspace();
         let mut store = ContentStore::open(temp.path()).unwrap();
         let previous = store.history().unwrap()[0].revision.clone();
@@ -266,7 +255,7 @@ mod windows {
 
     #[test]
     fn existing_history_flush_failure_prevents_observation_publication() {
-        let _context = super::super::super::windows_test_support::restricted_context().unwrap();
+        let _context = situate_host::windows_test_support::restricted_context().unwrap();
         let temp = workspace();
         let mut store = ContentStore::open(temp.path()).unwrap();
         let previous = store.history().unwrap()[0].revision.clone();
@@ -290,7 +279,7 @@ mod windows {
 
     #[test]
     fn post_reference_flush_failure_is_retried_even_when_content_is_unchanged() {
-        let _context = super::super::super::windows_test_support::restricted_context().unwrap();
+        let _context = situate_host::windows_test_support::restricted_context().unwrap();
         let temp = workspace();
         let mut store = ContentStore::open(temp.path()).unwrap();
         let previous = store.history().unwrap()[0].revision.clone();
@@ -324,7 +313,7 @@ mod windows {
 
     #[test]
     fn reopening_retries_parent_publication_barriers_without_resetting_history() {
-        let _context = super::super::super::windows_test_support::restricted_context().unwrap();
+        let _context = situate_host::windows_test_support::restricted_context().unwrap();
         let temp = workspace();
         let marker = temp.path().join(".situate");
         drop(ContentStore::open(temp.path()).unwrap());
@@ -352,7 +341,7 @@ mod windows {
 
     #[test]
     fn object_directory_junction_is_rejected_before_reference_publication() {
-        let _context = super::super::super::windows_test_support::restricted_context().unwrap();
+        let _context = situate_host::windows_test_support::restricted_context().unwrap();
         let temp = workspace();
         let mut store = ContentStore::open(temp.path()).unwrap();
         let previous = store.history().unwrap()[0].revision.clone();
@@ -386,7 +375,7 @@ mod windows {
 
     #[test]
     fn existing_readonly_objects_and_outside_aliases_are_never_freshened() {
-        let _context = super::super::super::windows_test_support::restricted_context().unwrap();
+        let _context = situate_host::windows_test_support::restricted_context().unwrap();
         // Retain synthetic aliases even on assertion failure: cleanup must not clear READONLY.
         let path = workspace().keep();
         eprintln!("History alias fixture: {}", path.display());

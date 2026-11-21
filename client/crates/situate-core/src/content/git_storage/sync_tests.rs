@@ -1,6 +1,7 @@
 use super::*;
 use crate::durable_storage::testing::{self, Event};
-use std::{fs, os::unix::fs::PermissionsExt};
+use situate_host::unix_test_support::PermissionsExt;
+use std::fs;
 
 fn workspace() -> tempfile::TempDir {
     let temp = tempfile::tempdir().unwrap();

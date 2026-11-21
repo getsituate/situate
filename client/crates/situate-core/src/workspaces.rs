@@ -106,14 +106,15 @@ fn check_target(dir: &Dir, name: &str) -> Result<(), String> {
 
 enum InitialMetadata {
     Identity,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     Onboarding,
 }
 
 /// Publishes identity and initial progress together. Failure may leave a partial
 /// child directory, which must not be reused or automatically removed.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn create_for_onboarding(parent: &Path, name: &str) -> Result<Location, String> {
+    if !situate_host::fs::STAGE_WORKSPACE_MARKER {
+        return Err("native.workspace.create.markerFailed".into());
+    }
     create_initialized(parent, name, InitialMetadata::Onboarding)
 }
 
@@ -192,7 +193,6 @@ fn check_directory_entry(dir: &Dir, name: &str, held: &Dir) -> std::io::Result<(
     Ok(())
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn prepare_initial_metadata(child: &Dir, onboarding: bool) -> std::io::Result<(String, Dir)> {
     #[cfg(test)]
     onboarding_tests::checkpoint(onboarding_tests::Checkpoint::Empty, child)?;
@@ -242,59 +242,44 @@ fn finish_new_directory(
     {
         return Err(partial("native.workspace.create.markerNonempty"));
     }
-    let marker: Option<Dir> = match metadata {
-        InitialMetadata::Identity => {
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            {
-                let (stage, marker) = prepare_initial_metadata(child, false)
-                    .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-                verify()?;
-                check_directory_entry(child, &stage, &marker)
-                    .map_err(|_| partial("native.workspace.create.locationChanged"))?;
-                crate::durable_storage::rename_noreplace(child, &stage, child, ".situate")
-                    .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-                Some(marker)
-            }
-            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-            {
-                child
-                    .create_dir(".situate")
-                    .and_then(|_| crate::workspace_identity::initialize(child))
-                    .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-                None
-            }
-        }
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        InitialMetadata::Onboarding => {
-            let (stage, marker) = prepare_initial_metadata(child, true)
-                .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-            verify()?;
-            check_directory_entry(child, &stage, &marker)
-                .map_err(|_| partial("native.workspace.create.locationChanged"))?;
-            // Publish identity and progress together; a bare marker is a legacy workspace.
-            crate::durable_storage::rename_noreplace(child, &stage, child, ".situate")
-                .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-            #[cfg(test)]
+    let marker = if situate_host::fs::STAGE_WORKSPACE_MARKER {
+        let onboarding = matches!(metadata, InitialMetadata::Onboarding);
+        let (stage, marker) = prepare_initial_metadata(child, onboarding)
+            .map_err(|_| partial("native.workspace.create.markerFailed"))?;
+        verify()?;
+        check_directory_entry(child, &stage, &marker)
+            .map_err(|_| partial("native.workspace.create.locationChanged"))?;
+        // Publish identity and progress together; a bare marker is a legacy workspace.
+        crate::durable_storage::rename_noreplace(child, &stage, child, ".situate")
+            .map_err(|_| partial("native.workspace.create.markerFailed"))?;
+        #[cfg(test)]
+        if onboarding {
             onboarding_tests::checkpoint(onboarding_tests::Checkpoint::Published, child)
                 .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-            Some(marker)
         }
+        Some(marker)
+    } else {
+        child
+            .create_dir(".situate")
+            .and_then(|_| crate::workspace_identity::initialize(child))
+            .map_err(|_| partial("native.workspace.create.markerFailed"))?;
+        None
     };
-    #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+    #[cfg(test)]
     if marker.is_some() {
         onboarding_tests::checkpoint(onboarding_tests::Checkpoint::ChildSync, child)
             .map_err(|_| partial("native.workspace.create.markerFailed"))?;
     }
     crate::durable_storage::sync_directory(child)
         .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-    #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+    #[cfg(test)]
     if marker.is_some() {
         onboarding_tests::checkpoint(onboarding_tests::Checkpoint::ParentSync, child)
             .map_err(|_| partial("native.workspace.create.markerFailed"))?;
     }
     crate::durable_storage::sync_directory(dir)
         .map_err(|_| partial("native.workspace.create.markerFailed"))?;
-    #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+    #[cfg(test)]
     if marker.is_some() {
         onboarding_tests::checkpoint(onboarding_tests::Checkpoint::Synced, child)
             .map_err(|_| partial("native.workspace.create.markerFailed"))?;
@@ -309,7 +294,7 @@ fn finish_new_directory(
     Ok(result)
 }
 
-#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+#[cfg(test)]
 #[path = "workspaces_onboarding_tests.rs"]
 pub(crate) mod onboarding_tests;
 
@@ -383,7 +368,7 @@ mod tests {
     #[test]
     fn rejects_even_dangling_symlinks() {
         let temp = tempfile::tempdir().unwrap();
-        std::os::unix::fs::symlink("missing", temp.path().join("link")).unwrap();
+        situate_host::unix_test_support::symlink("missing", temp.path().join("link")).unwrap();
         assert_eq!(
             create(temp.path(), "link").unwrap_err(),
             "native.workspace.folder.exists"
@@ -579,7 +564,7 @@ mod tests {
     fn no_follow_open_rejects_a_child_replaced_by_a_symlink() {
         let temp = tempfile::tempdir().unwrap();
         fs::create_dir(temp.path().join("existing")).unwrap();
-        std::os::unix::fs::symlink("existing", temp.path().join("Garden")).unwrap();
+        situate_host::unix_test_support::symlink("existing", temp.path().join("Garden")).unwrap();
         let dir = Dir::open_ambient_dir(temp.path(), ambient_authority()).unwrap();
         assert!(open_child_directory(&dir, "Garden").is_err());
         assert!(!temp.path().join("existing/.situate").exists());
@@ -588,7 +573,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn read_only_parent_fails_without_creating_a_target() {
-        use std::os::unix::fs::PermissionsExt;
+        use situate_host::unix_test_support::PermissionsExt;
         let temp = tempfile::tempdir().unwrap();
         fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o500)).unwrap();
         let result = create(temp.path(), "Garden");

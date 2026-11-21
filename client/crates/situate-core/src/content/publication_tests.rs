@@ -16,7 +16,7 @@ fn new_file_publication_keeps_existing_file_directory_and_symlink_occupants() {
     assert!(temp.path().join("folder").is_dir());
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink("missing", temp.path().join("link")).unwrap();
+        situate_host::unix_test_support::symlink("missing", temp.path().join("link")).unwrap();
         let stage = temporary_file(&dir, b"new").unwrap();
         assert!(publish_new_file(&dir, &stage, "link").is_err());
         assert!(

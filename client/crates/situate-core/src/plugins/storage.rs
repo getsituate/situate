@@ -85,11 +85,7 @@ pub fn read(root: &Path, plugin: &str, area: Area, path: &str) -> Result<TextVer
     }
     let mut options = cap_std::fs::OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NONBLOCK);
-    }
+    situate_host::fs::nonblocking_file_options(&mut options);
     let file = parent
         .open_with(parts.last().ok_or(INVALID)?, &options)
         .map_err(|_| ERROR)?;
@@ -250,7 +246,7 @@ mod tests {
             if path.is_dir() {
                 std::fs::remove_dir_all(&path).unwrap();
             }
-            std::os::unix::fs::symlink(outside.path(), path).unwrap();
+            situate_host::unix_test_support::symlink(outside.path(), path).unwrap();
             assert!(write(root.path(), "one", Area::Data, "state.json", "new", None).is_err());
             assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 1);
         }

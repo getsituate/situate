@@ -1,5 +1,5 @@
 use super::*;
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 use tempfile::TempDir;
 
 fn request(cwd: &std::path::Path, script: &str) -> CommandRequest {

@@ -580,7 +580,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn unreadable_and_corrupt_surviving_payloads_block_load_and_save_without_erasure() {
-        use std::os::unix::fs::symlink;
+        use situate_host::unix_test_support::symlink;
         let directory = workspace();
         let owners = install(&directory);
         let store = open(&directory);
@@ -617,8 +617,8 @@ mod tests {
             assert_eq!(fs::read(&payload).unwrap(), corrupt);
         }
         fs::write(&payload, &original_payload).unwrap();
-        if unsafe { libc::geteuid() } != 0 {
-            use std::os::unix::fs::PermissionsExt;
+        if !situate_host::unix_test_support::is_root() {
+            use situate_host::unix_test_support::PermissionsExt;
             fs::set_permissions(&payload, fs::Permissions::from_mode(0o000)).unwrap();
             assert!(store.load().is_err());
             assert!(
@@ -894,7 +894,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symlinks_cannot_redirect_layout_marker_or_lock() {
-        use std::os::unix::fs::symlink;
+        use situate_host::unix_test_support::symlink;
         let directory = workspace();
         let outside = workspace();
         let target = outside.path().join("sentinel");

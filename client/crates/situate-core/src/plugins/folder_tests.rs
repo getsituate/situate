@@ -71,7 +71,7 @@ fn legacy_migrations_preserve_unrelated_siblings() {
     fs::write(matching_directory.join("keep"), "keep").unwrap();
     #[cfg(all(unix, not(target_os = "macos")))]
     let noise = {
-        use std::os::unix::ffi::OsStringExt;
+        use situate_host::unix_test_support::RawNameBuf;
         let name = std::ffi::OsString::from_vec(vec![0xff]);
         let mut noise = noise;
         noise.extend([legacy.join(&name), plugins.join(&name), marker.join(&name)]);

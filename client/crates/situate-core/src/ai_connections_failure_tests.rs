@@ -5,7 +5,7 @@ struct ReadOnly(std::path::PathBuf);
 #[cfg(unix)]
 impl ReadOnly {
     fn new(path: &Path) -> Self {
-        use std::os::unix::fs::PermissionsExt;
+        use situate_host::unix_test_support::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o500)).unwrap();
         Self(path.into())
     }
@@ -13,7 +13,7 @@ impl ReadOnly {
 #[cfg(unix)]
 impl Drop for ReadOnly {
     fn drop(&mut self) {
-        use std::os::unix::fs::PermissionsExt;
+        use situate_host::unix_test_support::PermissionsExt;
         std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 }

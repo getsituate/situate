@@ -149,8 +149,9 @@ fn direct_import_rejects_symlinks_in_files_and_ancestors() {
     let root = sources.path().canonicalize().unwrap();
     fs::create_dir(root.join("real")).unwrap();
     fs::write(root.join("real/file.bin"), b"original").unwrap();
-    std::os::unix::fs::symlink(root.join("real/file.bin"), root.join("link.bin")).unwrap();
-    std::os::unix::fs::symlink(root.join("real"), root.join("link-dir")).unwrap();
+    situate_host::unix_test_support::symlink(root.join("real/file.bin"), root.join("link.bin"))
+        .unwrap();
+    situate_host::unix_test_support::symlink(root.join("real"), root.join("link-dir")).unwrap();
     for path in ["link.bin", "link-dir/file.bin"] {
         assert!(
             store

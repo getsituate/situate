@@ -1,0 +1,23 @@
+[package]
+name = "situate-host-windows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+situate-host-api = { path = "../situate-host-api" }
+tokio-util = "=0.7.19"
+dunce = "1"
+cap-std = "3"
+cap-fs-ext = "3"
+same-file = "1"
+tokio = { version = "1", features = ["macros", "rt", "time"] }
+windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+
+[dev-dependencies]
+cap-primitives = "3"
+tempfile = "3.23"
+
+[features]
+test-support = []
