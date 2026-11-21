@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   constants,
   closeSync,
@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
 import { sshArguments } from "./transport.mjs";
@@ -20,6 +19,7 @@ import {
   checkpointFile,
   checkpointIdentity,
   createRestoreDirectory,
+  installRestoreDirectory,
   writeRestoredFile,
   validateRestoredCheckpoint,
 } from "../../tools/release-checkpoint.mjs";
@@ -64,51 +64,56 @@ export function createHostCheckpointStore(
       { env, stdio: ["pipe", "pipe", "pipe"] },
     );
   const identity = ({ dev, ino }) => `${dev}:${ino}`;
-  const parentIdentity = (destination) =>
-    identity(lstatSync(dirname(destination), { bigint: true }));
-  const stagingDirectory = (destination) => {
-    const parent = parentIdentity(destination);
-    assert(
-      !lstatSync(destination, { throwIfNoEntry: false }),
-      "Restore destination already exists",
-    );
+  async function withStaging(destination, restore) {
     const staging = join(
       dirname(destination),
       `.release-restore-incomplete-${randomUUID()}`,
     );
-    const original = createRestoreDirectory(staging);
-    assert.equal(
-      parentIdentity(destination),
-      parent,
-      "Restore parent directory changed",
+    const { parent, staging: original } = createRestoreDirectory(
+      staging,
+      destination,
     );
-    const verify = () => {
+    const fd = openSync(
+      staging,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    try {
       assert.equal(
-        parentIdentity(destination),
-        parent,
-        "Restore parent directory changed",
-      );
-      assert.equal(
-        identity(lstatSync(staging, { bigint: true })),
+        identity(fstatSync(fd, { bigint: true })),
         original,
         "Restore staging directory changed",
       );
-    };
-    return { staging, parent, original, verify };
-  };
-  const commitRestore = ({ staging, parent, original }, destination) =>
-    execFileSync(
-      "/usr/bin/python3",
-      [
-        "-IB",
-        fileURLToPath(new URL("./checkpoint-commit.py", import.meta.url)),
+      const verify = () => {
+        assert.equal(
+          identity(lstatSync(dirname(destination), { bigint: true })),
+          parent,
+          "Restore parent directory changed",
+        );
+        const current = lstatSync(staging, { bigint: true });
+        assert.equal(
+          identity(current),
+          original,
+          "Restore staging directory changed",
+        );
+        assert(
+          current.isDirectory() &&
+            current.uid === BigInt(process.geteuid()) &&
+            !(current.mode & 0o077n),
+          "Restore staging must be an owned private directory",
+        );
+      };
+      verify();
+      const result = await restore({
         staging,
-        destination,
-        parent,
-        original,
-      ],
-      { env: {}, stdio: ["ignore", "pipe", "pipe"] },
-    );
+        verify,
+        sync: () => fsyncSync(fd),
+      });
+      installRestoreDirectory(staging, destination, parent, original);
+      return result;
+    } finally {
+      closeSync(fd);
+    }
+  }
   async function exchange(request, files = [], receive) {
     const child = start();
     child.stderr.resume();
@@ -197,51 +202,40 @@ export function createHostCheckpointStore(
         identity: { operationId },
       });
       assert.equal(result.descriptor.identity.operationId, operationId);
-      const local = stagingDirectory(destination);
-      const { staging, verify } = local;
-      for (const name of [
-        "plan.json",
-        "configuration.json",
-        "operation.json",
-      ]) {
-        const item = result.descriptor.files.find((item) => item.name === name);
-        assert(item, "Missing bootstrap metadata");
+      return withStaging(destination, async ({ staging, verify, sync }) => {
+        for (const name of [
+          "plan.json",
+          "configuration.json",
+          "operation.json",
+        ]) {
+          const item = result.descriptor.files.find(
+            (item) => item.name === name,
+          );
+          assert(item, "Missing bootstrap metadata");
+          writeRestoredFile(
+            staging,
+            item,
+            Buffer.from(result.metadata[name], "base64"),
+            verify,
+          );
+        }
+        sync();
+        const { validatePlan, digest } =
+          await import("../../tools/pipeline-state.mjs");
         verify();
-        writeRestoredFile(
-          staging,
-          item,
-          Buffer.from(result.metadata[name], "base64"),
+        const plan = JSON.parse(checkpointFile(join(staging, "plan.json")));
+        validatePlan(plan);
+        assert.deepEqual(checkpointIdentity(plan), result.descriptor.identity);
+        assert.equal(
+          digest(checkpointFile(join(staging, "configuration.json"))),
+          plan.configurationDigest,
         );
-      }
-      const parent = openSync(
-        staging,
-        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-      );
-      try {
-        const info = fstatSync(parent);
-        assert(
-          info.uid === process.getuid() && !(info.mode & 0o077),
-          "Restore staging must be an owned private directory",
-        );
-        fsyncSync(parent);
-      } finally {
-        closeSync(parent);
-      }
-      const plan = JSON.parse(checkpointFile(join(staging, "plan.json")));
-      const { validatePlan, digest } =
-        await import("../../tools/pipeline-state.mjs");
-      validatePlan(plan);
-      assert.deepEqual(checkpointIdentity(plan), result.descriptor.identity);
-      assert.equal(
-        digest(checkpointFile(join(staging, "configuration.json"))),
-        plan.configurationDigest,
-      );
-      commitRestore(local, destination);
-      return {
-        directory: destination,
-        planFile: `${destination}/plan.json`,
-        configurationFile: `${destination}/configuration.json`,
-      };
+        return {
+          directory: destination,
+          planFile: `${destination}/plan.json`,
+          configurationFile: `${destination}/configuration.json`,
+        };
+      });
     },
     inspect: ({ plan }) =>
       exchange({ action: "inspect", identity: checkpointIdentity(plan) }),
@@ -256,145 +250,130 @@ export function createHostCheckpointStore(
       qualified = false,
       draftId,
     }) {
-      const local = stagingDirectory(destination);
-      const { staging, verify } = local;
-      const descriptor = await exchange(
-        {
-          action: qualified ? "restore-qualified" : "restore",
-          identity: checkpointIdentity(plan),
-          checkpointId,
-          inspectionDigest,
-          ...(draftId !== undefined ? { draftId } : {}),
-        },
-        [],
-        async (stream) => {
-          let buffer = Buffer.alloc(0);
-          let descriptor;
-          let index = 0;
-          let fd;
-          let size = 0;
-          let hash;
-          try {
-            for await (const chunk of stream) {
-              buffer = Buffer.concat([buffer, chunk]);
-              if (!descriptor) {
-                const end = buffer.indexOf(10);
-                if (end < 0) {
+      return withStaging(destination, async ({ staging, verify, sync }) => {
+        const descriptor = await exchange(
+          {
+            action: qualified ? "restore-qualified" : "restore",
+            identity: checkpointIdentity(plan),
+            checkpointId,
+            inspectionDigest,
+            ...(draftId !== undefined ? { draftId } : {}),
+          },
+          [],
+          async (stream) => {
+            let buffer = Buffer.alloc(0);
+            let descriptor;
+            let index = 0;
+            let fd;
+            let size = 0;
+            let hash;
+            try {
+              for await (const chunk of stream) {
+                buffer = Buffer.concat([buffer, chunk]);
+                if (!descriptor) {
+                  const end = buffer.indexOf(10);
+                  if (end < 0) {
+                    assert(
+                      buffer.length <= 65536,
+                      "Oversized checkpoint descriptor",
+                    );
+                    continue;
+                  }
+                  descriptor = JSON.parse(buffer.subarray(0, end));
+                  buffer = buffer.subarray(end + 1);
+                  assert.equal(descriptor.checkpointId, checkpointId);
                   assert(
-                    buffer.length <= 65536,
-                    "Oversized checkpoint descriptor",
-                  );
-                  continue;
-                }
-                descriptor = JSON.parse(buffer.subarray(0, end));
-                buffer = buffer.subarray(end + 1);
-                assert.equal(descriptor.checkpointId, checkpointId);
-                assert(
-                  Array.isArray(descriptor.files) &&
-                    descriptor.files.length >= 3 &&
-                    descriptor.files.length <= 24 &&
-                    descriptor.files.every(
-                      (item) =>
-                        Number.isSafeInteger(item.size) && item.size >= 0,
-                    ) &&
-                    descriptor.files.reduce(
-                      (total, item) => total + item.size,
-                      0,
-                    ) <=
-                      16 * 1024 ** 3,
-                  "Invalid checkpoint inventory",
-                );
-              }
-              while (index < descriptor.files.length) {
-                const item = descriptor.files[index];
-                if (fd === undefined) {
-                  assert(
-                    /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(item.name) &&
-                      Number.isSafeInteger(item.size) &&
-                      item.size >= 0 &&
-                      item.size <= 16 * 1024 ** 3,
+                    Array.isArray(descriptor.files) &&
+                      descriptor.files.length >= 3 &&
+                      descriptor.files.length <= 24 &&
+                      descriptor.files.every(
+                        (item) =>
+                          Number.isSafeInteger(item.size) && item.size >= 0,
+                      ) &&
+                      descriptor.files.reduce(
+                        (total, item) => total + item.size,
+                        0,
+                      ) <=
+                        16 * 1024 ** 3,
                     "Invalid checkpoint inventory",
                   );
-                  verify();
-                  fd = openSync(join(staging, item.name), "wx", 0o600);
-                  size = 0;
-                  hash = createHash("sha256");
                 }
-                const count = Math.min(buffer.length, item.size - size);
-                const bytes = buffer.subarray(0, count);
-                for (let offset = 0; offset < bytes.length;)
-                  offset += writeSync(fd, bytes, offset);
-                hash.update(bytes);
-                size += count;
-                buffer = buffer.subarray(count);
-                if (size !== item.size) break;
-                assert.equal(
-                  hash.digest("hex"),
-                  item.sha256,
-                  "Restored checkpoint hash differs",
-                );
-                fsyncSync(fd);
-                closeSync(fd);
-                fd = undefined;
-                index++;
+                while (index < descriptor.files.length) {
+                  const item = descriptor.files[index];
+                  if (fd === undefined) {
+                    assert(
+                      /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(item.name) &&
+                        Number.isSafeInteger(item.size) &&
+                        item.size >= 0 &&
+                        item.size <= 16 * 1024 ** 3,
+                      "Invalid checkpoint inventory",
+                    );
+                    verify();
+                    fd = openSync(join(staging, item.name), "wx", 0o600);
+                    verify();
+                    size = 0;
+                    hash = createHash("sha256");
+                  }
+                  const count = Math.min(buffer.length, item.size - size);
+                  const bytes = buffer.subarray(0, count);
+                  for (let offset = 0; offset < bytes.length;)
+                    offset += writeSync(fd, bytes, offset);
+                  hash.update(bytes);
+                  size += count;
+                  buffer = buffer.subarray(count);
+                  if (size !== item.size) break;
+                  assert.equal(
+                    hash.digest("hex"),
+                    item.sha256,
+                    "Restored checkpoint hash differs",
+                  );
+                  fsyncSync(fd);
+                  closeSync(fd);
+                  fd = undefined;
+                  index++;
+                }
               }
-            }
-            assert(
-              descriptor &&
-                index === descriptor.files.length &&
-                buffer.length === 0,
-              "Incomplete checkpoint download",
-            );
-            const parent = openSync(
-              staging,
-              constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-            );
-            try {
-              fsyncSync(parent);
+              assert(
+                descriptor &&
+                  index === descriptor.files.length &&
+                  buffer.length === 0,
+                "Incomplete checkpoint download",
+              );
+              sync();
+              return descriptor;
             } finally {
-              closeSync(parent);
+              if (fd !== undefined) closeSync(fd);
             }
-            return descriptor;
-          } finally {
-            if (fd !== undefined) closeSync(fd);
-          }
-        },
-      );
-      verify();
-      let retained;
-      if (qualified) {
-        const { validateQualifiedRestore } =
-          await import("../../tools/release-checkpoint-qualified.mjs");
-        retained = validateQualifiedRestore(descriptor, staging, plan);
-        verify();
-        const bytes = Buffer.from(`${JSON.stringify(descriptor)}\n`);
-        writeRestoredFile(
-          staging,
-          {
-            name: "qualified-restore.json",
-            size: bytes.length,
-            sha256: createHash("sha256").update(bytes).digest("hex"),
           },
-          bytes,
         );
-        const parent = openSync(
-          staging,
-          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-        );
-        try {
-          fsyncSync(parent);
-        } finally {
-          closeSync(parent);
-        }
-      } else validateRestoredCheckpoint(descriptor, staging, plan);
-      commitRestore(local, destination);
-      return qualified
-        ? {
-            ...retained,
-            directory: destination,
-            mapping: { ...retained.mapping, directory: destination },
-          }
-        : { descriptor, directory: destination };
+        verify();
+        let retained;
+        if (qualified) {
+          const { validateQualifiedRestore } =
+            await import("../../tools/release-checkpoint-qualified.mjs");
+          verify();
+          retained = validateQualifiedRestore(descriptor, staging, plan);
+          const bytes = Buffer.from(`${JSON.stringify(descriptor)}\n`);
+          writeRestoredFile(
+            staging,
+            {
+              name: "qualified-restore.json",
+              size: bytes.length,
+              sha256: createHash("sha256").update(bytes).digest("hex"),
+            },
+            bytes,
+            verify,
+          );
+          sync();
+        } else validateRestoredCheckpoint(descriptor, staging, plan);
+        return qualified
+          ? {
+              ...retained,
+              directory: destination,
+              mapping: { ...retained.mapping, directory: destination },
+            }
+          : { descriptor, directory: destination };
+      });
     },
   };
 }
