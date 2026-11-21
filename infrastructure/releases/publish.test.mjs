@@ -5,6 +5,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   chmodSync,
+  closeSync,
+  openSync,
   statSync,
   realpathSync,
   renameSync,
@@ -274,6 +276,29 @@ test("publisher accepts absent or legacy recovery evidence without allowing a du
       "{}",
     );
   }
+});
+
+test("local journal inspection rejects an aliased journal before transport", (t) => {
+  const directory = temporary(t);
+  const external = join(temporary(t), "other-journal.json");
+  const bytes = '{"host":"release@fixture.invalid"}';
+  writeFileSync(external, bytes);
+  symlinkSync(external, join(directory, "publication-journal.json"));
+  const result = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("./publish.mjs", import.meta.url)),
+      "inspect",
+      "--release",
+      directory,
+      "--destination",
+      "release@fixture.invalid",
+    ],
+    { encoding: "utf8", env: { PATH: process.env.PATH, CI: "true" } },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Cannot read publication journal/);
+  assert.equal(readFileSync(external, "utf8"), bytes);
 });
 
 test("publication destination reads only the effective host from private dotenv data", (t) => {
@@ -1415,8 +1440,8 @@ test("publication archives keep exact bytes for reconciliation and require an un
     );
     assert.equal(existsSync(`${stage}.tar`), false);
   }
-  const inspect = (fd, digest) => {
-    const bytes = readFileSync(fd);
+  const inspect = (digest) => {
+    const bytes = readFileSync(`${stage}.tar`);
     assert.equal(sha256(bytes), digest);
     assert.equal(
       execFileSync("/usr/bin/tar", ["-tf", "-"], {
@@ -1434,6 +1459,7 @@ test("publication archives keep exact bytes for reconciliation and require an un
     inspect,
   );
   assert.equal(statSync(`${stage}.tar`).mode & 0o777, 0o600);
+  writeFileSync(join(stage, "manifest.json"), '{"changed":true}\n');
   assert.equal(
     withPublicationArchive(stage, releaseMembers, digest, inspect),
     digest,
@@ -1448,6 +1474,68 @@ test("publication archives keep exact bytes for reconciliation and require an un
   );
 });
 
+test("archive creation and handoff stay in the selected parent after it moves", (t) => {
+  const root = temporary(t);
+  const parent = join(root, "external stage parent");
+  const moved = join(root, "moved parent");
+  const stage = "staged release";
+  mkdirSync(join(parent, stage), { recursive: true });
+  writeFileSync(join(parent, stage, "manifest.json"), "{}\n");
+  const directory = openSync(parent, "r");
+  try {
+    renameSync(parent, moved);
+    mkdirSync(parent);
+    const storage = fileURLToPath(
+      new URL("./publication-storage.py", import.meta.url),
+    );
+    const options = { stdio: ["pipe", "pipe", "pipe", directory], env: {} };
+    const prepared = execFileSync(
+      "/usr/bin/python3",
+      ["-IB", storage, "prepare-archive"],
+      {
+        ...options,
+        input: JSON.stringify({ stage, names: ["manifest.json"] }),
+      },
+    );
+    const { digest } = JSON.parse(prepared);
+    assert.equal(existsSync(join(parent, `${stage}.tar`)), false);
+    const retained = readFileSync(join(moved, `${stage}.tar`));
+    assert.equal(sha256(retained), digest);
+    const localTransport = [
+      "import os, runpy, sys",
+      "def capture(executable, args):",
+      " assert executable == '/usr/bin/ssh'",
+      " with os.fdopen(0, 'rb') as archive: sys.stdout.buffer.write(archive.read())",
+      "os.execv = capture",
+      "sys.argv = sys.argv[1:]",
+      "runpy.run_path(sys.argv[0], run_name='__main__')",
+    ].join("\n");
+    const transferred = execFileSync(
+      "/usr/bin/python3",
+      ["-IBc", localTransport, storage, "send-archive"],
+      {
+        ...options,
+        input: JSON.stringify({ stage, digest }),
+      },
+    );
+    assert.deepEqual(transferred, retained);
+    assert.throws(
+      () =>
+        execFileSync(
+          "/usr/bin/python3",
+          ["-IBc", localTransport, storage, "send-archive"],
+          {
+            ...options,
+            input: JSON.stringify({ stage, digest: "0".repeat(64) }),
+          },
+        ),
+      /Transport archive changed before transfer/,
+    );
+  } finally {
+    closeSync(directory);
+  }
+});
+
 test("publication archives reject files outside the approved inventory", (t) => {
   const stage = join(temporary(t), "stage");
   mkdirSync(stage);
@@ -1456,7 +1544,7 @@ test("publication archives reject files outside the approved inventory", (t) => 
   assert.throws(
     () =>
       withPublicationArchive(stage, ["manifest.json"], undefined, assert.fail),
-    /Cannot create publication archive/,
+    /Cannot prepare publication archive/,
   );
 });
 
@@ -1476,7 +1564,7 @@ test("publication archives reject a linked metadata directory", (t) => {
         undefined,
         assert.fail,
       ),
-    /Cannot create publication archive/,
+    /Cannot prepare publication archive/,
   );
   assert.equal(
     readFileSync(join(metadata, "update.json"), "utf8"),

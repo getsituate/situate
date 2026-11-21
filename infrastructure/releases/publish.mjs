@@ -4,7 +4,6 @@ import {
   constants,
   cpSync,
   existsSync,
-  fsyncSync,
   fstatSync,
   lstatSync,
   mkdirSync,
@@ -14,7 +13,7 @@ import {
   realpathSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { isDeepStrictEqual, parseArgs } from "node:util";
@@ -45,7 +44,6 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const client = join(root, "client");
 const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const filename = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
-const archiveMemberName = /^(?:metadata\/)?[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const storageProgram = fileURLToPath(
   new URL("./publication-storage.py", import.meta.url),
@@ -575,27 +573,40 @@ function inventory(destination) {
   return files;
 }
 
-function saveJournal(releaseDirectory, original, value, exclusive = false) {
-  const directory = openSync(releaseDirectory, directoryFlags);
+function openPublicationDirectory(path) {
+  const selected = lstatSync(path, { bigint: true });
+  const fd = openSync(path, directoryFlags);
   try {
-    const current = fstatSync(directory, { bigint: true });
-    if (current.dev !== original.dev || current.ino !== original.ino)
-      throw new Error("Publication journal directory changed.");
-    execFileSync(
-      "/usr/bin/python3",
-      ["-IB", storageProgram, exclusive ? "create-journal" : "replace-journal"],
-      {
-        env: {},
-        input: `${JSON.stringify(value, null, 2)}\n`,
-        stdio: ["pipe", "ignore", "pipe", directory],
-      },
-    );
-  } finally {
-    closeSync(directory);
+    const opened = fstatSync(fd, { bigint: true });
+    if (opened.dev !== selected.dev || opened.ino !== selected.ino)
+      throw new Error("Publication directory changed while opening it.");
+    return fd;
+  } catch (error) {
+    closeSync(fd);
+    throw error;
   }
 }
 
-function remote(action, request, config, input) {
+function storage(directory, operation, options = {}, args = []) {
+  return execFileSync(
+    "/usr/bin/python3",
+    ["-IB", storageProgram, operation, ...args],
+    {
+      env: {},
+      encoding: "utf8",
+      ...options,
+      stdio: ["pipe", "pipe", "pipe", directory],
+    },
+  );
+}
+
+function saveJournal(directory, value, exclusive = false) {
+  storage(directory, exclusive ? "create-journal" : "replace-journal", {
+    input: JSON.stringify(value, null, 2) + "\n",
+  });
+}
+
+function remote(action, request, config, sendArchive) {
   if (!["inspect", "publish", "reconcile", "complete", "promote"].includes(action))
     throw new Error("Unknown publication transport action.");
   const storage = readFileSync(new URL("./remote.py", import.meta.url), "utf8");
@@ -609,20 +620,26 @@ function remote(action, request, config, input) {
   const code = Buffer.from(program).toString("base64");
   const encoded = Buffer.from(JSON.stringify(request)).toString("base64");
   const command = `python3 -c 'import base64;exec(base64.b64decode("${code}"))' ${action} ${encoded}`;
+  const args = [...sshArguments(config), command];
+  const options = {
+    env: {
+      ...environment(),
+      ...(process.env.SSH_AUTH_SOCK
+        ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK }
+        : {}),
+    },
+    timeout: 1800000,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  };
   try {
     return JSON.parse(
-      execFileSync("/usr/bin/ssh", [...sshArguments(config), command], {
-        env: {
-          ...environment(),
-          ...(process.env.SSH_AUTH_SOCK
-            ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK }
-            : {}),
-        },
-        timeout: 1800000,
-        encoding: "utf8",
-        stdio: [input ?? "ignore", "pipe", "pipe"],
-        maxBuffer: 1024 * 1024,
-      }),
+      sendArchive
+        ? sendArchive(args, options)
+        : execFileSync("/usr/bin/ssh", args, {
+            ...options,
+            stdio: ["ignore", "pipe", "pipe"],
+          }),
     );
   } catch {
     throw new Error(
@@ -659,54 +676,35 @@ export function withPublicationArchive(
   expectedDigest,
   useArchive,
 ) {
-  const tar = `${destination}.tar`;
-  const retained = lstatSync(tar, { throwIfNoEntry: false });
-  if (retained && expectedDigest === undefined)
-    throw new Error(
-      "A transport archive already exists; inspect it before reconciliation.",
-    );
-  if (!retained) {
-    if (
-      !lstatSync(destination).isDirectory() ||
-      !names.length ||
-      new Set(names).size !== names.length ||
-      names.some(
-        (name) =>
-          typeof name !== "string" ||
-          !archiveMemberName.test(name) ||
-          name.trim() !== name,
-      )
-    )
-      throw new Error("Invalid publication archive inventory.");
-    const directory = openSync(destination, directoryFlags);
+  const stage = basename(destination);
+  const parent = openPublicationDirectory(realpathSync(dirname(destination)));
+  try {
+    let archive;
     try {
-      const output = openSync(tar, "wx", 0o600);
-      try {
-        execFileSync("/usr/bin/python3", ["-IB", storageProgram, "archive"], {
-          env: {},
-          input: JSON.stringify(names),
-          stdio: ["pipe", output, "pipe", directory],
-        });
-        fsyncSync(output);
-      } catch {
-        throw new Error("Cannot create publication archive.");
-      } finally {
-        closeSync(output);
-      }
-    } finally {
-      closeSync(directory);
-    }
-  }
-  return withReleaseFile(tar, (fd, stat) => {
-    const transportSha256 = hashReleaseFileDescriptor(fd, stat.size).toString(
-      "hex",
-    );
-    if (retained && expectedDigest !== transportSha256)
-      throw new Error(
-        "A differing transport archive exists; inspect it before reconciliation.",
+      archive = JSON.parse(
+        storage(parent, "prepare-archive", {
+          input: JSON.stringify({ stage, names, expectedDigest }),
+        }),
       );
-    return useArchive(fd, transportSha256);
-  });
+    } catch {
+      throw new Error("Cannot prepare publication archive.");
+    }
+    if (archive.error) throw new Error(archive.error);
+    // Node cannot open files relative to a directory descriptor on macOS.
+    return useArchive(archive.digest, (args, options) =>
+      storage(
+        parent,
+        "send-archive",
+        {
+          ...options,
+          input: JSON.stringify({ stage, digest: archive.digest }),
+        },
+        args,
+      ),
+    );
+  } finally {
+    closeSync(parent);
+  }
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -762,14 +760,41 @@ export async function main(args = process.argv.slice(2)) {
             : configuration(["SITUATE_UPDATER_PUBLIC_KEY"])),
       }
     : configuration();
-  const journalPath = join(directory, "publication-journal.json");
-  const journalDirectory = lstatSync(directory, { bigint: true });
+  const journalDirectory = ["inspect", "publish", "reconcile"].includes(action)
+    ? openPublicationDirectory(directory)
+    : undefined;
+  try {
+    await runPublication(action, values, directory, config, journalDirectory);
+  } finally {
+    if (journalDirectory !== undefined) closeSync(journalDirectory);
+  }
+}
+
+async function runPublication(
+  action,
+  values,
+  directory,
+  config,
+  journalDirectory,
+) {
+  const journalText = () => {
+    try {
+      return storage(journalDirectory, "read-journal");
+    } catch {
+      throw new Error("Cannot read publication journal.");
+    }
+  };
+  const readJournal = () => {
+    const recorded = journalText();
+    if (!recorded) throw new Error("Publication journal is missing.");
+    return JSON.parse(recorded);
+  };
   if (action === "inspect") {
-    const journal = json(journalPath);
+    const journal = readJournal();
     if (journal.host !== config.WEBSITE_DEPLOY_HOST)
       throw new Error("Journal SSH destination differs from configuration.");
     const observed = remote("inspect", journal.request, config);
-    saveJournal(directory, journalDirectory, {
+    saveJournal(journalDirectory, {
       ...journal,
       inspected: true,
       observed,
@@ -777,7 +802,7 @@ export async function main(args = process.argv.slice(2)) {
     console.log(JSON.stringify(observed, null, 2));
     return;
   }
-  if (action === "publish" && !values.fresh && existsSync(journalPath))
+  if (action === "publish" && !values.fresh && journalText())
     throw new Error(
       "Publication journal exists; inspect and reconcile instead of retrying.",
     );
@@ -818,7 +843,7 @@ export async function main(args = process.argv.slice(2)) {
   sshArguments(config);
   let journal;
   if (action === "reconcile") {
-    journal = json(journalPath);
+    journal = readJournal();
     if (
       !journal.inspected ||
       journal.host !== config.WEBSITE_DEPLOY_HOST ||
@@ -883,19 +908,19 @@ export async function main(args = process.argv.slice(2)) {
     destination,
     Object.keys(staged),
     action === "reconcile" ? (journal.transportSha256 ?? null) : undefined,
-    (fd, transportSha256) => {
+    (transportSha256, sendArchive) => {
       assertReviewedRevision(values["reviewed-revision"]);
-      if (values.fresh) return remote("promote", journal.request, config, fd);
+      if (values.fresh)
+        return remote("promote", journal.request, config, sendArchive);
       journal.transportSha256 = transportSha256;
       saveJournal(
-        directory,
         journalDirectory,
         { ...journal, state: "pending", inspected: false },
         action === "publish",
       );
       return action === "reconcile"
-        ? remote("reconcile", journal.request, config, fd)
-        : remote("publish", journal.request, config, fd);
+        ? remote("reconcile", journal.request, config, sendArchive)
+        : remote("publish", journal.request, config, sendArchive);
     },
   );
   await verifyPublicAvailability(manifest, artifact);
@@ -905,7 +930,7 @@ export async function main(args = process.argv.slice(2)) {
   }
   if (journal.request.publicVerificationRequired)
     result = remote("complete", journal.request, config);
-  saveJournal(directory, journalDirectory, {
+  saveJournal(journalDirectory, {
     ...journal,
     state: "complete",
     result,
