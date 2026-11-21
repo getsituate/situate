@@ -939,8 +939,16 @@ test("the Tauri Cargo runner forwards arguments and preserves a failed Cargo exi
     "--target",
     "x86_64-apple-darwin",
   ];
+  for (const cargo of [undefined, "cargo", join(bin, "wrong")]) {
+    const invalid = spawnSync(process.execPath, [runner, ...args], {
+      env: { PATH: bin, ...(cargo ? { SITUATE_RELEASE_CARGO: cargo } : {}) },
+      encoding: "utf8",
+    });
+    assert.equal(invalid.status, 1);
+    assert.match(invalid.stderr, /absolute path to the release Cargo/);
+  }
   const result = spawnSync(process.execPath, [runner, ...args], {
-    env: { PATH: bin },
+    env: { PATH: "/usr/bin:/bin", SITUATE_RELEASE_CARGO: join(bin, "cargo") },
     encoding: "utf8",
   });
   assert.equal(result.status, 19);

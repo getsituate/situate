@@ -194,10 +194,12 @@ export async function observeHostingProducer({
       reason:
         "GitHub returned incomplete or unexpected Deploy hosting run data.",
     };
-  if (!runs.length) return { kind: "absent" };
-  if (runs.some((run) => run.status !== "completed"))
-    return { kind: "pending" };
-  const latest = runs.reduce((a, b) => (a.run_number > b.run_number ? a : b));
+  let latest;
+  for (const run of runs) {
+    if (run.status !== "completed") return { kind: "pending" };
+    if (!latest || run.run_number > latest.run_number) latest = run;
+  }
+  if (!latest) return { kind: "absent" };
   if (
     !["failure", "cancelled", "timed_out", "startup_failure"].includes(
       latest.conclusion,
