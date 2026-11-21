@@ -15,6 +15,7 @@ export interface DictationOwner {
 }
 export interface Snapshot {
   supported: boolean;
+  mobileDownload?: boolean;
   model:
     | "missing"
     | "checking"
@@ -182,10 +183,12 @@ export async function stopRecording(): Promise<void> {
   if (!id || dictation.owner?.phase !== "recording") return;
   await invoke("dictation_control", { action: "stop", id });
 }
-export async function retryProvisioning(): Promise<void> {
+export async function retryProvisioning(allowMobile = false): Promise<void> {
   await initializeDictation();
   try {
-    await invoke("dictation_control", { action: "retry" });
+    await invoke("dictation_control", {
+      action: allowMobile ? "download" : "retry",
+    });
   } catch {
     dictation.model = "failed";
   }

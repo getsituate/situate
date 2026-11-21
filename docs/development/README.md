@@ -293,6 +293,10 @@ The revision must match [`ModelManifest.swift`](../../client/app/src-tauri/dicta
 
 To use another source directory, set the build-time variable `SITUATE_DICTATION_MODEL_SOURCE` to an absolute path before starting the console or `npm run dev:client`. Its layout is `<source>/<revision>/<model files>`. The variable is embedded at build time, not read from the running application's environment. Empty and relative values are rejected. Builds outside the desktop wrapper use Hugging Face when the variable is unset; release builds reject the local override and use the fixed Hugging Face source. Keep local paths out of release environments and do not distribute development binaries containing them.
 
+On Windows x64, an unbundled build needs the [Sherpa-ONNX 2.0.2 CPU archive](https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/sherpa-onnx-v2.0.2-win-x64-shared-MT-Release.tar.bz2). Verify the archive's SHA-256 (`55ada3f155344355c4b07445a10f4d96708a96bc483d69641fafc4966b6578ef`). Copy `sherpa-onnx-c-api.dll`, `onnxruntime.dll` and `onnxruntime_providers_shared.dll` from its `lib/` directory into `dictation/sherpa-onnx-2.0.2/` beside the executable. The app verifies the DLLs before enabling dictation.
+
+The app downloads the pinned [INT8 conversion](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/ed5d745623472f97cfc2e6c2916ee248798fc5a8) of [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (CC BY 4.0) separately into `dictation/parakeet-tdt-v3-int8-ed5d7456/` under its local app data directory. For an offline test, seed the four model files from the pinned revision in that directory before starting the app. The same size and hash checks apply to seeded files and downloads.
+
 ## Run the client
 
 The client has its own npm and Cargo workspaces under `client/`. Follow the [client setup guide](../../client/README.md) for the pinned Node/Rust toolchains, native prerequisites, development commands, tests, and desktop/mobile builds. Client development does not require Pi, Herdr, a backend, or model credentials.

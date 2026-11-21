@@ -82,4 +82,4 @@ tokio = { version = "1", features = ["test-util"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
-native-smoke = ["dep:situate-fixtures"]
+native-smoke = ["dep:situate-fixtures", "situate-host-windows/test-support"]

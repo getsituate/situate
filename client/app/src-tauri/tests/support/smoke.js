@@ -36,6 +36,11 @@
       button("Continue without AI").click();
     }
     await waitFor(() => document.querySelector(".topic-window"));
+    if (window.runWindowsDictationSmoke) {
+      await window.runWindowsDictationSmoke();
+      await invoke("finish_smoke_test", { error: null });
+      return;
+    }
     const pluginChecksMode = (await invoke("smoke_phase")).pluginChecksMode;
     if (pluginChecksMode === "windows") {
       await window.runWindowsPluginSmoke();

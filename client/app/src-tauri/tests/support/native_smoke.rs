@@ -206,6 +206,9 @@ fn smoke_phase(app: tauri::AppHandle) -> serde_json::Value {
         "entryCloseOnly": std::env::var("SITUATE_ENTRY_CLOSE_ONLY").as_deref() == Ok("1"),
         "pluginDrafts": cfg!(target_os = "macos"),
         "pluginChecksMode": std::env::var("SITUATE_PLUGIN_CHECKS_PHASE").ok(),
+        "dictationDenied": directory.join("smoke-dictation-denied").is_file(),
+        "dictationFocusSwitch": directory.join("smoke-dictation-focus").is_file(),
+        "dictationLock": directory.join("smoke-dictation-lock").is_file(),
         "handoff": std::env::var("SITUATE_ONBOARDING_HANDOFF_PHASE").ok(),
         "diagnostics": diagnostics_selected(&directory, std::env::var_os("SITUATE_DIAGNOSTICS_SMOKE").is_some()),
         "diagnosticsProfile": std::env::var("SITUATE_DIAGNOSTICS_PROFILE").ok(),
@@ -367,6 +370,10 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                 return Err(error.into());
             }
             crate::diagnostics::setup(app.handle());
+            #[cfg(all(windows, target_arch = "x86_64"))]
+            if directory.join("smoke-dictation.pcm16").is_file() {
+                crate::dictation::setup(app.handle());
+            }
             super::workspaces::setup(app.handle())?;
             crate::updates::setup(app.handle());
             progress("", "workspaces-configured", serde_json::Value::Null);
@@ -508,6 +515,17 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                         webview
                             .eval(include_str!("windows-plugin-smoke.js"))
                             .expect("load Windows plugin smoke");
+                    }
+                    #[cfg(all(windows, target_arch = "x86_64"))]
+                    if webview
+                        .app_handle()
+                        .path()
+                        .app_data_dir()
+                        .is_ok_and(|root| root.join("smoke-dictation.pcm16").is_file())
+                    {
+                        webview
+                            .eval(include_str!("windows-dictation-smoke.js"))
+                            .expect("load Windows dictation smoke");
                     }
                     webview
                         .eval(if webview.label() == "main" {

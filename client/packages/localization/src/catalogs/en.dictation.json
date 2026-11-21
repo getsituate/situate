@@ -15,6 +15,8 @@
   "dictation.downloadRecovery": "Check your connection, then try again.",
   "dictation.storageRecovery": "Free up space on this device, then try again.",
   "dictation.retry": "Retry download",
+  "dictation.waitingMobile": "Connect to Wi-Fi or Ethernet, or allow this download to use mobile data.",
+  "dictation.downloadMobile": "Download using mobile data",
   "dictation.settings": "Dictation settings",
   "dictation.record": "Dictate text",
   "dictation.stop": "Stop recording and transcribe",

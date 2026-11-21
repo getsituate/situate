@@ -1,4 +1,6 @@
 #[cfg(windows)]
+pub mod dictation;
+#[cfg(windows)]
 pub mod fs;
 #[cfg(windows)]
 pub mod process;

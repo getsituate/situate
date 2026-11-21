@@ -4721,11 +4721,15 @@ dependencies = [
  "cap-primitives",
  "cap-std",
  "dunce",
+ "reqwest",
  "same-file",
+ "serde_json",
+ "sha2 0.10.9",
  "situate-host-api",
  "tempfile",
  "tokio",
  "tokio-util",
+ "windows",
  "windows-sys 0.61.2",
 ]
 
