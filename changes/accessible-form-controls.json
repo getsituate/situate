@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "accessible-form-controls",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "accessible-form-controls",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Form labels and keyboard scrolling",
+          "paragraphs": [
+            "Screen readers can identify more fields and choices in AI setup, onboarding, and file dialogs. You can also tab to the plain-text reader and scroll it with the keyboard."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "accessible-form-controls",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Formularbeschriftungen und Scrollen per Tastatur",
+          "paragraphs": [
+            "Screenreader können bei der KI-Einrichtung, beim Einstieg und in Dateidialogen mehr Felder und Optionen benennen. In der Textansicht kannst du mit der Tabulatortaste zum Text wechseln und ihn per Tastatur scrollen."
+          ]
+        }
+      ]
+    }
+  }
+}
