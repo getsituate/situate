@@ -25,6 +25,16 @@ val generateAuthResources by tasks.registering(Exec::class) {
 }
 tasks.named("preBuild") { dependsOn(generateAuthResources) }
 
+dependencyLocking {
+    lockMode.set(LockMode.STRICT)
+}
+
+configurations.configureEach {
+    if (isCanBeResolved && (name.endsWith("CompileClasspath") || name.endsWith("RuntimeClasspath"))) {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
 dependencies {
     implementation(project(":tauri-android"))
     implementation("androidx.appcompat:appcompat:1.7.1")

@@ -21,6 +21,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_1_8
     }
 }
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { it.enable = false }
+}
 kotlin {
     compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8 }
     sourceSets.named("main") {
