@@ -62,6 +62,22 @@ test("lists folders, filters files and reads source without executing it", async
   await wrapper.get(".code-empty button").trigger("click");
   expect(wrapper.findAll(".code-entry").length).toBeGreaterThan(0);
 });
+test("lists folders in a stable order regardless of the native listing order", async () => {
+  invoke.mockResolvedValueOnce({
+    files: ["zeta", "beta", "Zeta", "Alpha"].map((path) => ({
+      path,
+      isDirectory: true,
+    })),
+  });
+  const wrapper = browser();
+  await flushPromises();
+  expect(
+    wrapper
+      .findAll(".code-entry")
+      .map((row) => row.attributes("aria-description")),
+  ).toEqual(["Alpha", "Zeta", "beta", "zeta"]);
+});
+
 test("known binary assets show an unsupported preview without reading or executing them", async () => {
   invoke.mockResolvedValueOnce({
     files: [{ path: "logo.png", isDirectory: false }],

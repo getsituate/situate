@@ -163,7 +163,11 @@ describe("assignment file diffs", () => {
       .findAll(".file-row")
       .find((row) => row.attributes("data-change-id") === "notes")!
       .trigger("click");
-    expect(wrapper.get(".diff-lines").text()).not.toContain("archived = false");
+    const diff = wrapper.get('table[aria-label="File diff"]');
+    expect(
+      diff.findAll('th[scope="col"]').map((header) => header.text()),
+    ).toEqual(["Before", "After", "Changes", "Full contents"]);
+    expect(diff.text()).not.toContain("archived = false");
     await click(wrapper, "All changes");
     await wrapper
       .findAll(".file-row")

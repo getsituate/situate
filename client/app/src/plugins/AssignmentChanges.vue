@@ -304,15 +304,25 @@ watch(
   },
 );
 let observer: ResizeObserver | undefined;
+let resizeFrame: number | undefined;
 onMounted(() => {
   if (typeof ResizeObserver !== "undefined") {
     observer = new ResizeObserver(([entry]) => {
-      split.value = entry.contentRect.width >= 720;
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
+      const nextSplit = entry.contentRect.width >= 720;
+      // Apply the layout change outside the observer's delivery cycle.
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = undefined;
+        split.value = nextSplit;
+      });
     });
     observer.observe(root.value!);
   }
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
+});
 defineExpose({ focusTitle, showList: showTree });
 </script>
 
@@ -575,6 +585,7 @@ defineExpose({ focusTitle, showList: showTree });
               v-else
               ref="diffScroll"
               class="diff-scroll"
+              role="region"
               tabindex="0"
               :aria-label="t('assignmentChanges.diff')"
               @scroll="rememberScroll('fileScroll')"
@@ -584,6 +595,14 @@ defineExpose({ focusTitle, showList: showTree });
                 class="diff-lines"
                 :aria-label="t('assignmentChanges.diff')"
               >
+                <thead class="sr-only">
+                  <tr>
+                    <th scope="col">{{ t("assignmentChanges.beforeLine") }}</th>
+                    <th scope="col">{{ t("assignmentChanges.afterLine") }}</th>
+                    <th scope="col">{{ t("assignmentChanges.change") }}</th>
+                    <th scope="col">{{ t("assignmentChanges.lineText") }}</th>
+                  </tr>
+                </thead>
                 <tbody>
                   <template
                     v-for="part in visibleParts"
@@ -604,10 +623,10 @@ defineExpose({ focusTitle, showList: showTree });
                     </tr>
                     <template v-else>
                       <tr class="diff-line" :class="part.row.kind">
-                        <td class="line-number" aria-hidden="true">
+                        <td class="line-number">
                           {{ part.row.before }}
                         </td>
-                        <td class="line-number" aria-hidden="true">
+                        <td class="line-number">
                           {{ part.row.after }}
                         </td>
                         <td class="diff-sign">

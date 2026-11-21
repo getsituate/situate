@@ -67,10 +67,11 @@ async fn main() -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::other(text::TERMINAL_REQUIRED));
     }
-    let branch = std::process::Command::new("git")
+    let branch = tokio::process::Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(&root)
         .output()
+        .await
         .ok()
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())

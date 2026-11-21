@@ -1359,15 +1359,16 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             @click="emit('leave')"
           />
         </div>
-        <label class="file-filter"
-          ><SituateIcon name="search" /><SituateInput
+        <div class="file-filter">
+          <SituateIcon name="search" /><SituateInput
             appearance="plain"
             ref="filterControl"
             v-model="query"
             type="search"
             :placeholder="t('files.findAFile')"
             :aria-label="t('files.findAFileDetail')"
-        /></label>
+          />
+        </div>
         <div class="file-tree">
           <p v-if="session.loading && !session.snapshot" class="tree-empty">
             {{ t("files.loadingFiles") }}
@@ -1650,6 +1651,9 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           <div
             ref="documentScroll"
             class="document-scroll"
+            :role="comparison ? 'region' : undefined"
+            :aria-label="comparison ? t('files.compareWithCurrent') : undefined"
+            :tabindex="comparison ? 0 : undefined"
             @scroll="rememberScroll"
           >
             <SituateEmptyState v-if="historicalDeleted" class="empty-document">
@@ -1672,7 +1676,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
                 >
                   {{ versionDate(selectedVersion) }}
                 </p>
-                <pre tabindex="0" data-localization-content="user">{{
+                <pre data-localization-content="user">{{
                   historical.version.text
                 }}</pre>
               </section>
@@ -1685,7 +1689,6 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
                   }}
                 </h3>
                 <pre
-                  tabindex="0"
                   :data-localization-content="
                     session.files[historyPath] ? 'user' : undefined
                   "
@@ -1714,6 +1717,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             <pre
               v-else-if="!isMarkdown"
               class="text-document"
+              role="region"
               tabindex="0"
               :aria-label="t('files.textSource')"
             ><SourceText :tokens="tokens" /></pre>
@@ -2137,26 +2141,34 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
         <div class="candidates" :data-inspect="inspect">
           <section class="candidate" data-candidate="editor">
             <header>
-              <h3>{{ t("files.yourEditorText") }}</h3>
+              <h3 :id="`${browserId}-editor-candidate`">
+                {{ t("files.yourEditorText") }}
+              </h3>
               <p data-dialog-help>
                 {{ t("files.completeVersionRetainedInSituate") }}
               </p>
             </header>
             <pre
               data-dialog-document
+              role="region"
+              :aria-labelledby="`${browserId}-editor-candidate`"
               tabindex="0"
               data-localization-content="user"
               >{{ file.outcome.editor ?? file.text }}</pre>
           </section>
           <section class="candidate" data-candidate="external">
             <header>
-              <h3>{{ t("files.changedFile") }}</h3>
+              <h3 :id="`${browserId}-external-candidate`">
+                {{ t("files.changedFile") }}
+              </h3>
               <p data-dialog-help>
                 {{ t("files.completeVersionFoundInTheWorkspace") }}
               </p>
             </header>
             <pre
               data-dialog-document
+              role="region"
+              :aria-labelledby="`${browserId}-external-candidate`"
               tabindex="0"
               data-localization-content="user"
               >{{ file.outcome.external?.text }}</pre>

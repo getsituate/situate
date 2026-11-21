@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 
-const input = "/tmp/volta-input";
+const input = "/opt/volta-input";
 const pin = JSON.parse(readFileSync(`${input}/ci-volta.json`));
 const npm = JSON.parse(readFileSync(`${input}/ci-npm.json`));
 const { volta } = JSON.parse(readFileSync("/workspace/package.json"));
@@ -45,8 +45,10 @@ for (const directory of [
   "tools/user",
 ])
   mkdirSync(`${home}/${directory}`, { recursive: true });
-download(asset.url, "/tmp/volta.tar.gz", asset.sha256);
-run("tar", ["-xzf", "/tmp/volta.tar.gz", "-C", `${home}/bin`]);
+const archive = `${home}/tmp/volta.tar.gz`;
+download(asset.url, archive, asset.sha256);
+run("tar", ["-xzf", archive, "-C", `${home}/bin`]);
+rmSync(archive);
 download(pin.license.url, `${home}/LICENSE`, pin.license.sha256);
 assert.match(npm.integrity, /^sha512-/);
 download(
@@ -81,7 +83,6 @@ writeFileSync(
 );
 for (const name of ["node", "npm", "npx"])
   symlinkSync("volta-shim", `${home}/bin/${name}`);
-rmSync("/tmp/volta.tar.gz");
 run(`${home}/bin/volta`, ["install", `npm@${npm.version}`]);
 run(`${home}/bin/volta`, ["--version"]);
 run(`${home}/bin/node`, ["--version"]);

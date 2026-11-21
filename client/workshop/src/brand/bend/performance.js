@@ -44,7 +44,7 @@ const performance = (function () {
   // Read the renderer's path data, keeping all control points in absolute coordinates.
   function segments(data) {
     const tokens =
-      data.match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g) ||
+      data.match(/[a-zA-Z]|[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?/g) ||
       [];
     const sizes = { M: 2, L: 2, H: 1, V: 1, C: 6, Q: 4 };
     const output = [];

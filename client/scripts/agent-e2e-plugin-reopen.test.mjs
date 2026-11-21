@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
@@ -17,12 +17,14 @@ const journeyEnd = source.indexOf(
   '\n  try {\n    await wait(\n      "workspace-registry-ready",',
   journeyStart,
 );
-assert.ok(
-  helpersStart >= 0 &&
-    helpersEnd > helpersStart &&
-    journeyStart >= 0 &&
-    journeyEnd > journeyStart,
-);
+before(() => {
+  assert.ok(
+    helpersStart >= 0 &&
+      helpersEnd > helpersStart &&
+      journeyStart >= 0 &&
+      journeyEnd > journeyStart,
+  );
+});
 const script =
   source.slice(helpersStart, helpersEnd) +
   source.slice(journeyStart, journeyEnd) +
@@ -51,7 +53,7 @@ const sourceEnd = source.indexOf(
   '    await invoke("agent_e2e_ready");',
   sourceStart,
 );
-assert.ok(sourceStart > journeyStart && sourceEnd > sourceStart);
+before(() => assert.ok(sourceStart > journeyStart && sourceEnd > sourceStart));
 const sourceScript = `(async () => {${source.slice(sourceStart, sourceEnd)}})()`;
 
 function retainedSource() {

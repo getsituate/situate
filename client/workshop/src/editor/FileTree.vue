@@ -25,7 +25,7 @@ const rows = computed(() => {
   function fill(folder: string, depth: number) {
     for (const path of props.state.folders
       .filter((path) => path.split("/").slice(0, -1).join("/") === folder)
-      .sort()) {
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
       if (
         query &&
         !files.some(

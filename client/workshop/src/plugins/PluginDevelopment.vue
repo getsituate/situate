@@ -221,6 +221,7 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
         <div
           ref="thread"
           class="conversation-scroll"
+          role="region"
           tabindex="0"
           :aria-label="c.chat"
         >

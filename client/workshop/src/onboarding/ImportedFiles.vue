@@ -5,6 +5,7 @@ import ImportCollection from "./ImportCollection.vue";
 import { fileCount } from "./import-browser";
 import MarkdownContent from "../editor/MarkdownContent.vue";
 import type { EditorFile } from "../editor/model";
+import { workspaceFilePath } from "./model";
 import copy from "../localization/en.import-result.json";
 const props = defineProps<{
   files: EditorFile[];
@@ -26,9 +27,8 @@ const current = computed(() =>
 const path = computed(() => {
   const file = current.value;
   if (!file) return "";
-  const separator = props.workspacePath.includes("\\") ? "\\" : "/";
   const relative = [file.folder, file.name].filter(Boolean).join("/");
-  return `${props.workspacePath.replace(/[\\/]+$/, "")}${separator}${relative.replaceAll("/", separator)}`;
+  return workspaceFilePath(props.workspacePath, relative);
 });
 function close() {
   emit("select", null);

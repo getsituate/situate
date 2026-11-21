@@ -17,7 +17,7 @@ export async function expectDialogText(
   await expect
     .poll(() =>
       text.evaluate((element) =>
-        parseFloat(getComputedStyle(element).lineHeight),
+        Number.parseFloat(getComputedStyle(element).lineHeight),
       ),
     )
     .toBeCloseTo(rootSize * scale * leading, 3);

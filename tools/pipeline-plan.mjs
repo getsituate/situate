@@ -222,7 +222,7 @@ function validatePaths(paths) {
     )
   )
     throw new Error("Changed paths must be repository-relative file paths.");
-  return [...new Set(paths)].sort();
+  return [...new Set(paths)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 export function planPaths(paths, { mode = "verify" } = {}) {
@@ -230,7 +230,7 @@ export function planPaths(paths, { mode = "verify" } = {}) {
   return select(paths, {
     mode,
     inventory: suiteInventory(sourceFiles(repositoryRoot), "darwin"),
-    appImpact: paths.some(appAffected),
+    appImpact: paths.some((path) => appAffected(path)),
   });
 }
 
@@ -296,7 +296,7 @@ export async function createPlan({
     ...select(paths, {
       mode,
       inventory: suiteInventory(files, "darwin"),
-      appImpact: appPaths.some(appAffected),
+      appImpact: appPaths.some((path) => appAffected(path)),
     }),
   };
 }

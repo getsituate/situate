@@ -6,7 +6,7 @@ function slugger() {
     const base =
       text
         .toLocaleLowerCase("en")
-        .replace(/<[^>]*>/g, "")
+        .replace(/<[^>]*(>|$)/g, (match, close) => (close ? "" : match))
         .replace(/[^\p{L}\p{N}\s_-]/gu, "")
         .trim()
         .replace(/\s+/g, "-") || "section";

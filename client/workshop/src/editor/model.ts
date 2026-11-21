@@ -344,7 +344,10 @@ export function destinationFolders(
   target: ItemTarget,
   action: ItemAction,
 ): string[] {
-  return ["", ...state.folders.slice().sort()].filter(
+  return [
+    "",
+    ...state.folders.slice().sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+  ].filter(
     (path) =>
       target.kind !== "folder" ||
       !target.path ||

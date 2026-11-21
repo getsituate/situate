@@ -191,7 +191,7 @@ export function captureLaneEvidence(
         `${plan.source}:client/rust-toolchain.toml`,
       );
       const channel = tools.rustPin.match(
-        /^\s*channel\s*=\s*"(\d+\.\d+\.\d+)"\s*$/m,
+        /^[\t ]*channel[\t ]*=[\t ]*"(\d+\.\d+\.\d+)"[\t ]*$/m,
       )?.[1];
       assert(channel, "An exact Rust release pin is required");
       const cwd = join(root, "client");
@@ -658,11 +658,10 @@ export async function publishSourceVerificationEvidence(
           Buffer.byteLength(raw) <= MAX_SOURCE_EVIDENCE_BYTES,
       );
       const capture = JSON.parse(raw);
-      assert.deepEqual(Object.keys(capture).sort(), [
-        "checkout",
-        "contract",
-        "host",
-      ]);
+      assert.deepEqual(
+        Object.keys(capture).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+        ["checkout", "contract", "host"],
+      );
       lanes.push({ lane: lane.id, jobId, ...capture });
     }
     const evidence = createSourceVerificationEvidence({

@@ -110,8 +110,10 @@ function contract(value, suites) {
   assert(hash.test(value.toolsDigest));
   assert(Array.isArray(value.suites));
   exact(
-    value.suites.map(({ id }) => id).sort(),
-    [...suites].sort(),
+    value.suites
+      .map(({ id }) => id)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    [...suites].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     "Contract coverage differs",
   );
   for (const entry of value.suites) {

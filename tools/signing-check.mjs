@@ -283,11 +283,14 @@ export async function checkSigning({
           ["find-identity", "-v", "-p", "codesigning", keychain],
           options,
         );
-        const valid = [
-          ...identities.matchAll(
-            /^\s*\d+\) ([A-Fa-f0-9]{40}) "([^"\r\n]+)"\s*$/gm,
-          ),
-        ];
+        const valid = identities
+          .split(/\r\n|[\r\n\u2028\u2029]/u)
+          .flatMap((line) => {
+            const identity = /^\d+\) ([A-Fa-f0-9]{40}) "([^"]+)"$/u.exec(
+              line.trim(),
+            );
+            return identity ? [identity] : [];
+          });
         const matching = valid.filter(
           ([, hash, name]) =>
             (hash === selector || name === selector) &&

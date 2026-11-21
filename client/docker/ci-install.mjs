@@ -29,6 +29,9 @@ function download(url, destination, checksum, algorithm = "sha256") {
   if (actual !== checksum) throw new Error(`Checksum mismatch: ${url}`);
 }
 mkdirSync("/opt/ci-tools", { recursive: true });
+const staging = "/opt/ci-tools/.install";
+mkdirSync(staging, { mode: 0o700 });
+const archive = `${staging}/archive.tar.gz`;
 for (const [name, tool] of Object.entries(assets)) {
   if (tool.version !== quality[name].version)
     throw new Error(`Update tool pins for ${name}`);
@@ -42,10 +45,10 @@ for (const [name, tool] of Object.entries(assets)) {
       throw new Error(`Unsupported source build: ${name}`);
   } else {
     const asset = tool[arch];
-    download(asset.url, "/tmp/ci-archive.tar.gz", asset.sha256);
+    download(asset.url, archive, asset.sha256);
     run("tar", [
       "-xzf",
-      "/tmp/ci-archive.tar.gz",
+      archive,
       "-C",
       directory,
       ...(["cargo-deny", "gh"].includes(name) ? ["--strip-components=1"] : []),
@@ -74,8 +77,9 @@ const npmPin = JSON.parse(readFileSync(`${input}/client/docker/ci-npm.json`));
 if (npmPin.version !== quality.npm.version)
   throw new Error("Update npm archive pin");
 if (
-  execFileSync("npm", ["--version"], { encoding: "utf8" }).trim() !==
-  npmPin.version
+  execFileSync("/opt/volta/bin/npm", ["--version"], {
+    encoding: "utf8",
+  }).trim() !== npmPin.version
 )
   throw new Error("Volta npm version does not match the CI toolchain");
 const browsers = JSON.parse(
@@ -93,19 +97,8 @@ for (const project of ["client", "requirements"]) {
   installed.add(core.version);
   const directory = `/opt/ci-tools/playwright-${core.version}`;
   mkdirSync(directory);
-  download(
-    core.resolved,
-    "/tmp/ci-archive.tar.gz",
-    core.integrity.slice(7),
-    "sha512",
-  );
-  run("tar", [
-    "-xzf",
-    "/tmp/ci-archive.tar.gz",
-    "-C",
-    directory,
-    "--strip-components=1",
-  ]);
+  download(core.resolved, archive, core.integrity.slice(7), "sha512");
+  run("tar", ["-xzf", archive, "-C", directory, "--strip-components=1"]);
   run("node", [`${directory}/cli.js`, "install-deps", "chromium", "webkit"]);
 }
 writeFileSync(
@@ -114,7 +107,7 @@ writeFileSync(
 );
 writeFileSync(
   "/opt/ci-tools/debian-packages.tsv",
-  execFileSync("dpkg-query", [
+  execFileSync("/usr/bin/dpkg-query", [
     "-W",
     "-f=${binary:Package}\\t${Version}\\t${source:Package}\\t${source:Version}\\n",
   ]),
@@ -123,5 +116,5 @@ writeFileSync(
   "/opt/ci-tools/ci-browsers.json",
   JSON.stringify(browsers, null, 2),
 );
-rmSync("/tmp/ci-archive.tar.gz");
+rmSync(staging, { recursive: true });
 run("npm", ["cache", "clean", "--force"]);

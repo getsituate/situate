@@ -10,7 +10,8 @@ export function elapsedWorkTime(
   );
 }
 export function workClockTime(state: ChatState, now = Date.now()): number {
-  const base = state.workHistory?.milliseconds ?? state.workTimeMs ?? NaN;
+  const base =
+    state.workHistory?.milliseconds ?? state.workTimeMs ?? Number.NaN;
   return elapsedWorkTime(
     base,
     state.phase === "working" ? state.workClockStartedAt : undefined,

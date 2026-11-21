@@ -18,11 +18,16 @@ export function verifyRuntimeDependencies(executable, inspect = spawnSync) {
   if (lines.shift() !== `${executable}:` || lines.length === 0)
     throw new Error("Invalid native VM runtime dependency inventory.");
   for (const line of lines) {
-    const dependency = line.match(
-      /^\s+(.+?) \(compatibility version [^\n]+\)$/,
-    )?.[1];
+    const entry = line.trimStart();
+    const marker = " (compatibility version ";
+    const versionStart = entry.indexOf(marker);
+    const dependency = entry.slice(0, versionStart);
     if (
-      !dependency ||
+      entry === line ||
+      versionStart < 0 ||
+      !entry.endsWith(")") ||
+      versionStart + marker.length >= entry.length - 1 ||
+      /[\r\u2028\u2029]/.test(dependency) ||
       !/^\/(?:usr\/lib|System\/Library)\//.test(dependency) ||
       dependency.split("/").some((part) => part === "." || part === "..")
     )

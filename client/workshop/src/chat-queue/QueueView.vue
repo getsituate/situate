@@ -127,6 +127,7 @@ function keydown(event: KeyboardEvent) {
           </template>
           <div
             class="received-list"
+            role="region"
             tabindex="0"
             aria-label="Received messages"
           >
@@ -201,6 +202,7 @@ function keydown(event: KeyboardEvent) {
                 </h3>
                 <div
                   class="pending-items"
+                  role="region"
                   tabindex="0"
                   :aria-label="
                     kind === 'steering'

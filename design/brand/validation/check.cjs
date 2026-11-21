@@ -105,7 +105,7 @@ function luminance(hex) {
   const channels = hex
     .slice(1)
     .match(/../g)
-    .map((pair) => parseInt(pair, 16) / 255)
+    .map((pair) => Number.parseInt(pair, 16) / 255)
     .map((value) =>
       value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
     );

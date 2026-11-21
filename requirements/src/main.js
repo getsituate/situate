@@ -124,7 +124,13 @@ function renderCollection() {
     `<label>${title}<select name="${name}" aria-label="${title}"><option value="">All</option>${values.map((value) => `<option value="${escape(value)}" ${filters[name] === value ? "selected" : ""}>${escape(labels[value] || value)}</option>`).join("")}</select></label>`;
   app.innerHTML = `<section class="intro"><p class="eyebrow">Goals & Requirements</p><h1>What Situate should do.</h1><p>Understand needs. Clarify requirements. Record decisions.</p></section>
     <form class="filters" role="search"><label class="search">Search<input name="q" type="search" placeholder="Title, ID or content" value="${escape(filters.q || "")}"></label>
-    ${select("type", "Entry type", ["goal", "requirement"])}${select("area", "Area", [...new Set(entries.map((entry) => entry.area))].sort())}${select("status", "Status", ["approved", "rejected"])}${select("priority", "Priority", ["must", "should", "could"])}<button type="reset">Reset</button></form>
+    ${select("type", "Entry type", ["goal", "requirement"])}${select(
+      "area",
+      "Area",
+      [...new Set(entries.map((entry) => entry.area))].sort((a, b) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      ),
+    )}${select("status", "Status", ["approved", "rejected"])}${select("priority", "Priority", ["must", "should", "could"])}<button type="reset">Reset</button></form>
     <p id="count" class="count" role="status"></p><section id="results" aria-label="Entries"></section>`;
   const form = app.querySelector("form");
   const update = () => {

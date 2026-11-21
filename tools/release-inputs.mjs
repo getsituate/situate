@@ -21,7 +21,9 @@ const sha = /^[a-f0-9]{64}$/u;
 function exactFields(value, keys) {
   assert(
     value &&
-      canonical(Object.keys(value).sort()) === canonical([...keys].sort()),
+      canonical(
+        Object.keys(value).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+      ) === canonical([...keys].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))),
     "Invalid sealed input fields",
   );
 }
@@ -39,7 +41,11 @@ export function validateGeneratedCatalog(catalog, { version, locales } = {}) {
       catalog.releases[0].version === catalog.installedVersion,
     "Catalog must include its installed version first",
   );
-  const inventory = locales ?? Object.keys(catalog.releases[0].locales).sort();
+  const inventory =
+    locales ??
+    Object.keys(catalog.releases[0].locales).sort((a, b) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    );
   assert(inventory.includes("en"), "Catalog requires English source content");
   let prior;
   for (const release of catalog.releases) {

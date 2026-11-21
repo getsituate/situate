@@ -40,6 +40,7 @@ import {
 import { compareVersions } from "../../tools/release-catalog.mjs";
 export { sshArguments } from "./transport.mjs";
 
+const compareCodeUnits = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const client = join(root, "client");
 const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
@@ -225,7 +226,7 @@ export function verifyDownloadReceipt(directory, manifest, receipt) {
         item.updater.signaturePath,
       ]),
     "github-release.json",
-  ].sort();
+  ].sort(compareCodeUnits);
   if (
     receipt?.schemaVersion !== 1 ||
     receipt.kind !== "github-release-download" ||
@@ -240,7 +241,10 @@ export function verifyDownloadReceipt(directory, manifest, receipt) {
     identity.inputSha256 !== manifest.releaseInputs?.sha256 ||
     !/^[a-f0-9]{64}$/.test(receipt.evidenceSha256 ?? "") ||
     !Array.isArray(receipt.assets) ||
-    !isDeepStrictEqual(receipt.assets.map((item) => item.name).sort(), expected)
+    !isDeepStrictEqual(
+      receipt.assets.map((item) => item.name).sort(compareCodeUnits),
+      expected,
+    )
   )
     throw new Error(
       "Downloaded GitHub Release identity or public asset inventory differs.",
@@ -552,7 +556,7 @@ function inventory(destination) {
   for (const directory of [destination, join(destination, "metadata")]) {
     if (!lstatSync(directory).isDirectory())
       throw new Error("Expected a staged release directory without symlinks.");
-    for (const name of readdirSync(directory).sort()) {
+    for (const name of readdirSync(directory).sort(compareCodeUnits)) {
       const path = join(directory, name);
       if (
         directory === destination &&
@@ -956,9 +960,10 @@ export function verifyStagedRelease(
     "manifest.json",
     ...publicInputFiles(manifest),
     ...Object.keys(expectedMetadata).map((name) => `metadata/${name}`),
-  ].sort();
+  ].sort(compareCodeUnits);
   if (
-    JSON.stringify(Object.keys(staged).sort()) !== JSON.stringify(expectedNames)
+    JSON.stringify(Object.keys(staged).sort(compareCodeUnits)) !==
+    JSON.stringify(expectedNames)
   )
     throw new Error("Staged file inventory differs from the approved release.");
   for (const [name, value] of Object.entries(expectedMetadata))

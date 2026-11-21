@@ -50,6 +50,40 @@ test("CI helper and project-license changes invalidate image inputs", (t) => {
   assert.notEqual(inputDigest(directory), changedHelper);
 });
 
+test("CI image CLI prints only the published lock fields", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-ci-lock-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const file of [
+    ...imageInputs(),
+    "client/package-lock.json",
+    "requirements/package-lock.json",
+  ]) {
+    const target = join(directory, file);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(new URL(`../${file}`, import.meta.url), target);
+  }
+  const lock = {
+    version: 1,
+    image: `ghcr.io/example/ci@sha256:${"a".repeat(64)}`,
+    inputsSha256: inputDigest(directory),
+    platform: "linux/amd64",
+  };
+  writeFileSync(
+    join(directory, "tools/ci-image.lock.json"),
+    JSON.stringify({ ...lock, description: "fixture metadata" }),
+  );
+  const stdout = execFileSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("./ci-image.mjs", import.meta.url)),
+      "--directory",
+      directory,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(stdout, `${JSON.stringify(lock)}\n`);
+});
+
 test("CI tool pins bind prebuilt binaries or locked source builds to the quality toolchain", () => {
   const assets = JSON.parse(read("client/docker/ci-assets.json"));
   assert.deepEqual(Object.keys(assets).sort(), [

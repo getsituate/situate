@@ -6,8 +6,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 : "${GRADLE_BIN:?Set GRADLE_BIN to the existing Gradle 8.14.3 executable}"
 NDK="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/bin"
 AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt2"
-test -x "$NDK/aarch64-linux-android24-clang"
-test -x "$AAPT"
+[[ -x "$NDK/aarch64-linux-android24-clang" ]]
+[[ -x "$AAPT" ]]
 SIGNING=$(mktemp -d /tmp/situate-android-signing.XXXXXX)
 trap 'rm -rf -- "$SIGNING"' EXIT
 export SITUATE_TEST_KEYSTORE="$SIGNING/debug.keystore"

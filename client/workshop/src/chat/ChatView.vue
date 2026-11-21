@@ -258,6 +258,7 @@ onBeforeUnmount(() => clearInterval(timer));
       v-else
       ref="history"
       class="chat-scroll"
+      role="region"
       @scroll="trackScroll"
       tabindex="0"
       aria-label="Conversation history"

@@ -35,7 +35,9 @@ export function decodeActionsReceipt(value) {
   if (envelope?.encoding === undefined) return envelope;
   assert(
     envelope.encoding === "deflate-base64-v1" &&
-      Object.keys(envelope).sort().join() === "data,encoding,sha256,size" &&
+      Object.keys(envelope)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .join() === "data,encoding,sha256,size" &&
       Buffer.byteLength(value) <= maximumWireBytes &&
       Number.isSafeInteger(envelope.size) &&
       envelope.size > 0 &&

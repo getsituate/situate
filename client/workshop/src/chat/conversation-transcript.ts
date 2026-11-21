@@ -32,7 +32,7 @@ export function conversationBlocks(
       id: pending[0].id,
       events: pending,
       phase,
-      history: { example: "mixed", milliseconds: milliseconds ?? NaN },
+      history: { example: "mixed", milliseconds: milliseconds ?? Number.NaN },
     });
   return blocks;
 }

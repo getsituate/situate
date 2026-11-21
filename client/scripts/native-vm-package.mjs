@@ -124,10 +124,15 @@ export async function readPackage(directory) {
     Object.values(manifest.modes).some((value) => typeof value !== "boolean")
   )
     throw new Error("Invalid native VM manifest.");
-  const expected = [...inputs, "runtime/situate-client"].sort();
+  const expected = [...inputs, "runtime/situate-client"].sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
   if (
-    JSON.stringify(Object.keys(manifest.files ?? {}).sort()) !==
-    JSON.stringify(expected)
+    JSON.stringify(
+      Object.keys(manifest.files ?? {}).sort((a, b) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      ),
+    ) !== JSON.stringify(expected)
   )
     throw new Error("Invalid native VM package inventory.");
   for (const name of expected) {
@@ -154,8 +159,12 @@ export async function readPackage(directory) {
     return result;
   }
   if (
-    JSON.stringify((await inventory(directory)).sort()) !==
-    JSON.stringify([...expected, manifestName].sort())
+    JSON.stringify(
+      (await inventory(directory)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    ) !==
+    JSON.stringify(
+      [...expected, manifestName].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    )
   )
     throw new Error("Unexpected native VM package content.");
   return { ...manifest, executable: resolve(directory, manifest.executable) };

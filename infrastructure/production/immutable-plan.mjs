@@ -10,6 +10,7 @@ export const immutablePhases = [
   "unprotect",
   "retire",
 ];
+const compareCodeUnits = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const generation = /^[a-z][a-z0-9-]{0,19}$/;
 const server = /^hcloud_server\.immutable\["([a-z][a-z0-9-]{0,19})"\]$/;
 const volume = /^hcloud_volume\.publication\["([a-z][a-z0-9-]{0,19})"\]$/;
@@ -79,21 +80,23 @@ function allowsFirewallDrift(drift, phase, operation) {
         link.server > 0 &&
         link.label_selector === "",
     )
-      ? links.map(({ server }) => String(server)).sort()
+      ? links.map(({ server }) => String(server)).sort(compareCodeUnits)
       : null;
   if (phase === "detach")
     return (
       isDeepStrictEqual(members(beforeLinks), [operation.previousId]) &&
       isDeepStrictEqual(
         members(afterLinks),
-        [operation.previousId, operation.candidateId].sort(),
+        [operation.previousId, operation.candidateId].sort(compareCodeUnits),
       )
     );
   if (phase === "stage" && operation.deletedFirewallMembers?.length)
     return (
       isDeepStrictEqual(
         members(beforeLinks),
-        [operation.previousId, ...operation.deletedFirewallMembers].sort(),
+        [operation.previousId, ...operation.deletedFirewallMembers].sort(
+          compareCodeUnits,
+        ),
       ) && isDeepStrictEqual(members(afterLinks), [operation.previousId])
     );
   return false;

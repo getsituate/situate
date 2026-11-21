@@ -436,12 +436,29 @@ defineExpose({ focusTitle, showTree });
               v-else
               ref="diffScroll"
               class="diff-scroll"
+              role="region"
               tabindex="0"
               :aria-label="c.diff"
               @scroll="rememberScroll('fileScroll')"
               dir="ltr"
             >
               <table class="diff-lines" :aria-label="c.diff">
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      <span class="sr-only">{{ c.before }}</span>
+                    </th>
+                    <th scope="col">
+                      <span class="sr-only">{{ c.after }}</span>
+                    </th>
+                    <th scope="col">
+                      <span class="sr-only">{{ c.title }}</span>
+                    </th>
+                    <th scope="col">
+                      <span class="sr-only">{{ c.contents }}</span>
+                    </th>
+                  </tr>
+                </thead>
                 <tbody>
                   <template
                     v-for="part in visibleParts"
@@ -463,10 +480,10 @@ defineExpose({ focusTitle, showTree });
                     </tr>
                     <template v-else>
                       <tr class="diff-line" :class="part.row.kind">
-                        <td class="line-number" aria-hidden="true">
+                        <td class="line-number">
                           {{ part.row.before }}
                         </td>
-                        <td class="line-number" aria-hidden="true">
+                        <td class="line-number">
                           {{ part.row.after }}
                         </td>
                         <td class="diff-sign">
@@ -745,6 +762,9 @@ h4 {
   border-collapse: collapse;
   width: 100%;
   font: 12px/1.8 var(--situate-font-mono);
+}
+.diff-lines th {
+  padding: 0;
 }
 .diff-line td {
   padding: 0;

@@ -15,7 +15,7 @@ const m0002Corrected = "12127a6e3b206a5ce3efd85c12b1b97058941878";
 const fullRevision = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u;
 
 function git(root, args) {
-  return execFileSync("git", args, {
+  return execFileSync("/usr/bin/git", args, {
     cwd: root,
     encoding: "utf8",
     env: {
@@ -32,6 +32,7 @@ export function migrationRevision(root, revision = "HEAD") {
   const resolved = git(root, [
     "rev-parse",
     "--verify",
+    "--end-of-options",
     `${revision}^{commit}`,
   ]).trim();
   assert(fullRevision.test(resolved), "Invalid migration candidate revision");
@@ -39,6 +40,7 @@ export function migrationRevision(root, revision = "HEAD") {
 }
 
 export function migrationInventory(root, revision) {
+  assert(!revision.startsWith("-"), "Invalid migration inventory revision");
   const tree = git(root, ["ls-tree", "-r", "-z", revision, "--", directory]);
   const files = new Map(
     tree
@@ -59,7 +61,7 @@ export function migrationInventory(root, revision) {
       (file) =>
         file.startsWith(migrationsPath) && file !== `${migrationsPath}mod.rs`,
     )
-    .sort();
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   for (const file of implementations)
     assert(
       /^m[0-9]{4}_[a-z0-9_]+\.rs$/u.test(file.slice(migrationsPath.length)),
@@ -89,7 +91,9 @@ export function migrationInventory(root, revision) {
     "Unsupported migration registry entry syntax",
   );
   assert.deepEqual(
-    entries.map((entry) => `${migrationsPath}${entry[1]}.rs`).sort(),
+    entries
+      .map((entry) => `${migrationsPath}${entry[1]}.rs`)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     implementations,
     "Migration registry must name every implementation exactly once",
   );
@@ -101,8 +105,12 @@ export function migrationInventory(root, revision) {
     "Unsupported migration module declaration syntax",
   );
   assert.deepEqual(
-    modules.map((entry) => entry[1]).sort(),
-    entries.map((entry) => entry[1]).sort(),
+    modules
+      .map((entry) => entry[1])
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    entries
+      .map((entry) => entry[1])
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     "Migration modules must match the registry",
   );
   return {
@@ -132,9 +140,9 @@ export function verifyMigrationHistory(
     }
     assert(type === "commit", `Missing local migration history commit: ${at}`);
   }
-  git(root, ["merge-base", "--is-ancestor", publishedRevision, revision]);
+  git(root, ["merge-base", "--is-ancestor", publishedRevision, candidate]);
   const published = migrationInventory(root, publishedRevision);
-  const current = migrationInventory(root, revision);
+  const current = migrationInventory(root, candidate);
   for (const file of published.implementations) {
     const before = published.files.get(file);
     const after = current.files.get(file);

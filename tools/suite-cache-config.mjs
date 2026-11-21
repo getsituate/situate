@@ -9,7 +9,8 @@ try {
 } catch {
   // Missing policy data disables reuse, not the underlying test execution.
 }
-const normalizeBoundary = (source) => source.replace(/^[\t ]+|[\t ]+$/gm, "");
+const normalizeBoundary = (source) =>
+  source.replace(/^[\t ]+|(?<=[^\t \r\n\u2028\u2029])[\t ]+$/gm, "");
 const rootsReference = Symbol("sourceRoots");
 const boundaryPlugin = Symbol("uiBoundary(sourceRoots)");
 const vuePlugin = Symbol("vue()");

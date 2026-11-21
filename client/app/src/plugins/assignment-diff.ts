@@ -11,7 +11,13 @@ export interface FileDiff {
   removed: number;
   simplified: boolean;
 }
-const lines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+function lines(text: string): string[] {
+  const parts = text.split("\n");
+  const last = parts.pop();
+  const tokens = parts.map((part) => part + "\n");
+  if (last) tokens.push(last);
+  return tokens;
+}
 
 export function fileDiff(before: string, after: string): FileDiff {
   const left = lines(before),

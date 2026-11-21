@@ -11,8 +11,9 @@ import {
 function validateRelease(release) {
   assert(
     release &&
-      Object.keys(release).sort().join() ===
-        "manifestSha256,revision,version" &&
+      Object.keys(release)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .join() === "manifestSha256,revision,version" &&
       typeof release.version === "string" &&
       typeof release.revision === "string" &&
       typeof release.manifestSha256 === "string" &&
@@ -72,7 +73,7 @@ function sameRelease(left, right) {
 function committedCheckpoint(root) {
   const path = "releases/migration-checkpoint.json";
   const git = (...args) =>
-    execFileSync("git", args, {
+    execFileSync("/usr/bin/git", args, {
       cwd: root,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
@@ -93,7 +94,9 @@ function committedCheckpoint(root) {
   const checkpoint = JSON.parse(git("show", `${toolRevision}:${path}`));
   assert(
     checkpoint?.schemaVersion === 1 &&
-      Object.keys(checkpoint).sort().join() === "release,schemaVersion",
+      Object.keys(checkpoint)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .join() === "release,schemaVersion",
     "Invalid migration checkpoint",
   );
   validateRelease(checkpoint.release);

@@ -125,7 +125,8 @@ export function createQualificationRouting(
           ["-n", "get", config.privateAddress],
           { capture: true, signal, env: { PATH: environment.PATH } },
         );
-        const actualInterface = /^\s*interface:\s*(\S+)\s*$/m.exec(route)?.[1];
+        const actualInterface =
+          /^[^\S\r\n\u2028\u2029]*interface:\s*(\S+)\s*$/m.exec(route)?.[1];
         assert(
           actualInterface === config.interface,
           "Production hostname is not routed through the configured restricted interface",

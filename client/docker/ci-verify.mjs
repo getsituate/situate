@@ -28,9 +28,13 @@ for (const [path, expected] of [
     `Tool notice verification input: ${path}`,
   );
 }
-execFileSync("python3", ["-B", "/opt/ci-tools/ci-tool-notices.py", "verify"], {
-  stdio: "inherit",
-});
+execFileSync(
+  "/usr/bin/python3",
+  ["-B", "/opt/ci-tools/ci-tool-notices.py", "verify"],
+  {
+    stdio: "inherit",
+  },
+);
 
 const quality = JSON.parse(
   readFileSync("/opt/ci-tools/toolchain.quality.json"),
@@ -47,7 +51,7 @@ const uid = process.getuid();
 const gid = process.getgid();
 assert.notEqual(uid, 0, "Run verification as a non-root UID");
 execFileSync(
-  "bash",
+  "/usr/bin/bash",
   [
     "-ec",
     `
@@ -146,7 +150,7 @@ for (const [path, expected] of [
     `Swift verification input: ${path}`,
   );
 execFileSync(
-  "python3",
+  "/usr/bin/python3",
   [
     "-B",
     "/opt/ci-tools/ci-swift-tools.py",
@@ -175,8 +179,8 @@ const swiftSmoke = mkdtempSync(`${process.env.HOME}/swift-source-smoke-`);
 try {
   const source = `${swiftSmoke}/example.swift`;
   writeFileSync(source, "let value:Int=1\n");
-  execFileSync("swift-format", ["format", "--in-place", source]);
-  execFileSync("swift-format", ["lint", "--strict", source]);
+  execFileSync("/usr/local/bin/swift-format", ["format", "--in-place", source]);
+  execFileSync("/usr/local/bin/swift-format", ["lint", "--strict", source]);
   const configuration = `${swiftSmoke}/swiftlint.yml`;
   writeFileSync(configuration, "only_rules:\n  - statement_position\n");
   writeFileSync(
@@ -184,7 +188,7 @@ try {
     'if true {\n  print("first")\n}\nelse {\n  print("second")\n}\n',
   );
   const result = spawnSync(
-    "swiftlint",
+    "/usr/local/bin/swiftlint",
     ["lint", "--strict", "--no-cache", "--config", configuration, source],
     { encoding: "utf8" },
   );
@@ -273,7 +277,10 @@ const sourcePackages = new Set(
       return `${/^Source: (.+)$/m.exec(dsc)?.[1]}=${/^Version: (.+)$/m.exec(dsc)?.[1]}`;
     }),
 );
-assert.deepEqual([...sourcePackages].sort(), requests);
+assert.deepEqual(
+  [...sourcePackages].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+  requests,
+);
 const nssSource = output("dpkg-query", [
   "-W",
   "-f=${source:Package}=${source:Version}",
@@ -283,12 +290,12 @@ assert.ok(
   sourcePackages.has(nssSource),
   "NSS wrapper corresponding source must be bundled",
 );
-execFileSync("sha256sum", ["--check", "--quiet"], {
+execFileSync("/usr/bin/sha256sum", ["--check", "--quiet"], {
   cwd: `${sources}/debian`,
   input: upstreamHashes.join("\n") + "\n",
   stdio: ["pipe", "inherit", "inherit"],
 });
-execFileSync("sha256sum", ["--check", "--quiet", "SHA256SUMS"], {
+execFileSync("/usr/bin/sha256sum", ["--check", "--quiet", "SHA256SUMS"], {
   cwd: sources,
   stdio: "inherit",
 });

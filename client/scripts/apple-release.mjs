@@ -1014,13 +1014,13 @@ async function buildResolvedAppleRelease({
         "rustc",
         "rustc",
         ["--version"],
-        /^rustc [0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9 .()+_-]*$/,
+        /^rustc [0-9]+\.[0-9]+\.[0-9][A-Za-z0-9 .()+_-]*$/,
       ],
       [
         "cargo",
         "cargo",
         ["--version"],
-        /^cargo [0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9 .()+_-]*$/,
+        /^cargo [0-9]+\.[0-9]+\.[0-9][A-Za-z0-9 .()+_-]*$/,
       ],
       [
         "xcodebuild",
@@ -1032,7 +1032,7 @@ async function buildResolvedAppleRelease({
         "swift",
         "swift",
         ["--version"],
-        /^(?:swift-driver version: [0-9]+(?:\.[0-9]+)* )?(?:Apple )?Swift version [0-9]+(?:\.[0-9]+)*[A-Za-z0-9 .()+_-]*(?:\nTarget: [A-Za-z0-9._-]+)?$/,
+        /^(?:swift-driver version: [0-9]+(?:\.[0-9]+)* )?(?:Apple )?Swift version [0-9][A-Za-z0-9 .()+_-]*(?:\nTarget: [A-Za-z0-9._-]+)?$/,
       ],
     ];
     manifest.verificationHost = {
@@ -1075,35 +1075,35 @@ async function buildResolvedAppleRelease({
       const proof = publicCompatibility?.qualification;
       const releaseIdentity = (release) =>
         release &&
-        isDeepStrictEqual(Object.keys(release).sort(), [
-          "manifestSha256",
-          "revision",
-          "version",
-        ]) &&
+        isDeepStrictEqual(
+          Object.keys(release).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+          ["manifestSha256", "revision", "version"],
+        ) &&
         /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(
           release.version,
         ) &&
         /^[a-f0-9]{40}$/.test(release.revision) &&
         /^[a-f0-9]{64}$/.test(release.manifestSha256);
       if (
-        !isDeepStrictEqual(Object.keys(publicCompatibility ?? {}).sort(), [
-          "qualification",
-          "schemaVersion",
-          "source",
-        ]) ||
+        !isDeepStrictEqual(
+          Object.keys(publicCompatibility ?? {}).sort((a, b) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+          ["qualification", "schemaVersion", "source"],
+        ) ||
         publicCompatibility.schemaVersion !== 1 ||
         publicCompatibility.source !== manifest.revision ||
         proof?.schemaVersion !== 1 ||
         proof.source !== "macos-direct-publication" ||
         !isDeepStrictEqual(
-          Object.keys(proof).sort(),
+          Object.keys(proof).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
           [
             "migrations",
             "releases",
             "schemaVersion",
             "source",
             ...(Object.hasOwn(proof, "checkpoint") ? ["checkpoint"] : []),
-          ].sort(),
+          ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
         ) ||
         !Number.isSafeInteger(proof.migrations) ||
         proof.migrations < 0 ||

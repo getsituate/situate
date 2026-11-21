@@ -379,8 +379,16 @@ function validateModelResponse(root, value, request, response) {
       "Missing entry evidence or uncertainties",
     );
     assert(
-      canonical(Object.keys(response.evidence).sort()) ===
-        canonical(response.source.entries.map((entry) => entry.id).sort()),
+      canonical(
+        Object.keys(response.evidence).sort((a, b) =>
+          a < b ? -1 : a > b ? 1 : 0,
+        ),
+      ) ===
+        canonical(
+          response.source.entries
+            .map((entry) => entry.id)
+            .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+        ),
       "Evidence IDs do not match release entries",
     );
     const { commits } = readJson(
@@ -562,8 +570,16 @@ export async function generateRelease(root, version, agent, options = {}) {
     "Missing entry evidence or uncertainties",
   );
   assert(
-    canonical(Object.keys(response.evidence).sort()) ===
-      canonical(response.source.entries.map((entry) => entry.id).sort()),
+    canonical(
+      Object.keys(response.evidence).sort((a, b) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      ),
+    ) ===
+      canonical(
+        response.source.entries
+          .map((entry) => entry.id)
+          .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+      ),
     "Evidence IDs do not match release entries",
   );
   for (const refs of Object.values(response.evidence))

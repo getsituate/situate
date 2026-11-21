@@ -26,7 +26,9 @@ const keys = (value, expected) =>
   value !== null &&
   typeof value === "object" &&
   !Array.isArray(value) &&
-  Object.keys(value).sort().join() === expected;
+  Object.keys(value)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .join() === expected;
 const applicationToken =
   /(?<![\p{L}\p{N}_.-])Situate(?:\.app)?(?![\p{L}\p{N}_.-])/u;
 const otherApplicationToken =

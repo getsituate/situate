@@ -23,8 +23,8 @@ RUN rm /etc/apt/sources.list.d/debian.sources \
 WORKDIR /workspace/client
 COPY client/rust-toolchain.toml client/.node-version ./
 COPY package.json /workspace/package.json
-COPY client/docker/ci-volta-install.mjs client/docker/ci-volta.json client/docker/ci-npm.json /tmp/volta-input/
-RUN /opt/node/bin/node /tmp/volta-input/ci-volta-install.mjs && rm -rf /tmp/volta-input
+COPY client/docker/ci-volta-install.mjs client/docker/ci-volta.json client/docker/ci-npm.json /opt/volta-input/
+RUN /opt/node/bin/node /opt/volta-input/ci-volta-install.mjs && rm -rf /opt/volta-input
 RUN rustup show active-toolchain && rustup component add clippy rustfmt llvm-tools \
     && test "$(node --version)" = "v$(cat .node-version)"
 RUN useradd --create-home --uid 1000 builder \
@@ -116,9 +116,9 @@ RUN ln -s /usr/lib/llvm-14/bin/clang /usr/local/bin/clang-cl \
     done
 # Tauri's installer needs newer NSIS headers than Debian 12 provides. Build the native
 # compiler and use the matching official Windows stubs/plugins, retaining their notices.
-RUN curl --fail --location --retry 3 -o /tmp/nsis.zip \
+RUN curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 -o /tmp/nsis.zip \
       'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.11/nsis-3.11.zip' \
-    && curl --fail --location --retry 3 -o /tmp/nsis-src.tar.bz2 \
+    && curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 -o /tmp/nsis-src.tar.bz2 \
       'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.11/nsis-3.11-src.tar.bz2' \
     && printf '%s\n' \
       'c7d27f780ddb6cffb4730138cd1591e841f4b7edb155856901cdf5f214394fa1  /tmp/nsis.zip' \

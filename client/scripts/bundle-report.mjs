@@ -64,15 +64,17 @@ export async function bundleReport(directory) {
       throw new Error(`Build manifest references a missing output: ${file}`);
   }
   const chunks = await Promise.all(
-    files.sort().map(async (file) => {
-      const bytes = await readArtifact(file);
-      return {
-        file,
-        initial: initialFiles.has(file),
-        bytes: bytes.length,
-        gzipBytes: gzipSync(bytes).length,
-      };
-    }),
+    files
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(async (file) => {
+        const bytes = await readArtifact(file);
+        return {
+          file,
+          initial: initialFiles.has(file),
+          bytes: bytes.length,
+          gzipBytes: gzipSync(bytes).length,
+        };
+      }),
   );
   const sum = (selected) => ({
     bytes: selected.reduce((total, chunk) => total + chunk.bytes, 0),

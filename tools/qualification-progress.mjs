@@ -98,7 +98,9 @@ const launchObservations = new Set([
 export function validateQualificationProgress(event) {
   assert(
     event &&
-      Object.keys(event).sort().join() === "command,elapsedMs,phase,status",
+      Object.keys(event)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .join() === "command,elapsedMs,phase,status",
     "Invalid qualification progress",
   );
   assert(

@@ -123,6 +123,7 @@ watch(
         <div
           ref="content"
           class="dialog-content"
+          role="region"
           tabindex="0"
           :aria-label="current.name"
         >

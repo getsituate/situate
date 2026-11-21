@@ -16,6 +16,8 @@ const release = {
   distribution: "direct",
 };
 
+const compareStrings = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 async function eventually(condition) {
   const deadline = Date.now() + 5000;
   while (!condition()) {
@@ -340,7 +342,7 @@ export async function checkAnalytics(browser, origin, proofs) {
         assert.equal(event.properties.surface, "website");
         assert.equal(event.properties.environment, "production");
         assert.deepEqual(
-          Object.keys(event.properties).sort(),
+          Object.keys(event.properties).sort(compareStrings),
           [
             "token",
             "distinct_id",
@@ -360,7 +362,7 @@ export async function checkAnalytics(browser, origin, proofs) {
             ...(event.event === "download_clicked"
               ? ["platform", "version"]
               : []),
-          ].sort(),
+          ].sort(compareStrings),
         );
       }
       assert.doesNotMatch(

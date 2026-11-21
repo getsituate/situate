@@ -62,6 +62,7 @@ watch(
           </h3>
           <div
             class="pending-items"
+            role="region"
             tabindex="0"
             :aria-label="
               kind === 'steering'

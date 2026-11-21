@@ -159,13 +159,23 @@ export function methodCombinationNotes(s: OnboardingState): string[] {
       : []),
   ];
 }
-export function instructionPath(s: OnboardingState): string {
-  const separator = s.workspacePath.includes("\\") ? "\\" : "/";
+export function workspaceFilePath(
+  workspacePath: string,
+  relative: string,
+): string {
+  const separator = workspacePath.includes("\\") ? "\\" : "/";
+  let end = workspacePath.length;
+  while (workspacePath[end - 1] === "/" || workspacePath[end - 1] === "\\")
+    end--;
   return (
-    s.workspacePath.replace(/[\\/]+$/, "") +
+    workspacePath.slice(0, end) +
     separator +
-    instructionsCopy.filename
+    relative.replaceAll("/", separator)
   );
+}
+
+export function instructionPath(s: OnboardingState): string {
+  return workspaceFilePath(s.workspacePath, instructionsCopy.filename);
 }
 export function instructionMarkdown(s: OnboardingState): string {
   const d = instructionsCopy.document;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import SituateSelect from "../ui/SituateSelect.vue";
 import { deviceAiCopy } from "./content";
 import { cloneSettings, connectionName, type SettingsState } from "./model";
@@ -42,6 +42,7 @@ function choose(event: Event) {
   next.chatModel = (event.target as HTMLSelectElement).value;
   emit("update:state", next);
 }
+const pickerId = useId();
 </script>
 <template>
   <p v-if="state.useManaged" class="chat-model-picker">
@@ -52,13 +53,14 @@ function choose(event: Event) {
     }}
   </p>
   <div v-else-if="state.showModelPicker" class="chat-model-picker">
-    <label>
-      <span
+    <div>
+      <label :for="`${pickerId}-model`"
         >Chat model<template v-if="state.provider">
           · {{ connectionName(state, state.provider) }}</template
-        ></span
+        ></label
       >
       <SituateSelect
+        :id="`${pickerId}-model`"
         aria-label="Chat model"
         :value="state.chatModel"
         :disabled="!state.provider || state.unavailable === state.provider"
@@ -69,10 +71,11 @@ function choose(event: Event) {
           {{ model }}
         </option>
       </SituateSelect>
-    </label>
-    <label v-if="thinkingModel">
-      <span>{{ copy.thinking }}</span>
+    </div>
+    <div v-if="thinkingModel">
+      <label :for="`${pickerId}-thinking`">{{ copy.thinking }}</label>
       <SituateSelect
+        :id="`${pickerId}-thinking`"
         :aria-label="copy.thinking"
         :value="thinkingChoice"
         :disabled="!state.provider || state.unavailable === state.provider"
@@ -104,7 +107,7 @@ function choose(event: Event) {
           {{ thinkingLabels[level] }}
         </option>
       </SituateSelect>
-    </label>
+    </div>
     <small v-if="!state.provider || state.unavailable === state.provider"
       >Choose a connected provider in Settings.</small
     >
@@ -118,7 +121,7 @@ function choose(event: Event) {
   font-size: 12px;
   color: var(--situate-muted);
 }
-.chat-model-picker > label {
+.chat-model-picker > div {
   display: grid;
   gap: 6px;
   min-width: 0;

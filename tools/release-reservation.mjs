@@ -276,7 +276,9 @@ function validateRequest(request) {
 export function validateReservation(value) {
   validateRequest(value);
   assert(
-    Object.keys(value).sort().join() === reservationKeys &&
+    Object.keys(value)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .join() === reservationKeys &&
       value.schemaVersion === 1 &&
       value.kind === "situate-release-reservation",
     "Invalid release reservation schema",

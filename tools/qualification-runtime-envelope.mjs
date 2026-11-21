@@ -70,7 +70,9 @@ export async function readQualificationRuntimeEnvelope(
   }
   assert(
     envelope?.schemaVersion === 1 &&
-      Object.keys(envelope).sort().join() ===
+      Object.keys(envelope)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+        .join() ===
         "inspection,plan,recoveryAuthorization,runtimeAuthorization,schemaVersion",
     "Invalid qualification runtime authorization envelope",
   );

@@ -236,7 +236,7 @@ function setupSnapshot(record: OnboardingRecord) {
     value && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(
           Object.keys(value)
-            .sort()
+            .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
             .map((key) => [key, value[key]]),
         )
       : value,

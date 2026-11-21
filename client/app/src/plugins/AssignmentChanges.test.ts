@@ -312,6 +312,9 @@ test("keeps retrieval status separate from empty results and emits retry without
 });
 
 test("responds to its container width and emits expansion requests without owning the host layout", async () => {
+  vi.useFakeTimers({
+    toFake: ["requestAnimationFrame", "cancelAnimationFrame"],
+  });
   let resize!: ResizeObserverCallback;
   const disconnect = vi.fn();
   vi.stubGlobal(
@@ -330,6 +333,7 @@ test("responds to its container width and emits expansion requests without ownin
       [{ contentRect: { width: 900 } }] as ResizeObserverEntry[],
       {} as ResizeObserver,
     );
+    vi.advanceTimersToNextFrame();
     await nextTick();
     expect(wrapper.get(".inspection-body").classes()).toContain("split");
     await click(wrapper, "expand");
@@ -341,11 +345,13 @@ test("responds to its container width and emits expansion requests without ownin
       [{ contentRect: { width: 320 } }] as ResizeObserverEntry[],
       {} as ResizeObserver,
     );
+    vi.advanceTimersToNextFrame();
     await nextTick();
     expect(wrapper.get(".inspection-body").classes()).not.toContain("split");
     wrapper.unmount();
     expect(disconnect).toHaveBeenCalledOnce();
   } finally {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   }
 });

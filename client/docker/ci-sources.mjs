@@ -10,6 +10,8 @@ import {
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const compareCodeUnits = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 export function sourceRequests(inventory) {
   const requests = new Set();
   for (const row of inventory.trim().split("\n")) {
@@ -24,7 +26,7 @@ export function sourceRequests(inventory) {
     assert.match(version, /^[a-zA-Z0-9.+:~-]+$/);
     requests.add(`${name}=${version}`);
   }
-  return [...requests].sort();
+  return [...requests].sort(compareCodeUnits);
 }
 
 export function verifyJavaRelease(release, pin) {
@@ -100,10 +102,10 @@ function main() {
     readFileSync(`${root}/debian-packages.tsv`, "utf8"),
   );
   writeFileSync(`${root}/debian-requests.txt`, requests.join("\n") + "\n");
-  run("apt-get", ["update"]);
+  run("/usr/bin/apt-get", ["update"]);
   // Resolve every exact version before downloading; unavailable sources fail the image build.
   const args = ["source", "--download-only", "--only-source", ...requests];
-  const uris = execFileSync("apt-get", ["--print-uris", ...args], {
+  const uris = execFileSync("/usr/bin/apt-get", ["--print-uris", ...args], {
     cwd: debian,
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
@@ -111,11 +113,11 @@ function main() {
   writeFileSync(`${root}/debian-download-uris.txt`, uris);
   const archives = sourceArchiveNames(uris);
   const cache = "/var/cache/situate-ci-sources";
-  run("apt-get", args, cache);
+  run("/usr/bin/apt-get", args, cache);
   for (const name of archives)
     copyFileSync(`${cache}/${name}`, `${debian}/${name}`);
   for (const asset of [...pin.common, pin[arch]]) {
-    run("curl", [
+    run("/usr/bin/curl", [
       "--fail",
       "--location",
       "--retry",
@@ -124,7 +126,7 @@ function main() {
       "-o",
       `${java}/${asset.name}`,
     ]);
-    const hash = execFileSync("sha256sum", [`${java}/${asset.name}`], {
+    const hash = execFileSync("/usr/bin/sha256sum", [`${java}/${asset.name}`], {
       encoding: "utf8",
     }).split(" ")[0];
     assert.equal(hash, asset.sha256, `Source checksum: ${asset.name}`);
@@ -155,13 +157,13 @@ function main() {
     "debian-download-uris.txt",
     ...["debian", "temurin"].flatMap((directory) =>
       readdirSync(`${root}/${directory}`)
-        .sort()
+        .sort(compareCodeUnits)
         .map((name) => `${directory}/${name}`),
     ),
   ];
   writeFileSync(
     `${root}/SHA256SUMS`,
-    execFileSync("sha256sum", files, {
+    execFileSync("/usr/bin/sha256sum", files, {
       cwd: root,
       maxBuffer: 16 * 1024 * 1024,
     }),
