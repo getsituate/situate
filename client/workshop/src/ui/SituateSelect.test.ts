@@ -64,12 +64,8 @@ describe("SituateSelect", () => {
     wrapper.unmount();
   });
   it("offers a toolbar appearance without changing the field contract", async () => {
-    const wrapper = create({ "aria-labelledby": "format-heading" });
-    const trigger = wrapper.get('[role="combobox"]');
-    const native = wrapper.get("select");
+    const wrapper = create();
     expect(wrapper.classes()).not.toContain("situate-select-toolbar");
-    expect(trigger.attributes("aria-label")).toBe("Time format");
-    expect(trigger.attributes("aria-labelledby")).toBe("format-heading");
     await wrapper.setProps({ appearance: "toolbar", value: "12" });
     await nextTick();
     expect(wrapper.classes()).toContain("situate-select-toolbar");
@@ -79,14 +75,28 @@ describe("SituateSelect", () => {
     expect(wrapper.get('[role="combobox"]').attributes("data-value")).toBe(
       "12",
     );
-    expect(trigger.attributes("aria-label")).toBe("Time format");
-    expect(trigger.attributes("aria-labelledby")).toBe("format-heading");
-    expect(native.attributes("aria-label")).toBeUndefined();
-    expect(native.attributes("aria-labelledby")).toBeUndefined();
-    expect(native.element.hidden).toBe(true);
-    expect(native.element.value).toBe("12");
+    expect(wrapper.get("select").element.value).toBe("12");
     wrapper.unmount();
   });
+  it.each(["field", "toolbar"] as const)(
+    "puts the %s select's accessible name on its focus target",
+    (appearance) => {
+      const wrapper = create({ appearance, "aria-labelledby": "format-label" });
+      try {
+        const target = wrapper.get("button").element;
+        target.focus();
+        expect(document.activeElement).toBe(target);
+        expect(target.getAttribute("aria-label")).toBe("Time format");
+        expect(target.getAttribute("aria-labelledby")).toBe("format-label");
+        expect(wrapper.get("select").element.hidden).toBe(true);
+        expect(wrapper.findAll("[aria-label], [aria-labelledby]")).toHaveLength(
+          1,
+        );
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
   it("disables both the visible control and form field", async () => {
     const wrapper = create({ disabled: true });
     expect(wrapper.get("button").element.disabled).toBe(true);

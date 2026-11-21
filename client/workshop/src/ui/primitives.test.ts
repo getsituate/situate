@@ -28,44 +28,46 @@ function keep<T extends { unmount(): void }>(wrapper: T): T {
 }
 
 describe("native primitives", () => {
-  it.each([
-    [SituateCheckbox, "default"],
-    [SituateCheckbox, "plain"],
-    [SituateRadio, "default"],
-    [SituateRadio, "plain"],
-    [SituateInput, "default"],
-    [SituateInput, "plain"],
-    [SituateTextarea, "default"],
-    [SituateTextarea, "plain"],
-    [SituateSwitch, undefined],
-  ] as const)(
-    "%o (%s) keeps consumer labels on the native control",
-    (Control, appearance) => {
-      const wrapper = keep(
-        mount(
-          defineComponent({
-            components: { Control },
-            setup: () => ({ appearance }),
-            template: `
-            <label for="entry">Notebook title</label>
-            <span id="entry-name">Notebook name</span>
-            <Control id="entry" :appearance="appearance" />
-            <Control :appearance="appearance" aria-label="Folder name" />
-            <Control :appearance="appearance" aria-labelledby="entry-name" />
-          `,
-          }),
-          { attachTo: document.body },
-        ),
-      );
-
-      const [labeled, named, referenced] = wrapper.findAll("input, textarea");
-      expect(wrapper.get("label").element.control).toBe(labeled!.element);
-      expect(labeled!.attributes("aria-label")).toBeUndefined();
-      expect(labeled!.attributes("aria-labelledby")).toBeUndefined();
-      expect(named!.attributes("aria-label")).toBe("Folder name");
-      expect(referenced!.attributes("aria-labelledby")).toBe("entry-name");
-    },
-  );
+  for (const Control of [
+    SituateInput,
+    SituateTextarea,
+    SituateRadio,
+    SituateCheckbox,
+    SituateSwitch,
+  ]) {
+    it(`${Control.__name} forwards names to its focusable field`, () => {
+      const label = document.createElement("label");
+      label.htmlFor = "workshop-field";
+      label.textContent = "Example field";
+      label.id = "workshop-label";
+      document.body.append(label);
+      const appearances =
+        Control === SituateSwitch ? [undefined] : ["default", "plain"];
+      for (const appearance of appearances) {
+        const wrapper = mount(Control, {
+          attachTo: document.body,
+          attrs: {
+            id: label.htmlFor,
+            ...(appearance ? { appearance } : {}),
+            "aria-label": "Example",
+            "aria-labelledby": label.id,
+          },
+        });
+        try {
+          const field = wrapper.get<HTMLInputElement | HTMLTextAreaElement>(
+            "input, textarea",
+          ).element;
+          field.focus();
+          expect(document.activeElement).toBe(field);
+          expect(label.control).toBe(field);
+          expect(field.getAttribute("aria-label")).toBe("Example");
+          expect(field.getAttribute("aria-labelledby")).toBe(label.id);
+        } finally {
+          wrapper.unmount();
+        }
+      }
+    });
+  }
 
   it("keeps button defaults and native attributes, focus and disabled behavior", async () => {
     const click = vi.fn();
