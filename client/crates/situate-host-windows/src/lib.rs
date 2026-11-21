@@ -6,3 +6,5 @@ pub mod fs;
 pub mod process;
 #[cfg(all(windows, any(test, feature = "test-support")))]
 pub mod test_support;
+#[cfg(windows)]
+pub mod updater;

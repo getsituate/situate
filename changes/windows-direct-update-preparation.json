@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "windows-direct-update-preparation",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Windows direct-update support is not yet released; no change to the macOS experience."
+}

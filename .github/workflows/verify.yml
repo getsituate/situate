@@ -304,7 +304,7 @@ jobs:
   windows-smoke-build:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
     runs-on: windows-2025
-    timeout-minutes: 60
+    timeout-minutes: 75
     permissions:
       contents: read
     steps:
@@ -327,6 +327,12 @@ jobs:
         with:
           name: windows-installer-preview-x64-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/installer-preview/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-update-pair-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/swu/pair/
           if-no-files-found: error
           retention-days: 7
 

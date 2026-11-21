@@ -16,3 +16,4 @@ Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path $artifact.Full
     source = $env:GITHUB_SHA
     sha256 = (Get-FileHash -LiteralPath (Join-Path $artifact.FullName 'setup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifact.FullName 'manifest.json')
+node client/scripts/windows-installer.mjs (Join-Path $env:RUNNER_TEMP swu) $sherpa $onnx --update-test

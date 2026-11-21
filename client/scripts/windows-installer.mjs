@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { windowsTarget } from "../../tools/test-windows.mjs";
@@ -95,10 +103,16 @@ export function prepareInstaller(directory, sherpaArchive, onnxArchive) {
   return config;
 }
 
-async function main([output, sherpaArchive, onnxArchive, ...extra]) {
-  if (!output || !sherpaArchive || !onnxArchive || extra.length) {
+async function main([output, sherpaArchive, onnxArchive, mode, ...extra]) {
+  if (
+    !output ||
+    !sherpaArchive ||
+    !onnxArchive ||
+    extra.length ||
+    (mode && mode !== "--update-test")
+  ) {
     throw new Error(
-      "Usage: node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE",
+      "Usage: node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE [--update-test]",
     );
   }
   if (process.platform !== "win32" || process.arch !== "x64") {
@@ -119,28 +133,114 @@ async function main([output, sherpaArchive, onnxArchive, ...extra]) {
   const dependencies = await prepareDependencies("client", { force: true });
   try {
     if (dependencies.failure) throw new Error(dependencies.failure.error);
+    if (mode === "--update-test") buildUpdatePair(directory, config);
+    else buildInstaller(directory, config, process.env);
+  } finally {
+    dependencies.release();
+  }
+}
+
+const tauriCli = join(client, "node_modules/@tauri-apps/cli/tauri.js");
+function buildInstaller(directory, config, environment) {
+  execFileSync(
+    process.execPath,
+    [
+      tauriCli,
+      "build",
+      "--ci",
+      "--target",
+      windowsTarget,
+      "--config",
+      config,
+      "--no-sign",
+      "--",
+      "--locked",
+    ],
+    {
+      cwd: app,
+      env: { ...environment, CARGO_TARGET_DIR: join(directory, "target") },
+      stdio: "inherit",
+    },
+  );
+}
+
+function buildUpdatePair(directory, config) {
+  const signer = mkdtempSync(join(directory, "signer-"));
+  const key = join(signer, "fixture.key");
+  const artifact = join(directory, "pair");
+  try {
     execFileSync(
       process.execPath,
       [
-        join(client, "node_modules/@tauri-apps/cli/tauri.js"),
-        "build",
+        tauriCli,
+        "signer",
+        "generate",
         "--ci",
-        "--target",
-        windowsTarget,
-        "--config",
-        config,
-        "--no-sign",
-        "--",
-        "--locked",
+        "--password",
+        "",
+        "--write-keys",
+        key,
       ],
-      {
-        cwd: app,
-        env: { ...process.env, CARGO_TARGET_DIR: join(directory, "target") },
-        stdio: "inherit",
-      },
+      { cwd: app, stdio: "pipe" },
+    );
+    const publicKey = readFileSync(`${key}.pub`, "utf8").trim();
+    const environment = {
+      ...process.env,
+      SITUATE_DISTRIBUTION: "direct",
+      SITUATE_UPDATER_PUBLIC_KEY: publicKey,
+      SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
+    };
+    mkdirSync(artifact);
+    const overlay = JSON.parse(readFileSync(config, "utf8"));
+    overlay.identifier = "com.getsituate.updater-preview";
+    overlay.productName = "Situate Update Preview";
+    const packages = [];
+    for (const version of ["0.1.6", "0.1.7"]) {
+      const bundle = join(
+        directory,
+        "target",
+        windowsTarget,
+        "release",
+        "bundle",
+        "nsis",
+      );
+      rmSync(bundle, { recursive: true, force: true });
+      writeFileSync(config, JSON.stringify({ ...overlay, version }));
+      buildInstaller(directory, config, environment);
+      const files = readdirSync(bundle).filter((file) => file.endsWith(".exe"));
+      if (files.length !== 1) throw new Error("Expected one NSIS installer");
+      const file = `${version}.exe`;
+      const output = join(artifact, file);
+      copyFileSync(join(bundle, files[0]), output);
+      execFileSync(
+        process.execPath,
+        [
+          tauriCli,
+          "signer",
+          "sign",
+          "--private-key-path",
+          key,
+          "--password",
+          "",
+          "--app-version",
+          version,
+          output,
+        ],
+        { cwd: app, stdio: "pipe" },
+      );
+      packages.push({
+        version,
+        file,
+        sha256: createHash("sha256").update(readFileSync(output)).digest("hex"),
+      });
+    }
+    writeFileSync(
+      join(artifact, "manifest.json"),
+      `${JSON.stringify({ kind: "situate-windows-update-pair", target: windowsTarget, source: process.env.GITHUB_SHA, packages }, null, 2)}\n`,
+      { flag: "wx" },
     );
   } finally {
-    dependencies.release();
+    rmSync(signer, { recursive: true, force: true });
   }
 }
 

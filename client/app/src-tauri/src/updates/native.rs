@@ -102,11 +102,13 @@ fn secure_client(client: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
             }
         }))
 }
+#[cfg(target_os = "macos")]
 fn reachable(flags: system_configuration::network_reachability::ReachabilityFlags) -> bool {
     use system_configuration::network_reachability::ReachabilityFlags;
     flags.contains(ReachabilityFlags::REACHABLE)
         && !flags.contains(ReachabilityFlags::CONNECTION_REQUIRED)
 }
+#[cfg(target_os = "macos")]
 fn network_available() -> Option<bool> {
     use system_configuration::network_reachability::SCNetworkReachability;
     let available = [
@@ -129,6 +131,11 @@ fn network_available() -> Option<bool> {
         None
     }
 }
+#[cfg(windows)]
+fn network_available() -> Option<bool> {
+    situate_host_windows::updater::network_available()
+}
+
 async fn bounded_check(
     client: reqwest::Client,
     url: url::Url,
@@ -200,6 +207,11 @@ pub fn setup(app: &tauri::AppHandle) {
                 .build(),
         )
         .map_err(|_| "native.updates.invalidConfiguration")?;
+        #[cfg(windows)]
+        if super::install::windows_installed_version(app)? != app.package_info().version.to_string()
+        {
+            return Err("native.updates.invalidConfiguration".into());
+        }
         let cache = Cache::open(
             app.path()
                 .app_local_data_dir()
@@ -260,6 +272,16 @@ pub fn setup(app: &tauri::AppHandle) {
         }
         if service.cache.interrupted() {
             service.recovery(&app, false);
+        }
+        #[cfg(windows)]
+        if !service.cache.interrupted() {
+            // NSIS can start the new version before releasing its own executable.
+            for _ in 0..20 {
+                if service.cache.remove_installer().is_ok() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
         }
         service.initialized.store(true, Ordering::Release);
         loop {

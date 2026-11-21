@@ -56,10 +56,11 @@ fn main() {
             "SITUATE_DICTATION_MODEL_SOURCE must be valid UTF-8 without NUL bytes"
         );
     }
-    let direct_macos_release = std::env::var("SITUATE_DISTRIBUTION").as_deref() == Ok("direct")
-        && std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos")
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS");
+    let direct_release = std::env::var("SITUATE_DISTRIBUTION").as_deref() == Ok("direct")
         && std::env::var("PROFILE").as_deref() == Ok("release");
-    if direct_macos_release {
+    let direct_macos_release = direct_release && target_os.as_deref() == Ok("macos");
+    if direct_release && matches!(target_os.as_deref(), Ok("macos" | "windows")) {
         assert!(
             std::env::var("SITUATE_UPDATER_PUBLIC_KEY").is_ok_and(|v| !v.trim().is_empty()),
             "Direct releases require SITUATE_UPDATER_PUBLIC_KEY"

@@ -176,7 +176,7 @@ function checkWorkflowBootstrap(name, workflow) {
                 "diagnostics.yml: launch-check":
                   /^node tools\/qualification-launch-check\.mjs$/,
                 "verify.yml: windows-smoke-build":
-                  /^node tools\/build-windows-smoke\.mjs windows-smoke-artifact$/,
+                  /^(?:node tools\/build-windows-smoke\.mjs windows-smoke-artifact|\.\/tools\/build-windows-installer-preview\.ps1)$/,
                 "verify-hosting.yml: offline":
                   /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
                 "deploy-hosting.yml: rehearse":

@@ -212,7 +212,7 @@ async fn discard_target(
     .map_err(|_| "dictation.failed")?
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
 pub(crate) async fn stop_for_update(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<Dictation>();
     let id = state
@@ -223,12 +223,19 @@ pub(crate) async fn stop_for_update(app: &tauri::AppHandle) -> Result<(), String
         .as_ref()
         .map(|owner| owner.id.clone());
     if let Some(id) = id {
+        #[cfg(target_os = "macos")]
         command("discard", &id);
+        #[cfg(windows)]
+        if let Ok(state) = state.0.lock()
+            && state.owner.as_ref().is_some_and(|owner| owner.id == id)
+        {
+            state.session.discard.cancel();
+        }
     }
     wait_until_idle(&state).await
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
 async fn wait_until_idle(state: &Dictation) -> Result<(), String> {
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
