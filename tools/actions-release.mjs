@@ -84,8 +84,14 @@ export function configureRelease(env, workflow) {
   privateJson(configuration, bytes);
   return { state, configuration };
 }
-function jsonCommand(execute, args) {
-  return JSON.parse(execute(process.execPath, ["tools/pipeline.mjs", ...args]));
+function jsonCommand(execute, args, environment) {
+  return JSON.parse(
+    execute(
+      process.execPath,
+      ["tools/pipeline.mjs", ...args],
+      environment ? { env: environment } : undefined,
+    ),
+  );
 }
 function readJson(path) {
   const stat = lstatSync(path);
@@ -108,22 +114,26 @@ export async function prepareCreate(env, execute, validateSourcePlan) {
   const original = join(state, "verification-plan.json");
   privateJson(original, sourcePlan);
   privateJson(join(state, "receipts.json"), receipts);
-  const plan = jsonCommand(execute, [
-    "plan",
-    "create",
-    "--source",
-    sourcePlan.source,
-    "--base",
-    sourcePlan.base,
-    "--verification-plan",
-    original,
-    "--operation",
-    `actions-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
-    "--destination",
-    env.WEBSITE_DEPLOY_HOST,
-    "--configuration",
-    configuration,
-  ]);
+  const plan = jsonCommand(
+    execute,
+    [
+      "plan",
+      "create",
+      "--source",
+      sourcePlan.source,
+      "--base",
+      sourcePlan.base,
+      "--verification-plan",
+      original,
+      "--operation",
+      `actions-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
+      "--destination",
+      env.WEBSITE_DEPLOY_HOST,
+      "--configuration",
+      configuration,
+    ],
+    { ...env, PIPELINE_FRESH_RELEASE: "1" },
+  );
   if (
     plan.workflow !== "create" ||
     plan.verificationPlan?.authorizationDigest !==
@@ -249,6 +259,7 @@ export async function runReleaseStage(env, workflow, stage, execute) {
     args.push("--stage", stage);
   }
   const environment = stageEnvironment(env, workflow, stage);
+  environment.PIPELINE_FRESH_RELEASE = "1";
   if (workflow === "create" && stage === "inputs")
     Object.assign(environment, {
       GIT_CONFIG_COUNT: "2",

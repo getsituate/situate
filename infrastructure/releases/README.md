@@ -27,39 +27,13 @@ Local and CI execution use the same gates. The publisher obtains `release-inputs
 
 `manifest.json` points to the sealed release inputs and qualification evidence. File SHA-256 values identify exact bytes, including generated catalog bytes; the signed app also retains its existing canonical catalog digest. Publication copies those assets without regenerating notes or modifying the app.
 
-## Recover a retained creation
+## When a hosted release fails
 
-Creation checkpoints live privately under `/opt/situate/release-checkpoints`, outside public release routes. They retain the original sealed plan/configuration, build manifest, generated inputs, packages, signatures and predecessor assets. Runtime recovery records retain their original authorization and inspection; a completed recovery qualification also retains its exact receipt bytes. Checkpoint acknowledgements precede stage completion and claim release. Reservations and notarization journals are never replaced by restored local files.
+Use a new `Release macOS` run for the current protected `main`. A reserved tag, a partial draft, or an unfinished notarization does not prevent a new attempt. Tags are immutable: a new attempt chooses new version and build numbers rather than rebuilding under a reserved tag.
 
-Use **Release recovery** on protected `main` for an existing creation operation:
+If the GitHub Release already completed, dispatch `Publish macOS` with its numeric release ID instead of building again. If a publish run loses its acknowledgement, check both public manifests. Repeating publication for the same release is safe: the publisher verifies existing bytes and never moves the feed to an older version.
 
-1. **inspect** reports checkpoint IDs and a confirmation digest without rebuilding or changing the operation.
-2. **qualify** takes a build checkpoint ID and that digest. It restores the original bytes, verifies a disposable macOS account and current routing/feed/predecessor facts, and authorizes a separate native qualification attempt. The original configuration and manifest remain unchanged.
-3. Inspect again before **continue**. Select the passed recovery-qualification checkpoint and the new confirmation digest. Continuation restores its retained receipt and original build on the new runner, then completes the original GitHub Release without building, signing, notarizing or qualifying again. Website promotion remains a separate **Publish macOS** dispatch using the returned release ID.
-
-If continuation stopped during GitHub draft creation or its first asset upload, inspect again and supply the exact existing draft ID as `draft_id`. Continuation requires a retained intent and the unchanged draft with no assets. It refuses to create a replacement draft or continue a draft with a partial upload.
-
-The protected `release-recovery` environment needs `WEBSITE_DEPLOY_HOST` and the two SSH-content secrets listed above. Inspection and qualification receive read-only GitHub access; only continuation receives release-write access. Qualification workers receive neither SSH nor GitHub credentials. This workflow cannot abandon an operation.
-
-For the same script-owned operations from the CLI, bootstrap the original metadata into a new private directory and inspect first. Output destinations must be fresh absolute paths with an existing private parent:
-
-```sh
-node tools/release-checkpoint-cli.mjs bootstrap --operation "$OPERATION_ID" --destination "$WEBSITE_DEPLOY_HOST" --output "$RECOVERY_ROOT/original"
-node tools/pipeline.mjs inspect --plan "$RECOVERY_ROOT/original/plan.json" --operation "$OPERATION_ID"
-node tools/pipeline.mjs restore --plan "$RECOVERY_ROOT/original/plan.json" --operation "$OPERATION_ID" --checkpoint "$BUILD_CHECKPOINT_ID" --restore-directory "$RECOVERY_ROOT/candidate" --confirm "$INSPECTION_DIGEST"
-node tools/release-checkpoint-qualify.mjs --restore-authorization "$RESTORE_AUTHORIZATION_FILE" --prepare-runtime
-```
-
-`restore` returns the private restoration-authorization filename. Automatic runtime preparation requires a trusted disposable hosted runner or the explicitly configured disposable local account; it refuses personal accounts, retained app data, a running original hosted attempt, changed baselines and unresolved listener ownership. A separately prepared `--runtime-authorization FILE` can replace `--prepare-runtime`. Neither option authorizes rebuilding or changing the reserved source/version.
-
-After a passed recovery qualification, a different runner can bootstrap and inspect again, then restore that passed checkpoint and continue:
-
-```sh
-node tools/release-checkpoint-restore-qualified.mjs --plan "$RECOVERY_ROOT/original/plan.json" --checkpoint "$PASSED_CHECKPOINT_ID" --destination "$RECOVERY_ROOT/qualified" --inspection ".release-operations/$OPERATION_ID/inspection.json" --confirm "$INSPECTION_DIGEST"
-node tools/release-checkpoint-continue.mjs --restored-directory "$RECOVERY_ROOT/qualified" --publication-inspection ".release-operations/$OPERATION_ID/inspection.json" --confirm "$INSPECTION_DIGEST"
-```
-
-The new directory mapping does not rewrite paths inside the original authorization. Restore validates every file before atomically committing the destination without replacement. Interrupted transfers retain an explicitly incomplete sibling directory, not a completed destination. Missing original checkpoints, incomplete attempt records or unknown external outcomes block recovery; retained packages or notarization acceptance alone are insufficient. Do not reconstruct missing original plans or remove claims to force another attempt.
+Only one production delivery run may own private qualification or publication at a time. Do not run the legacy local write commands against production while GitHub Actions owns delivery. Older checkpoints and journals are not consumed by hosted runs. An old claim can still matter to the separate hosting cutover runbook; do not remove records merely to retry app delivery.
 
 ## Migration history
 
@@ -92,7 +66,9 @@ node infrastructure/releases/publish.mjs publish --release /PATH/TO/DOWNLOADED_R
 
 The transport archive is saved beside the stage as `publication-RUN.tar`. A private `publication-journal.json` in the downloaded release directory records the SSH target, immutable file hashes, operation token and outcome before SSH starts. SSH has verified host keys and one connection attempt; no uncertain request is automatically retried.
 
-Under a host-wide `flock`, the remote transaction records `/opt/situate/release-pending.json`, receives only the declared regular files into an operation-specific incoming directory, verifies every size/hash, and renames the complete directory to `/opt/situate/releases/<version>`. It refuses to replace differing bytes under an existing version and rejects versions older than any stored release, including SemVer-equivalent version aliases with different build metadata. Public release/metadata directories are set to `0755` and public files to `0644`, even with operator umask `077`; incoming directories remain private until verified, and journals/locks use `0600`. Only after verification does it atomically replace `/opt/situate/current-release` with a relative symlink to `releases/<version>/metadata`.
+The hosted publisher uses a host-wide `flock`, verifies uploaded bytes in a private staging directory, and atomically activates the verified version after installing its immutable files. Staging leftovers can be replaced under the same lock. It verifies the public manifests and package hashes without requiring a second remote write.
+
+The legacy local publisher uses the same lock. Its remote transaction records `/opt/situate/release-pending.json`, receives only the declared regular files into an operation-specific incoming directory, verifies every size/hash, and renames the complete directory to `/opt/situate/releases/<version>`. It refuses to replace differing bytes under an existing version and rejects versions older than any stored release, including SemVer-equivalent version aliases with different build metadata. Public release/metadata directories are set to `0755` and public files to `0644`, even with operator umask `077`; incoming directories remain private until verified, and journals/locks use `0600`. Only after verification does it atomically replace `/opt/situate/current-release` with a relative symlink to `releases/<version>/metadata`.
 
 Each immutable release contains the DMG, updater archive, signature, sealed generated inputs/catalog, qualification evidence, complete build manifest and `metadata/{update.json,download.json,descriptor.json}`. Both public metadata documents come from one descriptor and one pointer:
 
@@ -104,9 +80,9 @@ All URLs are restricted to `https://getsituate.com/releases/`. Metadata must be 
 
 The app's history was sealed before signing from approved declarations and retained finalized catalogs. Publication neither edits that history nor requires a separate note-writing step.
 
-## Interrupted publication
+## Interrupted legacy local publication
 
-Do not repeat `publish`, remove pending markers or assume a disconnected SSH client cancelled the host operation. Preserve the local journal, stage, transport archive and remote incoming directory.
+For operations started with the legacy local publisher, do not repeat `publish`, remove pending markers or assume a disconnected SSH client cancelled the host operation. Preserve the local journal, stage, transport archive and remote incoming directory.
 
 ```sh
 node tools/pipeline.mjs status --operation OPERATION_ID

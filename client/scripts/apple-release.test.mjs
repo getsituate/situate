@@ -202,6 +202,25 @@ test("durable notary intent precedes submission; accepted submission IDs persist
   assert.ok(!existsSync(fixture.local));
 });
 
+test("a fresh build waits for its own notarization without a remote journal", async (t) => {
+  const fixture = notaryFixture(t);
+  const calls = [];
+  await notarize(
+    fixture.path,
+    { ...settings, freshOperationId: "actions-42-1" },
+    async (_command, args) => {
+      calls.push(args[1]);
+      return JSON.stringify(
+        args[1] === "submit" ? { id } : { id, status: "Accepted" },
+      );
+    },
+    fixture.options,
+  );
+  assert.deepEqual(calls, ["submit", "wait"]);
+  assert.equal(existsSync(fixture.local), false);
+  assert.deepEqual(fixture.journal.entries, []);
+});
+
 test("missing or non-durable controlled-host acknowledgment blocks notarization before external effects", async (t) => {
   const fixture = notaryFixture(t);
   let calls = 0;

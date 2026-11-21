@@ -132,7 +132,11 @@ function fileDigest(path, expected) {
 /** Effects are single-attempt. A lost response requires inspect(), not an automatic replay. */
 export function createQualificationHost(
   config,
-  { execute = execFileSync, environment = process.env } = {},
+  {
+    execute = execFileSync,
+    environment = process.env,
+    replacePrivateView = false,
+  } = {},
 ) {
   config = structuredClone(config);
   const args = sshConfig(config);
@@ -147,6 +151,9 @@ export function createQualificationHost(
       ...identity(request),
       config: binding,
       ...(request.files ? { files: request.files } : {}),
+      ...(["prepare", "serve"].includes(action) && replacePrivateView
+        ? { replacePrivateView: true }
+        : {}),
       ...(action === "cleanup" && request.retainArtifacts === true
         ? { retainArtifacts: true }
         : {}),

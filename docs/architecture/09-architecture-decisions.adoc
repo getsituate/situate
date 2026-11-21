@@ -59,6 +59,9 @@
 |link:09-architecture-decisions/ADR-0024-gate-delivery-on-verified-hosting.adoc[ADR-0024]
 |Gate delivery on the verified serving generation, without running Terraform for unchanged hosting inputs.
 |Accepted; live workflow verification pending
+|link:09-architecture-decisions/ADR-0025-run-macos-delivery-as-fresh-attempts.adoc[ADR-0025]
+|Start new macOS release attempts without resuming interrupted builds.
+|Accepted
 |===
 
 :architecture-repository-root: ../..
@@ -101,6 +104,8 @@ include::09-architecture-decisions/ADR-0022-serve-release-qualification-on-host-
 include::09-architecture-decisions/ADR-0023-open-hosting-recovery-at-production-staging.adoc[leveloffset=+2]
 
 include::09-architecture-decisions/ADR-0024-gate-delivery-on-verified-hosting.adoc[leveloffset=+2]
+
+include::09-architecture-decisions/ADR-0025-run-macos-delivery-as-fresh-attempts.adoc[leveloffset=+2]
 
 :!architecture-repository-root:
 :!architecture-docs-root:

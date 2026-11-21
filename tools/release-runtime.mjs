@@ -272,7 +272,9 @@ export async function prepareReleaseRuntime(
       createHost ??
       (await import("../infrastructure/releases/qualification-host.mjs"))
         .createQualificationHost
-    )(hostConfiguration);
+    )(hostConfiguration, {
+      replacePrivateView: environment.PIPELINE_FRESH_RELEASE === "1",
+    });
     const history = await readHistory(root, {
       destination: {
         host: destination,
@@ -414,6 +416,7 @@ export async function runPreparedQualification(
     createHost,
     withRoute,
     progressOutput = process.stderr,
+    replacePrivateView = false,
     qualificationRuntime,
     runtimeAuthorization,
     inspection,
@@ -612,7 +615,7 @@ export async function runPreparedQualification(
       feedPath: new URL(endpoint).pathname.slice(1),
       publicFeedSha256: runtime.publicFeedSha256,
     },
-    { environment },
+    { environment, replacePrivateView },
   );
   const operation = {
     operationNonce: runtime.operation,

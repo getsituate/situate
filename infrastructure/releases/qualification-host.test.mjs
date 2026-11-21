@@ -332,6 +332,39 @@ m.command=forbidden`;
   assert.equal(run("inspect-family").operations[0].containerRunning, false);
 });
 
+test("fresh immutable qualification replaces an abandoned view without touching public metadata", (t) => {
+  const h = harness(t);
+  const baked = `m.IMMUTABLE_UID=os.getuid()
+m.IMMUTABLE_HOSTNAME=request['config']['hostname']
+m.immutable_host=lambda: True
+m.probe_immutable_listener=lambda: None`;
+  const run = (action, request) => h.success(action, request, undefined, baked);
+  run("prepare");
+  run("stage");
+  run("serve");
+  const view = join(h.root, ".qualification-view");
+  const publicFeed = join(h.root, "current-release");
+  writeFileSync(publicFeed, "unchanged");
+  const successor = {
+    ...h.request,
+    operationId: "successor",
+    operationNonce: "successor",
+    replacePrivateView: true,
+  };
+  const prepared = run("prepare", successor);
+  run("stage", successor);
+  run("serve", successor);
+  run("cleanup");
+  assert.equal(run("inspect", successor).containerRunning, true);
+  assert.equal(
+    sha(readFileSync(join(view, prepared.identityPath))),
+    prepared.identitySha256,
+  );
+  assert.equal(readFileSync(publicFeed, "utf8"), "unchanged");
+  run("cleanup", successor);
+  assert(!existsSync(view));
+});
+
 test("host lock rejects concurrent mutations without changing prepared state", (t) => {
   const h = harness(t);
   h.success("prepare");
