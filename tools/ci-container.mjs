@@ -77,6 +77,10 @@ export function containerArguments({
     throw new Error("CI requires an exact Rust toolchain version.");
   inside(workspace, harness);
   inside(workspace, source);
+  if ([harness, source].some((path) => /[,"\r\n]/.test(path)))
+    throw new Error(
+      "Docker mount paths cannot contain commas, quotes or line breaks.",
+    );
   const target = shard === "coverage" ? "/workspace/harness" : "/workspace";
   const args = [
     "run",
@@ -150,10 +154,12 @@ export function containerArguments({
     args.push("--env", `${key}=${value}`);
   const setup =
     'HOME=$(mktemp -d "${TMPDIR:-/tmp}/situate-ci-home.XXXXXXXX"); export HOME; mkdir -p "$CARGO_HOME" "$npm_config_cache"; source /opt/ci-tools/ci-user.sh; git -C /tmp config --global --add safe.directory /workspace; df -h /workspace /ci-cache;';
+  const checkout =
+    'require_checkout() { if [[ ! -d "$1/.git" || -L "$1/.git" ]]; then echo "Use a regular checkout, not a linked worktree." >&2; exit 1; fi; };';
   let script;
   if (shard === "coverage") {
     const sourcePath = "/workspace/source";
-    script = `${setup}\ngit config --global --add safe.directory "$1"; git config --global --add safe.directory "$2";\nif test "$PREPARATION_STATUS" != failure && test "$PREPARATION_STATUS" != cancelled && test -f "$1/tools/test.mjs" && grep -q -- --coverage "$1/tools/test.mjs"; then\n  if ! npm ci --prefix "$1/client"; then export PREPARATION_STATUS=failure; fi\nfi\nnode "$2/tools/coverage.mjs" "$1";`;
+    script = `${checkout} require_checkout /workspace/source;\n${setup}\ngit config --global --add safe.directory "$1"; git config --global --add safe.directory "$2";\nif test "$PREPARATION_STATUS" != failure && test "$PREPARATION_STATUS" != cancelled && test -f "$1/tools/test.mjs" && grep -q -- --coverage "$1/tools/test.mjs"; then\n  if ! npm ci --prefix "$1/client"; then export PREPARATION_STATUS=failure; fi\nfi\nnode "$2/tools/coverage.mjs" "$1";`;
     args.push(
       lock.image,
       "bash",
@@ -200,7 +206,7 @@ export function containerArguments({
       "-o",
       "pipefail",
       "-c",
-      `${setup}\nexec gitleaks git . --redact --config .gitleaks.toml`,
+      `${checkout} require_checkout .;\n${setup}\nexec gitleaks git . --redact --config .gitleaks.toml`,
     );
   } else {
     const installs =
@@ -211,7 +217,7 @@ export function containerArguments({
           : browserShards.includes(shard)
             ? "npm ci --prefix client; npm ci --prefix requirements; node client/node_modules/playwright/cli.js install chromium webkit; node requirements/node_modules/playwright/cli.js install chromium;"
             : "npm ci --prefix client;";
-    script = `{ ${setup}\n${installs}\n} >&2\nexec node tools/ci-shard.mjs --shard "$1" --timeout 1800 --json`;
+    script = `${checkout} require_checkout .;\n{ ${setup}\n${installs}\n} >&2\nexec node tools/ci-shard.mjs --shard "$1" --timeout 1800 --json`;
     args.push(
       lock.image,
       "bash",
@@ -331,15 +337,6 @@ async function main() {
   inside(workspace, sourcePath);
   const source = realpathSync(sourcePath);
   inside(workspace, source);
-  if (
-    !values.visual &&
-    !readdirSync(source, { withFileTypes: true }).some(
-      (entry) => entry.name === ".git" && entry.isDirectory(),
-    )
-  )
-    throw new Error(
-      "Use a regular checkout with its .git directory inside the workspace, not a linked worktree.",
-    );
   const cachePath =
     process.env.CI_CACHE_DIR ||
     (process.env.RUNNER_TEMP &&

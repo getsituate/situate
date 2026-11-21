@@ -224,6 +224,28 @@ test("container execution has no host socket, credentials, privileged mode, or t
     /exact Rust/,
   );
   assert.throws(() => inside("/checkout", "/outside"), /inside/);
+  assert.throws(
+    () =>
+      containerArguments({
+        ...options,
+        shard: "coverage",
+        source: "/checkout/a,b",
+      }),
+    /mount paths/,
+  );
+});
+
+test("diagnostic containers check the mounted Git directory before running tools", () => {
+  for (const [shard, mounted] of [
+    ["checks", "."],
+    ["history", "."],
+    ["coverage", "/workspace/source"],
+  ]) {
+    const args = containerArguments({ ...options, shard });
+    const script = args[args.indexOf("-c") + 1];
+    assert.match(script, /-d "\$1\/\.git".*-L "\$1\/\.git"/);
+    assert.ok(script.split("\n")[0].endsWith(`require_checkout ${mounted};`));
+  }
 });
 
 test("macOS diagnostic containers keep caches and Rust targets off host shares", () => {
@@ -308,6 +330,7 @@ test(
     const log = join(directory, "calls");
     try {
       mkdirSync(bin);
+      mkdirSync(join(directory, ".git"));
       mkdirSync(join(directory, "client"));
       for (const command of ["git", "df", "npm"])
         writeFileSync(join(bin, command), "#!/bin/sh\nexit 0\n", {
