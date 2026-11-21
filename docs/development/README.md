@@ -148,9 +148,9 @@ Design queries go to external hosted services. Use generic queries, keep private
 
 ## SonarQube Cloud in Pi
 
-To use the read-only SonarQube MCP tools, [create a personal access token](https://docs.sonarsource.com/sonarqube-cloud/managing-your-account/managing-tokens) and set `SONARQUBE_MCP_TOKEN` in the worktree root’s private `.env`. Pi reads only that key from the file. If you export the variable before starting Pi, it takes precedence, even when empty. In CI, Pi uses only the environment.
+To use the SonarQube MCP tools, [create a personal access token](https://docs.sonarsource.com/sonarqube-cloud/managing-your-account/managing-tokens) and set `SONARQUBE_MCP_TOKEN` in the worktree root’s private `.env`. Pi reads only that key from the file. If you export the variable before starting Pi, it takes precedence, even when empty. In CI, Pi uses only the environment.
 
-Start Pi and run `/mcp` to check the connection. Without a token, Pi does not register the server. You can still view the [public Situate analysis](https://sonarcloud.io/project/overview?id=getsituate_situate) without a token.
+Start Pi and run `/mcp` to check the connection. Changing issue status requires the **Administer Issues** permission on the SonarQube Cloud project. Without a token, Pi does not register the server. You can still view the [public Situate analysis](https://sonarcloud.io/project/overview?id=getsituate_situate) without a token.
 
 ## Herdr operational skill
 

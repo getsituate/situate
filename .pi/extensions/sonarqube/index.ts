@@ -33,10 +33,9 @@ export default function (pi: ExtensionAPI) {
   pi.registerMcpServer("sonarqube", {
     url: "https://api.sonarcloud.io/mcp",
     description:
-      "Read SonarQube Cloud findings, metrics, and quality gates for getsituate_situate.",
+      "Review SonarQube Cloud findings and check metrics and quality gates for getsituate_situate.",
     headers: {
       Authorization: authorization,
-      SONARQUBE_READ_ONLY: "true",
       SONARQUBE_TOOLSETS: "projects,issues,measures,quality-gates",
     },
   });
