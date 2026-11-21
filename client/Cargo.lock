@@ -5128,6 +5128,8 @@ dependencies = [
  "tauri",
  "tauri-plugin",
  "tokio",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

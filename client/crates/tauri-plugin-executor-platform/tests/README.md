@@ -27,7 +27,10 @@ cargo +1.98.1 run --manifest-path client/crates/tauri-plugin-executor-platform/t
 
 The fixture opens no main app window. It checks that two workspace executors
 receive their own Worker replies and that closing one removes its view without
-interrupting the other. A successful run prints `executor-native-test: passed`.
+interrupting the other. It also checks the pixels of a cropped screenshot at 125%
+scale, rejects out-of-bounds rectangles, and checks that a closed preview returns
+no image. The preview window remains hidden. A successful run prints
+`executor-native-test: passed`.
 
 ## iOS WebKit boundary
 

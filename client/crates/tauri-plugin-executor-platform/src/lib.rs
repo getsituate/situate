@@ -232,7 +232,7 @@ impl ExecutorHandle {
 
     /// Captures only this executor's native view; closure fences pending replies.
     /// Callers own authorization and must recheck admission after awaiting.
-    /// Timeout fences the reply, not WebKit's internal snapshot completion.
+    /// Timeout fences the reply, not the WebView's internal snapshot completion.
     pub async fn capture(&self, rect: CaptureRect) -> Result<String, String> {
         rect.validate()?;
         if self.session.lifecycle.lock().unwrap().is_closed() {
@@ -246,9 +246,20 @@ impl ExecutorHandle {
                 .ok_or("executor.closed")?;
             capture::macos::capture(&window, rect, self.session.clone()).await
         };
+        #[cfg(target_os = "windows")]
+        let result = {
+            if self.session.document_kind != DocumentKind::Preview {
+                return Err("native.plugins.captureUnavailable".into());
+            }
+            let window = self
+                .app
+                .get_webview_window(&self.session.id)
+                .ok_or("executor.closed")?;
+            capture::windows::capture(&window, rect, self.session.clone()).await
+        };
         #[cfg(target_os = "ios")]
         let result = ios::capture_executor(self, rect).await;
-        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
         let result = Err("executor.platformUnavailable".into());
         if self.session.lifecycle.lock().unwrap().is_closed() {
             return Err("executor.closed".into());
