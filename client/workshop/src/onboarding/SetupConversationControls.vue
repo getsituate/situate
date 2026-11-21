@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from "vue";
 import { SituateButton, SituateCheckbox, SituateSelect } from "../ui";
 import FinaleControls from "../workspaces/setup-journey/finale/FinaleControls.vue";
 import type { OnboardingAction } from "./model";
@@ -8,6 +9,7 @@ import type {
   SetupConversationAction,
   ResponseOutcome,
 } from "./conversation-setup";
+const fieldId = useId();
 defineProps<{ state: SetupConversationState }>();
 const emit = defineEmits<{ action: [action: SetupConversationAction] }>();
 function finale(action: OnboardingAction) {
@@ -30,8 +32,9 @@ function finale(action: OnboardingAction) {
       @action="finale"
     />
     <template v-else>
-      <label
+      <label :for="`${fieldId}-manual`"
         ><SituateCheckbox
+          :id="`${fieldId}-manual`"
           :checked="state.manual"
           @change="
             emit('action', {
@@ -72,8 +75,9 @@ function finale(action: OnboardingAction) {
           >{{ copy.controls.complete }}</SituateButton
         >
       </template>
-      <label
+      <label :for="`${fieldId}-pause-motion`"
         ><SituateCheckbox
+          :id="`${fieldId}-pause-motion`"
           :checked="state.motionPaused"
           @change="
             emit('action', {

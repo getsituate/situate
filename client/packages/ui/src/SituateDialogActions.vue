@@ -13,7 +13,7 @@
   gap: 12px;
   margin-top: 24px;
 }
-.situate-dialog-actions :slotted(*) {
+.situate-dialog-actions :deep(> *) {
   max-width: 100%;
 }
 </style>

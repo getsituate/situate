@@ -243,7 +243,9 @@ function returnToDraft() {
       :open="!!state.dialog"
       :class="{ 'incident-dialog': state.dialog === 'unexpected' }"
       aria-labelledby="recovery-dialog-title"
-      aria-describedby="recovery-dialog-body"
+      :aria-describedby="
+        state.dialog ? `recovery-dialog-${state.dialog}-body` : undefined
+      "
       @cancel.prevent="open(null)"
       @close="restoreFocus"
       @keydown="trapTab"
@@ -264,7 +266,7 @@ function returnToDraft() {
           :seen="state.gestureSeen"
           @played="send({ type: 'gesture' })"
         />
-        <p id="recovery-dialog-body" class="incident-message">
+        <p id="recovery-dialog-unexpected-body" class="incident-message">
           {{ c.unexpectedBody }}
         </p>
         <SituateDisclosure :label="c.more" class="incident-options">
@@ -283,7 +285,7 @@ function returnToDraft() {
         <p v-if="state.notice" role="status">{{ state.notice }}</p>
       </template>
       <template v-else-if="state.dialog === 'report'">
-        <p id="recovery-dialog-body">
+        <p id="recovery-dialog-report-body">
           {{ c.to }}: <strong>{{ c.recipient }}</strong>
         </p>
         <label for="report-description">{{ c.description }}</label>
@@ -301,7 +303,7 @@ function returnToDraft() {
         </SituateDisclosure>
       </template>
       <template v-else-if="state.dialog === 'mail'">
-        <p id="recovery-dialog-body">
+        <p id="recovery-dialog-mail-body">
           {{
             state.mail === "missing"
               ? c.mailMissing
@@ -325,7 +327,7 @@ function returnToDraft() {
           }}</SituateButton>
         </div>
       </template>
-      <p v-if="state.dialog === 'reopen'" id="recovery-dialog-body">
+      <p v-if="state.dialog === 'reopen'" id="recovery-dialog-reopen-body">
         {{ c.iosBody }}
       </p>
       <template #actions>

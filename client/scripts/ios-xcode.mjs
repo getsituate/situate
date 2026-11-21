@@ -537,14 +537,19 @@ if (
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   const controller = new AbortController();
-  let interrupted;
-  const stop = (signal) => {
-    interrupted = signal;
-    controller.abort(new Error("iOS session stopped."));
-  };
-  process.on("SIGINT", stop);
-  process.on("SIGTERM", stop);
-  process.on("SIGHUP", stop);
+  let interruptedExitCode;
+  const handlers = [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ].map(([signal, exitCode]) => {
+    const stop = () => {
+      interruptedExitCode = exitCode;
+      controller.abort(new Error("iOS session stopped."));
+    };
+    process.on(signal, stop);
+    return [signal, stop];
+  });
   try {
     const { values } = parseArgs({
       options: {
@@ -576,18 +581,9 @@ if (
         });
     }
   } catch (error) {
-    if (!interrupted) console.error(error.message);
-    process.exitCode =
-      interrupted === "SIGINT"
-        ? 130
-        : interrupted === "SIGTERM"
-          ? 143
-          : interrupted === "SIGHUP"
-            ? 129
-            : 1;
+    if (interruptedExitCode === undefined) console.error(error.message);
+    process.exitCode = interruptedExitCode ?? 1;
   } finally {
-    process.removeListener("SIGINT", stop);
-    process.removeListener("SIGTERM", stop);
-    process.removeListener("SIGHUP", stop);
+    for (const [signal, stop] of handlers) process.removeListener(signal, stop);
   }
 }

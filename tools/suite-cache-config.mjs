@@ -53,12 +53,17 @@ class Literals {
     return this.tokens[this.index];
   }
 
-  take(expected) {
-    const token = this.tokens[this.index++];
-    requireValue(
-      token !== undefined && (expected === undefined || token === expected),
-    );
-    return token;
+  done() {
+    return this.index >= this.tokens.length;
+  }
+
+  take() {
+    requireValue(!this.done());
+    return this.tokens[this.index++];
+  }
+
+  expect(token) {
+    requireValue(this.take() === token);
   }
 
   newlines() {
@@ -94,34 +99,34 @@ class Literals {
         else {
           const key = this.key();
           requireValue(!Object.hasOwn(result, key));
-          this.take(this.toml ? "=" : ":");
+          this.expect(this.toml ? "=" : ":");
           result[key] = this.value(depth + 1);
         }
         this.newlines();
         if (this.peek() === closing) break;
-        this.take(",");
+        this.expect(",");
         this.newlines();
       }
-      this.take(closing);
+      this.expect(closing);
       return result;
     }
     if (!this.toml) {
       if (token === "sourceRoots") return rootsReference;
       requireValue(token === "vue" || token === "uiBoundary");
-      this.take("(");
-      if (token === "uiBoundary") this.take("sourceRoots");
-      this.take(")");
+      this.expect("(");
+      if (token === "uiBoundary") this.expect("sourceRoots");
+      this.expect(")");
       return token === "vue" ? vuePlugin : boundaryPlugin;
     }
     throw new Error("Unsupported literal");
   }
 
   sequence(tokens) {
-    for (const token of tokens.split(" ")) this.take(token);
+    for (const token of tokens.split(" ")) this.expect(token);
   }
 
   end() {
-    requireValue(this.peek() === undefined);
+    requireValue(this.done());
   }
 }
 
@@ -139,7 +144,7 @@ function manifest(source) {
     return value;
   };
   reader.newlines();
-  while (reader.peek() !== undefined) {
+  while (!reader.done()) {
     if (reader.peek() === "[") {
       reader.take();
       const path = [reader.key()];
@@ -147,7 +152,7 @@ function manifest(source) {
         reader.take();
         path.push(reader.key());
       }
-      reader.take("]");
+      reader.expect("]");
       const name = JSON.stringify(path);
       requireValue(!tables.has(name));
       tables.add(name);
@@ -158,13 +163,13 @@ function manifest(source) {
         reader.take();
         path.push(reader.key());
       }
-      reader.take("=");
+      reader.expect("=");
       const target = descend(current, path.slice(0, -1));
       const key = path.at(-1);
       requireValue(!Object.hasOwn(target, key));
       target[key] = reader.value();
     }
-    requireValue(reader.peek() === undefined || reader.peek() === "\n");
+    requireValue(reader.done() || reader.peek() === "\n");
     reader.newlines();
   }
   return root;
@@ -342,7 +347,7 @@ function vitest(source, suite) {
   ]) {
     reader.sequence(`import ${binding} from`);
     requireValue(reader.string() === module);
-    reader.take(";");
+    reader.expect(";");
   }
   reader.sequence("const sourceRoots =");
   const roots = reader.value();

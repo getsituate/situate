@@ -78,6 +78,25 @@ describe("SituateSelect", () => {
     expect(wrapper.get("select").element.value).toBe("12");
     wrapper.unmount();
   });
+  it.each(["field", "toolbar"] as const)(
+    "puts the %s select's accessible name on its focus target",
+    (appearance) => {
+      const wrapper = create({ appearance, "aria-labelledby": "format-label" });
+      try {
+        const target = wrapper.get("button").element;
+        target.focus();
+        expect(document.activeElement).toBe(target);
+        expect(target.getAttribute("aria-label")).toBe("Time format");
+        expect(target.getAttribute("aria-labelledby")).toBe("format-label");
+        expect(wrapper.get("select").element.hidden).toBe(true);
+        expect(wrapper.findAll("[aria-label], [aria-labelledby]")).toHaveLength(
+          1,
+        );
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
   it("disables both the visible control and form field", async () => {
     const wrapper = create({ disabled: true });
     expect(wrapper.get("button").element.disabled).toBe(true);

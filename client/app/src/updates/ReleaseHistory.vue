@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, useId } from "vue";
 import { SituateButton, SituateInput } from "@situate/ui";
 import { t, preferences, type MessageKey } from "@situate/localization";
 import { installedReleases, installedVersion } from "./release-history";
@@ -27,6 +27,7 @@ const catalog = computed(() =>
     notes: release.locales[preferences.value.language] ?? release.locales.en,
   })),
 );
+const searchId = useId();
 const query = ref("");
 const search = ref<InstanceType<typeof SituateInput>>();
 function clearSearch() {
@@ -88,10 +89,11 @@ async function back() {
 <template>
   <div class="release-history">
     <template v-if="!release">
-      <label class="history-search">
+      <label class="history-search" :for="searchId">
         <span>{{ t("releaseHistory.searchHistory") }}</span>
         <SituateInput
           ref="search"
+          :id="searchId"
           v-model="query"
           type="search"
           :placeholder="t('releaseHistory.searchPlaceholder')"

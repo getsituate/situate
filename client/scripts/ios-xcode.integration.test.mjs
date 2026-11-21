@@ -144,6 +144,48 @@ test(
   },
 );
 
+for (const [signal, exitCode] of [
+  ["SIGINT", 130],
+  ["SIGTERM", 143],
+  ["SIGHUP", 129],
+]) {
+  test(
+    `iOS CLI exits with status ${exitCode} on ${signal}`,
+    {
+      skip: process.platform !== "darwin",
+      timeout: 10000,
+    },
+    async (t) => {
+      const { root } = fixture(t);
+      const ready = join(root, "ready");
+      writeFileSync(
+        join(root, "rustup"),
+        '#!/bin/sh\n: > "$TEST_READY"\nexec /bin/sleep 10\n',
+        { mode: 0o700 },
+      );
+      const script = fileURLToPath(new URL("./ios-xcode.mjs", import.meta.url));
+      const child = spawn(process.execPath, [script, "--check"], {
+        env: { PATH: root, TEST_READY: ready },
+        stdio: "ignore",
+      });
+      const exited = once(child, "exit");
+      t.after(async () => {
+        if (child.exitCode === null && child.signalCode === null)
+          child.kill("SIGTERM");
+        await exited;
+      });
+      for (let count = 0; count < 150 && !existsSync(ready); count++)
+        await delay(20);
+      assert.ok(
+        existsSync(ready),
+        "The CLI did not reach its prerequisite check",
+      );
+      child.kill(signal);
+      assert.deepEqual(await exited, [exitCode, null]);
+    },
+  );
+}
+
 function isRunning(pid) {
   assert.ok(Number.isSafeInteger(pid) && pid > 1, `Invalid PID: ${pid}`);
   const result = spawnSync("ps", ["-o", "stat=", "-p", String(pid)], {

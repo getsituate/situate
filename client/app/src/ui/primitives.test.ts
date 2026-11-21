@@ -7,6 +7,7 @@ import {
   SituateTextarea,
   SituateCheckbox,
   SituateRadio,
+  SituateSwitch,
   SituateDialog,
   SituateDialogActions,
   SituateField,
@@ -28,6 +29,45 @@ function keep<T extends { unmount(): void }>(wrapper: T): T {
 }
 
 describe("native primitives", () => {
+  it.each([
+    [SituateCheckbox, "default"],
+    [SituateCheckbox, "plain"],
+    [SituateRadio, "default"],
+    [SituateRadio, "plain"],
+    [SituateInput, "default"],
+    [SituateInput, "plain"],
+    [SituateTextarea, "default"],
+    [SituateTextarea, "plain"],
+    [SituateSwitch, undefined],
+  ] as const)(
+    "%o (%s) keeps consumer labels on the native control",
+    (Control, appearance) => {
+      const wrapper = keep(
+        mount(
+          defineComponent({
+            components: { Control },
+            setup: () => ({ appearance }),
+            template: `
+            <label for="entry">Notebook title</label>
+            <span id="entry-name">Notebook name</span>
+            <Control id="entry" :appearance="appearance" />
+            <Control :appearance="appearance" aria-label="Folder name" />
+            <Control :appearance="appearance" aria-labelledby="entry-name" />
+          `,
+          }),
+          { attachTo: document.body },
+        ),
+      );
+
+      const [labeled, named, referenced] = wrapper.findAll("input, textarea");
+      expect(wrapper.get("label").element.control).toBe(labeled!.element);
+      expect(labeled!.attributes("aria-label")).toBeUndefined();
+      expect(labeled!.attributes("aria-labelledby")).toBeUndefined();
+      expect(named!.attributes("aria-label")).toBe("Folder name");
+      expect(referenced!.attributes("aria-labelledby")).toBe("entry-name");
+    },
+  );
+
   it("keeps button defaults and native attributes, focus and disabled behavior", async () => {
     const click = vi.fn();
     const wrapper = keep(

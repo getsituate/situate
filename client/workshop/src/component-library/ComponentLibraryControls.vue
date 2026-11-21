@@ -23,8 +23,9 @@ const emit = defineEmits<{ patch: [patch: Partial<ComponentLibraryState>] }>();
         {{ label }}
       </option>
     </SituateSelect>
-    <label class="component-check">
+    <label class="component-check" for="component-long-labels">
       <SituateCheckbox
+        id="component-long-labels"
         :checked="state.longLabels"
         @change="
           emit('patch', {

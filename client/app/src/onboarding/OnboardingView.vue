@@ -152,8 +152,9 @@ function input(event: Event) {
             @input="emit('patch', { sourceDescription: input($event) })"
           />
         </label>
-        <label class="fresh-choice"
+        <label class="fresh-choice" :for="`${id}-fresh`"
           ><SituateCheckbox
+            :id="`${id}-fresh`"
             :checked="!!state.fresh"
             :disabled="busy"
             @change="
@@ -170,10 +171,12 @@ function input(event: Event) {
           <label
             v-for="intent in ['keep', 'change', 'help'] as const"
             :key="intent"
+            :for="`${id}-intent-${intent}`"
             class="intent-choice"
             :class="{ selected: (state.intent ?? 'help') === intent }"
           >
             <SituateRadio
+              :id="`${id}-intent-${intent}`"
               :name="`${id}-intent`"
               :value="intent"
               :checked="(state.intent ?? 'help') === intent"

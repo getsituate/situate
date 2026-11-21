@@ -49,8 +49,9 @@ const emit = defineEmits<{ action: [action: RecoveryAction] }>();
       ><option value="true">{{ c.controls.success }}</option>
       <option value="false">{{ c.controls.failure }}</option></SituateSelect
     >
-    <label class="still"
+    <label class="still" for="recovery-still"
       ><SituateCheckbox
+        id="recovery-still"
         :checked="state.still"
         @change="
           emit('action', {

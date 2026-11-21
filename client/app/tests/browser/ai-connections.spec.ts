@@ -385,6 +385,45 @@ test(
     ]);
   },
 );
+test("the native login fixture preserves the cancellation error and does not save a connection", async ({
+  page,
+}) => {
+  await workspaceFixture(page, shellState, {
+    aiDeviceOutcome: "pending",
+    aiLoginOutcome: "pending",
+    aiConnections: configs,
+  });
+  await page.goto("/");
+  const results = await page.evaluate(async () => {
+    const invoke = Reflect.get(window, "__TAURI_INTERNALS__").invoke;
+    const scope = "garden";
+    const before = await invoke("ai_connections", { scope });
+
+    const id = await invoke("ai_openai_start", { scope });
+    const browserResult = invoke("ai_openai_wait", { scope, id }).catch(
+      (reason: unknown) => reason,
+    );
+    await invoke("ai_openai_cancel", { scope, id });
+
+    const device = await invoke("ai_codex_start", { scope });
+    const deviceArgs = { scope, id: device.id };
+    const deviceResult = invoke("ai_codex_wait", deviceArgs).catch(
+      (reason: unknown) => reason,
+    );
+    await invoke("ai_codex_cancel", deviceArgs);
+    Reflect.get(window, "__finishDeviceLogin")();
+    return {
+      browser: await browserResult,
+      device: await deviceResult,
+      before,
+      after: await invoke("ai_connections", { scope }),
+    };
+  });
+  expect(results.browser).toBe("native.ai.login.cancelled");
+  expect(results.device).toBe("native.ai.login.cancelled");
+  expect(results.after).toEqual(results.before);
+});
+
 test(
   "device authorization denial preserves existing access",
   { tag: "@visual-mobile" },

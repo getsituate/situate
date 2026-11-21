@@ -7,6 +7,7 @@ import {
   onMounted,
   ref,
   shallowRef,
+  useId,
   watch,
 } from "vue";
 import {
@@ -40,6 +41,7 @@ import {
   type DocumentsState,
 } from "./model";
 import "./documents.css";
+const fieldId = useId();
 const props = defineProps<{
   state: DocumentsState;
   mobile?: boolean;
@@ -611,8 +613,9 @@ function sources(action: "list" | "create" | "detail", id?: string) {
             })
           "
         />
-        <label class="doc-check"
+        <label :for="`${fieldId}-pin-view`" class="doc-check"
           ><SituateCheckbox
+            :id="`${fieldId}-pin-view`"
             appearance="plain"
             type="checkbox"
             :checked="state.draftPinned"
@@ -675,8 +678,13 @@ function sources(action: "list" | "create" | "detail", id?: string) {
         <p v-if="!state.tags.length" class="doc-muted">
           {{ c.noWorkspaceTags }}
         </p>
-        <label v-for="tag in state.tags" :key="tag.id" class="doc-check"
+        <label
+          v-for="tag in state.tags"
+          :key="tag.id"
+          :for="`${fieldId}-tag-${tag.id}`"
+          class="doc-check"
           ><SituateCheckbox
+            :id="`${fieldId}-tag-${tag.id}`"
             appearance="plain"
             type="checkbox"
             :checked="state.draftTags.includes(tag.id)"

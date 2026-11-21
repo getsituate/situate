@@ -115,8 +115,11 @@ test("Markdown links respect code blocks, references and angle brackets", () => 
 });
 
 test("heading slugs strip closed tags and keep text after unmatched angle brackets", () => {
-  const body = "# One <em>Two</em> << Three";
-  assert.deepEqual(inspectMarkdown(body).headings, ["one-two-three"]);
+  const body = "# One <em>Two</em> << Three\n\n# Four << hidden > Five";
+  assert.deepEqual(inspectMarkdown(body).headings, [
+    "one-two-three",
+    "four-five",
+  ]);
   assert.match(renderMarkdown(body), /id="section-one-two-three"/);
 });
 

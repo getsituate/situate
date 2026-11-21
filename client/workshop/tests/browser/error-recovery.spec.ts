@@ -180,6 +180,8 @@ test("report always includes bounded technical data and mail failures offer sele
   page,
 }, info) => {
   const preview = await open(page, "report");
+  const dialog = preview.getByRole("dialog");
+  await expect(dialog).toHaveAccessibleDescription("To: bugs@getsituate.com");
   const description = preview.getByLabel("What were you doing? (optional)", {
     exact: true,
   });
@@ -208,9 +210,9 @@ test("report always includes bounded technical data and mail failures offer sele
     page.getByLabel("Email availability", { exact: true }),
     "missing",
   );
-  await expect(
-    preview.getByText("No email app is available.", { exact: false }),
-  ).toBeVisible();
+  await expect(dialog).toHaveAccessibleDescription(
+    "No email app is available. Select the report text to copy it.",
+  );
   await preview
     .getByRole("button", { name: "Select report text", exact: true })
     .click();
@@ -235,6 +237,7 @@ test("report always includes bounded technical data and mail failures offer sele
     preview.getByText("You’re offline.", { exact: false }),
   ).toBeVisible();
   await preview.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(dialog).toHaveAccessibleDescription("To: bugs@getsituate.com");
   await expect(description).toHaveValue("Opening the reading list");
   await expect(preview.getByRole("dialog").getByRole("checkbox")).toHaveCount(
     0,

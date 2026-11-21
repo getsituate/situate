@@ -259,8 +259,12 @@ watch(
       <footer>
         <fieldset :disabled="blocked">
           <legend>Choose one whole version</legend>
-          <label v-for="choice in choices" :key="choice"
+          <label
+            v-for="choice in choices"
+            :key="choice"
+            :for="`${titleId}-version-${choice}`"
             ><SituateRadio
+              :id="`${titleId}-version-${choice}`"
               appearance="plain"
               type="radio"
               :name="titleId + '-version'"

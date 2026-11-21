@@ -86,8 +86,9 @@ watch(
           class="method-tile"
           :class="{ selected: state.approaches.includes(method.id) }"
         >
-          <label
+          <label :for="`${id}-method-${method.id}`"
             ><SituateCheckbox
+              :id="`${id}-method-${method.id}`"
               appearance="plain"
               type="checkbox"
               :checked="state.approaches.includes(method.id)"

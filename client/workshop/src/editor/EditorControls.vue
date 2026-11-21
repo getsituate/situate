@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from "vue";
 import { SituateSelect, SituateButton, SituateCheckbox } from "../ui";
 import {
   currentFile,
@@ -15,6 +16,7 @@ import {
   changeConflictSource,
   completeConflictOperation,
 } from "./conflicts";
+const fieldId = useId();
 const props = defineProps<{ state: EditorState }>();
 const emit = defineEmits<{ "update:state": [state: EditorState] }>();
 const { state, update } = useEditorState(props, emit);
@@ -82,8 +84,11 @@ function outcome(event: Event) {
       class="conflict-controls"
       aria-label="Conflict controls"
     >
-      <label v-if="state.conflict.status !== 'resolved'"
+      <label
+        v-if="state.conflict.status !== 'resolved'"
+        :for="`${fieldId}-conflict-outcome`"
         >Next application result<SituateSelect
+          :id="`${fieldId}-conflict-outcome`"
           :value="state.conflict.nextOutcome"
           @change="
             update((next) => {
@@ -122,8 +127,11 @@ function outcome(event: Event) {
       >
     </section>
     <template v-if="!state.dialog && !state.conflict?.open">
-      <label v-if="currentFile(state) && !state.historical"
+      <label
+        v-if="currentFile(state) && !state.historical"
+        :for="`${fieldId}-save-failure`"
         ><SituateCheckbox
+          :id="`${fieldId}-save-failure`"
           type="checkbox"
           :checked="state.saveOutcome === 'failure'"
           @change="outcome"
@@ -181,8 +189,9 @@ function outcome(event: Event) {
         </SituateButton>
       </div>
     </template>
-    <label v-if="!state.conflict?.open"
+    <label v-if="!state.conflict?.open" :for="`${fieldId}-dialog`"
       >Dialog<SituateSelect
+        :id="`${fieldId}-dialog`"
         :value="state.dialog?.kind || 'none'"
         @change="showDialog(($event.target as HTMLSelectElement).value)"
       >

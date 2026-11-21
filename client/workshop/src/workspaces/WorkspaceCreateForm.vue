@@ -144,7 +144,6 @@ onBeforeUnmount(() => {
           <SituateInput
             ref="nameControl"
             v-bind="controlAttrs"
-            id="workspace-name"
             v-model="name"
             :disabled="busy"
             autocomplete="off"

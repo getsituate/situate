@@ -7,6 +7,7 @@ import {
   SituateTextarea,
   SituateCheckbox,
   SituateRadio,
+  SituateSwitch,
   SituateDialog,
   SituateField,
   SituateIconButton,
@@ -27,6 +28,47 @@ function keep<T extends { unmount(): void }>(wrapper: T): T {
 }
 
 describe("native primitives", () => {
+  for (const Control of [
+    SituateInput,
+    SituateTextarea,
+    SituateRadio,
+    SituateCheckbox,
+    SituateSwitch,
+  ]) {
+    it(`${Control.__name} forwards names to its focusable field`, () => {
+      const label = document.createElement("label");
+      label.htmlFor = "workshop-field";
+      label.textContent = "Example field";
+      label.id = "workshop-label";
+      document.body.append(label);
+      const appearances =
+        Control === SituateSwitch ? [undefined] : ["default", "plain"];
+      for (const appearance of appearances) {
+        const wrapper = mount(Control, {
+          attachTo: document.body,
+          attrs: {
+            id: label.htmlFor,
+            ...(appearance ? { appearance } : {}),
+            "aria-label": "Example",
+            "aria-labelledby": label.id,
+          },
+        });
+        try {
+          const field = wrapper.get<HTMLInputElement | HTMLTextAreaElement>(
+            "input, textarea",
+          ).element;
+          field.focus();
+          expect(document.activeElement).toBe(field);
+          expect(label.control).toBe(field);
+          expect(field.getAttribute("aria-label")).toBe("Example");
+          expect(field.getAttribute("aria-labelledby")).toBe(label.id);
+        } finally {
+          wrapper.unmount();
+        }
+      }
+    });
+  }
+
   it("keeps button defaults and native attributes, focus and disabled behavior", async () => {
     const click = vi.fn();
     const wrapper = keep(

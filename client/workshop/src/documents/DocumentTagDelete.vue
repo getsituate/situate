@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { SituateCheckbox, SituateButton } from "../ui";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import EditorDialog from "../editor/EditorDialog.vue";
 import { clone, filterTagName, tagPath, type DocumentsState } from "./model";
 import { deleteTag, tagDeletionImpact } from "./tag-deletion";
 import { c } from "./content";
+const fieldId = useId();
 const props = defineProps<{ state: DocumentsState }>();
 const emit = defineEmits<{
   change: [state: DocumentsState];
@@ -60,8 +61,13 @@ function submit() {
       </p>
       <div class="doc-delete-body">
         <p v-if="error" role="alert" class="doc-warning">{{ error }}</p>
-        <label v-if="impact.descendants.size" class="doc-check">
+        <label
+          v-if="impact.descendants.size"
+          :for="`${fieldId}-descendants`"
+          class="doc-check"
+        >
           <SituateCheckbox
+            :id="`${fieldId}-descendants`"
             type="checkbox"
             :checked="state.tagDeletion!.descendants"
             @change="

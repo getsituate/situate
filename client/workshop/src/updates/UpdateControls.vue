@@ -59,8 +59,9 @@ const controlsId = useId();
         >{{ copy.controls.completeCheck }}</SituateButton
       >
       <template v-if="state.phase === 'downloading'">
-        <label
+        <label :for="`${controlsId}-progress`"
           >{{ copy.controls.progress }} · {{ state.progress }}%<SituateInput
+            :id="`${controlsId}-progress`"
             appearance="plain"
             type="range"
             min="0"
@@ -86,16 +87,18 @@ const controlsId = useId();
           state.preparation !== 'blocked'
         "
       >
-        <label class="check"
+        <label class="check" :for="`${controlsId}-running`"
           ><SituateCheckbox
+            :id="`${controlsId}-running`"
             :model-value="state.running"
             @update:model-value="
               emit('action', { type: 'running', value: $event })
             "
           />{{ copy.controls.running }}</label
         >
-        <label class="check"
+        <label class="check" :for="`${controlsId}-unsynced`"
           ><SituateCheckbox
+            :id="`${controlsId}-unsynced`"
             :model-value="state.unsynced"
             @update:model-value="
               emit('action', { type: 'unsynced', value: $event })

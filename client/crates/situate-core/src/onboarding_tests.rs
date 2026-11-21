@@ -24,6 +24,43 @@ fn idea() -> SupportIdea {
 }
 
 #[test]
+fn onboarding_requires_nullable_fields() {
+    let mut idea = idea();
+    idea.choice = None;
+    let record = OnboardingRecord {
+        ideas: vec![idea],
+        ..Default::default()
+    };
+    let input = serde_json::to_value(&record).unwrap();
+    assert_eq!(
+        serde_json::from_value::<OnboardingRecord>(input.clone()).unwrap(),
+        record
+    );
+
+    for (container, field) in [
+        ("", "instructionBase"),
+        ("", "instructionRevision"),
+        ("", "methodConversationId"),
+        ("", "sourceConversationId"),
+        ("", "supportConversationId"),
+        ("/ideas/0", "choice"),
+        ("/ideas/0", "notePath"),
+    ] {
+        let mut missing = input.clone();
+        missing
+            .pointer_mut(container)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert!(
+            serde_json::from_value::<OnboardingRecord>(missing).is_err(),
+            "{field}"
+        );
+    }
+}
+
+#[test]
 fn open_points_are_optional_bounded_and_preserved_without_changing_the_draft() {
     let temp = workspace();
     let storage = open(&temp);

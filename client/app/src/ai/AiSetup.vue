@@ -7,6 +7,7 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
+  useId,
   useTemplateRef,
   watch,
 } from "vue";
@@ -116,6 +117,7 @@ const key = ref("");
 const reveal = ref(false);
 const error = ref<unknown>("");
 const busy = ref(false);
+const formId = useId();
 const heading = useTemplateRef<HTMLElement>("heading");
 const browserLogin =
   useTemplateRef<InstanceType<typeof OpenAiBrowserLogin>>("browserLogin");
@@ -672,8 +674,9 @@ function cancelSkip(): void {
                 })
               }}
             </p>
-            <label class="ai-reveal"
+            <label class="ai-reveal" :for="`${formId}-http-consent`"
               ><SituateCheckbox
+                :id="`${formId}-http-consent`"
                 appearance="plain"
                 v-model="httpAcknowledged"
                 type="checkbox"
@@ -700,8 +703,10 @@ function cancelSkip(): void {
             :disabled="busy"
           />
         </SituateField>
-        <label class="ai-reveal"
-          ><SituateSwitch v-model="reveal" />{{ t("ai.showKey") }}</label
+        <label class="ai-reveal" :for="`${formId}-show-key`"
+          ><SituateSwitch :id="`${formId}-show-key`" v-model="reveal" />{{
+            t("ai.showKey")
+          }}</label
         >
         <p>{{ t("ai.savingDoesNotContactTheProviderOrVerifyThis") }}</p>
       </form>

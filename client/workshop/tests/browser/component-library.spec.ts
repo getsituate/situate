@@ -187,13 +187,22 @@ test("choices, select, dialog focus and resize remain keyboard accessible", asyn
   browserName,
 }) => {
   const preview = await open(page);
-  await preview.getByLabel("Include archived notes", { exact: true }).check();
+  for (const name of ["Name", "Notes"]) {
+    await expect(
+      preview.getByRole("textbox", { name, exact: true }),
+    ).toBeVisible();
+  }
+  const archived = preview.getByRole("checkbox", {
+    name: "Include archived notes",
+    exact: true,
+  });
+  await archived.check();
+  await expect(archived).toBeChecked();
+  await preview
+    .getByRole("radio", { name: "Oldest first", exact: true })
+    .check();
   await expect(
-    preview.getByLabel("Include archived notes", { exact: true }),
-  ).toBeChecked();
-  await preview.getByLabel("Oldest first", { exact: true }).check();
-  await expect(
-    preview.getByLabel("Newest first", { exact: true }),
+    preview.getByRole("radio", { name: "Newest first", exact: true }),
   ).not.toBeChecked();
   const select = preview.getByRole("combobox", {
     name: "Collection",
@@ -236,9 +245,9 @@ test("choices, select, dialog focus and resize remain keyboard accessible", asyn
     "line-height",
     "21px",
   );
-  await expect(
-    dialog.getByRole("button", { name: "Cancel", exact: true }),
-  ).toBeFocused();
+  const cancel = dialog.getByRole("button", { name: "Cancel", exact: true });
+  await expect(cancel).toHaveCSS("max-width", "100%");
+  await expect(cancel).toBeFocused();
   await preview.keyboard.press(
     browserName === "webkit" && process.platform === "darwin"
       ? "Alt+Tab"

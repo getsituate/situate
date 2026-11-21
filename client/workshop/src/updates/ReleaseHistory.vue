@@ -83,9 +83,10 @@ async function back() {
 <template>
   <div class="release-history">
     <template v-if="!release">
-      <label class="history-search">
+      <label class="history-search" for="release-history-search">
         <span>{{ copy.searchHistory }}</span>
         <SituateInput
+          id="release-history-search"
           ref="search"
           v-model="query"
           type="search"

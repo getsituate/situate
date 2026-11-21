@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import SituateDisclosure from "../ui/SituateDisclosure.vue";
 import { SituateSelect, SituateCheckbox, SituateButton } from "../ui";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import { c, dc } from "./content";
 import { clone, finishDocumentAction, type DocumentsState } from "./model";
+const fieldId = useId();
 const props = defineProps<{
   state: DocumentsState;
   collectionVisible: boolean;
@@ -107,8 +108,12 @@ function value(event: Event) {
         <option value="wait">{{ dc.wait }}</option>
       </SituateSelect>
     </template>
-    <label v-if="sourceMode" class="document-control-check"
+    <label
+      v-if="sourceMode"
+      :for="`${fieldId}-add-document`"
+      class="document-control-check"
       ><SituateCheckbox
+        :id="`${fieldId}-add-document`"
         type="checkbox"
         :checked="state.addOnRefresh"
         @change="

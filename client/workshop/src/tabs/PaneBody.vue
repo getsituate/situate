@@ -99,9 +99,11 @@ function send() {
       v-for="(task, index) in tasks"
       :key="task"
       class="task-row"
+      :for="`pane-${pane.id}-task-${index}`"
       :class="{ checked: state.completed.includes(index) }"
     >
       <SituateCheckbox
+        :id="`pane-${pane.id}-task-${index}`"
         appearance="plain"
         type="checkbox"
         :checked="state.completed.includes(index)"

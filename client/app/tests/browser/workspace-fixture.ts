@@ -2058,10 +2058,12 @@ export async function workspaceFixture(
                 throw "native.ai.login.cancelled";
               if (options.aiLoginOutcome === "denied")
                 throw "native.ai.login.denied";
-              if (options.aiLoginOutcome === "pending")
-                return new Promise((_resolve, reject) => {
-                  login.cancel = () => reject("native.ai.login.cancelled");
+              if (options.aiLoginOutcome === "pending") {
+                await new Promise<void>((resolve) => {
+                  login.cancel = resolve;
                 });
+                throw "native.ai.login.cancelled";
+              }
               const config: Config = {
                 provider: "openai",
                 endpoint: null,
@@ -2118,9 +2120,11 @@ export async function workspaceFixture(
                 });
                 return status(login.scope, undefined, saved);
               };
-              if (options.aiDeviceOutcome === "pending")
-                return new Promise((resolve, reject) => {
-                  login.cancel = () => reject("native.ai.login.cancelled");
+              if (options.aiDeviceOutcome === "pending") {
+                const result = await new Promise<
+                  ReturnType<typeof finish> | undefined
+                >((resolve) => {
+                  login.cancel = () => resolve(undefined);
                   Object.defineProperty(window, "__finishDeviceLogin", {
                     configurable: true,
                     value: () => {
@@ -2128,6 +2132,9 @@ export async function workspaceFixture(
                     },
                   });
                 });
+                if (result === undefined) throw "native.ai.login.cancelled";
+                return result;
+              }
               return finish();
             }
             if (

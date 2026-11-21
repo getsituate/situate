@@ -29,6 +29,10 @@ function git(root, args) {
 }
 
 export function migrationRevision(root, revision = "HEAD") {
+  assert(
+    typeof revision === "string" && !revision.startsWith("-"),
+    "Invalid migration candidate revision",
+  );
   const resolved = git(root, [
     "rev-parse",
     "--verify",
@@ -40,7 +44,10 @@ export function migrationRevision(root, revision = "HEAD") {
 }
 
 export function migrationInventory(root, revision) {
-  assert(!revision.startsWith("-"), "Invalid migration inventory revision");
+  assert(
+    typeof revision === "string" && fullRevision.test(revision),
+    "Invalid migration inventory revision",
+  );
   const tree = git(root, ["ls-tree", "-r", "-z", revision, "--", directory]);
   const files = new Map(
     tree
@@ -50,7 +57,7 @@ export function migrationInventory(root, revision) {
         const [metadata, file] = entry.split("\t");
         const [mode, type, oid] = metadata.split(" ");
         assert(
-          mode === "100644" && type === "blob",
+          mode === "100644" && type === "blob" && fullRevision.test(oid),
           `Unsupported migration source: ${file}`,
         );
         return [file, oid];
@@ -71,7 +78,11 @@ export function migrationInventory(root, revision) {
     assert(implementations.length === 0, "Missing migration registry");
     return { files, implementations, entries: [], modules: [] };
   }
-  const read = (file) => git(root, ["cat-file", "blob", `${revision}:${file}`]);
+  const read = (file) => {
+    const oid = files.get(file);
+    assert(oid, `Missing migration source: ${file}`);
+    return git(root, ["cat-file", "blob", oid]);
+  };
   const source = read(registryPath);
   const declarations = [
     ...source.matchAll(
@@ -179,7 +190,7 @@ export function qualifyMigrationHistory(
     publishedRevision = environment.SITUATE_MIGRATIONS_PUBLISHED_REVISION,
   } = {},
 ) {
-  const current = migrationInventory(root, "HEAD");
+  const current = migrationInventory(root, migrationRevision(root));
   if (publishedRevision === undefined && current.entries.length === 0)
     return { status: "not-applicable", migrations: 0 };
   return verifyMigrationHistory(root, {
