@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -378,7 +378,7 @@ export async function main(
   });
   const read = (name) => {
     assert(values[name], `Select --${name} FILE`);
-    return JSON.parse(readFileSync(values[name], "utf8"));
+    return JSON.parse(checkpointFile(values[name]));
   };
   const original = (option, name) => {
     if (values[option]) return read(option);

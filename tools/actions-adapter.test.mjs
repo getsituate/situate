@@ -470,6 +470,28 @@ test("aggregate distinguishes deliberate unselection from failure, cancellation,
   );
 });
 
+test("the Actions adapter does not accept a plan path", async () => {
+  const env = {
+    PIPELINE_PLAN: JSON.stringify(plan),
+    PIPELINE_PLAN_DIGEST: digest(plan),
+  };
+  const never = () => assert.fail("The adapter must not execute a lane");
+  await assert.rejects(
+    main(["lane", "--lane", "policy", "--plan", "fixture.json"], env, never),
+    { code: "ERR_PARSE_ARGS_UNKNOWN_OPTION" },
+  );
+});
+
+test("PR base resolution rejects non-commit identities before executing Git", () => {
+  const never = () => assert.fail("Git must not run for an invalid identity");
+  for (const inputs of [
+    ["HEAD", base, source],
+    [source, "main", base],
+    [source, base, "HEAD"],
+  ])
+    assert.throws(() => resolvePullRequestBase(...inputs, never), /Exact PR/);
+});
+
 test("adapter subprocess transports plan-bound receipts and reports planner failures without Actions APIs", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-adapter-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

@@ -39,7 +39,7 @@ test("uses only the SonarQube key from private dotenv as a local fallback", (t) 
   );
 });
 
-test("registers SonarQube only when the environment provides a token in CI", (t) => {
+test("registers SonarQube without a read-only restriction when a token is available in CI", (t) => {
   const originalCI = process.env.CI;
   process.env.CI = "true";
   t.after(() => {
@@ -77,7 +77,6 @@ test("registers SonarQube only when the environment provides a token in CI", (t)
         url: "https://api.sonarcloud.io/mcp",
         headers: {
           Authorization: "Bearer ${SONARQUBE_MCP_TOKEN}",
-          SONARQUBE_READ_ONLY: "true",
           SONARQUBE_TOOLSETS: "projects,issues,measures,quality-gates",
         },
       },

@@ -106,7 +106,8 @@ export function createHostAllocatorLock(
       .map((name) => [name, environment[name]]),
   );
   return createAllocatorLock({
-    start: () => spawn("ssh", args, { env, stdio: ["pipe", "pipe", "pipe"] }),
+    start: () =>
+      spawn("/usr/bin/ssh", args, { env, stdio: ["pipe", "pipe", "pipe"] }),
   });
 }
 

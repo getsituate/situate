@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  readBaseline,
   readConfiguration,
   inspectCandidateReservation,
   publicationEnvironment,
@@ -23,6 +24,13 @@ import {
 import { digest, sealPlan, operationDirectory } from "./pipeline-state.mjs";
 import { checkpointFixture } from "./release-checkpoint-fixtures.mjs";
 import { notesForCatalog } from "./github-release.mjs";
+
+test("baseline lookup rejects symbolic source names before reading release state", async () => {
+  await assert.rejects(
+    readBaseline("unused", { source: "HEAD" }),
+    /exact source commit/,
+  );
+});
 
 test("publication creates a private download root and rejects linked storage", async (t) => {
   const f = checkpointFixture(t);

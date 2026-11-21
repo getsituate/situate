@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { parseArgs, stripVTControlCharacters } from "node:util";
 import { nativeDesktopIssue } from "./native-desktop-session.mjs";
 
@@ -231,18 +231,25 @@ export function childEnvironment(
     : env;
 }
 
+export function windowsTaskkillPath(systemRoot) {
+  if (typeof systemRoot !== "string" || !/^[A-Za-z]:[\\/]/u.test(systemRoot))
+    throw new AgentRunError("blocked", "process-cleanup-unavailable");
+  return win32.join(systemRoot, "System32", "taskkill.exe");
+}
+
 // The supervisor pins the process-group identity after the command exits. Killing
 // the group while this owned child is alive cannot target a recycled leader PID.
 const supervisor = `
 const { spawn, spawnSync } = require('node:child_process');
+const [, diagnostics, taskkill, command, ...args] = process.argv;
 setInterval(() => {}, 1000);
 process.on('SIGTERM', () => {});
 process.on('disconnect', () => {
-  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(process.pid), '/T', '/F'], { stdio: 'ignore', timeout: 2000 });
+  if (process.platform === 'win32') spawnSync(taskkill, ['/PID', String(process.pid), '/T', '/F'], { stdio: 'ignore', timeout: 2000 });
   else process.kill(-process.pid, 'SIGKILL');
 });
 process.send({ type: 'ready' });
-const child = spawn(process.argv[2], process.argv.slice(3), { stdio: ['ignore', 'inherit', process.argv[1] === '1' ? 'inherit' : 'ignore'] });
+const child = spawn(command, args, { stdio: ['ignore', 'inherit', diagnostics === '1' ? 'inherit' : 'ignore'] });
 child.once('error', () => process.send({ type: 'spawn-error' }));
 child.once('exit', (code) => process.send({ type: 'exit', code }));
 `;
@@ -263,9 +270,22 @@ export function runChild(
     return Promise.reject(new AgentRunError("cancel", "interrupted"));
   return new Promise((resolve, reject) => {
     const started = performance.now();
+    // Resolve from the supervisor's host environment, not the command's environment.
+    const taskkill =
+      process.platform === "win32"
+        ? windowsTaskkillPath(process.env.SystemRoot)
+        : "";
     const child = spawn(
       process.execPath,
-      ["--eval", supervisor, buildDiagnostics ? "1" : "0", command, ...args],
+      [
+        "--eval",
+        supervisor,
+        "--",
+        buildDiagnostics ? "1" : "0",
+        taskkill,
+        command,
+        ...args,
+      ],
       {
         cwd,
         env,
@@ -356,7 +376,7 @@ export function runChild(
       try {
         if (process.platform === "win32") {
           const result = spawnSync(
-            "taskkill",
+            taskkill,
             ["/PID", String(child.pid), "/T", "/F"],
             { stdio: "ignore", timeout: 2000 },
           );

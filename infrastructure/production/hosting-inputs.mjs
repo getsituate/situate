@@ -21,7 +21,7 @@ export function hostingDigest(revision, git = execFileSync) {
     throw new Error("Expected a full hosting source commit.");
   try {
     const tree = git(
-      "git",
+      "/usr/bin/git",
       [
         "ls-tree",
         "-r",

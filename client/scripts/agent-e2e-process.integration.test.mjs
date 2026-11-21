@@ -7,7 +7,18 @@ import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { runChild } from "./agent-e2e-runtime.mjs";
+import { runChild, windowsTaskkillPath } from "./agent-e2e-runtime.mjs";
+
+test("Windows cleanup resolves the system executable from an absolute system root", () => {
+  assert.equal(
+    windowsTaskkillPath("D:\\Windows"),
+    "D:\\Windows\\System32\\taskkill.exe",
+  );
+  for (const root of [undefined, "", "Windows", "D:Windows"])
+    assert.throws(() => windowsTaskkillPath(root), {
+      code: "process-cleanup-unavailable",
+    });
+});
 
 test("CLI help exits successfully with structured usage and no credentials", async () => {
   const output = await runChild(

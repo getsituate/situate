@@ -318,7 +318,7 @@ test("fixture creation never adopts existing directories and snapshots reject li
   assert.throws(() => createReleaseFixture(workspace), /EEXIST/);
   const other = join(root, "other");
   mkdirSync(other);
-  assert.throws(() => fixtureSnapshot(other), /ENOENT/);
+  assert.throws(() => fixtureSnapshot(other), /Cannot open release file/);
   const alias = join(root, "alias");
   symlinkSync(workspace, alias);
   assert.throws(() => fixtureSnapshot(alias), /canonical/);

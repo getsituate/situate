@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { publishCoverage, marker } from "./coverage-comment.mjs";
+import {
+  createCoverageApi,
+  publishCoverage,
+  marker,
+} from "./coverage-comment.mjs";
 
 const repository = "owner/project";
 const head = "a".repeat(40);
@@ -125,13 +129,108 @@ function fixture(options = {}) {
     execute: () =>
       publishCoverage({
         event: {
-          workflow_run: { id: 123, run_attempt: options.eventAttempt ?? 1 },
+          workflow_run: {
+            id: options.eventRunId ?? 123,
+            run_attempt: options.eventAttempt ?? 1,
+          },
         },
         repository,
         api,
       }),
   };
 }
+
+test("rejects invalid run and pull request identities before using them in API paths", async () => {
+  const invalidEvent = fixture({ eventRunId: "123" });
+  await invalidEvent.execute();
+  assert.deepEqual(invalidEvent.reads, []);
+
+  const wrongRun = fixture({ run: { id: 124 } });
+  await wrongRun.execute();
+  assert.equal(wrongRun.reads.length, 2);
+  assert.deepEqual(wrongRun.writes, []);
+
+  const invalidPull = fixture({ pull: { number: "42" } });
+  await invalidPull.execute();
+  assert.equal(invalidPull.reads.at(-1), `commits/${head}/pulls?per_page=100`);
+  assert.deepEqual(invalidPull.writes, []);
+});
+
+test("coverage requests allow one artifact redirect without forwarding authorization", async () => {
+  const storage =
+    "https://productionresults123.blob.core.windows.net/fixture?view=zip";
+  const calls = [];
+  const api = createCoverageApi({
+    token: "fixture",
+    fetchImpl: async (url, options) => {
+      calls.push({ url: url.href, options });
+      if (url.href === storage) {
+        assert.equal(options.credentials, "omit");
+        assert.equal(options.referrerPolicy, "no-referrer");
+        return new Response("fixture archive");
+      }
+      if (url.pathname.endsWith("/zip"))
+        return new Response(null, {
+          status: 302,
+          headers: { location: storage },
+        });
+      return Response.json({ id: 123 });
+    },
+  });
+  assert.deepEqual(await (await api("actions/runs/123")).json(), { id: 123 });
+  assert.equal(
+    await (await api("actions/artifacts/10/zip")).text(),
+    "fixture archive",
+  );
+  assert.deepEqual(
+    calls.map(({ url, options }) => [
+      url,
+      options.redirect,
+      new Headers(options.headers).get("authorization"),
+    ]),
+    [
+      [
+        "https://api.github.com/repos/getsituate/situate/actions/runs/123",
+        "error",
+        "Bearer fixture",
+      ],
+      [
+        "https://api.github.com/repos/getsituate/situate/actions/artifacts/10/zip",
+        "manual",
+        "Bearer fixture",
+      ],
+      [storage, "error", null],
+    ],
+  );
+});
+
+test("coverage never follows ordinary redirects, unapproved storage URLs or a second hop", async () => {
+  const approved = "https://productionresults123.blob.core.windows.net/fixture";
+  for (const [path, location, expectedCalls] of [
+    ["issues/42/comments", approved, 1],
+    ["actions/artifacts/10/zip", "https://storage.example/fixture", 1],
+    [
+      "actions/artifacts/10/zip",
+      "http://productionresults123.blob.core.windows.net/fixture",
+      1,
+    ],
+    ["actions/artifacts/10/zip", approved, 2],
+  ]) {
+    let calls = 0;
+    const api = createCoverageApi({
+      token: "fixture",
+      fetchImpl: async () => {
+        calls++;
+        return new Response(null, { status: 302, headers: { location } });
+      },
+    });
+    await assert.rejects(
+      api(path),
+      /GitHub (?:API returned 302|coverage request failed)/,
+    );
+    assert.equal(calls, expectedCalls);
+  }
+});
 
 test("fork posting flow validates artifacts and main ancestry before creating a comparison", async () => {
   const f = fixture();

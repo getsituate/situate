@@ -251,19 +251,32 @@ export function collectFragments(root, options) {
   });
 }
 
-export function runFragmentCli(
+async function readAuthorInput() {
+  assert(!process.stdin.isTTY, "Redirect or pipe localized JSON to --stdin");
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of process.stdin) {
+    length += chunk.length;
+    assert(length <= 4 * 1024 * 1024, "Localized input must be at most 4 MiB");
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks, length).toString("utf8"));
+}
+
+export async function runFragmentCli(
   args = process.argv.slice(2),
   root = process.cwd(),
 ) {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: Object.fromEntries(
-      ["id", "input", "reason", "base", "head"].map((name) => [
-        name,
-        { type: "string" },
-      ]),
-    ),
+    options: {
+      id: { type: "string" },
+      stdin: { type: "boolean" },
+      reason: { type: "string" },
+      base: { type: "string" },
+      head: { type: "string" },
+    },
   });
   const [command] = positionals;
   assert(
@@ -288,14 +301,14 @@ export function runFragmentCli(
   const id = values.id ?? `change-${randomUUID()}`;
   assert(idPattern.test(id), "Invalid fragment ID");
   assert(
-    Boolean(values.input) !== Boolean(values.reason),
-    "Provide either --input localized content or --reason",
+    Boolean(values.stdin) !== Boolean(values.reason),
+    "Provide either --stdin localized content or --reason",
   );
   const fragment = {
     schemaVersion: 2,
     id,
-    locales: values.input
-      ? JSON.parse(fs.readFileSync(values.input, "utf8"))
+    locales: values.stdin
+      ? await readAuthorInput()
       : Object.fromEntries(
           locales.map((locale) => [
             locale,
@@ -305,12 +318,11 @@ export function runFragmentCli(
     ...(values.reason ? { emptyReason: values.reason } : {}),
   };
   validateFragment(fragment, { locales });
-  fs.mkdirSync(path.join(root, "changes"), { recursive: true });
-  fs.writeFileSync(
-    safePath(root, fragmentPath(id)),
-    `${JSON.stringify(fragment, null, 2)}\n`,
-    { flag: "wx" },
-  );
+  const output = safePath(root, fragmentPath(id));
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, `${JSON.stringify(fragment, null, 2)}\n`, {
+    flag: "wx",
+  });
   return { id };
 }
 
@@ -319,7 +331,7 @@ if (
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
   try {
-    console.log(JSON.stringify(runFragmentCli(), null, 2));
+    console.log(JSON.stringify(await runFragmentCli(), null, 2));
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

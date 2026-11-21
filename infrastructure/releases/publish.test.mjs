@@ -5,6 +5,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   chmodSync,
+  closeSync,
+  openSync,
   statSync,
   realpathSync,
   renameSync,
@@ -32,6 +34,7 @@ import {
   verifyDownloadReceipt,
   verifyPublicationInputs,
   verifyPublicAvailability,
+  withPublicationArchive,
   qualifyPublicationCompatibility,
 } from "./publish.mjs";
 import { readPublicationHistory } from "./transport.mjs";
@@ -275,6 +278,29 @@ test("publisher accepts absent or legacy recovery evidence without allowing a du
   }
 });
 
+test("local journal inspection rejects an aliased journal before transport", (t) => {
+  const directory = temporary(t);
+  const external = join(temporary(t), "other-journal.json");
+  const bytes = '{"host":"release@fixture.invalid"}';
+  writeFileSync(external, bytes);
+  symlinkSync(external, join(directory, "publication-journal.json"));
+  const result = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("./publish.mjs", import.meta.url)),
+      "inspect",
+      "--release",
+      directory,
+      "--destination",
+      "release@fixture.invalid",
+    ],
+    { encoding: "utf8", env: { PATH: process.env.PATH, CI: "true" } },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Cannot read publication journal/);
+  assert.equal(readFileSync(external, "utf8"), bytes);
+});
+
 test("publication destination reads only the effective host from private dotenv data", (t) => {
   const directory = temporary(t);
   const clientRoot = join(directory, "client");
@@ -510,6 +536,7 @@ test("SSH has verified host keys, bounded connection attempts and no shell-injec
     WEBSITE_SSH_KNOWN_HOSTS: "/private/known_hosts",
   });
   assert.ok(args.includes("UserKnownHostsFile=/private/known_hosts"));
+  assert.deepEqual(args.slice(-2), ["--", "release@release-host"]);
   for (const invalid of [
     "relative/known_hosts",
     "/private/known_hosts\ncommand",
@@ -1338,7 +1365,7 @@ test("immutable input and download receipts bind public files without operationa
     receipt.identity,
   );
   const releaseReceipt = join(directory, "github-release-receipt.json");
-  const receiptBytes = JSON.stringify(receipt);
+  const receiptBytes = `${JSON.stringify(receipt, null, 2)}\n`;
   writeFileSync(releaseReceipt, receiptBytes);
   for (const action of ["publish", "reconcile"])
     assert.deepEqual(
@@ -1392,6 +1419,188 @@ test("immutable input and download receipts bind public files without operationa
       }),
     /bytes or size/,
   );
+});
+
+test("publication archives keep exact bytes for reconciliation and require an unused destination for creation", (t) => {
+  const parent = temporary(t);
+  const stage = join(parent, "stage");
+  mkdirSync(stage);
+  writeFileSync(join(stage, "manifest.json"), "{}\n");
+  mkdirSync(join(stage, "metadata"));
+  writeFileSync(join(stage, "metadata", "update.json"), "{}\n");
+  const releaseMembers = ["manifest.json", "metadata/update.json"];
+  for (const names of [
+    [],
+    ["manifest.json", "manifest.json"],
+    ["nested/report.json"],
+  ]) {
+    assert.throws(
+      () => withPublicationArchive(stage, names, undefined, assert.fail),
+      /Invalid publication archive inventory/,
+    );
+    assert.equal(existsSync(`${stage}.tar`), false);
+  }
+  const inspect = (digest) => {
+    const bytes = readFileSync(`${stage}.tar`);
+    assert.equal(sha256(bytes), digest);
+    assert.equal(
+      execFileSync("/usr/bin/tar", ["-tf", "-"], {
+        input: bytes,
+        encoding: "utf8",
+      }),
+      "manifest.json\nmetadata/update.json\n",
+    );
+    return digest;
+  };
+  const digest = withPublicationArchive(
+    stage,
+    releaseMembers,
+    undefined,
+    inspect,
+  );
+  assert.equal(statSync(`${stage}.tar`).mode & 0o777, 0o600);
+  writeFileSync(join(stage, "manifest.json"), '{"changed":true}\n');
+  assert.equal(
+    withPublicationArchive(stage, releaseMembers, digest, inspect),
+    digest,
+  );
+  assert.throws(
+    () => withPublicationArchive(stage, [], undefined, assert.fail),
+    /already exists/,
+  );
+  assert.throws(
+    () => withPublicationArchive(stage, [], "0".repeat(64), assert.fail),
+    /differing transport archive/,
+  );
+});
+
+test("archive creation and handoff stay in the selected parent after it moves", (t) => {
+  const root = temporary(t);
+  const parent = join(root, "external stage parent");
+  const moved = join(root, "moved parent");
+  const stage = "staged release";
+  mkdirSync(join(parent, stage), { recursive: true });
+  writeFileSync(join(parent, stage, "manifest.json"), "{}\n");
+  const directory = openSync(parent, "r");
+  try {
+    renameSync(parent, moved);
+    mkdirSync(parent);
+    const storage = fileURLToPath(
+      new URL("./publication-storage.py", import.meta.url),
+    );
+    const options = { stdio: ["pipe", "pipe", "pipe", directory], env: {} };
+    const prepared = execFileSync(
+      "/usr/bin/python3",
+      ["-IB", storage, "prepare-archive"],
+      {
+        ...options,
+        input: JSON.stringify({ stage, names: ["manifest.json"] }),
+      },
+    );
+    const { digest } = JSON.parse(prepared);
+    assert.equal(existsSync(join(parent, `${stage}.tar`)), false);
+    const retained = readFileSync(join(moved, `${stage}.tar`));
+    assert.equal(sha256(retained), digest);
+    const localTransport = [
+      "import os, runpy, sys",
+      "def capture(executable, args):",
+      " assert executable == '/usr/bin/ssh'",
+      " with os.fdopen(0, 'rb') as archive: sys.stdout.buffer.write(archive.read())",
+      "os.execv = capture",
+      "sys.argv = sys.argv[1:]",
+      "runpy.run_path(sys.argv[0], run_name='__main__')",
+    ].join("\n");
+    const transferred = execFileSync(
+      "/usr/bin/python3",
+      ["-IBc", localTransport, storage, "send-archive"],
+      {
+        ...options,
+        input: JSON.stringify({ stage, digest }),
+      },
+    );
+    assert.deepEqual(transferred, retained);
+    assert.throws(
+      () =>
+        execFileSync(
+          "/usr/bin/python3",
+          ["-IBc", localTransport, storage, "send-archive"],
+          {
+            ...options,
+            input: JSON.stringify({ stage, digest: "0".repeat(64) }),
+          },
+        ),
+      /Transport archive changed before transfer/,
+    );
+  } finally {
+    closeSync(directory);
+  }
+});
+
+test("publication archives reject files outside the approved inventory", (t) => {
+  const stage = join(temporary(t), "stage");
+  mkdirSync(stage);
+  writeFileSync(join(stage, "manifest.json"), "{}\n");
+  writeFileSync(join(stage, "unapproved.json"), "{}\n");
+  assert.throws(
+    () =>
+      withPublicationArchive(stage, ["manifest.json"], undefined, assert.fail),
+    /Cannot prepare publication archive/,
+  );
+});
+
+test("publication archives reject a linked metadata directory", (t) => {
+  const parent = temporary(t);
+  const stage = join(parent, "stage");
+  const metadata = join(parent, "unrelated");
+  mkdirSync(stage);
+  mkdirSync(metadata);
+  writeFileSync(join(metadata, "update.json"), "unchanged");
+  symlinkSync(metadata, join(stage, "metadata"));
+  assert.throws(
+    () =>
+      withPublicationArchive(
+        stage,
+        ["metadata/update.json"],
+        undefined,
+        assert.fail,
+      ),
+    /Cannot prepare publication archive/,
+  );
+  assert.equal(
+    readFileSync(join(metadata, "update.json"), "utf8"),
+    "unchanged",
+  );
+});
+
+test("publication receipt must be a bounded single-link regular file", (t) => {
+  const directory = temporary(t);
+  const receipt = join(directory, "receipt.json");
+  const oversized = join(directory, "oversized.json");
+  const symlink = join(directory, "linked.json");
+  const hardlink = join(directory, "hardlink.json");
+  writeFileSync(receipt, "{}");
+  writeFileSync(oversized, Buffer.alloc(1024 * 1024 + 1, " "));
+  symlinkSync(receipt, symlink);
+  linkSync(receipt, hardlink);
+  for (const [releaseReceipt, error] of [
+    [directory, /single-link regular release file/],
+    [symlink, /Cannot open release file/],
+    [hardlink, /single-link regular release file/],
+    [oversized, /exceeds 1 MiB/],
+  ]) {
+    assert.throws(
+      () =>
+        verifyPublicationInputs(
+          directory,
+          { releaseInputs: {} },
+          {
+            action: "publish",
+            releaseReceipt,
+          },
+        ),
+      error,
+    );
+  }
 });
 
 test("staged generated releases reject changed receipts and private extra files", (t) => {

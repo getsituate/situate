@@ -1,16 +1,26 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { constants } from "node:fs";
 import { createRequire } from "node:module";
 import {
-  access,
+  lstat,
   copyFile,
   mkdir,
-  mkdtemp,
+  open,
   readFile,
-  rename,
-  rm,
+  realpath,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { marked } from "marked";
@@ -18,6 +28,10 @@ import { marked } from "marked";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const sources = join(root, "docs/marketing/onboarding");
 const require = createRequire(import.meta.url);
+const installProgram = fileURLToPath(
+  new URL("./install-export.py", import.meta.url),
+);
+const directoryIdentity = ({ dev, ino }) => `${dev}:${ino}`;
 
 export const documents = [
   "01-welcome-to-situate",
@@ -256,17 +270,112 @@ export async function prepare(date) {
   return result;
 }
 
+async function proofPath(path) {
+  const entry = await lstat(path).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+  });
+  if (entry) {
+    const anchor = await realpath(path);
+    const identity = await lstat(anchor, { bigint: true });
+    assert(identity.isDirectory(), "Proof destination must be a directory.");
+    return { path: anchor, anchor, identity };
+  }
+  const parent = await proofPath(dirname(path));
+  return { ...parent, path: join(parent.path, basename(path)) };
+}
+
+async function openExportDirectory(path, expected) {
+  const directory = await open(
+    path,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
+  try {
+    assert.equal(
+      directoryIdentity(await directory.stat({ bigint: true })),
+      directoryIdentity(expected),
+      "Export directory changed while rendering.",
+    );
+    return directory;
+  } catch (error) {
+    await directory.close();
+    throw error;
+  }
+}
+
 export async function exportPack({ date, output, proofs }) {
-  const prepared = await prepare(date);
+  validateDate(date);
   output = resolve(output);
+  const parent = await realpath(dirname(output));
+  const parentIdentity = await lstat(parent, { bigint: true });
+  assert(parentIdentity.isDirectory(), "Export parent must be a directory.");
+  output = join(parent, basename(output));
   await assert.rejects(
-    access(output),
+    lstat(output),
     { code: "ENOENT" },
     "Output already exists; choose a new empty destination.",
   );
-  const staging = await mkdtemp(join(dirname(output), ".situate-onboarding-"));
+  const proofTarget = proofs ? await proofPath(resolve(proofs)) : undefined;
+  if (proofTarget) {
+    proofs = proofTarget.path;
+    const within = relative(output, proofs);
+    assert(
+      isAbsolute(within) || within === ".." || within.startsWith(`..${sep}`),
+      "Choose a proof directory outside the pack destination.",
+    );
+  }
+  const destination = await openExportDirectory(parent, parentIdentity);
+  let review;
+  try {
+    if (proofTarget)
+      review = await openExportDirectory(
+        proofTarget.anchor,
+        proofTarget.identity,
+      );
+    const request = {
+      parent,
+      output: basename(output),
+      proofAnchor: proofTarget?.anchor,
+      proofParts: proofTarget
+        ? relative(proofTarget.anchor, proofs).split(sep).filter(Boolean)
+        : null,
+      date,
+    };
+    const child = spawn(
+      "/usr/bin/python3",
+      ["-IB", installProgram, process.execPath, JSON.stringify(request)],
+      {
+        env: {
+          ...process.env,
+          INIT_CWD: process.env.INIT_CWD || process.cwd(),
+        },
+        stdio: [
+          "ignore",
+          "pipe",
+          "inherit",
+          destination.fd,
+          review?.fd ?? "ignore",
+          1,
+        ],
+      },
+    );
+    let result = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk) => (result += chunk));
+    const [status] = await once(child, "close");
+    if (result) {
+      const { code, message } = JSON.parse(result);
+      throw Object.assign(new Error(message), { code });
+    }
+    assert.equal(status, 0, "Export helper did not complete.");
+  } finally {
+    await Promise.all([review?.close(), destination.close()]);
+  }
+  console.log(`Created ${output}`);
+}
+
+export async function renderPack(date, proofs) {
+  const prepared = await prepare(date);
+  const stagedProofs = ".proofs";
   let browser;
-  let reserved = false;
   try {
     const { chromium } = require("../../client/node_modules/playwright");
     const { launchBrowser } = require("../brand/browser-launch.cjs");
@@ -282,11 +391,11 @@ export async function exportPack({ date, output, proofs }) {
     });
     const page = await context.newPage();
     await page.emulateMedia({ media: "print", reducedMotion: "reduce" });
-    if (proofs) await mkdir(proofs, { recursive: true });
-    const editableDirectory = join(staging, "editable-sources");
+    if (proofs) await mkdir(stagedProofs);
+    const editableDirectory = "editable-sources";
     await mkdir(editableDirectory);
     for (const document of prepared) {
-      const directory = join(staging, document.id);
+      const directory = document.id;
       await mkdir(directory);
       const filename = `${document.id}-${date}`;
       await writeFile(
@@ -344,12 +453,12 @@ export async function exportPack({ date, output, proofs }) {
             .locator(".sheet")
             .nth(index)
             .screenshot({
-              path: join(proofs, `${document.id}-${index + 1}.png`),
+              path: join(stagedProofs, `${document.id}-${index + 1}.png`),
             });
       }
       console.log(`${document.id}: ${document.pages} pages`);
     }
-    const assetRoot = join(staging, documents.at(-1));
+    const assetRoot = documents.at(-1);
     for (const [folder, entries, extension] of [
       ["brand-artwork", artwork, "svg"],
       ["illustrative-interface-previews", previews, "webp"],
@@ -401,19 +510,8 @@ export async function exportPack({ date, output, proofs }) {
       [],
       "Export attempted network access.",
     );
-    await browser.close();
-    browser = undefined;
-    // Reserve the destination exclusively. Never replace a pre-existing pack or user folder.
-    await mkdir(output);
-    reserved = true;
-    await rename(staging, output);
-    console.log(`Created ${output}`);
-  } catch (error) {
-    if (reserved) await rm(output, { recursive: true, force: true });
-    throw error;
   } finally {
     await browser?.close();
-    await rm(staging, { recursive: true, force: true });
   }
 }
 

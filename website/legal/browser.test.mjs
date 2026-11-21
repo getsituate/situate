@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
-import { createBuildServer, createPreviewServer } from "../site.mjs";
+import {
+  createBuildServer,
+  createPreviewServer,
+  legalContent,
+} from "../site.mjs";
 import { renderLegalPage } from "./render.mjs";
 
 const require = createRequire(import.meta.url);
@@ -13,14 +17,8 @@ const { chromium } = require(
     process.env.PLAYWRIGHT_MODULE ||
     "../../client/node_modules/playwright",
 );
-const content = resolve(process.argv[2] || "website/legal");
-const pages = JSON.parse(await readFile(join(content, "pages.json"), "utf8"));
-const messages = JSON.parse(
-  await readFile(join(content, "messages.en.json"), "utf8"),
-);
-const shared = JSON.parse(
-  await readFile(new URL("../messages.en.json", import.meta.url), "utf8"),
-);
+const content = process.argv[2] ? resolve(process.argv[2]) : undefined;
+const { pages, messages } = await legalContent(content);
 const sample = {
   id: "test",
   path: "/test.html",
@@ -35,13 +33,13 @@ const sample = {
 };
 assert.ok(
   renderLegalPage(sample, {
-    ...shared,
+    ...messages,
     title: "<Title>",
     body: '<script>"&',
   }).includes("&lt;script&gt;&quot;&amp;"),
 );
 assert.throws(
-  () => renderLegalPage(sample, { ...shared, title: "Title" }),
+  () => renderLegalPage(sample, { ...messages, title: "Title" }),
   /Missing translation/,
 );
 const unsafe = structuredClone(sample);
@@ -49,7 +47,7 @@ unsafe.sections[0].blocks = [
   { type: "link", key: "title", href: "javascript:alert(1)" },
 ];
 assert.throws(
-  () => renderLegalPage(unsafe, { ...shared, title: "Title" }),
+  () => renderLegalPage(unsafe, { ...messages, title: "Title" }),
   /Unsupported link/,
 );
 const server = process.env.WEBSITE_BUILD

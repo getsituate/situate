@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
-import { hostingDigest } from "./hosting-inputs.mjs";
+import { fileURLToPath } from "node:url";
 import { probeReleaseHost } from "../releases/hosting-readiness.mjs";
 import { deploymentGate, hostingReadiness } from "./hosting-deployment.mjs";
+import { hostingDigest } from "./hosting-inputs.mjs";
 
 const revision = "a".repeat(40);
 const environment = "hosting-production-operation";
@@ -20,8 +22,22 @@ function fixture(previousState = null) {
       runId: "123",
       digest: () => "same",
       fetchImpl: async (url, options) => {
-        const path = new URL(url).pathname;
+        assert.equal(url.origin, "https://api.github.com");
+        assert.equal(options.redirect, "error");
+        assert.equal(options.headers.Authorization, "Bearer fixture");
+        const path = url.pathname;
+        assert.match(
+          path,
+          /^\/repos\/getsituate\/situate\/deployments(?:\/21\/statuses)?$/,
+        );
         const body = options.body && JSON.parse(options.body);
+        if (options.method === "GET") {
+          assert.equal(url.searchParams.get("per_page"), "1");
+          assert.equal(
+            url.searchParams.get("environment"),
+            path.endsWith("/statuses") ? null : environment,
+          );
+        }
         calls.push([options.method, path, body?.state]);
         if (options.method === "GET") {
           if (path.endsWith("/statuses"))
@@ -31,6 +47,11 @@ function fixture(previousState = null) {
           return Response.json(created ? [verified] : []);
         }
         if (path.endsWith("/statuses")) {
+          assert.equal(
+            body.log_url,
+            "https://github.com/getsituate/situate/actions/runs/123",
+          );
+          assert.equal(body.auto_inactive, false);
           state = body.state;
           return Response.json({ state });
         }
@@ -165,5 +186,58 @@ test("missing, inactive or unresolved deployments do not authorize publication",
   await assert.rejects(
     observe({ author: { login: "untrusted" } }).read(),
     /no trusted success/,
+  );
+});
+
+test("retries a transient GitHub read failure but never retries a write", async () => {
+  const methods = [];
+  const gate = deploymentGate({
+    token: "fixture",
+    revision,
+    runId: "123",
+    fetchImpl: async (_url, { method }) => {
+      methods.push(method);
+      return methods.length === 2
+        ? Response.json([])
+        : new Response(null, { status: 503 });
+    },
+  });
+  await assert.rejects(gate.begin(), /request failed \(503\)/);
+  assert.deepEqual(methods, ["GET", "GET", "POST"]);
+});
+
+test("rejects invalid workflow run and deployment identities before using them", async () => {
+  const fetchImpl = () => assert.fail("Unexpected API request");
+  for (const runId of [0, "0", "001", "not-a-run", "9007199254740992"]) {
+    assert.throws(
+      () => deploymentGate({ token: "fixture", revision, runId, fetchImpl }),
+      /Missing GitHub deployment identity/,
+    );
+  }
+  const gate = deploymentGate({
+    token: "fixture",
+    revision,
+    runId: "123",
+    fetchImpl: async (url) => {
+      assert.equal(url.pathname, "/repos/getsituate/situate/deployments");
+      return Response.json([{ id: "21", environment }]);
+    },
+  });
+  await assert.rejects(gate.check(), /Unexpected GitHub deployment identity/);
+});
+
+test("deployment CLI reports a fixed diagnostic when authorization is absent", () => {
+  const script = fileURLToPath(
+    new URL("immutable/continuous-deploy.mjs", import.meta.url),
+  );
+  const result = spawnSync(process.execPath, [script], {
+    env: {},
+    encoding: "utf8",
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1);
+  assert.equal(
+    result.stderr,
+    "Production deployment stopped. Inspect the GitHub deployment gate, Terraform, Hetzner and DNS before retrying or clearing the gate.\n",
   );
 });

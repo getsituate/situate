@@ -5,6 +5,10 @@ import vm from "node:vm";
 import { nativeSmokeBuildEnvironment } from "../../tools/compiler-cache.mjs";
 import { workerBudget } from "../../tools/test-budget.mjs";
 import { fileURLToPath } from "node:url";
+import { join, posix } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { rustHostTarget } from "./test-native.mjs";
 
 const source = await readFile(
   new URL("./test-native.mjs", import.meta.url),
@@ -70,8 +74,14 @@ async function controller({
       workerBudget,
       URL,
       resolve: (...parts) => parts.join("/"),
+      join: posix.join,
+      isAbsolute: posix.isAbsolute,
+      homedir: () => "/fixture/home",
+      existsSync: (path) => path === "/fixture/home/.cargo/bin/rustup",
       spawnSync(command, args, options) {
-        if (command === "rustc")
+        if (command === "/fixture/home/.cargo/bin/rustup")
+          return { status: 0, stdout: "/fixture/toolchain/bin/rustc\n" };
+        if (command === "/fixture/toolchain/bin/rustc")
           return { status: 0, stdout: "host: aarch64-apple-darwin\n" };
         builds.push({ command, args, options });
         return { status: 0 };
@@ -91,6 +101,49 @@ async function controller({
   assert.equal(listeners.size, 0);
   return { phases, builds, sourceClosed };
 }
+
+test("native host detection uses installed Rust tools without searching PATH", async (t) => {
+  const cargoHome = await mkdtemp(join(tmpdir(), "situate-rust-home-"));
+  t.after(() => rm(cargoHome, { recursive: true, force: true }));
+  const extension = process.platform === "win32" ? ".exe" : "";
+  const rustup = join(cargoHome, "bin", `rustup${extension}`);
+  const rustc = join(cargoHome, "toolchain", `rustc${extension}`);
+  await mkdir(join(cargoHome, "bin"));
+  await writeFile(rustup, "fixture");
+  const environment = { CARGO_HOME: cargoHome };
+  const calls = [];
+  assert.equal(
+    rustHostTarget(environment, (path, args, options) => {
+      calls.push([path, args]);
+      assert.equal(options.env.RUSTUP_AUTO_INSTALL, "0");
+      return {
+        status: 0,
+        stdout: path === rustup ? `${rustc}\n` : "host: aarch64-apple-darwin\n",
+      };
+    }),
+    "aarch64-apple-darwin",
+  );
+  assert.deepEqual(calls, [
+    [rustup, ["which", "rustc"]],
+    [rustc, ["-vV"]],
+  ]);
+  assert.throws(
+    () => rustHostTarget({ CARGO_HOME: "fixture" }, assert.fail),
+    /must be absolute/,
+  );
+  assert.throws(
+    () => rustHostTarget(environment, () => ({ status: 0, stdout: "rustc" })),
+    /project Rust compiler/,
+  );
+  assert.throws(
+    () =>
+      rustHostTarget(environment, (path) => ({
+        status: 0,
+        stdout: path === rustup ? rustc : "host: invalid target",
+      })),
+    /Rust host target/,
+  );
+});
 
 test("default native controller builds once for creation, reopen, entry closure and ordinary native phases", async () => {
   const { phases, builds } = await controller();

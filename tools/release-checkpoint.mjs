@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
   constants,
@@ -6,13 +7,12 @@ import {
   fsyncSync,
   fstatSync,
   lstatSync,
-  mkdirSync,
   openSync,
-  readFileSync,
   readSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { digest, validatePlan } from "./pipeline-state.mjs";
 import { verifyReleaseInputs } from "./release-inputs.mjs";
 import { validateReservation } from "./release-reservation.mjs";
@@ -77,15 +77,9 @@ export const checkpointIdentity = (plan) => ({
   planDigest: plan.authorizationDigest,
   sourceRevision: plan.source,
 });
-export function checkpointFile(file) {
-  for (let parent = resolve(dirname(file)); ; parent = dirname(parent)) {
-    const stat = lstatSync(parent);
-    assert(
-      stat.isDirectory() && !stat.isSymbolicLink(),
-      "Checkpoint path traverses linked storage",
-    );
-    if (parent === dirname(parent)) break;
-  }
+export function checkpointFile(path) {
+  const file = resolve(path);
+  checkpointFileParent(file);
   const fd = openSync(
     file,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
@@ -97,7 +91,19 @@ export function checkpointFile(file) {
       "Checkpoint payload must be an owned single-link regular file",
     );
     assert(stat.size <= 8 * 1024 * 1024, "Checkpoint metadata exceeds bound");
-    return readFileSync(fd);
+    const bytes = Buffer.alloc(stat.size + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(fd, bytes, offset, bytes.length - offset);
+      if (count === 0) break;
+      offset += count;
+    }
+    assert.equal(
+      offset,
+      stat.size,
+      "Checkpoint metadata size changed while reading",
+    );
+    return bytes.subarray(0, offset);
   } finally {
     closeSync(fd);
   }
@@ -464,19 +470,44 @@ export function validateRestoredCheckpoint(descriptor, directory, plan) {
     manifestBytes: checkpointFile(join(directory, "manifest.json")),
   };
 }
-export function createRestoreDirectory(destination) {
+function restoreDirectoryCommand(action, ...args) {
+  return execFileSync(
+    "/usr/bin/python3",
+    [
+      "-IB",
+      fileURLToPath(
+        new URL(
+          "../infrastructure/releases/checkpoint-commit.py",
+          import.meta.url,
+        ),
+      ),
+      action,
+      ...args,
+    ],
+    { encoding: "utf8", env: {}, stdio: ["ignore", "pipe", "pipe"] },
+  );
+}
+export function installRestoreDirectory(
+  directory,
+  destination,
+  parent,
+  staging,
+) {
+  restoreDirectoryCommand("commit", directory, destination, parent, staging);
+}
+export function createRestoreDirectory(directory, destination) {
   assert(
-    isAbsolute(destination),
+    isAbsolute(destination ?? directory),
     "Restore requires an explicit absolute destination",
   );
-  checkpointFileParent(destination);
-  mkdirSync(destination, { mode: 0o700 });
-  const parent = openSync(dirname(destination), "r");
-  try {
-    fsyncSync(parent);
-  } finally {
-    closeSync(parent);
-  }
+  const [parent, staging] = restoreDirectoryCommand(
+    "create",
+    directory,
+    ...(destination === undefined ? [] : [destination]),
+  )
+    .trim()
+    .split(" ");
+  return destination === undefined ? staging : { parent, staging };
 }
 function checkpointFileParent(destination) {
   for (let parent = dirname(destination); ; parent = dirname(parent)) {
@@ -488,15 +519,17 @@ function checkpointFileParent(destination) {
     if (parent === dirname(parent)) break;
   }
 }
-export function writeRestoredFile(directory, item, bytes) {
+export function writeRestoredFile(directory, item, bytes, verifyDirectory) {
   assert(
     /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(item.name),
     "Invalid checkpoint path",
   );
   assert.equal(bytes.length, item.size);
   assert.equal(digest(bytes), item.sha256, "Restored checkpoint hash differs");
+  verifyDirectory?.();
   const fd = openSync(join(directory, item.name), "wx", 0o600);
   try {
+    verifyDirectory?.();
     writeFileSync(fd, bytes);
     fsyncSync(fd);
   } finally {

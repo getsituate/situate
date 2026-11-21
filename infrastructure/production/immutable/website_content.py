@@ -6,6 +6,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import select
 import stat
@@ -147,8 +148,8 @@ def check_feeds():
 
 def current_main(expected):
     observed = subprocess.check_output(
-        ['git', 'ls-remote', '--exit-code', 'https://github.com/getsituate/situate.git', 'refs/heads/main'],
-        text=True, timeout=30, env={'PATH': os.environ['PATH'], 'GIT_TERMINAL_PROMPT': '0'},
+        ['/usr/bin/git', 'ls-remote', '--exit-code', 'https://github.com/getsituate/situate.git', 'refs/heads/main'],
+        text=True, timeout=30, env={'PATH': '/usr/bin:/bin', 'GIT_TERMINAL_PROMPT': '0'},
     ).split()[0]
     return observed == expected
 
@@ -172,11 +173,11 @@ def deliver(source, revision):
             path.write_text(value + '\n')
             path.chmod(0o600)
             paths[name] = path
-        args = ['ssh', '-F', '/dev/null', '-T', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
+        args = ['/usr/bin/ssh', '-F', '/dev/null', '-T', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
                 '-o', 'StrictHostKeyChecking=yes', '-o', 'GlobalKnownHostsFile=/dev/null',
                 '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=3',
                 '-o', f'UserKnownHostsFile={paths["KNOWN_HOSTS"]}', '-i', str(paths['SSH_KEY']), SSH_TARGET, 'publish-website']
-        environment = {key: os.environ[key] for key in ('PATH', 'HOME', 'LANG') if key in os.environ}
+        environment = {key: os.environ[key] for key in ('HOME', 'LANG') if key in os.environ}
         with subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=environment) as child:
             try:
                 send_line(child.stdin, files)
@@ -205,20 +206,23 @@ def install_key(key):
     if os.geteuid() != 0 or not re.fullmatch(r'ssh-ed25519 [A-Za-z0-9+/]{68}', key):
         raise ValueError('Expected a dedicated Ed25519 website publication key.')
     entry = f'restrict,command="/usr/local/lib/situate/website-ssh.sh" {key}\n'
-    with KEY_FILE.open('x') as output:
-        os.fchmod(output.fileno(), 0o644)
+    group = pwd.getpwnam('situate-website').pw_gid
+    with os.fdopen(os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as output:
         output.write(entry)
+        output.flush()
+        os.fchown(output.fileno(), -1, group)
+        os.fchmod(output.fileno(), 0o640)
 
 
 def receive():
     if os.geteuid() != 0:
         raise ValueError('The website receiver must run through its restricted host entry point.')
-    os.umask(0o022)
+    os.umask(0o077)
     files = line(sys.stdin.buffer, LIMIT * 2)
     with open('/run/situate-state/lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         subprocess.run(['/usr/local/lib/situate/state.sh', 'writable'], check=True)
-        subprocess.run(['systemctl', 'is-active', '--quiet', 'situate-serving.service'], check=True)
+        subprocess.run(['/usr/bin/systemctl', 'is-active', '--quiet', 'situate-serving.service'], check=True)
         serve(website.ROOT, files, lambda result: send_line(sys.stdout.buffer, result),
               lambda: line(sys.stdin.buffer, 128))
 

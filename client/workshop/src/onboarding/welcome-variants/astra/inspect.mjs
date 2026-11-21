@@ -1,9 +1,18 @@
 import { chromium, webkit, expect } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const origin = process.env.ASTRA_ORIGIN ?? "http://127.0.0.1:1595";
-const output = process.env.ASTRA_PROOFS ?? "/tmp/situate-astra";
-await mkdir(output, { recursive: true });
+const selectedOutput = process.env.ASTRA_PROOFS;
+const output =
+  selectedOutput === undefined
+    ? await mkdtemp(join(tmpdir(), "situate-astra-"))
+    : resolve(selectedOutput);
+if (selectedOutput !== undefined) {
+  if (!selectedOutput) throw new Error("ASTRA_PROOFS must name a directory.");
+  await mkdir(output, { recursive: true });
+}
 const engines =
   process.env.ASTRA_ENGINE === "chromium" ? { chromium } : { chromium, webkit };
 for (const [engine, browserType] of Object.entries(engines)) {
@@ -130,7 +139,7 @@ for (const [engine, browserType] of Object.entries(engines)) {
     .focus();
   await preview.keyboard.press("Enter");
   await expect(choice).toBeVisible();
-  await expect(preview.locator("#first-title")).toBeFocused();
+  await expect(choice.getByRole("heading", { level: 1 })).toBeFocused();
   await reset();
   await expect.poll(time).toBeLessThan(1000);
   await preview.emulateMedia({ reducedMotion: "reduce" });

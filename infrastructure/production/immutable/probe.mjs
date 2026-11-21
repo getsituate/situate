@@ -19,7 +19,7 @@ function require(condition, message) {
 function curl(args, { capture = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(
-      "curl",
+      "/usr/bin/curl",
       [
         "--disable",
         "--silent",

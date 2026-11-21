@@ -510,7 +510,7 @@ def perform(action, request, source=None):
 
 RUNNER_UID = 0
 RUNNER_LOCK = Path('/private/var/run/situate-qualification-route')
-RUNNER_HISTORY = Path('/private/var/tmp')
+RUNNER_HISTORY = Path('/private/var/tmp/situate-qualification-history')
 HOSTS = Path('/private/etc/hosts')
 
 
@@ -530,6 +530,27 @@ def replace_hosts(expected, replacement, token):
         os.close(fd)
 
 
+def runner_archive(token):
+    parent = RUNNER_HISTORY.parent
+    ancestors(parent)
+    info = parent.lstat()
+    require(info.st_uid == RUNNER_UID and (not info.st_mode & 0o022 or info.st_mode & stat.S_ISVTX),
+            'Unsafe runner history parent')
+    try:
+        RUNNER_HISTORY.mkdir(mode=0o700)
+        sync_private_directory(parent)
+    except FileExistsError:
+        pass
+    info = RUNNER_HISTORY.lstat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == RUNNER_UID and stat.S_IMODE(info.st_mode) == 0o700,
+            'Unsafe runner history directory')
+    name = 'situate-qualification-route-' + token
+    for path in (RUNNER_HISTORY / name, parent / name):
+        require(not path.exists() and not path.is_symlink(),
+                'Runner operation was already used; inspect retained evidence')
+    return RUNNER_HISTORY / name
+
+
 def runner_perform(action, request):
     require(sys.platform == 'darwin' and os.geteuid() == RUNNER_UID, 'Runner routing requires privileged trusted macOS')
     nonce = request['operationNonce']
@@ -537,9 +558,8 @@ def runner_perform(action, request):
     require(request['privateAddress'] == '127.0.0.2' and request['localPort'] == 443, 'Invalid runner loopback binding')
     require(re.fullmatch(r'[a-z0-9]+(?:[.-][a-z0-9]+)*', request['hostname']), 'Invalid runner hostname')
     token = sha(nonce.encode())
-    archive = RUNNER_HISTORY / ('situate-qualification-route-' + token)
     if action == 'runner-prepare':
-        require(not archive.exists(), 'Runner operation was already used; inspect retained evidence')
+        runner_archive(token)
         ancestors(RUNNER_LOCK.parent)
         RUNNER_LOCK.mkdir(mode=0o700)
         state = {'request': request, 'status': 'reserved', 'hostsPending': False, 'aliasPending': False}
@@ -549,6 +569,8 @@ def runner_perform(action, request):
         require(RUNNER_LOCK.stat().st_uid == RUNNER_UID and RUNNER_LOCK.stat().st_mode & 0o077 == 0, 'Runner resource ownership differs')
         state = json.loads(read(RUNNER_LOCK / 'state.json'))
         require(state['request'] == request, 'Runner operation ownership differs')
+    if action == 'runner-cleanup':
+        archive = runner_archive(token)
     try:
         if action == 'runner-prepare':
             original = read(HOSTS)
@@ -595,11 +617,14 @@ def runner_perform(action, request):
         save(RUNNER_LOCK / 'state.json', state)
         if action == 'runner-cleanup':
             os.rename(RUNNER_LOCK, archive)
-        return {'status': state['status'], 'operationNonce': nonce}
     except BaseException:
         state.update({'status': 'failed', 'failure': action, 'uncertain': True})
         save(RUNNER_LOCK / 'state.json', state)
         raise
+    if action == 'runner-cleanup':
+        sync_private_directory(RUNNER_HISTORY)
+        sync_private_directory(RUNNER_LOCK.parent)
+    return {'status': state['status'], 'operationNonce': nonce}
 
 
 def main():

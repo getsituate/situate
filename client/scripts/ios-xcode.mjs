@@ -380,7 +380,7 @@ export function prepareProjectSpec(
     }),
   );
   // XcodeGen writes target-generated schemes after explicit schemes of the same name.
-  source = source.replace(/^ {4}scheme:\n(?: {6,}.*\n)*/gm, "");
+  source = source.replace(/^ {4}scheme:\n(?: {6}.*\n)*/gm, "");
   // A Rust pre-build phase ends before native linking; release ownership only
   // after the entire scheme build, including failed builds, has finished.
   return `${source}\nschemes:\n  situate-client_iOS:\n    build:\n      targets:\n        situate-client_iOS: all\n      runPostActionsOnFailure: true\n      postActions:\n        - name: Finish iOS build\n          script: |\n            ${shellQuote(node)} ${shellQuote(join(paths.root, "scripts/ios-xcode-build.mjs"))} --finish-build ${process.pid}\n    run:\n      config: debug\n      environmentVariables:\n        RUST_BACKTRACE: full\n        RUST_LOG: info\n`;

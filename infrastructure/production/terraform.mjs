@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { childEnvironment, configuration } from "../website/config.mjs";
 import { checkAdoptionPlan } from "./inspect.mjs";
@@ -26,6 +33,74 @@ const terraformDirectory = fileURLToPath(
 );
 const usage =
   "Usage: node infrastructure/production/terraform.mjs init|validate|status|export <new.tfstate>|plan <variables.tfvars.json> <new.tfplan>|show <saved.tfplan>|adopt <saved.tfplan> --confirm-ownership-handoff\n       rollout-begin <proposal.json>\n       legacy-retirement-begin <proposal.json> --confirm-legacy-cutover\n       rollout-reconcile <phase> <attempted.tfplan> <variables.tfvars.json> <observation.tfplan> [qualification.json]\n       immutable-plan <phase> <variables.tfvars.json> <new.tfplan> [phase-evidence.json]\n       immutable-apply <phase> <saved.tfplan> --confirm-immutable-change [phase-evidence.json]";
+
+export const systemPath = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+export function resolveTerraform(environment) {
+  const usable = (path) => {
+    if (!path || !isAbsolute(path)) return false;
+    const info = statSync(path, { throwIfNoEntry: false });
+    return (
+      info?.isFile() &&
+      Boolean(info.mode & 0o111) &&
+      !(info.mode & 0o022) &&
+      [0, process.getuid()].includes(info.uid)
+    );
+  };
+
+  if (environment.GITHUB_ACTIONS === "true") {
+    // setup-terraform extracts the unwrapped binary directly into a runner temp subdirectory.
+    const temp = environment.RUNNER_TEMP;
+    if (temp && isAbsolute(temp)) {
+      const root = realpathSync(temp);
+      const info = statSync(root);
+      if (
+        !info.isDirectory() ||
+        info.uid !== process.getuid() ||
+        info.mode & 0o022
+      )
+        throw new Error(
+          "Expected a runner-owned Terraform installation directory.",
+        );
+      const candidates = [];
+      for (const name of readdirSync(root)) {
+        if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(name))
+          continue;
+        const entry = join(root, name);
+        const directory = lstatSync(entry, { throwIfNoEntry: false });
+        if (
+          !directory?.isDirectory() ||
+          directory.uid !== process.getuid() ||
+          directory.mode & 0o022
+        )
+          continue;
+        const binary = join(entry, "terraform");
+        if (usable(binary) && realpathSync(binary) === binary)
+          candidates.push(binary);
+      }
+      if (candidates.length === 1) return candidates[0];
+    }
+    throw new Error(
+      "Expected one Terraform installation from setup-terraform in runner temp.",
+    );
+  }
+
+  const explicit = environment.SITUATE_TERRAFORM_EXECUTABLE;
+  const candidates =
+    explicit === undefined
+      ? [
+          "/opt/homebrew/bin/terraform",
+          "/usr/local/bin/terraform",
+          "/usr/bin/terraform",
+        ]
+      : [explicit];
+  const binary = candidates.find(usable);
+  if (!binary)
+    throw new Error(
+      "Install Terraform in a standard location or set SITUATE_TERRAFORM_EXECUTABLE to a trusted absolute executable path.",
+    );
+  return realpathSync(binary);
+}
 
 function privateFile(path) {
   const stat = lstatSync(path);
@@ -68,8 +143,8 @@ function privateDestination(path, extension) {
     ["rev-parse", "--show-toplevel"],
     ["rev-parse", "--is-inside-git-dir"],
   ]) {
-    const result = spawnSync("git", ["-C", parent, ...args], {
-      env: childEnvironment(),
+    const result = spawnSync("/usr/bin/git", ["-C", parent, ...args], {
+      env: { ...childEnvironment(), PATH: systemPath },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -243,6 +318,7 @@ export async function main(
     const config = names.length ? configuration(names, environment) : {};
     const env = {
       ...childEnvironment(environment),
+      PATH: systemPath,
       TF_IN_AUTOMATION: "1",
       TF_INPUT: "0",
     };
@@ -259,9 +335,11 @@ export async function main(
         );
       env.HCLOUD_TOKEN = config.HCLOUD_TOKEN;
     }
+    let executable;
     function run(parameters, capture = false) {
+      executable ??= resolveTerraform(environment);
       const init = parameters[0] === "init";
-      const result = execute("terraform", parameters, {
+      const result = execute(executable, parameters, {
         cwd: directory,
         env,
         encoding: "utf8",

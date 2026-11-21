@@ -129,7 +129,11 @@ export function validateQualificationProgress(event) {
 }
 
 function checkedFile(path, flags) {
-  const fd = openSync(path, flags | constants.O_NOFOLLOW, 0o600);
+  const fd = openSync(
+    path,
+    flags | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    0o600,
+  );
   try {
     checkFile(fd, path);
     return fd;

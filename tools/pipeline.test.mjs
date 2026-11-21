@@ -106,6 +106,19 @@ function declarationFixture(t) {
   return { root, git, base, branch };
 }
 
+test("declaration review rejects symbolic source or base before invoking Git", async () => {
+  const commit = "a".repeat(40);
+  for (const [source, base] of [
+    ["HEAD", commit],
+    [commit, "main"],
+  ]) {
+    await assert.rejects(
+      validateDeclarations("unused", { source, base, heads: [commit] }),
+      /exact source and base commits/,
+    );
+  }
+});
+
 test("merge groups review original branch heads and preserve their exact declarations", async (t) => {
   const { root, git, base, branch } = declarationFixture(t);
   const alpha = branch("alpha"),

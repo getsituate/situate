@@ -1,5 +1,6 @@
 """Run portable pipeline commands in the repository's pinned tool image."""
 
+from contextlib import nullcontext
 import glob
 import importlib.util
 import json
@@ -175,8 +176,7 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
             target.mkdir(exist_ok=True)
             args += mount(target, root / relative)
     empty = state / "empty-env"
-    empty.write_text("")
-    empty.chmod(0o600)
+    os.close(os.open(empty, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
     args += git_mounts(root, state, empty)
     for relative in (".env", "client/.apple-release.local.json"):
         if (root / relative).exists():
@@ -185,7 +185,7 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
         if (root / relative).exists():
             args += ["--tmpfs", f"{root / relative}:mode=0700"]
     env = {
-        "CI": "true", "HOME": "/tmp/situate-ci-home", "CARGO_HOME": "/ci-cache/cargo",
+        "CI": "true", "CARGO_HOME": "/ci-cache/cargo",
         "npm_config_cache": "/ci-cache/npm", "PLAYWRIGHT_BROWSERS_PATH": "/ci-cache/browsers",
         "RUSTUP_TOOLCHAIN": rust_version(root),
         "SITUATE_TOOL_CONTAINER": "1", "SITUATE_TOOL_BUILD_SLOTS": "1", "SITUATE_CI_IMAGE": image,
@@ -212,7 +212,8 @@ def arguments(root, state, image, command, environment, name, token, lease=None,
             env[key] = str(path)
     for key, value in env.items():
         args += ["--env", f"{key}={value}"]
-    script = ('set -eu; umask 077; mkdir -p "$HOME" "$CARGO_HOME" "$npm_config_cache" "$PLAYWRIGHT_BROWSERS_PATH"; umask 022; '
+    script = ('set -eu; HOME=$(mktemp -d "${TMPDIR:-/tmp}/situate-ci-home.XXXXXXXX"); export HOME; '
+              'umask 077; mkdir -p "$CARGO_HOME" "$npm_config_cache" "$PLAYWRIGHT_BROWSERS_PATH"; umask 022; '
               'source /opt/ci-tools/ci-user.sh; git config --global --add safe.directory "$PWD"; '
               'exec /opt/volta/bin/node tools/pipeline-container-entry.mjs "$@"')
     args += ["--workdir", str(root), image, "bash", "-c", script, "pipeline", *command]
@@ -371,9 +372,6 @@ def main(argv=None, environment=None):
         owner = container_owner()
         docker_environment = {key: environment[key] for key in owner.DOCKER_ENVIRONMENT if key in environment}
         command_line = [sys.executable, "-B", str(ROOT / "tools/pipeline-container.py"), "_docker-client", str(lease), token, *docker_args]
-        if not coordinated:
-            command_line = [sys.executable, str(ROOT / "tools/worktree-supervisor.py"),
-                            "worktree", str(ROOT), "--docker-lease", str(lease), *command_line]
         child = None
         cancelled = False
         def cancel(_signal, _frame):
@@ -388,7 +386,14 @@ def main(argv=None, environment=None):
                 owner.cleanup_docker_lease(lease, creation_started=False)
                 return 130
             try:
-                child = subprocess.Popen(command_line, env=environment, stdin=subprocess.PIPE if not coordinated else None, umask=0o077)
+                directory = nullcontext() if coordinated else owner.private_directory(context, owner.DOCKER_DIRECTORY_ERROR)
+                with directory as lease_fd:
+                    if lease_fd is not None:
+                        command_line = [sys.executable, str(ROOT / "tools/worktree-supervisor.py"),
+                                        "--docker-lease-fd", str(lease_fd), str(lease),
+                                        "worktree", str(ROOT), *command_line]
+                    child = subprocess.Popen(command_line, env=environment, stdin=subprocess.PIPE if not coordinated else None,
+                                             pass_fds=() if lease_fd is None else (lease_fd,), umask=0o077)
             except OSError:
                 owner.cleanup_docker_lease(lease, creation_started=False)
                 raise

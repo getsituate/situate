@@ -129,6 +129,10 @@ export async function readBaseline(
   root,
   { repository, source, environment = process.env },
 ) {
+  assert(
+    typeof source === "string" && sha.test(source),
+    "Release baseline requires an exact source commit",
+  );
   const { readCompletedReleaseBaseline } = await import("./github-release.mjs");
   const completed = await readCompletedReleaseBaseline(root, {
     repository,

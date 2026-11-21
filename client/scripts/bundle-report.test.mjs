@@ -1,12 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  rm,
+  symlink,
+  link,
+  copyFile,
+  realpath,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { bundleReport, checkBudget } from "./bundle-report.mjs";
 
 test("production builds enforce the JavaScript budget", async () => {
@@ -20,6 +29,7 @@ test("initial bytes include shared static dependencies once but exclude lazy chu
   const directory = await mkdtemp(join(tmpdir(), "situate-bundle-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await mkdir(join(directory, ".vite"));
+  const providerFile = join("assets", "provider.js");
   await writeFile(
     join(directory, ".vite/manifest.json"),
     JSON.stringify({
@@ -30,12 +40,13 @@ test("initial bytes include shared static dependencies once but exclude lazy chu
         dynamicImports: ["provider"],
       },
       shared: { file: "shared.js", imports: ["app"] },
-      provider: { file: "provider.js", imports: ["shared"] },
+      provider: { file: providerFile, imports: ["shared"] },
     }),
   );
   await writeFile(join(directory, "app.js"), "app");
   await writeFile(join(directory, "shared.js"), "shared");
-  await writeFile(join(directory, "provider.js"), "provider");
+  await mkdir(join(directory, "assets"));
+  await writeFile(join(directory, providerFile), "provider");
   await writeFile(join(directory, "executor-supervisor.js"), "supervisor");
   await writeFile(join(directory, "plugin-check-renderer.js"), "preview");
   await writeFile(join(directory, "unlisted-worker.js"), "worker");
@@ -60,7 +71,7 @@ test("initial bytes include shared static dependencies once but exclude lazy chu
     6,
   );
   assert.equal(
-    report.chunks.find((chunk) => chunk.file === "provider.js").initial,
+    report.chunks.find((chunk) => chunk.file === providerFile).initial,
     false,
   );
   assert.deepEqual(checkBudget(report, { bytes: 9, gzipBytes: 100 }), []);
@@ -71,6 +82,64 @@ test("initial bytes include shared static dependencies once but exclude lazy chu
   assert.match(
     checkBudget(report, { bytes: 100, gzipBytes: 1 })[0],
     /gzip warning threshold/,
+  );
+});
+
+test("rejects chunk paths outside the build directory", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-bundle-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(join(directory, ".vite"));
+  const manifest = join(directory, ".vite/manifest.json");
+  for (const [file, reason] of [
+    [join("..", "absent.js"), /Build manifest references a missing output/],
+    [join("assets", "absent.js"), /Build manifest references a missing output/],
+    [join(directory, "absent.js"), /Build artifact paths must be relative/],
+  ]) {
+    await writeFile(manifest, JSON.stringify({ app: { file, isEntry: true } }));
+    await assert.rejects(bundleReport(directory), reason);
+  }
+});
+
+test("rejects symbolic links for the manifest and chunk files", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-bundle-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(join(directory, ".vite"));
+  const manifest = join(directory, ".vite/manifest.json");
+  await symlink(join(directory, "absent.json"), manifest);
+  await assert.rejects(bundleReport(directory), /must not use a symbolic link/);
+  await rm(manifest);
+  await writeFile(
+    manifest,
+    JSON.stringify({ app: { file: "app.js", isEntry: true } }),
+  );
+  await symlink(join(directory, "absent.js"), join(directory, "app.js"));
+  await writeFile(join(directory, "executor-supervisor.js"), "worker");
+  await writeFile(join(directory, "plugin-check-renderer.js"), "worker");
+  await assert.rejects(bundleReport(directory), /must not use a symbolic link/);
+});
+
+test("rejects directories and multiply linked build artifacts", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "situate-bundle-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(join(directory, ".vite"));
+  await writeFile(
+    join(directory, ".vite/manifest.json"),
+    JSON.stringify({ app: { file: "app.js", isEntry: true } }),
+  );
+  await writeFile(join(directory, "executor-supervisor.js"), "worker");
+  await writeFile(join(directory, "plugin-check-renderer.js"), "worker");
+  const entry = join(directory, "app.js");
+  await mkdir(entry);
+  await assert.rejects(
+    bundleReport(directory),
+    /single-link regular build artifact: app\.js/,
+  );
+  await rm(entry, { recursive: true });
+  await writeFile(join(directory, "fixture.txt"), "sample");
+  await link(join(directory, "fixture.txt"), entry);
+  await assert.rejects(
+    bundleReport(directory),
+    /single-link regular build artifact: app\.js/,
   );
 });
 
@@ -93,16 +162,25 @@ test("the raw limit fails while gzip excess only returns a warning", () => {
 });
 
 test("the CLI reports sizes, warns without failure for gzip, and fails for raw excess", async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), "situate-bundle-cli-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  await mkdir(join(directory, ".vite"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "situate-bundle-cli-")),
+  );
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directory = join(root, "app", "dist");
+  await mkdir(join(directory, ".vite"), { recursive: true });
+  await mkdir(join(root, "scripts"));
+  for (const file of ["bundle-report.mjs", "ios-project-lock.mjs"])
+    await copyFile(
+      new URL(`./${file}`, import.meta.url),
+      join(root, "scripts", file),
+    );
   await writeFile(
     join(directory, ".vite/manifest.json"),
     JSON.stringify({ app: { file: "app.js", isEntry: true } }),
   );
-  const script = fileURLToPath(new URL("./bundle-report.mjs", import.meta.url));
-  const run = () =>
-    spawnSync(process.execPath, [script, directory], { encoding: "utf8" });
+  const script = join(root, "scripts", "bundle-report.mjs");
+  const run = (...args) =>
+    spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
 
   await writeFile(join(directory, "app.js"), "app");
   await writeFile(join(directory, "executor-supervisor.js"), "supervisor");
@@ -124,13 +202,12 @@ test("the CLI reports sizes, warns without failure for gzip, and fails for raw e
   assert.equal(JSON.parse(failure.stdout).initialJavaScript.bytes, 1_000_001);
   assert.match(failure.stderr, /uncompressed budget/);
 
-  const missing = spawnSync(
-    process.execPath,
-    [script, join(directory, "missing")],
-    {
-      encoding: "utf8",
-    },
-  );
+  const override = run(join(root, "other"));
+  assert.equal(override.status, 1);
+  assert.match(override.stderr, /app\/dist/);
+
+  await rm(directory, { recursive: true });
+  const missing = run();
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /ENOENT/);
 });

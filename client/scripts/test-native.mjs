@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { availableParallelism } from "node:os";
+import { existsSync } from "node:fs";
+import { availableParallelism, homedir } from "node:os";
 import { workerBudget } from "../../tools/test-budget.mjs";
 import { nativeSmokeBuildEnvironment } from "../../tools/compiler-cache.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { withSmokeRoot, parseSmokeOptions } from "./native-smoke-runtime.mjs";
 import { requireNativeDesktop } from "./native-desktop-session.mjs";
 import { runCoordinatedSmokePhase as runSmokePhase } from "./coordinated-native-smoke.mjs";
@@ -11,17 +12,46 @@ import { startDocumentSourceServer } from "./document-source-fixtures.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
+export function rustHostTarget(environment = process.env, execute = spawnSync) {
+  const name = process.platform === "win32" ? "rustup.exe" : "rustup";
+  const cargoHome = environment.CARGO_HOME;
+  if (cargoHome && !isAbsolute(cargoHome))
+    throw new Error("CARGO_HOME must be absolute for native smoke tests.");
+  const candidates = [
+    ...(cargoHome ? [join(cargoHome, "bin", name)] : []),
+    join(homedir(), ".cargo", "bin", name),
+    ...(process.platform === "darwin"
+      ? ["/opt/homebrew/bin/rustup", "/usr/local/bin/rustup"]
+      : []),
+  ];
+  const rustup = candidates.find(existsSync);
+  if (!rustup)
+    throw new Error("Could not locate the installed rustup executable.");
+  const options = {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...environment, RUSTUP_AUTO_INSTALL: "0" },
+  };
+  const compiler = execute(rustup, ["which", "rustc"], options);
+  const rustc = compiler.stdout?.trim();
+  if (compiler.error || compiler.status !== 0 || !rustc || !isAbsolute(rustc))
+    throw new Error("Could not locate the project Rust compiler.");
+  const version = execute(rustc, ["-vV"], options);
+  const host = version.stdout?.match(
+    /^host: ([A-Za-z0-9][A-Za-z0-9_-]*)\r?$/m,
+  )?.[1];
+  if (version.error || version.status !== 0 || !host)
+    throw new Error("Could not determine the Rust host target.");
+  return host;
+}
+
 export function buildNativeApp(
   isolated,
   { release },
   environment = process.env,
 ) {
   const cli = resolve(root, "node_modules/@tauri-apps/cli/tauri.js");
-  const rustc = spawnSync("rustc", ["-vV"], { cwd: root, encoding: "utf8" });
-  if (rustc.error) throw rustc.error;
-  const host = rustc.stdout.match(/^host: (.+)$/m)?.[1].trim();
-  if (rustc.status !== 0 || !host)
-    throw new Error("Could not determine the Rust host target.");
+  const host = rustHostTarget(environment);
   const targetDirectory = resolve(root, "target/native-smoke");
   const build = spawnSync(
     process.execPath,

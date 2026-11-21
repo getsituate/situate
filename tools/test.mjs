@@ -13,7 +13,7 @@ import {
 import { createHash } from "node:crypto";
 import { availableParallelism, tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { cachedQualitySuite } from "./quality-cache.mjs";
@@ -1024,11 +1024,12 @@ export function suiteEnvironment(
 }
 
 function processSnapshot() {
-  const listing = execFileSync("ps", ["-A", "-o", "pid=,ppid=,stat=,lstart="], {
-    encoding: "utf8",
-    timeout: 2000,
-    maxBuffer: 8 * 1024 * 1024,
-  });
+  // Process ownership must not depend on the suite's selected toolchain.
+  const listing = execFileSync(
+    "/bin/ps",
+    ["-A", "-o", "pid=,ppid=,stat=,lstart="],
+    { encoding: "utf8", timeout: 2000, maxBuffer: 8 * 1024 * 1024 },
+  );
   const snapshot = new Map();
   for (const line of listing.split("\n")) {
     const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/);
@@ -1100,6 +1101,8 @@ export function executeSuite(
       encoding: "utf8",
       timeout: 5000,
     }).trim();
+    if (!isAbsolute(cargoPath))
+      throw new Error("rustup did not return an absolute Cargo path.");
     if (command === "cargo") command = cargoPath;
     env.PATH = [dirname(cargoPath), env.PATH].filter(Boolean).join(":");
   }
@@ -1194,12 +1197,25 @@ export function executeSuite(
       if (!child.pid) return;
       if (process.platform === "win32") {
         if (exited) return;
+        const systemRoot = process.env.SystemRoot;
+        if (!systemRoot || !/^[a-z]:[\\/]/i.test(systemRoot)) {
+          cleanupUncertain = true;
+          diagnostic = "Cannot locate the Windows system process cleanup tool.";
+          child.kill(name);
+          return;
+        }
         const result = spawnSync(
-          "taskkill",
+          join(systemRoot, "System32", "taskkill.exe"),
           ["/PID", String(child.pid), "/T", "/F"],
           { stdio: "ignore", timeout: 2000 },
         );
-        if (result.error) diagnostic = result.error.message;
+        if (result.error || result.status !== 0) {
+          cleanupUncertain = true;
+          diagnostic =
+            result.error?.message ??
+            "Could not verify Windows process tree cleanup.";
+          child.kill(name);
+        }
         return;
       }
       // Browser/native helpers can detach. Only extend ancestry from identities

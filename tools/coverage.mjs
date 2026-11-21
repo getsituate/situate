@@ -1,4 +1,14 @@
-import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  writeFileSync,
+  unlinkSync,
+} from "node:fs";
+import { safePath } from "./release-catalog.mjs";
 import { createPlan, runPlan } from "./test.mjs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -63,14 +73,44 @@ export function delta(head, main) {
   return percentage(head) - percentage(main);
 }
 
-export async function measure(directory, options = {}) {
-  const runner = resolve(directory, "tools/test.mjs");
-  if (
-    !existsSync(runner) ||
-    !readFileSync(runner, "utf8").includes("--coverage")
-  )
-    return { status: "unavailable" };
+function readCoverageInput(directory, relative, limit) {
+  const file = safePath(directory, relative);
+  const fd = openSync(
+    file,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
   try {
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.nlink !== 1 || info.size > limit)
+      throw new Error(`Invalid coverage input: ${relative}`);
+    const bytes = Buffer.alloc(info.size + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(fd, bytes, offset, bytes.length - offset, null);
+      if (!count) break;
+      offset += count;
+    }
+    if (offset !== info.size)
+      throw new Error(`Coverage input changed: ${relative}`);
+    return bytes.toString("utf8", 0, offset);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+export async function measure(directory, options = {}) {
+  try {
+    try {
+      if (
+        !readCoverageInput(directory, "tools/test.mjs", 1024 * 1024).includes(
+          "--coverage",
+        )
+      )
+        return { status: "unavailable" };
+    } catch (error) {
+      if (error.code === "ENOENT") return { status: "unavailable" };
+      throw error;
+    }
     const plan = createPlan(
       {
         coverage: true,
@@ -84,10 +124,16 @@ export async function measure(directory, options = {}) {
       (suite) => suite.id === "client-rust-coverage",
     );
     if (!vue || !rust) return { status: "unavailable" };
-    rmSync(resolve(directory, "client/target/coverage"), {
-      recursive: true,
-      force: true,
-    });
+    safePath(directory, "client/app");
+    for (const report of [
+      "client/target/coverage/vue/lcov.info",
+      "client/target/coverage/rust.lcov",
+    ]) {
+      const file = safePath(directory, report);
+      const existing = lstatSync(file, { throwIfNoEntry: false });
+      if (existing && !existing.isFile()) return { status: "failed" };
+      if (existing) unlinkSync(file);
+    }
     // Source inclusion and report formats must match across both revisions.
     vue.args.push(
       "--coverage.provider=v8",
@@ -104,15 +150,17 @@ export async function measure(directory, options = {}) {
     return {
       status: "measured",
       vue: parseLcov(
-        readFileSync(
-          resolve(directory, "client/target/coverage/vue/lcov.info"),
-          "utf8",
+        readCoverageInput(
+          directory,
+          "client/target/coverage/vue/lcov.info",
+          64 * 1024 * 1024,
         ),
       ),
       rust: parseLcov(
-        readFileSync(
-          resolve(directory, "client/target/coverage/rust.lcov"),
-          "utf8",
+        readCoverageInput(
+          directory,
+          "client/target/coverage/rust.lcov",
+          64 * 1024 * 1024,
         ),
       ),
     };

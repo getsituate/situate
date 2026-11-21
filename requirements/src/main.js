@@ -67,7 +67,8 @@ function renderMilestones(query) {
   const name = params.get("name");
   const groups = milestoneScope(entries, name);
   document.title = `${name || copy.unplanned} · Situate`;
-  app.innerHTML = `<a class="back" href="#milestones">${copy.back}</a><h1>${escape(name || copy.unplanned)}</h1><p>${copy.trackedOnly}</p>${groups.length ? `<p>${copy.scope}: ${progress(groups.flatMap((group) => group.criteria))}</p>${groups.map(({ entry, criteria }) => `<article class="card"><h2><a href="${entryLink(entry.id)}">${escape(entry.id)} · ${escape(entry.title)}</a></h2><div>${badges(entry)}</div><p>${copy.overall}: ${progress(entry.acceptanceCriteria)}</p><p>${copy.scope}: ${progress(criteria)}</p>${criteriaTable(criteria)}</article>`).join("")}` : `<div class="empty"><h2>${name ? copy.missing : copy.unplannedEmpty}</h2><p>${copy.missingHelp}</p></div>`}`;
+  app.innerHTML = `<a class="back" href="#milestones">${copy.back}</a><h1></h1><p>${copy.trackedOnly}</p>${groups.length ? `<p>${copy.scope}: ${progress(groups.flatMap((group) => group.criteria))}</p>${groups.map(({ entry, criteria }) => `<article class="card"><h2><a href="${entryLink(entry.id)}">${escape(entry.id)} · ${escape(entry.title)}</a></h2><div>${badges(entry)}</div><p>${copy.overall}: ${progress(entry.acceptanceCriteria)}</p><p>${copy.scope}: ${progress(criteria)}</p>${criteriaTable(criteria)}</article>`).join("")}` : `<div class="empty"><h2>${name ? copy.missing : copy.unplannedEmpty}</h2><p>${copy.missingHelp}</p></div>`}`;
+  app.querySelector("h1").textContent = name || copy.unplanned;
 }
 
 function markdown(body, file = "foundations.md") {

@@ -158,7 +158,11 @@ test("container arguments mount only dedicated caches and keep Cargo home dispos
     base=Path(temporary).resolve()
     root=base/'checkout';(root/'client').mkdir(parents=True)
     (root/'client/rust-toolchain.toml').write_text('channel = "1.98.1"')
-    state=base/'state';state.mkdir()
+    def new_state(name):
+        state=base/name
+        state.mkdir(mode=0o700)
+        return state
+    state=new_state('linux-state')
     env={'SITUATE_CONTAINER_CACHE_DIR':str(base/'cache')}
     m.sys.platform='linux'
     args=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',platform='linux/arm64')
@@ -169,20 +173,20 @@ test("container arguments mount only dedicated caches and keep Cargo home dispos
     assert not any(item.endswith('dst=/ci-cache/cargo') for item in mounts)
     assert any('worktrees/' in item and 'dst='+str(root/'client/target') in item for item in mounts)
     assert not any('node_modules' in item or '/.cargo' in item for item in mounts)
-    disposable=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],{**env,'GITHUB_ACTIONS':'true'},'fixture','fixture')
+    disposable=m.arguments(root,new_state('disposable-state'),'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],{**env,'GITHUB_ACTIONS':'true'},'fixture','fixture')
     assert not any(str(base/'cache') in item for item in disposable)
     paths=m.retained_cache_paths(root,'linux/arm64','ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,env)
     import hashlib
     volumes={key:'situate-cache-'+str(os.getuid())+'-'+hashlib.sha256(key.encode()).hexdigest() for key in paths}
     m.sys.platform='darwin'
-    managed=m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',platform='linux/arm64',cache_paths=paths,cache_volumes=volumes)
+    managed=m.arguments(root,new_state('managed-state'),'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',platform='linux/arm64',cache_paths=paths,cache_volumes=volumes)
     assert '/ci-cache:exec,mode=1777' in managed
     assert '/ci-cache/cargo:exec,mode=0700,uid='+str(os.getuid())+',gid='+str(os.getgid()) in managed
     assert sum(item.startswith('type=volume,') for item in managed)==6
     assert not any(str(base/'cache') in item for item in managed)
     for destination in ('/ci-cache/npm','/ci-cache/browsers','/ci-cache/cargo/registry','/ci-cache/cargo/git',str(root/'client/target'),str(root/'tools/dev-tui/target')):
         assert any('dst='+destination+',volume-nocopy' in item for item in managed)
-    try:m.arguments(root,state,'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',cache_paths=paths)
+    try:m.arguments(root,new_state('invalid-state'),'ghcr.io/getsituate/situate-ci-linux@sha256:'+'a'*64,[],env,'fixture','fixture',cache_paths=paths)
     except ValueError:pass
     else:raise AssertionError('macOS retained caches silently used host binds')`);
 });

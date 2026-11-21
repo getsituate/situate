@@ -92,7 +92,7 @@ export function readJson(root, relative) {
 }
 export function git(root, args) {
   const workingTree = ["status", "ls-files"].includes(args[0]);
-  return execFileSync("git", ["--no-pager", ...args], {
+  return execFileSync("/usr/bin/git", ["--no-pager", ...args], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,

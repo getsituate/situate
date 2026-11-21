@@ -60,6 +60,19 @@ with tempfile.TemporaryDirectory() as temporary:
         raise AssertionError('unsafe lease accepted')
     save()
     assert s.read_docker_lease(lease)[0] == value
+    private = root / 'situate-docker-lease-fixture'
+    private.mkdir(mode=0o700)
+    with s.private_directory(private, s.DOCKER_DIRECTORY_ERROR) as descriptor:
+        binding = s.DockerLease(private / 'container.json', descriptor)
+        assert s.read_docker_lease(binding) is None
+        private.rename(root / 'retained')
+        private.mkdir(mode=0o700)
+        try:
+            s.read_docker_lease(binding)
+        except ValueError as error:
+            assert 'directory changed' in str(error)
+        else:
+            raise AssertionError('Replacement lease directory accepted')
     lease.chmod(0o644)
     rejected()
     lease.unlink()
@@ -229,6 +242,94 @@ with tempfile.TemporaryDirectory() as temporary:
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("phase protocol rejects public and aliased directories without touching their files", () => {
+  const source = `import importlib.util, tempfile
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(modulePath)})
+s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+with tempfile.TemporaryDirectory() as temporary:
+    root=Path(temporary)
+    phase=root/'phase';phase.mkdir(mode=0o700)
+    token='11111111-1111-4111-8111-111111111111'
+    s.publish_phase(phase,'grant.json',token)
+    grant=phase/'grant.json'
+    assert s.read_phase_request(phase,grant)==token
+    try: s.publish_phase(phase,'notes.json',token,withdraw=True)
+    except ValueError: pass
+    else: raise AssertionError('A non-protocol file name was accepted')
+    assert grant.is_file() and not (phase/'notes.json').exists()
+    alias=root/'alias';alias.symlink_to(phase, target_is_directory=True)
+    for directory in (alias, phase):
+        if directory == phase:
+            phase.chmod(0o755)
+        for check in (lambda: s.publish_phase(directory,'released.json',token,withdraw=True),
+                      lambda: s.read_phase_request(directory,directory/'grant.json')):
+            try: check()
+            except (OSError, ValueError): pass
+            else: raise AssertionError('Invalid phase directory accepted')
+        assert grant.is_file()
+        assert not (phase/'released.json').exists()
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("Docker cleanup only removes validated phase entries within its lease directory", () => {
+  const source = `import importlib.util, json, tempfile
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(modulePath)})
+s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+s.inspect_docker_container=lambda *args:None
+with tempfile.TemporaryDirectory() as temporary:
+    directory=Path(temporary)
+    token='11111111-1111-4111-8111-111111111111'
+    path=directory/'container.json'
+    path.write_text(json.dumps({'name':'situate-pipeline-'+token,'token':token,'phaseAdmission':True}))
+    path.chmod(0o600)
+    admission=Path(str(path)+'.'+token+'.admission');admission.mkdir(mode=0o700)
+    outside=directory/'outside';outside.mkdir(mode=0o700)
+    s.publish_phase(outside,'request.json',token)
+    (admission/'phase').symlink_to(outside, target_is_directory=True)
+    s.publish_phase(admission,'grant.json',token)
+    s.cleanup_docker_lease(path)
+    assert not path.exists() and not (admission/'grant.json').exists()
+    assert (admission/'phase').is_symlink()
+    assert s.read_phase_request(outside,outside/'request.json')==token
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("Docker cleanup preserves directories outside its temporary lease locations", () => {
+  const source = `import importlib.util, tempfile
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('supervisor',${JSON.stringify(modulePath)})
+s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+with tempfile.TemporaryDirectory() as temporary:
+    root=Path(temporary)
+    for folder, lease, remains in (
+        ('ordinary-folder', 'container.json', True),
+        ('situate-docker-lease-fixture', 'different.json', True),
+        ('situate-docker-lease-fixture', 'container.json', False),
+        ('situate-tool-container-fixture', 'docker-lease.json', False),
+    ):
+        directory=root/folder;directory.mkdir(mode=0o700, exist_ok=True)
+        s.cleanup_docker_lease(directory/lease, remove_directory=True)
+        assert directory.exists() == remains, (folder, lease)
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("build slot settings retain two host slots and permit one guest slot", () => {
   const source = `import importlib.util, os
 spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})
@@ -278,17 +379,17 @@ with tempfile.TemporaryDirectory() as temporary:
         return path
     publish(first)
     old = acknowledge(first, 'a' * 64)
-    original_unlink = Path.unlink
+    original_unlink = os.unlink
     def preserve_old(path, *args, **kwargs):
-        if path == old:
+        if path == old.name:
             raise PermissionError('old acknowledgement retained')
         return original_unlink(path, *args, **kwargs)
     s.inspect_docker_container = lambda *args: None
-    Path.unlink = preserve_old
+    os.unlink = preserve_old
     try:
         s.cleanup_docker_lease(lease)
     finally:
-        Path.unlink = original_unlink
+        os.unlink = original_unlink
     assert not lease.exists() and old.exists()
     publish(second)
     legacy = Path(str(lease) + '.cid')
@@ -351,29 +452,31 @@ def no_docker(*args, **kwargs):
 s.subprocess.run = no_docker
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
+    checkout = root / 'checkout'; checkout.mkdir()
     for failure in ('queued', 'popen'):
-        directory = root / failure
+        directory = root / ('situate-docker-lease-' + failure)
         directory.mkdir(mode=0o700)
         lease = directory / 'container.json'
         token = '11111111-1111-4111-8111-111111111111'
         lease.write_text(json.dumps({'name': 'situate-pipeline-' + token, 'token': token, 'creationPending': True}))
         lease.chmod(0o600)
-        sys.argv = ['supervisor', 'worktree', str(root), '--docker-lease', str(lease), '/unstarted']
-        if failure == 'queued':
-            s.acquire = lambda *args: None
-            assert s.main(root / 'coordination') == 130
-        else:
-            s.acquire = lambda *args: os.open(root / 'lock', os.O_CREAT | os.O_RDWR, 0o600)
-            s.caller_closed = lambda: False
-            def failed_start(*args, **kwargs):
-                raise FileNotFoundError('known failed start')
-            s.subprocess.Popen = failed_start
-            try:
-                s.main(root / 'coordination')
-            except FileNotFoundError:
-                pass
+        with s.private_directory(directory, s.DOCKER_DIRECTORY_ERROR) as fd:
+            sys.argv = ['supervisor', '--docker-lease-fd', str(fd), str(lease), 'worktree', str(checkout), '/unstarted']
+            if failure == 'queued':
+                s.acquire = lambda *args: None
+                assert s.main(root / 'coordination') == 130
             else:
-                raise AssertionError('failed start was not reported')
+                s.acquire = lambda *args: os.open(root / 'lock', os.O_CREAT | os.O_RDWR, 0o600)
+                s.caller_closed = lambda: False
+                def failed_start(*args, **kwargs):
+                    raise FileNotFoundError('known failed start')
+                s.subprocess.Popen = failed_start
+                try:
+                    s.main(root / 'coordination')
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise AssertionError('failed start was not reported')
         assert not lease.exists()
         assert not directory.exists()
 `;
@@ -433,8 +536,8 @@ finally:
   },
 );
 
-test("direct Python owners accept both Docker lease option positions and forward the path", () => {
-  const source = `import importlib.util, json, sys, tempfile
+test("the supervisor binds a private inherited directory before running the command", () => {
+  const source = `import importlib.util, os, sys, tempfile
 from pathlib import Path
 spec = importlib.util.spec_from_file_location('supervisor', ${JSON.stringify(modulePath)})
 s = importlib.util.module_from_spec(spec)
@@ -442,17 +545,45 @@ spec.loader.exec_module(s)
 s.caller_closed = lambda: False
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
-    for prefix in (True, False):
-        lease_directory = root / ('lease-' + str(prefix))
-        lease_directory.mkdir(mode=0o700)
-        lease = lease_directory / 'container.json'
-        marker = root / ('observed-' + str(prefix))
-        command = [sys.executable, '-c', 'import os;from pathlib import Path;path=Path(os.environ["SITUATE_DOCKER_LEASE"]);assert not path.exists();Path(' + repr(str(marker)) + ').write_text(str(path))']
-        option = ['--docker-lease', str(lease)]
-        sys.argv = ['supervisor', *(option if prefix else []), 'worktree', str(root), *(option if not prefix else []), *command]
-        assert s.main(root / 'coordination') == 0
-        assert marker.read_text() == str(lease)
-        assert not lease_directory.exists()
+    checkout = root / 'checkout'; checkout.mkdir()
+    directory = root / 'situate-docker-lease-fixture'; directory.mkdir(mode=0o700)
+    lease = directory / 'container.json'
+    coordination = root / 'coordination'
+    real_open = os.open
+    with s.private_directory(directory, s.DOCKER_DIRECTORY_ERROR) as fd:
+        def no_reopen(path, *args, **kwargs):
+            assert path != directory, 'supervisor reopened the launcher directory by path'
+            return real_open(path, *args, **kwargs)
+        os.open = no_reopen
+        def run(path, command, descriptor=fd):
+            sys.argv = ['supervisor', '--docker-lease-fd', str(descriptor), str(path), 'worktree', str(checkout), *command]
+            return s.main(coordination)
+        for parent, descriptor, error_text in (
+            (root/'ordinary', fd, 'private temporary Docker lease'),
+            (checkout/'situate-docker-lease-fixture', fd, 'outside the checkout'),
+            (root/'situate-docker-lease-other', fd, 'directory changed'),
+        ):
+            parent.mkdir(mode=0o700)
+            try: run(parent/'container.json', ['/unstarted'], descriptor)
+            except ValueError as error: assert error_text in str(error)
+            else: raise AssertionError('Unexpected lease binding accepted')
+            assert parent.exists()
+        with (root/'regular').open('wb') as regular:
+            try: run(lease, ['/unstarted'], regular.fileno())
+            except ValueError as error: assert 'private and owned' in str(error)
+            else: raise AssertionError('Regular file accepted as lease directory')
+        assert not coordination.exists()
+        os.set_inheritable(fd, True)
+        program = '''import os, sys
+from pathlib import Path
+path = Path(os.environ['SITUATE_DOCKER_LEASE'])
+assert path == Path(sys.argv[1]) and not path.exists()
+try: info = os.fstat(int(sys.argv[2]))
+except OSError: pass
+else: assert (info.st_dev, info.st_ino) != (path.parent.stat().st_dev, path.parent.stat().st_ino)
+'''
+        assert run(lease, [sys.executable, '-c', program, str(lease), str(fd)]) == 0
+        assert not directory.exists()
 `;
   const result = spawnSync("python3", ["-c", source], {
     encoding: "utf8",

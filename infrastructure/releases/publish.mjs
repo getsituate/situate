@@ -1,19 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
+  constants,
   cpSync,
   existsSync,
-  fsyncSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
   readdirSync,
   realpathSync,
-  renameSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { isDeepStrictEqual, parseArgs } from "node:util";
@@ -24,7 +24,10 @@ import {
   loadAppleSettings,
 } from "../../client/scripts/apple-release.mjs";
 import {
+  hashReleaseFileDescriptor,
+  readReleaseFileDescriptor,
   updaterEndpoint,
+  withReleaseFile,
   verifyUpdaterSignature,
 } from "../../client/scripts/updater-signing.mjs";
 import { verifyDirectPayloads } from "../../client/scripts/direct-release-verification.mjs";
@@ -42,33 +45,50 @@ const client = join(root, "client");
 const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const filename = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const storageProgram = fileURLToPath(
+  new URL("./publication-storage.py", import.meta.url),
+);
+const directoryFlags =
+  constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 const environment = () => appleEnvironment(process.env, client);
 
-function json(path) {
-  if (lstatSync(path).size > 1024 * 1024)
-    throw new Error("Release metadata exceeds 1 MiB.");
-  return JSON.parse(readFileSync(path, "utf8"));
+function readMetadata(path) {
+  return withReleaseFile(path, (fd, stat) => {
+    if (stat.size > 1024 * 1024)
+      throw new Error("Release metadata exceeds 1 MiB.");
+    return readReleaseFileDescriptor(fd, stat.size, 1024 * 1024);
+  });
 }
 
-function file(directory, name, expected) {
-  if (!filename.test(name) || name.trim() !== name)
+function json(path) {
+  return JSON.parse(readMetadata(path));
+}
+
+function file(directory, name, expected, { limit, requireSize = true } = {}) {
+  if (typeof name !== "string" || !filename.test(name) || name.trim() !== name)
     throw new Error("Unsafe artifact path.");
   const path = join(directory, name);
-  const stat = lstatSync(path);
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    stat.nlink !== 1 ||
-    !Number.isSafeInteger(expected.size) ||
-    expected.size <= 0 ||
-    stat.size !== expected.size ||
-    !/^[a-f0-9]{64}$/.test(expected.sha256) ||
-    hash(readFileSync(path)) !== expected.sha256
-  )
-    throw new Error(
-      "Artifact bytes or size do not match the complete manifest.",
-    );
-  return path;
+  return withReleaseFile(path, (fd, stat) => {
+    if (
+      stat.size <= 0 ||
+      (requireSize && stat.size !== expected.size) ||
+      !/^[a-f0-9]{64}$/.test(expected.sha256)
+    )
+      throw new Error(
+        "Artifact bytes or size do not match the complete manifest.",
+      );
+    const bytes = limit
+      ? readReleaseFileDescriptor(fd, stat.size, limit)
+      : undefined;
+    const digest = bytes
+      ? hash(bytes)
+      : hashReleaseFileDescriptor(fd, stat.size).toString("hex");
+    if (digest !== expected.sha256)
+      throw new Error(
+        "Artifact bytes or size do not match the complete manifest.",
+      );
+    return bytes ?? path;
+  });
 }
 
 export function validateManifest(
@@ -151,11 +171,16 @@ export function validateManifest(
     throw new Error("Unexpected direct artifact names.");
   file(directory, artifact.path, artifact);
   const archive = file(directory, artifact.updater.path, artifact.updater);
-  const signaturePath = file(directory, artifact.updater.signaturePath, {
-    size: artifact.updater.signatureSize,
-    sha256: artifact.updater.signatureSha256,
-  });
-  if (readFileSync(signaturePath, "utf8").trim() !== artifact.updater.signature)
+  const signatureBytes = file(
+    directory,
+    artifact.updater.signaturePath,
+    {
+      size: artifact.updater.signatureSize,
+      sha256: artifact.updater.signatureSha256,
+    },
+    { limit: 1024 * 1024 },
+  );
+  if (signatureBytes.toString("utf8").trim() !== artifact.updater.signature)
     throw new Error("Updater signature sidecar differs from manifest.");
   verifyUpdaterSignature(
     archive,
@@ -182,10 +207,8 @@ export function verifyImmutableInputs(directory, manifest) {
     [inputs.path]: inputs.sha256,
     [inputs.catalogPath]: inputs.catalogSha256,
   };
-  for (const [name, sha256] of Object.entries(files)) {
-    const size = lstatSync(join(directory, name)).size;
-    file(directory, name, { size, sha256 });
-  }
+  for (const [name, sha256] of Object.entries(files))
+    file(directory, name, { sha256 }, { requireSize: false });
   return files;
 }
 
@@ -261,13 +284,14 @@ export function verifyPublicationInputs(
       "Publication requires exact GitHub Release, immutable inputs and qualification.",
     );
   if (!manifest.releaseInputs) return {};
+  const receiptBytes = readMetadata(resolve(releaseReceipt));
   return {
     releaseIdentity: verifyDownloadReceipt(
       directory,
       manifest,
-      json(resolve(releaseReceipt)),
+      JSON.parse(receiptBytes),
     ),
-    releaseReceiptSha256: hash(readFileSync(resolve(releaseReceipt))),
+    releaseReceiptSha256: hash(receiptBytes),
   };
 }
 
@@ -422,32 +446,34 @@ export function assertReviewedRevision(
     !/^[a-f0-9]{40}$/.test(revision)
   )
     throw new Error(message);
-  let type;
+  let object;
   try {
-    type = execFileSync("git", ["cat-file", "-t", revision], {
-      cwd,
-      env: {
-        ...env,
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_NO_REPLACE_OBJECTS: "1",
-        GIT_TERMINAL_PROMPT: "0",
+    object = execFileSync(
+      "/usr/bin/git",
+      ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+      {
+        cwd,
+        env: {
+          ...env,
+          GIT_NO_LAZY_FETCH: "1",
+          GIT_NO_REPLACE_OBJECTS: "1",
+          GIT_TERMINAL_PROMPT: "0",
+        },
+        input: `${revision}\n`,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
       },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
+    ).trim();
   } catch {
     throw new Error(message);
   }
-  if (type !== "commit") throw new Error(message);
+  if (object !== `${revision} commit`) throw new Error(message);
 }
 
 async function preflight(directory, revision, config) {
   const env = environment();
   assertReviewedRevision(revision);
-  const manifestPath = join(directory, "manifest.json");
-  if (lstatSync(manifestPath).size > 1024 * 1024)
-    throw new Error("Release metadata exceeds 1 MiB.");
-  const manifestBytes = readFileSync(manifestPath);
+  const manifestBytes = readMetadata(join(directory, "manifest.json"));
   const manifest = JSON.parse(manifestBytes);
   const settings = loadAppleSettings(client);
   const identifier = json(
@@ -459,13 +485,21 @@ async function preflight(directory, revision, config) {
     teamId: settings.teamId,
     publicKey: config.SITUATE_UPDATER_PUBLIC_KEY,
   });
+  let qualificationSha256;
   if (manifest.releaseInputs) {
     const { verifyReleaseInputs } =
       await import("../../tools/release-inputs.mjs");
     const inputs = json(join(directory, manifest.releaseInputs.path));
     verifyReleaseInputs(
       inputs,
-      readFileSync(join(directory, manifest.releaseInputs.catalogPath), "utf8"),
+      file(
+        directory,
+        manifest.releaseInputs.catalogPath,
+        {
+          sha256: manifest.releaseInputs.catalogSha256,
+        },
+        { limit: 4 * 1024 * 1024, requireSize: false },
+      ).toString("utf8"),
     );
     if (
       inputs.source !== manifest.revision ||
@@ -476,20 +510,18 @@ async function preflight(directory, revision, config) {
       );
     const { verifyQualificationReceipt } =
       await import("../../tools/release-qualification.mjs");
-    verifyQualificationReceipt(
-      directory,
-      manifest,
-      json(join(directory, "release-qualification.json")),
+    const receiptBytes = readMetadata(
+      join(directory, "release-qualification.json"),
     );
+    verifyQualificationReceipt(directory, manifest, JSON.parse(receiptBytes));
+    qualificationSha256 = hash(receiptBytes);
   }
   await verifyDirectPayloads(directory, artifact, { env });
   return {
     manifest,
     artifact,
     manifestSha256: hash(manifestBytes),
-    qualificationSha256: manifest.releaseInputs
-      ? hash(readFileSync(join(directory, "release-qualification.json")))
-      : undefined,
+    qualificationSha256,
   };
 }
 
@@ -517,7 +549,9 @@ function stage(directory, destination, manifest, artifact) {
 
 function inventory(destination) {
   const files = {};
-  for (const directory of [destination, join(destination, "metadata")])
+  for (const directory of [destination, join(destination, "metadata")]) {
+    if (!lstatSync(directory).isDirectory())
+      throw new Error("Expected a staged release directory without symlinks.");
     for (const name of readdirSync(directory).sort()) {
       const path = join(directory, name);
       if (
@@ -527,36 +561,56 @@ function inventory(destination) {
         !lstatSync(path).isSymbolicLink()
       )
         continue;
-      const stat = lstatSync(path);
-      if (!filename.test(name) || !stat.isFile() || stat.nlink !== 1)
+      if (!filename.test(name))
         throw new Error("Unexpected staged release entry.");
-      files[directory === destination ? name : `metadata/${name}`] = {
-        size: stat.size,
-        sha256: hash(readFileSync(path)),
-      };
+      files[directory === destination ? name : `metadata/${name}`] =
+        withReleaseFile(path, (fd, stat) => ({
+          size: stat.size,
+          sha256: hashReleaseFileDescriptor(fd, stat.size).toString("hex"),
+        }));
     }
+  }
   return files;
 }
 
-function saveJournal(path, value, exclusive = false) {
-  const temporary = exclusive ? path : `${path}.${randomUUID()}.tmp`;
-  const handle = openSync(temporary, "wx", 0o600);
+function openPublicationDirectory(path) {
+  const selected = lstatSync(path, { bigint: true });
+  const fd = openSync(path, directoryFlags);
   try {
-    writeFileSync(handle, `${JSON.stringify(value, null, 2)}\n`);
-    fsyncSync(handle);
-  } finally {
-    closeSync(handle);
-  }
-  if (!exclusive) renameSync(temporary, path);
-  const directory = openSync(resolve(path, ".."), "r");
-  try {
-    fsyncSync(directory);
-  } finally {
-    closeSync(directory);
+    const opened = fstatSync(fd, { bigint: true });
+    if (opened.dev !== selected.dev || opened.ino !== selected.ino)
+      throw new Error("Publication directory changed while opening it.");
+    return fd;
+  } catch (error) {
+    closeSync(fd);
+    throw error;
   }
 }
 
-function remote(action, request, config, tar) {
+function storage(directory, operation, options = {}, args = []) {
+  return execFileSync(
+    "/usr/bin/python3",
+    ["-IB", storageProgram, operation, ...args],
+    {
+      env: {},
+      encoding: "utf8",
+      ...options,
+      stdio: ["pipe", "pipe", "pipe", directory],
+    },
+  );
+}
+
+function saveJournal(directory, value, exclusive = false) {
+  storage(directory, exclusive ? "create-journal" : "replace-journal", {
+    input: JSON.stringify(value, null, 2) + "\n",
+  });
+}
+
+function remote(action, request, config, sendArchive) {
+  if (
+    !["inspect", "publish", "reconcile", "complete", "promote"].includes(action)
+  )
+    throw new Error("Unknown publication transport action.");
   const storage = readFileSync(new URL("./remote.py", import.meta.url), "utf8");
   const program =
     action === "promote"
@@ -568,22 +622,26 @@ function remote(action, request, config, tar) {
   const code = Buffer.from(program).toString("base64");
   const encoded = Buffer.from(JSON.stringify(request)).toString("base64");
   const command = `python3 -c 'import base64;exec(base64.b64decode("${code}"))' ${action} ${encoded}`;
-  let input;
+  const args = [...sshArguments(config), command];
+  const options = {
+    env: {
+      ...environment(),
+      ...(process.env.SSH_AUTH_SOCK
+        ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK }
+        : {}),
+    },
+    timeout: 1800000,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  };
   try {
-    input = tar ? openSync(tar, "r") : undefined;
     return JSON.parse(
-      execFileSync("ssh", [...sshArguments(config), command], {
-        env: {
-          ...environment(),
-          ...(process.env.SSH_AUTH_SOCK
-            ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK }
-            : {}),
-        },
-        timeout: 1800000,
-        encoding: "utf8",
-        stdio: [input ?? "ignore", "pipe", "pipe"],
-        maxBuffer: 1024 * 1024,
-      }),
+      sendArchive
+        ? sendArchive(args, options)
+        : execFileSync("/usr/bin/ssh", args, {
+            ...options,
+            stdio: ["ignore", "pipe", "pipe"],
+          }),
     );
   } catch {
     throw new Error(
@@ -591,8 +649,6 @@ function remote(action, request, config, tar) {
         ? "Publication was not confirmed over SSH. Check the public version before trying again."
         : "SSH outcome is uncertain. Do not retry publication; inspect and explicitly reconcile the retained journal.",
     );
-  } finally {
-    if (input !== undefined) closeSync(input);
   }
 }
 
@@ -614,6 +670,43 @@ export async function qualifyPublicationCompatibility(
       "A newer release is already recorded; inspect its publication state before promoting this candidate.",
     );
   return { schemaVersion: 1, source: manifest.revision, qualification };
+}
+
+export function withPublicationArchive(
+  destination,
+  names,
+  expectedDigest,
+  useArchive,
+) {
+  const stage = basename(destination);
+  const parent = openPublicationDirectory(realpathSync(dirname(destination)));
+  try {
+    let archive;
+    try {
+      archive = JSON.parse(
+        storage(parent, "prepare-archive", {
+          input: JSON.stringify({ stage, names, expectedDigest }),
+        }),
+      );
+    } catch {
+      throw new Error("Cannot prepare publication archive.");
+    }
+    if (archive.error) throw new Error(archive.error);
+    // Node cannot open files relative to a directory descriptor on macOS.
+    return useArchive(archive.digest, (args, options) =>
+      storage(
+        parent,
+        "send-archive",
+        {
+          ...options,
+          input: JSON.stringify({ stage, digest: archive.digest }),
+        },
+        args,
+      ),
+    );
+  } finally {
+    closeSync(parent);
+  }
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -669,17 +762,49 @@ export async function main(args = process.argv.slice(2)) {
             : configuration(["SITUATE_UPDATER_PUBLIC_KEY"])),
       }
     : configuration();
-  const journalPath = join(directory, "publication-journal.json");
+  const journalDirectory = ["inspect", "publish", "reconcile"].includes(action)
+    ? openPublicationDirectory(directory)
+    : undefined;
+  try {
+    await runPublication(action, values, directory, config, journalDirectory);
+  } finally {
+    if (journalDirectory !== undefined) closeSync(journalDirectory);
+  }
+}
+
+async function runPublication(
+  action,
+  values,
+  directory,
+  config,
+  journalDirectory,
+) {
+  const journalText = () => {
+    try {
+      return storage(journalDirectory, "read-journal");
+    } catch {
+      throw new Error("Cannot read publication journal.");
+    }
+  };
+  const readJournal = () => {
+    const recorded = journalText();
+    if (!recorded) throw new Error("Publication journal is missing.");
+    return JSON.parse(recorded);
+  };
   if (action === "inspect") {
-    const journal = json(journalPath);
+    const journal = readJournal();
     if (journal.host !== config.WEBSITE_DEPLOY_HOST)
       throw new Error("Journal SSH destination differs from configuration.");
     const observed = remote("inspect", journal.request, config);
-    saveJournal(journalPath, { ...journal, inspected: true, observed });
+    saveJournal(journalDirectory, {
+      ...journal,
+      inspected: true,
+      observed,
+    });
     console.log(JSON.stringify(observed, null, 2));
     return;
   }
-  if (action === "publish" && !values.fresh && existsSync(journalPath))
+  if (action === "publish" && !values.fresh && journalText())
     throw new Error(
       "Publication journal exists; inspect and reconcile instead of retrying.",
     );
@@ -712,7 +837,7 @@ export async function main(args = process.argv.slice(2)) {
       manifestSha256,
       qualificationSha256,
     );
-    console.log(`Staged ${manifest.version}: ${destination}`);
+    console.log(`Staged direct release ${manifest.version}.`);
     return;
   }
   if (values.confirm !== `${config.WEBSITE_DEPLOY_HOST}:${manifest.version}`)
@@ -720,7 +845,7 @@ export async function main(args = process.argv.slice(2)) {
   sshArguments(config);
   let journal;
   if (action === "reconcile") {
-    journal = json(journalPath);
+    journal = readJournal();
     if (
       !journal.inspected ||
       journal.host !== config.WEBSITE_DEPLOY_HOST ||
@@ -781,42 +906,37 @@ export async function main(args = process.argv.slice(2)) {
         release.manifestSha256 === manifestSha256
       ),
   );
-  const tar = `${destination}.tar`;
-  if (existsSync(tar)) {
-    if (
-      action !== "reconcile" ||
-      journal.transportSha256 !== hash(readFileSync(tar))
-    )
-      throw new Error(
-        "A differing transport archive exists; inspect it before reconciliation.",
+  let result = withPublicationArchive(
+    destination,
+    Object.keys(staged),
+    action === "reconcile" ? (journal.transportSha256 ?? null) : undefined,
+    (transportSha256, sendArchive) => {
+      assertReviewedRevision(values["reviewed-revision"]);
+      if (values.fresh)
+        return remote("promote", journal.request, config, sendArchive);
+      journal.transportSha256 = transportSha256;
+      saveJournal(
+        journalDirectory,
+        { ...journal, state: "pending", inspected: false },
+        action === "publish",
       );
-  } else {
-    execFileSync(
-      "tar",
-      ["-cf", tar, "-C", destination, ...Object.keys(staged)],
-      {
-        env: { ...environment(), COPYFILE_DISABLE: "1" },
-      },
-    );
-  }
-  assertReviewedRevision(values["reviewed-revision"]);
+      return action === "reconcile"
+        ? remote("reconcile", journal.request, config, sendArchive)
+        : remote("publish", journal.request, config, sendArchive);
+    },
+  );
+  await verifyPublicAvailability(manifest, artifact);
   if (values.fresh) {
-    const result = remote("promote", journal.request, config, tar);
-    await verifyPublicAvailability(manifest, artifact);
     console.log(JSON.stringify(result));
     return;
   }
-  journal.transportSha256 = hash(readFileSync(tar));
-  saveJournal(
-    journalPath,
-    { ...journal, state: "pending", inspected: false },
-    action === "publish",
-  );
-  let result = remote(action, journal.request, config, tar);
-  await verifyPublicAvailability(manifest, artifact);
   if (journal.request.publicVerificationRequired)
     result = remote("complete", journal.request, config);
-  saveJournal(journalPath, { ...journal, state: "complete", result });
+  saveJournal(journalDirectory, {
+    ...journal,
+    state: "complete",
+    result,
+  });
   console.log(JSON.stringify(result));
 }
 

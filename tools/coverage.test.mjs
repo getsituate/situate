@@ -325,6 +325,7 @@ test("comments show signed percentage-point changes or explicit unavailable/fail
 
 test("artifact metadata rejects a different run, head, expired or oversized data", () => {
   const artifact = {
+    id: 10,
     expired: false,
     size_in_bytes: 200,
     workflow_run: {
@@ -342,6 +343,7 @@ test("artifact metadata rejects a different run, head, expired or oversized data
   };
   assert.equal(validArtifact(artifact, current), true);
   for (const change of [
+    { id: "10" },
     { expired: true },
     { size_in_bytes: 16385 },
     { size_in_bytes: -1 },

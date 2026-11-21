@@ -115,6 +115,7 @@ function run(command, args, options = {}) {
     stdio: ["ignore", "pipe", "inherit"],
     maxBuffer: 16 * 1024 * 1024,
     ...options,
+    shell: false,
   });
   if (result.error || result.status !== 0)
     throw new Error(
@@ -167,6 +168,12 @@ export function eventSelection(env, event) {
   return { source, base, ...(declarationHead ? { declarationHead } : {}) };
 }
 export function resolvePullRequestBase(source, base, head, execute = run) {
+  if (
+    ![source, base, head].every(
+      (value) => typeof value === "string" && sha.test(value),
+    )
+  )
+    throw new Error("Exact PR source, base and head commits are required.");
   const parents = execute("git", ["rev-list", "--parents", "-n", "1", source])
     .trim()
     .split(/\s+/);
@@ -316,7 +323,6 @@ export async function main(
     options: {
       workflow: { type: "string", default: "verify" },
       lane: { type: "string" },
-      plan: { type: "string" },
       stage: { type: "string" },
     },
   });
@@ -633,11 +639,7 @@ export async function main(
     );
     return plan;
   }
-  const plan = validatePlan(
-    JSON.parse(
-      values.plan ? readFileSync(values.plan, "utf8") : env.PIPELINE_PLAN,
-    ),
-  );
+  const plan = validatePlan(JSON.parse(env.PIPELINE_PLAN));
   if (digest(plan) !== env.PIPELINE_PLAN_DIGEST)
     throw new Error("Workflow plan digest mismatch.");
   if (command === "source-reuse") {

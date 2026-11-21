@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { readAppleEnv } from "./apple-credentials.mjs";
 
 export const updaterEndpoint =
@@ -63,6 +63,65 @@ function base64(value) {
   return Buffer.from(value.trim(), "base64");
 }
 
+export function withReleaseFile(path, read) {
+  let fd;
+  try {
+    fd = openSync(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+  } catch {
+    throw new Error("Cannot open release file.");
+  }
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1)
+      throw new Error("Expected a single-link regular release file.");
+    return read(fd, stat);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+export function readReleaseFileDescriptor(fd, size, limit) {
+  if (size > limit) throw new Error("Release file exceeds size limit.");
+  const bytes = Buffer.alloc(size + 1);
+  let offset = 0;
+  while (offset < bytes.length) {
+    const count = readSync(fd, bytes, offset, bytes.length - offset, offset);
+    if (count === 0) break;
+    offset += count;
+  }
+  if (offset !== size)
+    throw new Error("Release file size changed while reading.");
+  return bytes.subarray(0, offset);
+}
+
+export function updateReleaseFileDigest(digest, fd, size) {
+  const buffer = Buffer.alloc(64 * 1024);
+  let offset = 0;
+  while (offset <= size) {
+    const count = readSync(
+      fd,
+      buffer,
+      0,
+      Math.min(buffer.length, size - offset + 1),
+      offset,
+    );
+    if (count === 0) break;
+    offset += count;
+    digest.update(buffer.subarray(0, count));
+  }
+  if (offset !== size)
+    throw new Error("Release file size changed while reading.");
+}
+
+export function hashReleaseFileDescriptor(fd, size, algorithm = "sha256") {
+  const digest = createHash(algorithm);
+  updateReleaseFileDigest(digest, fd, size);
+  return digest.digest();
+}
+
 // Minisign authenticates the BLAKE2b payload digest and, separately, the trusted comment.
 export function verifyUpdaterSignature(path, signature, publicKey, version) {
   const keyLines = base64(publicKey).toString("utf8").trim().split(/\r?\n/);
@@ -96,7 +155,9 @@ export function verifyUpdaterSignature(path, signature, publicKey, version) {
     type: "spki",
   });
   const detached = sig.subarray(10);
-  const digest = createHash("blake2b512").update(readFileSync(path)).digest();
+  const digest = withReleaseFile(path, (fd, stat) =>
+    hashReleaseFileDescriptor(fd, stat.size, "blake2b512"),
+  );
   if (
     !verify(null, digest, ed25519, detached) ||
     !verify(

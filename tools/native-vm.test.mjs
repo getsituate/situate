@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { once } from "node:events";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
@@ -142,6 +143,30 @@ test("configuration selection is explicit and validates the complete schema", as
     await writeFile(f.configFile, JSON.stringify(invalid));
     assert.throws(() => nativeVmConfiguration(f.environment), /Invalid/);
   }
+});
+
+test("the guest supervisor rejects relative executables and non-string arguments", () => {
+  const supervisor = fileURLToPath(
+    new URL("./native-vm-supervisor.py", import.meta.url),
+  );
+  const source = `import runpy
+from pathlib import Path
+execute = runpy.run_path(${JSON.stringify(supervisor)})['execute']
+for request, expected in [({'node': 'node', 'args': []}, 'absolute executable'),
+                          ({'node': ${JSON.stringify(process.execPath)}, 'args': {}}, 'array of strings'),
+                          ({'node': ${JSON.stringify(process.execPath)}, 'args': [1]}, 'array of strings')]:
+    try:
+        execute(Path('unused'), request)
+    except ValueError as error:
+        assert expected in str(error)
+    else:
+        raise AssertionError('Invalid guest execution request accepted')
+`;
+  const result = spawnSync("python3", ["-B", "-c", source], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test("an explicit package runs with a minimal local-only guest environment and verified SSH options", async (t) => {
@@ -405,7 +430,7 @@ test("execution timeout does not include time waiting for the VM lease", async (
   const job = path.join(f.directory, "fixture-job");
   await writeFile(
     job,
-    '#!/bin/sh\nif [ "$2" = hold ]; then printf 1 > ready; exec sleep 60; fi\nprintf executed > completed\n',
+    '#!/bin/sh\n[ "$1" = -- ] || exit 2\nshift\nif [ "$2" = hold ]; then printf 1 > ready; exec sleep 60; fi\nprintf executed > completed\n',
     { mode: 0o700 },
   );
   await writeFile(f.configFile, JSON.stringify({ ...f.config, node: job }));

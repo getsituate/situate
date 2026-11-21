@@ -1,12 +1,51 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import {
+  access,
+  copyFile,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const args = process.argv.slice(2);
+const check = args.length === 1 && args[0] === "--check";
+assert(
+  args.length === 0 || check,
+  "Usage: node website/capture-workshop.mjs [--check]",
+);
+
+async function findEncoder() {
+  const paths =
+    process.platform === "darwin"
+      ? [
+          process.arch === "arm64"
+            ? "/opt/homebrew/bin/cwebp"
+            : "/usr/local/bin/cwebp",
+          "/usr/bin/cwebp",
+        ]
+      : ["/usr/bin/cwebp", "/usr/local/bin/cwebp"];
+  for (const file of paths) {
+    try {
+      await access(file, constants.X_OK);
+      return file;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error(
+    `Install cwebp in a standard package directory: ${paths.join(", ")}.`,
+  );
+}
+
+const encoder = await findEncoder();
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(join(root, "client/package.json"));
 const { createServer } = await import(require.resolve("vite"));
@@ -106,13 +145,15 @@ const captures = [
     mobile: true,
   },
 ];
-const server = await createServer({
-  configFile: join(root, "client/workshop/vite.config.ts"),
-  root: join(root, "client/workshop"),
-  server: { host: "127.0.0.1", port: 0, strictPort: true, open: false },
-});
+let server;
 let browser;
 try {
+  server = await createServer({
+    configFile: join(root, "client/workshop/vite.config.ts"),
+    root: join(root, "client/workshop"),
+    envDir: false,
+    server: { host: "127.0.0.1", port: 0, strictPort: true, open: false },
+  });
   await server.listen();
   const address = server.httpServer.address();
   assert(address && typeof address !== "string");
@@ -466,7 +507,7 @@ try {
         .filter((image) => !image.complete || image.naturalWidth === 0)
         .map((image) => image.getAttribute("src")),
       controls: !!document.querySelector(
-        ".workshop-controls, vite-error-overlay, [role=dialog]",
+        ".workshop-controls, vite-error-overlay, [role=dialog]:not([popover]), [role=dialog]:popover-open",
       ),
       text: document.body.innerText,
     }));
@@ -476,7 +517,11 @@ try {
       [],
       `${capture.file}: missing images`,
     );
-    assert.equal(audit.controls, false);
+    assert.equal(
+      audit.controls,
+      false,
+      `${capture.file}: unexpected controls or dialog`,
+    );
     assert.deepEqual(errors, [], `${capture.file}: browser errors`);
     assert.deepEqual(external, [], `${capture.file}: external requests`);
     assert(
@@ -498,16 +543,11 @@ try {
       animations: "disabled",
       caret: "hide",
     });
-    execFileSync("cwebp", [
-      "-quiet",
-      "-lossless",
-      "-z",
-      "9",
-      png,
-      "-o",
-      join(media, capture.file),
-    ]);
-    const bytes = await readFile(join(media, capture.file));
+    const webp = join(temporary, capture.file);
+    execFileSync(encoder, ["-quiet", "-lossless", "-z", "9", png, "-o", webp], {
+      env: { PATH: "/usr/bin:/bin" },
+    });
+    const bytes = await readFile(webp);
     const pngBytes = await readFile(png);
     manifest.images.push({
       file: capture.file,
@@ -555,18 +595,26 @@ try {
       768 * 1024,
     "Screenshot set exceeds 768 KiB",
   );
-  await writeFile(
-    join(media, "provider-icons-license.txt"),
-    await readFile(
+  if (!check) {
+    for (const { file } of captures)
+      await copyFile(join(temporary, file), join(media, file));
+    await copyFile(
       join(root, "client/workshop/src/ai/assets/providers/LICENSE.txt"),
-    ),
-  );
-  await writeFile(
-    join(media, "manifest.json"),
-    JSON.stringify(manifest, null, 2) + "\n",
-  );
+      join(media, "provider-icons-license.txt"),
+    );
+    await writeFile(
+      join(media, "manifest.json"),
+      JSON.stringify(manifest, null, 2) + "\n",
+    );
+  }
 } finally {
-  await browser?.close();
-  await server.close();
-  await rm(temporary, { recursive: true, force: true });
+  try {
+    await browser?.close();
+  } finally {
+    try {
+      await server?.close();
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  }
 }

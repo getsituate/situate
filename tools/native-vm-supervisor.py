@@ -150,6 +150,12 @@ def disconnected(last_heartbeat):
 
 
 def execute(root, request):
+    node = request['node']
+    args = request['args']
+    if not isinstance(node, str) or '\0' in node or not Path(node).is_absolute():
+        raise ValueError('Guest Node must be an absolute executable path.')
+    if not isinstance(args, list) or any(not isinstance(arg, str) or '\0' in arg for arg in args):
+        raise ValueError('Guest arguments must be an array of strings.')
     last_heartbeat = time.monotonic()
     lock = root.parent / ".native-vm-queue"
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -180,13 +186,12 @@ def execute(root, request):
         entrypoint = root / request["entrypoint"]
         if not entrypoint.is_file() or entrypoint.is_symlink():
             raise ValueError("Package entrypoint is missing.")
-        node = request["node"]
         environment = {"PATH": str(Path(node).parent) + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(Path.home()), "SITUATE_NATIVE_EXECUTOR": "local", "CI": "true"}
         state(root, "running")
         # Keep the group leader alive until the supervisor releases it, so its PID
         # cannot be reused while remaining descendants are being drained.
         wrapper = "import subprocess,sys,signal,os; p=subprocess.Popen(sys.argv[2:]); c=p.wait(); f=open(sys.argv[1]+'.tmp','x'); f.write(str(c)); f.close(); os.rename(sys.argv[1]+'.tmp',sys.argv[1]); signal.pause()"
-        child = subprocess.Popen([sys.executable, "-c", wrapper, str(metadata(root) / ".native-vm-exit"), node, str(entrypoint), *request["args"]], cwd=root, env=environment, stdin=subprocess.DEVNULL, start_new_session=True)
+        child = subprocess.Popen([sys.executable, "-c", wrapper, str(metadata(root) / ".native-vm-exit"), node, "--", str(entrypoint), *args], cwd=root, env=environment, stdin=subprocess.DEVNULL, start_new_session=True)
         code = 130
         while True:
             stopped, last_heartbeat = disconnected(last_heartbeat)
