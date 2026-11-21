@@ -831,10 +831,10 @@ fn synthetic_shell_connections_use_declared_interpreter_with_offline_fixtures() 
     assert!(capability.available);
     assert_eq!(capability.implementation, "syntheticProcess");
     assert_eq!(capability.ownership, "none");
-    assert_eq!(capability.interpreter, Some("/bin/sh"));
+    assert_eq!(capability.interpreter.as_deref(), Some("/bin/sh"));
     assert_eq!(capability.interpreter_dialect, Some("posixSh"));
     assert_eq!(capability.interpreter_args, ["-c"]);
-    let executable = capability.interpreter.unwrap();
+    let executable = capability.interpreter.as_deref().unwrap();
     let args: Vec<String> = capability
         .interpreter_args
         .iter()

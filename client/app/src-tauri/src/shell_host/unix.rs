@@ -1,4 +1,4 @@
-use super::{CommandOutcome, CommandOutput, CommandRequest, CommandResult, ShellError};
+use super::{Capture, CommandOutcome, CommandRequest, CommandResult, ShellError};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::Stdio;
 use std::time::Duration;
@@ -107,33 +107,6 @@ fn zombie_only_group(group: libc::pid_t) -> bool {
     true
 }
 
-#[derive(Default)]
-struct Capture {
-    bytes: Vec<u8>,
-    total: u64,
-    eof: bool,
-    failed: bool,
-}
-
-impl Capture {
-    fn append(&mut self, bytes: &[u8], limit: usize) {
-        self.total = self.total.saturating_add(bytes.len() as u64);
-        let remaining = limit.saturating_sub(self.bytes.len());
-        self.bytes
-            .extend_from_slice(&bytes[..remaining.min(bytes.len())]);
-    }
-
-    fn finish(self) -> CommandOutput {
-        CommandOutput {
-            text: String::from_utf8_lossy(&self.bytes).into_owned(),
-            captured_bytes: self.bytes.len(),
-            total_bytes: self.total,
-            truncated: self.total > self.bytes.len() as u64,
-            incomplete: !self.eof || self.failed,
-        }
-    }
-}
-
 async fn read_chunk(reader: &mut (impl AsyncRead + Unpin), capture: &mut Capture, limit: usize) {
     let mut bytes = [0; 8192];
     match reader.read(&mut bytes).await {
@@ -152,21 +125,7 @@ pub(super) async fn execute(
     cancellation: CancellationToken,
 ) -> Result<CommandResult, ShellError> {
     if cancellation.is_cancelled() {
-        return Ok(CommandResult {
-            outcome: CommandOutcome::Cancelled,
-            exit_code: None,
-            signal: None,
-            stdout: Capture {
-                eof: true,
-                ..Capture::default()
-            }
-            .finish(),
-            stderr: Capture {
-                eof: true,
-                ..Capture::default()
-            }
-            .finish(),
-        });
+        return Ok(super::cancelled_before_start());
     }
     let deadline = Instant::now() + Duration::from_millis(request.timeout_ms);
     let mut command = Command::new(&request.executable);

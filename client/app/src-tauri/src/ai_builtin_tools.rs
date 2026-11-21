@@ -151,7 +151,15 @@ pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value
         ));
     }
     if capabilities["shell"]["available"] == true {
-        tools.push(tool("shell", "Run a POSIX sh command directly from the workspace with the application's OS permissions. Not a sandbox: it can access other files and the network. No Bash guarantee or detached-daemon containment. Output is bounded to 32 KiB per stream; workspace history records observed changes, not certain attribution. Editor drafts block execution.", json!({"command":{"type":"string","minLength":1,"maxLength":65536},"timeoutMs":{"type":"integer","minimum":1,"maximum":300000}}), &["command"]));
+        let dialect = if capabilities["shell"]["interpreterDialect"] == "windowsPowerShell" {
+            "Run a Windows PowerShell 5.1 command directly from the workspace with the application's OS permissions. An owned job contains spawned descendants, not work delegated to other services."
+        } else {
+            "Run a POSIX sh command directly from the workspace with the application's OS permissions. No Bash guarantee or detached-daemon containment."
+        };
+        let description = format!(
+            "{dialect} Not a sandbox: it can access other files and the network. Output is bounded to 32 KiB per stream; workspace history records observed changes, not certain attribution. Editor drafts block execution."
+        );
+        tools.push(tool("shell", &description, json!({"command":{"type":"string","minLength":1,"maxLength":65536},"timeoutMs":{"type":"integer","minimum":1,"maximum":300000}}), &["command"]));
     }
     tools.retain(|tool| {
         let name = tool["name"].as_str().unwrap_or_default();

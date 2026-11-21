@@ -4591,6 +4591,7 @@ dependencies = [
  "cap-std",
  "dom_query 0.29.0",
  "dom_smoothie",
+ "dunce",
  "encoding_rs",
  "futures-util",
  "jsonwebtoken",
