@@ -24,30 +24,6 @@ import {
   sonarLcov,
 } from "./actions-adapter.mjs";
 
-test("the launch trace entrypoint sanitizes errors and removes its cancellation handlers", async () => {
-  const before = ["SIGINT", "SIGTERM"].map((name) =>
-    process.listenerCount(name),
-  );
-  await assert.rejects(
-    main(["launch-trace"], {
-      GITHUB_WORKFLOW_REF: "synthetic private UI text",
-    }),
-    (error) => {
-      assert.equal(
-        error.message,
-        "Private launch trace did not complete; inspect the retained operation before another attempt",
-      );
-      assert.equal(error.cause, undefined);
-      assert.doesNotMatch(error.message, /synthetic private/);
-      return true;
-    },
-  );
-  assert.deepEqual(
-    ["SIGINT", "SIGTERM"].map((name) => process.listenerCount(name)),
-    before,
-  );
-});
-
 test("desktop preflight uses the shared adapter without production credentials", async () => {
   const evidence = { desktopUnlocked: true, accessibilityTrusted: true };
   const result = await main(
@@ -786,33 +762,6 @@ test("unprovisioned remote operations and paid diagnostics fail visibly before e
       execute,
     ),
     /explicit trusted/,
-  );
-});
-
-test("legacy publication inspection is read-only and reconciliation requires the local journal", async () => {
-  const env = {
-    ...environment,
-    GITHUB_EVENT_NAME: "workflow_dispatch",
-    RECOVERY_WORKFLOW: "publish",
-    RECOVERY_OPERATION: "operation-1",
-    RECOVERY_ACTION: "inspect",
-  };
-  const calls = [];
-  await main(["recovery"], env, (command, args) => calls.push([command, args]));
-  assert.deepEqual(calls[0][1], [
-    "tools/pipeline.mjs",
-    "inspect",
-    "publish",
-    "--operation",
-    "operation-1",
-  ]);
-  await assert.rejects(
-    main(["recovery"], { ...env, RECOVERY_ACTION: "reconcile" }),
-    /local pipeline CLI with the original operation journal/,
-  );
-  await assert.rejects(
-    main(["recovery"], { ...env, RECOVERY_OPERATION: "../other" }),
-    /identity/,
   );
 });
 

@@ -447,14 +447,14 @@ async function inspectExact(adapter, value) {
  * must create only when absent, never move a ref. inspectTag returns null only
  * for authoritative absence, otherwise {annotated, sourceRevision, annotation}.
  */
-export async function reserveRelease(request, adapter) {
+export async function reserveRelease(request, adapter, { fresh = false } = {}) {
   validateRequest(request);
   return adapter.withAllocatorLock(async (lease) => {
-    const pending = await lease.pending();
-    assert(
-      pending === null,
-      "An unresolved reservation requires inspection and explicit reconciliation",
-    );
+    if (!fresh)
+      assert(
+        (await lease.pending()) === null,
+        "An unresolved reservation requires inspection and explicit reconciliation",
+      );
     const inventory = await adapter.readInventory(lease);
     // Validation precedes lookup so a truncated inventory cannot authorize reuse.
     validateInventory(inventory);
@@ -483,7 +483,7 @@ export async function reserveRelease(request, adapter) {
       fragmentDigest: request.fragmentDigest,
       generatedInputDigest,
     });
-    await lease.saveIntent(value);
+    if (!fresh) await lease.saveIntent(value);
     await lease.assertHeld();
     try {
       await adapter.createAnnotatedTag({
@@ -494,7 +494,7 @@ export async function reserveRelease(request, adapter) {
       });
       const result = await inspectExact(adapter, value);
       assert(result.status === "reserved", "Tag creation outcome is unknown");
-      await lease.clearIntent(value);
+      if (!fresh) await lease.clearIntent(value);
       return result;
     } catch {
       // A lost response is not authoritative absence and cannot free the slot.

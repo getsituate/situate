@@ -15,8 +15,6 @@ const pipelineWorkflows = [
   "publish-macos",
   "dependency-monitoring",
   "diagnostics",
-  "release-recovery",
-  "release-launch-trace",
   "verify-hosting",
   "deploy-hosting",
   "sonarcloud",
@@ -127,21 +125,14 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
   }
 });
 
-test("launch tracing is a protected direct checkpoint diagnostic without publication or public artifacts", () => {
-  const trace = job(read("release-launch-trace"), "trace");
-  assert.match(trace, /github\.ref == 'refs\/heads\/main'/);
-  assert.match(trace, /github\.event_name == 'workflow_dispatch'/);
-  assert.match(trace, /environment: release-recovery/);
-  assert.match(trace, /group: situate-release-effects/);
-  assert.match(trace, /node tools\/actions-adapter\.mjs launch-trace/);
-  assert.match(
-    trace,
-    /SITUATE_RELEASE_SSH_PRIVATE_KEY:.*secrets\.SITUATE_RELEASE_SSH_PRIVATE_KEY/,
-  );
-  assert.doesNotMatch(
-    trace,
-    /APPLE_|TAURI_SIGNING|contents: write|actions: write|upload-artifact|create-stage|publish-run|source-reuse|prepare-release/,
-  );
+test("macOS delivery has no hosted checkpoint recovery workflow", () => {
+  for (const workflow of ["release-recovery", "release-launch-trace"])
+    assert.equal(
+      existsSync(
+        new URL(`../.github/workflows/${workflow}.yml`, import.meta.url),
+      ),
+      false,
+    );
 });
 
 test("fixed independent families depend on planning and aggregate every selected receipt", () => {
@@ -439,10 +430,6 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   );
   for (const name of ["release-macos", "publish-macos"])
     assert.match(read(name), /actions-adapter\.mjs release-gate/);
-  assert.match(
-    read("release-recovery"),
-    /run: node tools\/actions-adapter\.mjs recovery/,
-  );
   const publisher = read("publish-macos");
   assert.match(publisher, /workflow_run:[\s\S]*workflows: \[Release macOS\]/);
   assert.match(publisher, /release_id:/);
