@@ -104,7 +104,9 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
             : name === "verify-hosting" && match[1].startsWith("terraform ")
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
-              : /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
+              : name === "verify" && match[1].endsWith(".ps1")
+                ? /^\.\/tools\/build-windows-installer-preview\.ps1$/
+                : /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
       );
     }
     assert.match(workflow, /persist-credentials: false/);
