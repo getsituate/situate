@@ -601,6 +601,91 @@ test("explicit state export is private, independent of cloud credentials and nev
   await assert.rejects(main(["export", path], f), /never overwritten/);
 });
 
+test("state export authenticates to HCP and follows one Archivist redirect without credentials", async (t) => {
+  const f = fixture(t);
+  f.current = { id: "sv-Current", serial: 7 };
+  const endpoint =
+    "https://app.terraform.io/api/state-versions/sv-Current/hosted_state";
+  const object = f.stateUrl;
+  f.stateUrl = endpoint;
+  const path = join(f.privateDirectory, "recovery.tfstate");
+  const hops = [];
+  await main(["export", path], {
+    ...f,
+    fetchImpl: async (url, options) => {
+      if (url === endpoint) {
+        hops.push(options);
+        assert.equal(options.headers.Authorization, "Bearer synthetic-hcp");
+        assert.equal(options.redirect, "manual");
+        return new Response(null, {
+          status: 302,
+          headers: { Location: object },
+        });
+      }
+      if (url === object) {
+        hops.push(options);
+        assert.equal(options.headers.Authorization, undefined);
+        assert.equal(options.credentials, "omit");
+        assert.equal(options.referrerPolicy, "no-referrer");
+        assert.equal(options.redirect, "error");
+        return Response.json({
+          version: 4,
+          lineage: "fixture",
+          serial: 7,
+          resources: [],
+        });
+      }
+      return f.fetchImpl(url, options);
+    },
+  });
+  assert.equal(hops.length, 2);
+  assert.equal(hops[0].signal, hops[1].signal);
+  assert.equal(JSON.parse(readFileSync(path, "utf8")).serial, 7);
+});
+
+test("state export refuses a different version or an unexpected redirect before downloading", async (t) => {
+  const endpoint =
+    "https://app.terraform.io/api/state-versions/sv-Current/hosted_state";
+  for (const [advertised, status, location, expectedHops] of [
+    [endpoint.replace("sv-Current", "sv-Other"), 302, null, 0],
+    [`${endpoint}?private`, 302, null, 0],
+    [endpoint, 302, "https://untrusted.test/v1/object/private", 1],
+    [endpoint, 302, "https://archivist.terraform.io/other/private", 1],
+    [endpoint, 302, "/v1/object/private", 1],
+    [endpoint, 302, null, 1],
+    [endpoint, 307, "https://archivist.terraform.io/v1/object/private", 1],
+  ]) {
+    const f = fixture(t);
+    f.current = { id: "sv-Current", serial: 7 };
+    f.stateUrl = advertised;
+    const path = join(f.privateDirectory, "recovery.tfstate");
+    let hops = 0;
+    await assert.rejects(
+      main(["export", path], {
+        ...f,
+        fetchImpl: async (url, options) => {
+          if (
+            url.endsWith("/current-state-version") ||
+            url.endsWith("/workspaces/situate-production")
+          )
+            return f.fetchImpl(url, options);
+          hops++;
+          assert.equal(url, endpoint);
+          return new Response(null, {
+            status,
+            headers: location ? { Location: location } : {},
+          });
+        },
+      }),
+      {
+        message: "HCP Terraform did not provide a trusted state download URL.",
+      },
+    );
+    assert.equal(hops, expectedHops);
+    assert.equal(existsSync(path), false);
+  }
+});
+
 test("a mismatched or untrusted state download never leaves an export", async (t) => {
   for (const [failure, diagnostic] of [
     ["url", /trusted state download URL/],
