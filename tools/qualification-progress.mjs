@@ -6,8 +6,11 @@ import {
   fstatSync,
   lstatSync,
   readSync,
+  realpathSync,
   writeSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { isUpdaterObservation } from "../client/scripts/qualification-updater-observation.mjs";
 
 const maxBytes = 1024 * 1024;
@@ -169,7 +172,30 @@ export function createQualificationProgressFile(path) {
   closeSync(fd);
 }
 
+function workerProgressFile(path) {
+  const file = resolve(path);
+  const directory = dirname(file);
+  const name = basename(directory);
+  const root = realpathSync(tmpdir());
+  assert(
+    basename(file) === "progress.jsonl" &&
+      /^situate-qualification-progress-[a-zA-Z0-9]{6}$/u.test(name) &&
+      realpathSync(dirname(directory)) === root,
+    "Invalid qualification progress path",
+  );
+  const parent = join(root, name);
+  const stat = lstatSync(parent);
+  assert(
+    stat.isDirectory() &&
+      stat.uid === process.getuid() &&
+      (stat.mode & 0o777) === 0o700,
+    "Unsafe qualification progress directory",
+  );
+  return join(parent, "progress.jsonl");
+}
+
 export function qualificationProgressWriter(path) {
+  closeSync(checkedFile(workerProgressFile(path), constants.O_RDONLY));
   const started = performance.now();
   let count = 0;
   return (
@@ -186,7 +212,10 @@ export function qualificationProgressWriter(path) {
     });
     const line = `${JSON.stringify(event)}\n`;
     assert(++count <= maxEvents, "Qualification progress event limit exceeded");
-    const fd = checkedFile(path, constants.O_WRONLY | constants.O_APPEND);
+    const fd = checkedFile(
+      workerProgressFile(path),
+      constants.O_WRONLY | constants.O_APPEND,
+    );
     try {
       assert(
         fstatSync(fd).size + Buffer.byteLength(line) <= maxBytes,

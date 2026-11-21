@@ -232,6 +232,25 @@ test("unsupported or inconsistent source declarations fail closed", async (t) =>
     });
 });
 
+test("candidate selectors qualify the selected commit rather than the checkout", (t) => {
+  const f = fixture(t);
+  f.migrations(names.slice(0, 1));
+  const candidate = f.commit();
+  f.git("branch", "qualification-candidate", candidate);
+  f.migrations(names);
+  f.commit();
+  for (const revision of [
+    "qualification-candidate",
+    "HEAD^",
+    candidate.slice(0, 12),
+  ]) {
+    assert.deepEqual(
+      verifyMigrationHistory(f.root, { publishedRevision: f.legacy, revision }),
+      { publishedRevision: f.legacy, releasedMigrations: 0, migrations: 1 },
+    );
+  }
+});
+
 test("baseline must be an ancestor and local history checking never fetches", (t) => {
   const f = fixture(t);
   f.migrations(names.slice(0, 1));

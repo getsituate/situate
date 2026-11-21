@@ -47,7 +47,14 @@ for (const directory of [
   mkdirSync(`${home}/${directory}`, { recursive: true });
 const archive = `${home}/tmp/volta.tar.gz`;
 download(asset.url, archive, asset.sha256);
-run("tar", ["-xzf", archive, "-C", `${home}/bin`]);
+run("tar", [
+  "--no-same-owner",
+  "--no-same-permissions",
+  "-xzf",
+  archive,
+  "-C",
+  `${home}/bin`,
+]);
 rmSync(archive);
 download(pin.license.url, `${home}/LICENSE`, pin.license.sha256);
 assert.match(npm.integrity, /^sha512-/);

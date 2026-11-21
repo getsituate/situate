@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   rmSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import { open, rename, rm } from "node:fs/promises";
@@ -489,8 +490,9 @@ export async function runPreparedQualification(
     const timeout = AbortSignal.timeout(1800_000);
     const signals = [signal, routeSignal, timeout].filter(Boolean);
     const workerSignal = AbortSignal.any(signals);
+    const progressRoot = realpathSync(tmpdir());
     const progressDirectory = mkdtempSync(
-      join(tmpdir(), "situate-qualification-progress-"),
+      join(progressRoot, "situate-qualification-progress-"),
     );
     const progressFile = join(progressDirectory, "progress.jsonl");
     const runtimeArgs = [];
@@ -542,7 +544,10 @@ export async function runPreparedQualification(
         ],
         {
           cwd: root,
-          env: qualificationEnvironment(environment),
+          env: {
+            ...qualificationEnvironment(environment),
+            TMPDIR: progressRoot,
+          },
           signal: workerSignal,
           capture: true,
           terminationGraceMs: 75_000,

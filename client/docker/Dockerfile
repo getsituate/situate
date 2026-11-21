@@ -4,7 +4,7 @@ COPY . /
 FROM node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS node
 FROM rust:1.98.1-slim-bookworm@sha256:ff521445a372125ed4f76e1453a1f8098f2d05332d1601d30db1c1f62757e730 AS toolchain
 
-COPY --from=node /usr/local/ /opt/node/
+COPY --from=node --chown=0:0 /usr/local/ /opt/node/
 ENV VOLTA_HOME=/opt/volta \
     PATH=/opt/volta/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # A dated package archive prevents apt updates from silently changing the build base.
@@ -28,9 +28,12 @@ RUN /opt/node/bin/node /opt/volta-input/ci-volta-install.mjs && rm -rf /opt/volt
 RUN rustup show active-toolchain && rustup component add clippy rustfmt llvm-tools \
     && test "$(node --version)" = "v$(cat .node-version)"
 RUN useradd --create-home --uid 1000 builder \
-    && mkdir -p /workspace/client/target /usr/local/cargo/registry /usr/local/cargo/git \
-    && chown -R builder:builder /workspace /usr/local/cargo
-ENV APPIMAGE_EXTRACT_AND_RUN=1
+    && mkdir -p /workspace/client/target \
+    && chown -R builder:builder /workspace \
+    && chown -R root:root /usr/local/cargo /usr/local/rustup \
+    && chmod -R go-w /usr/local/cargo /usr/local/rustup
+ENV APPIMAGE_EXTRACT_AND_RUN=1 \
+    CARGO_HOME=/home/builder/.cargo
 USER builder
 
 FROM eclipse-temurin:21-jdk-jammy@sha256:e0c60c487345d1dc9d0fc7b6f0496f3cc941e5132e09296cc17a6decc71b902b AS ci-java
@@ -53,8 +56,8 @@ COPY tools/toolchain.quality.json /tools/
 
 FROM toolchain AS ci
 USER root
-COPY --from=ci-java /opt/java/openjdk /opt/java/openjdk
-COPY --from=ci-swift /export/opt/ci-tools/ /opt/ci-tools/
+COPY --from=ci-java --chown=0:0 /opt/java/openjdk /opt/java/openjdk
+COPY --from=ci-swift --chown=0:0 /export/opt/ci-tools/ /opt/ci-tools/
 RUN printf '%s\n' \
       /opt/ci-tools/swift-runtime/usr/lib/swift/linux \
       /opt/ci-tools/swift-runtime/usr/lib/swift/host/compiler \
@@ -98,7 +101,7 @@ COPY --chown=builder:builder client/app/package.json ./app/
 COPY --chown=builder:builder client/workshop/package.json ./workshop/
 COPY --chown=builder:builder client/packages/ui/package.json ./packages/ui/
 COPY --chown=builder:builder client/packages/localization/package.json ./packages/localization/
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 FROM dependencies AS windows-toolchain
 USER root
@@ -106,9 +109,8 @@ ENV PATH=/opt/volta/bin:/opt/nsis/bin:/usr/lib/llvm-14/bin:/usr/local/cargo/bin:
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clang-14 lld-14 llvm-14 cmake ninja-build scons unzip zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && cargo install --locked cargo-xwin --version '=0.23.1' \
-    && rustup target add x86_64-pc-windows-msvc \
-    && chown -R builder:builder /usr/local/cargo
+    && CARGO_HOME=/usr/local/cargo cargo install --locked cargo-xwin --version '=0.23.1' \
+    && CARGO_HOME=/usr/local/cargo rustup target add x86_64-pc-windows-msvc
 # Debian does not install the clang-cl driver alias; clang selects CL mode from argv[0].
 RUN ln -s /usr/lib/llvm-14/bin/clang /usr/local/bin/clang-cl \
     && for tool in clang-cl lld-link llvm-lib llvm-rc; do \

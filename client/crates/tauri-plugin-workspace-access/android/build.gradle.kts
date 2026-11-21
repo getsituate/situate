@@ -29,6 +29,16 @@ android {
     }
 }
 kotlin { compilerOptions { jvmTarget = JvmTarget.JVM_1_8 } }
+dependencyLocking {
+    lockMode.set(LockMode.STRICT)
+}
+
+configurations.configureEach {
+    if (isCanBeResolved && (name.endsWith("CompileClasspath") || name.endsWith("RuntimeClasspath"))) {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
 dependencies {
     implementation(project(":tauri-android"))
     compileOnly("androidx.appcompat:appcompat:1.7.1")
