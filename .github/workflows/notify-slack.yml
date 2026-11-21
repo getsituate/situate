@@ -8,9 +8,7 @@ on:
       - Deploy website
       - Diagnostics
       - Publish macOS
-      - Release launch trace
       - Release macOS
-      - Release recovery
       - SonarQube Cloud
       - Verify
       - Verify hosting

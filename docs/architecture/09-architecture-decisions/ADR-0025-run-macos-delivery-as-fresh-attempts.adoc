@@ -1,0 +1,28 @@
+[[adr-0025]]
+= ADR-0025: Run macOS delivery as fresh attempts
+
+Status:: Accepted
+Date:: 2026-11-21
+
+== Context
+
+A durable release claim let a different runner resume retained packages and qualification evidence.
+It also blocked successors if the old release could not complete.
+An unpublished build is replaceable; neither its exact version nor its notarized bytes need to reach users.
+
+== Decision
+
+Run each hosted creation as a new attempt. Reserve a version and build number with a non-overwriting Git tag before building. Use the tag inventory, not a release or its draft, to determine which numbers are taken.
+Do not persist recovery checkpoints, claims, or notarization journals on the publication host for new macOS runs.
+A serialized qualification run can replace the private view left by its predecessor without modifying the public feed.
+
+Publish an exact completed GitHub Release independently of creation.
+Keep the host lock, byte verification, and forward-only atomic feed switch.
+Repeating publication of identical bytes verifies the existing release; the public pointer and immutable version directory remain authoritative if the response is lost.
+
+== Consequences
+
+A failed attempt may leave a version gap, an unfinished GitHub draft, or a notarization record at Apple.
+Building a successor costs more than restoring a checkpoint but removes checkpoint restoration from ordinary delivery.
+The macOS app still needs signing, notarization, exact-artifact qualification, and publication checks.
+This decision does not change recovery for host replacement or Terraform writes (<<adr-0020,ADR-0020>>).

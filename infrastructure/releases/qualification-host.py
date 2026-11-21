@@ -238,9 +238,16 @@ def listener_running(state):
     return item is not None and item['State']['Running'] is True
 
 
-def publish_view(operation, state):
+def publish_view(operation, state, *, replace=False):
     target = active_view()
-    require(not target.exists() and not target.is_symlink(), 'Private qualification view already exists; inspect before recovery')
+    retired = operation / 'previous-view'
+    if target.exists() or target.is_symlink():
+        require(replace, 'Private qualification view already exists; inspect before recovery')
+        ancestors(target)
+        require(target.stat().st_uid == os.getuid(), 'Qualification view has a different owner')
+        os.rename(target, retired)
+        sync_private_directory(target.parent)
+        sync_private_directory(operation)
     payload = operation / 'payload'
     identity = payload / state['identityPath'].lstrip('/')
     identity.parent.mkdir(mode=0o755, parents=True)
@@ -254,6 +261,8 @@ def publish_view(operation, state):
     os.rename(payload, target)
     sync_private_directory(operation)
     sync_private_directory(target.parent)
+    if retired.exists():
+        shutil.rmtree(retired)
 
 
 def retire_view(operation, state):
@@ -362,10 +371,13 @@ def perform(action, request, source=None):
             if action == 'inspect':
                 return {'status': 'absent', **discover(config)}
             require(action == 'prepare', 'Operation is not prepared')
-            family = inspect_family(request['operationId'])
-            require(all(member['status'] in ('cleaned', 'cleaned-retained') and not member.get('uncertain', False)
-                        and not member['containerRunning'] for member in family['operations']),
-                    'An active or uncertain qualification family member requires inspection')
+            if request.get('replacePrivateView') is True:
+                require(baked, 'Replacing a private view requires immutable hosting')
+            else:
+                family = inspect_family(request['operationId'])
+                require(all(member['status'] in ('cleaned', 'cleaned-retained') and not member.get('uncertain', False)
+                            and not member['containerRunning'] for member in family['operations']),
+                        'An active or uncertain qualification family member requires inspection')
             discovered = discover(config)
             operation.mkdir(mode=0o700)
             sync_private_directory(ROOT)
@@ -445,7 +457,7 @@ def perform(action, request, source=None):
                 require(sha(read(operation / 'identity' / 'identity.json')) == state['identitySha256'], 'Listener identity differs')
                 require(discover(config) == listener_binding(state), 'Production qualification listener binding changed')
                 if baked:
-                    publish_view(operation, state)
+                    publish_view(operation, state, replace=request.get('replacePrivateView') is True)
                     state['status'] = 'serving'
                     save(operation / 'state.json', state)
                     return facts(state)

@@ -1,22 +1,14 @@
+import { hostingDigest, revisionPattern } from "./hosting-inputs.mjs";
+
 const repo = "getsituate/situate";
 const environment = "hosting-production-operation";
 const collection = `https://api.github.com/repos/${repo}/deployments`;
 const validDeploymentId = (id) => Number.isSafeInteger(id) && id > 0;
 
-export function deploymentGate({ token, revision, runId, fetchImpl = fetch }) {
-  if (
-    typeof token !== "string" ||
-    !token.trim() ||
-    typeof revision !== "string" ||
-    !/^[a-f0-9]{40}$/.test(revision) ||
-    typeof runId !== "string" ||
-    !/^[1-9][0-9]{0,15}$/.test(runId) ||
-    !Number.isSafeInteger(Number(runId))
-  )
-    throw new Error("Missing GitHub deployment identity.");
-  const logUrl = `https://github.com/${repo}/actions/runs/${runId}`;
-  let id;
-  async function request({ deploymentId, body } = {}) {
+function deploymentsApi(token, fetchImpl) {
+  if (typeof token !== "string" || !token.trim())
+    throw new Error("GitHub deployments access is required.");
+  return async ({ deploymentId, body } = {}) => {
     const url = new URL(collection);
     if (deploymentId !== undefined) {
       if (!validDeploymentId(deploymentId))
@@ -28,43 +20,128 @@ export function deploymentGate({ token, revision, runId, fetchImpl = fetch }) {
         url.searchParams.set("environment", environment);
       url.searchParams.set("per_page", "1");
     }
-    const response = await fetchImpl(url, {
-      method: body ? "POST" : "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body && JSON.stringify(body),
-      redirect: "error",
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok)
-      throw new Error(
-        `GitHub deployment status request failed (${response.status}).`,
-      );
-    return response.json();
-  }
+    for (let attempt = 0; ; attempt += 1) {
+      let response;
+      try {
+        response = await fetchImpl(url, {
+          method: body ? "POST" : "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            ...(body ? { "Content-Type": "application/json" } : {}),
+          },
+          body: body && JSON.stringify(body),
+          redirect: "error",
+          signal: AbortSignal.timeout(15_000),
+        });
+      } catch {
+        throw new Error("GitHub deployment status request did not complete.");
+      }
+      if (response.ok) {
+        try {
+          return await response.json();
+        } catch {
+          throw new Error("GitHub returned invalid deployment status data.");
+        }
+      }
+      if (body || attempt === 1 || ![502, 503, 504].includes(response.status))
+        throw new Error(
+          `GitHub deployment status request failed (${response.status}).`,
+        );
+    }
+  };
+}
+
+async function latest(request) {
+  const deployments = await request();
+  if (!Array.isArray(deployments) || deployments.length > 1)
+    throw new Error("Unexpected GitHub deployment inventory.");
+  if (!deployments.length) return null;
+  const previous = deployments[0];
+  if (!validDeploymentId(previous?.id) || previous.environment !== environment)
+    throw new Error("Unexpected GitHub deployment identity.");
+  const statuses = await request({ deploymentId: previous.id });
+  if (!Array.isArray(statuses) || statuses.length > 1)
+    throw new Error("Unexpected GitHub deployment status.");
+  return { deployment: previous, status: statuses[0] };
+}
+
+function readiness(record, revision, digest = hostingDigest) {
+  if (!record || record.status?.state === "inactive")
+    return { ready: false, reason: "No verified active hosting deployment." };
+  const { deployment, status } = record;
+  if (status?.state !== "success")
+    return {
+      ready: false,
+      reason: "A production hosting operation is unresolved.",
+    };
+  if (
+    deployment.creator?.login !== "github-actions[bot]" ||
+    status.creator?.login !== "github-actions[bot]" ||
+    status.environment !== environment ||
+    !revisionPattern.test(deployment.sha ?? "")
+  )
+    throw new Error("The hosting deployment has no trusted success record.");
+  if (digest(deployment.sha) !== digest(revision))
+    return {
+      ready: false,
+      reason: "The verified host has different hosting inputs.",
+    };
+  return { ready: true, revision: deployment.sha, deploymentId: deployment.id };
+}
+
+export async function hostingReadiness({
+  token,
+  revision,
+  fetchImpl = fetch,
+  digest,
+}) {
+  const request = deploymentsApi(token, fetchImpl);
+  const record = await latest(request);
+  const result = readiness(record, revision, digest);
+  if (!result.ready) return result;
+  // Do not accept the predecessor if a new operation opened during the read.
+  const confirmed = await latest(request);
+  if (
+    confirmed?.deployment.id !== record.deployment.id ||
+    confirmed.status?.state !== "success" ||
+    confirmed.status?.creator?.login !== "github-actions[bot]"
+  )
+    return {
+      ready: false,
+      reason: "Hosting changed during the readiness check.",
+    };
+  return result;
+}
+
+export function deploymentGate({
+  token,
+  revision,
+  runId,
+  fetchImpl = fetch,
+  digest = hostingDigest,
+}) {
+  if (
+    typeof token !== "string" ||
+    !token.trim() ||
+    typeof revision !== "string" ||
+    !revisionPattern.test(revision) ||
+    typeof runId !== "string" ||
+    !/^[1-9][0-9]{0,15}$/.test(runId) ||
+    !Number.isSafeInteger(Number(runId))
+  )
+    throw new Error("Missing GitHub deployment identity.");
+  const logUrl = `https://github.com/${repo}/actions/runs/${runId}`;
+  const request = deploymentsApi(token, fetchImpl);
+  let id;
   async function check() {
-    const deployments = await request();
-    if (!Array.isArray(deployments) || deployments.length > 1)
-      throw new Error("Unexpected GitHub deployment inventory.");
-    if (!deployments.length) return;
-    const previous = deployments[0];
-    if (
-      !validDeploymentId(previous?.id) ||
-      previous.environment !== environment
-    )
-      throw new Error("Unexpected GitHub deployment identity.");
-    const statuses = await request({ deploymentId: previous.id });
-    if (
-      !Array.isArray(statuses) ||
-      !["success", "inactive"].includes(statuses[0]?.state)
-    )
+    const record = await latest(request);
+    if (record && !["success", "inactive"].includes(record.status?.state))
       throw new Error(
-        `Deployment ${previous.id} is unresolved. Inspect Terraform, Hetzner and DNS before clearing it manually.`,
+        `Deployment ${record.deployment.id} is unresolved. Inspect Terraform, Hetzner and DNS before clearing it manually.`,
       );
+    return readiness(record, revision, digest);
   }
   function status(state) {
     return request({

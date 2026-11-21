@@ -596,11 +596,17 @@ function saveJournal(releaseDirectory, original, value, exclusive = false) {
 }
 
 function remote(action, request, config, input) {
-  if (!["inspect", "publish", "reconcile", "complete"].includes(action))
+  if (!["inspect", "publish", "reconcile", "complete", "promote"].includes(action))
     throw new Error("Unknown publication transport action.");
-  const code = readFileSync(new URL("./remote.py", import.meta.url)).toString(
-    "base64",
-  );
+  const storage = readFileSync(new URL("./remote.py", import.meta.url), "utf8");
+  const program =
+    action === "promote"
+      ? storage.replace("if __name__ == '__main__':", "if False:") +
+        "\n" +
+        readFileSync(new URL("./promote.py", import.meta.url), "utf8") +
+        "\npromote_main()\n"
+      : storage;
+  const code = Buffer.from(program).toString("base64");
   const encoded = Buffer.from(JSON.stringify(request)).toString("base64");
   const command = `python3 -c 'import base64;exec(base64.b64decode("${code}"))' ${action} ${encoded}`;
   try {
@@ -620,7 +626,9 @@ function remote(action, request, config, input) {
     );
   } catch {
     throw new Error(
-      "SSH outcome is uncertain. Do not retry publication; inspect and explicitly reconcile the retained journal.",
+      action === "promote"
+        ? "Publication was not confirmed over SSH. Check the public version before trying again."
+        : "SSH outcome is uncertain. Do not retry publication; inspect and explicitly reconcile the retained journal.",
     );
   }
 }
@@ -716,10 +724,13 @@ export async function main(args = process.argv.slice(2)) {
       "updater-public-key": { type: "string" },
       "release-receipt": { type: "string" },
       "recovery-evidence": { type: "string" },
+      fresh: { type: "boolean" },
       help: { type: "boolean" },
     },
   });
   const [action] = positionals;
+  if (values.fresh && action !== "publish")
+    throw new Error("--fresh is only supported with publish.");
   if (values.help) {
     console.log(
       "Usage: node infrastructure/releases/publish.mjs destination | check|stage|publish|inspect|reconcile --release DIR --reviewed-revision SHA [--stage DIR] [--destination SSH_HOST] [--ssh-identity ABS_PATH] [--ssh-known-hosts ABS_PATH] [--updater-public-key KEY] [--confirm SSH_HOST:VERSION] [--release-receipt FILE] [--recovery-evidence LEGACY_FILE]",
@@ -766,7 +777,7 @@ export async function main(args = process.argv.slice(2)) {
     console.log(JSON.stringify(observed, null, 2));
     return;
   }
-  if (action === "publish" && existsSync(journalPath))
+  if (action === "publish" && !values.fresh && existsSync(journalPath))
     throw new Error(
       "Publication journal exists; inspect and reconcile instead of retrying.",
     );
@@ -863,7 +874,7 @@ export async function main(args = process.argv.slice(2)) {
   journal.request.migrationBaseline = qualification.releases.filter(
     (release) =>
       !(
-        action === "reconcile" &&
+        (action === "reconcile" || values.fresh) &&
         release.version === manifest.version &&
         release.manifestSha256 === manifestSha256
       ),
@@ -873,8 +884,9 @@ export async function main(args = process.argv.slice(2)) {
     Object.keys(staged),
     action === "reconcile" ? (journal.transportSha256 ?? null) : undefined,
     (fd, transportSha256) => {
-      journal.transportSha256 = transportSha256;
       assertReviewedRevision(values["reviewed-revision"]);
+      if (values.fresh) return remote("promote", journal.request, config, fd);
+      journal.transportSha256 = transportSha256;
       saveJournal(
         directory,
         journalDirectory,
@@ -887,6 +899,10 @@ export async function main(args = process.argv.slice(2)) {
     },
   );
   await verifyPublicAvailability(manifest, artifact);
+  if (values.fresh) {
+    console.log(JSON.stringify(result));
+    return;
+  }
   if (journal.request.publicVerificationRequired)
     result = remote("complete", journal.request, config);
   saveJournal(directory, journalDirectory, {

@@ -221,9 +221,9 @@ pub fn definitions(development: Option<&Development>) -> Vec<Value> {
     ];
     tools.push(definition(
         "read_plugin_development",
-        "Read offline plugin authoring references without workspace effects. document-sources describes the optional document-source export convention; document-source-contract returns its copyable JavaScript conformance helpers. These are not mandatory plugin registration rules.",
+        "Read offline plugin authoring references without workspace effects. Choose package for the manifest and entry points, service-host for invocation APIs, checks for fixtures, previews and activation, or document-sources and document-source-contract for the optional document-source convention and its validation helpers.",
         object(
-            json!({"resource":{"type":"string","enum":["document-sources","document-source-contract"]}}),
+            json!({"resource":{"type":"string","enum":["package","service-host","checks","document-sources","document-source-contract"]}}),
             &["resource"],
         ),
     ));
@@ -330,6 +330,9 @@ fn development_reference(args: Value) -> Result<ToolResult, String> {
     }
     let args: Args = decode(args)?;
     let content = match args.resource.as_str() {
+        "package" => include_str!("../../src/ai/plugin-authoring/package.md"),
+        "service-host" => include_str!("../../src/ai/plugin-authoring/service-host.md"),
+        "checks" => include_str!("../../src/ai/plugin-authoring/checks.md"),
         "document-sources" => include_str!("../../src/ai/document-sources/reference.md"),
         "document-source-contract" => include_str!("../../src/ai/document-sources/contract.js"),
         _ => return Err("native.plugins.invalidPath".into()),

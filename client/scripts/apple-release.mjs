@@ -212,7 +212,7 @@ export async function checkApplePrerequisites({
     throw new Error(
       "A notarization attempt remains unresolved in target/apple-release/notary-pending.json. Reconcile it with Apple before removing the journal and starting another build.",
     );
-  if (!settings.notaryJournal?.operationId)
+  if (!settings.notaryJournal?.operationId && !settings.freshOperationId)
     throw new Error(
       "Blocked: a controlled-host durable notarization journal is required.",
     );
@@ -370,14 +370,16 @@ export async function notarize(
 ) {
   const durable = settings.notaryJournal;
   if (
-    !durable?.operationId ||
-    typeof durable.persist !== "function" ||
-    typeof durable.complete !== "function"
+    !settings.freshOperationId &&
+    (!durable?.operationId ||
+      typeof durable.persist !== "function" ||
+      typeof durable.complete !== "function")
   )
     throw new Error(
       "Blocked: a controlled-host durable notarization journal is required.",
     );
   const acknowledge = async (method, value) => {
+    if (!durable) return;
     const ack = await durable[method](value);
     if (ack?.durable !== true || ack.operationId !== durable.operationId)
       throw new Error(
@@ -387,7 +389,7 @@ export async function notarize(
   // A journal exists before submission, including when Apple's response never arrives.
   const journal = pendingNotarization(options.cwd);
   const entry = {
-    operationId: durable.operationId,
+    operationId: durable?.operationId ?? settings.freshOperationId,
     file: basename(path),
     sha256: sha256(path),
     status: "submitting",
@@ -820,9 +822,10 @@ export async function buildAppleRelease(options) {
   updaterSigningConfiguration(options.root, options.environment);
   const journal = options.notaryJournal;
   if (
-    !journal?.operationId ||
-    typeof journal.persist !== "function" ||
-    typeof journal.complete !== "function"
+    !options.freshOperationId &&
+    (!journal?.operationId ||
+      typeof journal.persist !== "function" ||
+      typeof journal.complete !== "function")
   )
     throw new Error(
       "Blocked: a controlled-host durable notarization journal is required.",
@@ -838,7 +841,12 @@ export async function buildAppleRelease(options) {
       (signingKeychain) =>
         buildResolvedAppleRelease({
           ...options,
-          settings: { ...settings, signingKeychain, notaryJournal: journal },
+          settings: {
+            ...settings,
+            signingKeychain,
+            notaryJournal: journal,
+            freshOperationId: options.freshOperationId,
+          },
         }),
     ),
   );

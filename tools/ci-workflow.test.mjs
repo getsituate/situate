@@ -15,8 +15,6 @@ const pipelineWorkflows = [
   "publish-macos",
   "dependency-monitoring",
   "diagnostics",
-  "release-recovery",
-  "release-launch-trace",
   "verify-hosting",
   "deploy-hosting",
   "sonarcloud",
@@ -86,10 +84,10 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
           match[1].includes("infrastructure/production/")
           ? /^(?:node infrastructure\/production\/immutable\/continuous-deploy\.mjs|(?:timeout --signal=TERM --kill-after=30s 24m )?python3 -B infrastructure\/production\/immutable\/github-rehearsal\.py(?: cleanup)?)$/
           : name === "deploy-website"
-            ? /^(?:python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
+            ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
             : name === "verify-hosting" && match[1].startsWith("terraform ")
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
-              : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+ [a-z-]+)*$/,
+              : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
       );
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
@@ -127,21 +125,14 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
   }
 });
 
-test("launch tracing is a protected direct checkpoint diagnostic without publication or public artifacts", () => {
-  const trace = job(read("release-launch-trace"), "trace");
-  assert.match(trace, /github\.ref == 'refs\/heads\/main'/);
-  assert.match(trace, /github\.event_name == 'workflow_dispatch'/);
-  assert.match(trace, /environment: release-recovery/);
-  assert.match(trace, /group: situate-release-effects/);
-  assert.match(trace, /node tools\/actions-adapter\.mjs launch-trace/);
-  assert.match(
-    trace,
-    /SITUATE_RELEASE_SSH_PRIVATE_KEY:.*secrets\.SITUATE_RELEASE_SSH_PRIVATE_KEY/,
-  );
-  assert.doesNotMatch(
-    trace,
-    /APPLE_|TAURI_SIGNING|contents: write|actions: write|upload-artifact|create-stage|publish-run|source-reuse|prepare-release/,
-  );
+test("macOS delivery has no hosted checkpoint recovery workflow", () => {
+  for (const workflow of ["release-recovery", "release-launch-trace"])
+    assert.equal(
+      existsSync(
+        new URL(`../.github/workflows/${workflow}.yml`, import.meta.url),
+      ),
+      false,
+    );
 });
 
 test("fixed independent families depend on planning and aggregate every selected receipt", () => {
@@ -210,6 +201,17 @@ test("native source jobs declare one build slot in both PR and release verificat
   for (const workflow of ["verify", "release-macos"])
     for (const id of ["macos-native", "macos-compatibility"])
       assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
+});
+
+test("the Intel release job has more time for cold compilation than PR verification", () => {
+  assert.match(
+    job(read("release-macos"), "macos-compatibility"),
+    /^ {4}timeout-minutes: 75$/m,
+  );
+  assert.match(
+    job(read("verify"), "macos-compatibility"),
+    /^ {4}timeout-minutes: 60$/m,
+  );
 });
 
 test("only the release Intel lane persists its compiler cache after success and flush", () => {
@@ -312,26 +314,17 @@ test("paused release skips planning and source work while only effect jobs share
   }
 });
 
-test("website publication follows trusted hosting runs and uses only website credentials", () => {
+test("website publication checks verified hosting independently of the hosting run", () => {
   const workflow = read("deploy-website");
-  assert.match(
-    workflow,
-    /workflow_run:\n {4}workflows: \[Deploy hosting\]\n {4}branches: \[main\]\n {4}types: \[completed\]/,
-  );
+  assert.match(workflow, /push:\n {4}branches: \[main\]/);
+  assert.doesNotMatch(workflow, /workflow_run/);
   const body = job(workflow, "website");
-  assert.match(body, /head_repository\.full_name == github\.repository/);
-  assert.match(body, /head_branch == 'main'/);
-  assert.match(body, /conclusion == 'success'/);
-  assert.match(
-    body,
-    /workflow_run\.event == 'push' \|\| github\.event\.workflow_run\.event == 'workflow_dispatch'/,
-  );
-  assert.match(
-    body,
-    /vars\.HOSTING_PRODUCTION_ENABLED == 'true' && vars\.WEBSITE_DEPLOY_ENABLED == 'true'/,
-  );
-  assert.match(body, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(body, /github.ref == 'refs\/heads\/main'/);
   assert.match(body, /environment: website-production/);
+  assert.ok(
+    body.indexOf("wait-for-hosting.mjs --check") <
+      body.indexOf("website_content.py deploy"),
+  );
   assert.deepEqual(
     [...body.matchAll(/secrets\.([A-Z_]+)/g)].map((match) => match[1]),
     ["WEBSITE_CONTENT_SSH_KEY"],
@@ -396,33 +389,11 @@ test("Slack notifications skip message composition and delivery without a webhoo
   assert.match(notifier, /id: post\s+if: steps\.message\.outcome == 'success'/);
 });
 
-test("hosting status requires the exact successful main push for this repository", async () => {
-  const { hostingState } = await import("./wait-for-hosting.mjs");
-  const repository = "getsituate/situate";
-  const sha = "a".repeat(40);
-  const run = {
-    head_sha: sha,
-    head_branch: "main",
-    head_repository: { full_name: repository },
-    event: "push",
-    status: "completed",
-    conclusion: "success",
-  };
-  const state = (runs) => hostingState(runs, { repository, sha });
-  assert.equal(state([]), "waiting");
-  assert.equal(state([{ ...run, event: "workflow_dispatch" }]), "waiting");
-  assert.equal(state([{ ...run, head_sha: "b".repeat(40) }]), "waiting");
-  assert.equal(state([{ ...run, status: "in_progress" }]), "waiting");
-  assert.equal(state([{ ...run, conclusion: "failure" }]), "failure");
-  assert.equal(state([run]), "success");
-  assert.throws(() => state([run, run]), /Multiple hosting runs/);
-});
-
-test("macOS release waits for hosting before starting release effects", () => {
+test("macOS release checks verified hosting before starting release effects", () => {
   const workflow = read("release-macos");
   const hosting = job(workflow, "hosting-ready");
   assert.match(hosting, /needs: plan/);
-  assert.match(hosting, /actions: read/);
+  assert.match(hosting, /deployments: read/);
   assert.match(hosting, /run: node tools\/wait-for-hosting\.mjs/);
   assert.doesNotMatch(hosting, /secrets\.|contents: write/);
   assert.match(job(workflow, "create"), /needs:[\s\S]*hosting-ready,/);
@@ -459,10 +430,6 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   );
   for (const name of ["release-macos", "publish-macos"])
     assert.match(read(name), /actions-adapter\.mjs release-gate/);
-  assert.match(
-    read("release-recovery"),
-    /run: node tools\/actions-adapter\.mjs recovery/,
-  );
   const publisher = read("publish-macos");
   assert.match(publisher, /workflow_run:[\s\S]*workflows: \[Release macOS\]/);
   assert.match(publisher, /release_id:/);
@@ -476,12 +443,12 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   assert.match(job(publisher, "publish"), /runs-on: macos-latest/);
   assert.match(publisher, /APPLE_TEAM_ID:.*vars\.APPLE_TEAM_ID/);
   assert.doesNotMatch(
-    creator.split("create-prepare")[0],
+    creator.split("run: node tools/wait-for-hosting.mjs --probe")[0],
     /SITUATE_RELEASE_SSH_PRIVATE_KEY|SITUATE_RELEASE_SSH_KNOWN_HOSTS/,
   );
   const qualification = creator
     .split("create-stage --stage qualify")[1]
-    .split("create-stage --stage github")[0];
+    .split("\n      - ")[0];
   assert.match(qualification, /SITUATE_RELEASE_SSH_PRIVATE_KEY/);
   assert.match(qualification, /SITUATE_RELEASE_SSH_KNOWN_HOSTS/);
   assert.doesNotMatch(
@@ -494,11 +461,11 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   );
   assert.equal(
     (creator.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY:/g) ?? []).length,
-    5,
+    7,
   );
   assert.equal(
     (publisher.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY:/g) ?? []).length,
-    1,
+    2,
   );
   assert.doesNotMatch(
     publisher,

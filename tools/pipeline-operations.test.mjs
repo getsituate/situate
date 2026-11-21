@@ -62,9 +62,11 @@ test("publication creates a private download root and rejects linked storage", a
   assert.equal(calls.length, 1);
 });
 
-test("production publication and reconciliation acknowledge complete journal checkpoints before releasing their claim", async (t) => {
-  for (const path of ["ordinary", "reconcile"])
-    for (const failure of ["before-commit", "lost-ack", "none"]) {
+test("hosted GitHub creation bypasses recovery; legacy local creation retains its checkpoints", async (t) => {
+  for (const path of ["ordinary", "reconcile", "hosted"])
+    for (const failure of path === "hosted"
+      ? ["none"]
+      : ["before-commit", "lost-ack", "none"]) {
       const f = checkpointFixture(t);
       const configurationBytes = JSON.stringify({
         ...f.configuration,
@@ -112,7 +114,10 @@ test("production publication and reconciliation acknowledge complete journal che
       const calls = [];
       const retained = [];
       const stages = await productionStages(f.root, plan, {
-        environment: { SITUATE_RELEASE_CONFIG_JSON: configurationBytes },
+        environment: {
+          SITUATE_RELEASE_CONFIG_JSON: configurationBytes,
+          ...(path === "hosted" ? { PIPELINE_FRESH_RELEASE: "1" } : {}),
+        },
         checkpointStore: {
           commit: async (value) => {
             const snapshot = JSON.parse(
@@ -161,7 +166,12 @@ test("production publication and reconciliation acknowledge complete journal che
         path === "reconcile"
           ? stages.reconcile({ operation, observation: {} })
           : stages.github({ operation });
-      if (failure !== "none") {
+      if (path === "hosted") {
+        assert.equal(stages.persistIntent, undefined);
+        assert.equal(stages.persistOutcome, undefined);
+        assert.equal((await invoke()).releaseId, 42);
+        assert.deepEqual(calls, ["publish"]);
+      } else if (failure !== "none") {
         await assert.rejects(invoke(), /terminal/);
         assert.deepEqual(calls, ["publish", "checkpoint"]);
         assert.equal(retained.length, failure === "lost-ack" ? 1 : 0);

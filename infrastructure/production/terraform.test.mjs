@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -94,6 +95,8 @@ function fixture(t) {
     calls: [],
     requests: [],
     current: null,
+    stateUrl:
+      "https://archivist.terraform.io/v1/object/synthetic-download-secret",
     workspaceId: "ws-Production1",
     executionMode: "local",
     locked: false,
@@ -155,6 +158,15 @@ function fixture(t) {
   f.bind();
   f.fetchImpl = async (url, options) => {
     f.requests.push({ url, options });
+    if (url === f.stateUrl)
+      return new Response(
+        JSON.stringify({
+          version: 4,
+          lineage: "synthetic-lineage",
+          serial: f.current.serial,
+          resources: [],
+        }),
+      );
     if (url.endsWith("/workspaces/situate-production"))
       return {
         ok: true,
@@ -183,7 +195,11 @@ function fixture(t) {
             data: {
               type: "state-versions",
               id: f.current.id,
-              attributes: { serial: f.current.serial, status: "finalized" },
+              attributes: {
+                serial: f.current.serial,
+                status: "finalized",
+                "hosted-state-download-url": f.stateUrl,
+              },
             },
           }),
         }
@@ -200,16 +216,11 @@ function fixture(t) {
         { mode: 0o600 },
       );
     if (args[0] === "apply") f.current = { id: "sv-Adopted", serial: 1 };
-    if (args[0] === "state")
-      return {
-        status: 0,
-        stdout: JSON.stringify({
-          version: 4,
-          lineage: "synthetic-lineage",
-          serial: f.current.serial,
-          resources: [],
-        }),
-      };
+    assert.notEqual(
+      args[0],
+      "state",
+      "Export must not invoke Terraform state pull",
+    );
     return { status: 0, stdout: JSON.stringify(f.plan) };
   };
   f.output = join(privateDirectory, "adoption.tfplan");
@@ -328,6 +339,7 @@ test("initialization binds a pre-existing Local HCP workspace without migration 
   await main(["init"], f);
   assert.deepEqual(f.calls[0].args, [
     "init",
+    "-no-color",
     "-input=false",
     "-lockfile=readonly",
   ]);
@@ -348,6 +360,31 @@ test("initialization binds a pre-existing Local HCP workspace without migration 
     assert.equal(env[key], undefined, key);
   assert.doesNotMatch(readFileSync(f.bindingPath, "utf8"), /synthetic-hcp/);
   await main(["init"], f);
+});
+
+test("initialization timeout reports only the last known phase", async (t) => {
+  const f = fixture(t);
+  rmSync(f.metadataPath);
+  rmSync(f.bindingPath);
+  await assert.rejects(
+    main(["init"], {
+      ...f,
+      execute: (_command, _args, options) => {
+        assert.equal(options.timeout, 180_000);
+        return {
+          error: Object.assign(new Error("private failure"), {
+            code: "ETIMEDOUT",
+          }),
+          stdout:
+            "Initializing HCP Terraform...\nInitializing provider plugins...\nprivate output",
+          stderr: "private stderr",
+          status: null,
+        };
+      },
+    }),
+    { message: "Terraform init timed out during provider initialization." },
+  );
+  assert.equal(existsSync(f.bindingPath), false);
 });
 
 test("initialization refuses existing local state, old backends and unbound metadata", async (t) => {
@@ -547,11 +584,100 @@ test("an uncertain adoption with unchanged remote state cannot reuse its journal
 test("explicit state export is private, independent of cloud credentials and never overwrites", async (t) => {
   const f = fixture(t);
   f.current = { id: "sv-Current", serial: 7 };
+  delete f.environment.HCLOUD_TOKEN;
   const path = join(f.privateDirectory, "recovery.tfstate");
   await main(["export", path], f);
   assert.equal(JSON.parse(readFileSync(path, "utf8")).serial, 7);
-  assert.equal(f.calls[0].options.env.HCLOUD_TOKEN, undefined);
+  assert.equal(lstatSync(path).mode & 0o777, 0o600);
+  assert.equal(f.calls.length, 0);
+  const downloads = f.requests.filter(({ url }) => url === f.stateUrl);
+  assert.equal(downloads.length, 1);
+  assert.equal(downloads[0].options.headers.Authorization, undefined);
+  assert.equal(downloads[0].options.redirect, "error");
+  assert.equal(downloads[0].options.method, "GET");
+  assert.equal(downloads[0].options.credentials, "omit");
+  assert.equal(downloads[0].options.referrerPolicy, "no-referrer");
+  assert.equal(downloads[0].options.signal.aborted, false);
   await assert.rejects(main(["export", path], f), /never overwritten/);
+});
+
+test("a mismatched or untrusted state download never leaves an export", async (t) => {
+  for (const [failure, diagnostic] of [
+    ["url", /trusted state download URL/],
+    ["transport", /state download did not complete/],
+    ["http", /state download failed: HTTP 503/],
+    ["size", /state download is missing or too large/],
+    ["json", /state download returned invalid JSON/],
+    ["serial", /does not match the inspected HCP state version/],
+    ["race", /state changed during export/],
+    ["version-before-download", /state changed during export/],
+  ]) {
+    const f = fixture(t);
+    f.current = { id: "sv-Current", serial: 1 };
+    if (failure === "url") f.stateUrl = "https://untrusted.test/private";
+    const path = join(f.privateDirectory, "recovery.tfstate");
+    let attempts = 0;
+    let currentReads = 0;
+    const fetchImpl = async (url, options) => {
+      if (url !== f.stateUrl) {
+        if (
+          url.endsWith("/current-state-version") &&
+          ++currentReads === 2 &&
+          failure === "version-before-download"
+        )
+          f.current = { id: "sv-New", serial: 2 };
+        return f.fetchImpl(url, options);
+      }
+      attempts++;
+      if (failure === "url" || failure === "version-before-download")
+        assert.fail("Unexpected download");
+      if (failure === "transport") throw new Error("private download URL");
+      if (failure === "http")
+        return new Response("private response", { status: 503 });
+      if (failure === "size")
+        return new Response("bytes", {
+          headers: { "Content-Length": "16777217" },
+        });
+      if (failure === "json") return new Response("private non-JSON state");
+      if (failure === "serial")
+        return Response.json({
+          version: 4,
+          lineage: "synthetic",
+          serial: 9,
+          resources: [],
+        });
+      const response = await f.fetchImpl(url, options);
+      if (failure === "race") f.current = { id: "sv-New", serial: 2 };
+      return response;
+    };
+    await assert.rejects(
+      main(["export", path], { ...f, fetchImpl }),
+      (error) => {
+        assert.match(error.message, diagnostic, failure);
+        assert.doesNotMatch(error.message, /private|synthetic-download-secret/);
+        return true;
+      },
+    );
+    assert.equal(
+      attempts,
+      ["url", "version-before-download"].includes(failure) ? 0 : 1,
+    );
+    assert.equal(f.calls.length, 0);
+    assert.equal(existsSync(path), false);
+  }
+});
+
+test("preflight reports Terraform init failure without private subprocess output", async (t) => {
+  const f = fixture(t);
+  const options = {
+    ...f,
+    execute: () => ({ status: 1, stderr: "private Terraform diagnostics" }),
+  };
+  rmSync(f.metadataPath);
+  rmSync(f.bindingPath);
+  await assert.rejects(main(["init"], options), {
+    message: "Terraform init failed (exit 1).",
+  });
 });
 
 test("status remains read-only even when a workspace is locked", async (t) => {

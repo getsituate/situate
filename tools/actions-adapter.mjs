@@ -582,62 +582,9 @@ export async function main(
     );
     return;
   }
-  if (command === "launch-trace") {
-    const abort = new AbortController();
-    const cancel = () => abort.abort(new Error("Launch trace cancelled"));
-    process.on("SIGINT", cancel);
-    process.on("SIGTERM", cancel);
-    try {
-      const { runLaunchTrace } = await import("./actions-launch-trace.mjs");
-      return await runLaunchTrace(root, env, { signal: abort.signal });
-    } catch {
-      throw new Error(
-        "Private launch trace did not complete; inspect the retained operation before another attempt",
-      );
-    } finally {
-      process.removeListener("SIGINT", cancel);
-      process.removeListener("SIGTERM", cancel);
-    }
-  }
-  if (command === "recovery") {
-    if (
-      env.GITHUB_REPOSITORY !== repository ||
-      env.GITHUB_REF !== "refs/heads/main" ||
-      env.GITHUB_EVENT_NAME !== "workflow_dispatch"
-    )
-      throw new Error("Recovery requires an explicit trusted main dispatch.");
-    if (
-      !["create", "publish"].includes(env.RECOVERY_WORKFLOW) ||
-      !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(env.RECOVERY_OPERATION ?? "")
-    )
-      throw new Error("Invalid recovery operation identity.");
-    if (
-      env.RECOVERY_WORKFLOW === "create" &&
-      ["inspect", "qualify", "continue"].includes(env.RECOVERY_ACTION)
-    ) {
-      const { runCheckpointRecovery } = await import("./actions-recovery.mjs");
-      return runCheckpointRecovery(root, env);
-    }
-    if (env.RECOVERY_ACTION !== "inspect")
-      throw new Error(
-        "Use the local pipeline CLI with the original operation journal for reconciliation.",
-      );
-    execute(
-      process.execPath,
-      [
-        "tools/pipeline.mjs",
-        "inspect",
-        env.RECOVERY_WORKFLOW,
-        "--operation",
-        env.RECOVERY_OPERATION,
-      ],
-      { stdio: "inherit" },
-    );
-    return;
-  }
   if (command === "blocked")
     throw new Error(
-      "Release automation is disabled pending repository protections, isolated qualification, recovery and signing gate provisioning.",
+      "Release automation is disabled pending repository protections, isolated qualification and signing gate provisioning.",
     );
   if (command === "plan") {
     const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));

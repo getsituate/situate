@@ -15,42 +15,43 @@ export function hcpConfiguration(config) {
   return { organization, token };
 }
 
+async function get(config, fetchImpl, path, allowMissing = false) {
+  let response;
+  try {
+    response = await fetchImpl(`https://${hostname}/api/v2/${path}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        Accept: "application/vnd.api+json",
+        // A blocking Terraform apply can outlive an idle connection.
+        Connection: "close",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch {
+    throw new Error("HCP Terraform inspection failed; no retry was attempted.");
+  }
+  if (allowMissing && response.status === 404) return null;
+  if (!response.ok)
+    throw new Error(
+      `HCP Terraform inspection failed: HTTP ${response.status}.`,
+    );
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("HCP Terraform returned invalid JSON.");
+  }
+}
+
 export async function inspectWorkspace(
   config,
   fetchImpl = fetch,
   { allowLocked = false } = {},
 ) {
-  async function get(path, allowMissing = false) {
-    let response;
-    try {
-      response = await fetchImpl(`https://${hostname}/api/v2/${path}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${config.token}`,
-          Accept: "application/vnd.api+json",
-          // A blocking Terraform apply can outlive an idle connection.
-          Connection: "close",
-        },
-        redirect: "error",
-        signal: AbortSignal.timeout(30000),
-      });
-    } catch {
-      throw new Error(
-        "HCP Terraform inspection failed; no retry was attempted.",
-      );
-    }
-    if (allowMissing && response.status === 404) return null;
-    if (!response.ok)
-      throw new Error(
-        `HCP Terraform inspection failed: HTTP ${response.status}.`,
-      );
-    try {
-      return await response.json();
-    } catch {
-      throw new Error("HCP Terraform returned invalid JSON.");
-    }
-  }
   const result = await get(
+    config,
+    fetchImpl,
     `organizations/${encodeURIComponent(config.organization)}/workspaces/${workspaceName}`,
   );
   const workspace = result?.data;
@@ -76,23 +77,14 @@ export async function inspectWorkspace(
       "The HCP workspace is locked; inspect its owner before continuing.",
     );
   const current = await get(
+    config,
+    fetchImpl,
     `workspaces/${workspace.id}/current-state-version`,
     true,
   );
   let stateVersion = null;
   if (current) {
-    const state = current.data;
-    if (
-      state?.type !== "state-versions" ||
-      !/^sv-[A-Za-z0-9]+$/.test(state.id ?? "") ||
-      !Number.isSafeInteger(state.attributes?.serial) ||
-      state.attributes.serial < 0 ||
-      state.attributes.status !== "finalized"
-    )
-      throw new Error(
-        "HCP Terraform returned an incomplete or invalid state version.",
-      );
-    stateVersion = { id: state.id, serial: state.attributes.serial };
+    stateVersion = finalizedStateVersion(current.data);
   }
   return {
     hostname,
@@ -102,4 +94,107 @@ export async function inspectWorkspace(
     locked: workspace.attributes.locked,
     stateVersion,
   };
+}
+
+function finalizedStateVersion(state) {
+  if (
+    state?.type !== "state-versions" ||
+    !/^sv-[A-Za-z0-9]+$/.test(state.id ?? "") ||
+    !Number.isSafeInteger(state.attributes?.serial) ||
+    state.attributes.serial < 0 ||
+    state.attributes.status !== "finalized"
+  )
+    throw new Error(
+      "HCP Terraform returned an incomplete or invalid state version.",
+    );
+  return { id: state.id, serial: state.attributes.serial };
+}
+
+const maxStateBytes = 16 * 1024 * 1024;
+
+export async function downloadCurrentState(
+  config,
+  workspace,
+  fetchImpl = fetch,
+) {
+  if (
+    workspace.organization !== config.organization ||
+    workspace.hostname !== hostname ||
+    workspace.workspace !== workspaceName ||
+    workspace.locked !== false ||
+    !/^ws-[A-Za-z0-9]+$/.test(workspace.workspaceId ?? "") ||
+    !workspace.stateVersion
+  )
+    throw new Error(
+      "Expected an inspected, unlocked HCP workspace with state.",
+    );
+
+  const result = await get(
+    config,
+    fetchImpl,
+    `workspaces/${workspace.workspaceId}/current-state-version`,
+    true,
+  );
+  const state = result?.data;
+  const version = state && finalizedStateVersion(state);
+  if (
+    version?.id !== workspace.stateVersion.id ||
+    version.serial !== workspace.stateVersion.serial
+  )
+    throw new Error(
+      "The HCP state changed during export; inspect it before continuing.",
+    );
+
+  const url = URL.parse(state.attributes["hosted-state-download-url"] ?? "");
+  if (
+    !url ||
+    url.origin !== "https://archivist.terraform.io" ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    !/^\/v1\/object\/[^/]+$/.test(url.pathname)
+  )
+    throw new Error(
+      "HCP Terraform did not provide a trusted state download URL.",
+    );
+
+  // The download URL grants access on its own; never forward the HCP API token.
+  let response;
+  try {
+    response = await fetchImpl(url.href, {
+      method: "GET",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      headers: { Connection: "close" },
+      redirect: "error",
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch {
+    throw new Error("HCP Terraform state download did not complete.");
+  }
+  if (!response.ok)
+    throw new Error(
+      `HCP Terraform state download failed: HTTP ${response.status}.`,
+    );
+  if (
+    !response.body ||
+    Number(response.headers.get("content-length")) > maxStateBytes
+  ) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error("HCP Terraform state download is missing or too large.");
+  }
+  const chunks = [];
+  let bytes = 0;
+  try {
+    for await (const chunk of response.body) {
+      bytes += chunk.byteLength;
+      if (bytes > maxStateBytes) break;
+      chunks.push(Buffer.from(chunk));
+    }
+  } catch {
+    throw new Error("HCP Terraform state download did not complete.");
+  }
+  if (bytes > maxStateBytes)
+    throw new Error("HCP Terraform state download is missing or too large.");
+  return Buffer.concat(chunks);
 }

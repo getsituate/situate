@@ -539,6 +539,7 @@ test("SSH has verified host keys, bounded connection attempts and no shell-injec
 });
 
 const remotePath = fileURLToPath(new URL("./remote.py", import.meta.url));
+const promotePath = fileURLToPath(new URL("./promote.py", import.meta.url));
 function remoteHarness(t) {
   const root = temporary(t);
   const stage = join(root, "stage");
@@ -589,16 +590,75 @@ function remoteHarness(t) {
       "python3",
       [
         "-c",
-        `import importlib.util,sys\nsys.dont_write_bytecode=True\nspec=importlib.util.spec_from_file_location('release_remote',sys.argv[1])\nmodule=importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nmodule.ROOT=module.Path(sys.argv[2])\nsys.argv=['remote',sys.argv[3],sys.argv[4]]\n${extra}\nmodule.main()`,
+        `import importlib.util,sys\nsys.dont_write_bytecode=True\nspec=importlib.util.spec_from_file_location('release_remote',sys.argv[1])\nmodule=importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nmodule.ROOT=module.Path(sys.argv[2])\nsys.argv=['remote',sys.argv[3],sys.argv[4],sys.argv[5]]\n${extra}\nif sys.argv[1]=='promote':\n exec(module.Path(sys.argv[3]).read_text(),module.__dict__)\n module.promote_main()\nelse:\n sys.argv=sys.argv[:3]\n module.main()`,
         remotePath,
         host,
         action,
         Buffer.from(JSON.stringify(value)).toString("base64"),
+        promotePath,
       ],
       { input, encoding: "utf8", timeout: 5000 },
     );
   return { root, host, stage, files, tar, request, invoke };
 }
+
+test("promotion removes interrupted transfer scratch without a recovery journal", (t) => {
+  const { invoke, host, request } = remoteHarness(t);
+  mkdirSync(join(host, ".release-transfer"));
+  writeFileSync(join(host, ".release-transfer", "partial"), "incomplete");
+  symlinkSync("releases/1.2.3/metadata", join(host, ".release-activation"));
+  const stopped = invoke(
+    "promote",
+    request,
+    undefined,
+    "original=module.os.replace\ndef fail(source,target):\n if target.name=='current-release': raise OSError('interrupted before pointer switch')\n return original(source,target)\nmodule.os.replace=fail",
+  );
+  assert.notEqual(stopped.status, 0);
+  assert.equal(existsSync(join(host, "current-release")), false);
+  assert.equal(
+    existsSync(join(host, "releases", request.version, "manifest.json")),
+    true,
+  );
+  assert.equal(invoke("promote", request, Buffer.alloc(0)).status, 0);
+  assert.equal(invoke("promote", request, Buffer.alloc(0)).status, 0);
+  assert.equal(existsSync(join(host, "release-pending.json")), false);
+  assert.equal(existsSync(join(host, ".release-transfer")), false);
+  assert.notEqual(
+    invoke("promote", {
+      ...request,
+      files: {
+        ...request.files,
+        "artifact.dmg": { size: 1, sha256: "a".repeat(64) },
+      },
+    }).status,
+    0,
+  );
+  assert.equal(
+    readlinkSync(join(host, "current-release")),
+    "releases/1.2.3/metadata",
+  );
+});
+
+test("promotion disregards legacy intents but never moves a newer pointer backwards", (t) => {
+  const { invoke, host, request } = remoteHarness(t);
+  const older = storeRelease(host, "1.2.2");
+  symlinkSync("releases/1.2.2/metadata", join(host, "current-release"));
+  writeFileSync(join(host, "release-pending.json"), "{}");
+  assert.notEqual(invoke("promote").status, 0);
+  assert.equal(
+    invoke("promote", { ...request, migrationBaseline: [older] }).status,
+    0,
+  );
+  assert.notEqual(
+    invoke("promote", { ...request, version: "1.2.2" }).status,
+    0,
+  );
+  assert.equal(
+    readlinkSync(join(host, "current-release")),
+    "releases/1.2.3/metadata",
+  );
+  assert.equal(readFileSync(join(host, "release-pending.json"), "utf8"), "{}");
+});
 
 function storeRelease(host, version, changes = {}) {
   const manifest = Buffer.from(

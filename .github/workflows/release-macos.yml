@@ -279,7 +279,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.enabled == 'true' && contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, 'macos-compatibility')
     runs-on: macos-15-intel
-    timeout-minutes: 60
+    timeout-minutes: 75
     outputs:
       receipt: ${{ steps.lane.outputs.receipt }}
     env:
@@ -362,18 +362,19 @@ jobs:
           PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"tooling-macos":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"macos-code":{7},"browser":{8},"macos-native":{9},"macos-compatibility":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.tooling-macos), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.macos-code), toJSON(needs.browser), toJSON(needs.macos-native), toJSON(needs.macos-compatibility)) }}
 
   hosting-ready:
-    name: Wait for hosting on this revision
+    name: Wait for verified hosting inputs
     needs: plan
     if: needs.plan.outputs.enabled == 'true' && needs.plan.outputs.app_impact == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 155
     permissions:
       contents: read
-      actions: read
+      deployments: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
       - run: node tools/wait-for-hosting.mjs
@@ -408,6 +409,7 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: write
+      deployments: read
     env:
       PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_RELEASE_ENABLED }}
       SITUATE_RELEASE_CONFIG_SHA256: ${{ vars.SITUATE_RELEASE_CONFIG_SHA256 }}
@@ -421,6 +423,11 @@ jobs:
       - run: python3 tools/pipeline-bootstrap.py
       - run: node tools/actions-adapter.mjs release-gate --workflow create
       - run: node tools/actions-adapter.mjs desktop
+      - run: node tools/wait-for-hosting.mjs --probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
       - run: node tools/actions-adapter.mjs create-prepare
         env:
           SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}
@@ -481,10 +488,18 @@ jobs:
         with:
           path: ${{ steps.cache_plan.outputs.paths }}
           key: ${{ steps.cache_plan.outputs.key }}
+      - run: node tools/wait-for-hosting.mjs --probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
       - run: node tools/actions-adapter.mjs create-stage --stage qualify
         env:
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
+      - run: node tools/wait-for-hosting.mjs --check
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: node tools/actions-adapter.mjs create-stage --stage github
         env:
           GH_TOKEN: ${{ github.token }}
