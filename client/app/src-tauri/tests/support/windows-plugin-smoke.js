@@ -38,10 +38,28 @@ window.runWindowsPluginSmoke = async () => {
         name: "Synthetic plugin",
         description: "Return a fixed synthetic value.",
         serviceEntry: "service.js",
-        exports: ["answer"],
+        exports: ["answer", "writeWithProcess"],
       }),
     ],
-    ["service.js", "export default () => ({exports:{answer:() => 42}});"],
+    [
+      "service.js",
+      `export default () => ({exports:{
+        answer: () => 42,
+        async writeWithProcess(_args, host) {
+          const shell = await host.process.capability();
+          if (!shell.available || shell.interpreterDialect !== 'windowsPowerShell')
+            throw new Error('Windows PowerShell is unavailable');
+          const reply = await host.process.run({
+            executable: shell.interpreter,
+            args: [...shell.interpreterArgs,
+              "$ErrorActionPreference = 'Stop'; [IO.File]::WriteAllText((Join-Path $PWD 'process.md'), 'Written by PowerShell'); [Console]::Out.Write('done')"],
+            timeoutMs: 15000,
+          });
+          if (reply.isError) return reply;
+          return { ...reply, text: (await host.files.read('process.md')).text };
+        },
+      }});`,
+    ],
   ])
     await source({ operation: "write", path, text, expectedRevision: null });
   const validated = await invoke("plugins_source", {
@@ -77,4 +95,23 @@ window.runWindowsPluginSmoke = async () => {
   const service = await window.nativePluginService(scope, pluginId);
   if ((await service.invoke("answer", {})) !== 42)
     throw new Error("Active plugin returned an unexpected result");
+  const process = await service
+    .invoke("writeWithProcess", {})
+    .catch((error) => {
+      throw new Error(`Plugin process export failed: ${String(error)}`);
+    });
+  const result = process.commandResult?.Ok;
+  if (
+    process.isError ||
+    result?.outcome !== "exited" ||
+    result.exitCode !== 0 ||
+    result.stdout.text !== "done" ||
+    process.text !== "Written by PowerShell" ||
+    !process.beforeHistoryRevision ||
+    !process.afterHistoryRevision ||
+    process.beforeHistoryRevision === process.afterHistoryRevision
+  )
+    throw new Error(
+      `Plugin process did not reconcile its write: ${JSON.stringify(process)}`,
+    );
 };

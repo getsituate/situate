@@ -298,7 +298,7 @@ async fn cwd_is_not_a_filesystem_jail() {
 fn capability_names_the_actual_interpreter_and_ownership_limit() {
     let facts = capability();
     assert!(facts.available);
-    assert_eq!(facts.interpreter, Some("/bin/sh"));
+    assert_eq!(facts.interpreter.as_deref(), Some("/bin/sh"));
     assert_eq!(facts.interpreter_dialect, Some("posixSh"));
     assert_eq!(facts.interpreter_args, vec!["-c"]);
     assert_eq!(facts.ownership, "processGroup");
