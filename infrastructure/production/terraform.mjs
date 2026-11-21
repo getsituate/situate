@@ -21,6 +21,7 @@ import {
 } from "./rollout-journal.mjs";
 import { verifyAppliedOutcome } from "./rollout-reconcile.mjs";
 import {
+  downloadCurrentState,
   hcpConfiguration,
   hostname,
   inspectWorkspace,
@@ -337,17 +338,41 @@ export async function main(
     let executable;
     function run(parameters, capture = false) {
       executable ??= resolveTerraform(environment);
+      const init = parameters[0] === "init";
       const result = execute(executable, parameters, {
         cwd: directory,
         env,
         encoding: "utf8",
         maxBuffer: 16 * 1024 * 1024,
-        stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+        stdio: capture || init ? ["ignore", "pipe", "pipe"] : "inherit",
+        ...(init ? { timeout: 180_000, killSignal: "SIGKILL" } : {}),
       });
-      if (result.error || result.status !== 0)
+      if (result.error || result.status !== 0) {
+        if (init) {
+          if (result.error?.code === "ETIMEDOUT") {
+            const lines = String(result.stdout ?? "").split(/\r?\n/);
+            const stage = lines.some(
+              (line) => line.trim() === "Initializing provider plugins...",
+            )
+              ? "provider initialization"
+              : lines.some(
+                    (line) => line.trim() === "Initializing HCP Terraform...",
+                  )
+                ? "HCP backend initialization"
+                : "before reporting an initialization phase";
+            throw new Error(`Terraform init timed out during ${stage}.`);
+          }
+          const outcome = result.error
+            ? "could not start"
+            : result.signal
+              ? `signal ${result.signal}`
+              : `exit ${result.status}`;
+          throw new Error(`Terraform init failed (${outcome}).`);
+        }
         throw new Error(
           "Terraform failed. Inspect HCP state and pending operations before retrying; no automatic retry was attempted.",
         );
+      }
       return result.stdout;
     }
     if (command === "validate") {
@@ -385,7 +410,7 @@ export async function main(
         throw new Error(
           "Backend metadata is missing; inspect the existing workspace binding before continuing.",
         );
-      run(["init", "-input=false", "-lockfile=readonly"]);
+      run(["init", "-no-color", "-input=false", "-lockfile=readonly"]);
       const after = await inspect();
       if (!same(targetIdentity(after), targetIdentity(target)))
         throw new Error(
@@ -420,10 +445,15 @@ export async function main(
         );
         return;
       }
-      const raw = run(["state", "pull"], true);
-      const state = JSON.parse(raw);
+      const raw = await downloadCurrentState(hcp, snapshot, fetchImpl);
+      let state;
+      try {
+        state = JSON.parse(raw.toString("utf8"));
+      } catch {
+        throw new Error("HCP Terraform state download returned invalid JSON.");
+      }
       if (
-        state.version !== 4 ||
+        state?.version !== 4 ||
         typeof state.lineage !== "string" ||
         state.serial !== snapshot.stateVersion.serial ||
         !Array.isArray(state.resources)

@@ -103,6 +103,13 @@ def run(args,**options):
         if mode=='control-timeout': raise subprocess.TimeoutExpired('synthetic-control',options['timeout'])
         if mode!='stuck': child.terminate()
     return types.SimpleNamespace(returncode=0)
+def getaddrinfo(host, port, *, type):
+    assert not actions, 'Resolve before installing the loopback mapping'
+    assert host=='updates.example.com' and port==22 and type==socket.SOCK_STREAM
+    if mode=='loopback-only':
+        return [(socket.AF_INET,socket.SOCK_STREAM,0,'',('127.0.0.2',22))]
+    return [(socket.AF_INET,socket.SOCK_STREAM,0,'',('192.0.2.15',22))]
+g.network.getaddrinfo=getaddrinfo
 g.subprocess.Popen=popen
 g.subprocess.run=run
 g.GUARDIAN_READY_SECONDS=0.01
@@ -202,6 +209,27 @@ test("guardian owns a foreground verified SSH process and reports readiness befo
     .filter((entry) => entry[0] === "run")
     .map((entry) => entry[1][entry[1].indexOf("-O") + 1]);
   assert.deepEqual(controls, ["check", "exit"]);
+});
+
+test("guardian pins the SSH address before overriding a shared hostname and retains host key verification", (t) => {
+  const shared = {
+    ...request,
+    ssh: { ...request.ssh, host: "release@updates.example.com" },
+  };
+  const result = unit(t, "success", shared);
+  assert.equal(result.status, 0);
+  for (const [kind, args] of result.details.commands) {
+    if (kind !== "popen" && kind !== "run") continue;
+    assert(args.includes("HostName=192.0.2.15"));
+    assert(args.includes("HostKeyAlias=updates.example.com"));
+    assert(args.includes("StrictHostKeyChecking=yes"));
+    assert.equal(args.at(-1), shared.ssh.host);
+  }
+  const noAddress = unit(t, "loopback-only", shared);
+  assert.equal(noAddress.status, 1);
+  assert.deepEqual(noAddress.details.actions, []);
+  assert.deepEqual(noAddress.details.commands, []);
+  assert.equal(noAddress.records.at(-1).failure, "ssh-destination");
 });
 
 test("guardian rejects command injection and non-loopback contracts before any resource effects", (t) => {

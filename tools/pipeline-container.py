@@ -1,5 +1,6 @@
 """Run portable pipeline commands in the repository's pinned tool image."""
 
+from contextlib import nullcontext
 import glob
 import importlib.util
 import json
@@ -371,9 +372,6 @@ def main(argv=None, environment=None):
         owner = container_owner()
         docker_environment = {key: environment[key] for key in owner.DOCKER_ENVIRONMENT if key in environment}
         command_line = [sys.executable, "-B", str(ROOT / "tools/pipeline-container.py"), "_docker-client", str(lease), token, *docker_args]
-        if not coordinated:
-            command_line = [sys.executable, str(ROOT / "tools/worktree-supervisor.py"),
-                            "worktree", str(ROOT), "--docker-lease", str(lease), *command_line]
         child = None
         cancelled = False
         def cancel(_signal, _frame):
@@ -388,7 +386,14 @@ def main(argv=None, environment=None):
                 owner.cleanup_docker_lease(lease, creation_started=False)
                 return 130
             try:
-                child = subprocess.Popen(command_line, env=environment, stdin=subprocess.PIPE if not coordinated else None, umask=0o077)
+                directory = nullcontext() if coordinated else owner.private_directory(context, owner.DOCKER_DIRECTORY_ERROR)
+                with directory as lease_fd:
+                    if lease_fd is not None:
+                        command_line = [sys.executable, str(ROOT / "tools/worktree-supervisor.py"),
+                                        "--docker-lease-fd", str(lease_fd), str(lease),
+                                        "worktree", str(ROOT), *command_line]
+                    child = subprocess.Popen(command_line, env=environment, stdin=subprocess.PIPE if not coordinated else None,
+                                             pass_fds=() if lease_fd is None else (lease_fd,), umask=0o077)
             except OSError:
                 owner.cleanup_docker_lease(lease, creation_started=False)
                 raise

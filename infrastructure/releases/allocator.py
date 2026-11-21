@@ -115,12 +115,12 @@ def release_coordination(request):
     if action == 'release-claim':
         if active is not None:
             if active != identity:
-                raise ValueError('Another release operation requires inspection')
+                return {'rejected': 'another-release-active'}
             if request.get('inspectionDigest') != snapshot:
-                raise ValueError('Existing release claim requires explicit fresh inspection')
+                return {'rejected': 'release-inspection-required'}
             return {'durable': True, 'operationId': identity['operationId'], 'resumed': True}
         if selected:
-            raise ValueError('A completed release operation cannot be reused')
+            return {'rejected': 'release-already-completed'}
         state = 'claimed'
     elif action == 'release-complete':
         if selected and selected[-1]['state'] == 'completed':
@@ -185,12 +185,10 @@ def allocator_main():
     with os.fdopen(open_regular(ROOT / 'release.lock', os.O_WRONLY | os.O_CREAT), 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         validate_storage('')
-        check_pending()
         reply({'ready': True})
         for line in sys.stdin:
             request = json.loads(line)
             action = request['action']
-            current = read_intent()
             if action in ('release-inspect', 'release-claim', 'release-complete'):
                 reply(release_coordination(request))
             elif action in ('journal-append', 'journal-inspect', 'journal-inspect-family'):
@@ -198,16 +196,17 @@ def allocator_main():
             elif action == 'inventory':
                 reply(allocator_inventory())
             elif action == 'pending':
-                reply({'pending': current})
+                reply({'pending': read_intent()})
             elif action == 'assert-held':
                 reply({'held': True})
             elif action == 'save':
                 value = request['value']
-                if not isinstance(value, dict) or current is not None:
+                if not isinstance(value, dict) or read_intent() is not None:
                     raise ValueError('An unresolved allocation requires inspection')
                 save(pending, value)
                 reply({'saved': True})
             elif action == 'clear':
+                current = read_intent()
                 if current is None or current != request['value']:
                     raise ValueError('Allocation intent differs')
                 pending.unlink()

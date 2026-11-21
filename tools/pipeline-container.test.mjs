@@ -283,6 +283,34 @@ test("Python host commands retain only their scoped inputs", () => {
   assert.deepEqual(value.plan, { ...value.lane, GH_TOKEN: "read-token" });
 });
 
+test("a standalone container launcher passes its directory descriptor and closes it after a failed start", () => {
+  const result = python(`import types
+m.subprocess.run = lambda *args, **kwargs: types.SimpleNamespace(returncode=0)
+m.git_common_dir = lambda root: None
+m.retained_cache_paths = lambda *args: {}
+m.arguments = lambda *args: ['version']
+class FailedStart(OSError): pass
+def start(command, *, pass_fds, stdin, **kwargs):
+    global lease_fd, lease
+    (lease_fd,) = pass_fds
+    assert command[2:4] == ['--docker-lease-fd', str(lease_fd)]
+    lease = pathlib.Path(command[4])
+    directory = lease.parent.stat()
+    inherited = os.fstat(lease_fd)
+    assert (directory.st_dev, directory.st_ino) == (inherited.st_dev, inherited.st_ino)
+    assert lease.is_file() and stdin == m.subprocess.PIPE
+    raise FailedStart()
+m.subprocess.Popen = start
+try: m.main(['monitoring'], {})
+except FailedStart: pass
+else: raise AssertionError('Failed subprocess start was not reported')
+try: os.fstat(lease_fd)
+except OSError: pass
+else: raise AssertionError('Launcher retained the directory descriptor')
+print(json.dumps({'leaseRemoved': not lease.exists()}))`);
+  assert.deepEqual(result, { leaseRemoved: true });
+});
+
 test("a local Docker exec failure confirms non-submission without guessing daemon state", () => {
   const value = python(
     `import types\ncleanups=[]\nowner=types.SimpleNamespace(read_docker_lease=lambda path:({'token':'first'},None),cleanup_docker_lease=lambda path,**kwargs:cleanups.append(kwargs))\nm.container_owner=lambda:owner\ndef failed_exec(*args): raise OSError('executable unavailable')\nm.os.execvpe=failed_exec\ntry:m.docker_client('/synthetic/lease','first',['version'],{})\nexcept OSError:failed=True\nelse:failed=False\nprint(json.dumps({'failed':failed,'cleanups':cleanups}))`,

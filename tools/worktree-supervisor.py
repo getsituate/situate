@@ -720,31 +720,31 @@ def main(coordination_directory=None):
         cleanup_grace_ms = int(arguments[1])
         arguments = arguments[2:]
     docker_lease = None
-    if arguments[:1] == ['--docker-lease']:
-        docker_lease = Path(arguments[1])
-        arguments = arguments[2:]
-    resource, directory, *args = arguments
-    if args[:1] == ['--docker-lease']:
-        if docker_lease is not None:
-            raise ValueError('Docker lease option was repeated.')
-        docker_lease = Path(args[1])
-        args = args[2:]
-    command, *args = args
+    if arguments[:1] == ['--docker-lease-fd']:
+        if len(arguments) < 3 or not re.fullmatch(r'[0-9]+', arguments[1]) or int(arguments[1]) < 3:
+            raise ValueError('Expected an inherited Docker lease directory descriptor.')
+        docker_lease = DockerLease(Path(arguments[2]), int(arguments[1]))
+        arguments = arguments[3:]
+    resource, directory, command, *args = arguments
     if resource not in ("worktree", "desktop", "build"):
         raise ValueError("Unknown coordinated resource.")
-    if docker_lease is not None:
-        if resource != 'worktree':
-            raise ValueError('Only a worktree owner can supervise a Docker lease.')
-        if not managed_lease_location(docker_lease) or '..' in docker_lease.parts:
-            raise ValueError('Use a private temporary Docker lease created by the launcher.')
     directory = Path(directory).resolve(strict=True)
     if docker_lease is None:
         return supervise(resource, directory, command, args, cleanup_grace_ms, coordination_directory)
-    if docker_lease.parent.resolve(strict=True).is_relative_to(worktree_root(directory)):
+    if resource != 'worktree':
+        raise ValueError('Only a worktree owner can supervise a Docker lease.')
+    path = docker_lease.path
+    if not managed_lease_location(path) or '..' in path.parts:
+        raise ValueError('Use a private temporary Docker lease created by the launcher.')
+    if path.parent.resolve(strict=True).is_relative_to(worktree_root(directory)):
         raise ValueError('Docker control leases must remain outside the checkout.')
-    with private_directory(docker_lease.parent, DOCKER_DIRECTORY_ERROR) as directory_fd:
-        return supervise(resource, directory, command, args, cleanup_grace_ms, coordination_directory,
-                         DockerLease(docker_lease, directory_fd))
+    info = os.fstat(docker_lease.directory_fd)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        raise ValueError(DOCKER_DIRECTORY_ERROR)
+    # Only the supervisor needs the directory handle; workers publish using the bound path.
+    os.set_inheritable(docker_lease.directory_fd, False)
+    with docker_lease_directory(docker_lease):
+        return supervise(resource, directory, command, args, cleanup_grace_ms, coordination_directory, docker_lease)
 
 
 def supervise(resource, directory, command, args, cleanup_grace_ms, coordination_directory, docker_lease=None):

@@ -1,5 +1,13 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, realpathSync, rmdirSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  mkdtempSync,
+  openSync,
+  realpathSync,
+  rmdirSync,
+  writeSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -109,28 +117,54 @@ export async function runCoordinated({
   const dockerLease = dockerLeaseDirectory
     ? join(dockerLeaseDirectory, "container.json")
     : undefined;
-  const child = spawn(
-    "python3",
-    [
-      "-u",
-      fileURLToPath(new URL("./worktree-supervisor.py", import.meta.url)),
-      "--cleanup-grace-ms",
-      String(cleanupGraceMs),
-      ...(dockerLease ? ["--docker-lease", dockerLease] : []),
-      resource,
-      realpathSync(directory),
-      command,
-      ...args,
-    ],
-    {
-      cwd: directory,
-      env: dockerLease
-        ? { ...environment, SITUATE_DOCKER_LEASE: dockerLease }
-        : environment,
-      detached: process.platform !== "win32",
-      stdio: ["pipe", "pipe", "pipe", "pipe"],
-    },
-  );
+  const discardEmptyLease = () => {
+    if (dockerLeaseDirectory) {
+      try {
+        rmdirSync(dockerLeaseDirectory);
+      } catch {
+        /* A nonempty lease directory belongs to the supervisor. */
+      }
+    }
+  };
+  let child;
+  let leaseFd;
+  try {
+    const stdio = ["pipe", "pipe", "pipe", "pipe"];
+    const leaseOptions = [];
+    if (dockerLeaseDirectory) {
+      leaseFd = openSync(
+        dockerLeaseDirectory,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+      );
+      leaseOptions.push("--docker-lease-fd", String(stdio.length), dockerLease);
+      stdio.push(leaseFd);
+    }
+    child = spawn(
+      "python3",
+      [
+        "-u",
+        fileURLToPath(new URL("./worktree-supervisor.py", import.meta.url)),
+        "--cleanup-grace-ms",
+        String(cleanupGraceMs),
+        ...leaseOptions,
+        resource,
+        realpathSync(directory),
+        command,
+        ...args,
+      ],
+      {
+        cwd: directory,
+        env: environment,
+        detached: process.platform !== "win32",
+        stdio,
+      },
+    );
+  } catch (error) {
+    discardEmptyLease();
+    throw error;
+  } finally {
+    if (leaseFd !== undefined) closeSync(leaseFd);
+  }
   let timingBuffer = "";
   child.stdio[3].setEncoding("utf8");
   child.stdio[3].on("data", (chunk) => {
@@ -164,13 +198,7 @@ export async function runCoordinated({
   try {
     return await new Promise((done, reject) => {
       child.once("error", (error) => {
-        if (dockerLeaseDirectory) {
-          try {
-            rmdirSync(dockerLeaseDirectory);
-          } catch {
-            /* A nonempty lease directory belongs to the supervisor. */
-          }
-        }
+        discardEmptyLease();
         reject(error);
       });
       child.once("close", (code) => done(signalExit ?? code ?? 1));

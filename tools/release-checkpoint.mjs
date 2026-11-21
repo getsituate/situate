@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
   constants,
@@ -6,12 +7,12 @@ import {
   fsyncSync,
   fstatSync,
   lstatSync,
-  mkdirSync,
   openSync,
   readSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { digest, validatePlan } from "./pipeline-state.mjs";
 import { verifyReleaseInputs } from "./release-inputs.mjs";
 import { validateReservation } from "./release-reservation.mjs";
@@ -469,37 +470,44 @@ export function validateRestoredCheckpoint(descriptor, directory, plan) {
     manifestBytes: checkpointFile(join(directory, "manifest.json")),
   };
 }
-export function createRestoreDirectory(destination) {
+function restoreDirectoryCommand(action, ...args) {
+  return execFileSync(
+    "/usr/bin/python3",
+    [
+      "-IB",
+      fileURLToPath(
+        new URL(
+          "../infrastructure/releases/checkpoint-commit.py",
+          import.meta.url,
+        ),
+      ),
+      action,
+      ...args,
+    ],
+    { encoding: "utf8", env: {}, stdio: ["ignore", "pipe", "pipe"] },
+  );
+}
+export function installRestoreDirectory(
+  directory,
+  destination,
+  parent,
+  staging,
+) {
+  restoreDirectoryCommand("commit", directory, destination, parent, staging);
+}
+export function createRestoreDirectory(directory, destination) {
   assert(
-    isAbsolute(destination),
+    isAbsolute(destination ?? directory),
     "Restore requires an explicit absolute destination",
   );
-  checkpointFileParent(destination);
-  const parentPath = dirname(destination);
-  const parent = openSync(
-    parentPath,
-    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-  );
-  try {
-    const opened = fstatSync(parent);
-    const checkParent = () => {
-      const current = lstatSync(parentPath);
-      assert(
-        current.isDirectory() &&
-          current.dev === opened.dev &&
-          current.ino === opened.ino,
-        "Restore parent directory changed",
-      );
-    };
-    checkParent();
-    mkdirSync(destination, { mode: 0o700 });
-    checkParent();
-    const { dev, ino } = lstatSync(destination, { bigint: true });
-    fsyncSync(parent);
-    return `${dev}:${ino}`;
-  } finally {
-    closeSync(parent);
-  }
+  const [parent, staging] = restoreDirectoryCommand(
+    "create",
+    directory,
+    ...(destination === undefined ? [] : [destination]),
+  )
+    .trim()
+    .split(" ");
+  return destination === undefined ? staging : { parent, staging };
 }
 function checkpointFileParent(destination) {
   for (let parent = dirname(destination); ; parent = dirname(parent)) {
@@ -511,15 +519,17 @@ function checkpointFileParent(destination) {
     if (parent === dirname(parent)) break;
   }
 }
-export function writeRestoredFile(directory, item, bytes) {
+export function writeRestoredFile(directory, item, bytes, verifyDirectory) {
   assert(
     /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(item.name),
     "Invalid checkpoint path",
   );
   assert.equal(bytes.length, item.size);
   assert.equal(digest(bytes), item.sha256, "Restored checkpoint hash differs");
+  verifyDirectory?.();
   const fd = openSync(join(directory, item.name), "wx", 0o600);
   try {
+    verifyDirectory?.();
     writeFileSync(fd, bytes);
     fsyncSync(fd);
   } finally {

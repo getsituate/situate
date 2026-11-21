@@ -653,6 +653,7 @@ export function suiteInventory(files, host = process.platform) {
     "infrastructure/production/rollout-journal.test.mjs",
     "infrastructure/production/continuous-rollout.test.mjs",
     "infrastructure/production/hosting-deployment.test.mjs",
+    "infrastructure/production/immutable/continuous-deploy.test.mjs",
     "infrastructure/production/immutable/hosting-inventory.test.mjs",
     "infrastructure/production/immutable/enrollment.test.mjs",
     "infrastructure/production/rollout-reconcile.test.mjs",
@@ -739,7 +740,8 @@ export function suiteInventory(files, host = process.platform) {
         "design-unit",
         "runner-unit",
         "runner-integration",
-      ].includes(suite.id)
+      ].includes(suite.id) ||
+      suite.environment === "pi"
     )
       suite.npm = ".";
     if (
@@ -1307,6 +1309,7 @@ export function executeSuite(
 
 const npmEntrypoints = {
   ".": [
+    "@earendil-works/pi-coding-agent/dist/index.js",
     "eslint/bin/eslint.js",
     "prettier/bin/prettier.cjs",
     "marked/package.json",

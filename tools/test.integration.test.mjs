@@ -174,6 +174,7 @@ test("root quality checks bootstrap locked local tools without changing the lock
   const devDependencies = {};
   const packages = {};
   for (const [name, entry] of [
+    ["@earendil-works/pi-coding-agent", "dist/index.js"],
     ["eslint", "bin/eslint.js"],
     ["prettier", "bin/prettier.cjs"],
     ["marked", "lib/marked.esm.js"],

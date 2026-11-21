@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   linkSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   symlinkSync,
   writeFileSync,
   rmSync,
@@ -139,13 +141,27 @@ test("committed packages restore exactly without a builder, and lost acknowledge
     f.store.commit(checkpoint),
     /inspect instead of replaying/,
   );
-  const destination = join(f.root, "restored");
-  await f.store.restore({
-    plan: f.plan,
-    checkpointId: ack.checkpointId,
-    inspectionDigest: inspected.inspectionDigest,
-    destination,
-  });
+  const ancestor = join(f.root, "search-only");
+  const shared = join(ancestor, "shared");
+  mkdirSync(shared, { recursive: true });
+  chmodSync(shared, 0o777);
+  const destination = join(shared, "restored");
+  chmodSync(ancestor, 0o100);
+  try {
+    await f.store.restore({
+      plan: f.plan,
+      checkpointId: ack.checkpointId,
+      inspectionDigest: inspected.inspectionDigest,
+      destination,
+    });
+  } finally {
+    chmodSync(ancestor, 0o700);
+  }
+  assert.equal(statSync(destination).mode & 0o777, 0o700);
+  assert.equal(
+    statSync(join(destination, "manifest.json")).mode & 0o777,
+    0o600,
+  );
   assert.deepEqual(
     readFileSync(join(destination, "manifest.json")),
     readFileSync(join(f.directory, "manifest.json")),
@@ -164,6 +180,27 @@ test("committed packages restore exactly without a builder, and lost acknowledge
   });
   assert.deepEqual(JSON.parse(readFileSync(bootstrap.planFile)), f.plan);
 });
+test("restore refuses linked ancestors before creating staging or opening a transfer", async (t) => {
+  const { root, plan } = checkpointFixture(t);
+  const parent = join(root, "parent");
+  const actual = join(parent, "nested");
+  const alias = join(root, "alias");
+  mkdirSync(actual, { recursive: true, mode: 0o700 });
+  symlinkSync(parent, alias);
+  const store = createHostCheckpointStore(
+    {},
+    {
+      start: () =>
+        assert.fail("Transfer started before destination validation"),
+    },
+  );
+  const restore = (parent) =>
+    store.restore({ plan, destination: join(parent, "restore") });
+
+  await assert.rejects(restore(join(alias, "nested")), /linked storage/);
+  assert.deepEqual(readdirSync(actual), []);
+});
+
 test("restore commits only a complete validated successful transfer and never replaces a destination", async (t) => {
   for (const failure of [
     "metadata-only",
@@ -171,6 +208,8 @@ test("restore commits only a complete validated successful transfer and never re
     "bad-hash",
     "bad-manifest",
     "nonzero-exit",
+    "staging-moved",
+    "staging-exposed",
     "existing",
     "concurrent",
     "none",
@@ -219,6 +258,16 @@ test("restore commits only a complete validated successful transfer and never re
       {
         start: () => {
           transfers++;
+          if (["staging-moved", "staging-exposed"].includes(failure)) {
+            const name = readdirSync(f.root).find((name) =>
+              name.startsWith(".release-restore-incomplete-"),
+            );
+            assert(name);
+            const staging = join(f.root, name);
+            if (failure === "staging-moved")
+              renameSync(staging, `${staging}-moved`);
+            else chmodSync(staging, 0o755);
+          }
           const code = `process.stdin.resume();process.stdin.on('end',()=>{process.stdout.write(Buffer.from(${JSON.stringify(payload.toString("base64"))},'base64'));${failure === "concurrent" ? `require('node:fs').mkdirSync(${JSON.stringify(destination)},{mode:0o700});` : ""}process.exitCode=${failure === "nonzero-exit" ? 1 : 0};});`;
           return spawn(process.execPath, ["-e", code], {
             stdio: ["pipe", "pipe", "pipe"],
@@ -279,13 +328,14 @@ test("restore commits only a complete validated successful transfer and never re
         assert.deepEqual(readdirSync(destination), []);
       else assert.equal(existsSync(destination), false);
       assert.equal(transfers, failure === "existing" ? 0 : 1);
-      if (failure !== "existing")
-        assert.equal(
-          readdirSync(f.root).filter((name) =>
-            name.startsWith(".release-restore-incomplete-"),
-          ).length,
-          1,
+      if (failure !== "existing") {
+        const staging = readdirSync(f.root).filter((name) =>
+          name.startsWith(".release-restore-incomplete-"),
         );
+        assert.equal(staging.length, 1);
+        if (["staging-moved", "staging-exposed"].includes(failure))
+          assert.deepEqual(readdirSync(join(f.root, staging[0])), []);
+      }
     }
   }
 });

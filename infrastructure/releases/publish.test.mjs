@@ -5,6 +5,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   chmodSync,
+  closeSync,
+  openSync,
   statSync,
   realpathSync,
   renameSync,
@@ -276,6 +278,29 @@ test("publisher accepts absent or legacy recovery evidence without allowing a du
   }
 });
 
+test("local journal inspection rejects an aliased journal before transport", (t) => {
+  const directory = temporary(t);
+  const external = join(temporary(t), "other-journal.json");
+  const bytes = '{"host":"release@fixture.invalid"}';
+  writeFileSync(external, bytes);
+  symlinkSync(external, join(directory, "publication-journal.json"));
+  const result = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("./publish.mjs", import.meta.url)),
+      "inspect",
+      "--release",
+      directory,
+      "--destination",
+      "release@fixture.invalid",
+    ],
+    { encoding: "utf8", env: { PATH: process.env.PATH, CI: "true" } },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Cannot read publication journal/);
+  assert.equal(readFileSync(external, "utf8"), bytes);
+});
+
 test("publication destination reads only the effective host from private dotenv data", (t) => {
   const directory = temporary(t);
   const clientRoot = join(directory, "client");
@@ -539,6 +564,7 @@ test("SSH has verified host keys, bounded connection attempts and no shell-injec
 });
 
 const remotePath = fileURLToPath(new URL("./remote.py", import.meta.url));
+const promotePath = fileURLToPath(new URL("./promote.py", import.meta.url));
 function remoteHarness(t) {
   const root = temporary(t);
   const stage = join(root, "stage");
@@ -589,16 +615,75 @@ function remoteHarness(t) {
       "python3",
       [
         "-c",
-        `import importlib.util,sys\nsys.dont_write_bytecode=True\nspec=importlib.util.spec_from_file_location('release_remote',sys.argv[1])\nmodule=importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nmodule.ROOT=module.Path(sys.argv[2])\nsys.argv=['remote',sys.argv[3],sys.argv[4]]\n${extra}\nmodule.main()`,
+        `import importlib.util,sys\nsys.dont_write_bytecode=True\nspec=importlib.util.spec_from_file_location('release_remote',sys.argv[1])\nmodule=importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nmodule.ROOT=module.Path(sys.argv[2])\nsys.argv=['remote',sys.argv[3],sys.argv[4],sys.argv[5]]\n${extra}\nif sys.argv[1]=='promote':\n exec(module.Path(sys.argv[3]).read_text(),module.__dict__)\n module.promote_main()\nelse:\n sys.argv=sys.argv[:3]\n module.main()`,
         remotePath,
         host,
         action,
         Buffer.from(JSON.stringify(value)).toString("base64"),
+        promotePath,
       ],
       { input, encoding: "utf8", timeout: 5000 },
     );
   return { root, host, stage, files, tar, request, invoke };
 }
+
+test("promotion removes interrupted transfer scratch without a recovery journal", (t) => {
+  const { invoke, host, request } = remoteHarness(t);
+  mkdirSync(join(host, ".release-transfer"));
+  writeFileSync(join(host, ".release-transfer", "partial"), "incomplete");
+  symlinkSync("releases/1.2.3/metadata", join(host, ".release-activation"));
+  const stopped = invoke(
+    "promote",
+    request,
+    undefined,
+    "original=module.os.replace\ndef fail(source,target):\n if target.name=='current-release': raise OSError('interrupted before pointer switch')\n return original(source,target)\nmodule.os.replace=fail",
+  );
+  assert.notEqual(stopped.status, 0);
+  assert.equal(existsSync(join(host, "current-release")), false);
+  assert.equal(
+    existsSync(join(host, "releases", request.version, "manifest.json")),
+    true,
+  );
+  assert.equal(invoke("promote", request, Buffer.alloc(0)).status, 0);
+  assert.equal(invoke("promote", request, Buffer.alloc(0)).status, 0);
+  assert.equal(existsSync(join(host, "release-pending.json")), false);
+  assert.equal(existsSync(join(host, ".release-transfer")), false);
+  assert.notEqual(
+    invoke("promote", {
+      ...request,
+      files: {
+        ...request.files,
+        "artifact.dmg": { size: 1, sha256: "a".repeat(64) },
+      },
+    }).status,
+    0,
+  );
+  assert.equal(
+    readlinkSync(join(host, "current-release")),
+    "releases/1.2.3/metadata",
+  );
+});
+
+test("promotion disregards legacy intents but never moves a newer pointer backwards", (t) => {
+  const { invoke, host, request } = remoteHarness(t);
+  const older = storeRelease(host, "1.2.2");
+  symlinkSync("releases/1.2.2/metadata", join(host, "current-release"));
+  writeFileSync(join(host, "release-pending.json"), "{}");
+  assert.notEqual(invoke("promote").status, 0);
+  assert.equal(
+    invoke("promote", { ...request, migrationBaseline: [older] }).status,
+    0,
+  );
+  assert.notEqual(
+    invoke("promote", { ...request, version: "1.2.2" }).status,
+    0,
+  );
+  assert.equal(
+    readlinkSync(join(host, "current-release")),
+    "releases/1.2.3/metadata",
+  );
+  assert.equal(readFileSync(join(host, "release-pending.json"), "utf8"), "{}");
+});
 
 function storeRelease(host, version, changes = {}) {
   const manifest = Buffer.from(
@@ -1355,8 +1440,8 @@ test("publication archives keep exact bytes for reconciliation and require an un
     );
     assert.equal(existsSync(`${stage}.tar`), false);
   }
-  const inspect = (fd, digest) => {
-    const bytes = readFileSync(fd);
+  const inspect = (digest) => {
+    const bytes = readFileSync(`${stage}.tar`);
     assert.equal(sha256(bytes), digest);
     assert.equal(
       execFileSync("/usr/bin/tar", ["-tf", "-"], {
@@ -1374,6 +1459,7 @@ test("publication archives keep exact bytes for reconciliation and require an un
     inspect,
   );
   assert.equal(statSync(`${stage}.tar`).mode & 0o777, 0o600);
+  writeFileSync(join(stage, "manifest.json"), '{"changed":true}\n');
   assert.equal(
     withPublicationArchive(stage, releaseMembers, digest, inspect),
     digest,
@@ -1388,6 +1474,68 @@ test("publication archives keep exact bytes for reconciliation and require an un
   );
 });
 
+test("archive creation and handoff stay in the selected parent after it moves", (t) => {
+  const root = temporary(t);
+  const parent = join(root, "external stage parent");
+  const moved = join(root, "moved parent");
+  const stage = "staged release";
+  mkdirSync(join(parent, stage), { recursive: true });
+  writeFileSync(join(parent, stage, "manifest.json"), "{}\n");
+  const directory = openSync(parent, "r");
+  try {
+    renameSync(parent, moved);
+    mkdirSync(parent);
+    const storage = fileURLToPath(
+      new URL("./publication-storage.py", import.meta.url),
+    );
+    const options = { stdio: ["pipe", "pipe", "pipe", directory], env: {} };
+    const prepared = execFileSync(
+      "/usr/bin/python3",
+      ["-IB", storage, "prepare-archive"],
+      {
+        ...options,
+        input: JSON.stringify({ stage, names: ["manifest.json"] }),
+      },
+    );
+    const { digest } = JSON.parse(prepared);
+    assert.equal(existsSync(join(parent, `${stage}.tar`)), false);
+    const retained = readFileSync(join(moved, `${stage}.tar`));
+    assert.equal(sha256(retained), digest);
+    const localTransport = [
+      "import os, runpy, sys",
+      "def capture(executable, args):",
+      " assert executable == '/usr/bin/ssh'",
+      " with os.fdopen(0, 'rb') as archive: sys.stdout.buffer.write(archive.read())",
+      "os.execv = capture",
+      "sys.argv = sys.argv[1:]",
+      "runpy.run_path(sys.argv[0], run_name='__main__')",
+    ].join("\n");
+    const transferred = execFileSync(
+      "/usr/bin/python3",
+      ["-IBc", localTransport, storage, "send-archive"],
+      {
+        ...options,
+        input: JSON.stringify({ stage, digest }),
+      },
+    );
+    assert.deepEqual(transferred, retained);
+    assert.throws(
+      () =>
+        execFileSync(
+          "/usr/bin/python3",
+          ["-IBc", localTransport, storage, "send-archive"],
+          {
+            ...options,
+            input: JSON.stringify({ stage, digest: "0".repeat(64) }),
+          },
+        ),
+      /Transport archive changed before transfer/,
+    );
+  } finally {
+    closeSync(directory);
+  }
+});
+
 test("publication archives reject files outside the approved inventory", (t) => {
   const stage = join(temporary(t), "stage");
   mkdirSync(stage);
@@ -1396,7 +1544,7 @@ test("publication archives reject files outside the approved inventory", (t) => 
   assert.throws(
     () =>
       withPublicationArchive(stage, ["manifest.json"], undefined, assert.fail),
-    /Cannot create publication archive/,
+    /Cannot prepare publication archive/,
   );
 });
 
@@ -1416,7 +1564,7 @@ test("publication archives reject a linked metadata directory", (t) => {
         undefined,
         assert.fail,
       ),
-    /Cannot create publication archive/,
+    /Cannot prepare publication archive/,
   );
   assert.equal(
     readFileSync(join(metadata, "update.json"), "utf8"),

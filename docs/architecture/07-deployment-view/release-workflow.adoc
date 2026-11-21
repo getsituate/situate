@@ -102,7 +102,10 @@ Instrumented native smoke builds cannot substitute for these exact artifacts.
 The update test must retain the embedded production HTTPS endpoint and TLS validation without advertising the unqualified candidate as the current public update.
 On immutable hosting, the existing TLS proxy serves the candidate through a separate loopback port, reached through a restricted SSH forward from the runner.
 The release account stages the candidate files without access to Docker or TLS keys; see <<adr-0022>>.
-Release creation waits for the hosting workflow for its exact `main` revision.
+Release creation requires a successful production deployment whose hosting inputs match the candidate's.
+App-only revisions can use the already verified generation without running Terraform.
+Before release work and before artifact qualification, macOS verifies the running image's provenance and private HTTPS response over authenticated SSH.
+An unresolved hosting operation or an undeployed hosting change blocks release creation; the artifact qualification itself is unchanged.
 Changing the embedded endpoint or manually replacing the app does not establish production updater qualification.
 
 After final qualification, complete a GitHub Release containing sealed packages, generated inputs and public qualification evidence; exclude keys, private journals and raw diagnostics.
@@ -115,7 +118,7 @@ Workflow chaining must account for event suppression by the default workflow tok
 Independent selected checks and preliminary builds may run in parallel after relevance planning, with isolated outputs and native-desktop ownership.
 There is no global fast-check barrier before unrelated native or browser jobs; all required results still gate publication.
 Serialize final migration-baseline qualification, macOS release creation and publication effects so a concurrent publication cannot silently invalidate a candidate's checked history; independent source verification does not hold that queue.
-Before a new automated claim, observe the latest main source. An existing claim retains its original source and reservation.
+Before reserving a version, verify that the candidate still matches protected `main`.
 Eligible source results may be reused only with independently verified producer execution/workflow identity, whole-tree equality, matching execution contracts and actual host identity. Retain original tested revisions and explicit reuse bindings; history-sensitive and unknown checks execute afresh.
 Read baselines from trusted immutable publication evidence, not a comparison revision chosen by the candidate change.
 Revalidate a candidate against current publication evidence before publication without changing its artifacts.
@@ -128,20 +131,15 @@ Until then, the existing operator approvals remain in force.
 
 Record source and any derived release revision, public version, build identifier, variant, content digest, toolchain identity, artifact hashes and qualification outcomes.
 Keep build, qualification, notarization and public-availability states distinct, including an explicit unknown outcome.
-Retain ordinary diagnostics for seven days and resolved unpublished candidates for thirty days; unresolved operations have no automatic deletion.
-Initially retain finalized release packages, generated inputs, symbols and release/recovery evidence without automatic deletion, with private material excluded from public assets.
+Use runner-local storage for unpublished builds. Retain finalized release packages, generated inputs and qualification evidence without automatic deletion; exclude private material from public assets.
 Independent backup, restore, signing-key and account-access recovery exercises are deferred operational work; their evidence is not required for release creation or publication.
 Legacy operational recovery metadata remains readable without gating delivery.
-Private immutable checkpoints retain original plans, configuration bytes, build inputs, package signatures and predecessor assets before qualification.
-A fresh qualification runtime requires a separate authorization bound to an inspected restoration; it does not reseal the original product configuration.
-Passed recovery attempts retain their exact receipts and original authorization context so a different runner can continue with an explicit new directory mapping.
-Commit checkpoints durably before acknowledging stage completion or releasing the operation claim. Unknown external effects and missing original evidence block automatic continuation.
+Hosted runs are independent attempts; a failed run does not retain a claim over the next one. The Git tag, completed GitHub Release, and production feed pointer record the state of three distinct steps. See <<adr-0025>>.
 Do not treat artifact-storage presence or a successful upload as proof of public availability.
 
 Overtaken PR checks may be cancelled.
 Do not automatically cancel an active notarization or publication because a newer commit arrived.
-Persist operation identity and journals before external effects; inspect uncertain outcomes before any explicit reconciliation.
-Never blindly repeat an uncertain submission or publish differing bytes under an existing version.
+Reserve a new identity before building again. An earlier submission is not repeated under the same identity, and existing public versions never accept different bytes.
 Correct a faulty release with a higher version; pausing availability must not advertise an older app.
 
 ==== Transition gates

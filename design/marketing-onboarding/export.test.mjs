@@ -215,6 +215,90 @@ test("a reserved name and proof paths inside the pack are refused before renderi
   ]);
 });
 
+function runHelper(operation, request, descriptors) {
+  const script = fileURLToPath(new URL("./install-export.py", import.meta.url));
+  return execFileSync(
+    "/usr/bin/python3",
+    [
+      "-IB",
+      "-c",
+      `import json, runpy, sys
+helper = runpy.run_path(sys.argv[1])
+request = json.load(sys.stdin)
+helper['report'](lambda: exec(sys.argv[2], {**helper, 'request': request}))`,
+      script,
+      operation,
+    ],
+    {
+      input: JSON.stringify(request),
+      stdio: ["pipe", "pipe", "pipe", ...descriptors],
+      encoding: "utf8",
+    },
+  );
+}
+
+test("staging creation and cleanup stay under the opened parent", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "situate-export-stage-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const parent = join(root, "destination");
+  const moved = join(root, "original");
+  await mkdir(parent);
+  const directory = await open(parent, "r");
+  t.after(() => directory.close());
+  await rename(parent, moved);
+  await mkdir(parent);
+  await writeFile(join(parent, "keep.txt"), "existing");
+
+  const name = JSON.parse(
+    runHelper("name, _ = create_staging(3)\nprint(json.dumps(name))", null, [
+      directory.fd,
+    ]),
+  );
+  assert.deepEqual(await readdir(parent), ["keep.txt"]);
+  assert.deepEqual(await readdir(moved), [name]);
+  const staged = join(moved, name);
+  await mkdir(join(staged, "rendered"));
+  await writeFile(join(staged, "rendered", "document.pdf"), "rendered");
+  const rendered = await open(staged, "r");
+  t.after(() => rendered.close());
+  assert.equal(
+    runHelper("discard_staging(3, request, 4)", name, [
+      directory.fd,
+      rendered.fd,
+    ]),
+    "",
+  );
+  assert.deepEqual(await readdir(moved), []);
+  assert.equal(await readFile(join(parent, "keep.txt"), "utf8"), "existing");
+});
+
+test("cleanup leaves a replacement staging entry and its contents untouched", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "situate-export-stage-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directory = await open(root, "r");
+  t.after(() => directory.close());
+  const staging = join(root, "staging");
+  await mkdir(staging, { mode: 0o700 });
+  await writeFile(join(staging, "rendered.pdf"), "rendered");
+  const rendered = await open(staging, "r");
+  t.after(() => rendered.close());
+  await rename(staging, join(root, "original"));
+  await mkdir(staging);
+  await writeFile(join(staging, "keep.txt"), "existing");
+  await symlink(staging, join(root, "original", "alias"), "dir");
+
+  assert.equal(
+    runHelper("discard_staging(3, request, 4)", "staging", [
+      directory.fd,
+      rendered.fd,
+    ]),
+    "",
+  );
+  assert.deepEqual(await readdir(join(root, "original")), []);
+  assert.deepEqual(await readdir(staging), ["keep.txt"]);
+  assert.equal(await readFile(join(staging, "keep.txt"), "utf8"), "existing");
+});
+
 test("installation leaves a replacement staging directory untouched", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "situate-export-install-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -230,14 +314,12 @@ test("installation leaves a replacement staging directory untouched", async (t) 
   };
   await rename(staging, join(parent, "original"));
   await mkdir(staging);
-  const script = fileURLToPath(new URL("./install-export.py", import.meta.url));
   const directory = await open(parent, "r");
   try {
-    const result = execFileSync("/usr/bin/python3", ["-IB", script], {
-      input: JSON.stringify(request),
-      stdio: ["pipe", "pipe", "pipe", directory.fd, rendered.fd],
-      encoding: "utf8",
-    });
+    const result = runHelper("install(request, 3, 4, 5)", request, [
+      directory.fd,
+      rendered.fd,
+    ]);
     assert.match(JSON.parse(result).message, /directory changed/);
     assert.deepEqual((await readdir(parent)).sort(), ["original", "staging"]);
   } finally {
@@ -257,22 +339,21 @@ test("installation does not adopt a newly created proof directory", async (t) =>
   const proofs = join(review, "proofs");
   await mkdir(proofs);
   await writeFile(join(proofs, "keep.txt"), "existing");
-  const stdio = ["pipe", "pipe", "pipe"];
+  const descriptors = [];
   for (const path of [root, staging, review]) {
     const directory = await open(path, "r");
     t.after(() => directory.close());
-    stdio.push(directory.fd);
+    descriptors.push(directory.fd);
   }
-  const script = fileURLToPath(new URL("./install-export.py", import.meta.url));
-  const result = execFileSync("/usr/bin/python3", ["-IB", script], {
-    input: JSON.stringify({
+  const result = runHelper(
+    "install(request, 3, 4, 5)",
+    {
       staging: "staging",
       output: "pack",
       proofParts: ["proofs"],
-    }),
-    stdio,
-    encoding: "utf8",
-  });
+    },
+    descriptors,
+  );
   assert.equal(JSON.parse(result).code, "EEXIST");
   assert.deepEqual((await readdir(root)).sort(), ["review", "staging"]);
   assert.deepEqual(await readdir(proofs), ["keep.txt"]);
@@ -305,14 +386,17 @@ test(
     ]);
     assert.equal(await readFile(existing, "utf8"), "existing proof");
     assert.deepEqual((await readdir(directory)).sort(), ["alias", "proofs"]);
-    const newProofs = join(directory, "review", "proofs");
-    await exportPack({ ...options, proofs: newProofs });
+    const review = await mkdtemp(join(tmpdir(), "situate-onboarding-review-"));
+    t.after(() => rm(review, { recursive: true, force: true }));
+    const reviewAlias = join(directory, "review");
+    await symlink(review, reviewAlias, "dir");
+    await exportPack({ ...options, proofs: join(reviewAlias, "proofs") });
     const pack = join(directory, "pack");
     assert.deepEqual((await readdir(pack)).sort(), [
       ...documents,
       "editable-sources",
     ]);
-    assert.equal((await readdir(newProofs)).length, 12);
+    assert.equal((await readdir(join(review, "proofs"))).length, 12);
     assert.equal(await readFile(existing, "utf8"), "existing proof");
     const pdf = join(
       pack,

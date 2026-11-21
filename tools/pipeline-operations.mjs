@@ -376,6 +376,7 @@ export async function productionStages(
       configRecord.configuration.sshKnownHosts ??
       environment.WEBSITE_SSH_KNOWN_HOSTS,
   };
+  const fresh = environment.PIPELINE_FRESH_RELEASE === "1";
   const host = hostFields(plan, config);
   const { createHostAllocatorLock, createBuilderNotaryJournal } =
     await import("../infrastructure/releases/allocator.mjs");
@@ -517,11 +518,11 @@ export async function productionStages(
   });
   const stages = {
     persistIntent:
-      plan.workflow === "create"
+      plan.workflow === "create" && !fresh
         ? async ({ operation }) => checkpoint(operation, "intent")
         : undefined,
     persistOutcome:
-      plan.workflow === "create"
+      plan.workflow === "create" && !fresh
         ? async ({ operation, stage }) => {
             if (stage !== "github") await checkpoint(operation, "intent");
           }
@@ -563,11 +564,11 @@ export async function productionStages(
       return { ...restored, manifestSha256: digest(retained.manifestBytes) };
     },
     compatibility: async ({ operation, resume = false }) => {
-      const claim = await coordinator();
-      if (resume) await claim.inspect();
+      const claim = fresh ? null : await coordinator();
+      if (resume && claim) await claim.inspect();
       if (!resume && environment.PIPELINE_REQUIRE_LATEST_MAIN === "true")
         await assertCurrentSource(plan, { environment });
-      await claim.claim({ resume });
+      if (claim) await claim.claim({ resume });
       const fresh = await readBaseline(root, {
         repository: plan.repository,
         source: plan.source,
@@ -622,6 +623,7 @@ export async function productionStages(
           },
         },
         allocator,
+        { fresh },
       );
       operation.reservation = result.reservation;
       saveOperation(root, operation);
@@ -690,15 +692,17 @@ export async function productionStages(
             }),
           });
         },
-        notaryJournal,
+        ...(fresh ? { freshOperationId: plan.operation } : { notaryJournal }),
         signal,
       });
       assert(typeof built === "string", "Builder returned no final artifacts");
-      const retained = await checkpoint(operation, "build", built);
+      const retained = fresh
+        ? null
+        : await checkpoint(operation, "build", built);
       return {
         directory: built,
         manifestSha256: digest(readFileSync(join(built, "manifest.json"))),
-        checkpointId: retained.checkpointId,
+        ...(retained ? { checkpointId: retained.checkpointId } : {}),
       };
     },
     qualify: async ({ operation, signal }) => {
@@ -711,6 +715,7 @@ export async function productionStages(
         configuration: config,
         directory: built.directory,
         environment,
+        replacePrivateView: fresh,
         signal,
       });
     },
@@ -734,6 +739,8 @@ export async function productionStages(
       const prepared = (
         publicationAdapter?.evidence ?? createEvidenceFromDirectory
       )(request);
+      const github =
+        publicationAdapter?.github ?? githubAdapter({ environment });
       const result = await (
         publicationAdapter?.createRelease ?? createGitHubRelease
       )(
@@ -744,18 +751,26 @@ export async function productionStages(
           journalPath,
         },
         {
-          github: checkpointGitHubWrites(
-            publicationAdapter?.github ?? githubAdapter({ environment }),
-            async () => {
-              const publicationJournal = json(journalPath);
-              await checkpoint({ ...operation, publicationJournal }, "intent");
-            },
-          ),
+          github: fresh
+            ? github
+            : checkpointGitHubWrites(github, async () => {
+                const publicationJournal = json(journalPath);
+                await checkpoint(
+                  { ...operation, publicationJournal },
+                  "intent",
+                );
+              }),
           authorize: async (expected) =>
             assert.deepEqual(expected.identity, request.identity),
           reconcile,
         },
       );
+      if (fresh)
+        return {
+          identity: result.identity,
+          releaseId: result.identity.releaseId,
+          evidenceSha256: result.evidenceSha256,
+        };
       return completeCheckpointedPublication({
         operation,
         result,
@@ -821,6 +836,7 @@ export async function productionStages(
         root,
         [
           ...args,
+          ...(fresh ? ["--fresh"] : []),
           "--confirm",
           `${plan.destination}:${plan.release.identity.version}`,
         ],

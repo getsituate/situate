@@ -163,7 +163,8 @@ test("creator retains original receipts and authorizes final staged plan without
     },
   ];
   const calls = [];
-  const execute = (_command, args) => {
+  const execute = (_command, args, options) => {
+    assert.equal(options.env.PIPELINE_FRESH_RELEASE, "1");
     calls.push(args);
     if (args[1] === "plan") {
       const original = JSON.parse(

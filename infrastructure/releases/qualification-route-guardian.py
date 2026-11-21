@@ -1,10 +1,12 @@
 """Privileged SSH route lifetime bound to a caller-owned stdin pipe."""
+from ipaddress import ip_address
 import json
 import os
 from pathlib import PurePosixPath
 import re
 import select
 import signal
+import socket as network
 import stat
 import subprocess
 import sys
@@ -54,6 +56,19 @@ def guardian_ssh_arguments(ssh, socket):
             '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2',
             '-o', 'IdentitiesOnly=yes', '-i', ssh['identityPath'],
             '-o', 'UserKnownHostsFile=' + ssh['knownHostsPath']]
+
+
+def guardian_pin_destination(route, ssh):
+    host = ssh['host'].rsplit('@', 1)[-1]
+    if host.rstrip('.').lower() != route['hostname']:
+        return []
+    # The updater and SSH can share a hostname. Resolve SSH before runner-prepare
+    # maps that name to the updater's loopback, but verify the original host key.
+    for _, _, _, _, address in network.getaddrinfo(host, 22, type=network.SOCK_STREAM):
+        ip = ip_address(address[0])
+        if not ip.is_loopback and not ip.is_unspecified:
+            return ['-o', 'HostName=' + str(ip), '-o', 'HostKeyAlias=' + host.rstrip('.').lower()]
+    raise ValueError('SSH destination did not resolve outside runner loopback')
 
 
 def guardian_socket(path):
@@ -152,6 +167,8 @@ def guardian_main(runner, request):
 
     previous = {item: signal.signal(item, stopped) for item in [signal.SIGTERM, signal.SIGINT]}
     try:
+        failure = 'ssh-destination'
+        args += guardian_pin_destination(route, ssh)
         failure = 'prepare'
         runner.runner_perform('runner-prepare', route)
         owned = True
