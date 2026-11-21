@@ -111,6 +111,52 @@ function finalizedStateVersion(state) {
 }
 
 const maxStateBytes = 16 * 1024 * 1024;
+const untrustedDownload =
+  "HCP Terraform did not provide a trusted state download URL.";
+
+function archivistObject(value) {
+  if (typeof value !== "string") return null;
+  const url = URL.parse(value);
+  return url?.origin === "https://archivist.terraform.io" &&
+    !url.username &&
+    !url.password &&
+    !url.hash &&
+    /^\/v1\/object\/[^/]+$/.test(url.pathname)
+    ? url.href
+    : null;
+}
+
+async function stateDownloadUrl(value, versionId, config, fetchImpl, signal) {
+  const direct = archivistObject(value);
+  if (direct) return direct;
+
+  // Authenticate only to the exact HCP route for the inspected version.
+  const endpoint = `https://app.terraform.io/api/state-versions/${encodeURIComponent(versionId)}/hosted_state`;
+  if (value !== endpoint) throw new Error(untrustedDownload);
+  let response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${config.token}`, Connection: "close" },
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      redirect: "manual",
+      signal,
+    });
+  } catch {
+    throw new Error("HCP Terraform state download did not complete.");
+  }
+  await response.body?.cancel().catch(() => {});
+  if (response.status >= 400 && response.status <= 599)
+    throw new Error(
+      `HCP Terraform state download failed: HTTP ${response.status}.`,
+    );
+  const target =
+    response.status === 302 &&
+    archivistObject(response.headers.get("location"));
+  if (!target) throw new Error(untrustedDownload);
+  return target;
+}
 
 export async function downloadCurrentState(
   config,
@@ -145,29 +191,25 @@ export async function downloadCurrentState(
       "The HCP state changed during export; inspect it before continuing.",
     );
 
-  const url = URL.parse(state.attributes["hosted-state-download-url"] ?? "");
-  if (
-    !url ||
-    url.origin !== "https://archivist.terraform.io" ||
-    url.username ||
-    url.password ||
-    url.hash ||
-    !/^\/v1\/object\/[^/]+$/.test(url.pathname)
-  )
-    throw new Error(
-      "HCP Terraform did not provide a trusted state download URL.",
-    );
+  const signal = AbortSignal.timeout(30000);
+  const url = await stateDownloadUrl(
+    state.attributes["hosted-state-download-url"],
+    version.id,
+    config,
+    fetchImpl,
+    signal,
+  );
 
-  // The download URL grants access on its own; never forward the HCP API token.
+  // The Archivist URL grants access on its own; never forward the HCP API token.
   let response;
   try {
-    response = await fetchImpl(url.href, {
+    response = await fetchImpl(url, {
       method: "GET",
       credentials: "omit",
       referrerPolicy: "no-referrer",
       headers: { Connection: "close" },
       redirect: "error",
-      signal: AbortSignal.timeout(30000),
+      signal,
     });
   } catch {
     throw new Error("HCP Terraform state download did not complete.");
