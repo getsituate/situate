@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "accessible-file-diffs",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "accessible-file-diffs",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Navigate file diffs with a screen reader",
+          "paragraphs": [
+            "File diffs announce column headings and line numbers. Scrollable areas in chat and file views have names that identify their contents."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "accessible-file-diffs",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Dateiunterschiede mit dem Screenreader lesen",
+          "paragraphs": [
+            "Screenreader lesen bei Dateiunterschieden die Spaltenüberschriften und Zeilennummern vor. Scrollbare Bereiche in Chats und Dateiansichten sind nach ihrem Inhalt benannt."
+          ]
+        }
+      ]
+    }
+  }
+}
