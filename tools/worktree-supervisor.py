@@ -255,13 +255,21 @@ def coordination_directory(base):
             yield fd
         return
 
-    # Use the account home so per-command HOME and TMPDIR overrides do not split the lease.
-    home = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve(strict=True)
-    parent = os.open(home, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    # Prefer the account home so per-command HOME and TMPDIR overrides do not split the lease.
+    try:
+        home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        forbidden_mode = 0o022
+    except KeyError:
+        # Sanitized environments can omit the CI container's synthetic passwd entry.
+        home = Path(os.environ.get("HOME", ""))
+        forbidden_mode = 0o077
+    if not home.is_absolute():
+        raise ValueError("The coordination home must be an absolute path.")
+    parent = os.open(home.resolve(strict=True), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         info = os.fstat(parent)
-        if info.st_uid != os.getuid() or info.st_mode & 0o022:
-            raise ValueError("The account home must be owned by the current user and not writable by others.")
+        if info.st_uid != os.getuid() or info.st_mode & forbidden_mode:
+            raise ValueError("The coordination home must be owned by the current user and protected from other users.")
         name = ".situate-coordination"
         try:
             os.mkdir(name, mode=0o700, dir_fd=parent)
