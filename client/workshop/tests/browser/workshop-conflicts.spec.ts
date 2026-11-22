@@ -79,6 +79,26 @@ test("complete sources, explicit whole-file choice, dismissal, focus trapping an
       ),
     ).toBe(true);
   }
+  const editorSource = review(preview).getByRole("region", {
+    name: "Editor text complete source",
+    exact: true,
+  });
+  const fileSource = review(preview).getByRole("region", {
+    name: "Changed file complete source",
+    exact: true,
+  });
+  await review(preview)
+    .getByRole("button", { name: "Close version review" })
+    .focus();
+  await preview.keyboard.press("Tab");
+  await expect(editorSource).toBeFocused();
+  await preview.keyboard.press("PageDown");
+  await expect
+    .poll(() => editorSource.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await preview.keyboard.press("Tab");
+  await expect(fileSource).toBeFocused();
+  expect(await fileSource.evaluate((el) => el.scrollTop)).toBe(0);
   await expect(source(preview, "file")).toHaveCSS("font-size", "14px");
   expect(
     await source(preview, "file").evaluate(

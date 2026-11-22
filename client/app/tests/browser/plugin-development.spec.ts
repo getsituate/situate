@@ -312,6 +312,31 @@ for (const width of [1440, 1000, 700]) {
     },
   );
 }
+test("plugin development help scrolls with the keyboard in a short window", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 500, height: 380 });
+  await openDevelopment(page);
+  const trigger = page.locator(".development-help-trigger");
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("dialog");
+  const content = dialog.getByRole("region");
+  const close = dialog.getByRole("button");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(content).toBeFocused();
+  await page.keyboard.press("PageDown");
+  await expect
+    .poll(() => dialog.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await page.keyboard.press("Shift+Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
 test("plugin UI checks keep the development chat unobscured until they finish", async ({
   page,
 }, testInfo) => {

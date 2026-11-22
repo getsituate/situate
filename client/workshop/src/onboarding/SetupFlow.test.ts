@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { defineComponent, h, ref } from "vue";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import SetupFlow from "./SetupFlow.vue";
 import {
   createOnboardingState,
@@ -95,6 +95,41 @@ describe("setup conversations", () => {
     expect(state.value.step).toBe("source-chat");
     expect(state.value.sourceIntent).toBe("changes");
     wrapper.unmount();
+  });
+  it("adds a file path to the tab order only when it needs scrolling", async () => {
+    let resize: (() => void) | undefined;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          resize = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const { wrapper, click } = flow("onboarding-samples");
+    try {
+      await click("Reading tasks.md");
+      const path = wrapper.get(".imported-file-path");
+      let height = 40;
+      Object.defineProperties(path.element, {
+        clientHeight: { value: 40 },
+        scrollHeight: { get: () => height },
+      });
+      expect(path.attributes("tabindex")).toBeUndefined();
+      height = 80;
+      resize!();
+      await wrapper.vm.$nextTick();
+      expect(path.attributes("tabindex")).toBe("0");
+      height = 40;
+      resize!();
+      await wrapper.vm.$nextTick();
+      expect(path.attributes("tabindex")).toBeUndefined();
+    } finally {
+      wrapper.unmount();
+      vi.unstubAllGlobals();
+    }
   });
   it("offers three ideas with no default choice or separate plan approval", async () => {
     const { wrapper, state, click } = flow("onboarding-plan");

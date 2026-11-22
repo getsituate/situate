@@ -252,15 +252,20 @@ test("mode help sits beside its label, explains development and preserves the dr
     document.documentElement.style.zoom = "1";
   });
   await selectOption(page.getByLabel("Platform profile"), "ios");
-  await preview.setViewportSize({ width: 390, height: 844 });
+  await preview.setViewportSize({ width: 390, height: 610 });
   await page.getByLabel("Keyboard occlusion").check();
   await help.click();
   const dialog = preview.getByRole("dialog");
-  await dialog
-    .getByText(/same workspace access as ordinary chat/)
-    .scrollIntoViewIfNeeded();
+  await preview.keyboard.press("Tab");
+  await expect(
+    dialog.getByRole("region", { name: "About plugin development" }),
+  ).toBeFocused();
+  await preview.keyboard.press("PageDown");
+  await expect
+    .poll(() => dialog.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
   const box = (await dialog.boundingBox())!;
-  expect(box.y + box.height).toBeLessThanOrEqual(844 - 294);
+  expect(box.y + box.height).toBeLessThanOrEqual(610 - 294);
   await dialog
     .getByRole("button", { name: "Close dialog", exact: true })
     .click();

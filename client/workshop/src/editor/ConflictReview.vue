@@ -247,6 +247,7 @@ watch(
           <pre
             data-dialog-document
             :data-source="choice"
+            role="region"
             :aria-label="name(choice) + ' complete source'"
             tabindex="0"
             @scroll="scroll(choice, $event)"
