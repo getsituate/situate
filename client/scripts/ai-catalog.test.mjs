@@ -300,6 +300,8 @@ test("bundled recommendations cover the pinned inventory without activating rese
     [
       "openai/api_key",
       "openai/oauth",
+      "openai/api_key",
+      "openai/oauth",
       "anthropic/api_key",
       "openrouter/api_key",
       "openai/api_key",
@@ -307,6 +309,24 @@ test("bundled recommendations cover the pinned inventory without activating rese
       "openai-codex/oauth",
     ],
   );
+});
+test("discovery-only recommendations are limited to OpenAI Responses chat without thinking controls", () => {
+  for (const patch of [
+    { modelId: "gpt-5.4" },
+    { api: "openai-completions" },
+    { thinking: "medium" },
+    { priority: { chat: 5, comment: 1 } },
+  ]) {
+    const invalid = structuredClone(recommendations);
+    Object.assign(
+      invalid.rankedCandidates.find((entry) => entry.discoveryOnly),
+      patch,
+    );
+    assert.throws(
+      () => validateRecommendations(inventory, invalid, transports),
+      /Invalid discovery-only recommendation/u,
+    );
+  }
 });
 test("missing methods, fabricated ids and unsupported access cannot activate", () => {
   const missing = structuredClone(recommendations);

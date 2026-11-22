@@ -133,6 +133,61 @@ fn unsuitable_higher_priority_and_unranked_results_are_not_selected() {
     );
 }
 #[test]
+fn openai_recommends_sol_62_only_with_qualified_discovery_and_only_for_chat() {
+    for (auth, source, comment) in [
+        (AuthKind::ApiKey, discovery::Source::Provider, "gpt-4o-mini"),
+        (AuthKind::Oauth, discovery::Source::Account, "gpt-6.1-sol"),
+    ] {
+        let mut config = config();
+        config.auth = Some(auth);
+        let mut observed = discovery::Catalog {
+            source,
+            models: vec![
+                "gpt-6.2-sol".into(),
+                "gpt-6.1-sol".into(),
+                "gpt-4o-mini".into(),
+            ],
+            checked_at: None,
+            selectable: vec![],
+        };
+        let recommended = || {
+            ModelChoice {
+                model: "recommended".into(),
+                thinking: "recommended".into(),
+                catalog_revision: None,
+            }
+            .snapshot(&config)
+        };
+        assert_eq!(
+            resolve_choice(recommended(), &observed, "chat").unwrap().model,
+            "gpt-6.1-sol"
+        );
+
+        observed.selectable.push(discovery::DiscoveredModel {
+            id: "gpt-6.2-sol".into(),
+            context_window: 1_050_000,
+            max_tokens: 128_000,
+            image_input: true,
+        });
+        let chat = resolve_choice(recommended(), &observed, "chat").unwrap();
+        assert_eq!(chat.model, "gpt-6.2-sol");
+        assert_eq!(chat.thinking, "off");
+        assert_eq!(chat.target().unwrap().0, "openai-responses");
+        assert_eq!(
+            resolve_choice(recommended(), &observed, "comment")
+                .unwrap()
+                .model,
+            comment
+        );
+
+        observed.models.retain(|id| id != "gpt-6.2-sol");
+        assert_eq!(
+            resolve_choice(recommended(), &observed, "chat").unwrap().model,
+            "gpt-6.1-sol"
+        );
+    }
+}
+#[test]
 fn initialization_persists_symbolic_choices_without_rewriting_on_reopen() {
     let (directory, storage) = workspace();
     let config = config();

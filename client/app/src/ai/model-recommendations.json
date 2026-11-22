@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "revision": "2026-10-08.1",
+  "revision": "2026-11-22.1",
   "rankedCandidates": [
     {
       "provider": "openai",
@@ -24,6 +24,34 @@
       "rationale": "Direct ChatGPT static compatibility only; account entitlement and discovery remain unresolved.",
       "sources": [
         "https://developers.openai.com/siwc/token-sharing-open-source/sign-in"
+      ]
+    },
+    {
+      "provider": "openai",
+      "access": "api_key",
+      "modelId": "gpt-6.2-sol",
+      "api": "openai-responses",
+      "thinking": "off",
+      "priority": { "chat": 5 },
+      "discoveryOnly": true,
+      "eligibility": "supported",
+      "rationale": "Preferred for chat when the authenticated model catalog lists it and Responses tool metadata is available.",
+      "sources": [
+        "https://developers.openai.com/api/docs/changelog#november-2026"
+      ]
+    },
+    {
+      "provider": "openai",
+      "access": "oauth",
+      "modelId": "gpt-6.2-sol",
+      "api": "openai-responses",
+      "thinking": "off",
+      "priority": { "chat": 5 },
+      "discoveryOnly": true,
+      "eligibility": "supported",
+      "rationale": "Preferred for chat when the account model list includes it and Responses tool metadata is available.",
+      "sources": [
+        "https://developers.openai.com/api/docs/changelog#november-2026"
       ]
     },
     {
@@ -487,7 +515,7 @@
         }
       },
       "pricing": "API base 2/10; prompts over 272K use 2x input and 1.5x output rates. Fast, regional, Batch and Flex rates differ.",
-      "rationale": "Official intelligence/cost-balanced tier with tools and images. Tool calling requires Responses; Chat Completions does not support tools for this model. Low is the minimum effort. The direct-token ChatGPT OAuth flow intentionally uses the public API resource; do not replace it with legacy Codex. The subscription default is GPT-6.1 Sol with medium reasoning; Responses model identity and low/medium/high reasoning are validated statically; account entitlement remains provider-controlled and unverified.",
+      "rationale": "Official intelligence/cost-balanced tier with tools and images. Tool calling requires Responses; Chat Completions does not support tools for this model. Low is the minimum effort. The direct-token ChatGPT OAuth flow intentionally uses the public API resource; do not replace it with legacy Codex. GPT-6.1 Sol remains a ranked candidate with medium reasoning; account entitlement remains provider-controlled and unverified.",
       "sources": [
         "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
         "https://developers.openai.com/siwc/token-sharing-open-source/sign-in"

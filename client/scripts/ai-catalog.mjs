@@ -218,7 +218,10 @@ export function validateRecommendations(
     if (candidates.has(identity))
       throw new Error(`Duplicate ranked candidate: ${identity}`);
     candidates.add(identity);
-    if (!projected.has(`${entry.provider}/${entry.modelId}`))
+    if (
+      entry.discoveryOnly !== true &&
+      !projected.has(`${entry.provider}/${entry.modelId}`)
+    )
       throw new Error(`Missing static recommendation model: ${identity}`);
     if (
       !entry.rationale ||
@@ -229,6 +232,7 @@ export function validateRecommendations(
     )
       throw new Error(`Incomplete ranked candidate: ${identity}`);
     for (const kind of ["chat", "comment"]) {
+      if (entry.discoveryOnly === true && kind === "comment") continue;
       const priority = entry.priority?.[kind];
       const key = `${entry.provider}/${entry.access}/${kind}/${priority}`;
       if (
@@ -255,6 +259,19 @@ export function validateRecommendations(
       throw new Error(
         `Unsupported recommendation authentication: ${entry.provider}/${entry.access}`,
       );
+    if (entry.discoveryOnly === true) {
+      if (
+        entry.provider !== "openai" ||
+        entry.api !== "openai-responses" ||
+        !transports.apis[entry.api] ||
+        entry.thinking !== "off" ||
+        entry.priority.comment !== undefined ||
+        !/^gpt-[a-z0-9.-]+$/u.test(entry.modelId) ||
+        provider.models.some((model) => model.id === entry.modelId)
+      )
+        throw new Error(`Invalid discovery-only recommendation: ${identity}`);
+      continue;
+    }
     if (
       !model ||
       (entry.eligibility === "supported" && !transports.apis[model.api]) ||

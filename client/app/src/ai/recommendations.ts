@@ -46,7 +46,8 @@ export interface RankedCandidate {
   modelId: string;
   api: string;
   thinking: string;
-  priority: { chat: number; comment: number };
+  priority: { chat: number; comment?: number };
+  discoveryOnly?: boolean;
   eligibility: string;
 }
 export type ModelAvailability =
@@ -122,9 +123,13 @@ export function rankModelChoices(
       (entry) =>
         entry.eligibility === "supported" &&
         entry.provider === config.provider &&
-        entry.access === (config.auth ?? "api_key"),
+        entry.access === (config.auth ?? "api_key") &&
+        (!entry.discoveryOnly ||
+          (kind === "chat" && availability.source !== "static")),
     )
-    .sort((a, b) => a.priority[kind] - b.priority[kind])
+    .sort(
+      (a, b) => (a.priority[kind] ?? Infinity) - (b.priority[kind] ?? Infinity),
+    )
     .flatMap((entry) => {
       const model = availability.models.find(
         (model) =>
