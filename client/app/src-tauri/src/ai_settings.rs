@@ -389,7 +389,10 @@ fn ranked_choice(
             continue;
         }
         let levels = if entry["discoveryOnly"] == true {
-            vec![off()]
+            let Some(verified) = discovery::openai_thinking(config, model) else {
+                continue;
+            };
+            verified.levels.clone()
         } else {
             let Ok((api, _, _)) = target(config, model) else {
                 continue;

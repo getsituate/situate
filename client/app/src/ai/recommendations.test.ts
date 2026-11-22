@@ -36,7 +36,7 @@ test.each([
     );
     expect(recommendedChoice(config, "chat", availability)).toMatchObject({
       model: "gpt-6.2-sol",
-      thinking: "off",
+      thinking: "medium",
     });
     expect(recommendedChoice(config, "comment", availability)?.model).toBe(
       comment,

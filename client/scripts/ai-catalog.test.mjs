@@ -174,6 +174,7 @@ test("catalog validation runs without upstream packages and never rewrites sourc
     "catalog.provenance.json",
     "../../public/licenses/ai-catalog.txt",
     "model-recommendations.json",
+    "openai-discovered-thinking.json",
     "provider-policy.json",
     "transport-contract.json",
   ];
@@ -310,11 +311,11 @@ test("bundled recommendations cover the pinned inventory without activating rese
     ],
   );
 });
-test("discovery-only recommendations are limited to OpenAI Responses chat without thinking controls", () => {
+test("discovery-only recommendations require a qualified OpenAI Responses model and effort", () => {
   for (const patch of [
     { modelId: "gpt-5.4" },
     { api: "openai-completions" },
-    { thinking: "medium" },
+    { thinking: "off" },
     { priority: { chat: 5, comment: 1 } },
   ]) {
     const invalid = structuredClone(recommendations);

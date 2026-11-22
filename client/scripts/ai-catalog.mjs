@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import openAiDiscoveredThinking from "../app/src/ai/openai-discovered-thinking.json" with { type: "json" };
 
 const record = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -264,7 +265,8 @@ export function validateRecommendations(
         entry.provider !== "openai" ||
         entry.api !== "openai-responses" ||
         !transports.apis[entry.api] ||
-        entry.thinking !== "off" ||
+        !openAiDiscoveredThinking.models.includes(entry.modelId) ||
+        !openAiDiscoveredThinking.levels.includes(entry.thinking) ||
         entry.priority.comment !== undefined ||
         !/^gpt-[a-z0-9.-]+$/u.test(entry.modelId) ||
         provider.models.some((model) => model.id === entry.modelId)
