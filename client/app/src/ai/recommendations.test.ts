@@ -12,6 +12,44 @@ import catalog from "./model-recommendations.json";
 import { providers, availableChatModels } from "./model-catalog";
 const openai = { provider: "openai", endpoint: null };
 const models = availableChatModels(openai);
+
+test.each([
+  ["api_key", "provider", "gpt-4o-mini"],
+  ["oauth", "account", "gpt-6.1-sol"],
+] as const)(
+  "OpenAI %s recommends discovered GPT-6.2 Sol only for chat",
+  (auth, source, comment) => {
+    const config = { ...openai, auth };
+    const listed = {
+      source,
+      models: ["gpt-6.2-sol", "gpt-6.1-sol", "gpt-4o-mini"],
+    };
+    const qualified = {
+      ...listed,
+      selectable: [
+        { id: "gpt-6.2-sol", contextWindow: 1_050_000, maxTokens: 128_000 },
+      ],
+    };
+    const availability = modelAvailability(
+      qualified,
+      availableChatModels(config, qualified),
+    );
+    expect(recommendedChoice(config, "chat", availability)).toMatchObject({
+      model: "gpt-6.2-sol",
+      thinking: "off",
+    });
+    expect(recommendedChoice(config, "comment", availability)?.model).toBe(
+      comment,
+    );
+    expect(
+      recommendedChoice(
+        config,
+        "chat",
+        modelAvailability(listed, availableChatModels(config, listed)),
+      )?.model,
+    ).toBe("gpt-6.1-sol");
+  },
+);
 const sol = models.find((model) => model.id === "gpt-6.1-sol")!;
 const mini = models.find((model) => model.id === "gpt-4o-mini")!;
 const synthetic: RankedCandidate[] = [
@@ -102,7 +140,7 @@ test("static recommendations identify compatibility, not confirmed account entit
     expect(recommendedChoice({ ...openai, auth })).toEqual({
       model: "gpt-6.1-sol",
       thinking: "medium",
-      catalogRevision: "2026-10-08.1",
+      catalogRevision: catalog.revision,
     });
     expect(recommendedChoice({ ...openai, auth }, "comment")?.thinking).toBe(
       auth === "api_key" ? "off" : "low",
@@ -159,7 +197,7 @@ test("explicit priority skips unavailable candidates for distinct account catalo
   ).toEqual({
     model: "gpt-4o-mini",
     thinking: "off",
-    catalogRevision: "2026-10-08.1",
+    catalogRevision: catalog.revision,
   });
 });
 test("unsuitable higher ranks do not hide the next suitable candidate", () => {
