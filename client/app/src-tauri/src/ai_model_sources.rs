@@ -123,9 +123,7 @@ impl Protocol {
                 )
             }
             Self::Router => {
-                let Some(reasoning) = item["reasoning"].as_object() else {
-                    return None;
-                };
+                let reasoning = item["reasoning"].as_object()?;
                 let efforts = reasoning.get("supported_efforts")?;
                 if !(efforts.is_null() || efforts.is_array()) {
                     return None;
