@@ -53,6 +53,7 @@ for (const width of [375, 1440]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     await workspaceFixture(
       page,
       {
@@ -105,6 +106,19 @@ for (const width of [375, 1440]) {
     await expect(comments).not.toBeChecked();
     await inline.check();
     await expect(inline).toBeChecked();
+    const switchMotion = () =>
+      inline.evaluate(
+        (element) => getComputedStyle(element, "::before").transitionDuration,
+      );
+    await expect.poll(switchMotion).toBe("0.16s");
+    const indicator = page.locator(
+      ".advanced-settings summary .disclosure-chevron",
+    );
+    await expect(indicator).toHaveCSS("rotate", "0deg");
+    await expect(indicator).toHaveCSS("transition-duration", "0.16s");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(switchMotion).toBe("0s");
+    await expect(indicator).toHaveCSS("transition-duration", "0s");
     expect(
       await page
         .locator(".settings-content")

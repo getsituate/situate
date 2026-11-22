@@ -16,6 +16,7 @@ const emit = defineEmits<{ patch: [patch: Partial<ComponentLibraryState>] }>();
       @change="
         emit('patch', {
           status: ($event.target as HTMLSelectElement).value as ExampleStatus,
+          saveFailed: false,
         })
       "
     >
@@ -57,7 +58,7 @@ const emit = defineEmits<{ patch: [patch: Partial<ComponentLibraryState>] }>();
       <SituateButton
         variant="secondary"
         size="small"
-        @click="emit('patch', { status: 'error' })"
+        @click="emit('patch', { status: 'ready', saveFailed: true })"
         >{{ c.controls.fail }}</SituateButton
       >
     </div>

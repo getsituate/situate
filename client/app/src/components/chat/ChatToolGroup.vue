@@ -70,7 +70,7 @@ const state = computed(() =>
 );
 </script>
 <template>
-  <SituateDisclosure class="history-tools">
+  <SituateDisclosure class="history-tools" custom-indicator>
     <template #label>
       <SituateIcon
         :name="
@@ -124,6 +124,12 @@ const state = computed(() =>
   font-size: 18px;
   line-height: 1;
   margin-inline-start: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .history-chevron {
+    transition: transform var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
 }
 .history-tools[open] > :deep(summary) > .history-chevron {
   transform: rotate(90deg);

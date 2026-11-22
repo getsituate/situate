@@ -47,7 +47,11 @@ const plugin = computed(() => props.call.pluginName);
       :changes="changes"
       :is-error="call.result?.isError"
     />
-    <SituateDisclosure v-model:open="batchOpen" class="call-details">
+    <SituateDisclosure
+      v-model:open="batchOpen"
+      class="call-details"
+      custom-indicator
+    >
       <template #label>
         <span class="tool-name" data-localization-content="user">{{
           isBatch && batch
@@ -123,6 +127,12 @@ const plugin = computed(() => props.call.pluginName);
   font-size: 18px;
   line-height: 1;
   margin-inline-start: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .history-chevron {
+    transition: transform var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
 }
 .call-details[open] > :deep(summary) > .history-chevron {
   transform: rotate(90deg);

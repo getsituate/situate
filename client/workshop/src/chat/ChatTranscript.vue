@@ -85,7 +85,7 @@ const blocks = computed(() => groupEvents(props.events));
       :label="systemMessageCopy[locale].label"
     />
     <div v-else-if="block.kind === 'activity'" class="activity-wrap">
-      <SituateDisclosure class="activity">
+      <SituateDisclosure class="activity" custom-indicator>
         <template #label>
           <span class="disclosure" aria-hidden="true">›</span
           ><span>{{ c.activity }}</span
@@ -101,6 +101,7 @@ const blocks = computed(() => groupEvents(props.events));
             v-for="call in block.calls"
             :key="call.id"
             class="call-detail"
+            custom-indicator
           >
             <template #label>
               <span class="call-check" aria-hidden="true">✓</span
@@ -149,7 +150,7 @@ const blocks = computed(() => groupEvents(props.events));
         </section>
       </div>
       <pre v-else class="write-content">{{ block.after }}</pre>
-      <SituateDisclosure class="change-details">
+      <SituateDisclosure class="change-details" custom-indicator>
         <template #label
           >{{ c.details }} <span aria-hidden="true">›</span></template
         >

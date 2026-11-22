@@ -1,6 +1,6 @@
 import { compileStyle, parse } from "@vue/compiler-sfc";
 import { describe, expect, it } from "vitest";
-import { list } from "postcss";
+import { list, parse as parseCss } from "postcss";
 import button from "../../../packages/ui/src/SituateButton.vue?raw";
 import field from "../../../packages/ui/src/SituateField.vue?raw";
 import badge from "../../../packages/ui/src/SituateBadge.vue?raw";
@@ -41,20 +41,27 @@ describe("primitive style specificity", () => {
     "%s defaults outrank native element resets without increasing state specificity",
     (name, source) => {
       const { descriptor } = parse(source);
-      const result = compileStyle({
-        source: descriptor.styles[0].content,
-        filename: `${name}.vue`,
-        id: "data-v-probe",
-        scoped: true,
-      });
-      expect(result.errors).toEqual([]);
-      const selectors = result.code.match(/[^{}]+(?=\{)/g) ?? [];
-      expect(selectors.length).toBeGreaterThan(0);
-      for (const selector of selectors) {
-        for (const branch of list.comma(selector.trim())) {
-          expect(branch).toMatch(/^\.situate-/);
-          expect(branch).toMatch(/\[data-v-probe(?:-s)?\]/);
-        }
+      const styles = descriptor.styles.filter((style) => style.scoped);
+      expect(styles.length).toBeGreaterThan(0);
+      for (const style of styles) {
+        const result = compileStyle({
+          source: style.content,
+          filename: `${name}.vue`,
+          id: "data-v-probe",
+          scoped: true,
+        });
+        expect(result.errors).toEqual([]);
+        parseCss(result.code).walkRules((rule) => {
+          if (
+            rule.parent?.type === "atrule" &&
+            rule.parent.name.endsWith("keyframes")
+          )
+            return;
+          for (const branch of list.comma(rule.selector)) {
+            expect(branch).toMatch(/^\.situate-/);
+            expect(branch).toMatch(/\[data-v-probe(?:-s)?\]/);
+          }
+        });
       }
     },
   );

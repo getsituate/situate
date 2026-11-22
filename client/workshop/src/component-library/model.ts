@@ -13,6 +13,7 @@ export interface ComponentLibraryState {
   collection: string;
   dialogOpen: boolean;
   dialogSaved: boolean;
+  saveFailed: boolean;
   height: number;
   actions: number;
   reminders: boolean;
@@ -45,6 +46,7 @@ export function createComponentLibraryState(
     collection: "garden",
     dialogOpen: false,
     dialogSaved: false,
+    saveFailed: false,
     height: 160,
     actions: 0,
     reminders: true,
@@ -59,6 +61,7 @@ export function createComponentLibraryState(
 export const componentGroups = {
   actions: [
     "SituateButton",
+    "SituateNotice",
     "SituateIconButton",
     "SituateIcon",
     "SituateMenu",
@@ -76,7 +79,6 @@ export const componentGroups = {
   ],
   feedback: [
     "SituateBadge",
-    "SituateNotice",
     "SituateEmptyState",
     "SituateTooltip",
     "SituateProgress",

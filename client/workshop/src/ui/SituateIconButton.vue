@@ -70,6 +70,8 @@ defineExpose({
   </button>
 </template>
 
+<style src="./button-feedback.css"></style>
+
 <style scoped>
 .situate-icon-button {
   display: inline-grid;
@@ -88,6 +90,15 @@ defineExpose({
   border-radius: var(--situate-radius-pill);
   background: var(--situate-ink);
   color: var(--situate-surface);
+}
+.situate-icon-button[aria-pressed="true"] {
+  background: var(--situate-accent-soft, var(--situate-lilac));
+  color: var(--situate-accent-strong, var(--situate-violet-deep));
+}
+@media (forced-colors: active) {
+  .situate-icon-button[aria-pressed="true"] {
+    border: 1px solid Highlight;
+  }
 }
 .situate-icon-button:disabled {
   cursor: default;

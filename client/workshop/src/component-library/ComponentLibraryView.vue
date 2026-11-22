@@ -35,6 +35,8 @@ import type { ComponentLibraryState } from "./model";
 const props = defineProps<{ state: ComponentLibraryState }>();
 const emit = defineEmits<{ patch: [patch: Partial<ComponentLibraryState>] }>();
 const dialog = ref<InstanceType<typeof SituateDialog>>();
+const saveButton = ref<InstanceType<typeof SituateButton>>();
+const nameInput = ref<InstanceType<typeof SituateInput>>();
 const menuTrigger = ref<InstanceType<typeof SituateButton>>();
 const popoverTrigger = ref<InstanceType<typeof SituateButton>>();
 const chipRegion = ref<HTMLElement>();
@@ -51,11 +53,7 @@ const busy = computed(() => props.state.status === "loading");
 const tones = ["neutral", "info", "success", "warning", "danger"] as const;
 const iconNames = Object.keys(icons) as IconName[];
 const noticeTone = computed(() =>
-  props.state.status === "error"
-    ? "danger"
-    : props.state.status === "success"
-      ? "success"
-      : "info",
+  props.state.status === "success" ? "success" : "info",
 );
 watch(disabled, (value) => {
   if (value) emit("patch", { menuOpen: false, popoverOpen: false });
@@ -64,7 +62,14 @@ function action() {
   emit("patch", { actions: props.state.actions + 1 });
 }
 function save() {
-  emit("patch", { status: props.state.name.trim() ? "loading" : "error" });
+  emit("patch", {
+    saveFailed: false,
+    status: props.state.name.trim() ? "loading" : "error",
+  });
+  if (!props.state.name.trim()) nameInput.value?.focus();
+}
+function dismissSaveFailure() {
+  emit("patch", { saveFailed: false });
 }
 function openDialog(event: MouseEvent) {
   (event.currentTarget as HTMLElement).focus();
@@ -98,9 +103,15 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
         <article data-component="SituateButton">
           <h3>SituateButton</h3>
           <div class="example-row">
-            <SituateButton :disabled="disabled" :busy="busy" @click="save">{{
-              busy ? c.saving : state.longLabels ? c.saveLong : c.save
-            }}</SituateButton>
+            <SituateButton
+              ref="saveButton"
+              :disabled="disabled"
+              :busy="busy"
+              @click="save"
+              >{{
+                busy ? c.saving : state.longLabels ? c.saveLong : c.save
+              }}</SituateButton
+            >
             <SituateButton
               variant="secondary"
               :disabled="disabled"
@@ -135,6 +146,19 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
             >
           </div>
         </article>
+        <article
+          v-show="state.status !== 'error'"
+          data-component="SituateNotice"
+        >
+          <h3>SituateNotice</h3>
+          <SituateNotice
+            v-if="state.status !== 'error'"
+            :tone="noticeTone"
+            role="status"
+          >
+            {{ c.notice[state.status] }}
+          </SituateNotice>
+        </article>
         <article data-component="SituateIconButton">
           <h3>SituateIconButton</h3>
           <div class="example-row">
@@ -146,12 +170,13 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
               @click="action"
             />
             <SituateIconButton
-              icon="plus"
+              :icon="state.pinned ? 'check' : 'arrow'"
               variant="primary"
-              :label="c.iconAction"
+              :label="c.menuPin"
+              :aria-pressed="state.pinned"
               :disabled="disabled"
               :unavailable-reason="c.notice.disabled"
-              @click="action"
+              @click="emit('patch', { pinned: !state.pinned })"
             />
             <output>{{ c.actionCount }}: {{ state.actions }}</output>
           </div>
@@ -268,6 +293,7 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
           >
             <SituateInput
               v-bind="controlAttrs"
+              ref="nameInput"
               :model-value="state.name"
               :disabled="disabled || busy"
               @update:model-value="emit('patch', { name: String($event) })"
@@ -450,22 +476,6 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
             }}</SituateBadge>
           </div>
         </article>
-        <article data-component="SituateNotice">
-          <h3>SituateNotice</h3>
-          <SituateNotice
-            :tone="noticeTone"
-            :role="state.status === 'error' ? 'alert' : 'status'"
-          >
-            {{ c.notice[state.status] }}
-            <SituateButton
-              v-if="state.status === 'error'"
-              size="small"
-              variant="secondary"
-              @click="emit('patch', { status: 'loading' })"
-              >{{ c.retry }}</SituateButton
-            >
-          </SituateNotice>
-        </article>
         <article data-component="SituateEmptyState">
           <h3>SituateEmptyState</h3>
           <SituateEmptyState :description="c.emptyDescription">
@@ -526,7 +536,7 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
           <p v-if="state.dialogSaved" role="status">{{ c.dialogSaved }}</p>
           <SituateDialog
             ref="dialog"
-            appearance="default"
+            fade-backdrop
             aria-labelledby="example-dialog-heading"
             aria-describedby="example-dialog-description"
             @close="emit('patch', { dialogOpen: false })"
@@ -603,6 +613,27 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
         </article>
       </div>
     </section>
+    <SituateDialog
+      :open="state.saveFailed"
+      aria-labelledby="save-failure-title"
+      aria-describedby="save-failure-body"
+      @cancel.prevent="dismissSaveFailure"
+      @close="!busy && saveButton?.focus({ preventScroll: true })"
+    >
+      <template #header>
+        <h2 id="save-failure-title">{{ c.saveFailure.title }}</h2>
+      </template>
+      <p id="save-failure-body">{{ c.saveFailure.body }}</p>
+      <template #actions>
+        <SituateButton
+          variant="secondary"
+          autofocus
+          @click="dismissSaveFailure"
+          >{{ c.cancel }}</SituateButton
+        >
+        <SituateButton @click="save">{{ c.retry }}</SituateButton>
+      </template>
+    </SituateDialog>
   </main>
 </template>
 

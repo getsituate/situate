@@ -1084,6 +1084,14 @@ test("no matches, inaccessible original, held opening and reset remain distinct"
   await expect(
     preview.getByText("Search results may be incomplete.", { exact: false }),
   ).toBeVisible();
+  await preview
+    .locator(".doc-empty")
+    .getByRole("button", {
+      name: "Clear search and filters",
+    })
+    .click();
+  await expect(preview.locator("#doc-query")).toBeFocused();
+  await expect(preview.locator(".doc-result").first()).toBeVisible();
   await selectScenario(page, "documents-unavailable");
   await expect(
     preview.getByRole("heading", { name: "On another device" }),

@@ -38,6 +38,7 @@ const fraction = computed(() =>
     :data-indeterminate="!measured || undefined"
   >
     <span
+      :key="measured ? 'measured' : 'indeterminate'"
       class="situate-progress-fill"
       :style="{ transform: `scaleX(${fraction})` }"
     />
@@ -61,6 +62,12 @@ const fraction = computed(() =>
   border-radius: inherit;
   background: var(--situate-accent-strong, var(--situate-violet-deep));
   transform-origin: left center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .situate-progress:not([data-indeterminate]) .situate-progress-fill {
+    transition: transform var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
 }
 @media (forced-colors: active) {
   .situate-progress {

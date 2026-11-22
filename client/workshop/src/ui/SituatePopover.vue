@@ -7,6 +7,7 @@ const props = defineProps<{
   label: string;
   anchor?: HTMLElement | null;
   point?: { x: number; y: number };
+  staticSurface?: boolean;
 }>();
 const emit = defineEmits<{ close: [] }>();
 const element = ref<HTMLElement>();
@@ -55,7 +56,21 @@ function position() {
   const y = props.point?.y ?? (anchor?.bottom ?? top) + 4;
   const above = (anchor?.top ?? top) - popup.offsetHeight - 4;
   popup.style.left = `${Math.max(left, Math.min(right - popup.offsetWidth, props.point?.x ?? (anchor?.right ?? left + popup.offsetWidth) - popup.offsetWidth))}px`;
-  popup.style.top = `${Math.max(top, Math.min(bottom - popup.offsetHeight, !props.point && y + popup.offsetHeight > bottom ? above : y))}px`;
+  const height = popup.offsetHeight;
+  const placement = Math.max(
+    top,
+    Math.min(bottom - height, !props.point && y + height > bottom ? above : y),
+  );
+  popup.style.top = `${placement}px`;
+  if (anchor && !props.point && !props.staticSurface) {
+    popup.style.setProperty(
+      "--popover-approach",
+      placement >= anchor.bottom ? "-3px" : "3px",
+    );
+    popup.dataset.anchored = "";
+  } else {
+    delete popup.dataset.anchored;
+  }
 }
 function dismiss(restore = true) {
   if (closing || !props.open) return;
@@ -172,5 +187,16 @@ defineExpose({ element, dismiss });
   color: var(--situate-ink);
   font: 14px/1.5 var(--situate-font-body);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--situate-ink) 10%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .situate-popover[data-anchored]:popover-open {
+    animation: popover-arrival var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
+  @keyframes popover-arrival {
+    from {
+      translate: 0 var(--popover-approach);
+    }
+  }
 }
 </style>

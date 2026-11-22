@@ -605,10 +605,21 @@ for (const viewport of [
       await enterFiles(page);
       let input = await source(page);
       await input.fill("# Keep my draft");
-      await expect(page.getByRole("alert")).toContainText(
+      const saveError = page.getByRole("dialog", {
+        name: "Action could not be completed",
+      });
+      await expect(saveError.getByRole("alert")).toContainText(
         "This action could not be completed. Try again.",
       );
       await visual.capture("files.save.failed");
+      await saveError
+        .getByRole("button", { name: "Dismiss", exact: true })
+        .click();
+      await expect(input).toHaveValue("# Keep my draft");
+      await expect(
+        page.getByRole("button", { name: "Review error", exact: true }),
+      ).toBeVisible();
+      await visual.capture("files.save.failed-dismissed");
       await page
         .getByRole("button", { name: "Close Files", exact: true })
         .click();

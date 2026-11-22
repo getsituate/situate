@@ -46,6 +46,7 @@ import RenderedFile from "./RenderedFile.vue";
 import SourceText from "./SourceText.vue";
 import { highlightSource } from "./source-highlighting";
 import ErrorActions from "../errors/ErrorActions.vue";
+import ErrorDialog from "../errors/ErrorDialog.vue";
 import {
   discardFile,
   loadWorkspace,
@@ -340,6 +341,16 @@ const needsDestination = computed(() =>
     action.value?.operation ?? "",
   ),
 );
+const saveErrorOpen = ref(false);
+const writeFailure = computed(() =>
+  file.value?.dirty &&
+  file.value.error &&
+  !file.value.outcome &&
+  !historical.value &&
+  !historicalDeleted.value
+    ? file.value.error
+    : null,
+);
 const saveLabel = computed(() =>
   !file.value
     ? ""
@@ -379,6 +390,23 @@ watch(
     await loadWorkspace(session.value);
   },
   { immediate: true },
+);
+watch([file, writeFailure], ([current, error], [previous]) => {
+  if (current !== previous || !error) saveErrorOpen.value = false;
+});
+watch(
+  () => [file.value, file.value?.saving] as const,
+  ([current, saving], [previous, wasSaving]) => {
+    if (
+      current === previous &&
+      wasSaving &&
+      !saving &&
+      writeFailure.value &&
+      pane.value?.contains(document.activeElement) &&
+      !document.querySelector("dialog[open]")
+    )
+      saveErrorOpen.value = true;
+  },
 );
 watch(
   () => file.value?.outcome,
@@ -1192,15 +1220,29 @@ async function inspectRevision(version: HistoryEntry): Promise<void> {
     if (current === generation) session.value.error = error;
   }
 }
-function retrySelected(): void {
-  if (!file.value) return;
+async function retrySelected(): Promise<void> {
+  const current = file.value;
+  if (!current) return;
   const context = diagnosticsFor(props.workspaceId).action(
     "retry",
     "button",
     "editor",
   );
-  if (file.value.outcome) conflictOpen.value = true;
-  else void retryFile(session.value, file.value, context);
+  if (current.outcome) {
+    conflictOpen.value = true;
+    return;
+  }
+  const wasOpen = saveErrorOpen.value;
+  await retryFile(session.value, current, context);
+  await nextTick();
+  if (
+    wasOpen &&
+    file.value === current &&
+    !writeFailure.value &&
+    document.activeElement === document.body &&
+    !document.querySelector("dialog[open]")
+  )
+    (source.value ?? documentTitle.value)?.focus({ preventScroll: true });
 }
 async function resolve(): Promise<void> {
   if (!file.value || !choice.value) return;
@@ -1379,9 +1421,31 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           <p v-if="session.loading && !session.snapshot" class="tree-empty">
             {{ t("files.loadingFiles") }}
           </p>
-          <p v-else-if="!entries.length" class="tree-empty">
-            {{ query ? t("files.noMatchingFiles") : t("files.noFilesYet") }}
-          </p>
+          <SituateEmptyState v-else-if="!entries.length" class="tree-empty">
+            <p>
+              {{ query ? t("files.noMatchingFiles") : t("files.noFilesYet") }}
+            </p>
+            <template #actions>
+              <SituateButton
+                v-if="query"
+                size="small"
+                variant="secondary"
+                @click="
+                  query = '';
+                  filterControl?.focus();
+                "
+              >
+                {{ t("files.clearSearch") }}
+              </SituateButton>
+              <SituateButton
+                v-else-if="!pluginId && writable"
+                size="small"
+                @click="startAction('create')"
+              >
+                {{ t("files.newFileDetail") }}
+              </SituateButton>
+            </template>
+          </SituateEmptyState>
           <div
             v-for="entry in entries"
             :key="entry.path"
@@ -1609,8 +1673,32 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               </SituateButton>
             </div>
           </div>
+          <ErrorDialog
+            :open="saveErrorOpen && !!writeFailure"
+            :message="writeFailure ? localizeFileError(writeFailure) : ''"
+            @dismiss="saveErrorOpen = false"
+          >
+            <template #actions>
+              <SituateButton
+                :busy="file?.saving"
+                :disabled="!writable"
+                @click="retrySelected"
+              >
+                {{ t("navigation.retry") }}
+              </SituateButton>
+            </template>
+          </ErrorDialog>
+          <div v-if="writeFailure" class="file-notice">
+            <SituateButton
+              variant="secondary"
+              size="small"
+              @click="saveErrorOpen = true"
+            >
+              {{ t("errorRecovery.review") }}
+            </SituateButton>
+          </div>
           <div
-            v-if="file?.error && !historical && !historicalDeleted"
+            v-else-if="file?.error && !historical && !historicalDeleted"
             class="file-notice"
             role="alert"
           >

@@ -480,6 +480,9 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
 .view-pin[aria-pressed="true"] {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
+.view-pin[aria-pressed="true"]:not(:hover) {
+  background: transparent;
+}
 .view-pin[aria-pressed="true"] :deep(svg) {
   fill: currentColor;
 }

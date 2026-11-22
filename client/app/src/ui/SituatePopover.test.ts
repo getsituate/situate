@@ -27,6 +27,32 @@ function anchor(host: HTMLElement = document.body) {
   return button;
 }
 describe("popover placement and lifecycle", () => {
+  it.each([
+    [120, "-3px"],
+    [360, "3px"],
+  ])(
+    "starts anchored popovers toward their trigger at y=%s",
+    async (y, approach) => {
+      viewport();
+      const button = anchor();
+      vi.mocked(button.getBoundingClientRect).mockReturnValue(
+        new DOMRect(40, y, 44, 30),
+      );
+      const wrapper = mount(SituatePopover, {
+        attachTo: document.body,
+        props: { open: false, label: "Details", anchor: button },
+      });
+      const element = wrapper.vm.element!;
+      vi.spyOn(element, "offsetHeight", "get").mockReturnValue(80);
+      await wrapper.setProps({ open: true });
+      await nextTick();
+      expect(element.hasAttribute("data-anchored")).toBe(true);
+      expect(element.style.getPropertyValue("--popover-approach")).toBe(
+        approach,
+      );
+    },
+  );
+
   it("tracks native open state through controlled closure, reopening and light dismissal", async () => {
     const button = anchor();
     const wrapper = mount(SituatePopover, {

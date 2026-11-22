@@ -708,6 +708,67 @@ test.describe("localized maximized pane titles", () => {
   }
 });
 
+test("tab selection and dialog feedback do not delay navigation or saving", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 920 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await workspaceFixture(page, shellState);
+  await page.goto("/");
+  await expect(page.getByRole("tab")).toHaveCount(1);
+  await newTab(page);
+
+  const first = page.getByRole("tab").first();
+  const second = page.getByRole("tab").last();
+  await first.click();
+  await expect(first).toHaveAttribute("aria-selected", "true");
+  await first.press("ArrowRight");
+  await expect(second).toBeFocused();
+  await expect(second).toHaveAttribute("aria-selected", "true");
+  const panel = await second.getAttribute("aria-controls");
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("id", panel!);
+  const marker = () =>
+    second.evaluate((element) => {
+      const style = getComputedStyle(element.parentElement!, "::after");
+      return { visible: style.visibility, duration: style.transitionDuration };
+    });
+  await expect.poll(marker).toEqual({ visible: "visible", duration: "0.16s" });
+
+  await page.locator(".tab-header .tab-actions-trigger").click();
+  const renameItem = page.getByRole("menuitem", {
+    name: /^(Rename|Rename tab)$/,
+  });
+  await renameItem.hover();
+  await page.mouse.down();
+  await expect(renameItem).toHaveCSS("box-shadow", /0px 3px 2px -1px inset/);
+  await page.mouse.up();
+  const dialog = page.getByRole("dialog", { name: "Rename tab", exact: true });
+  const field = dialog.getByRole("textbox", { name: "Tab name" });
+  await expect(field).toBeFocused();
+  const backdrop = () =>
+    dialog.evaluate(
+      (element) => getComputedStyle(element, "::backdrop").animationDuration,
+    );
+  await expect.poll(backdrop).toBe("0.16s");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(backdrop).toBe("0s");
+  await expect.poll(marker).toEqual({ visible: "visible", duration: "0s" });
+  const save = dialog.getByRole("button", { name: "Save", exact: true });
+  await field.fill("Reading");
+  await save.hover();
+  const hoverFill = await save.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await page.mouse.down();
+  await expect(save).toHaveCSS("background-color", hoverFill);
+  await expect(save).toHaveCSS("box-shadow", /0px 3px 2px -1px inset/);
+  await expect(dialog).toBeVisible();
+  await page.mouse.up();
+  await expect(dialog).not.toBeVisible();
+  await expect(second).toHaveText("Reading");
+});
+
 async function rename(page: Page, name: string) {
   await page.locator(".tab-header .tab-actions-trigger").click();
   await page.getByRole("menuitem", { name: /^(Rename|Rename tab)$/ }).click();

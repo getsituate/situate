@@ -114,6 +114,15 @@ function leave() {
   clearTimer();
   if (!focused) timer = setTimeout(hide, 120);
 }
+function leaveTooltip(event: PointerEvent) {
+  if (focused || pointerInside) return;
+  if (
+    event.relatedTarget instanceof Node &&
+    activeAnchor.value?.contains(event.relatedTarget)
+  )
+    return;
+  hide();
+}
 function focus(event: FocusEvent) {
   activeAnchor.value = event.currentTarget as HTMLElement;
   focused = activeAnchor.value.matches(":focus-visible");
@@ -192,7 +201,7 @@ onBeforeUnmount(() => {
       popover="manual"
       class="situate-tooltip"
       @pointerenter="clearTimer"
-      @pointerleave="leave"
+      @pointerleave="leaveTooltip"
       >{{ text }}</span
     >
   </Teleport>
