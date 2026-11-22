@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import select
 import signal
@@ -254,13 +255,14 @@ def coordination_directory(base):
             yield fd
         return
 
-    # Ignore TMPDIR so all worktrees on the host share the same lease directory.
-    parent = os.open(Path("/tmp").resolve(), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    # Use the account home so per-command HOME and TMPDIR overrides do not split the lease.
+    home = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve(strict=True)
+    parent = os.open(home, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         info = os.fstat(parent)
-        if info.st_uid != 0 or not info.st_mode & stat.S_ISVTX:
-            raise ValueError("The system temporary directory must be root-owned and sticky.")
-        name = "situate-coordination-" + str(os.getuid())
+        if info.st_uid != os.getuid() or info.st_mode & 0o022:
+            raise ValueError("The account home must be owned by the current user and not writable by others.")
+        name = ".situate-coordination"
         try:
             os.mkdir(name, mode=0o700, dir_fd=parent)
         except FileExistsError:
