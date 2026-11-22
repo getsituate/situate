@@ -374,7 +374,8 @@ function thinking(event: Event): void {
       <div class="setting-row">
         <label for="settings-inline">{{
           t("settings.ai.showInlineModel")
-        }}</label><SituateSwitch
+        }}</label
+        ><SituateSwitch
           id="settings-inline"
           :checked="settings?.showInlineModel ?? false"
           :disabled="disabled"
@@ -493,7 +494,8 @@ function thinking(event: Event): void {
           <div class="setting-row">
             <label for="settings-thinking">{{
               t("settings.ai.thinking")
-            }}</label><SituateSelect
+            }}</label
+            ><SituateSelect
               id="settings-thinking"
               :value="thinkingPreference"
               :disabled="disabled || levels.length < 2"
@@ -537,7 +539,8 @@ function thinking(event: Event): void {
           <div class="setting-row">
             <label for="settings-generated">{{
               t("settings.ai.generatedComments")
-            }}</label><SituateSwitch
+            }}</label
+            ><SituateSwitch
               id="settings-generated"
               :checked="settings?.generatedComments ?? true"
               :disabled="disabled"
