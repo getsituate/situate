@@ -288,7 +288,12 @@
       return input && !input.disabled && !input.readOnly && input;
     });
     fill(input, text);
-    await click("Send message");
+    await wait("control-send-message", () => {
+      const control = button("Send message");
+      if (field()?.value !== text || !control || control.disabled) return false;
+      control.click();
+      return true;
+    });
   }
   async function queueInput(altKey = false) {
     await wait("queue-input-ready", () => {
@@ -1370,12 +1375,17 @@
       await selectConversation("Plugin capability graph");
     }
     if (info.phase === "exercise") {
+      const assignment =
+        "Check and activate the candidate capability, then use the current tool.";
       const settings = await invoke("ai_settings_load", { scope: info.scope });
-      await send(
-        marker +
-          " Check and activate the candidate capability, then use the current tool.",
+      await wait(
+        "plugins-assignment-draft",
+        () => field()?.value === assignment,
       );
+      await send(`${marker} ${assignment}`);
+      stage = "plugins-fixture-arrival";
       await invoke("agent_e2e_control", { action: "wait", marker });
+      stage = "plugins-settings-change";
       const changed = await invoke("ai_settings_save", {
         scope: info.scope,
         settings: {
@@ -1393,6 +1403,7 @@
         changed.chat.model === "gpt-4.1" && changed.generatedComments === true,
         "plugins-settings-change-not-saved",
       );
+      stage = "plugins-fixture-release";
       await invoke("agent_e2e_control", { action: "release", marker });
       await completed(marker);
       await invoke("ai_settings_save", { scope: info.scope, settings });
