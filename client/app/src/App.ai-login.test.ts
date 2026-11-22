@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
 import { localizeError } from "@situate/localization";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { action, snapshot } from "./workspaces/api";
 import App from "./App.vue";
 import { retainWorkspaceUi, workspaceUi } from "./layout/runtime";
@@ -154,6 +155,48 @@ function runningProcesses() {
   return { activity, stop };
 }
 
+test("window requests use the local target and ignore close requests for another workspace", async () => {
+  const wrapper = mountSetup();
+  await flushPromises();
+  for (const event of [
+    "ai-close-requested",
+    "ai-login-close-requested",
+    "files-close-requested",
+    "dictation-close-requested",
+    "ai-models-changed",
+    "updates-prepare-requested",
+    "files-quit-requested",
+    "recovery-prepare",
+    "recovery-completed",
+    "dictation-level",
+    "dictation-result",
+  ]) {
+    expect(listen).toHaveBeenCalledWith(event, expect.any(Function), {
+      target: "workspace-test",
+    });
+  }
+  for (const event of [
+    "workspaces-changed",
+    "updates-preparation-cancelled",
+    "files-quit-cancelled",
+    "recovery-cancelled",
+    "dictation-changed",
+  ]) {
+    expect(listen).toHaveBeenCalledWith(event, expect.any(Function));
+  }
+
+  events.get("files-close-requested")!({ payload: "reading" });
+  events.get("dictation-close-requested")!({ payload: "reading" });
+  events.get("ai-login-close-requested")!({ payload: "reading" });
+  events.get("ai-close-requested")!({
+    payload: { scope: "reading", processes: true },
+  });
+  await flushPromises();
+  expect(action).not.toHaveBeenCalled();
+  expect(cancelLogin).not.toHaveBeenCalled();
+  expect(wrapper.find("dialog[open]").exists()).toBe(false);
+});
+
 test.each(["files-close-requested", "ai-close-requested"])(
   "%s checks native processes before files; Cancel retains the process",
   async (event) => {
@@ -165,7 +208,12 @@ test.each(["files-close-requested", "ai-close-requested"])(
     );
     const wrapper = mountSetup();
     await flushPromises();
-    events.get(event)!({ payload: "garden" });
+    events.get(event)!({
+      payload:
+        event === "ai-close-requested"
+          ? { scope: "garden", processes: true }
+          : "garden",
+    });
     await vi.waitFor(
       () => {
         expect(
@@ -491,8 +539,8 @@ test("native close waits for browser sign-in cancellation without a response dia
   );
   const wrapper = mountSetup();
   await flushPromises();
-  events.get("ai-login-close-requested")!({ payload: null });
-  events.get("ai-login-close-requested")!({ payload: null });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
   await flushPromises();
   expect(cancelLogin).toHaveBeenCalledOnce();
   expect(action).not.toHaveBeenCalled();
@@ -516,8 +564,8 @@ test("login-close continuation waits for an in-flight workspace action and coale
   events.get("files-close-requested")!({ payload: "garden" });
   await flushPromises();
   expect(action).toHaveBeenCalledOnce();
-  events.get("ai-login-close-requested")!({ payload: null });
-  events.get("ai-login-close-requested")!({ payload: null });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
   await flushPromises();
   expect(cancelLogin).toHaveBeenCalledOnce();
   expect(action).toHaveBeenCalledOnce();
@@ -536,7 +584,7 @@ test("failed cancellation leaves the workspace open and releases the close lease
   );
   const wrapper = mountSetup();
   await flushPromises();
-  events.get("ai-login-close-requested")!({ payload: null });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
   await flushPromises();
   expect(action).not.toHaveBeenCalled();
   expect(
@@ -548,7 +596,7 @@ test("failed cancellation leaves the workspace open and releases the close lease
     "⟦navigation.signInCouldNotBeStoppedKeepThisWorkspace⟧",
   );
   expect(wrapper.text()).not.toContain("synthetic private provider details");
-  events.get("ai-login-close-requested")!({ payload: null });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
   await flushPromises();
   expect(action).toHaveBeenCalledExactlyOnceWith("close", "garden", undefined);
 });
@@ -557,7 +605,7 @@ test("a deferred workspace close retains its confirmation gate after sign-in has
   vi.mocked(action).mockResolvedValueOnce(false);
   mountSetup();
   await flushPromises();
-  events.get("ai-login-close-requested")!({ payload: null });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
   await flushPromises();
   expect(cancelLogin).toHaveBeenCalledOnce();
   expect(invoke).not.toHaveBeenCalledWith("ai_cancel_close", expect.anything());
@@ -569,7 +617,7 @@ test("cancelling file preparation after sign-in stops releases the AI close gate
   );
   const wrapper = mountSetup();
   await flushPromises();
-  events.get("ai-login-close-requested")!({ payload: null });
+  events.get("ai-login-close-requested")!({ payload: "garden" });
   await flushPromises();
   expect(wrapper.get(".file-dialog").text()).toContain(
     "⟦localization.unknownError⟧",
@@ -639,7 +687,9 @@ test("native close waits for a pending model choice without presenting it as an 
   const selection = chat.selectModel("gpt-4.1");
   const wrapper = mountSetup();
   await flushPromises();
-  events.get("ai-close-requested")!({ payload: null });
+  events.get("ai-close-requested")!({
+    payload: { scope: "garden", processes: false },
+  });
   await vi.waitFor(() =>
     expect(wrapper.find("dialog[open]").exists()).toBe(true),
   );

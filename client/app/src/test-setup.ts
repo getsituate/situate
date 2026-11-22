@@ -3,6 +3,11 @@ import { createRequire } from "node:module";
 import { beforeEach, vi } from "vitest";
 import { initialFormats, setPreferences } from "@situate/localization";
 
+vi.mock("@tauri-apps/api/window", () => {
+  const label = "workspace-test";
+  return { getCurrentWindow: () => ({ label }) };
+});
+
 beforeEach(() => {
   Reflect.set(
     globalThis,

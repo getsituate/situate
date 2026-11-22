@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { listenInWindow } from "../window-events";
 import { t, type MessageKey } from "@situate/localization";
 import { shallowReactive, shallowRef } from "vue";
 
@@ -91,7 +92,7 @@ export function initializeDictation(): Promise<void> {
       }),
     );
     listeners.push(
-      await listen<{ id: string; level: number }>(
+      await listenInWindow<{ id: string; level: number }>(
         "dictation-level",
         ({ payload }) => {
           if (
@@ -104,31 +105,32 @@ export function initializeDictation(): Promise<void> {
       ),
     );
     listeners.push(
-      await listen<{ id: string; text?: string; notice?: Notice | "noSpeech" }>(
-        "dictation-result",
-        ({ payload }) => {
-          const notice =
-            payload.notice === "noSpeech" ? undefined : payload.notice;
-          ++version;
-          if (confirmation.value && confirmation.value.id === payload.id)
-            confirmation.value = {
-              ...confirmation.value,
-              notice,
-              inserted: !!payload.text,
-            };
-          if (binding && binding.id === payload.id) {
-            const current = binding;
-            binding = undefined;
-            current.complete(payload.text, notice);
-          }
-          if (dictation.owner?.id === payload.id) {
-            dictationLevel.value = 0;
-            Object.assign(dictation, { owner: null, busy: false });
-          }
-          finished.get(payload.id)?.();
-          finished.delete(payload.id);
-        },
-      ),
+      await listenInWindow<{
+        id: string;
+        text?: string;
+        notice?: Notice | "noSpeech";
+      }>("dictation-result", ({ payload }) => {
+        const notice =
+          payload.notice === "noSpeech" ? undefined : payload.notice;
+        ++version;
+        if (confirmation.value && confirmation.value.id === payload.id)
+          confirmation.value = {
+            ...confirmation.value,
+            notice,
+            inserted: !!payload.text,
+          };
+        if (binding && binding.id === payload.id) {
+          const current = binding;
+          binding = undefined;
+          current.complete(payload.text, notice);
+        }
+        if (dictation.owner?.id === payload.id) {
+          dictationLevel.value = 0;
+          Object.assign(dictation, { owner: null, busy: false });
+        }
+        finished.get(payload.id)?.();
+        finished.delete(payload.id);
+      }),
     );
     await refreshDictation();
   })().catch(() => {

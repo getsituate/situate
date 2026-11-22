@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "close-workspace-window",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "close-workspace-window",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Close a workspace without affecting other windows",
+          "paragraphs": [
+            "Closing one workspace no longer shows a misleading error in another workspace window."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "close-workspace-window",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Arbeitsbereiche unabhängig voneinander schließen",
+          "paragraphs": [
+            "Beim Schließen eines Arbeitsbereichs erscheint in anderen Arbeitsbereichsfenstern keine irreführende Fehlermeldung mehr."
+          ]
+        }
+      ]
+    }
+  }
+}

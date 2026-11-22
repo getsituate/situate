@@ -257,6 +257,10 @@
         "Closing the second workspace affected the first",
       );
       await unchanged(created.before, created.originalDocument);
+      assert(
+        !document.querySelector(".workspace-notice, dialog[open]"),
+        "Closing the second workspace showed a notice or dialog in the first",
+      );
       await invoke("verify_smoke_registry", {
         known: [created.current.id, second.id],
         restore: [created.current.id],

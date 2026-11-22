@@ -1327,6 +1327,7 @@ export async function workspaceFixture(
       });
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         value: {
+          metadata: { currentWindow: { label: "workspace-fixture" } },
           transformCallback: (callback: (event: unknown) => void) => {
             callbacks.set(++callbackId, callback);
             return callbackId;

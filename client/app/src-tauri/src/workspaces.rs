@@ -806,7 +806,11 @@ fn close_session(app: &tauri::AppHandle, window: &str, id: &str) -> Result<bool,
         }
     };
     if let Some(window) = process_window {
-        let _ = app.emit_to(&window, "ai-close-requested", ());
+        let _ = app.emit_to(
+            &window,
+            "ai-close-requested",
+            serde_json::json!({"scope":id,"processes":true}),
+        );
         return Ok(false);
     }
     let result = state.with_close_session(window, id, cfg!(mobile), |participant| {
