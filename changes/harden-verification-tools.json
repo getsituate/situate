@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "harden-verification-tools",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Hardens verification tools and the Android test harness without changing the macOS app."
+}
