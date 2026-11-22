@@ -26,7 +26,7 @@ pub const RECHECK_HISTORY_CONTROLS: bool = true;
 pub const RECOVER_UNFLUSHED_HISTORY: bool = false;
 pub const RELEASE_CHILD_BEFORE_MOVE: bool = true;
 pub const REMOVE_FAILED_HISTORY_STAGE: bool = false;
-pub const STAGE_WORKSPACE_MARKER: bool = false;
+pub const STAGE_WORKSPACE_MARKER: bool = true;
 
 pub use dunce::simplified as display_path;
 
@@ -81,43 +81,135 @@ pub fn replace_file_write_through(from: &Path, to: &Path) -> io::Result<()> {
     Ok(())
 }
 
-pub fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> io::Result<()> {
-    use std::os::windows::{ffi::OsStrExt, ffi::OsStringExt, io::AsRawHandle};
-    use windows_sys::Win32::Storage::FileSystem::{GetFinalPathNameByHandleW, MoveFileExW};
-    fn path(dir: &Dir, name: &str) -> io::Result<Vec<u16>> {
-        let file = dir.try_clone()?.into_std_file();
-        let mut buffer = vec![0u16; 32768];
-        // The directory handle was opened without following symlinks. Windows
-        // publication still requires ancestors to stay put until MoveFileExW.
-        let size = unsafe {
-            GetFinalPathNameByHandleW(
-                file.as_raw_handle(),
-                buffer.as_mut_ptr(),
-                buffer.len() as u32,
-                0,
-            )
-        };
-        if size == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if size as usize >= buffer.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "native.content.path.tooLong",
-            ));
-        }
-        buffer.truncate(size as usize);
-        let path = std::path::PathBuf::from(std::ffi::OsString::from_wide(&buffer)).join(name);
-        Ok(path.as_os_str().encode_wide().chain(Some(0)).collect())
+fn directory_path(dir: &Dir) -> io::Result<PathBuf> {
+    use std::os::windows::{ffi::OsStringExt, io::AsRawHandle};
+    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+
+    let file = dir.try_clone()?.into_std_file();
+    let mut buffer = vec![0u16; 32768];
+    let size = unsafe {
+        GetFinalPathNameByHandleW(
+            file.as_raw_handle(),
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            0,
+        )
+    };
+    if size == 0 {
+        return Err(io::Error::last_os_error());
     }
+    if size as usize >= buffer.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "native.content.path.tooLong",
+        ));
+    }
+    Ok(std::ffi::OsString::from_wide(&buffer[..size as usize]).into())
+}
+
+pub fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
+    let path = |dir: &Dir, name: &str| -> io::Result<Vec<u16>> {
+        Ok(directory_path(dir)?
+            .join(name)
+            .as_os_str()
+            .encode_wide()
+            .chain([0])
+            .collect())
+    };
     let from = path(from, old)?;
     let to = path(to, new)?;
-    // Zero flags exclude replacement, including an existing empty directory.
+    // Ancestors must stay put for the path-based move. Zero flags exclude replacement.
     if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(())
 }
+
+pub fn open_workspace_stage(parent: &Dir, name: &str) -> io::Result<Dir> {
+    open_stage(parent, name, false).map(Dir::from_std_file)
+}
+
+fn open_stage(parent: &Dir, name: &str, rename: bool) -> io::Result<File> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    use windows_sys::Win32::Storage::FileSystem::{
+        DELETE, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_SHARE_DELETE, FILE_SHARE_READ,
+        FILE_SHARE_WRITE,
+    };
+
+    let mut parts = Path::new(name).components();
+    if !matches!(parts.next(), Some(Component::Normal(part)) if part == name)
+        || parts.next().is_some()
+    {
+        return Err(io::ErrorKind::InvalidInput.into());
+    }
+    // The held parent denies rename. Open only its immediate staging directory and allow
+    // a second handle to acquire DELETE without releasing the staged directory identity.
+    let file = std::fs::OpenOptions::new()
+        .access_mode(if rename {
+            FILE_GENERIC_READ | DELETE
+        } else {
+            FILE_GENERIC_READ
+        })
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(directory_path(parent)?.join(name))?;
+    let metadata = file.metadata()?;
+    if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(io::ErrorKind::NotADirectory.into());
+    }
+    Ok(file)
+}
+
+pub fn publish_workspace_marker(parent: &Dir, name: &str, marker: &Dir) -> io::Result<()> {
+    use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_RENAME_INFO, FileRenameInfo, SetFileInformationByHandle,
+    };
+
+    let source = open_stage(parent, name, true)?;
+    if same_file::Handle::from_file(source.try_clone()?)?
+        != same_file::Handle::from_file(marker.try_clone()?.into_std_file())?
+    {
+        return Err(io::Error::other("native.workspace.create.locationChanged"));
+    }
+
+    let destination: Vec<u16> = directory_path(parent)?
+        .join(".situate")
+        .as_os_str()
+        .encode_wide()
+        .collect();
+    let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
+    let length = std::mem::size_of_val(destination.as_slice());
+    let size = offset + length;
+    // FILE_RENAME_INFO has a trailing filename. Zeroed, aligned storage leaves
+    // replacement disabled, RootDirectory null for the absolute path, and a terminator.
+    let mut buffer = vec![0usize; (size + 2).div_ceil(std::mem::size_of::<usize>())];
+    let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    unsafe {
+        std::ptr::addr_of_mut!((*info).FileNameLength).write(length as u32);
+        std::ptr::copy_nonoverlapping(
+            destination.as_ptr(),
+            buffer.as_mut_ptr().cast::<u8>().add(offset).cast(),
+            destination.len(),
+        );
+    }
+    if unsafe {
+        SetFileInformationByHandle(
+            source.as_raw_handle(),
+            FileRenameInfo,
+            buffer.as_ptr().cast(),
+            (size + 2) as u32,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 pub fn publish_history(_marker: &Dir, stage: &str, history_path: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     let from: Vec<u16> = history_path

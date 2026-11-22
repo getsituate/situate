@@ -76,46 +76,49 @@ $menuItem = [System.Windows.Automation.ControlType]::MenuItem
 $parent = Join-Path $PSScriptRoot 'fixture-workspaces'
 New-Item -ItemType Directory -Path $parent | Out-Null
 Invoke-Control (App-Control $app $button '^(Create a workspace|Arbeitsbereich erstellen)(\s|$)')
+Invoke-Control (App-Control $app $button '^(Skip intro|Intro .berspringen)(\s|$)')
 Set-Text '^(Workspace name|Name des Arbeitsbereichs)$' 'Workspace smoke'
 Invoke-Control (App-Control $app $button '^(Choose|Ausw.hlen)(\u2026|\.\.\.)?$')
-$dialog = Wait-Control {
-    $root = [System.Windows.Automation.AutomationElement]::RootElement
-    $condition = [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $app.Id)
-    foreach ($candidate in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)) {
-        if ($candidate.Current.ControlType -eq $windowType -and $candidate.Current.ClassName -eq '#32770') { return $candidate }
-    }
-} 'the Windows folder picker'
-$dialogHandle = [IntPtr]$dialog.Current.NativeWindowHandle
-[void](Wait-Control { [SmokeDesktop]::GetForegroundWindow() -eq $dialogHandle } 'the active folder picker')
-function Native-Control([string]$id, [string]$class) {
-    $condition = [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id)
-    foreach ($element in $dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
-        $item = $element.Current
-        $handle = [IntPtr]$item.NativeWindowHandle
-        if ($item.ProcessId -eq $app.Id -and $item.ClassName -eq $class -and $handle -ne [IntPtr]::Zero -and
-            [SmokeDesktop]::IsWindowVisible($handle) -and [SmokeDesktop]::IsWindowEnabled($handle)) {
-            return $handle
+function Choose-Folder([string]$parent) {
+    $dialog = Wait-Control {
+        $root = [System.Windows.Automation.AutomationElement]::RootElement
+        $condition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $app.Id)
+        foreach ($candidate in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)) {
+            if ($candidate.Current.ControlType -eq $windowType -and $candidate.Current.ClassName -eq '#32770' -and -not $candidate.Current.IsOffscreen) { return $candidate }
+        }
+    } 'the Windows folder picker'
+    $dialogHandle = [IntPtr]$dialog.Current.NativeWindowHandle
+    function Native-Control([string]$id, [string]$class) {
+        $condition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id)
+        foreach ($element in $dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+            $item = $element.Current
+            $handle = [IntPtr]$item.NativeWindowHandle
+            if ($item.ProcessId -eq $app.Id -and $item.ClassName -eq $class -and $handle -ne [IntPtr]::Zero -and
+                [SmokeDesktop]::IsWindowVisible($handle) -and [SmokeDesktop]::IsWindowEnabled($handle)) {
+                return $handle
+            }
         }
     }
+    $field = Wait-Control { Native-Control '1152' 'Edit' } 'the native folder field'
+    $result = [IntPtr]::Zero
+    $sent = [SmokeDesktop]::SendMessageTimeout($field, 12, [IntPtr]::Zero, $parent, 2, 3000, [ref]$result)
+    if ($sent -eq [IntPtr]::Zero -or $result -eq [IntPtr]::Zero) { throw 'Could not set the folder picker path.' }
+    # The dialog can repaint and change its controls while it processes the edit.
+    $confirm = Wait-Control {
+        if (-not [SmokeDesktop]::IsWindowVisible($dialogHandle)) { return }
+        $currentField = Native-Control '1152' 'Edit'
+        if (-not $currentField) { return }
+        $text = [Text.StringBuilder]::new(512)
+        $read = [IntPtr]::Zero
+        if ([SmokeDesktop]::ReadControlText($currentField, 13, [IntPtr]$text.Capacity, $text, 2, 1000, [ref]$read) -ne [IntPtr]::Zero -and $text.ToString() -eq $parent) {
+            Native-Control '1' 'Button'
+        }
+    } 'confirmation with the intended folder path'
+    if (-not [SmokeDesktop]::PostMessage($confirm, 245, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Could not submit the folder picker.' }
 }
-$field = Wait-Control { Native-Control '1152' 'Edit' } 'the native folder field'
-$result = [IntPtr]::Zero
-$sent = [SmokeDesktop]::SendMessageTimeout($field, 12, [IntPtr]::Zero, $parent, 2, 3000, [ref]$result)
-if ($sent -eq [IntPtr]::Zero -or $result -eq [IntPtr]::Zero) { throw 'Could not set the folder picker path.' }
-# The dialog can repaint and change its controls while it processes the edit.
-$confirm = Wait-Control {
-    if ([SmokeDesktop]::GetForegroundWindow() -ne $dialogHandle) { return }
-    $currentField = Native-Control '1152' 'Edit'
-    if (-not $currentField) { return }
-    $text = [Text.StringBuilder]::new(512)
-    $read = [IntPtr]::Zero
-    if ([SmokeDesktop]::ReadControlText($currentField, 13, [IntPtr]$text.Capacity, $text, 2, 1000, [ref]$read) -ne [IntPtr]::Zero -and $text.ToString() -eq $parent) {
-        Native-Control '1' 'Button'
-    }
-} 'confirmation with the intended folder path'
-if (-not [SmokeDesktop]::PostMessage($confirm, 245, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Could not submit the folder picker.' }
+Choose-Folder $parent
 $workspace = Join-Path $parent 'Workspace smoke'
 try {
     [void](Wait-Control {
@@ -134,8 +137,24 @@ try {
 Invoke-Control (App-Control $app $button '^(Create workspace|Arbeitsbereich erstellen)$')
 [void](Wait-Control { Test-Path -LiteralPath (Join-Path $workspace '.situate\migrations.json') } 'workspace creation and initialization')
 
-Invoke-Control (App-Control $app $button '^(Skip for now|Vorerst .berspringen)$')
-Invoke-Control (App-Control $app $button '^(Continue without AI|Ohne KI fortfahren)$')
+function Assert-RequiredSetup {
+    [void](App-Control $app ([System.Windows.Automation.ControlType]::Text) '^(Choose a provider|Anbieter ausw.hlen)$')
+    if (Find-Control (App-Window $app) $button '^(Skip for now|Continue without AI|Vorerst .berspringen|Ohne KI fortfahren)$') {
+        throw 'A new workspace offered to skip initial AI setup.'
+    }
+}
+Assert-RequiredSetup
+$progress = Get-Content -LiteralPath (Join-Path $workspace '.situate\native-onboarding.json') -Raw | ConvertFrom-Json
+if ($progress.record.step -ne 'access' -or $progress.record.entered) { throw 'Initial setup was not recorded.' }
+if (-not $app.CloseMainWindow()) { throw 'Could not close the setup window.' }
+Invoke-Control (App-Control $app $button '^Workspace smoke(\s|$)')
+Assert-RequiredSetup
+if (-not $app.CloseMainWindow()) { throw 'Could not close the reopened setup window.' }
+
+$workspace = Join-Path $parent 'Legacy fixture'
+[void][IO.Directory]::CreateDirectory((Join-Path $workspace '.situate'))
+Invoke-Control (App-Control $app $button '^(Open a workspace|Arbeitsbereich .ffnen)(\s|$)')
+Choose-Folder $workspace
 function Open-Files {
     $nav = Find-Control (App-Window $app) $button '^(Open navigation|Navigation .ffnen)$'
     if ($nav) { Invoke-Control $nav }
@@ -164,7 +183,7 @@ Invoke-Control (App-Control $app $button '^(Application actions|App-Aktionen)$')
 Invoke-Control (App-Control $app $menuItem '^(Quit Situate|Situate beenden)$')
 if (-not $app.WaitForExit(18000) -or $app.ExitCode -ne 0) { throw 'Situate did not exit normally.' }
 $app = [Diagnostics.Process]::Start($launch)
-Invoke-Control (App-Control $app $button '^Workspace smoke(\s|$)')
+Invoke-Control (App-Control $app $button '^Legacy fixture(\s|$)')
 Open-Files
 Invoke-Control (App-Control $app $button '^smoke-note\.md$')
 if ([IO.File]::ReadAllText($file) -ne $body) { throw 'Saved file changed after reopening the workspace.' }

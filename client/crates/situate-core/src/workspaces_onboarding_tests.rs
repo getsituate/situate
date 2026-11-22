@@ -28,6 +28,6 @@ pub(crate) fn checkpoint(point: Checkpoint, child: &Dir) -> io::Result<()> {
     })
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 #[path = "workspaces_onboarding_cases.rs"]
 mod cases;

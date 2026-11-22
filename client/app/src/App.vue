@@ -612,7 +612,7 @@ async function refresh(): Promise<void> {
     const value = await snapshot();
     if (alive && request === revision) {
       if (value.open.length) layoutRuntime ??= await import("./layout/runtime");
-      if (value.onboardingAvailable && value.current)
+      if (value.current)
         onboardingState ??= await import("./onboarding/session");
       if (!alive || request !== revision) return;
       if (state.value?.current?.id !== value.current?.id) {
@@ -621,16 +621,15 @@ async function refresh(): Promise<void> {
         celebrationFocusScope = undefined;
         handoffGeneration++;
       }
-      setupProgress.value =
-        value.onboardingAvailable && value.current
-          ? onboardingState?.onboardingSession(value.current.id)
-          : undefined;
+      setupProgress.value = value.current
+        ? onboardingState?.onboardingSession(value.current.id)
+        : undefined;
       const progress = setupProgress.value;
       void progress?.load().catch((cause) => {
         if (alive && setupProgress.value === progress) error.value = cause;
       });
       state.value = value;
-      if (value.onboardingAvailable && value.current && !value.onboarding)
+      if (value.current && !value.onboarding)
         void checkPendingDevelopments(value.current.id);
       retainDiagnostics(
         value.mobile
@@ -730,9 +729,9 @@ const run: RunAction = async (command, id, name, accent) => {
       await flushLayouts(id);
     }
     if (command === "create") {
-      if (state.value?.onboardingAvailable) await loadOnboardingHost();
+      await loadOnboardingHost();
       creationAccent.value = accent;
-      creationPending.value = !!state.value?.onboardingAvailable;
+      creationPending.value = true;
     }
     const outcome = ownsClosingFiles
       ? await lifecycle.close(id!, () => action(command, id, name))

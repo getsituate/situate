@@ -1,5 +1,6 @@
 use super::*;
 use crate::onboarding::{OnboardingRecord, OnboardingStorage};
+#[cfg(unix)]
 use situate_host::unix_test_support::PermissionsExt;
 use std::{cell::Cell, rc::Rc};
 
@@ -34,6 +35,7 @@ fn publication_includes_initial_progress_without_native_followup() {
         compatibility,
         serde_json::json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":2})
     );
+    #[cfg(unix)]
     assert_eq!(
         fs::metadata(root.join(".situate/native-onboarding.json"))
             .unwrap()
@@ -148,7 +150,16 @@ fn failed_initial_writes_and_syncs_preserve_the_publication_boundary() {
 
 #[test]
 fn metadata_publication_does_not_replace_existing_entries() {
-    for kind in ["file", "empty", "populated", "symlink", "dangling"] {
+    let kinds = [
+        "file",
+        "empty",
+        "populated",
+        #[cfg(unix)]
+        "symlink",
+        #[cfg(unix)]
+        "dangling",
+    ];
+    for kind in kinds {
         let temp = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
         fs::write(outside.path().join("keep"), "unchanged").unwrap();
@@ -157,8 +168,8 @@ fn metadata_publication_does_not_replace_existing_entries() {
         } else {
             outside.path().to_owned()
         };
-        let link = target.clone();
-        let root = temp.path().join("Garden");
+        #[cfg(unix)]
+        let (link, root) = (target.clone(), temp.path().join("Garden"));
         let _guard = observe(move |point, child| {
             if point == Checkpoint::Prepared {
                 match kind {
@@ -169,7 +180,11 @@ fn metadata_publication_does_not_replace_existing_entries() {
                             child.write(".situate/keep", "unchanged")?;
                         }
                     }
-                    _ => situate_host::unix_test_support::symlink(&link, root.join(".situate"))?,
+                    #[cfg(unix)]
+                    "symlink" | "dangling" => {
+                        situate_host::unix_test_support::symlink(&link, root.join(".situate"))?
+                    }
+                    _ => unreachable!(),
                 }
             }
             Ok(())
@@ -196,6 +211,7 @@ fn metadata_publication_does_not_replace_existing_entries() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn staging_replacement_is_rejected_before_publication() {
     for symlink in [false, true] {
@@ -229,6 +245,7 @@ fn staging_replacement_is_rejected_before_publication() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn late_marker_replacement_cannot_be_acknowledged_as_success() {
     let temp = tempfile::tempdir().unwrap();
@@ -251,6 +268,7 @@ fn late_marker_replacement_cannot_be_acknowledged_as_success() {
     assert_eq!(fs::read_dir(root.join(".situate")).unwrap().count(), 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn parent_and_child_replacements_prevent_metadata_publication() {
     for replace_parent in [false, true] {

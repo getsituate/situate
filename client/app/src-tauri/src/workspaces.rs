@@ -76,7 +76,6 @@ pub struct Snapshot {
     current: Option<Entry>,
     ai_setup: bool,
     onboarding: bool,
-    onboarding_available: bool,
     failures: Vec<Failure>,
     error: Option<String>,
 }
@@ -537,11 +536,8 @@ fn native(
                 .transpose(),
             "inspect" => fs::inspect(path()?).map(Some),
             "create" => {
-                #[cfg(target_os = "macos")]
-                let create = fs::create_for_onboarding;
-                #[cfg(not(target_os = "macos"))]
-                let create = fs::create;
-                create(path()?, name.ok_or("native.workspace.name.required")?).map(Some)
+                fs::create_for_onboarding(path()?, name.ok_or("native.workspace.name.required")?)
+                    .map(Some)
             }
             _ => Err("native.workspace.operation.unknownFolder".into()),
         }
@@ -948,7 +944,6 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     });
     Ok(())
 }
-#[cfg(any(target_os = "macos", test))]
 fn stored_onboarding_incomplete(root: &Path, scope: &str) -> Result<bool, String> {
     Ok(
         situate_core::onboarding::OnboardingStorage::open(root, scope)?
@@ -961,16 +956,9 @@ fn stored_onboarding_incomplete(root: &Path, scope: &str) -> Result<bool, String
 }
 
 fn onboarding_incomplete(app: &tauri::AppHandle, location: &Location) -> Result<bool, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let root =
-            crate::files::local_root(app, location)?.ok_or("native.onboarding.storage.failed")?;
-        stored_onboarding_incomplete(&root, &location.id)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (app, location);
-        Ok(false)
+    match crate::files::local_root(app, location)? {
+        Some(root) => stored_onboarding_incomplete(&root, &location.id),
+        None => Ok(false),
     }
 }
 
@@ -1016,7 +1004,6 @@ pub async fn workspace_snapshot(
             ai_setup: current.is_some_and(|s| s.ai_setup),
             onboarding: current
                 .is_some_and(|s| onboarding_incomplete(&app, &s.location).unwrap_or(true)),
-            onboarding_available: cfg!(target_os = "macos"),
             failures: inner.failures.clone(),
             error: inner.error.clone(),
         })

@@ -55,7 +55,6 @@ export async function onboardingFixture(
       ...(options.startAtEntry ? { current: null, known: [], open: [] } : {}),
       aiSetup: true,
       onboarding: true,
-      onboardingAvailable: true,
     },
     {
       ...(options.connected === false

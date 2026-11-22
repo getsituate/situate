@@ -198,7 +198,7 @@ fn prepare_initial_metadata(child: &Dir, onboarding: bool) -> std::io::Result<(S
     onboarding_tests::checkpoint(onboarding_tests::Checkpoint::Empty, child)?;
     let name = format!(".situate-{}.tmp", uuid::Uuid::new_v4());
     child.create_dir(&name)?;
-    let marker = open_child_directory(child, &name)?;
+    let marker = situate_host::fs::open_workspace_stage(child, &name)?;
     #[cfg(test)]
     onboarding_tests::checkpoint(onboarding_tests::Checkpoint::Staging, child)?;
     crate::workspace_identity::initialize_marker(&marker)?;
@@ -250,7 +250,7 @@ fn finish_new_directory(
         check_directory_entry(child, &stage, &marker)
             .map_err(|_| partial("native.workspace.create.locationChanged"))?;
         // Publish identity and progress together; a bare marker is a legacy workspace.
-        crate::durable_storage::rename_noreplace(child, &stage, child, ".situate")
+        situate_host::fs::publish_workspace_marker(child, &stage, &marker)
             .map_err(|_| partial("native.workspace.create.markerFailed"))?;
         #[cfg(test)]
         if onboarding {
@@ -322,7 +322,7 @@ mod tests {
             fs::read_dir(Path::new(&result.handle).join(".situate"))
                 .unwrap()
                 .count(),
-            if cfg!(any(target_os = "macos", target_os = "linux")) {
+            if situate_host::fs::STAGE_WORKSPACE_MARKER {
                 2
             } else {
                 1
@@ -333,8 +333,7 @@ mod tests {
             "unchanged"
         );
         assert!(!temp.path().join(".situate").exists());
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        {
+        if situate_host::fs::STAGE_WORKSPACE_MARKER {
             let metadata: serde_json::Value = serde_json::from_slice(
                 &fs::read(Path::new(&result.handle).join(".situate/migrations.json")).unwrap(),
             )

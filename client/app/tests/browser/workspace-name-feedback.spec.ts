@@ -66,7 +66,10 @@ for (const locale of ["en-US", "de-DE"] as const) {
               locale === "de-DE" ? "Arbeitsbereich" : "workspace",
             ),
           ).toBe(1);
-          await visual.capture("workspaces.name.unvisited");
+          // Chromium can blend the illustration edges slightly differently on its first capture.
+          await visual.capture("workspaces.name.unvisited", {
+            maxDiffPixels: 20,
+          });
           const folderTop = () =>
             page
               .locator("#workspace-parent")

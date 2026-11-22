@@ -1499,6 +1499,8 @@ export async function workspaceFixture(
               return;
             }
             if (command === "workspace_snapshot") return structuredClone(state);
+            if (command === "onboarding_load")
+              return { record: null, revision: null, writable: true };
             if (command === "layout_load")
               return window.__layoutTest.load(String(args.workspaceId));
             if (command === "layout_save")

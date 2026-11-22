@@ -95,7 +95,7 @@ describe("creation", () => {
     expect(wrapper.find("[aria-live]").exists()).toBe(false);
     expect(wrapper.find(".entry-error").exists()).toBe(false);
     expect(run).not.toHaveBeenCalled();
-    expect(preflight).toHaveBeenCalledTimes(1);
+    expect(preflight).toHaveBeenCalledTimes(2);
     await wrapper.get("form").trigger("submit");
     expect(run).not.toHaveBeenCalled();
   });
@@ -105,6 +105,7 @@ describe("creation", () => {
       props: { run: vi.fn(), busy: false },
     });
     await flushPromises();
+    await wrapper.get("#workspace-name").setValue("");
     expect(wrapper.find("#workspace-name-error").exists()).toBe(false);
     const create = button(wrapper, "⟦workspace.createWorkspace⟧");
     expect(create.element.disabled).toBe(false);
@@ -269,6 +270,7 @@ describe("creation", () => {
       props: { run: vi.fn(), busy: false },
     });
     await flushPromises();
+    requests.shift();
     await wrapper.get("input").setValue("First");
     await wrapper.get("input").setValue("Second");
     requests[0]!.resolve("/Documents/First");
@@ -370,6 +372,10 @@ describe("entry and actions", () => {
   });
   it("retains the creation draft when opening an existing workspace fails", async () => {
     vi.mocked(preflight).mockRejectedValue("native.workspace.folder.exists");
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
     const run = vi.fn(async (): Promise<boolean> => {
       await wrapper.setProps({
         error: "native.workspace.migration.cleanupFailed",
@@ -381,6 +387,9 @@ describe("entry and actions", () => {
       props: { state: state(), run, busy: false, error: "" },
     });
     await wrapper.get(".entry-action.primary-choice").trigger("click");
+    await flushPromises();
+    await vi.dynamicImportSettled();
+    await wrapper.get(".skip").trigger("click");
     await flushPromises();
     await wrapper.get("#workspace-name").setValue("Existing");
     await flushPromises();

@@ -20,7 +20,6 @@ export interface Snapshot {
   current: Workspace | null;
   aiSetup?: boolean;
   onboarding?: boolean;
-  onboardingAvailable?: boolean;
   failures: { location: Workspace; message: string }[];
   error: string | null;
 }

@@ -28,6 +28,15 @@ pub const RELEASE_CHILD_BEFORE_MOVE: bool = false;
 pub const REMOVE_FAILED_HISTORY_STAGE: bool = true;
 pub const STAGE_WORKSPACE_MARKER: bool = cfg!(any(target_os = "macos", target_os = "linux"));
 
+pub fn open_workspace_stage(parent: &Dir, name: &str) -> io::Result<Dir> {
+    use cap_fs_ext::DirExt;
+    parent.open_dir_nofollow(name)
+}
+
+pub fn publish_workspace_marker(parent: &Dir, name: &str, _marker: &Dir) -> io::Result<()> {
+    rename_noreplace(parent, name, parent, ".situate")
+}
+
 pub fn private_file_options(options: &mut OpenOptions) {
     use cap_std::fs::OpenOptionsExt;
     options.mode(0o600);

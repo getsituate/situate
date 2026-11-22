@@ -23,7 +23,6 @@ import {
 const props = defineProps<{
   run: RunAction;
   busy: boolean;
-  setup?: boolean;
   operationError?: unknown;
 }>();
 const emit = defineEmits<{
@@ -34,7 +33,7 @@ const emit = defineEmits<{
 }>();
 const accent = ref<Accent>("violet");
 watch(accent, (value) => emit("accent", value));
-const name = ref(props.setup ? t("onboarding.creation.defaultName") : "");
+const name = ref(t("onboarding.creation.defaultName"));
 const parent = ref<Workspace | null>(null);
 const error = ref<unknown>("");
 const checking = ref(false);
@@ -160,7 +159,7 @@ async function create(): Promise<void> {
   else await check();
 }
 onMounted(() => {
-  if (props.setup) document.getElementById("create-title")?.focus();
+  document.getElementById("create-title")?.focus();
   emit("accent", accent.value);
   return choose(false);
 });
