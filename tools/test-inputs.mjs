@@ -347,7 +347,7 @@ function isClientTest(file) {
 const bundledBrand =
   /^design\/brand\/(?:tokens\.(?:css|json)|assets\/[^/]+\.svg|bend\/(?:svg\/[^/]+\.svg|performance\.js|mini\/mini\.js))$/;
 const clientBuildScript =
-  /^client\/scripts\/(?:ai-catalog|release-history)\.mjs$/;
+  /^client\/scripts\/(?:ai-catalog|models-dev-snapshot|release-history)\.mjs$/;
 
 // Release selection also covers verification and delivery inputs that don't change the client.
 export function requiresChangelog(file) {
@@ -383,7 +383,7 @@ export function appAffected(file) {
     clientConfig.test(file) ||
     appConfig.test(file) ||
     nativeHarness.test(file) ||
-    /^client\/scripts\/(?:apple-|updater-|qualify-direct|release|bundle-report|localization|ai-catalog|auth-callback|native-licenses)/.test(
+    /^client\/scripts\/(?:apple-|updater-|qualify-direct|release|bundle-report|localization|ai-catalog|models-dev-snapshot|auth-callback|native-licenses)/.test(
       file,
     ) ||
     /^infrastructure\/releases\//.test(file)

@@ -53,8 +53,6 @@ function providerName(config: Config): string {
   switch (config.provider) {
     case "openai":
       return t("ai.providers.openai");
-    case "openai-codex":
-      return t("ai.providers.codex");
     case "anthropic":
       return t("ai.providers.anthropic");
     case "openrouter":
@@ -69,11 +67,7 @@ function label(config: Config): string {
   return config.label || providerName(config);
 }
 function authentication(config: Config): string {
-  return config.auth === "oauth"
-    ? config.provider === "openai-codex"
-      ? t("ai.device.title")
-      : t("ai.browserMethod")
-    : t("ai.apiKeyMethod");
+  return config.auth === "oauth" ? t("ai.browserMethod") : t("ai.apiKeyMethod");
 }
 async function refresh(): Promise<void> {
   const request = ++revision;

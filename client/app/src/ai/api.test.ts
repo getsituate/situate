@@ -11,10 +11,6 @@ import {
   selectConversationModel,
   selectConversationThinking,
   selectChatModel,
-  startCodexLogin,
-  waitCodexLogin,
-  cancelCodexLogin,
-  openCodexLogin,
   waitOpenAiLogin,
   cancelOpenAiLogin,
 } from "./api";
@@ -80,26 +76,6 @@ test.each([
     () => selectChatModel("workspace", "chosen"),
     "ai_select_model",
     { scope: "workspace", model: "chosen" },
-  ],
-  [
-    () => startCodexLogin("workspace", "connection", "Codex"),
-    "ai_codex_start",
-    { scope: "workspace", connectionId: "connection", label: "Codex" },
-  ],
-  [
-    () => waitCodexLogin("workspace", "login"),
-    "ai_codex_wait",
-    { scope: "workspace", id: "login" },
-  ],
-  [
-    () => cancelCodexLogin("workspace", "login"),
-    "ai_codex_cancel",
-    { scope: "workspace", id: "login" },
-  ],
-  [
-    () => openCodexLogin("workspace", "login"),
-    "ai_codex_open",
-    { scope: "workspace", id: "login" },
   ],
   [
     () => waitOpenAiLogin("workspace", "login"),

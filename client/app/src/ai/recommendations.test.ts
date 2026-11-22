@@ -9,6 +9,7 @@ import {
   type RankedCandidate,
 } from "./recommendations";
 import catalog from "./model-recommendations.json";
+import type { ModelCatalog } from "./connection-types";
 import { providers, availableChatModels } from "./model-catalog";
 const openai = { provider: "openai", endpoint: null };
 const models = availableChatModels(openai);
@@ -24,10 +25,15 @@ test.each([
       source,
       models: ["gpt-6.2-sol", "gpt-6.1-sol", "gpt-4o-mini"],
     };
-    const qualified = {
+    const qualified: ModelCatalog = {
       ...listed,
       selectable: [
-        { id: "gpt-6.2-sol", contextWindow: 1_050_000, maxTokens: 128_000 },
+        {
+          id: "gpt-6.2-sol",
+          contextWindow: 1_050_000,
+          maxTokens: 128_000,
+          thinkingLevels: ["low", "medium", "max"],
+        },
       ],
     };
     const availability = modelAvailability(
@@ -250,37 +256,6 @@ test("qualified defaults use the real ranked data for each implemented method", 
   expect(
     rankModelChoices(openai, "chat", { source: "static", models }, pending),
   ).toEqual([]);
-});
-test("unavailable authentication and unknown custom catalogs have no default", () => {
-  for (const config of [
-    { provider: "anthropic", auth: "oauth", endpoint: null },
-    { provider: "openrouter", auth: "oauth", endpoint: null },
-    { provider: "custom", endpoint: "https://example.invalid/v1" },
-  ] as const)
-    expect(recommendedChoice(config)).toBeNull();
-  expect(
-    catalog.rankedCandidates.find((entry) => entry.provider === "openai-codex")
-      ?.eligibility,
-  ).toBe("supported");
-  const codex = {
-    provider: "openai-codex",
-    auth: "oauth",
-    endpoint: null,
-  } as const;
-  expect(recommendedChoice(codex)).toMatchObject({
-    model: "gpt-6.1-sol",
-    thinking: "medium",
-  });
-  expect(recommendedChoice(codex, "comment")).toMatchObject({
-    model: "gpt-6.1-sol",
-    thinking: "low",
-  });
-  expect(
-    supportedThinkingLevels(
-      { provider: "openai-codex", auth: "oauth", endpoint: null },
-      "gpt-6.1-sol",
-    ),
-  ).toEqual(["low", "medium", "high"]);
 });
 test("thinking is model-specific and custom endpoints do not inherit defaults", () => {
   expect(supportedThinkingLevels(openai, sol.id)).toEqual([

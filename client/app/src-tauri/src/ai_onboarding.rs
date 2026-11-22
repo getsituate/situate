@@ -1049,6 +1049,7 @@ mod tests {
         }
         async fn context(
             &self,
+            _: &str,
             messages: Vec<Value>,
             _: situate_agent::RunConfig,
             _: CancellationToken,

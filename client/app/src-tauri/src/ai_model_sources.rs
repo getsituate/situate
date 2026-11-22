@@ -1,8 +1,5 @@
 use super::*;
 
-#[path = "ai_openai_metadata.rs"]
-pub(super) mod openai_metadata;
-
 #[derive(Clone, Copy)]
 pub(super) enum Protocol {
     OpenAi,
@@ -16,30 +13,22 @@ pub(super) struct Request {
     pub(super) protocol: Protocol,
     pub(super) secret: String,
 }
-pub(super) enum ModelRefresh {
-    Live(fn(&Connection) -> Result<Request, String>),
-    Bundled,
-}
+type RequestBuilder = fn(&Connection) -> Result<Request, String>;
 
-pub(super) fn strategy(config: &Config) -> Result<ModelRefresh, String> {
+pub(super) fn strategy(config: &Config) -> Result<RequestBuilder, String> {
     admit_method(config)?;
-    use ModelRefresh::{Bundled, Live};
     Ok(match (config.provider.as_str(), config.auth) {
-        ("openai", Some(AuthKind::Oauth)) => Live(direct_request),
-        ("openai", _) => Live(openai_request),
-        ("anthropic", _) => Live(anthropic_request),
-        ("openrouter", _) => Live(router_request),
-        ("custom", _) => Live(custom_request),
-        ("openai-codex", _) => Bundled,
+        ("openai", Some(AuthKind::Oauth)) => direct_request,
+        ("openai", _) => openai_request,
+        ("anthropic", _) => anthropic_request,
+        ("openrouter", _) => router_request,
+        ("custom", _) => custom_request,
         _ => return Err(ERROR.into()),
     })
 }
 
-pub(super) fn request(connection: &Connection) -> Result<Option<Request>, String> {
-    match strategy(&connection.config)? {
-        ModelRefresh::Live(plan) => plan(connection).map(Some),
-        ModelRefresh::Bundled => Ok(None),
-    }
+pub(super) fn request(connection: &Connection) -> Result<Request, String> {
+    strategy(&connection.config)?(connection)
 }
 
 impl Request {
@@ -106,58 +95,6 @@ fn model_id(value: &Value) -> Result<String, String> {
         .ok_or_else(|| ERROR.into())
 }
 impl Protocol {
-    fn thinking(self, item: &Value) -> Option<ThinkingCapabilities> {
-        match self {
-            Self::Anthropic => {
-                let capabilities = &item["capabilities"];
-                let effort = &capabilities["effort"];
-                if effort["supported"] != true
-                    || capabilities["thinking"]["types"]["adaptive"]["supported"] != true
-                {
-                    return None;
-                }
-                ThinkingCapabilities::from_levels(
-                    &["low", "medium", "high", "xhigh", "max"],
-                    |level| effort[level]["supported"] == true,
-                    "medium",
-                )
-            }
-            Self::Router => {
-                let reasoning = item["reasoning"].as_object()?;
-                let efforts = reasoning.get("supported_efforts")?;
-                if !(efforts.is_null() || efforts.is_array()) {
-                    return None;
-                }
-                let accepts = |effort: &str| {
-                    efforts.is_null()
-                        || efforts
-                            .as_array()
-                            .is_some_and(|items| items.iter().any(|item| item == effort))
-                };
-                let off = reasoning.get("mandatory").and_then(Value::as_bool) == Some(false)
-                    && accepts("none");
-                let preferred =
-                    if reasoning.get("default_enabled").and_then(Value::as_bool) == Some(false) {
-                        "off"
-                    } else {
-                        reasoning
-                            .get("default_effort")
-                            .and_then(Value::as_str)
-                            .unwrap_or("medium")
-                    };
-                ThinkingCapabilities::from_levels(
-                    &["off", "minimal", "low", "medium", "high", "xhigh", "max"],
-                    |level| if level == "off" { off } else { accepts(level) },
-                    if preferred == "none" {
-                        "off"
-                    } else {
-                        preferred
-                    },
-                )
-            }
-            _ => None,
-        }
-    }
     fn selectable(self, id: &str, item: &Value) -> Option<DiscoveredModel> {
         fn contains(value: &Value, needle: &str) -> bool {
             value
@@ -186,12 +123,44 @@ impl Protocol {
         if context_window == 0 || max_tokens == 0 || max_tokens > context_window {
             return None;
         }
+        if matches!(self, Self::Router) {
+            return Some(DiscoveredModel {
+                id: id.into(),
+                context_window,
+                max_tokens,
+                name: None,
+                thinking_levels: vec![],
+                reasoning_none: false,
+                image_input: false,
+            });
+        }
         Some(DiscoveredModel {
             id: id.to_owned(),
+            thinking_levels: ["low", "medium", "high", "xhigh"]
+                .into_iter()
+                .filter(|level| match self {
+                    Self::Anthropic => {
+                        item["capabilities"]["thinking"]["types"]["adaptive"]["supported"] == true
+                            && item["capabilities"]["thinking"]["types"]["disabled"]["supported"]
+                                == true
+                            && item["capabilities"]["effort"][*level]["supported"] == true
+                    }
+                    _ => false,
+                })
+                .map(str::to_owned)
+                .collect(),
+            name: item["display_name"]
+                .as_str()
+                .filter(|name| {
+                    !name.trim().is_empty()
+                        && name.len() <= 256
+                        && !name.chars().any(char::is_control)
+                })
+                .map(str::to_owned),
             context_window,
             max_tokens,
-            image_input: false,
-            thinking: self.thinking(item),
+            reasoning_none: false,
+            image_input: item["capabilities"]["image_input"]["supported"] == true,
         })
     }
 }
@@ -206,11 +175,6 @@ pub(super) async fn collect(request: Request) -> Result<Catalog, String> {
         .map_err(|_| ERROR)?;
     let mut models = Vec::new();
     let mut selectable = Vec::new();
-    let bundled = match request.protocol {
-        Protocol::Anthropic => bundled_ids("anthropic"),
-        Protocol::Router => bundled_ids("openrouter"),
-        _ => HashSet::new(),
-    };
     let mut seen = HashSet::new();
     let mut cursors = HashSet::new();
     let mut cursor: Option<String> = None;
@@ -243,6 +207,14 @@ pub(super) async fn collect(request: Request) -> Result<Catalog, String> {
             query = query.bearer_auth(&request.secret);
         }
         let mut response = query.send().await.map_err(|_| ERROR)?;
+        if matches!(request.protocol, Protocol::Custom)
+            && matches!(response.status().as_u16(), 404 | 405 | 501)
+        {
+            return Ok(Catalog {
+                source: Source::Manual,
+                ..Catalog::default()
+            });
+        }
         if response.status() != reqwest::StatusCode::OK
             || response
                 .content_length()
@@ -259,13 +231,10 @@ pub(super) async fn collect(request: Request) -> Result<Catalog, String> {
             bytes.extend_from_slice(&chunk);
         }
         let body: Value = serde_json::from_slice(&bytes).map_err(|_| ERROR)?;
-        let items = body[if matches!(request.protocol, Protocol::Direct) {
-            "models"
-        } else {
-            "data"
-        }]
-        .as_array()
-        .ok_or(ERROR)?;
+        let slugs = matches!(request.protocol, Protocol::Direct);
+        let items = body[if slugs { "models" } else { "data" }]
+            .as_array()
+            .ok_or(ERROR)?;
         if items.len() > MAX_MODELS
             || (matches!(request.protocol, Protocol::Anthropic | Protocol::Router)
                 && items.len() > 100)
@@ -273,23 +242,14 @@ pub(super) async fn collect(request: Request) -> Result<Catalog, String> {
             return Err(ERROR.into());
         }
         for item in items {
-            if matches!(request.protocol, Protocol::Direct)
-                && item["visibility"].as_str().ok_or(ERROR)? != "list"
-            {
+            if slugs && item["visibility"].as_str().ok_or(ERROR)? != "list" {
                 continue;
             }
-            let id = model_id(
-                &item[if matches!(request.protocol, Protocol::Direct) {
-                    "slug"
-                } else {
-                    "id"
-                }],
-            )?;
+            let id = model_id(&item[if slugs { "slug" } else { "id" }])?;
             if !seen.insert(id.clone()) || models.len() >= MAX_MODELS {
                 return Err(ERROR.into());
             }
             if id != "recommended"
-                && !bundled.contains(&id)
                 && let Some(model) = request.protocol.selectable(&id, item)
             {
                 selectable.push(model);
@@ -360,13 +320,7 @@ pub(super) async fn observe(request: Request, budget: Duration) -> Catalog {
 }
 pub(in crate::ai) async fn fetch(connection: &Connection) -> Catalog {
     match request(connection) {
-        Ok(Some(request)) if matches!(request.protocol, Protocol::OpenAi | Protocol::Direct) => {
-            let mut catalog = observe(request, Duration::from_secs(25)).await;
-            openai_metadata::enrich(&mut catalog).await;
-            catalog
-        }
-        Ok(Some(request)) => observe(request, Duration::from_secs(30)).await,
-        Ok(None) => Catalog::static_models(&connection.config),
+        Ok(request) => observe(request, Duration::from_secs(30)).await,
         Err(_) => Catalog::default(),
     }
 }

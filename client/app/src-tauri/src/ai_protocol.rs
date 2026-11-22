@@ -35,7 +35,6 @@ const MAX_FRAME: usize = 16 * 1024 * 1024;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Protocol {
     Responses,
-    Codex,
     Completions,
     Anthropic,
 }
@@ -43,7 +42,6 @@ impl Protocol {
     fn parse(api: &str) -> Result<Self, String> {
         match api {
             "openai-responses" => Ok(Self::Responses),
-            "openai-codex-responses" => Ok(Self::Codex),
             "openai-completions" => Ok(Self::Completions),
             "anthropic-messages" => Ok(Self::Anthropic),
             _ => Err(UNSUPPORTED.into()),
@@ -52,13 +50,12 @@ impl Protocol {
     fn api(self) -> &'static str {
         match self {
             Self::Responses => "openai-responses",
-            Self::Codex => "openai-codex-responses",
             Self::Completions => "openai-completions",
             Self::Anthropic => "anthropic-messages",
         }
     }
     fn responses(self) -> bool {
-        matches!(self, Self::Responses | Self::Codex)
+        matches!(self, Self::Responses)
     }
 }
 
@@ -104,7 +101,7 @@ fn image_url(block: &Value) -> Result<String, String> {
 fn input_blocks(content: &[Value], protocol: Protocol) -> Result<Vec<Value>, String> {
     content.iter().map(|block| match block["type"].as_str() {
         Some("text") => Ok(match protocol {
-            Protocol::Responses | Protocol::Codex => json!({"type":"input_text","text":string(block,"text")?}),
+            Protocol::Responses => json!({"type":"input_text","text":string(block,"text")?}),
             _ => json!({"type":"text","text":string(block,"text")?}),
         }),
         Some("image") => match protocol {
@@ -203,7 +200,7 @@ fn normalized_context(context: &[Value], protocol: Protocol) -> Result<Vec<Value
     Ok(result)
 }
 
-fn effort(model: &Value, thinking: &str, codex: bool) -> Result<Option<String>, String> {
+fn effort(model: &Value, thinking: &str) -> Result<Option<String>, String> {
     if !matches!(
         thinking,
         "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
@@ -218,7 +215,7 @@ fn effort(model: &Value, thinking: &str, codex: bool) -> Result<Option<String>, 
         };
     }
     if thinking == "off" {
-        Ok((codex && model["reasoning"] == true).then(|| "none".into()))
+        Ok(None)
     } else {
         Ok(Some(thinking.into()))
     }
@@ -239,7 +236,7 @@ fn request_tools(tools: &[Value], protocol: Protocol, model: &Value) -> Result<V
             return Ok(wire);
         }
         if flag(model,"supportsStrictMode",protocol.responses()) {
-            function["strict"] = if protocol == Protocol::Codex { Value::Null } else { json!(tool["strict"].as_bool().unwrap_or(false)) };
+            function["strict"] = json!(tool["strict"].as_bool().unwrap_or(false));
         }
         if protocol == Protocol::Completions { Ok(json!({"type":"function","function":function})) }
         else { function["type"] = json!("function"); Ok(function) }
@@ -262,14 +259,8 @@ pub(crate) fn build_request(
     if model["api"] != api || string(model, "id")?.is_empty() || max_tokens == Some(0) {
         return Err(INVALID.into());
     }
-    if protocol == Protocol::Codex
-        && (model["provider"] != "openai-codex"
-            || model["baseUrl"] != "https://chatgpt.com/backend-api")
-    {
-        return Err(UNSUPPORTED.into());
-    }
-    let effort = effort(model, thinking, protocol == Protocol::Codex)?
-        .filter(|_| protocol != Protocol::Anthropic || thinking != "off");
+    let effort =
+        effort(model, thinking)?.filter(|_| protocol != Protocol::Anthropic || thinking != "off");
     let context = normalized_context(context, protocol)?;
     let wire_tools = request_tools(tools, protocol, model)?;
     let mut body = json!({"model":model["id"],"stream":true});
@@ -284,8 +275,7 @@ pub(crate) fn build_request(
     if protocol.responses() {
         body["input"] = json!(messages);
         body["store"] = json!(false);
-        if protocol != Protocol::Codex
-            && flag(model, "supportsMaxOutputTokens", true)
+        if flag(model, "supportsMaxOutputTokens", true)
             && let Some(max) = max_tokens
         {
             body["max_output_tokens"] = json!(max);
@@ -296,23 +286,6 @@ pub(crate) fn build_request(
                 body["reasoning"]["summary"] = json!("auto");
             }
             body["include"] = json!(["reasoning.encrypted_content"]);
-        }
-        if protocol == Protocol::Codex {
-            let instructions = context
-                .iter()
-                .take_while(|m| m["role"] == "system")
-                .map(|m| blocks(m).map(|b| text(&b)))
-                .collect::<Result<Vec<_>, _>>()?
-                .join("\n");
-            body["instructions"] = json!(if instructions.is_empty() {
-                "You are a helpful assistant."
-            } else {
-                &instructions
-            });
-            body["text"] = json!({"verbosity":"low"});
-            body["include"] = json!(["reasoning.encrypted_content"]);
-            body["tool_choice"] = json!("auto");
-            body["parallel_tool_calls"] = json!(true);
         }
     } else if protocol == Protocol::Anthropic {
         body["messages"] = json!(messages);
@@ -408,17 +381,13 @@ fn responses_context(
     model: &Value,
 ) -> Result<Vec<Value>, String> {
     let mut wire = Vec::new();
-    let mut initial = true;
     for message in context {
         let role = string(message, "role")?;
         let content = blocks(message)?;
         if role == "system" {
-            if !(protocol == Protocol::Codex && initial) {
-                wire.push(json!({"role":if model["reasoning"] == true {"developer"} else {"system"},"content":text(&content)}));
-            }
+            wire.push(json!({"role":if model["reasoning"] == true || flag(model,"requiresDeveloperRole",false) {"developer"} else {"system"},"content":text(&content)}));
             continue;
         }
-        initial = false;
         match role {
             "user" => wire.push(json!({"role":"user","content":input_blocks(&content,protocol)?})),
             "toolResult" => {
@@ -878,7 +847,7 @@ impl Assembler {
             return Err(REJECTED.into());
         }
         match self.protocol {
-            Protocol::Responses | Protocol::Codex => self.responses_frame(&frame),
+            Protocol::Responses => self.responses_frame(&frame),
             Protocol::Completions => self.completions_frame(&frame),
             Protocol::Anthropic => self.anthropic_frame(&frame),
         }
@@ -1068,9 +1037,6 @@ impl Assembler {
                     }
                 }
                 self.merge_usage(&response["usage"]);
-                if let Some(tier) = response.get("service_tier") {
-                    self.usage["service_tier"] = tier.clone();
-                }
                 let reason = if kind == "response.incomplete" || response["status"] == "incomplete"
                 {
                     response["incomplete_details"]["reason"]
@@ -1325,7 +1291,7 @@ fn sum(values: &[Option<u64>]) -> Option<u64> {
 fn accounting(raw: &Value, protocol: Protocol, model: &Value) -> Value {
     let anthropic = protocol == Protocol::Anthropic;
     let completions = protocol == Protocol::Completions;
-    let known_openai = matches!(model["provider"].as_str(), Some("openai" | "openai-codex"));
+    let known_openai = model["provider"] == "openai";
     let input_total = count(
         &raw[if completions {
             "prompt_tokens"
@@ -1409,80 +1375,8 @@ fn accounting(raw: &Value, protocol: Protocol, model: &Value) -> Value {
         input_total.and_then(|n| n.checked_sub(read?).and_then(|n| n.checked_sub(write?)))
     };
     let total = count(&raw["total_tokens"]).or_else(|| sum(&[input, output, read, write]));
-    let prompt = if anthropic {
-        sum(&[input, read, write])
-    } else {
-        input_total
-    };
-    let mut rates = &model["cost"];
-    // Manual custom-model zero placeholders are not verified server prices.
-    if model["provider"] == "custom"
-        && ["input", "output", "cacheRead", "cacheWrite"]
-            .iter()
-            .all(|key| model["cost"][*key].as_f64() == Some(0.0))
-    {
-        rates = &Value::Null;
-    }
-    if let Some(tiers) = model["cost"]["tiers"]
-        .as_array()
-        .filter(|tiers| !tiers.is_empty())
-    {
-        if let Some(prompt) = prompt {
-            if let Some(tier) = tiers
-                .iter()
-                .filter(|tier| {
-                    tier["inputTokensAbove"]
-                        .as_u64()
-                        .is_some_and(|threshold| prompt > threshold)
-                })
-                .max_by_key(|tier| tier["inputTokensAbove"].as_u64())
-            {
-                rates = tier;
-            }
-        } else {
-            rates = &Value::Null;
-        }
-    }
-    let rate = |key: &str| rates[key].as_f64().filter(|r| r.is_finite() && *r >= 0.0);
-    let multiplier = if known_openai && protocol.responses() {
-        match raw["service_tier"].as_str() {
-            Some("flex") => Some(0.5),
-            Some("priority" | "fast") => Some(if model["id"] == "gpt-5.5" { 2.5 } else { 2.0 }),
-            None | Some("default" | "auto" | "standard") => Some(1.0),
-            _ => None,
-        }
-    } else {
-        Some(1.0)
-    };
-    let mut cost = json!({});
-    for (key, tokens) in [
-        ("input", input),
-        ("output", output),
-        ("cacheRead", read),
-        ("cacheWrite", write),
-    ] {
-        let amount = tokens
-            .and_then(|tokens| {
-                if key == "cacheWrite" && anthropic {
-                    let long = long_write?;
-                    Some(
-                        (tokens.checked_sub(long)? as f64 * rate(key)?
-                            + long as f64 * rate("input")? * 2.0)
-                            / 1_000_000.0,
-                    )
-                } else {
-                    Some(tokens as f64 * rate(key)? / 1_000_000.0)
-                }
-            })
-            .and_then(|cost| Some(cost * multiplier?));
-        cost[key] = json!(amount);
-    }
-    cost["total"] = json!(
-        ["input", "output", "cacheRead", "cacheWrite"]
-            .iter()
-            .try_fold(0.0, |total, key| Some(total + cost[*key].as_f64()?))
-    );
-    let mut usage = json!({"input":input,"output":output,"cacheRead":read,"cacheWrite":write,"reasoning":reasoning,"totalTokens":total,"cost":cost});
+    // Older releases require this key in shared conversation history.
+    let mut usage = json!({"input":input,"output":output,"cacheRead":read,"cacheWrite":write,"reasoning":reasoning,"totalTokens":total,"cost":null});
     if anthropic {
         usage["cacheWrite1h"] = json!(long_write);
     }

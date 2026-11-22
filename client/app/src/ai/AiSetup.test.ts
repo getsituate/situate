@@ -72,7 +72,7 @@ test("waits for complete provider metadata and retains the active language when 
   expect(wrapper.text()).toContain(de["ai.loadingModels"]);
   finish(modelCatalog);
   await flushPromises();
-  expect(wrapper.findAll(".ai-provider-grid button")).toHaveLength(5);
+  expect(wrapper.findAll(".ai-provider-grid button")).toHaveLength(4);
   expect(wrapper.get("h1").text()).toBe(de["ai.chooseAProvider"]);
   expect(document.documentElement.lang).toBe("de");
   wrapper.unmount();
@@ -99,7 +99,7 @@ test("failed provider metadata loading stays unavailable until an explicit retry
     .find((button) => button.text() === "⟦ai.retryLoadingModels⟧")!
     .trigger("click");
   await flushPromises();
-  expect(wrapper.findAll(".ai-provider-grid button")).toHaveLength(5);
+  expect(wrapper.findAll(".ai-provider-grid button")).toHaveLength(4);
   expect(api.saveConnection).not.toHaveBeenCalled();
   wrapper.unmount();
 });
@@ -423,7 +423,7 @@ test("cancel discards a credential without replacing access", async () => {
   expect((wrapper.get("#ai-key").element as HTMLInputElement).value).toBe("");
   wrapper.unmount();
 });
-test("provider selection shows five named choices without search or helper copy and Back preserves the origin", async () => {
+test("provider selection shows four named choices without search or helper copy and Back preserves the origin", async () => {
   const wrapper = mount(AiSetup, {
     props: { scope: "one", workspaceName: "Garden", created: false },
   });
@@ -437,7 +437,6 @@ test("provider selection shows five named choices without search or helper copy 
   expect(choices.map((choice) => choice.get("strong").text())).toEqual([
     "Anthropic",
     "OpenAI",
-    "⟦ai.providers.codex⟧",
     "OpenRouter",
     "⟦ai.compatibleEndpoint⟧",
   ]);
@@ -445,7 +444,7 @@ test("provider selection shows five named choices without search or helper copy 
   expect(wrapper.find(".ai-subtitle").exists()).toBe(false);
   expect(wrapper.find(".ai-result-count").exists()).toBe(false);
   expect(wrapper.find(".ai-provider-grid small").exists()).toBe(false);
-  expect(wrapper.findAll(".ai-provider-grid .provider-icon")).toHaveLength(5);
+  expect(wrapper.findAll(".ai-provider-grid .provider-icon")).toHaveLength(4);
   expect(wrapper.get(".ai-provider-grid").attributes("aria-label")).toBe(
     "⟦ai.chooseAProvider⟧",
   );
@@ -504,51 +503,6 @@ test.each([
     );
     expect(wrapper.get("#ai-key-help").text()).toBe(`⟦${help}⟧`);
     expect(api.saveConnection).not.toHaveBeenCalled();
-    wrapper.unmount();
-  },
-);
-
-test("provider choices exclude deferred integrations and offer Codex device sign-in", async () => {
-  const wrapper = mount(AiSetup, {
-    props: { scope: "one", workspaceName: "Garden", created: true },
-  });
-  await flushPromises();
-  await wrapper.get(".ai-primary-choice").trigger("click");
-  await flushPromises();
-  expect(wrapper.findAll(".ai-provider-grid button")).toHaveLength(5);
-  await wrapper
-    .findAll(".ai-provider-grid button")
-    .find((button) => button.get("strong").text() === "⟦ai.providers.codex⟧")!
-    .trigger("click");
-  expect(wrapper.findAll(".ai-choices button")).toHaveLength(1);
-  expect(
-    wrapper.get(".ai-choices button").attributes("disabled"),
-  ).toBeUndefined();
-  expect(wrapper.find("#ai-key").exists()).toBe(false);
-  expect(api.startOpenAiLogin).not.toHaveBeenCalled();
-  expect(api.saveConnection).not.toHaveBeenCalled();
-  wrapper.unmount();
-});
-
-test.each(["anthropic", "openrouter"])(
-  "%s setup offers only API-key access",
-  async (provider) => {
-    const wrapper = mount(AiSetup, {
-      props: { scope: "one", workspaceName: "Garden", created: true },
-    });
-    await flushPromises();
-    await wrapper.get(".ai-primary-choice").trigger("click");
-    await wrapper
-      .findAll(".ai-provider-grid button")
-      .find((button) => button.get("strong").text().toLowerCase() === provider)!
-      .trigger("click");
-    expect(wrapper.findAll(".ai-choices button")).toHaveLength(1);
-    expect(wrapper.get(".ai-choices button").text()).toContain(
-      "⟦ai.apiKeyMethod⟧",
-    );
-    await wrapper.get(".ai-choices button").trigger("click");
-    expect(wrapper.find("#ai-key").exists()).toBe(true);
-    expect(api.startOpenAiLogin).not.toHaveBeenCalled();
     wrapper.unmount();
   },
 );

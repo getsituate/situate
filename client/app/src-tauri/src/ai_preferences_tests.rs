@@ -53,7 +53,6 @@ impl Fixture {
             config,
             key: "synthetic".into(),
             oauth: None,
-            codex: None,
         };
         storage
             .save_connection(

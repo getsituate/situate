@@ -3,6 +3,7 @@ import { t, type MessageKey } from "@situate/localization";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { reactive, shallowReactive } from "vue";
+import type { Status } from "../ai/api";
 import { newOnboardingRecord } from "./types";
 import OnboardingHost from "./OnboardingHost.vue";
 import OnboardingView from "./OnboardingView.vue";
@@ -12,6 +13,7 @@ const mock = vi.hoisted(() => ({
   update: vi.fn(),
   retry: vi.fn(),
   restore: vi.fn(),
+  start: vi.fn(),
   support: vi.fn(),
   enter: vi.fn(),
   abort: vi.fn(),
@@ -25,6 +27,14 @@ const mock = vi.hoisted(() => ({
     questionActionPending: undefined as string | undefined,
   },
   model: vi.fn(),
+  getStatus: vi.fn<() => Promise<Status>>(),
+  listen:
+    vi.fn<
+      (
+        name: string,
+        listener: (event: { payload: string }) => void,
+      ) => Promise<() => void>
+    >(),
   state: { record: null as unknown, loading: false },
 }));
 vi.mock("./session", () => ({
@@ -40,20 +50,24 @@ vi.mock("./session", () => ({
 vi.mock("./agent", () => ({
   checkSetupAccess: mock.check,
   restoreSetupConversation: mock.restore,
-  startSetupConversation: vi.fn(),
+  startSetupConversation: mock.start,
   enterSetupApp: mock.enter,
   recoverSetupQuestion: vi.fn(),
   continueSetupSupport: mock.support,
 }));
 vi.mock("../layout/runtime", () => ({ workspaceUi: vi.fn() }));
+vi.mock("../window-events", () => ({ listenInWindow: mock.listen }));
 vi.mock("../ai/api", () => ({
-  getStatus: async () => ({
-    available: true,
-    config: { provider: "openai" },
-    selectedModel: "test-model",
-  }),
+  getStatus: mock.getStatus,
   selectChatModel: mock.model,
 }));
+const connectedStatus: Status = {
+  available: true,
+  config: { provider: "openai", endpoint: null },
+  selectedModel: "test-model",
+  modelError: null,
+  reason: null,
+};
 vi.mock("../ai/chat", () => ({
   workspaceChat: () => ({ state: mock.chatState, abortAndWait: mock.abort }),
 }));
@@ -63,9 +77,9 @@ vi.mock("../dictation/runtime", () => ({
 vi.mock("../ai/AiSetup.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("../ai/ChatModelPicker.vue", () => ({
   default: {
-    props: ["appearance", "saving"],
+    props: ["appearance", "saving", "selectModel"],
     template:
-      '<div class="picker" :data-appearance="appearance" :aria-disabled="saving" />',
+      '<div class="picker" :data-appearance="appearance" :aria-disabled="saving"><button v-if="selectModel" data-alternate-model @click="selectModel(\'alternate-model\')">Alternate model</button></div>',
   },
 }));
 vi.mock("../components/ChatPane.vue", () => ({
@@ -76,10 +90,10 @@ vi.mock("../files/RenderedFile.vue", () => ({
 }));
 vi.mock("./OnboardingView.vue", () => ({
   default: {
-    props: ["canContinueSupport", "busy", "error"],
+    props: ["canContinueSupport", "busy", "error", "access", "connected"],
     emits: ["action"],
     template:
-      '<div><slot name="access" /><button data-support :disabled="busy || !canContinueSupport" @click="$emit(\'action\', \'support\')">Continue</button><button data-finish :disabled="busy" @click="$emit(\'action\', \'finish\')">Finish setup</button><slot name="notices" /></div>',
+      '<div><slot v-if="access" name="access" /><slot v-else name="start-recovery" /><button data-support :disabled="busy || !canContinueSupport" @click="$emit(\'action\', \'support\')">Continue</button><button data-finish :disabled="busy" @click="$emit(\'action\', \'finish\')">Finish setup</button><slot name="notices" /></div>',
   },
 }));
 enableAutoUnmount(afterEach);
@@ -87,6 +101,8 @@ afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
   vi.stubGlobal("__SITUATE_LOCALIZATION_KEYS__", true);
   vi.resetAllMocks();
+  mock.getStatus.mockResolvedValue(connectedStatus);
+  mock.listen.mockResolvedValue(() => {});
   mock.restore.mockResolvedValue(null);
   mock.retry.mockResolvedValue(undefined);
   mock.support.mockResolvedValue({ completion: Promise.resolve() });
@@ -133,6 +149,107 @@ it("blocks onboarding input and its reader during recovery preparation", async (
     wrapper.findComponent(OnboardingView).attributes("inert"),
   ).toBeUndefined();
   expect(wrapper.get("dialog").attributes("inert")).toBeUndefined();
+});
+it("lets users change the model after a failed chat start without losing setup input", async () => {
+  mock.state.record = {
+    ...newOnboardingRecord(),
+    step: "method",
+    description: "Review open tasks on Friday",
+  };
+  mock.start
+    .mockRejectedValueOnce(new Error("native.ai.model.chooseCatalog"))
+    .mockResolvedValueOnce({ id: "setup" });
+  mock.check.mockResolvedValue(undefined);
+  mock.model.mockResolvedValue({
+    available: true,
+    config: { provider: "openai" },
+    selectedModel: "alternate-model",
+  });
+  const wrapper = await host();
+  const view = wrapper.getComponent(OnboardingView);
+  view.vm.$emit("action", "start");
+  await flushPromises();
+  expect(view.props("access")).toBe(false);
+
+  await button(wrapper, "onboarding.access.change").trigger("click");
+  expect(view.props("access")).toBe(true);
+  await wrapper.get("[data-alternate-model]").trigger("click");
+  await flushPromises();
+  expect(mock.model).toHaveBeenCalledWith("test-workspace", "alternate-model");
+  await button(wrapper, "onboarding.access.check").trigger("click");
+  await flushPromises();
+  expect(view.props("access")).toBe(false);
+  expect(mock.start).toHaveBeenCalledOnce();
+  expect(mock.state.record).toMatchObject({
+    step: "method",
+    description: "Review open tasks on Friday",
+  });
+
+  view.vm.$emit("action", "start");
+  await flushPromises();
+  expect(mock.start).toHaveBeenCalledTimes(2);
+  expect(view.props("error")).toBeUndefined();
+});
+it("refreshes model availability for this workspace and unsubscribes on unmount", async () => {
+  const stop = vi.fn();
+  mock.listen.mockResolvedValue(stop);
+  const wrapper = await host();
+  const view = wrapper.getComponent(OnboardingView);
+  expect(view.props("connected")).toBe(true);
+  expect(mock.listen).toHaveBeenCalledWith(
+    "ai-models-changed",
+    expect.any(Function),
+  );
+  const catalogChanged = mock.listen.mock.calls[0]![1];
+
+  catalogChanged({ payload: "different-workspace" });
+  await flushPromises();
+  expect(mock.getStatus).toHaveBeenCalledOnce();
+
+  mock.getStatus.mockResolvedValueOnce({
+    ...connectedStatus,
+    selectedModel: null,
+  });
+  catalogChanged({ payload: "test-workspace" });
+  await flushPromises();
+  expect(view.props("connected")).toBe(false);
+
+  catalogChanged({ payload: "" });
+  await flushPromises();
+  expect(view.props("connected")).toBe(true);
+  expect(mock.check).not.toHaveBeenCalled();
+  wrapper.unmount();
+  expect(stop).toHaveBeenCalledOnce();
+});
+it("keeps the last selection and reports a failed model refresh", async () => {
+  const wrapper = await host();
+  const failure = new Error("Catalog refresh failed");
+  mock.getStatus.mockRejectedValueOnce(failure);
+  mock.listen.mock.calls[0]![1]({ payload: "test-workspace" });
+  await flushPromises();
+  const view = wrapper.getComponent(OnboardingView);
+  expect(view.props("error")).toBe(failure);
+  expect(view.props("connected")).toBe(true);
+});
+it("does not let a slow model refresh replace a newer model selection", async () => {
+  const wrapper = await host();
+  let finishRefresh!: (status: Status) => void;
+  mock.getStatus.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishRefresh = resolve;
+    }),
+  );
+  mock.listen.mock.calls[0]![1]({ payload: "test-workspace" });
+  mock.model.mockResolvedValueOnce({
+    ...connectedStatus,
+    selectedModel: "alternate-model",
+  });
+  await wrapper.get("[data-alternate-model]").trigger("click");
+  await flushPromises();
+  expect(mock.model).toHaveBeenCalledWith("test-workspace", "alternate-model");
+  finishRefresh({ ...connectedStatus, selectedModel: null });
+  await flushPromises();
+  expect(wrapper.getComponent(OnboardingView).props("connected")).toBe(true);
 });
 it("refreshes native onboarding progress when a pending decision arrives before the run ends", async () => {
   mock.restore.mockResolvedValue({ id: "setup" });

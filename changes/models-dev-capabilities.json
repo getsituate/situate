@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 2,
+  "id": "models-dev-capabilities",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "models-dev-capabilities",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Model capabilities update in the background",
+          "paragraphs": [
+            "Situate matches your connection’s model list with Models.dev. Compatible new models can appear without an app update. If Models.dev is unavailable, Situate uses the last saved or built-in model information."
+          ]
+        },
+        {
+          "id": "direct-chatgpt-sign-in",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Use your ChatGPT plan with direct sign-in",
+          "paragraphs": [
+            "Choose Sign in with ChatGPT instead of the former Codex device-code sign-in. You can also connect using a separately billed OpenAI API key."
+          ]
+        },
+        {
+          "id": "recover-from-onboarding-model-failure",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Recover from a model error during setup",
+          "paragraphs": [
+            "Dynamically discovered models keep their capabilities when the first setup chat starts. If a model still fails, you can return to model selection without starting setup over."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "models-dev-capabilities",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Modellinformationen werden im Hintergrund aktualisiert",
+          "paragraphs": [
+            "Situate gleicht die Modellliste deiner Verbindung mit Models.dev ab. Neue kompatible Modelle können ohne App-Update erscheinen. Ist Models.dev nicht erreichbar, nutzt Situate die zuletzt gespeicherten oder die mitgelieferten Modellinformationen."
+          ]
+        },
+        {
+          "id": "direct-chatgpt-sign-in",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Das ChatGPT-Abo über die direkte Anmeldung nutzen",
+          "paragraphs": [
+            "Wähle „Mit ChatGPT anmelden“ statt der bisherigen Codex-Anmeldung per Gerätecode. Du kannst auch einen separat abgerechneten OpenAI-API-Schlüssel verwenden."
+          ]
+        },
+        {
+          "id": "recover-from-onboarding-model-failure",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Nach einem Modellfehler mit der Einrichtung fortfahren",
+          "paragraphs": [
+            "Dynamisch erkannte Modelle behalten ihre Fähigkeiten beim Start des ersten Chats. Schlägt der Start trotzdem fehl, kannst du zur Modellauswahl zurückkehren, ohne die Einrichtung neu zu beginnen."
+          ]
+        }
+      ]
+    }
+  }
+}

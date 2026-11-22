@@ -221,7 +221,7 @@ impl<H: Host> Owner<H> {
         }
         let context = if kind == RequestKind::Main {
             self.host
-                .context(context, config.clone(), cancel.clone())
+                .context(action, context, config.clone(), cancel.clone())
                 .await?
         } else {
             context

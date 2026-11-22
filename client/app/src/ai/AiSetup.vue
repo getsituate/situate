@@ -36,9 +36,6 @@ import { useModelCatalog } from "./useModelCatalog";
 const OpenAiBrowserLogin = defineAsyncComponent(
   () => import("./OpenAiBrowserLogin.vue"),
 );
-const CodexDeviceLogin = defineAsyncComponent(
-  () => import("./CodexDeviceLogin.vue"),
-);
 
 const props = defineProps<{
   scope: string;
@@ -75,25 +72,10 @@ const {
     (stage.value !== "settings" || !!status.value?.config),
 );
 const providers = computed(() =>
-  (catalog.value?.providers ?? [])
-    .filter((provider) =>
-      ["openai", "openai-codex", "anthropic", "openrouter"].includes(
-        provider.id,
-      ),
-    )
-    .map((provider) =>
-      provider.id === "openai-codex"
-        ? { ...provider, name: t("ai.providers.codex") }
-        : provider,
-    ),
+  (catalog.value?.providers ?? []).filter((provider) =>
+    ["openai", "anthropic", "openrouter"].includes(provider.id),
+  ),
 );
-const openAiBrowserModels = computed(
-  () => catalog.value?.openAiBrowserModels ?? [],
-);
-const modelAvailable = (
-  model: Parameters<NonNullable<typeof catalog.value>["modelAvailable"]>[0],
-) => catalog.value?.modelAvailable(model) ?? false;
-
 const providerId = ref(props.connection?.provider ?? "");
 const endpoint = ref(props.connection?.endpoint ?? "");
 const label = ref(props.connection?.label ?? "");
@@ -121,8 +103,6 @@ const formId = useId();
 const heading = useTemplateRef<HTMLElement>("heading");
 const browserLogin =
   useTemplateRef<InstanceType<typeof OpenAiBrowserLogin>>("browserLogin");
-const deviceLogin =
-  useTemplateRef<InstanceType<typeof CodexDeviceLogin>>("deviceLogin");
 const skipDialogControl =
   useTemplateRef<InstanceType<typeof SituateDialog>>("skipDialogControl");
 const skipDialog = computed(() => skipDialogControl.value?.element);
@@ -134,15 +114,13 @@ const provider = computed(() =>
   providers.value.find((provider) => provider.id === providerId.value),
 );
 const methods = computed(() =>
-  providerId.value === "openai-codex"
-    ? [{ id: "device" }]
-    : (provider.value?.methods ?? []).filter(
-        (method) =>
-          (!props.connection ||
-            method.id === (props.connection.auth ?? "api_key")) &&
-          (method.id === "api_key" ||
-            (method.id === "oauth" && providerId.value === "openai")),
-      ),
+  (provider.value?.methods ?? []).filter(
+    (method) =>
+      (!props.connection ||
+        method.id === (props.connection.auth ?? "api_key")) &&
+      (method.id === "api_key" ||
+        (method.id === "oauth" && providerId.value === "openai")),
+  ),
 );
 const choices = computed(() => [
   ...providers.value.map((provider) => ({
@@ -164,9 +142,6 @@ const apiKeyHelp = computed(() =>
           ? "ai.connections.openrouterKeyHelp"
           : "ai.connections.openaiKeyHelp",
   ),
-);
-const models = computed(
-  () => provider.value?.models.filter(modelAvailable) ?? [],
 );
 const savedCatalogEmpty = computed(() => {
   const saved = status.value;
@@ -203,7 +178,6 @@ const title = computed(
           ? t("ai.connectAnEndpoint")
           : t("ai.connectProvider", { name: provider.value?.name ?? "" }),
       browser: t("ai.signInToOpenAI"),
-      device: t("ai.device.title"),
       saved:
         status.value?.config?.auth === "oauth"
           ? t("ai.aiAccessConnected")
@@ -276,24 +250,16 @@ function back(): void {
   else stage.value = stage.value === "remove" ? "settings" : origin;
 }
 function methodAvailable(id: string): boolean {
-  if (unavailable.value) return false;
-  if (id === "device") return providerId.value === "openai-codex";
-  return id === "api_key"
-    ? models.value.length > 0
-    : id === "oauth" &&
-        providerId.value === "openai" &&
-        openAiBrowserModels.value.length > 0;
+  return !unavailable.value && methods.value.some((method) => method.id === id);
 }
 function connected(result: Status): void {
-  if (!alive || busy.value || !["browser", "device"].includes(stage.value))
-    return;
+  if (!alive || busy.value || stage.value !== "browser") return;
   status.value = result;
   stage.value = "saved";
   emit("connected", result);
 }
 async function cancelAndWait(): Promise<void> {
   await browserLogin.value?.cancelAndWait();
-  await deviceLogin.value?.cancelAndWait();
 }
 defineExpose({ cancelAndWait });
 async function cancelBrowser(): Promise<void> {
@@ -569,45 +535,27 @@ function cancelSkip(): void {
             :aria-labelledby="`ai-method-${method.id}`"
             :aria-describedby="`ai-method-${method.id}-help`"
             :disabled="!methodAvailable(method.id)"
-            @click="
-              stage =
-                method.id === 'device'
-                  ? 'device'
-                  : method.id === 'oauth'
-                    ? 'browser'
-                    : 'form'
-            "
+            @click="stage = method.id === 'oauth' ? 'browser' : 'form'"
           >
             <strong :id="`ai-method-${method.id}`">{{
-              method.id === "device"
-                ? t("ai.device.title")
-                : method.id === "oauth" && providerId === "openai"
-                  ? t("ai.signInWithChatGPT")
-                  : method.id === "oauth"
-                    ? t("ai.browserMethod")
-                    : t("ai.apiKeyMethod")
+              method.id === "oauth" && providerId === "openai"
+                ? t("ai.signInWithChatGPT")
+                : method.id === "oauth"
+                  ? t("ai.browserMethod")
+                  : t("ai.apiKeyMethod")
             }}</strong
             ><small :id="`ai-method-${method.id}-help`">{{
               !methodAvailable(method.id)
                 ? t("ai.notAvailableHereYet")
-                : method.id === "device"
-                  ? t("ai.connections.codexHelp")
-                  : method.id === "oauth"
-                    ? t("ai.connections.chatgptHelp")
-                    : apiKeyHelp
+                : method.id === "oauth"
+                  ? t("ai.connections.chatgptHelp")
+                  : apiKeyHelp
             }}</small>
             <span class="ai-provider-arrow" aria-hidden="true">→</span>
           </SituateButton>
         </div>
         <p v-if="provider && !methods.length">
-          {{ t("ai.browserAndDeviceSignInAreNotAvailableFor") }}
-        </p>
-        <p
-          v-if="
-            methods.some((method) => method.id === 'api_key') && !models.length
-          "
-        >
-          {{ t("ai.thisProviderHasNoChatModelWithASupported") }}
+          {{ t("ai.browserSignInUnavailable") }}
         </p>
       </div>
       <fieldset
@@ -624,14 +572,6 @@ function cancelSkip(): void {
           @connected="connected"
         />
       </fieldset>
-      <CodexDeviceLogin
-        v-else-if="stage === 'device'"
-        ref="deviceLogin"
-        :scope="scope"
-        :connection-id="connection?.connectionId"
-        :label="label.trim() || undefined"
-        @connected="connected"
-      />
       <form
         v-else-if="stage === 'form'"
         id="ai-form"
@@ -772,7 +712,7 @@ function cancelSkip(): void {
       <SituateButton
         variant="secondary"
         size="small"
-        v-else-if="stage === 'browser' || stage === 'device'"
+        v-else-if="stage === 'browser'"
         type="button"
         :disabled="busy"
         @click="cancelBrowser"

@@ -77,7 +77,7 @@
         if (warning && info) {
           assert(
             warning.querySelector('[role="alert"]')?.textContent.trim() ===
-              "The model list could not be refreshed. You can still choose a compatible model manually. Your saved choice has not changed.",
+              "The model list could not be refreshed. Try again. Your saved choice has not changed.",
             "unexpected-model-recovery",
           );
           const status = await invoke("ai_status", { scope: info.scope });
@@ -354,7 +354,7 @@
         if (
           origin === "model" &&
           message ===
-            "The model list could not be refreshed. You can still choose a compatible model manually. Your saved choice has not changed."
+            "The model list could not be refreshed. Try again. Your saved choice has not changed."
         ) {
           const status = await invoke("ai_status", { scope: info.scope });
           assert(
@@ -480,19 +480,26 @@
       (message) => message.role === "assistant" && message.usage,
     );
     assert(
-      assistants.some((message) => message.usage.cost.total > 0),
-      "provider-cost-not-exercised",
+      assistants.some((message) => message.usage.totalTokens > 0),
+      "provider-token-counts-not-exercised",
     );
+    const counters = [
+      "input",
+      "output",
+      "cacheRead",
+      "cacheWrite",
+      "cacheWrite1h",
+      "reasoning",
+      "totalTokens",
+    ];
     for (const run of allRuns(record)) {
       for (const entry of run.usage ?? []) {
         if (entry.kind !== "main" || entry.usage == null) continue;
         assert(
           assistants.some((message) =>
-            Object.keys(entry.usage.cost).every(
-              (key) => message.usage.cost[key] === entry.usage.cost[key],
-            ),
+            counters.every((key) => message.usage[key] === entry.usage[key]),
           ),
-          "usage-cost-mismatch",
+          "usage-token-count-mismatch",
         );
       }
     }
@@ -859,12 +866,17 @@
         markdown: await read("seed.md"),
       };
       if (info.mode === "fixture")
-        await wait(
-          "onboarding-access-model-ready",
-          () =>
-            query(".setup-access-panel .model-picker .error-trigger") &&
-            !document.querySelector("dialog.model-error[open]"),
-        );
+        await wait("onboarding-access-model-ready", async () => {
+          const status = await invoke("ai_status", { scope: info.scope });
+          const check = button("Check and continue");
+          return (
+            status.catalog?.source === "provider" &&
+            status.catalog.selectable?.some(({ id }) => id === info.model) &&
+            status.selectedModel === info.model &&
+            check &&
+            !check.disabled
+          );
+        });
       await click("Check and continue");
       await wait(
         "onboarding-access-checked",

@@ -326,6 +326,7 @@ test.each(["toolbar", "field"] as const)(
             provider: "custom",
             endpoint: "https://example.invalid/v1",
           },
+          catalog: { source: "manual", models: [] },
           selectedModel: "saved-alias",
           modelInherited: false,
         },
@@ -434,7 +435,7 @@ test("an uncertain failed save requires readback before retrying the retained ch
   expect(selectModel).toHaveBeenLastCalledWith("gpt-5.4");
 });
 
-test("unknown discovery explains manual access rather than reporting unreadable choices", async () => {
+test("unknown discovery reports a refresh failure rather than unreadable choices", async () => {
   const wrapper = mount(ChatModelPicker, {
     attachTo: document.body,
     props: {
@@ -665,6 +666,18 @@ test("a discovered GPT-6.2 Sol offers Maximum but not Off in chat", async () => 
       status: {
         ...status,
         selectedModel: "gpt-6.2-sol",
+        catalog: {
+          source: "account",
+          models: ["gpt-6.2-sol"],
+          selectable: [
+            {
+              id: "gpt-6.2-sol",
+              contextWindow: 1_050_000,
+              maxTokens: 128_000,
+              thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+            },
+          ],
+        },
         thinkingInherited: false,
         thinkingPreference: "off",
         thinkingLevel: "medium",
@@ -707,10 +720,7 @@ test.each(["anthropic", "openrouter"])(
                 id: model,
                 contextWindow: 32768,
                 maxTokens: 8192,
-                thinking: {
-                  levels: ["low", "medium", "max"],
-                  default: "medium",
-                },
+                thinkingLevels: ["low", "medium", "max"],
               },
             ],
           },

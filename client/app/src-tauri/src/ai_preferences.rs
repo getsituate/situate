@@ -261,6 +261,9 @@ pub(super) fn select_conversation_model(
         Some(model) => {
             let connection = connection.ok_or(CHOOSE)?;
             let config = &connection.config;
+            if model != "recommended" {
+                discovery::catalog(connection).admits_selection(config, &model)?;
+            }
             resolve_choice(
                 Choice {
                     version: 1,
@@ -298,8 +301,8 @@ pub(super) fn select_conversation_thinking(
     if let Some(level) = &thinking
         && level != "recommended"
     {
-        if let Some(model) = &choice.discovered {
-            if !model.validate_thinking(&connection.config, level) {
+        if let Some(discovered) = &choice.discovered {
+            if !discovered.supports_thinking(level) {
                 return Err(MODEL_ERROR.into());
             }
         } else {

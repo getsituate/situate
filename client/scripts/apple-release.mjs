@@ -50,6 +50,7 @@ import {
 } from "./release-history.mjs";
 
 import { verifyReleaseInputs } from "../../tools/release-inputs.mjs";
+import { writeModelsDevSnapshot } from "./models-dev-snapshot.mjs";
 import { qualifyPublishedMigrations } from "../../tools/published-migrations.mjs";
 import { releaseCompilerCacheEnvironment } from "../../tools/release-build-cache.mjs";
 import { validateSourceVerification } from "../../tools/source-verification.mjs";
@@ -1141,11 +1142,14 @@ async function buildResolvedAppleRelease({
     manifest.qualification = { path: "release-qualification.json" };
     manifest.releaseContent = historyBinding;
     manifest.buildNumber = plan.buildNumber;
+    const modelsSnapshot = join(scratch, "models-dev.json");
+    await writeModelsDevSnapshot(modelsSnapshot, { signal });
     const options = {
       cwd: root,
       env: {
         ...env,
         SITUATE_RELEASE_VERSION: config.version,
+        SITUATE_MODELS_DEV_RELEASE_INPUT: modelsSnapshot,
         SITUATE_RELEASE_HISTORY_FILE: historyFile,
         SITUATE_RELEASE_HISTORY_SHA256: historyBinding.sha256,
       },

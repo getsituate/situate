@@ -77,7 +77,7 @@ function block(value: unknown, assistant: boolean): boolean {
 }
 function usage(value: unknown): boolean {
   if (value === null) return true;
-  if (!object(value) || (value.cost !== null && !object(value.cost)))
+  if (!object(value) || (value.cost != null && !object(value.cost)))
     return false;
   const counters = [
     "input",
@@ -89,12 +89,12 @@ function usage(value: unknown): boolean {
   const costs = ["input", "output", "cacheRead", "cacheWrite", "total"];
   const count = (value: unknown) => value === null || number(value);
   return (
-    fields(value, [...counters, "cost"], ["cacheWrite1h", "reasoning"]) &&
+    fields(value, counters, ["cacheWrite1h", "reasoning", "cost"]) &&
     counters.every((key) => count(value[key])) &&
     ["cacheWrite1h", "reasoning"].every(
       (key) => !Object.hasOwn(value, key) || count(value[key]),
     ) &&
-    (value.cost === null ||
+    (value.cost == null ||
       (fields(value.cost as ObjectValue, costs) &&
         costs.every((key) => count((value.cost as ObjectValue)[key]))))
   );

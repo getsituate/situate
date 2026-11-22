@@ -1,4 +1,16 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=SITUATE_MODELS_DEV_RELEASE_INPUT");
+    let snapshot = std::env::var_os("SITUATE_MODELS_DEV_RELEASE_INPUT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("../src/ai/models-dev.snapshot.json"));
+    let snapshot = snapshot
+        .canonicalize()
+        .expect("Models.dev snapshot is required");
+    println!("cargo:rerun-if-changed={}", snapshot.display());
+    println!(
+        "cargo:rustc-env=SITUATE_MODELS_SNAPSHOT={}",
+        snapshot.display()
+    );
     for key in [
         "SITUATE_DISTRIBUTION",
         "SITUATE_DICTATION_MODEL_SOURCE",

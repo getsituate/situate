@@ -134,7 +134,7 @@ test(
 );
 
 test(
-  "unknown lookup exposes static manual choices and retry uses native account admission without replacing the draft",
+  "unknown lookup offers no unobserved models and retry preserves the draft",
   { tag: "@visual-mobile" },
   async ({ page, visual }) => {
     await page.setViewportSize({ width: 375, height: 850 });
@@ -171,7 +171,7 @@ test(
     ).toHaveCount(0);
     await expect(
       page.locator('#settings-chat-model + select option[value="gpt-5.4"]'),
-    ).toHaveCount(1);
+    ).toHaveCount(0);
     await lookupWarning.evaluate((element) =>
       element.scrollIntoView({ block: "center", behavior: "instant" }),
     );
@@ -196,7 +196,7 @@ test(
       page
         .getByRole("menu")
         .locator('[role="menuitemradio"][data-choice="gpt-5.4"]'),
-    ).toHaveCount(1);
+    ).toHaveCount(0);
     await page.keyboard.press("Escape");
     const tooltip = page.getByRole("tooltip");
     await expect(tooltip).toBeVisible();
@@ -332,7 +332,7 @@ test("switching same-provider connection IDs updates catalog candidates in Setti
 });
 
 test(
-  "custom model observations suggest IDs without restricting manual aliases",
+  "custom endpoint without model discovery accepts manual aliases",
   { tag: "@visual-mobile" },
   async ({ page, visual }) => {
     await page.setViewportSize({ width: 375, height: 850 });
@@ -345,10 +345,7 @@ test(
       aiModel: "saved-alias",
       showInlineModel: true,
       aiCatalogs: {
-        work: {
-          source: "provider",
-          models: ["server/chat", "server/embedding"],
-        },
+        work: { source: "manual", models: [] },
       },
     });
     await page.goto("/");
@@ -365,24 +362,12 @@ test(
     const dialog = page.getByRole("dialog");
     const inline = dialog.getByLabel(t("ai.modelID"), { exact: true });
     await expect(inline).toHaveValue("saved-alias");
-    await expect(dialog.locator("datalist option")).toHaveCount(2);
     await visual.capture("model.custom.id-dialog");
     await page.keyboard.press("Escape");
     await expect(trigger).toBeFocused();
     await settings(page);
-    const suggestions = page.locator(".ai-settings datalist option");
-    await expect(suggestions).toHaveCount(2);
-    expect(
-      await suggestions.evaluateAll((options) =>
-        options.map((option) => option.getAttribute("value")),
-      ),
-    ).toEqual(["server/chat", "server/embedding"]);
     for (const id of ["settings-chat-model", "settings-comment-model"]) {
       await expect(page.locator(`#${id}`)).toHaveValue("");
-      await expect(page.locator(`#${id}`)).toHaveAttribute(
-        "list",
-        (await page.locator(".ai-settings datalist").getAttribute("id"))!,
-      );
     }
     await page.locator("#settings-comment-model").fill("comment-alias");
     await page

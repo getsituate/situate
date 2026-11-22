@@ -94,20 +94,21 @@ See link:{strategy-requirements-root}/data/requirements/REQ-0004-use-existing-co
 
 === Device-local AI access
 
-The MVP supports OpenAI API keys and direct ChatGPT browser login, distinct Codex device authorization, Anthropic and OpenRouter API keys, and OpenAI-compatible custom/local endpoints with optional keys.
+The MVP supports OpenAI API keys and direct ChatGPT browser login, Anthropic and OpenRouter API keys, and OpenAI-compatible custom/local endpoints with optional keys.
 Other providers, external credential sources, subscription methods and arbitrary provider extensions are deferred; classifiers and embedded model/server management are excluded.
-Native adapters own authentication, credential injection, renewal and destination checks. ChatGPT and Codex grants are not interchangeable, and browser return alone is not authentication success.
+Native adapters own authentication, credential injection, renewal and destination checks. Browser return alone is not authentication success.
 Known provider restrictions require method-specific disclosure and own-risk acknowledgement under link:{strategy-requirements-root}/data/requirements/REQ-0015-connect-user-provided-models.md[REQ-0015], not permission to bypass provider rejection.
 Custom HTTP needs destination-specific acknowledgement without insecure redirects or disabling HTTPS certificate verification.
 
 Connections, endpoints, credentials, defaults, conversation overrides and discovery observations belong to one workspace on one device, outside its portable directory and histories.
+Public Models.dev metadata is cached separately per installation; model choices require a match with that connection's discovery list.
 A local identifier associates these records with the authorized canonical location: the <<glossary-device-local-workspace-namespace,Device-local Workspace Namespace>>, not the portable diagnostic identifier or a runtime authorization handle.
 Neither official nor custom synchronization transfers these settings. New devices configure access independently; same-phone enrollment remains required on mobile rather than requiring desktop setup.
 The proposed <<adr-0002,ADR-0002>> describes local custody separately from content recovery.
 Only prototype formats verified never to have shipped publicly are exempt from credential migration and legacy-session compatibility. Published device-local connections and settings must survive app upgrades through compatible storage or a tested, recoverable migration. Unknown records must not be silently imported, overwritten or deleted.
 
 A conversation inherits the device's workspace selection unless explicitly overridden; each request captures its connection, model and thinking settings without later preference changes redirecting active work.
-Recommended and initial selection use the same ranked, capability-eligible catalog. Discovery, static compatibility and unknown availability remain distinct; catalog presence proves neither entitlement nor capability, and selection makes no billable probe.
+Recommended and initial selection use the same ranked, capability-eligible catalog. Connection discovery, model metadata and unknown availability remain distinct; catalog presence proves neither entitlement nor capability, and selection makes no billable probe.
 Saved explicit choices are not replaced by catalog updates, discovery or failure; unresolved/custom endpoints require explicit model selection rather than a guessed default.
 Automatic provider retries, provider prompt-cache requests and model/provider fallback remain disabled pending separate policy decisions. Ordinary tool-loop continuation is not permission to repeat a completed effect.
 Activity comments use a separately configured model with thinking off or minimal and a short work description rather than full context or raw tool results.

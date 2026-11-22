@@ -59,39 +59,8 @@ pub(super) fn validate_config(config: &Config) -> Result<(), String> {
     if config.endpoint.is_some() {
         return Err("native.ai.endpoint.builtinFixed".into());
     }
-    if config.auth == Some(AuthKind::Oauth)
-        && !matches!(config.provider.as_str(), "openai" | "openai-codex")
-    {
+    if config.auth == Some(AuthKind::Oauth) && config.provider != "openai" {
         return Err("native.ai.provider.authenticationUnavailable".into());
-    }
-    let catalog: Value = serde_json::from_str(CATALOG).map_err(|_| NETWORK_ERROR)?;
-    let provider = catalog["providers"]
-        .as_array()
-        .and_then(|providers| {
-            providers
-                .iter()
-                .find(|provider| provider["id"] == config.provider)
-        })
-        .ok_or("native.ai.provider.choose")?;
-    let method = if config.auth == Some(AuthKind::Oauth) {
-        "oauth"
-    } else {
-        "api_key"
-    };
-    if !provider["methods"]
-        .as_array()
-        .is_some_and(|methods| methods.iter().any(|entry| entry["id"] == method))
-    {
-        return Err("native.ai.provider.authenticationUnavailable".into());
-    }
-    if !provider["models"].as_array().is_some_and(|models| {
-        models.iter().any(|entry| {
-            entry["id"]
-                .as_str()
-                .is_some_and(|id| target(config, id).is_ok())
-        })
-    }) {
-        return Err("native.ai.model.noneCompatible".into());
     }
     Ok(())
 }
@@ -133,7 +102,7 @@ fn selected(storage: &Storage, config: &Config) -> Result<Option<Choice>, String
         .transpose()
 }
 include!("ai_preferences.rs");
-#[cfg(any(test, feature = "native-smoke"))]
+#[cfg(test)]
 pub(super) fn required(storage: &Storage, config: &Config) -> Result<Choice, String> {
     workspace_choice(storage, config, &discovery::Catalog::static_models(config))
 }
@@ -151,21 +120,26 @@ pub(super) fn resolve_choice(
         }
     }
     choice.discovered = observed.selectable(&choice.connection, &choice.model);
-    if let Some(model) = &choice.discovered {
-        if kind != "chat" {
+    if let Some(discovered) = &choice.discovered {
+        let minimum = discovered.minimum_thinking(&choice.connection);
+        if choice.thinking == "recommended" || (choice.thinking == "off" && minimum != "off") {
+            choice.thinking = if kind == "chat" {
+                discovered_default_thinking(&choice.connection, discovered)?
+            } else {
+                minimum.into()
+            };
+        }
+        if (kind == "comment" && choice.thinking != minimum)
+            || !discovered.supports_thinking(&choice.thinking)
+        {
             return Err(MODEL_ERROR.into());
         }
-        // Older versions saved "off" even when the model did not support disabling reasoning.
-        if choice.thinking == "recommended"
-            || (choice.thinking == "off" && !model.validate_thinking(&choice.connection, "off"))
-        {
-            choice.thinking = model
-                .thinking(&choice.connection)
-                .map_or_else(off, |(_, default)| default.into());
-        }
-        validate_snapshot(&choice, &choice.connection)?;
+        choice.target().map_err(|_| MODEL_ERROR)?;
         observed.admits(&choice.model)?;
         return Ok(choice);
+    }
+    if super::models_dev::active() && choice.connection.provider != "custom" {
+        return Err(MODEL_ERROR.into());
     }
     if choice.thinking == "recommended" {
         choice.thinking = if kind == "comment" {
@@ -188,9 +162,9 @@ pub(super) fn validate_snapshot(choice: &Choice, config: &Config) -> Result<(), 
         return Err("native.ai.access.changedDuringTurn".into());
     }
     choice.target()?;
-    if let Some(model) = &choice.discovered {
-        return model
-            .validate_thinking(config, &choice.thinking)
+    if let Some(discovered) = &choice.discovered {
+        return discovered
+            .supports_thinking(&choice.thinking)
             .then_some(())
             .ok_or_else(|| MODEL_ERROR.into());
     }
@@ -263,8 +237,6 @@ pub(super) fn validate_payload(choice: &Choice, payload: &Value) -> Result<(), S
         _ => return Err("native.ai.model.requestMismatch".into()),
     }
     if payload.get("store").is_some_and(|store| store != false)
-        || api == "openai-codex-responses"
-            && (payload["store"] != false || payload.get("max_output_tokens").is_some())
         || api == "openai-responses"
             && descriptor["compat"]["supportsMaxOutputTokens"] == false
             && payload.get("max_output_tokens").is_some()
@@ -345,12 +317,15 @@ pub(super) fn resolve_status(storage: &Storage, config: &Config, mut status: Sta
 }
 #[cfg(test)]
 pub(super) fn save(storage: &Storage, config: &Config, model: String) -> Result<Status, String> {
-    save_observed(
-        storage,
-        config,
-        model,
-        &discovery::Catalog::static_models(config),
-    )
+    let observed = if config.provider == "custom" {
+        discovery::Catalog {
+            source: discovery::Source::Manual,
+            ..Default::default()
+        }
+    } else {
+        discovery::Catalog::static_models(config)
+    };
+    save_observed(storage, config, model, &observed)
 }
 
 pub(super) fn save_observed(
@@ -361,7 +336,7 @@ pub(super) fn save_observed(
 ) -> Result<Status, String> {
     if model != "recommended" {
         target_for(config, &model, observed.selectable(config, &model).as_ref())?;
-        observed.admits(&model)?;
+        observed.admits_selection(config, &model)?;
     }
     let mut settings = match settings(storage, config) {
         Ok(settings) => settings,
@@ -463,15 +438,6 @@ mod tests {
             );
         }
         assert!(validate_config(&config("anthropic", Some(AuthKind::Oauth))).is_err());
-        let codex = config("openai-codex", Some(AuthKind::Oauth));
-        assert_eq!(
-            validate_config(&codex).is_ok(),
-            admit_method(&codex).is_ok()
-        );
-        assert!(validate_config(&config("missing-provider", None)).is_err());
-    }
-    #[test]
-    fn deferred_provider_methods_cannot_configure_or_dispatch_catalog_models() {
         for (provider, auth, model) in [
             ("groq", AuthKind::ApiKey, "llama-3.3-70b-versatile"), // gitleaks:allow -- public model ID
             ("deepseek", AuthKind::ApiKey, "deepseek-flash"),

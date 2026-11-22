@@ -148,7 +148,10 @@ export async function startAgentProvider(options = {}) {
   const { model = PINNED_AGENT_MODEL, apiKey, signal } = options;
   const mode = options.mode === "live" ? "openai" : (options.mode ?? "fixture");
   if (!["fixture", "openai"].includes(mode)) throw failure("invalid_mode");
-  if (![PINNED_AGENT_MODEL, "gpt-6.1-sol"].includes(model))
+  if (
+    ![PINNED_AGENT_MODEL, "gpt-6.1-sol"].includes(model) &&
+    !(mode === "fixture" && model === "fixture-discovered-chat")
+  )
     throw failure("model_not_allowed");
   if (
     mode === "openai" &&

@@ -3,7 +3,6 @@ import type { Config, ModelCatalog } from "./connection-types";
 import catalog from "./catalog.generated.json";
 import transports from "./transport-contract.json";
 import policy from "./provider-policy.json";
-import { hasOpenAiDiscoveredThinking } from "./recommendations";
 
 export interface Provider {
   id: string;
@@ -16,20 +15,25 @@ interface ProviderPolicy {
   methods: Record<string, { status: string }>;
 }
 const providerPolicies: Record<string, ProviderPolicy> = policy.providers;
-export const providers: Provider[] = (catalog.providers as Provider[])
-  .filter((provider) => Object.hasOwn(providerPolicies, provider.id))
-  .map((provider) => {
-    const methods = provider.methods.filter(
-      (method) =>
-        providerPolicies[provider.id]?.methods[method.id]?.status ===
-        "implemented",
-    );
-    return {
-      ...provider,
-      methods,
-      models: methods.length ? provider.models : [],
-    };
-  });
+const providerNames = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+};
+export const providers: Provider[] = Object.entries(providerNames).map(
+  ([id, name]) => ({
+    id,
+    name,
+    methods: Object.entries(providerPolicies[id]!.methods)
+      .filter(([, method]) => method.status === "implemented")
+      .map(([id]) => ({ id, name: id })),
+    models:
+      import.meta.env.MODE === "test"
+        ? ((catalog.providers.find((provider) => provider.id === id)
+            ?.models as Model[]) ?? [])
+        : [],
+  }),
+);
 function connectionAllowed(config: Config): boolean {
   if (!Object.hasOwn(providerPolicies, config.provider)) return false;
   const entry = providerPolicies[config.provider]!;
@@ -69,15 +73,6 @@ function compatibleChatModels(config: Config): Model[] {
   if (!connectionAllowed(config)) return [];
   if (config.auth === "oauth") {
     if (config.provider === "openai") return openAiBrowserModels;
-    if (config.provider === "openai-codex")
-      return providers
-        .find(({ id }) => id === "openai-codex")!
-        .models.filter(
-          (model) =>
-            model.api === "openai-codex-responses" &&
-            model.baseUrl === "https://chatgpt.com/backend-api" &&
-            modelAvailable(model),
-        );
     return [];
   }
   if (config.endpoint !== null) return [];
@@ -92,11 +87,27 @@ export function availableChatModels(
   config: Config,
   discovery?: ModelCatalog,
 ): Model[] {
+  if (
+    config.provider === "custom" &&
+    discovery?.source === "provider" &&
+    connectionAllowed(config)
+  )
+    return discovery.models
+      .filter((id) => id !== "recommended")
+      .map((id) => connectionModel(config, id));
+  if (
+    discovery &&
+    discovery.source !== "account" &&
+    discovery.source !== "provider"
+  )
+    return [];
   const models = compatibleChatModels(config);
-  if (discovery?.source !== "account" && discovery?.source !== "provider")
-    return models;
+  if (!discovery) return models;
   const ids = new Set(discovery.models);
-  const available = models.filter((model) => ids.has(model.id));
+  const enriched = new Set(discovery.selectable?.map(({ id }) => id));
+  const available = models.filter(
+    (model) => ids.has(model.id) && !enriched.has(model.id),
+  );
   if (!connectionAllowed(config)) return available;
   const transport = {
     openai: ["openai-responses", "https://api.openai.com/v1"],
@@ -105,25 +116,16 @@ export function availableChatModels(
   } as const;
   if (!Object.hasOwn(transport, config.provider)) return available;
   const [api, baseUrl] = transport[config.provider as keyof typeof transport];
-  const bundled = new Set(
-    providers
-      .find((provider) => provider.id === config.provider)
-      ?.models.map((model) => model.id),
-  );
   for (const model of discovery.selectable ?? []) {
-    if (!ids.has(model.id) || bundled.has(model.id)) continue;
+    if (!ids.has(model.id)) continue;
     available.push({
       ...model,
-      name: model.id,
+      name: model.name ?? model.id,
       provider: config.provider,
       api,
       baseUrl,
       input: model.imageInput ? ["text", "image"] : ["text"],
-      reasoning:
-        hasOpenAiDiscoveredThinking(config, model.id) ||
-        ((config.provider === "anthropic" ||
-          config.provider === "openrouter") &&
-          !!model.thinking),
+      reasoning: !!model.thinkingLevels?.length,
       cost: null,
     });
   }

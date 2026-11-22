@@ -40,9 +40,6 @@ pub(super) fn supported_thinking_levels(
     config: &Config,
     model: &str,
 ) -> Result<Vec<String>, String> {
-    if let Some(verified) = discovery::openai_thinking(config, model) {
-        return Ok(verified.levels.clone());
-    }
     let (api, _, _) = target(config, model)?;
     let catalog: Value = serde_json::from_str(RECOMMENDATIONS).map_err(|_| MODEL_ERROR)?;
     let entry = catalog["verifiedThinking"].as_array().and_then(|entries| {
@@ -62,8 +59,8 @@ pub(super) fn supported_thinking_levels(
 }
 pub(super) fn comment_thinking(config: &Config, model: &str) -> Result<String, String> {
     let levels = supported_thinking_levels(config, model)?;
-    let inventory: Value = serde_json::from_str(CATALOG).map_err(|_| MODEL_ERROR)?;
-    let reasoning = inventory["providers"]
+    #[cfg(any(test, feature = "native-smoke"))]
+    let reasoning = serde_json::from_str::<Value>(CATALOG).map_err(|_| MODEL_ERROR)?["providers"]
         .as_array()
         .and_then(|providers| {
             providers
@@ -73,15 +70,28 @@ pub(super) fn comment_thinking(config: &Config, model: &str) -> Result<String, S
         .and_then(|provider| provider["models"].as_array())
         .and_then(|models| models.iter().find(|entry| entry["id"] == model))
         .is_some_and(|entry| entry["reasoning"] == true);
+    #[cfg(any(test, feature = "native-smoke"))]
     if reasoning && levels == ["off"] {
         return Err(MODEL_ERROR.into());
     }
     Ok(levels[0].clone())
 }
+fn discovered_default_thinking(
+    config: &Config,
+    model: &discovery::DiscoveredModel,
+) -> Result<String, String> {
+    let catalog: Value = serde_json::from_str(RECOMMENDATIONS).map_err(|_| MODEL_ERROR)?;
+    let access = if config.auth == Some(AuthKind::Oauth) { "oauth" } else { "api_key" };
+    Ok(catalog["rankedCandidates"].as_array().into_iter().flatten()
+        .find(|entry| entry["provider"] == config.provider
+            && entry["access"] == access && entry["modelId"] == model.id)
+        .and_then(|entry| entry["thinking"].as_str())
+        .filter(|level| (*level != "off" || model.minimum_thinking(config) == "off")
+            && model.supports_thinking(level))
+        .unwrap_or_else(|| model.minimum_thinking(config)).to_owned())
+}
+
 fn default_thinking(config: &Config, model: &str) -> Result<String, String> {
-    if let Some(verified) = discovery::openai_thinking(config, model) {
-        return Ok(verified.default.clone());
-    }
     let levels = supported_thinking_levels(config, model)?;
     let recommendations: Value = serde_json::from_str(RECOMMENDATIONS).map_err(|_| MODEL_ERROR)?;
     let access = if config.auth == Some(AuthKind::Oauth) {
@@ -135,19 +145,16 @@ fn validate_settings(
         if choice.model == "recommended" {
             continue;
         }
-        if is_chat && choice.catalog_revision.is_none() {
-            if let Some(model) = observed.selectable(config, &choice.model) {
-                if !matches!(choice.thinking.as_str(), "recommended" | "off")
-                    && !model.validate_thinking(config, &choice.thinking)
-                    && prior != Some(choice)
-                {
-                    return Err(MODEL_ERROR.into());
+        if choice.catalog_revision.is_none()
+            && (observed.selectable(config, &choice.model).is_some_and(|model| {
+                choice.thinking == "recommended" || if is_chat {
+                    model.supports_thinking(&choice.thinking)
+                } else {
+                    choice.thinking == model.minimum_thinking(config)
                 }
-                continue;
-            }
-            if prior == Some(choice) && target(config, &choice.model).is_err() {
-                continue;
-            }
+            }) || (prior == Some(choice) && target(config, &choice.model).is_err()))
+        {
+            continue;
         }
         target(config, &choice.model)?;
         if choice.thinking != "recommended" {
@@ -228,6 +235,7 @@ fn settings(storage: &Storage, config: &Config) -> Result<WorkspaceAiSettings, S
         show_inline_model: false,
     })
 }
+#[cfg(test)]
 fn write_settings(
     storage: &Storage,
     config: &Config,
@@ -275,19 +283,14 @@ fn write_settings_observed(
             {
                 choice.thinking = thinking.clone();
             }
-            if choice.thinking != "recommended" {
-                if let Some(model) = observed.selectable(config, &concrete) {
-                    if choice.thinking != "off"
-                        && !model.validate_thinking(config, &choice.thinking)
-                        && previous.as_ref().and_then(|p| p.settings.chat.as_ref()) != Some(choice)
-                    {
-                        return Err(MODEL_ERROR.into());
-                    }
-                } else if previous.as_ref().and_then(|p| p.settings.chat.as_ref()) != Some(choice)
-                    || target(config, &concrete).is_ok()
-                {
-                    validate_thinking(config, &concrete, &choice.thinking)?;
-                }
+            if choice.thinking != "recommended"
+                && !(choice.catalog_revision.is_none()
+                    && (observed.selectable(config, &concrete)
+                        .is_some_and(|model| model.supports_thinking(&choice.thinking))
+                        || (previous.as_ref().and_then(|p| p.settings.chat.as_ref()) == Some(choice)
+                            && target(config, &concrete).is_err())))
+            {
+                validate_thinking(config, &concrete, &choice.thinking)?;
             }
             thinking_by_model.insert(concrete, choice.thinking.clone());
         } else if choice.thinking != "recommended" {
@@ -388,11 +391,12 @@ fn ranked_choice(
         {
             continue;
         }
-        let levels = if entry["discoveryOnly"] == true {
-            let Some(verified) = discovery::openai_thinking(config, model) else {
-                continue;
-            };
-            verified.levels.clone()
+        let levels = if let Some(levels) = available_model["observedThinking"].as_array() {
+            let mut supported = vec![off()];
+            supported.extend(levels.iter().filter_map(Value::as_str).map(str::to_owned));
+            supported
+        } else if entry["discoveryOnly"] == true {
+            continue;
         } else {
             let Ok((api, _, _)) = target(config, model) else {
                 continue;
@@ -410,8 +414,8 @@ fn ranked_choice(
         }
         return Ok(Some(ModelChoice {
             model: model.into(),
-            thinking: if kind == "comment" {
-                levels[0].clone()
+            thinking: if kind == "comment" || (thinking == "off" && available_model["minimumThinking"].is_string()) {
+                available_model["minimumThinking"].as_str().unwrap_or(&levels[0]).into()
             } else {
                 thinking.into()
             },
@@ -428,7 +432,6 @@ pub(super) fn initialize(
     if read_settings(storage, config)?.is_some() || selected(storage, config)?.is_some() {
         return Ok(());
     }
-    let _ = observed;
     let initial = WorkspaceAiSettings {
         version: 1,
         chat: Some(ModelChoice {
@@ -444,7 +447,7 @@ pub(super) fn initialize(
         generated_comments: true,
         show_inline_model: false,
     };
-    write_settings(storage, config, &initial)
+    write_settings_observed(storage, config, &initial, observed)
 }
 fn recommendation(
     config: &Config,
@@ -452,6 +455,25 @@ fn recommendation(
     kind: &str,
 ) -> Result<ModelChoice, String> {
     let catalog: Value = serde_json::from_str(RECOMMENDATIONS).map_err(|_| MODEL_ERROR)?;
+    if super::models_dev::active() {
+        let available: Vec<_> = observed.selectable.iter().filter_map(|model| {
+            let mut descriptor = model.descriptor(config)?;
+            descriptor["observedThinking"] = serde_json::json!(model.thinking_levels);
+            descriptor["minimumThinking"] = serde_json::json!(model.minimum_thinking(config));
+            Some(descriptor)
+        }).collect();
+        return ranked_choice(config, kind, &catalog, Some(&available))?.ok_or_else(|| MODEL_ERROR.into());
+    }
+    legacy_recommendation(config, observed, kind, &catalog)
+}
+
+#[cfg(not(any(test, feature = "native-smoke")))]
+fn legacy_recommendation(_: &Config, _: &discovery::Catalog, _: &str, _: &Value) -> Result<ModelChoice, String> {
+    Err(MODEL_ERROR.into())
+}
+
+#[cfg(any(test, feature = "native-smoke"))]
+fn legacy_recommendation(config: &Config, observed: &discovery::Catalog, kind: &str, catalog: &Value) -> Result<ModelChoice, String> {
     let inventory: Value = serde_json::from_str(CATALOG).map_err(|_| MODEL_ERROR)?;
     let mut available: Vec<Value> = inventory["providers"]
         .as_array()
@@ -477,13 +499,18 @@ fn recommendation(
                 && let Some(model) = entry["modelId"]
                     .as_str()
                     .and_then(|id| observed.selectable(config, id))
-                    .and_then(|model| model.descriptor(config))
+                    .and_then(|model| {
+                        let mut descriptor = model.descriptor(config)?;
+                        descriptor["observedThinking"] = serde_json::json!(model.thinking_levels);
+                        descriptor["minimumThinking"] = serde_json::json!(model.minimum_thinking(config));
+                        Some(descriptor)
+                    })
             {
                 available.push(model);
             }
         }
     }
-    ranked_choice(config, kind, &catalog, Some(&available))?.ok_or_else(|| MODEL_ERROR.into())
+    ranked_choice(config, kind, catalog, Some(&available))?.ok_or_else(|| MODEL_ERROR.into())
 }
 #[cfg(test)]
 #[path = "ai_ranking_tests.rs"]
@@ -508,7 +535,10 @@ pub(super) fn small_choice_observed(
     {
         return Ok(None);
     }
-    resolve_choice(choice.snapshot(config), observed, "comment").map(Some)
+    match resolve_choice(choice.snapshot(config), observed, "comment") {
+        Err(error) if super::models_dev::active() && error == MODEL_ERROR => Ok(None),
+        result => result.map(Some),
+    }
 }
 #[cfg(test)]
 pub(super) fn load_current_settings(
@@ -572,7 +602,7 @@ pub(super) fn save_current_settings(
             && let Some(choice) = choice
             && choice.model != "recommended"
         {
-            catalog.admits(&choice.model)?;
+            catalog.admits_selection(&connection.config, &choice.model)?;
         }
     }
     write_settings_observed(storage, &connection.config, &next, &catalog)?;

@@ -739,12 +739,21 @@ impl Host for NativeHost {
     }
     async fn context(
         &self,
+        run_id: &str,
         mut messages: Vec<Value>,
         config: RunConfig,
         cancel: CancellationToken,
     ) -> Result<Vec<Value>, String> {
         let context = self.context.clone();
-        let state = self.state.clone();
+        let (main, origins) = {
+            let state = self.state.lock().map_err(|_| NETWORK_ERROR)?;
+            let captured = state
+                .captured
+                .as_ref()
+                .filter(|captured| captured.run_id == run_id)
+                .ok_or("native.ai.turn.inactive")?;
+            (captured.main.clone(), state.origins.clone())
+        };
         self.context
             .blocking(move || {
                 context.with_location(|location| {
@@ -752,11 +761,7 @@ impl Host for NativeHost {
                         return Err("native.ai.response.stopped".into());
                     }
                     let storage = local_storage(&context.app, location)?;
-                    let main: model::Choice =
-                        serde_json::from_value(config.settings["main"].clone())
-                            .map_err(|_| NETWORK_ERROR)?;
                     let fingerprint = fingerprint(&context, &main)?;
-                    let origins = state.lock().map_err(|_| NETWORK_ERROR)?.origins.clone();
                     let descriptor = super::native_model::descriptor(&main)?;
                     for message in &mut messages {
                         if message["role"] == "assistant" {
@@ -1300,6 +1305,8 @@ fn fingerprint(context: &Context, choice: &model::Choice) -> Result<String, Stri
     let (protocol, _, _) = choice.target()?;
     let mut snapshot = json!({"choice":choice,"protocol":protocol,"credentials":epoch});
     if let Some(model) = &choice.discovered {
+        let mut model = model.clone();
+        model.name = None;
         snapshot["discovered"] = json!(model);
     }
     serde_json::to_vec(&snapshot)

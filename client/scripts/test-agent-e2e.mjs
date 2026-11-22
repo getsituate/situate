@@ -30,7 +30,7 @@ The optional file must be private, owned, mode 0600, and is never shell-evaluate
 --journey workspace (default) checks ordinary chat, files and restart.
 --journey onboarding checks method proposal, source conversion and continuation.
 --journey plugins checks native publication and request-local capabilities (fixture only).
-Fixed model: gpt-4.1-mini. No shell execution or automatic retries.
+Live model: gpt-4.1-mini. No shell execution or automatic retries.
 
 Option                     Fixture default/max  Live default/max
 --max-requests             64                   24
@@ -134,6 +134,8 @@ export async function runAgent(
       return { ...report, outcome: "help", code: "usage", help };
     report.provider = options.provider;
     report.journey = options.journey;
+    if (options.provider === "fixture" && options.journey === "onboarding")
+      report.model = "fixture-discovered-chat";
     preflight(platform, desktopIssue);
     if (signal?.aborted) throw new AgentRunError("cancel", "interrupted");
     const apiKey =
@@ -152,7 +154,7 @@ export async function runAgent(
     preflight(platform, desktopIssue);
     broker = await provider({
       mode: options.provider,
-      model: MODEL,
+      model: report.model,
       allowLive: options.provider === "openai",
       apiKey,
       signal,
@@ -186,7 +188,7 @@ export async function runAgent(
           workspaceRoot: isolated.root,
           providerBaseUrl: broker.url,
           providerToken: broker.token,
-          model: MODEL,
+          model: report.model,
           mode: options.provider === "openai" ? "live" : "fixture",
           journey: options.journey,
           reportPath,

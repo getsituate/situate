@@ -870,8 +870,9 @@ onMounted(async () => {
       [
         "ai-models-changed",
         (scope: string) => {
-          if (state.value?.current?.id === scope)
-            void refreshWorkspaceChats(scope);
+          const active = state.value?.current?.id;
+          if (active && (!scope || active === scope))
+            void refreshWorkspaceChats(active);
         },
       ],
       ["dictation-close-requested", continueClose],

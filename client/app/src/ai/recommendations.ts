@@ -8,7 +8,6 @@ import type { Config, ModelCatalog } from "./api";
 import type { ModelChoice, ThinkingLevel } from "./settings";
 import transports from "./transport-contract.json";
 import policy from "./provider-policy.json";
-import openAiDiscoveredThinking from "./openai-discovered-thinking.json";
 
 type EligibleModel = {
   id: string;
@@ -16,6 +15,8 @@ type EligibleModel = {
   api: string;
   baseUrl: string;
   reasoning: boolean;
+  thinkingLevels?: readonly ThinkingLevel[];
+  reasoningNone?: boolean;
   input: readonly string[];
   type?: string;
   headers?: Record<string, string>;
@@ -62,57 +63,41 @@ export function modelAvailability(
   catalog: ModelCatalog | undefined,
   models?: readonly EligibleModel[],
 ): ModelAvailability {
-  if (!models || catalog?.source === "unknown") return { source: "unknown" };
+  if (!models || catalog?.source === "unknown" || catalog?.source === "manual")
+    return { source: "unknown" };
   return { source: catalog?.source ?? "static", models };
 }
 
 export const recommendationRevision = revision;
-export function hasOpenAiDiscoveredThinking(
-  config: Config,
-  modelId: string,
-): boolean {
-  return (
-    config.provider === "openai" &&
-    config.endpoint === null &&
-    openAiDiscoveredThinking.models.includes(modelId)
-  );
-}
-function thinkingCapabilities(
-  config: Config,
-  modelId: string,
-  catalog?: ModelCatalog,
-) {
-  if (config.endpoint !== null) return undefined;
-  if (hasOpenAiDiscoveredThinking(config, modelId))
-    return openAiDiscoveredThinking;
-  const observed =
-    (config.provider === "anthropic" || config.provider === "openrouter") &&
-    (catalog?.source === "account" || catalog?.source === "provider") &&
-    catalog.models.includes(modelId)
-      ? catalog.selectable?.find((model) => model.id === modelId)?.thinking
-      : undefined;
-  return (
-    observed ??
-    verifiedThinking.find(
-      (entry) =>
-        entry.provider === config.provider && entry.modelId === modelId,
-    )
-  );
-}
 export function supportedThinkingLevels(
   config: Config,
   modelId: string,
   catalog?: ModelCatalog,
 ): ThinkingLevel[] {
-  const verified = thinkingCapabilities(config, modelId, catalog);
+  const discovered = catalog?.selectable?.find(({ id }) => id === modelId);
+  if (discovered) {
+    const levels = discovered.thinkingLevels ?? [];
+    return discovered.reasoningNone ||
+      config.provider === "anthropic" ||
+      !levels.length
+      ? ["off", ...levels]
+      : levels;
+  }
+  const verified =
+    config.endpoint === null &&
+    verifiedThinking.find(
+      (entry) =>
+        entry.provider === config.provider && entry.modelId === modelId,
+    );
   return verified ? (verified.levels as ThinkingLevel[]) : ["off"];
 }
 export function commentThinking(
   config: Config,
   modelId: string,
   model?: { reasoning: boolean },
+  catalog?: ModelCatalog,
 ): ThinkingLevel {
-  const levels = supportedThinkingLevels(config, modelId);
+  const levels = supportedThinkingLevels(config, modelId, catalog);
   if (model?.reasoning && levels.length === 1 && levels[0] === "off")
     throw new Error("ai.noEligibleChatModelsAreAvailableForThisConnection");
   return levels[0]!;
@@ -124,7 +109,11 @@ export function modelChoice(
   catalog?: ModelCatalog,
 ): ModelChoice {
   const levels = supportedThinkingLevels(config, model, catalog);
-  const verified = thinkingCapabilities(config, model, catalog);
+  const verified =
+    config.endpoint === null &&
+    verifiedThinking.find(
+      (entry) => entry.provider === config.provider && entry.modelId === model,
+    );
   return {
     model,
     thinking:
@@ -132,8 +121,12 @@ export function modelChoice(
       (previous.thinking === "recommended" ||
         levels.includes(previous.thinking))
         ? previous.thinking
-        : ((verified ? (verified.default as ThinkingLevel) : undefined) ??
-          levels[0]!),
+        : ((verified && levels.includes(verified.default as ThinkingLevel)
+            ? (verified.default as ThinkingLevel)
+            : undefined) ??
+          (catalog?.selectable?.some(({ id }) => id === model)
+            ? "recommended"
+            : levels[0]!)),
     catalogRevision: null,
   };
 }
@@ -166,17 +159,28 @@ export function rankModelChoices(
           modelEligible(config, model),
       );
       if (!model) return [];
-      const levels = supportedThinkingLevels(config, model.id);
+      const levels = model.thinkingLevels
+        ? (["off", ...model.thinkingLevels] as const)
+        : supportedThinkingLevels(config, model.id);
       if (
         !levels.includes(entry.thinking as ThinkingLevel) ||
         (model.reasoning && levels.length === 1 && levels[0] === "off")
       )
         return [];
+      const minimum =
+        model.thinkingLevels?.length &&
+        !model.reasoningNone &&
+        config.provider !== "anthropic"
+          ? model.thinkingLevels[0]!
+          : levels[0]!;
       return [
         {
           model: model.id,
           thinking:
-            kind === "comment" ? levels[0]! : (entry.thinking as ThinkingLevel),
+            kind === "comment" ||
+            (model.thinkingLevels && entry.thinking === "off")
+              ? minimum
+              : (entry.thinking as ThinkingLevel),
           catalogRevision: recommendationRevision,
         },
       ];

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import "@situate/localization/onboarding";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { listenInWindow } from "../window-events";
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import { localizeError, t } from "@situate/localization";
 import { SituateButton, SituateDialog } from "@situate/ui";
 import AiSetup from "../ai/AiSetup.vue";
@@ -49,6 +50,9 @@ const ready = ref(false),
   showAccess = ref(false),
   changingConnection = ref(false),
   modelSaving = ref(false);
+const startFailure = ref<unknown>();
+const startFailureDismissed = ref(false);
+const startFailureId = useId();
 const accessCheck = ref<
   "idle" | "checking" | "success" | "failure" | "cancelled"
 >("idle");
@@ -134,6 +138,17 @@ async function initialize() {
   conversationId.value = restored?.id ?? null;
   ready.value = true;
 }
+async function refreshSetupStatus() {
+  const previous = status.value;
+  try {
+    const next = await getStatus(props.scope);
+    if (alive && status.value === previous && !modelSaving.value)
+      status.value = next;
+  } catch (cause) {
+    if (alive && status.value === previous && !modelSaving.value)
+      error.value = cause;
+  }
+}
 async function selectSetupModel(model: string | null) {
   if (!model || modelSaving.value || busy.value) return false;
   modelSaving.value = true;
@@ -217,12 +232,17 @@ async function run(action: Parameters<typeof perform>[0]) {
   attempt = current;
   busy.value = true;
   error.value = undefined;
+  if (action === "start") {
+    startFailure.value = undefined;
+    startFailureDismissed.value = false;
+  }
   if (action === "access") accessCheck.value = "checking";
   operation = perform(action, current.signal)
     .catch((cause) => {
       if (alive && !current.signal.aborted) {
         if (action === "access" && accessCheck.value !== "success")
           accessCheck.value = "failure";
+        else if (action === "start") startFailure.value = cause;
         else error.value = cause;
       }
     })
@@ -234,6 +254,12 @@ async function run(action: Parameters<typeof perform>[0]) {
       }
     });
   return operation;
+}
+function reopenAccess() {
+  startFailureDismissed.value = true;
+  error.value = undefined;
+  accessCheck.value = "idle";
+  showAccess.value = true;
 }
 async function cancelAccessCheck() {
   attempt?.abort();
@@ -306,7 +332,25 @@ onMounted(() =>
     if (alive) error.value = cause;
   }),
 );
+let stopCatalogListener: (() => void) | undefined;
+onMounted(async () => {
+  const stop = await listenInWindow<string>(
+    "ai-models-changed",
+    ({ payload }) => {
+      if (
+        (!payload || payload === props.scope) &&
+        ready.value &&
+        !busy.value &&
+        !modelSaving.value
+      )
+        void refreshSetupStatus();
+    },
+  ).catch(() => undefined);
+  if (alive) stopCatalogListener = stop;
+  else stop?.();
+});
 onBeforeUnmount(() => {
+  stopCatalogListener?.();
   alive = false;
   readGeneration++;
   attempt?.abort();
@@ -368,6 +412,43 @@ defineExpose({ cancelAndWait, flush: session.flush });
     @patch="session.patch"
     @action="run"
   >
+    <template #start-recovery>
+      <template v-if="startFailure">
+        <SituateDialog
+          :open="!startFailureDismissed"
+          :aria-labelledby="`${startFailureId}-title`"
+          :aria-describedby="`${startFailureId}-detail`"
+          @cancel.prevent="startFailureDismissed = true"
+        >
+          <template #header>
+            <h2 :id="`${startFailureId}-title`">
+              {{ t("chat.actionFailed") }}
+            </h2>
+          </template>
+          <p :id="`${startFailureId}-detail`" role="alert">
+            {{ localizeError(startFailure) }}
+          </p>
+          <template #actions>
+            <SituateButton variant="secondary" @click="reopenAccess">{{
+              t("onboarding.access.change")
+            }}</SituateButton>
+            <SituateButton
+              variant="secondary"
+              autofocus
+              @click="startFailureDismissed = true"
+              >{{ t("settings.ai.dismiss") }}</SituateButton
+            >
+          </template>
+        </SituateDialog>
+        <SituateButton
+          v-if="startFailureDismissed"
+          variant="secondary"
+          :disabled="busy"
+          @click="reopenAccess"
+          >{{ t("onboarding.access.change") }}</SituateButton
+        >
+      </template>
+    </template>
     <template #access>
       <AiSetup
         v-if="!status?.config || changingConnection"
@@ -396,6 +477,7 @@ defineExpose({ cancelAndWait, flush: session.flush });
             :running="busy"
             :unsaved="!!chat?.state.unsaved"
             :select-model="selectSetupModel"
+            @retry="refreshSetupStatus"
           />
         </div>
         <div class="setup-check-status" :data-state="accessCheck">
@@ -454,12 +536,9 @@ defineExpose({ cancelAndWait, flush: session.flush });
         v-if="chat?.state.error && !chat.state.running"
         class="setup-recovery"
       >
-        <SituateButton
-          variant="ghost"
-          size="small"
-          @click="showAccess = true"
-          >{{ t("onboarding.access.change") }}</SituateButton
-        >
+        <SituateButton variant="ghost" size="small" @click="reopenAccess">{{
+          t("onboarding.access.change")
+        }}</SituateButton>
       </div>
     </template>
     <template #conversation>
@@ -469,7 +548,13 @@ defineExpose({ cancelAndWait, flush: session.flush });
         :conversation-id="conversationId"
         embedded
         @navigate="readTarget"
-      />
+      >
+        <template #error-actions>
+          <SituateButton variant="secondary" @click="reopenAccess">{{
+            t("onboarding.access.change")
+          }}</SituateButton>
+        </template>
+      </ChatPane>
     </template>
   </OnboardingView>
   <SituateDialog

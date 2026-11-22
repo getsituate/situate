@@ -2,17 +2,13 @@
   "userAgent": "Situate",
   "modelHeaders": ["user-agent", "nvcf-poll-seconds"],
   "apis": {
-    "openai-completions": { "suffix": "/chat/completions", "headers": {} },
-    "openai-responses": { "suffix": "/responses", "headers": {} },
-    "openai-codex-responses": {
-      "suffix": "/codex/responses",
-      "headers": {},
-      "nativeHeaders": {
-        "openai-beta": "responses=experimental",
-        "originator": "pi"
-      },
-      "nativeCredentialHeaders": ["authorization", "chatgpt-account-id"],
-      "transport": "sse"
+    "openai-completions": {
+      "suffix": "/chat/completions",
+      "headers": {}
+    },
+    "openai-responses": {
+      "suffix": "/responses",
+      "headers": {}
     },
     "anthropic-messages": {
       "suffix": "/v1/messages?beta=true",

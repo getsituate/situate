@@ -12,7 +12,7 @@ import contracts from "./transport-contract.json";
 import inventory from "./catalog.generated.json";
 const native = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }));
-test("browser models and connection routing keep direct ChatGPT and Codex access distinct", () => {
+test("browser models support direct ChatGPT access", () => {
   expect(openAiBrowserModels.length).toBeGreaterThan(0);
   for (const model of openAiBrowserModels) {
     expect(model.provider).toBe("openai");

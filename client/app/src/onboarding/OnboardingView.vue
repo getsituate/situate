@@ -135,6 +135,7 @@ function input(event: Event) {
         @click="emit('action', 'retry')"
         >{{ t("onboarding.retry") }}</SituateButton
       >
+      <slot name="start-recovery" />
       <div class="source-details">
         <p :id="`${id}-source-help`">
           {{ t("onboarding.conversation.sourceHelp") }}

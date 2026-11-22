@@ -87,11 +87,9 @@ fn every_implemented_connection_method_declares_a_refresh_strategy() {
                 "api_key" => AuthKind::ApiKey,
                 _ => panic!("Unsupported authentication method: {method}"),
             };
-            let refresh = strategy(&config(provider, auth))
-                .unwrap_or_else(|_| panic!("Missing discovery strategy for {provider}/{method}"));
-            assert_eq!(
-                matches!(refresh, ModelRefresh::Bundled),
-                provider == "openai-codex"
+            assert!(
+                strategy(&config(provider, auth)).is_ok(),
+                "{provider}/{method}"
             );
         }
     }
@@ -183,6 +181,32 @@ async fn router_uses_local_offsets_and_never_follows_service_pagination_links() 
     assert!(requests[0].starts_with("GET /models?offset=0&limit=100&output_modalities=text "));
     assert!(requests[1].starts_with("GET /models?offset=1&limit=100&output_modalities=text "));
 }
+#[tokio::test]
+async fn router_observation_keeps_a_large_account_catalog_with_compact_route_limits() {
+    let models = (0..400)
+        .map(|index| {
+            json!({
+                "id": format!("vendor/chat-{index}"),
+                "name": "N".repeat(240),
+                "architecture":{"input_modalities":["text","image"],"output_modalities":["text"]},
+                "supported_parameters":["tools"], "endpoints":["/api/v1/chat/completions"],
+                "context_length": 8192, "top_provider":{"max_completion_tokens":2048}
+            })
+        })
+        .collect::<Vec<_>>();
+    let pages = models
+        .chunks(100)
+        .map(|page| (200, json!({"data":page,"total_count":400})))
+        .collect();
+    let service = server(pages, None).await;
+    let catalog = collect(request_to(&service, Protocol::Router))
+        .await
+        .unwrap();
+    assert_eq!(catalog.models.len(), 400);
+    assert_eq!(catalog.selectable.len(), 400);
+    assert_eq!(catalog.selectable[399].max_tokens, 2048);
+}
+
 #[tokio::test]
 async fn denials_redirects_partial_pages_and_malformed_ids_are_not_authoritative_empty_lists() {
     for (protocol, pages) in [
@@ -316,7 +340,6 @@ fn observed_ids_resolve_symbolic_defaults_without_rewriting_preferences() {
         config: config.clone(),
         key: "synthetic".into(),
         oauth: None,
-        codex: None,
         catalog: Some(Catalog {
             source: Source::Account,
             models: vec!["gpt-4o-mini".into()],
@@ -340,21 +363,35 @@ fn observed_ids_resolve_symbolic_defaults_without_rewriting_preferences() {
     );
 }
 #[tokio::test]
-async fn keyless_custom_discovery_omits_authorization_and_codex_never_substitutes_an_endpoint() {
+async fn keyless_custom_discovery_omits_authorization() {
     let service = server(vec![(200, json!({"data":[{"id":"local-model"}]}))], None).await;
     let mut query = request_to(&service, Protocol::Custom);
     query.secret.clear();
     assert_eq!(collect(query).await.unwrap().models, ["local-model"]);
     assert!(!service.requests.lock().unwrap()[0].contains("authorization:"));
-    let connection = Connection {
-        config: config("openai-codex", AuthKind::Oauth),
-        key: String::new(),
-        oauth: None,
-        codex: None,
-        catalog: None,
-    };
-    assert!(request(&connection).unwrap().is_none());
-    assert_eq!(fetch(&connection).await.source, Source::Static);
+}
+
+#[tokio::test]
+async fn only_an_unsupported_custom_model_endpoint_enables_manual_selection() {
+    let config = config("custom", AuthKind::ApiKey);
+    for (status, source, accepted) in [
+        (404, Source::Manual, true),
+        (500, Source::Unknown, false),
+        (401, Source::Unknown, false),
+        (200, Source::Provider, false),
+    ] {
+        let service = server(vec![(status, json!({"data":[{"id":"listed"}]}))], None).await;
+        let catalog = observe(
+            request_to(&service, Protocol::Custom),
+            Duration::from_secs(2),
+        )
+        .await;
+        assert_eq!(catalog.source, source);
+        assert_eq!(
+            catalog.admits_selection(&config, "unlisted").is_ok(),
+            accepted
+        );
+    }
 }
 
 #[derive(Clone, Default)]
@@ -452,7 +489,6 @@ fn browser() -> Connection {
     Connection {
         config: config("openai", AuthKind::Oauth),
         key: String::new(),
-        codex: None,
         catalog: None,
         oauth: Some(crate::openai_oauth::Credential {
             access: "synthetic-access".into(),
@@ -488,7 +524,6 @@ async fn qualified_live_models_survive_reopen_and_use_only_the_native_provider_t
         config: config("openrouter", AuthKind::ApiKey),
         key: "synthetic-key".into(),
         oauth: None,
-        codex: None,
         catalog: None,
     };
     workspace.save(&connection, false);
@@ -551,173 +586,9 @@ async fn qualified_live_models_survive_reopen_and_use_only_the_native_provider_t
 }
 
 #[tokio::test]
-async fn openai_responses_models_use_public_metadata_without_making_availability_depend_on_it() {
-    use sources::openai_metadata::enrich_from;
-    let direct = server(
-        vec![(
-            200,
-            json!({"models":[
-                {"slug":"gpt-6.2-sol","visibility":"list"},
-                {"slug":"hidden-model","visibility":"hidden"},
-                {"slug":"unreviewed","visibility":"list"}
-            ]}),
-        )],
-        None,
-    )
-    .await;
-    let observed = collect(request_to(&direct, Protocol::Direct))
-        .await
-        .unwrap();
-    let public = server(vec![(200, json!({"openai":{"models":{
-        "gpt-6.2-sol":{"id":"gpt-6.2-sol","tool_call":true,"modalities":{"input":["text"],"output":["text"]},
-        "limit":{"context":250_000,"output":80_000}},
-        "unreviewed":{"id":"unreviewed","tool_call":true,"modalities":{"input":["text"],"output":["text"]},
-        "limit":{"context":250_000,"output":80_000}}
-    }}}))], None).await;
-    let mut enriched = observed.clone();
-    enrich_from(&mut enriched, public.url.clone()).await;
-    {
-        let captured = public.requests.lock().unwrap();
-        assert!(!captured[0].contains("authorization:"));
-        assert!(!captured[0].contains("gpt-6.2-sol"));
-    }
-
-    let config = config("openai", AuthKind::Oauth);
-    assert!(enriched.selectable(&config, "unreviewed").is_none());
-    assert!(enriched.selectable(&config, "hidden-model").is_none());
-    let remote = enriched.selectable(&config, "gpt-6.2-sol").unwrap();
-    assert_eq!(
-        (remote.context_window, remote.max_tokens),
-        (250_000, 80_000)
-    );
-    assert!(!remote.image_input);
-
-    let unavailable = server(vec![(503, json!({}))], None).await;
-    let mut fallback = observed;
-    enrich_from(&mut fallback, unavailable.url.clone()).await;
-    assert_eq!(fallback.models, enriched.models);
-    let model = fallback.selectable(&config, "gpt-6.2-sol").unwrap();
-    assert_eq!(
-        (model.context_window, model.max_tokens),
-        (1_050_000, 128_000)
-    );
-    let workspace = Workspace::new();
-    let storage = workspace.storage();
-    let mut connection = browser();
-    connection.catalog = Some(fallback);
-    workspace.save(&connection, false);
-    let observed = catalog(&connection);
-    model::save_observed(&storage, &connection.config, model.id.clone(), &observed).unwrap();
-    for (saved, effort) in [("off", "medium"), ("recommended", "medium"), ("max", "max")] {
-        let settings = serde_json::from_value(json!({
-            "version":1,"chat":{"model":model.id,"thinking":saved,"catalogRevision":null},
-            "comment":null,"generatedComments":true,"showInlineModel":false
-        }))
-        .unwrap();
-        model::save_current_settings(&storage, &connection, settings).unwrap();
-        let choice = model::admit_workspace(&storage, &connection).unwrap();
-        model::validate_snapshot(&choice, &connection.config).unwrap();
-        let descriptor = native_model::descriptor(&choice).unwrap();
-        assert_eq!(descriptor["reasoning"], true);
-        let request = crate::ai_protocol::build_request(
-            "openai-responses",
-            &descriptor,
-            &choice.thinking,
-            &[],
-            &[],
-            Some(4096),
-        )
-        .unwrap();
-        assert_eq!(request.body["model"], "gpt-6.2-sol");
-        assert_eq!(request.body["reasoning"]["effort"], effort);
-        assert!(request.body.get("max_output_tokens").is_none());
-    }
-    let unsupported = serde_json::from_value(json!({
-        "version":1,"chat":{"model":model.id,"thinking":"minimal","catalogRevision":null},
-        "comment":null,"generatedComments":true,"showInlineModel":false
-    }))
-    .unwrap();
-    assert!(model::save_current_settings(&storage, &connection, unsupported).is_err());
-}
-
-#[tokio::test]
-async fn provider_reported_thinking_survives_reopen_and_uses_each_native_transport() {
-    for (provider, protocol, response, api) in [
-        (
-            "anthropic",
-            Protocol::Anthropic,
-            json!({"has_more":false,"data":[{
-                "id":"new-reasoning-model","type":"model","lifecycle":"active","max_input_tokens":32768,"max_tokens":8192,
-                "capabilities":{"effort":{"supported":true,"low":{"supported":true},"medium":{"supported":true},"max":{"supported":true}},"thinking":{"types":{"adaptive":{"supported":true}}}}
-            }]}),
-            "anthropic-messages",
-        ),
-        (
-            "openrouter",
-            Protocol::Router,
-            json!({"total_count":1,"data":[{
-                "id":"new-reasoning-model","architecture":{"input_modalities":["text"],"output_modalities":["text"]},
-                "supported_parameters":["tools","reasoning"],"endpoints":["/api/v1/chat/completions"],
-                "context_length":32768,"top_provider":{"max_completion_tokens":8192},
-                "reasoning":{"supported_efforts":["max","medium","low","none","unknown"],"mandatory":true,"default_effort":"medium"}
-            }]}),
-            "openai-completions",
-        ),
-    ] {
-        let endpoint = server(vec![(200, response)], None).await;
-        let observed = collect(request_to(&endpoint, protocol)).await.unwrap();
-        let workspace = Workspace::new();
-        let storage = workspace.storage();
-        let mut connection = Connection {
-            config: config(provider, AuthKind::ApiKey),
-            key: "synthetic-key".into(),
-            catalog: None,
-            oauth: None,
-            codex: None,
-        };
-        workspace.save(&connection, false);
-        store_observation(&storage, &workspace.keys, &mut connection, observed).unwrap();
-        let reopened = workspace.load(connection.config.connection_id.as_deref().unwrap());
-        let id = "new-reasoning-model";
-        let observed = catalog(&reopened);
-        let discovered = observed.selectable(&reopened.config, id).unwrap();
-        assert_eq!(
-            discovered.thinking.unwrap().levels,
-            ["low", "medium", "max"]
-        );
-        for (saved, expected) in [("recommended", "medium"), ("max", "max")] {
-            let settings = serde_json::from_value(json!({
-                "version":1,"chat":{"model":id,"thinking":saved,"catalogRevision":null},
-                "comment":null,"generatedComments":true,"showInlineModel":false
-            }))
-            .unwrap();
-            model::save_current_settings(&storage, &reopened, settings).unwrap();
-            let choice = model::admit_workspace(&storage, &reopened).unwrap();
-            let descriptor = native_model::descriptor(&choice).unwrap();
-            let request = crate::ai_protocol::build_request(
-                api,
-                &descriptor,
-                &choice.thinking,
-                &[],
-                &[],
-                None,
-            )
-            .unwrap();
-            if provider == "anthropic" {
-                assert_eq!(request.body["thinking"]["type"], "adaptive");
-                assert_eq!(request.body["output_config"]["effort"], expected);
-            } else {
-                assert_eq!(request.body["reasoning"]["effort"], expected);
-                assert_eq!(request.body["provider"]["require_parameters"], true);
-            }
-        }
-    }
-}
-
-#[tokio::test]
 async fn anthropic_limits_qualify_active_messages_models_but_openai_ids_alone_do_not() {
     let anthropic = server(vec![(200, json!({"has_more":false,"data":[
-        {"id":"claude-new","type":"model","lifecycle":"active","max_input_tokens":8192,"max_tokens":2048},
+        {"id":"claude-new","display_name":"Fixture Claude","type":"model","lifecycle":"active","max_input_tokens":8192,"max_tokens":2048,"capabilities":{"image_input":{"supported":true},"effort":{"medium":{"supported":true}},"thinking":{"types":{"adaptive":{"supported":true},"disabled":{"supported":true}}}}},
         {"id":"claude-no-limits","type":"model","lifecycle":"active"},
         {"id":"claude-old","type":"model","lifecycle":"deprecated","max_input_tokens":8192,"max_tokens":2048}
     ]}))], None).await;
@@ -726,9 +597,24 @@ async fn anthropic_limits_qualify_active_messages_models_but_openai_ids_alone_do
         .unwrap();
     let config = config("anthropic", AuthKind::ApiKey);
     let qualified = observed.selectable(&config, "claude-new").unwrap();
+    assert_eq!(qualified.name.as_deref(), Some("Fixture Claude"));
+    assert!(qualified.image_input);
     let descriptor = qualified.descriptor(&config).unwrap();
     assert_eq!(descriptor["api"], "anthropic-messages");
     assert_eq!(descriptor["maxTokens"], 2048);
+    assert_eq!(qualified.thinking_levels, ["medium"]);
+    assert!(!qualified.supports_thinking("high"));
+    let request = crate::ai_protocol::build_request(
+        "anthropic-messages",
+        &descriptor,
+        "medium",
+        &[],
+        &[],
+        None,
+    )
+    .unwrap();
+    assert_eq!(request.body["thinking"]["type"], "adaptive");
+    assert_eq!(request.body["output_config"]["effort"], "medium");
     assert!(observed.selectable(&config, "claude-no-limits").is_none());
     assert!(observed.selectable(&config, "claude-old").is_none());
 
@@ -856,16 +742,13 @@ async fn rotation_is_durable_before_discovery_and_survives_cancel_denial_and_cac
     assert!(cancel.is_cancelled());
     let mut restored = workspace.load(&id);
     assert_eq!(restored.oauth.as_ref().unwrap().refresh, "rotated-refresh");
-    assert_eq!(
-        request(&restored).unwrap().unwrap().secret,
-        "rotated-access"
-    );
+    assert_eq!(request(&restored).unwrap().secret, "rotated-access");
     let denied = server(vec![(401, json!({}))], None).await;
     let observed = observe(
         Request {
             endpoint: denied.url.clone(),
             protocol: Protocol::Direct,
-            secret: request(&restored).unwrap().unwrap().secret,
+            secret: request(&restored).unwrap().secret,
         },
         Duration::from_secs(1),
     )
@@ -951,7 +834,7 @@ async fn selection_change_during_renewal_keeps_rotation_and_discovery_bound_to_t
     )
     .await;
     let mut query = request_to(&service, Protocol::Direct);
-    query.secret = request(&first).unwrap().unwrap().secret;
+    query.secret = request(&first).unwrap().secret;
     let observed = observe(query, Duration::from_secs(1)).await;
     store_observation(&workspace.storage(), &workspace.keys, &mut first, observed).unwrap();
     assert_eq!(
