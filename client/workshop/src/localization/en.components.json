@@ -86,12 +86,15 @@
   "notice": {
     "ready": "Choose where to keep these notes.",
     "disabled": "Editing is currently unavailable.",
-    "error": "The changes could not be saved. Try again.",
     "loading": "Saving your changes…",
     "empty": "No notes match the current selection.",
     "success": "Your changes have been saved."
   },
   "retry": "Try again",
+  "saveFailure": {
+    "title": "Couldn’t save changes",
+    "body": "Your edits are still here."
+  },
   "emptyTitle": "No notes yet",
   "emptyDescription": "Start with a note you want to return to.",
   "newNote": "Create a note",

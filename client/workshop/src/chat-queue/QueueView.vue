@@ -450,16 +450,9 @@ function keydown(event: KeyboardEvent) {
   cursor: pointer;
   font-size: 14px;
 }
-.pending-message > :deep(summary::before) {
-  content: "›";
+.pending-message > :deep(summary .disclosure-chevron) {
   flex: none;
-  font-size: 20px;
-}
-.pending-message[open] > :deep(summary::before) {
-  transform: rotate(90deg);
-}
-.pending-message > :deep(summary::-webkit-details-marker) {
-  display: none;
+  margin: 0;
 }
 .pending-preview {
   flex: 1;

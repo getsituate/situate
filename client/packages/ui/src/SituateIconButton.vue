@@ -67,6 +67,8 @@ withDefaults(
   </button>
 </template>
 
+<style src="./button-feedback.css"></style>
+
 <style scoped>
 .situate-icon-button {
   display: inline-grid;
@@ -83,10 +85,22 @@ withDefaults(
 }
 .situate-icon-button.primary {
   border-radius: var(--situate-radius-pill);
-  box-shadow: inset 0 0 0 var(--situate-stroke-divider)
-    var(--situate-accent-edge, transparent);
+  box-shadow: var(
+    --situate-pressed-shadow,
+    inset 0 0 0 var(--situate-stroke-divider)
+      var(--situate-accent-edge, transparent)
+  );
   background: var(--situate-accent, var(--situate-ink));
   color: var(--situate-accent-on, var(--situate-surface));
+}
+.situate-icon-button:where([aria-pressed="true"]) {
+  background: var(--situate-accent-soft, var(--situate-lilac));
+  color: var(--situate-accent-strong, var(--situate-violet-deep));
+}
+@media (forced-colors: active) {
+  .situate-icon-button:where([aria-pressed="true"]) {
+    border: 1px solid Highlight;
+  }
 }
 .situate-icon-button:disabled {
   cursor: default;

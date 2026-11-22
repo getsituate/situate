@@ -554,13 +554,30 @@ window.runRecoverySmoke = async (restored) => {
           ?.textContent.includes("Recovery draft stored"),
       "The editor did not acknowledge durable draft staging",
     );
+    const saveError = () => document.querySelector("dialog.error-dialog[open]");
     await wait(
       () =>
-        document
-          .querySelector('.file-notice[role="alert"]')
-          ?.textContent.includes("read-only"),
-      "The target save did not fail",
+        document.querySelector(".save-state")?.textContent.trim() ===
+        "Not saved",
+      "The editor did not report the failed save",
     );
+    if (!saveError()) {
+      const review = await wait(
+        () =>
+          [...document.querySelectorAll(".file-notice button")].find(
+            (button) => button.textContent.trim() === "Review error",
+          ),
+        "The failed save has no recovery action",
+      );
+      review.click();
+    }
+    const error = await wait(saveError, "The file save error did not open");
+    assert(
+      error.querySelector('[role="alert"]')?.textContent.includes("read-only"),
+      "The failed save did not explain that the target is read-only",
+    );
+    error.querySelector("button[autofocus]").click();
+    await wait(() => !saveError(), "The save error did not close");
     assert(
       textarea.value === expected.text,
       "The failed save changed editor text",

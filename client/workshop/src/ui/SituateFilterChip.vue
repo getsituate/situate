@@ -18,9 +18,11 @@ defineExpose({
     :aria-label="removeLabel"
     @click="emit('remove', $event)"
   >
-    <slot /><span aria-hidden="true">×</span>
+    <slot /><span class="filter-chip-remove" aria-hidden="true">×</span>
   </button>
 </template>
+
+<style src="./button-feedback.css"></style>
 
 <style scoped>
 .situate-filter-chip {
@@ -40,7 +42,7 @@ defineExpose({
   overflow-wrap: anywhere;
   cursor: pointer;
 }
-.situate-filter-chip > span {
+.filter-chip-remove {
   flex-shrink: 0;
 }
 .situate-filter-chip:hover:not(:disabled) {

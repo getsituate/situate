@@ -120,6 +120,7 @@ defineExpose({
     :anchor="anchor"
     :point="point"
     :label="label"
+    static-surface
     role="menu"
     class="situate-menu"
     @close="emit('close')"
@@ -130,6 +131,9 @@ defineExpose({
     <slot />
   </SituatePopover>
 </template>
+
+<style src="./button-feedback.css"></style>
+
 <style>
 .situate-menu {
   padding: 4px;

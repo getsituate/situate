@@ -17,6 +17,7 @@ import {
   SituateButton,
   SituateInput,
   SituateCheckbox,
+  SituateEmptyState,
 } from "../ui";
 import SituateSelect from "../ui/SituateSelect.vue";
 import EditorDialog from "../editor/EditorDialog.vue";
@@ -316,14 +317,25 @@ function sources(action: "list" | "create" | "detail", id?: string) {
         @keydown.up.prevent="collectionActions"
       />
     </div>
-    <div v-if="!state.sources.length" class="doc-empty-collection">
-      <SituateIcon name="notes" />
-      <h2>{{ c.empty }}</h2>
-      <p>{{ c.emptyHelp }}</p>
-      <SituateButton variant="primary" size="small" @click="sources('create')">
-        + {{ c.connect }}
-      </SituateButton>
-    </div>
+    <SituateEmptyState
+      v-if="!state.sources.length"
+      class="doc-empty-collection"
+      :description="c.emptyHelp"
+    >
+      <template #title>
+        <SituateIcon name="notes" />
+        <h2>{{ c.empty }}</h2>
+      </template>
+      <template #actions>
+        <SituateButton
+          variant="primary"
+          size="small"
+          @click="sources('create')"
+        >
+          + {{ c.connect }}
+        </SituateButton>
+      </template>
+    </SituateEmptyState>
     <div v-else class="doc-collection-shell">
       <aside
         id="doc-tag-sidebar"
@@ -500,18 +512,25 @@ function sources(action: "list" | "create" | "detail", id?: string) {
               {{ c.retry }}
             </SituateButton>
           </div>
-          <div v-else-if="!matches.length" class="doc-empty">
-            <h3>{{ c.noResults }}</h3>
-            <p>{{ c.noResultsHelp }}</p>
+          <SituateEmptyState
+            v-else-if="!matches.length"
+            class="doc-empty"
+            :description="c.noResultsHelp"
+          >
+            <template #title>
+              <h3>{{ c.noResults }}</h3>
+            </template>
             <p v-if="incomplete(state)">{{ c.incompleteHelp }}</p>
-            <SituateButton
-              variant="secondary"
-              size="small"
-              @click="update(clearSelection)"
-            >
-              {{ c.clear }}
-            </SituateButton>
-          </div>
+            <template #actions>
+              <SituateButton
+                variant="secondary"
+                size="small"
+                @click="clearSearch"
+              >
+                {{ c.clear }}
+              </SituateButton>
+            </template>
+          </SituateEmptyState>
           <ul v-else class="doc-gallery">
             <li v-for="doc in matches" :key="doc.id">
               <SituateButton

@@ -324,7 +324,11 @@ describe("file panes", () => {
     expect(editor.findAll(".file-entry").map((entry) => entry.text())).toEqual([
       "Notes/Garden.md",
     ]);
-    await search.setValue("");
+    await search.setValue("No such file");
+    expect(editor.text()).toContain("⟦files.noMatchingFiles⟧");
+    await button(editor, "⟦files.clearSearch⟧").trigger("click");
+    expect((search.element as HTMLInputElement).value).toBe("");
+    expect(document.activeElement).toBe(search.element);
     expect(button(editor, "Notes").attributes("aria-expanded")).toBe("false");
     expect(editor.findAll(".file-entry")).toHaveLength(0);
   });
@@ -830,6 +834,56 @@ describe("file panes", () => {
     expect(file.text).toBe(source + "\nMore");
     expect(file.text).toContain("custom: [broken");
   });
+  it.each(["editing", "another dialog"] as const)(
+    "keeps a failed write recoverable while %s",
+    async (context) => {
+      const { wrapper, session } = await setup();
+      wrapper.unmount();
+      const editor = await pane(session.id, "Notes/Garden.md");
+      const input = editor.get<HTMLTextAreaElement>("textarea");
+      const implementation = invoke.getMockImplementation()!;
+      let fail = true;
+      invoke.mockImplementation(async (request) => {
+        if (fail && request.operation === "save")
+          throw new Error("files.thisActionDidNotComplete");
+        return implementation(request);
+      });
+      const other = document.createElement("dialog");
+      document.body.append(other);
+      if (context === "another dialog") other.showModal();
+      input.element.focus();
+      await input.setValue("# Retained draft");
+      const file = session.files["Notes/Garden.md"]!;
+      const dialog = () => editor.find(".error-dialog[open]");
+
+      expect(await saveFile(session, file)).toBe(false);
+      await flushPromises();
+      expect(dialog().exists()).toBe(context === "editing");
+      expect(editor.get(".save-state").text()).toBe("⟦files.notSaved⟧");
+      expect(input.element.value).toBe("# Retained draft");
+      if (context === "editing") {
+        await dialog().trigger("cancel");
+        expect(dialog().exists()).toBe(false);
+      } else other.close();
+
+      await button(editor, "⟦errorRecovery.review⟧").trigger("click");
+      expect(dialog().exists()).toBe(true);
+      const retry = () => button(dialog(), "⟦navigation.retry⟧");
+      await retry().trigger("click");
+      await flushPromises();
+      expect(dialog().exists()).toBe(true);
+      expect(input.element.value).toBe("# Retained draft");
+
+      fail = false;
+      retry().element.focus();
+      await retry().trigger("click");
+      await flushPromises();
+      expect(dialog().exists()).toBe(false);
+      expect(editor.get(".save-state").text()).toBe("⟦files.saved⟧");
+      expect(input.element.value).toBe("# Retained draft");
+      expect(document.activeElement).toBe(input.element);
+    },
+  );
   it("keeps an outstanding save and newer shared edits when its pane unmounts", async () => {
     const { wrapper, session } = await setup();
     wrapper.unmount();

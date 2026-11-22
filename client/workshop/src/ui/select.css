@@ -55,6 +55,15 @@
   width: 16px;
   height: 16px;
 }
+.situate-select-trigger[aria-expanded="true"] .select-chevron svg {
+  rotate: 180deg;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .situate-select-trigger:enabled .select-chevron svg {
+    transition: rotate var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
+}
 .situate-select-trigger:focus-visible,
 .select-close:focus-visible {
   outline: var(--situate-stroke-focus) solid var(--situate-cobalt);

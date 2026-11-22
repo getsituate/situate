@@ -153,6 +153,10 @@ for (const accent of accents) {
           const list = page.getByRole("listbox");
           await expect(list).toBeFocused();
           await expect(control).toHaveAttribute("aria-expanded", "true");
+          await expect(control.locator(".select-chevron svg")).toHaveCSS(
+            "rotate",
+            "180deg",
+          );
           await check("open");
           const selected = page.getByRole("option", {
             name: "English",

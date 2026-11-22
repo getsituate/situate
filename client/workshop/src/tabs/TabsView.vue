@@ -942,13 +942,27 @@ defineExpose({ focusPaneHeader });
   background: var(--situate-accent-soft, var(--situate-lilac));
   font-weight: 600;
 }
-.topic-tab.selected::after {
+.topic-tab::after {
   content: "";
   position: absolute;
   inset: auto 16px 0;
   height: 2px;
   background: var(--situate-accent-strong, var(--situate-violet-deep));
+  visibility: hidden;
   pointer-events: none;
+}
+.topic-tab.selected::after {
+  visibility: visible;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .topic-tab::after {
+    transform: scaleX(0.35);
+  }
+  .topic-tab.selected::after {
+    transform: scaleX(1);
+    transition: transform var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
 }
 .topic-tab-select > span {
   overflow: hidden;

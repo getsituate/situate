@@ -384,6 +384,7 @@
   "files.findAFileDetail": "Datei suchen",
   "files.loadingFiles": "Dateien werden geladen…",
   "files.loadingDocument": "Datei wird geladen…",
+  "files.clearSearch": "Suche zurücksetzen",
   "files.noMatchingFiles": "Keine passenden Dateien.",
   "files.noFilesYet": "Noch keine Dateien.",
   "files.document": "Dokument",

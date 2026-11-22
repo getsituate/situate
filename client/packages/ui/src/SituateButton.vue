@@ -61,6 +61,8 @@ defineExpose({
   </button>
 </template>
 
+<style src="./button-feedback.css"></style>
+
 <style scoped>
 .situate-button {
   min-width: 0;

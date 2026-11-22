@@ -9,6 +9,7 @@ const props = defineProps<{
   point?: { x: number; y: number };
   align?: "start" | "end";
   maxHeight?: number;
+  staticSurface?: boolean;
 }>();
 const emit = defineEmits<{ close: [] }>();
 const element = ref<HTMLElement>();
@@ -35,14 +36,25 @@ function position() {
   popup.style.maxWidth = `${Math.max(0, right - left)}px`;
   popup.style.maxHeight = `${Math.max(0, Math.min(bottom - top, props.maxHeight ?? Infinity))}px`;
   const y = props.point?.y ?? (anchor?.bottom ?? top) + 4;
-  const above = (anchor?.top ?? top) - popup.offsetHeight - 4;
+  const height = popup.offsetHeight;
+  const above = (anchor?.top ?? top) - height - 4;
   const x =
     props.point?.x ??
     (props.align === "start"
       ? (anchor?.left ?? left)
       : (anchor?.right ?? left + popup.offsetWidth) - popup.offsetWidth);
   popup.style.left = `${Math.max(left, Math.min(right - popup.offsetWidth, x))}px`;
-  popup.style.top = `${Math.max(top, Math.min(bottom - popup.offsetHeight, !props.point && y + popup.offsetHeight > bottom ? above : y))}px`;
+  const opensAbove = !props.point && y + height > bottom;
+  const placement = Math.max(
+    top,
+    Math.min(bottom - height, opensAbove ? above : y),
+  );
+  popup.style.top = `${placement}px`;
+  if (anchor)
+    popup.style.setProperty(
+      "--popover-approach",
+      placement < anchor.bottom ? "3px" : "-3px",
+    );
 }
 function dismiss(restore = true) {
   if (closing || !props.open) return;
@@ -183,6 +195,7 @@ defineExpose({ element, dismiss });
       role="dialog"
       tabindex="-1"
       :popover="point ? 'manual' : 'auto'"
+      :data-anchored="(anchor && !point && !staticSurface) || undefined"
       class="situate-popover"
       :aria-label="label"
       v-bind="$attrs"
@@ -209,5 +222,16 @@ defineExpose({ element, dismiss });
   color: var(--situate-ink);
   font: 14px/1.5 var(--situate-font-body);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--situate-ink) 10%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .situate-popover[data-anchored]:popover-open {
+    animation: popover-arrival var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
+  @keyframes popover-arrival {
+    from {
+      translate: 0 var(--popover-approach);
+    }
+  }
 }
 </style>

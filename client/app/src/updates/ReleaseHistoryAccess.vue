@@ -18,6 +18,7 @@ async function show(event: MouseEvent) {
   <SituateDialog
     :open="open"
     class="release-dialog"
+    fade-backdrop
     aria-labelledby="release-history-title"
     @cancel.prevent="open = false"
   >

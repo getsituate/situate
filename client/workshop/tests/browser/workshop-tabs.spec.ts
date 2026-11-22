@@ -46,6 +46,72 @@ test("tab focus and active pane contours stay inside their surfaces", async ({
   await expect(tab).toHaveCSS("outline-offset", "-3px");
 });
 
+test("only the newly selected tab settles while its panel opens immediately", async ({
+  page,
+}, info) => {
+  const preview = await open(page, "tabs-multiple-topics");
+  const tabs = preview.getByRole("tab");
+  const active = preview.getByRole("tab", { selected: true });
+  const marker = (tab: Locator) =>
+    tab.evaluate((element) => {
+      const style = getComputedStyle(element.parentElement!, "::after");
+      return {
+        visibility: style.visibility,
+        transform: style.transform,
+        duration: style.transitionDuration,
+      };
+    });
+
+  await preview.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(tabs).toHaveCount(3);
+  await expect
+    .poll(() => marker(active))
+    .toEqual({
+      visibility: "visible",
+      transform: "matrix(1, 0, 0, 1, 0, 0)",
+      duration: "0.16s",
+    });
+  const first = tabs.nth(0);
+  const second = tabs.nth(1);
+  await first.click();
+
+  // Slow the transition so the in-flight assertions do not depend on frame timing.
+  await preview.addStyleTag({
+    content: ".topic-window { --situate-duration-feedback: 5s; }",
+  });
+  await second.click();
+  await expect(second).toHaveAttribute("aria-selected", "true");
+  const panel = await second.getAttribute("aria-controls");
+  await expect(preview.getByRole("tabpanel")).toHaveAttribute("id", panel!);
+  expect((await marker(first)).visibility).toBe("hidden");
+  expect(await marker(second)).toMatchObject({
+    visibility: "visible",
+    duration: "5s",
+  });
+  expect((await marker(second)).transform).not.toBe("matrix(1, 0, 0, 1, 0, 0)");
+  await preview.locator(".tab-header").screenshot({
+    path: info.outputPath("tab-selection.png"),
+  });
+
+  await second.press("ArrowRight");
+  await expect(tabs.nth(2)).toBeFocused();
+  await expect(tabs.nth(2)).toHaveAttribute("aria-selected", "true");
+  expect((await marker(second)).visibility).toBe("hidden");
+
+  await preview.emulateMedia({ reducedMotion: "reduce" });
+  await expect
+    .poll(() => marker(active))
+    .toEqual({
+      visibility: "visible",
+      transform: "none",
+      duration: "0s",
+    });
+  await tabs.nth(2).press("Home");
+  await expect(first).toBeFocused();
+  await expect(first).toHaveAttribute("aria-selected", "true");
+  expect((await marker(first)).transform).toBe("none");
+});
+
 async function expectCenteredCloseIcon(close: Locator) {
   const offset = await close.evaluate((button) => {
     const target = button.getBoundingClientRect();

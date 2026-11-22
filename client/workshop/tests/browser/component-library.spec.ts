@@ -21,6 +21,305 @@ async function open(page: Page, state = "ready") {
   return preview;
 }
 
+const topPressShadow = /0px 3px 2px -1px inset/;
+
+test("buttons acknowledge a press without moving the target or committing early", async ({
+  page,
+}, info) => {
+  const preview = await open(page);
+  const actions = preview.locator("#library-actions");
+  const count = actions.locator("[data-component='SituateIconButton'] output");
+  const button = actions.getByRole("button", { name: "Cancel", exact: true });
+  const iconButton = actions
+    .getByRole("button", { name: "Add to collection", exact: true })
+    .first();
+  const icon = iconButton.locator("svg");
+
+  await preview.emulateMedia({ reducedMotion: "no-preference" });
+  await button.hover();
+  const buttonBounds = await button.boundingBox();
+  const hoverFill = await button.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await preview.mouse.down();
+  await expect(button).toHaveCSS("background-color", hoverFill);
+  await expect(button).toHaveCSS("box-shadow", topPressShadow);
+  expect(await button.boundingBox()).toEqual(buttonBounds);
+  await expect(count).toHaveText("Actions taken: 0");
+  await preview.screenshot({ path: info.outputPath("button-pressed.png") });
+  await preview.mouse.up();
+  await expect(count).toHaveText("Actions taken: 1");
+  await expect(button).toHaveCSS("box-shadow", "none");
+
+  await button.hover();
+  await preview.mouse.down();
+  await preview.mouse.move(0, 0);
+  await preview.mouse.up();
+  await expect(count).toHaveText("Actions taken: 1");
+
+  const filter = preview.getByRole("button", { name: "Remove Garden filter" });
+  await filter.hover();
+  await preview.mouse.down();
+  await expect(filter.getByText("×")).toHaveCSS("translate", "0px 1px");
+  await expect(filter).toHaveCSS("box-shadow", topPressShadow);
+  await preview.mouse.up();
+  await expect(filter).toHaveCount(0);
+
+  await iconButton.hover();
+  const iconButtonBounds = await iconButton.boundingBox();
+  await preview.mouse.down();
+  await expect(icon).toHaveCSS("translate", "0px 1px");
+  expect(await iconButton.boundingBox()).toEqual(iconButtonBounds);
+  await preview.emulateMedia({ reducedMotion: "reduce" });
+  await expect(icon).toHaveCSS("translate", "none");
+  await expect(iconButton).toHaveCSS("box-shadow", topPressShadow);
+  await expect(iconButton).toHaveCSS("transition-duration", "0s");
+  await preview.mouse.up();
+  await expect(count).toHaveText("Actions taken: 2");
+
+  await button.focus();
+  await preview.keyboard.down("Space");
+  await expect(button).toBeFocused();
+  await expect(count).toHaveText("Actions taken: 2");
+  await expect(button).toHaveCSS("box-shadow", /inset/);
+  await preview.keyboard.up("Space");
+  await expect(count).toHaveText("Actions taken: 3");
+});
+
+test("styled buttons share a pressed edge without replacing their colors", async ({
+  page,
+}) => {
+  const preview = await open(page);
+  await preview.emulateMedia({ reducedMotion: "reduce" });
+  const actions = preview.locator("#library-actions");
+  const readAppearance = (element: Element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      border: style.borderTopColor,
+      text: style.color,
+      shadow: style.boxShadow,
+    };
+  };
+  let edge: string | undefined;
+  for (const label of [
+    "Cancel",
+    "Save",
+    "More",
+    "Remove",
+    "Add tag",
+    "Note actions",
+  ]) {
+    const button = actions.getByRole("button", { name: label, exact: true });
+    await button.hover();
+    const hovered = await button.evaluate(readAppearance);
+    await preview.mouse.down();
+    const appearance = await button.evaluate(readAppearance);
+    expect(appearance, label).toEqual({
+      ...hovered,
+      shadow: expect.stringMatching(topPressShadow),
+    });
+    edge ??= appearance.shadow;
+    expect(appearance.shadow, label).toBe(edge);
+    await expect(button).toHaveCSS("transition-duration", "0s");
+    await preview.mouse.move(0, 0);
+    await preview.mouse.up();
+  }
+
+  const plain = actions.getByRole("button", {
+    name: "Read details",
+    exact: true,
+  });
+  await plain.hover();
+  const hovered = await plain.evaluate(readAppearance);
+  await preview.mouse.down();
+  expect(await plain.evaluate(readAppearance)).toEqual(hovered);
+  await preview.mouse.move(0, 0);
+  await preview.mouse.up();
+});
+
+test("the button edge builds during a hold and quick clicks execute immediately", async ({
+  page,
+}) => {
+  const preview = await open(page);
+  await preview.emulateMedia({ reducedMotion: "no-preference" });
+  const cancel = preview.getByRole("button", { name: "Cancel", exact: true });
+  await cancel.hover();
+  await expect(cancel).toHaveCSS("transition-duration", "0.08s");
+  await preview.mouse.down();
+  await expect(cancel).toHaveCSS("transition-duration", "0.1s");
+  await preview.mouse.move(0, 0);
+  await preview.mouse.up();
+
+  const slowMotion = await preview.addStyleTag({
+    content:
+      "#library-actions .situate-button:active { transition-duration: 10s !important; }",
+  });
+  await cancel.hover();
+  const idle = await cancel.evaluate(
+    (element) => getComputedStyle(element).boxShadow,
+  );
+  await preview.mouse.down();
+  const [early, held] = await cancel.evaluate((element) => {
+    const style = getComputedStyle(element);
+    void style.boxShadow;
+    const edge = element
+      .getAnimations()
+      .find(
+        (animation) =>
+          animation instanceof CSSTransition &&
+          animation.transitionProperty === "box-shadow",
+      )!;
+    edge.pause();
+    return [3000, 10000].map((time) => {
+      edge.currentTime = time;
+      return style.boxShadow;
+    });
+  });
+  expect(early).not.toBe(idle);
+  expect(early).not.toBe(held);
+  expect(held).toMatch(topPressShadow);
+  await preview.mouse.move(0, 0);
+  await preview.mouse.up();
+  await slowMotion.evaluate((element) =>
+    element.parentNode?.removeChild(element),
+  );
+  await expect(cancel).toHaveCSS("box-shadow", "none");
+
+  await cancel.click();
+  await expect(
+    preview.locator('[data-component="SituateIconButton"] output'),
+  ).toHaveText("Actions taken: 1");
+});
+
+test("state changes are immediate while indicators settle, with or without motion", async ({
+  page,
+}, info) => {
+  const preview = await open(page);
+  await preview.emulateMedia({ reducedMotion: "no-preference" });
+  const reminders = preview.getByRole("switch", { name: "Show reminders" });
+  const thumb = () =>
+    reminders.evaluate((element) => {
+      const style = getComputedStyle(element, "::before");
+      return { left: style.left, duration: style.transitionDuration };
+    });
+  await expect.poll(thumb).toEqual({ left: "20px", duration: "0.16s" });
+  await reminders.press("Space");
+  await expect(reminders).not.toBeChecked();
+  await expect.poll(thumb).toEqual({ left: "4px", duration: "0.16s" });
+
+  const disclosure = preview.locator('[data-component="SituateDisclosure"]');
+  const chevron = disclosure.locator("svg");
+  await disclosure.locator("summary").press("Enter");
+  await expect(disclosure.locator("p")).toBeVisible();
+  await expect(chevron).toHaveCSS("rotate", "0deg");
+  await expect(chevron).toHaveCSS("transition-duration", "0.16s");
+  await preview.screenshot({ path: info.outputPath("open-disclosure.png") });
+
+  const select = preview.locator(
+    '[data-component="SituateSelect"] .situate-select-trigger',
+  );
+  const selectChevron = select.locator("svg");
+  await select.click();
+  await expect(preview.getByRole("listbox")).toBeVisible();
+  await expect(selectChevron).toHaveCSS("rotate", "180deg");
+  await preview.keyboard.press("ArrowDown");
+  await expect(
+    preview.getByRole("option", { name: "Garden journal" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await preview.emulateMedia({ reducedMotion: "reduce" });
+  await expect(selectChevron).toHaveCSS("transition-duration", "0s");
+  await expect(chevron).toHaveCSS("transition-duration", "0s");
+  await expect.poll(thumb).toEqual({ left: "4px", duration: "0s" });
+  await preview.keyboard.press("Escape");
+  await expect(select).toBeFocused();
+
+  await preview.emulateMedia({ reducedMotion: "no-preference" });
+  const progress = preview.getByRole("progressbar", { name: "Notes prepared" });
+  const fill = progress.locator("span");
+  await expect(fill).toHaveCSS("transition-duration", "0.16s");
+  await chooseSelect(
+    page.getByLabel("Example state", { exact: true }),
+    "success",
+  );
+  await expect(progress).toHaveAttribute("aria-valuenow", "5");
+  await expect(fill).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  await preview.emulateMedia({ reducedMotion: "reduce" });
+  await expect(fill).toHaveCSS("transition-duration", "0s");
+});
+
+test("anchored help settles from the trigger while menus and dialog content remain still", async ({
+  page,
+}, info) => {
+  const preview = await open(page);
+  await preview.emulateMedia({ reducedMotion: "no-preference" });
+  const trigger = preview.getByRole("button", {
+    name: "About this collection",
+  });
+  const popup = preview.getByRole("dialog", { name: "About this collection" });
+  for (const [block, direction] of [
+    ["start", "-3px"],
+    ["end", "3px"],
+  ] as const) {
+    await trigger.evaluate(
+      (element, block) => element.scrollIntoView({ block }),
+      block,
+    );
+    await trigger.click();
+    await expect(popup.getByRole("button")).toBeFocused();
+    await expect(popup).toHaveCSS("animation-duration", "0.16s");
+    expect(
+      await popup.evaluate((element) =>
+        element.style.getPropertyValue("--popover-approach"),
+      ),
+    ).toBe(direction);
+    await popup.screenshot({ path: info.outputPath(`popover-${block}.png`) });
+    await preview.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+  }
+
+  const menuTrigger = preview.getByRole("button", { name: "Note actions" });
+  await menuTrigger.hover();
+  const triggerHover = await menuTrigger.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await preview.mouse.down();
+  await expect(menuTrigger).toHaveCSS("background-color", triggerHover);
+  await expect(menuTrigger).toHaveCSS("box-shadow", topPressShadow);
+  await preview.mouse.up();
+  const menu = preview.getByRole("menu", { name: "Note actions" });
+  const item = menu.getByRole("menuitem", { name: "Add to reading list" });
+  await expect(item).toBeFocused();
+  await expect(menu).toHaveCSS("animation-name", "none");
+  await item.hover();
+  const itemHover = await item.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await preview.mouse.down();
+  await expect(item).toHaveCSS("background-color", itemHover);
+  await expect(item).toHaveCSS("box-shadow", topPressShadow);
+  await preview.screenshot({ path: info.outputPath("menu-item-pressed.png") });
+  await preview.mouse.up();
+  await expect(menu).not.toBeVisible();
+
+  const dialogTrigger = preview.getByRole("button", { name: "Open dialog" });
+  const dialog = preview.getByRole("dialog", { name: "Keep these notes?" });
+  await dialogTrigger.click();
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await expect(dialog).toHaveCSS("animation-name", "none");
+  const backdropMotion = () =>
+    dialog.evaluate(
+      (element) => getComputedStyle(element, "::backdrop").animationDuration,
+    );
+  await expect.poll(backdropMotion).toBe("0.16s");
+  await preview.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(backdropMotion).toBe("0s");
+  await preview.keyboard.press("Escape");
+  await expect(dialogTrigger).toBeFocused();
+  await trigger.click();
+  await expect(popup).toHaveCSS("animation-name", "none");
+});
+
 test("renders every library component and follows example actions, recovery and reset", async ({
   page,
 }, info) => {
@@ -98,7 +397,17 @@ test("renders every library component and follows example actions, recovery and 
   await page
     .getByRole("button", { name: "Fail example action", exact: true })
     .click();
-  await preview.getByRole("button", { name: "Try again", exact: true }).click();
+  const failure = preview.getByRole("dialog", {
+    name: "Couldn’t save changes",
+  });
+  await expect(failure.getByRole("button", { name: "Cancel" })).toBeFocused();
+  expect(
+    await failure.evaluate(
+      (element) => getComputedStyle(element, "::backdrop").animationName,
+    ),
+  ).toBe("none");
+  await failure.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(failure).not.toBeVisible();
   await page
     .getByRole("button", { name: "Complete example action", exact: true })
     .click();
@@ -329,6 +638,11 @@ test("extended controls retain selection, focus, dismissal and reset", async ({
     "aria-checked",
     "true",
   );
+  await expect(
+    preview.locator(
+      '[data-component="SituateIconButton"] button[aria-pressed]',
+    ),
+  ).toHaveAttribute("aria-pressed", "true");
   await preview.screenshot({ path: info.outputPath("components-menu.png") });
   await preview.keyboard.press("Escape");
   await expect(menuTrigger).toBeFocused();
@@ -358,9 +672,14 @@ test("extended controls retain selection, focus, dismissal and reset", async ({
     page.getByLabel("Example state", { exact: true }),
     "loading",
   );
-  await expect(
-    preview.getByRole("progressbar", { name: "Notes prepared" }),
-  ).not.toHaveAttribute("aria-valuenow");
+  const indeterminate = preview.getByRole("progressbar", {
+    name: "Notes prepared",
+  });
+  await expect(indeterminate).not.toHaveAttribute("aria-valuenow");
+  await expect(indeterminate.locator("span")).toHaveCSS(
+    "transition-duration",
+    "0s",
+  );
   await page
     .getByRole("button", { name: "Complete example action", exact: true })
     .click();

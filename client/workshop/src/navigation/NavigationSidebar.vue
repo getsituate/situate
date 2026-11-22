@@ -322,11 +322,9 @@ h2 {
   font-size: 13px;
   cursor: pointer;
 }
-:deep(summary)::before {
-  content: "›";
-}
-details[open] > :deep(summary)::before {
-  content: "⌄";
+:deep(summary .disclosure-chevron) {
+  flex: none;
+  margin: 0;
 }
 :deep(summary) span {
   margin-left: auto;

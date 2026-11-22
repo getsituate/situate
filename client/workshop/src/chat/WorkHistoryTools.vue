@@ -28,7 +28,7 @@ const groupState = computed(() =>
 </script>
 
 <template>
-  <SituateDisclosure class="history-tools">
+  <SituateDisclosure class="history-tools" custom-indicator>
     <template #label>
       <SituateIcon :name="category === 'read' ? 'notes' : 'folder'" />
       <span>{{ historyToolLabel(calls, category, locale) }}</span>
@@ -42,6 +42,7 @@ const groupState = computed(() =>
         v-for="call in calls"
         :key="call.id"
         class="history-call"
+        custom-indicator
       >
         <template #label>
           <span class="call-label">{{ historyCallLabel(call, locale) }}</span>
@@ -116,6 +117,12 @@ const groupState = computed(() =>
   font-size: 18px;
   line-height: 1;
   margin-inline-start: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .history-chevron {
+    transition: transform var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
 }
 .history-tools[open] > :deep(summary) > .history-chevron,
 .history-call[open] > :deep(summary) > .history-chevron {

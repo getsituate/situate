@@ -11,7 +11,7 @@ import dialogActions from "./SituateDialogActions.vue?raw";
 import checkbox from "./SituateCheckbox.vue?raw";
 import radio from "./SituateRadio.vue?raw";
 import { readFileSync } from "node:fs";
-import { list } from "postcss";
+import { list, parse as parseCss } from "postcss";
 const textControl = readFileSync("src/ui/text-control.css", "utf8");
 
 // A class inside :where has zero specificity, including Vue's injected scope attribute.
@@ -33,20 +33,20 @@ describe("primitive style specificity", () => {
     "%s defaults outrank native element resets without increasing state specificity",
     (name, source) => {
       const { descriptor } = parse(source);
-      const result = compileStyle({
-        source: descriptor.styles[0].content,
+      const sourceStyles = descriptor.styles.filter(({ scoped }) => scoped);
+      const compiled = compileStyle({
         filename: `${name}.vue`,
-        id: "data-v-probe",
+        source: sourceStyles.map(({ content }) => content).join("\n"),
         scoped: true,
+        id: "data-v-probe",
       });
-      expect(result.errors).toEqual([]);
-      const selectors = result.code.match(/[^{}]+(?=\{)/g) ?? [];
-      expect(selectors.length).toBeGreaterThan(0);
-      for (const selector of selectors) {
-        for (const branch of list.comma(selector.trim())) {
-          expect(branch).toMatch(/^\.situate-/);
-          expect(branch).toMatch(/\[data-v-probe(?:-s)?\]/);
-        }
+      expect(compiled.errors).toEqual([]);
+      const defaults = parseCss(compiled.code).nodes.flatMap((node) =>
+        node.type === "rule" ? list.comma(node.selector) : [],
+      );
+      expect(defaults.length).toBeGreaterThan(0);
+      for (const selector of defaults) {
+        expect(selector).toMatch(/^\.situate-.*\[data-v-probe(?:-s)?\]/);
       }
     },
   );

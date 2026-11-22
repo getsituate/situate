@@ -187,7 +187,7 @@ textarea::placeholder {
 .draft-dot {
   margin-inline-start: auto;
 }
-.tree-empty {
+.file-tree .tree-empty {
   padding: 20px 12px;
   color: var(--situate-muted);
   font-size: 13px;

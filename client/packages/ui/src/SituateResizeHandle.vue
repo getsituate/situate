@@ -212,6 +212,12 @@ onBeforeUnmount(() => {
   ):where(:focus-visible, [data-input-modality="keyboard"] *)::after {
   background: var(--situate-accent-strong, var(--situate-violet-deep));
 }
+.vertical[data-dragging]::after {
+  transform: scaleX(1.67);
+}
+.horizontal[data-dragging]::after {
+  transform: scaleY(1.67);
+}
 .situate-resize-handle:focus {
   outline: none;
 }

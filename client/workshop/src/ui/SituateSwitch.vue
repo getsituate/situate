@@ -76,6 +76,11 @@ defineExpose({
   opacity: 0.55;
   cursor: default;
 }
+@media (prefers-reduced-motion: no-preference) {
+  .situate-switch:enabled::before {
+    transition: left var(--situate-duration-feedback) var(--situate-ease-settle);
+  }
+}
 @media (forced-colors: active) {
   .situate-switch {
     appearance: auto;

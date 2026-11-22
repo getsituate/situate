@@ -60,6 +60,64 @@ async function browse(page: Page): Promise<void> {
       })
       .click();
 }
+test("clearing an empty file search restores results and search focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await filesFixture(page);
+  await enterFiles(page);
+  const search = page.getByRole("searchbox", {
+    name: keyLabel("files.findAFileDetail"),
+  });
+  await search.fill("A file that does not exist");
+  await expect(page.getByText(keyLabel("files.noMatchingFiles"))).toBeVisible();
+  await page
+    .getByRole("button", { name: keyLabel("files.clearSearch") })
+    .click();
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Garden.md", exact: true }),
+  ).toBeVisible();
+});
+
+test("a save error can be dismissed and retried without losing the draft", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await filesFixture(page, { failSave: true });
+  await enterFiles(page);
+  const input = await source(page);
+  await input.fill("# Keep this draft");
+  const error = page.getByRole("dialog", {
+    name: keyLabel("errorRecovery.operationTitle"),
+  });
+  const dismiss = error.getByRole("button", {
+    name: keyLabel("errorRecovery.dismiss"),
+  });
+  await expect(dismiss).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(error).not.toBeVisible();
+  await expect(input).toHaveValue("# Keep this draft");
+  await expect(input).toBeFocused();
+  await expect(page.locator(".save-state")).toHaveText(
+    keyLabel("files.notSaved"),
+  );
+  const review = page.getByRole("button", {
+    name: keyLabel("errorRecovery.review"),
+  });
+  await review.click();
+  await page.evaluate(() => window.__filesTest.setFailure(false));
+  await error
+    .getByRole("button", { name: keyLabel("navigation.retry") })
+    .click();
+  await expect(error).not.toBeVisible();
+  await expect(review).toBeHidden();
+  await expect(page.locator(".save-state")).toHaveText(keyLabel("files.saved"));
+  await expect(input).toHaveValue("# Keep this draft");
+  await expect(input).toBeFocused();
+});
+
 async function deletedFiles(page: Page): Promise<void> {
   await browse(page);
   await page
