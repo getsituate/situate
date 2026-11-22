@@ -309,10 +309,21 @@ test("creator can follow a successful aggregate when unselected lanes were skipp
   );
 });
 
-test("paused release skips planning and source work while only effect jobs share serialization", () => {
+test("macOS release runs serialize before planning, separately from publication effects", () => {
   const workflow = read("release-macos"),
     publisher = read("publish-macos");
-  assert.doesNotMatch(workflow.split("jobs:")[0], /concurrency:/);
+  assert.match(
+    workflow.split("jobs:")[0],
+    /^concurrency:\n {2}group: situate-release-create\n {2}cancel-in-progress: false$/m,
+  );
+  for (const effect of [job(workflow, "create"), job(publisher, "publish")]) {
+    assert.match(effect, /group: situate-release-effects/);
+    assert.match(effect, /cancel-in-progress: false/);
+  }
+});
+
+test("paused releases skip planning and source work", () => {
+  const workflow = read("release-macos");
   const plan = job(workflow, "plan");
   assert.match(plan, /environment: macos-release/);
   assert.match(plan, /release-selection --workflow create/);
@@ -321,10 +332,6 @@ test("paused release skips planning and source work while only effect jobs share
   for (const id of Object.keys(laneHosts)) {
     assert.match(job(workflow, id), /needs\.plan\.outputs\.enabled == 'true'/);
     assert.doesNotMatch(job(workflow, id), /concurrency:/);
-  }
-  for (const effect of [job(workflow, "create"), job(publisher, "publish")]) {
-    assert.match(effect, /group: situate-release-effects/);
-    assert.match(effect, /cancel-in-progress: false/);
   }
 });
 
