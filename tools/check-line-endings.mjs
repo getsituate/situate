@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-const entries = execFileSync("git", ["ls-files", "--eol", "-z"], {
+const entries = execFileSync("/usr/bin/git", ["ls-files", "--eol", "-z"], {
   encoding: "utf8",
   maxBuffer: 16 * 1024 * 1024,
 });
