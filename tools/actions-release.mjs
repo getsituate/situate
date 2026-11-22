@@ -7,6 +7,7 @@ import {
   trustedReleaseCacheHost,
   releaseCachePaths,
 } from "./release-build-cache.mjs";
+import { assertLatestMain } from "./pipeline-operations.mjs";
 
 const repository = "getsituate/situate";
 const positive = /^[1-9][0-9]*$/;
@@ -29,6 +30,22 @@ export function requireProvisioned(env, workflow) {
       "Release automation is blocked: attested provisioning, protected main and the exact trusted workflow are required.",
     );
 }
+export async function releaseSourceIsCurrent(env, execute) {
+  requireProvisioned(env, "create");
+  if (!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? ""))
+    throw new Error("Invalid release source revision.");
+  try {
+    await assertLatestMain(
+      { repository, source: env.GITHUB_SHA },
+      { environment: env, execute },
+    );
+    return true;
+  } catch (error) {
+    if (error.code !== "RELEASE_SOURCE_SUPERSEDED") throw error;
+    return false;
+  }
+}
+
 function stateDirectory(env, workflow, create = false) {
   if (
     !positive.test(env.GITHUB_RUN_ID ?? "") ||

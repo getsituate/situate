@@ -703,6 +703,7 @@ test("verification delegates selected lanes directly from planning without optio
       "rust",
       "macos-code",
       "browser",
+      "browser-webkit",
       "macos-native",
       "macos-compatibility",
     ]) {
@@ -773,6 +774,7 @@ test("verification delegates selected lanes directly from planning without optio
         "rust",
         "macos-code",
         "browser",
+        "browser-webkit",
         "macos-native",
         "macos-compatibility",
       ].sort(),

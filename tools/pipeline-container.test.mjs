@@ -72,6 +72,33 @@ except ValueError as error:
   }
 });
 
+test("both browser lanes pin AMD64 through the local and hosted launchers", () => {
+  const platforms = python(`platforms=[]
+class SelectedPlatform(Exception): pass
+
+def capture(lock, arch=None):
+    platforms.append(arch)
+    raise SelectedPlatform
+
+m.image_platform = capture
+for lane in ('browser', 'browser-webkit', 'frontend'):
+    for args in (['lane', 'verify', 'plan.json', lane, 'receipt.json'],
+                 ['actions', 'lane', '--workflow', 'verify', '--lane', lane]):
+        try:
+            m.main(args, {})
+        except SelectedPlatform:
+            pass
+print(json.dumps(platforms))`);
+  assert.deepEqual(platforms, [
+    "x86_64",
+    "x86_64",
+    "x86_64",
+    "x86_64",
+    null,
+    null,
+  ]);
+});
+
 test("tool containers isolate dependencies and credentials and retain their owner identity", (t) => {
   const root = fixture(t);
   writeFileSync(join(root, ".env"), "PRIVATE_SYNTHETIC_INPUT=fixture");

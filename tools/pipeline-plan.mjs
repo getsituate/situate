@@ -91,11 +91,11 @@ const families = [
     "linux",
     [
       "client-browser-chromium",
-      "client-browser-webkit",
       "client-executor-integration",
       "design-website-browser",
     ],
   ],
+  ["browser-webkit", "linux", ["client-browser-webkit-smoke"]],
   [
     "macos-native",
     "macos",
@@ -146,6 +146,7 @@ function select(paths, { mode, inventory, appImpact }) {
         "frontend",
         "rust",
         "browser",
+        "browser-webkit",
         "macos-code",
         "macos-native",
         "macos-compatibility",
@@ -171,6 +172,7 @@ function select(paths, { mode, inventory, appImpact }) {
       [
         "rust",
         "browser",
+        "browser-webkit",
         "macos-code",
         "macos-native",
         "macos-compatibility",

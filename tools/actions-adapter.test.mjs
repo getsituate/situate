@@ -87,7 +87,7 @@ test("optional diagnostics separate portable coverage, native coverage and Docke
   for (const id of [
     "root-swift",
     "client-browser-chromium",
-    "client-browser-webkit",
+    "client-browser-webkit-smoke",
     "client-core",
     "dev-tui-unit",
   ])
@@ -470,6 +470,41 @@ test("aggregate distinguishes deliberate unselection from failure, cancellation,
   );
 });
 
+test("selected browser jobs must each succeed and return their own receipt", () => {
+  const lanes = [
+    { id: "browser", suites: ["client-browser-chromium"] },
+    { id: "browser-webkit", suites: ["client-browser-webkit-smoke"] },
+  ].map((lane) => ({ ...lane, host: "linux", reasons: ["Product changes"] }));
+  const browserPlan = { ...plan, lanes };
+  const receipts = lanes.map((lane) => ({
+    ...receipt,
+    lane: lane.id,
+    results: [{ id: lane.suites[0], status: "passed", exitCode: 0 }],
+  }));
+  const needs = {
+    ...statuses(),
+    policy: { result: "skipped" },
+    browser: { result: "success" },
+    "browser-webkit": { result: "success" },
+  };
+  assert.deepEqual(aggregate(browserPlan, receipts, needs).lanes, [
+    "browser",
+    "browser-webkit",
+  ]);
+  assert.throws(
+    () => aggregate(browserPlan, [receipts[0], receipts[0]], needs),
+    /invalid receipt/,
+  );
+  assert.throws(
+    () =>
+      aggregate(browserPlan, receipts, {
+        ...needs,
+        "browser-webkit": { result: "skipped" },
+      }),
+    /Unexpected browser-webkit job result/,
+  );
+});
+
 test("the Actions adapter does not accept a plan path", async () => {
   const env = {
     PIPELINE_PLAN: JSON.stringify(plan),
@@ -715,7 +750,7 @@ test("qualification route diagnostics authorize trusted hosted dispatch before f
   assert.equal(calls.length, 1);
 });
 
-test("paused main release selection stops before planning or dependencies without claiming verification", async (t) => {
+test("paused or superseded main releases skip planning without claiming verification", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-release-selection-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const env = {
@@ -726,6 +761,7 @@ test("paused main release selection stops before planning or dependencies withou
     GITHUB_WORKFLOW_REF:
       "getsituate/situate/.github/workflows/release-macos.yml@refs/heads/main",
     GITHUB_OUTPUT: join(directory, "output"),
+    GITHUB_SHA: "a".repeat(40),
     PIPELINE_RELEASE_ENABLED: "false",
   };
   const execute = () =>
@@ -735,13 +771,31 @@ test("paused main release selection stops before planning or dependencies withou
     { enabled: false, reason: "paused" },
   );
   assert.equal(readFileSync(env.GITHUB_OUTPUT, "utf8"), "enabled=false\n");
-  assert.deepEqual(
-    await main(
-      ["release-selection", "--workflow", "create"],
-      { ...env, PIPELINE_RELEASE_ENABLED: "true" },
-      execute,
-    ),
-    { enabled: true, reason: "enabled" },
+  for (const [sha, expected] of [
+    [env.GITHUB_SHA, { enabled: true, reason: "enabled" }],
+    ["b".repeat(40), { enabled: false, reason: "superseded" }],
+  ])
+    assert.deepEqual(
+      await main(
+        ["release-selection", "--workflow", "create"],
+        { ...env, PIPELINE_RELEASE_ENABLED: "true" },
+        (command, args) => {
+          assert.equal(command, "gh");
+          assert.equal(
+            args.at(-1),
+            "repos/getsituate/situate/git/ref/heads/main",
+          );
+          return JSON.stringify({
+            ref: "refs/heads/main",
+            object: { type: "commit", sha },
+          });
+        },
+      ),
+      expected,
+    );
+  assert.equal(
+    readFileSync(env.GITHUB_OUTPUT, "utf8"),
+    "enabled=false\nenabled=true\nenabled=false\n",
   );
   for (const changed of [
     { GITHUB_REPOSITORY: "other/repository" },

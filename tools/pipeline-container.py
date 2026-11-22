@@ -314,9 +314,10 @@ def main(argv=None, environment=None):
         if needs.get("plan", {}).get("result") != "success":
             raise ValueError("Planning did not succeed; verification was not run. See the plan job for the original error.")
     lock = json.loads((ROOT / "tools/ci-image.lock.json").read_text())
+    browser_lanes = {'browser', 'browser-webkit'}
     pinned_browser_platform = (args[0] == 'website'
-                               or (args[0] == 'lane' and len(args) == 5 and args[3] == 'browser')
-                               or (args[:2] == ['actions', 'lane'] and args[-2:] == ['--lane', 'browser']))
+                               or (args[0] == 'lane' and len(args) == 5 and args[3] in browser_lanes)
+                               or (args[:2] == ['actions', 'lane'] and args[-2] == '--lane' and args[-1] in browser_lanes))
     if args[0] == 'suites' and len(args) == 3:
         suite_ids = json.loads(Path(args[1]).read_bytes()).get('suiteIds', [])
         pinned_browser_platform = 'design-website-browser' in suite_ids

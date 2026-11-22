@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   chmodSync,
   existsSync,
@@ -15,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  cargoCacheSampler,
   releaseBuildCachePlan,
   releaseCacheEndpoint,
   compatibilityCacheEnvironment,
@@ -82,7 +85,7 @@ test("cache plan contains only bounded compiler and public Cargo download paths"
   assert.equal(plan.enabled, true);
   assert.match(
     plan.key,
-    /^release-build-v1-main-macos-ARM64-universal-release-[a-f0-9]{64}-a{40}$/,
+    /^release-build-v2-main-macos-ARM64-universal-release-[a-f0-9]{64}-a{40}$/,
   );
   assert.equal(plan.restoreKey, plan.key.slice(0, -40));
   assert.deepEqual(plan.paths, [
@@ -141,14 +144,21 @@ test("Intel compatibility persists only compiler objects under a separate truste
   assert.deepEqual(releaseBuildCachePlan(fixture({ env: intel })), {
     enabled: false,
   });
-  assert.match(
-    plan.key,
-    /^release-build-v1-main-macos-X64-intel-compatibility-/,
+  assert.equal(
+    plan.restoreKey,
+    "release-build-v1-main-macos-X64-intel-compatibility-1ba24541319924d822d406d5ad6cf8caffbceacc0a0b4ac64baf5816b817e85b-",
   );
   assert.deepEqual(plan.paths, [
     "/Users/runner/Library/Caches/situate/intel-compatibility-v1/sccache",
   ]);
   assert.equal(plan.environment.CARGO_HOME, undefined);
+  assert.notEqual(
+    releaseBuildCachePlan({
+      ...options,
+      env: { ...intel, ImageVersion: "next" },
+    }).restoreKey,
+    plan.restoreKey,
+  );
   const prepared = { ...intel, ...plan.environment };
   const forLane = compatibilityCacheEnvironment(prepared);
   const forDaemon = releaseCompilerCacheEnvironment(prepared, compilerOptions);
@@ -181,9 +191,14 @@ test("Intel compatibility persists only compiler objects under a separate truste
   }
 });
 
-test("runtime, architecture, image, toolchain, manifest and lock changes invalidate restore scope", () => {
+test("universal cache survives image revisions, not platform or probed runtime changes", () => {
   const baseline = releaseBuildCachePlan(fixture()).restoreKey;
-  for (const field of ["RUNNER_ARCH", "ImageOS", "ImageVersion"]) {
+  assert.equal(
+    releaseBuildCachePlan(fixture({ env: { ...env, ImageVersion: "next" } }))
+      .restoreKey,
+    baseline,
+  );
+  for (const field of ["RUNNER_ARCH", "ImageOS"]) {
     const value = field === "RUNNER_ARCH" ? "X64" : "different";
     assert.notEqual(
       releaseBuildCachePlan(fixture({ env: { ...env, [field]: value } }))
@@ -628,8 +643,13 @@ function measurement(t, counters) {
     },
   };
 }
-const stats = (requests, hits, misses) => ({
-  compile_requests: requests,
+const stats = (compilations, hits, misses) => ({
+  compile_requests: 0,
+  compilations,
+  compiler_write_duration: { secs: compilations, nanos: 500000000 },
+  cache_writes: misses,
+  cache_read_errors: 0,
+  cache_write_errors: 0,
   cache_hits: {
     counts: { Rust: hits, "C/C++": 1 },
     adv_counts: { Rust: hits },
@@ -648,9 +668,13 @@ test("reports observed elapsed interval and counter deltas without paths or raw 
     enabled: true,
     elapsedSeconds: 12.5,
     statisticsAvailable: true,
-    compileRequests: 20,
+    compilations: 20,
+    compilerMilliseconds: 20000,
     hits: 15,
     misses: 5,
+    cacheWrites: 5,
+    cacheReadErrors: 0,
+    cacheWriteErrors: 0,
     flushed: true,
   });
   assert.deepEqual(sample.commands.at(-1), ["--stop-server"]);
@@ -675,9 +699,8 @@ test("unavailable, malformed or reset statistics never become invented hits or m
     [
       stats(0, 0, 0),
       {
-        compile_requests: 3,
+        ...stats(3, 2, 1),
         cache_hits: { counts: [] },
-        cache_misses: { counts: {} },
       },
     ],
   ]) {
@@ -859,9 +882,13 @@ test("flush failures retain measured counters without exposing command errors", 
     enabled: true,
     elapsedSeconds: 0.5,
     statisticsAvailable: true,
-    compileRequests: 2,
+    compilations: 2,
+    compilerMilliseconds: 2000,
     hits: 1,
     misses: 1,
+    cacheWrites: 1,
+    cacheReadErrors: 0,
+    cacheWriteErrors: 0,
     flushed: false,
   });
 });
@@ -891,6 +918,87 @@ test("reporting requires an owned private start record and never enables cache c
     () => releaseCacheMeasurement("report", sample.options),
     /interval/,
   );
+});
+
+test("the Tauri Cargo runner forwards arguments and preserves a failed Cargo exit", (t) => {
+  const bin = temporary(t, tmpdir(), "release-cargo-");
+  writeFileSync(
+    join(bin, "cargo"),
+    '#!/bin/sh\nprintf "%s\\n" "$@"\nexit 19\n',
+    { mode: 0o700 },
+  );
+  const runner = fileURLToPath(
+    new URL("./release-build-cache-cargo.mjs", import.meta.url),
+  );
+  const args = [
+    "build",
+    "--locked",
+    "--features",
+    "one,two",
+    "--release",
+    "--target",
+    "x86_64-apple-darwin",
+  ];
+  for (const cargo of [undefined, "cargo", join(bin, "wrong")]) {
+    const invalid = spawnSync(process.execPath, [runner, ...args], {
+      env: { PATH: bin, ...(cargo ? { SITUATE_RELEASE_CARGO: cargo } : {}) },
+      encoding: "utf8",
+    });
+    assert.equal(invalid.status, 1);
+    assert.match(invalid.stderr, /absolute path to the release Cargo/);
+  }
+  const result = spawnSync(process.execPath, [runner, ...args], {
+    env: { PATH: "/usr/bin:/bin", SITUATE_RELEASE_CARGO: join(bin, "cargo") },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 19);
+  const lines = result.stdout.trimEnd().split("\n");
+  const metric = JSON.parse(lines.pop());
+  assert.deepEqual(lines, args);
+  assert.equal(metric.target, "x86_64-apple-darwin");
+  assert.equal(metric.exitCode, 19);
+  assert.equal(metric.cache, null);
+  assert.ok(metric.elapsedSeconds >= 0);
+  assert.ok(metric.availableCpus > 0);
+  assert.ok(metric.memoryBytes > 0);
+});
+
+test("the Cargo sampler reports phase deltas only for the same daemon", () => {
+  const generation = { dev: "1", ino: "2", born: "3" };
+  for (const replaced of [false, true]) {
+    let active = generation;
+    const samples = [stats(5, 2, 3), stats(6, 9, 4)];
+    const finish = cargoCacheSampler(
+      {
+        RUSTC_WRAPPER: "/tools/sccache",
+        SCCACHE_SERVER_UDS: "/tmp/cache/s",
+        GH_TOKEN: "synthetic",
+      },
+      (command, args, options) => {
+        assert.equal(command, "/tools/sccache");
+        assert.deepEqual(args, ["--show-stats", "--stats-format=json"]);
+        assert.equal(options.env.GH_TOKEN, undefined);
+        return JSON.stringify({ stats: samples.shift() });
+      },
+      () => active,
+    );
+    if (replaced) active = { ...generation, ino: "9" };
+    assert.deepEqual(
+      finish(),
+      replaced
+        ? null
+        : {
+            compilations: 1,
+            compilerMilliseconds: 1000,
+            hits: 7,
+            misses: 1,
+            cacheWrites: 1,
+            cacheReadErrors: 0,
+            cacheWriteErrors: 0,
+          },
+    );
+    assert.equal(samples.length, replaced ? 1 : 0);
+  }
 });
 
 test("runtime probes receive no signing, remote cache or GitHub credentials", () => {

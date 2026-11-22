@@ -40,7 +40,7 @@ test("canonical execution types separate portable suites from host work", () => 
     suite: [
       "root-format",
       "client-browser-chromium",
-      "client-browser-webkit",
+      "client-browser-webkit-smoke",
       "client-executor-integration",
       "client-core",
       "client-native",
@@ -56,7 +56,7 @@ test("canonical execution types separate portable suites from host work", () => 
       "client-executor-integration",
       "client-core",
       "client-browser-chromium",
-      "client-browser-webkit",
+      "client-browser-webkit-smoke",
     ],
   );
   assert.deepEqual(selectContainerSuites({ suites: [] }), []);

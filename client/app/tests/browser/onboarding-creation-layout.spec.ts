@@ -14,7 +14,14 @@ for (const viewport of [
 ]) {
   test(
     `onboarding creation keeps actions visible at ${viewport.width}x${viewport.height}`,
-    { tag: viewport.width > 700 ? "@visual-desktop" : "@visual-mobile" },
+    {
+      tag: [
+        viewport.width > 700 ? "@visual-desktop" : "@visual-mobile",
+        ...(viewport.width === 800 && viewport.height === 360
+          ? ["@webkit-smoke"]
+          : []),
+      ],
+    },
     async ({ page, visual, browserName }) => {
       const tab = browserName === "webkit" ? "Alt+Tab" : "Tab";
       await onboardingFixture(page, { startAtEntry: true, connected: false });

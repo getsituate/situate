@@ -5,6 +5,14 @@ const environment = "hosting-production-operation";
 const collection = `https://api.github.com/repos/${repo}/deployments`;
 const validDeploymentId = (id) => Number.isSafeInteger(id) && id > 0;
 
+export class HostingReadUnavailable extends Error {}
+
+const retryableRead = ({ status, headers }) =>
+  [429, 500, 502, 503, 504].includes(status) ||
+  (status === 403 &&
+    (headers.get("x-ratelimit-remaining") === "0" ||
+      headers.has("retry-after")));
+
 function deploymentsApi(token, fetchImpl) {
   if (typeof token !== "string" || !token.trim())
     throw new Error("GitHub deployments access is required.");
@@ -36,7 +44,10 @@ function deploymentsApi(token, fetchImpl) {
           signal: AbortSignal.timeout(15_000),
         });
       } catch {
-        throw new Error("GitHub deployment status request did not complete.");
+        const ErrorType = body ? Error : HostingReadUnavailable;
+        throw new ErrorType(
+          "GitHub deployment status request did not complete.",
+        );
       }
       if (response.ok) {
         try {
@@ -45,10 +56,13 @@ function deploymentsApi(token, fetchImpl) {
           throw new Error("GitHub returned invalid deployment status data.");
         }
       }
-      if (body || attempt === 1 || ![502, 503, 504].includes(response.status))
-        throw new Error(
+      if (body || attempt === 1 || ![502, 503, 504].includes(response.status)) {
+        const ErrorType =
+          !body && retryableRead(response) ? HostingReadUnavailable : Error;
+        throw new ErrorType(
           `GitHub deployment status request failed (${response.status}).`,
         );
+      }
     }
   };
 }
@@ -110,9 +124,94 @@ export async function hostingReadiness({
   )
     return {
       ready: false,
+      changed: true,
       reason: "Hosting changed during the readiness check.",
     };
   return result;
+}
+
+export async function observeHostingProducer({
+  token,
+  revision,
+  fetchImpl = fetch,
+}) {
+  if (
+    typeof token !== "string" ||
+    !token.trim() ||
+    !revisionPattern.test(revision ?? "")
+  )
+    throw new Error("Missing GitHub hosting producer identity.");
+  const url = new URL(
+    `https://api.github.com/repos/${repo}/actions/workflows/deploy-hosting.yml/runs`,
+  );
+  url.search = new URLSearchParams({
+    branch: "main",
+    head_sha: revision,
+    per_page: "100",
+  });
+  let inventory;
+  try {
+    const response = await fetchImpl(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok)
+      return {
+        kind: "unavailable",
+        reason: `Cannot read Deploy hosting runs (${response.status}).`,
+      };
+    inventory = await response.json();
+  } catch {
+    return { kind: "unavailable", reason: "Cannot read Deploy hosting runs." };
+  }
+  const runs = inventory?.workflow_runs;
+  if (
+    !Array.isArray(runs) ||
+    runs.length > 100 ||
+    runs.length !== inventory.total_count ||
+    runs.some(
+      (run) =>
+        !validDeploymentId(run?.id) ||
+        !validDeploymentId(run.run_number) ||
+        !validDeploymentId(run.run_attempt) ||
+        run.head_sha !== revision ||
+        run.head_branch !== "main" ||
+        run.head_repository?.full_name !== repo ||
+        !["push", "workflow_dispatch"].includes(run.event) ||
+        typeof run.status !== "string",
+    ) ||
+    new Set(runs.map((run) => run.run_number)).size !== runs.length ||
+    new Set(runs.map((run) => run.id)).size !== runs.length
+  )
+    return {
+      kind: "unavailable",
+      reason:
+        "GitHub returned incomplete or unexpected Deploy hosting run data.",
+    };
+  let latest;
+  for (const run of runs) {
+    if (run.status !== "completed") return { kind: "pending" };
+    if (!latest || run.run_number > latest.run_number) latest = run;
+  }
+  if (!latest) return { kind: "absent" };
+  if (
+    !["failure", "cancelled", "timed_out", "startup_failure"].includes(
+      latest.conclusion,
+    )
+  )
+    return { kind: "unconfirmed" };
+  return {
+    kind: "failed",
+    runId: latest.id,
+    attempt: latest.run_attempt,
+    conclusion: latest.conclusion,
+  };
 }
 
 export function deploymentGate({

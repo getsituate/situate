@@ -333,6 +333,7 @@ export async function assertLatestMain(
         env: publicationEnvironment(environment),
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15_000,
         maxBuffer: 65536,
       },
     ),

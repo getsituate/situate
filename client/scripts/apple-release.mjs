@@ -283,7 +283,7 @@ export async function checkApplePrerequisites({
       );
     }
   }
-  return { cli, env };
+  return { cli, env, cargo: join(dirname(rustc), "cargo") };
 }
 
 async function readPlist(path, execute, options) {
@@ -473,6 +473,7 @@ async function buildMac({
   settings,
   config,
   cli,
+  cargo,
   execute,
   options,
   report,
@@ -490,6 +491,7 @@ async function buildMac({
     ...options,
     env: {
       ...options.env,
+      SITUATE_RELEASE_CARGO: cargo,
       SITUATE_DISTRIBUTION: plan.distribution,
       ...(updater
         ? {
@@ -514,6 +516,10 @@ async function buildMac({
       "--ci",
       "--target",
       plan.macosTarget,
+      "--runner",
+      fileURLToPath(
+        new URL("../../tools/release-build-cache-cargo.mjs", import.meta.url),
+      ),
       "--bundles",
       "app",
       "--config",
@@ -906,7 +912,7 @@ async function buildResolvedAppleRelease({
     throw new Error(
       "Apple distribution requires a numeric major.minor.patch app version.",
     );
-  const { cli, env } = await checkApplePrerequisites({
+  const { cli, env, cargo } = await checkApplePrerequisites({
     root,
     settings,
     plan,
@@ -1176,6 +1182,7 @@ async function buildResolvedAppleRelease({
           settings,
           config,
           cli,
+          cargo,
           execute,
           options,
           report,

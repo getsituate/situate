@@ -47,6 +47,7 @@ test("developer-only inputs and required declarations do not activate app lanes"
               "macos-code",
               "rust",
               "browser",
+              "browser-webkit",
               "macos-native",
               "macos-compatibility",
             ].includes(lane.id),
@@ -72,13 +73,16 @@ test("public website inputs require browser verification without triggering an a
     "website/styles.css",
     ".github/workflows/deploy-website.yml",
   ]) {
-    const plan = planPaths([path]);
-    assert.equal(plan.appImpact, false, path);
-    assert.deepEqual(
-      plan.lanes.find((lane) => lane.id === "browser")?.suites,
-      ["design-website-browser"],
-      path,
-    );
+    for (const mode of ["verify", "release"]) {
+      const plan = planPaths([path], { mode });
+      assert.equal(plan.appImpact, false, path);
+      assert.deepEqual(
+        plan.lanes.find((lane) => lane.id === "browser")?.suites,
+        ["design-website-browser"],
+        path,
+      );
+      assert.ok(!plan.lanes.some((lane) => lane.id === "browser-webkit"));
+    }
   }
   assert.ok(
     suites(planPaths(["design/brand/tokens.css"])).includes(
@@ -142,13 +146,29 @@ test("only release planning gives Intel macOS compatibility a 45-minute suite bu
   assert.equal(timeout("release"), 2700);
 });
 
+test("release-only browser selection still runs both product engines", () => {
+  const paths = ["tools/native-vm.mjs"];
+  const browserJobs = (mode) =>
+    planPaths(paths, { mode }).lanes.filter(({ id }) =>
+      id.startsWith("browser"),
+    );
+  assert.deepEqual(browserJobs("verify"), []);
+  assert.deepEqual(
+    browserJobs("release").map(({ id, suites }) => [id, suites]),
+    [
+      ["browser", ["client-executor-integration", "client-browser-chromium"]],
+      ["browser-webkit", ["client-browser-webkit-smoke"]],
+    ],
+  );
+});
+
 test("release source gates are complete, unique and exclude diagnostics and advisory scans", () => {
   const plan = planPaths(["client/app/src/App.vue"], { mode: "release" });
   const ids = suites(plan);
   assert.equal(ids.length, new Set(ids).size);
   for (const id of [
     "client-browser-chromium",
-    "client-browser-webkit",
+    "client-browser-webkit-smoke",
     "client-native",
     "client-agent-e2e",
     "client-migrations",

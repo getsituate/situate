@@ -16,7 +16,7 @@ test("portable checks remain available on both execution hosts without a Linux p
     "dev-tui-format",
     "dev-tui-clippy",
     "client-browser-chromium",
-    "client-browser-webkit",
+    "client-browser-webkit-smoke",
     "client-executor-integration",
     "client-agent-runtime",
     "client-migrations",
@@ -147,6 +147,7 @@ test("runtime dependency and browser prerequisites belong to their suite workspa
   for (const [id, workspace, browsers] of [
     ["client-browser-chromium", "client", ["chromium"]],
     ["client-browser-webkit", "client", ["webkit"]],
+    ["client-browser-webkit-smoke", "client", ["webkit"]],
     ["client-executor-integration", "client", ["chromium"]],
     ["client-visual", "client", ["chromium"]],
     ["requirements-browser", "requirements", ["chromium"]],
@@ -162,29 +163,53 @@ test("runtime dependency and browser prerequisites belong to their suite workspa
     );
 });
 
-test("product browser engines run the same flows with independent deadlines", () => {
+test("required browser verification runs full Chromium and a separate WebKit smoke", () => {
   const chromium = find("client-browser-chromium");
   const webkit = find("client-browser-webkit");
+  const smoke = find("client-browser-webkit-smoke");
   assert.deepEqual(chromium.covers, webkit.covers);
-  for (const engine of ["chromium", "webkit"]) {
-    const suite = find(`client-browser-${engine}`);
+  assert.equal(chromium.args.includes("--grep"), false);
+  assert.equal(webkit.args.includes("--grep"), false);
+  assert.deepEqual(smoke.args.slice(smoke.args.indexOf("--grep"), -2), [
+    "--grep",
+    "(^|\\s)@webkit-smoke(\\s|$)",
+  ]);
+  assert.ok(
+    !createPlan({ platform: "linux" }).suites.some(
+      ({ id }) => id === webkit.id,
+    ),
+  );
+  assert.deepEqual(
+    createPlan({ platform: "linux", suite: [webkit.id] }).suites.map(
+      ({ id }) => id,
+    ),
+    [webkit.id],
+  );
+  for (const [suite, engine, output] of [
+    [chromium, "chromium", "chromium"],
+    [webkit, "webkit", "webkit"],
+    [smoke, "webkit", "webkit-smoke"],
+  ]) {
     assert.equal(suite.args[suite.args.indexOf("--project") + 1], engine);
     assert.equal(
       suite.args[suite.args.indexOf("--output") + 1],
-      `test-results/browser/${engine}`,
+      `test-results/browser/${output}`,
     );
     assert.equal(suite.cwd, "client");
     assert.equal(suite.kind, "browser");
   }
-  const lane = planPaths(["client/app/src/App.vue"]).lanes.find(
-    (lane) => lane.id === "browser",
-  );
-  assert.deepEqual(lane.suites, [
-    "client-executor-integration",
-    "client-browser-chromium",
-    "client-browser-webkit",
-  ]);
-  assert.equal(lane.timeoutSeconds, 1800);
+  for (const mode of ["verify", "release"]) {
+    const { lanes } = planPaths(["client/app/src/App.vue"], { mode });
+    for (const [id, suites] of [
+      ["browser", ["client-executor-integration", "client-browser-chromium"]],
+      ["browser-webkit", ["client-browser-webkit-smoke"]],
+    ]) {
+      const lane = lanes.find((lane) => lane.id === id);
+      assert.equal(lane.host, "linux", id);
+      assert.equal(lane.timeoutSeconds, 1800, id);
+      assert.deepEqual(lane.suites, suites, id);
+    }
+  }
 });
 
 test("Swift static policy is Linux-hosted without selecting product execution", () => {

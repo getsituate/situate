@@ -17,6 +17,7 @@ import {
   prepareCreate,
   preparePublish,
   prepareReleaseDependencies,
+  releaseSourceIsCurrent,
   requireProvisioned,
   resolveProducerRelease,
   runReleaseStage,
@@ -136,6 +137,49 @@ test("enabled delivery requires exact protected workflow and attested private co
   );
   assert.throws(() => configureRelease(env, "create"), /EEXIST/);
 });
+test("release selection skips only a superseded protected main revision", async (t) => {
+  const env = { ...environment(t), GITHUB_SHA: source, GH_TOKEN: "synthetic" };
+  const readMain =
+    (sha, type = "commit") =>
+    (command, args, options) => {
+      assert.equal(command, "gh");
+      assert.equal(args.at(-1), "repos/getsituate/situate/git/ref/heads/main");
+      assert.equal(options.env.GH_TOKEN, "synthetic");
+      assert.equal(options.env.SITUATE_RELEASE_CONFIG_JSON, undefined);
+      return JSON.stringify({
+        ref: "refs/heads/main",
+        object: { type, sha },
+      });
+    };
+  assert.equal(await releaseSourceIsCurrent(env, readMain(source)), true);
+  assert.equal(
+    await releaseSourceIsCurrent(env, readMain("b".repeat(40))),
+    false,
+  );
+  await assert.rejects(
+    releaseSourceIsCurrent(env, readMain(source, "tag")),
+    /Current main identity is unavailable/,
+  );
+  await assert.rejects(
+    releaseSourceIsCurrent(env, () => {
+      throw new Error("API unavailable");
+    }),
+    /API unavailable/,
+  );
+  for (const changes of [
+    { GITHUB_SHA: "" },
+    { GITHUB_REF_PROTECTED: "false" },
+    { PIPELINE_RELEASE_ENABLED: "false" },
+  ]) {
+    await assert.rejects(
+      releaseSourceIsCurrent({ ...env, ...changes }, () =>
+        assert.fail("Unexpected lookup"),
+      ),
+      /Invalid release source revision|blocked/,
+    );
+  }
+});
+
 test("legacy recovery metadata remains readable without validating operational recovery", (t) => {
   const env = environment(t);
   const bytes = JSON.stringify({

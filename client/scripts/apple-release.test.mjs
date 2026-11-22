@@ -438,6 +438,10 @@ test("hosted builds register their isolated Keychain only for the build lifetime
         }
         if (command === process.execPath && args[1] === "build") {
           reachedBuild = true;
+          assert.equal(
+            options.env.SITUATE_RELEASE_CARGO,
+            "/synthetic/bin/cargo",
+          );
           assert.ok(
             searchList.some(
               (path) => realpathSync(path) === realpathSync(keychain),

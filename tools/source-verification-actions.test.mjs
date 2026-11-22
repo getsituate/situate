@@ -392,6 +392,20 @@ test("consumer retrieves an attempt-bound artifact and independently resolves so
   );
 });
 
+test("consumer reports a host mismatch only after verifying candidate provenance", async () => {
+  const f = fixture();
+  f.measured.host.ImageVersion = "20990101.1";
+  assert.deepEqual(await selectActionsSourceEvidence(root, f.options), {
+    action: "execute",
+    reason: "host-differs",
+  });
+  f.options.verifyAttestation = async () => null;
+  assert.deepEqual(await selectActionsSourceEvidence(root, f.options), {
+    action: "execute",
+    reason: "no-matching-evidence",
+  });
+});
+
 test("a completed post-merge run with no PR snapshot uses its unique merged head association", async () => {
   const f = fixture();
   f.data.run.pull_requests = [];
@@ -1050,9 +1064,9 @@ test("capture measures actual process identity and excludes tokens and ephemeral
     ...f.plan,
     lanes: [
       {
-        id: linux ? "frontend" : "macos-native",
+        id: linux ? "browser-webkit" : "macos-native",
         host: linux ? "linux" : "macos",
-        suites: [linux ? "client-vue" : "client-native"],
+        suites: [linux ? "client-browser-webkit-smoke" : "client-native"],
         timeoutSeconds: 1800,
         reasons: [],
       },

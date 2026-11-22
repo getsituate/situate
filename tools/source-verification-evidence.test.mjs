@@ -588,6 +588,96 @@ test("portable reuse requires the same pinned digest and actual Linux identity",
     execute({ ...input, host: { ...input.host, ociDigest } });
 });
 
+test("split browser reuse binds only the suites requested in its own lane", () => {
+  const chromium = "client-browser-chromium";
+  const executor = "client-executor-integration";
+  const webkit = "client-browser-webkit-smoke";
+  const fullWebkit = "client-browser-webkit";
+  const website = "design-website-browser";
+  const browser = fixture({
+    laneId: "browser",
+    suites: [chromium, executor],
+    linux: true,
+  });
+  const splitWebkit = fixture({
+    laneId: "browser-webkit",
+    suites: [webkit],
+    linux: true,
+  });
+  const mixed = fixture({
+    laneId: "browser",
+    suites: [chromium, executor, website],
+    linux: true,
+  });
+  const old = fixture({
+    laneId: "browser",
+    suites: [chromium, executor, fullWebkit],
+    linux: true,
+  });
+  const oldSplit = fixture({
+    laneId: "browser-webkit",
+    suites: [fullWebkit],
+    linux: true,
+  });
+
+  const reused = selectSourceVerificationEvidence({
+    ...browser,
+    candidates: mixed.candidates,
+  });
+  assert.equal(reused.action, "reuse");
+  assert.deepEqual(reused.binding.suites, [chromium, executor]);
+  assert.deepEqual(reused.binding.executedSuites, [
+    chromium,
+    executor,
+    website,
+  ]);
+  execute(mixed, "lane-ineligible");
+  assert.equal(selectSourceVerificationEvidence(splitWebkit).action, "reuse");
+  execute({ ...browser, candidates: old.candidates }, "lane-contract-differs");
+  execute(
+    { ...splitWebkit, candidates: old.candidates },
+    "lane-evidence-absent",
+  );
+  execute(
+    { ...splitWebkit, candidates: oldSplit.candidates },
+    "lane-contract-differs",
+  );
+});
+
+test("only authenticated evidence for the same tree supplies a mismatch reason", () => {
+  const input = fixture();
+  const differentHost = {
+    ...input,
+    host: { ...input.host, ImageVersion: "20260102.1" },
+  };
+  execute(differentHost, "host-differs");
+  execute(
+    { ...differentHost, source: { ...input.source, tree: "0".repeat(40) } },
+    "no-matching-evidence",
+  );
+  execute(
+    { ...input, contract: { ...input.contract, toolsDigest: "0".repeat(64) } },
+    "tools-differ",
+  );
+  const badCommand = structuredClone(input);
+  badCommand.contract.suites[0].commandDigest = "0".repeat(64);
+  execute(badCommand, "suite-command-differs");
+  const narrow = fixture({ suites: ["client-native"] });
+  execute(
+    { ...input, candidates: narrow.candidates },
+    "suite-coverage-incomplete",
+  );
+  assert.equal(
+    selectSourceVerificationEvidence({
+      ...input,
+      candidates: [...narrow.candidates, ...input.candidates],
+    }).action,
+    "reuse",
+  );
+  input.candidates[0].observation.trusted = false;
+  execute(differentHost, "no-matching-evidence");
+});
+
 test("failed, cancelled, forked, untrusted or forged origin cannot authorize reuse", () => {
   for (const patch of [
     { trusted: false },
