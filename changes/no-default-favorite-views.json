@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "no-default-favorite-views",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "no-default-favorite-views",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "New workspaces start without pinned views",
+          "paragraphs": [
+            "You can still open Files from All views and pin it if you like. Pins in existing workspaces stay as they are."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "no-default-favorite-views",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Neue Workspaces starten ohne angepinnte Ansichten",
+          "paragraphs": [
+            "Du kannst Dateien weiterhin unter „Alle Ansichten“ öffnen und bei Bedarf anpinnen. Angepinnte Ansichten in bestehenden Workspaces bleiben unverändert."
+          ]
+        }
+      ]
+    }
+  }
+}
