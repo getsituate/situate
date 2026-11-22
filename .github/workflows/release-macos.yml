@@ -547,12 +547,59 @@ jobs:
 
   publish:
     needs: create
+    concurrency:
+      group: situate-release-effects
+      cancel-in-progress: false
     if: ${{ !cancelled() && needs.create.result == 'success' }}
-    uses: ./.github/workflows/publish-macos.yml
+    runs-on: macos-latest
+    environment: macos-publication
+    timeout-minutes: 60
+    outputs:
+      published_release_id: ${{ steps.promote.outcome == 'success' && steps.plan.outputs.release_id || '' }}
     permissions:
       contents: read
       deployments: read
+    env:
+      PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_PUBLICATION_ENABLED }}
+      SITUATE_RELEASE_CONFIG_SHA256: ${{ vars.SITUATE_RELEASE_CONFIG_SHA256 }}
+      WEBSITE_DEPLOY_HOST: ${{ vars.WEBSITE_DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs release-gate --workflow publish
+      - id: plan
+        run: node tools/actions-adapter.mjs publish-prepare --workflow publish
+        env:
+          PIPELINE_RELEASE_ID: ${{ needs.create.outputs.release_id }}
+          SITUATE_RELEASE_CONFIG_JSON: ${{ secrets.SITUATE_RELEASE_CONFIG_JSON }}
+          GH_TOKEN: ${{ github.token }}
+      - run: node tools/wait-for-hosting.mjs --probe
+        if: steps.plan.outputs.selected == 'true'
+        env:
+          HOSTING_SOURCE_REVISION: ${{ github.workflow_sha }}
+          GH_TOKEN: ${{ github.token }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
+      - id: promote
+        run: node tools/actions-adapter.mjs publish-run --workflow publish
+        if: steps.plan.outputs.selected == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
+          SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          SITUATE_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_UPDATER_PUBLIC_KEY }}
+
+  notify-release:
+    needs: publish
+    if: needs.publish.outputs.published_release_id != ''
+    uses: ./.github/workflows/slack-notify.yml
     with:
-      release_id: ${{ needs.create.outputs.release_id }}
+      kind: release
+      release_id: ${{ needs.publish.outputs.published_release_id }}
     secrets:
-      SLACK_RELEASE_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
+      webhook_url: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}

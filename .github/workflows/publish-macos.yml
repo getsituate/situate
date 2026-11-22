@@ -1,20 +1,6 @@
 name: Publish macOS
 
 on:
-  workflow_call:
-    inputs:
-      release_id:
-        type: string
-        required: true
-    secrets:
-      SITUATE_RELEASE_CONFIG_JSON:
-        required: false
-      SITUATE_RELEASE_SSH_PRIVATE_KEY:
-        required: false
-      SITUATE_RELEASE_SSH_KNOWN_HOSTS:
-        required: false
-      SLACK_RELEASE_WEBHOOK_URL:
-        required: false
   workflow_dispatch:
     inputs:
       release_id:
