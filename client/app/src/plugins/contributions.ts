@@ -1,3 +1,4 @@
+import { isIconName } from "@situate/ui/icons";
 import type { ViewDefinition } from "../layout/registry";
 import type { Component } from "vue";
 import type { PluginUiContributions, PluginToolDescriptor } from "./types";
@@ -133,6 +134,7 @@ function component(value: unknown): value is Component {
 export function validateUiContributions(
   value: unknown,
   pluginId: string,
+  requireViewIcons = false,
 ): PluginUiContributions {
   if (!object(value)) invalid();
   if (
@@ -153,12 +155,8 @@ export function validateUiContributions(
       ))
   )
     invalid();
-  const views = [
-    ...((value.views ?? []) as ViewDefinition[]),
-    ...(value.settings === undefined ? [] : [value.settings as ViewDefinition]),
-  ];
   const ids = new Set<string>();
-  for (const view of views) {
+  function validateView(view: unknown): ViewDefinition {
     if (
       !object(view) ||
       typeof view.id !== "string" ||
@@ -166,8 +164,6 @@ export function validateUiContributions(
       view.id.length === pluginId.length + 1 ||
       ids.has(view.id) ||
       typeof view.title !== "function" ||
-      typeof view.icon !== "string" ||
-      !view.icon ||
       !component(view.component) ||
       (view.reveal !== undefined && typeof view.reveal !== "function") ||
       (view.availability !== undefined &&
@@ -175,6 +171,11 @@ export function validateUiContributions(
     )
       invalid();
     ids.add(view.id);
+    const icon = view.icon;
+    const validIcon = isIconName(icon);
+    if (requireViewIcons && !validIcon)
+      throw new Error("plugins.viewIconRequired");
+    return { ...view, icon: validIcon ? icon : "plugins" } as ViewDefinition;
   }
   return {
     ...(value.components === undefined
@@ -182,10 +183,10 @@ export function validateUiContributions(
       : {
           components: value.components as Record<string, Component>,
         }),
-    views: (value.views ?? []) as ViewDefinition[],
+    views: Array.from(value.views ?? [], validateView),
     ...(value.settings === undefined
       ? {}
-      : { settings: value.settings as ViewDefinition }),
+      : { settings: validateView(value.settings) }),
     ...(value.dispose === undefined
       ? {}
       : { dispose: value.dispose as () => void | Promise<void> }),

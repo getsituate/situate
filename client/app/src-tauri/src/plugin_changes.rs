@@ -764,9 +764,11 @@ async fn execute(
         let mut evidence = Vec::new();
         let mut images = Vec::new();
         stage="worker";
+        let publish = begun["publish"].as_array().ok_or(INVALID)?;
         for check in checks {
             let source = sources.iter().find(|source| source["manifest"]["id"] == check.plugin_id).ok_or(INVALID)?;
-            let payload = json!({"source":source,"sources":sources});
+            let require_view_icons = publish.iter().any(|package| package["pluginId"] == check.plugin_id);
+            let payload = json!({"source":source,"sources":sources,"requireViewIcons":require_view_icons});
             let outcome = crate::ai_executor::check(&crate::ai_plugin_tools::broker_context(context), payload, id.clone(), check.script, check.timeout_ms.unwrap_or(30_000), progress.clone(), cancel.clone()).await?;
             let result = ResultEvidence::from_worker(check.plugin_id,&outcome)?;
             let mut row=json!({"pluginId":result.plugin_id,"passed":result.passed,"assertions":result.assertions});

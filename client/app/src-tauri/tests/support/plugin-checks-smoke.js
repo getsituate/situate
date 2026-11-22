@@ -726,6 +726,29 @@ window.runPluginChecksSmoke = async () => {
     ],
   });
   require(!hung.passed, "A non-cooperative check worker did not stop at its deadline");
+  await sourceWrite(
+    counter,
+    fixture.pluginId,
+    "ui.js",
+    `export default () => ({
+      views: [{ id: "native-check:main", title: () => "Main", component: {} }],
+    });`,
+  );
+  const iconless = await checkChanges(counter, {
+    changes: [{ pluginId: fixture.pluginId }],
+    checks: [{ pluginId: fixture.pluginId, script: "assert.equal(2 + 2, 4);" }],
+  });
+  const failure = iconless.results[0];
+  require(!iconless.passed, "A check without a preview accepted a view without an icon");
+  require(failure?.error === "plugins.viewIconRequired" &&
+    failure?.assertions ===
+      0, "Missing icon did not stop the functional script with an actionable error");
+  await denied(
+    () => activateGroup(counter, iconless),
+    "A missing view icon did not block publication",
+    "native.plugins.checkInvalid",
+  );
+  await sourceWrite(counter, fixture.pluginId, "ui.js", fixture.uiSource);
   const counterResult = await checkCounter(counter);
   require(counterResult.passed, "Native counter check failed");
   await verifyImage(counterResult);

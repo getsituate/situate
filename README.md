@@ -62,9 +62,11 @@ This starts the local development app. Pi, Herdr, an AI subscription and model c
 
 Bug reports, usability feedback, documentation fixes and code contributions are welcome. [Open an issue](https://github.com/getsituate/situate/issues) with the app and macOS versions, steps to reproduce the problem, and what you expected to happen. Use synthetic examples and remove personal content, credentials and private paths from screenshots and logs.
 
-For code changes, start with the [developer setup](docs/development/README.md), follow the [repository guidelines](AGENTS.md), and run focused checks for the behavior you change. The [test guide](docs/development/testing.md) explains test selection and prerequisites; CI runs the broader PR verification plan. Discuss substantial feature or architecture changes in an issue before implementation.
+For code changes, start with the [developer setup](docs/development/README.md), follow the [repository guidelines](AGENTS.md), and run focused checks for the behavior you change. The [test guide](docs/development/testing.md) explains test selection and prerequisites; the [Verify workflow](https://github.com/getsituate/situate/actions/workflows/verify.yml) runs the broader PR verification plan. Discuss substantial feature or architecture changes in an issue before implementation.
 
 Report vulnerabilities confidentially through the [security policy](SECURITY.md), not in public issues.
+
+[![SonarQube Cloud quality gate for main](https://sonarcloud.io/api/project_badges/measure?project=getsituate_situate&metric=alert_status)](https://sonarcloud.io/dashboard?id=getsituate_situate)
 
 ## Documentation
 

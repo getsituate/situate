@@ -352,6 +352,7 @@ fn ranked_choice(
             entry["provider"] == config.provider
                 && entry["access"] == access
                 && entry["eligibility"] == "supported"
+                && (entry["discoveryOnly"] != true || kind == "chat")
         })
         .collect();
     candidates.sort_by_key(|entry| entry["priority"][kind].as_u64().unwrap_or(u64::MAX));
@@ -387,13 +388,17 @@ fn ranked_choice(
         {
             continue;
         }
-        let Ok((api, _, _)) = target(config, model) else {
-            continue;
+        let levels = if entry["discoveryOnly"] == true {
+            vec![off()]
+        } else {
+            let Ok((api, _, _)) = target(config, model) else {
+                continue;
+            };
+            if entry["api"] != api {
+                continue;
+            }
+            supported_thinking_levels(config, model)?
         };
-        if entry["api"] != api {
-            continue;
-        }
-        let levels = supported_thinking_levels(config, model)?;
         let thinking = entry["thinking"].as_str().ok_or(MODEL_ERROR)?;
         if !levels.iter().any(|level| level == thinking)
             || (available_model["reasoning"] == true && levels == ["off"])
@@ -445,7 +450,7 @@ fn recommendation(
 ) -> Result<ModelChoice, String> {
     let catalog: Value = serde_json::from_str(RECOMMENDATIONS).map_err(|_| MODEL_ERROR)?;
     let inventory: Value = serde_json::from_str(CATALOG).map_err(|_| MODEL_ERROR)?;
-    let available: Vec<Value> = inventory["providers"]
+    let mut available: Vec<Value> = inventory["providers"]
         .as_array()
         .and_then(|providers| {
             providers
@@ -462,6 +467,19 @@ fn recommendation(
         })
         .cloned()
         .collect();
+    if kind == "chat" {
+        for entry in catalog["rankedCandidates"].as_array().ok_or(MODEL_ERROR)? {
+            if entry["discoveryOnly"] == true
+                && entry["provider"] == config.provider
+                && let Some(model) = entry["modelId"]
+                    .as_str()
+                    .and_then(|id| observed.selectable(config, id))
+                    .and_then(|model| model.descriptor(config))
+            {
+                available.push(model);
+            }
+        }
+    }
     ranked_choice(config, kind, &catalog, Some(&available))?.ok_or_else(|| MODEL_ERROR.into())
 }
 #[cfg(test)]

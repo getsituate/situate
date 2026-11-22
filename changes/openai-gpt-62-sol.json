@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "openai-gpt-62-sol",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "openai-gpt-62-sol",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "GPT-6.2 Sol for OpenAI chats",
+          "paragraphs": [
+            "Situate recommends GPT-6.2 Sol for chats when your OpenAI connection lists it. If you selected a specific model, your choice stays the same."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "openai-gpt-62-sol",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "GPT-6.2 Sol für OpenAI-Chats",
+          "paragraphs": [
+            "Situate empfiehlt GPT-6.2 Sol für Chats, wenn deine OpenAI-Verbindung das Modell anbietet. Wenn du ein bestimmtes Modell ausgewählt hast, bleibt deine Auswahl erhalten."
+          ]
+        }
+      ]
+    }
+  }
+}
