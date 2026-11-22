@@ -1,6 +1,6 @@
 {
   "version": 2,
   "platforms": ["linux/amd64", "linux/arm64"],
-  "image": "ghcr.io/getsituate/situate-ci-linux@sha256:59ffb600e1db62a6162d413dd2d85adc730f82011a007231133fadc1e2c2e88d",
-  "inputsSha256": "c5c450ad0ac2ebc2a3f8c204442b5aa23b71c2b3e26a0d2e091a361fad17e819"
+  "image": "ghcr.io/getsituate/situate-ci-linux@sha256:c2f119881ecdbceb889df962108cf9c5c30091eecf7a35830e8701145860d8d8",
+  "inputsSha256": "6bab0d199d7dfabeb32f663397899a6b0ae30f0d46ceda3957be7e53e66ca551"
 }
