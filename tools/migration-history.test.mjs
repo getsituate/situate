@@ -19,7 +19,7 @@ import {
 
 const source = "client/crates/situate-migrations/src/";
 const names = ["m0001_metadata", "m0002_history"];
-function fixture(t) {
+function fixture(t, objectFormat = "sha1") {
   const root = mkdtempSync(join(tmpdir(), "migration-history-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = (...args) =>
@@ -27,7 +27,7 @@ function fixture(t) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-  git("init", "-q", "--object-format=sha1");
+  git("init", "-q", `--object-format=${objectFormat}`);
   git("config", "core.autocrlf", "false");
   git("config", "user.name", "Migration Test");
   git("config", "user.email", "migration@example.invalid");
@@ -206,6 +206,20 @@ test("pre-migration published commit establishes an empty prefix, never an impli
   );
   for (const publishedRevision of ["HEAD", "", "a".repeat(40)])
     assert.throws(() => verifyMigrationHistory(f.root, { publishedRevision }));
+});
+
+test("published baselines require the full commit ID in SHA-256 repositories", (t) => {
+  const { root, legacy } = fixture(t, "sha256");
+  assert.equal(
+    verifyMigrationHistory(root, { publishedRevision: legacy })
+      .publishedRevision,
+    legacy,
+  );
+  assert.throws(
+    () =>
+      verifyMigrationHistory(root, { publishedRevision: legacy.slice(0, 40) }),
+    /Missing local migration history commit/u,
+  );
 });
 
 test("unsupported or inconsistent source declarations fail closed", async (t) => {
