@@ -124,13 +124,14 @@ export function rankModelChoices(
         entry.eligibility === "supported" &&
         entry.provider === config.provider &&
         entry.access === (config.auth ?? "api_key") &&
-        (!entry.discoveryOnly ||
-          (kind === "chat" && availability.source !== "static")),
-    )
-    .sort(
-      (a, b) => (a.priority[kind] ?? Infinity) - (b.priority[kind] ?? Infinity),
+        (!entry.discoveryOnly || availability.source !== "static"),
     )
     .flatMap((entry) => {
+      const priority = entry.priority[kind];
+      return priority === undefined ? [] : [{ entry, priority }];
+    })
+    .sort((a, b) => a.priority - b.priority)
+    .flatMap(({ entry }) => {
       const model = availability.models.find(
         (model) =>
           model.provider === config.provider &&
