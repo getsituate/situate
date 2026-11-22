@@ -144,17 +144,21 @@ export function verifyMigrationHistory(
     "Migration qualification requires an explicit full published Git commit: SITUATE_MIGRATIONS_PUBLISHED_REVISION",
   );
   const candidate = migrationRevision(root, revision);
-  for (const at of [publishedRevision, candidate]) {
-    let type;
-    try {
-      type = git(root, ["cat-file", "-t"], at).trim();
-    } catch {
-      /* Missing local history must not trigger an implicit fetch. */
-    }
-    assert(type === "commit", `Missing local migration history commit: ${at}`);
+  let baseline;
+  try {
+    baseline = migrationRevision(root, publishedRevision);
+  } catch (cause) {
+    throw new Error(
+      `Missing local migration history commit: ${publishedRevision}`,
+      { cause },
+    );
   }
-  git(root, ["merge-base", "--is-ancestor"], publishedRevision, candidate);
-  const published = migrationInventory(root, publishedRevision);
+  assert(
+    baseline === publishedRevision,
+    `Missing local migration history commit: ${publishedRevision}`,
+  );
+  git(root, ["merge-base", "--is-ancestor"], baseline, candidate);
+  const published = migrationInventory(root, baseline);
   const current = migrationInventory(root, candidate);
   for (const file of published.implementations) {
     const before = published.files.get(file);
