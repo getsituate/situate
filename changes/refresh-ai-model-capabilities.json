@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "id": "refresh-ai-model-capabilities",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "refresh-ai-model-capabilities",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Refresh models while a chat is replying",
+          "paragraphs": [
+            "You can refresh the model list in AI & models without interrupting a reply. The Advanced settings show the model and thinking level behind each recommendation where available.",
+            "Thinking levels are available for GPT-6.2 Sol and Astra, and for newly discovered Anthropic and OpenRouter models that report supported levels."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "refresh-ai-model-capabilities",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Modelle während einer laufenden Antwort aktualisieren",
+          "paragraphs": [
+            "Unter KI & Modelle kannst du die Modellliste aktualisieren, ohne eine laufende Antwort zu unterbrechen. Die erweiterten Einstellungen zeigen dir, welches Modell und welche Denkstufe jeweils empfohlen werden, sofern eine Empfehlung verfügbar ist.",
+            "Denkstufen stehen für GPT-6.2 Sol und Astra sowie für neu gefundene Modelle von Anthropic und OpenRouter zur Verfügung, wenn diese ihre unterstützten Stufen melden."
+          ]
+        }
+      ]
+    }
+  }
+}
