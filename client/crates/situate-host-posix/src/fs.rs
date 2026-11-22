@@ -141,6 +141,13 @@ impl PatchIdentity {
         Ok(&self.0 == candidate)
     }
 }
+pub fn check_directory_write(dir: &Dir) -> io::Result<()> {
+    if dir.dir_metadata()?.permissions().readonly() {
+        return Err(io::ErrorKind::PermissionDenied.into());
+    }
+    Ok(())
+}
+
 pub fn directory_for_sync(dir: &Dir) -> io::Result<File> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {

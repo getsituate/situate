@@ -438,6 +438,20 @@ pub fn is_single_link(file: &File, _metadata: &std::fs::Metadata) -> io::Result<
     }
     Ok(unsafe { information.assume_init() }.nNumberOfLinks == 1)
 }
+pub fn check_directory_write(dir: &Dir) -> io::Result<()> {
+    use cap_fs_ext::OpenOptionsMaybeDirExt;
+    use cap_std::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::FILE_ADD_SUBDIRECTORY;
+
+    // The read-only attribute on Windows directories is not a write permission.
+    let mut options = OpenOptions::new();
+    options
+        .access_mode(FILE_ADD_SUBDIRECTORY)
+        .maybe_dir(true)
+        .follow(FollowSymlinks::No);
+    dir.open_with(".", &options).map(drop)
+}
+
 pub fn directory_for_sync(dir: &Dir) -> io::Result<File> {
     use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
     let mut options = cap_std::fs::OpenOptions::new();

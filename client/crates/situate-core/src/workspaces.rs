@@ -63,13 +63,9 @@ pub fn inspect(path: &Path) -> Result<Location, String> {
         return Err("native.workspace.folder.notWorkspace".into());
     }
     fs::read_dir(marker).map_err(|_| "native.workspace.marker.readFailed")?;
-    if fs::metadata(&result.handle)
-        .map_err(|_| "native.workspace.folder.unavailable")?
-        .permissions()
-        .readonly()
-    {
-        return Err("native.workspace.folder.readOnly".into());
-    }
+    let dir = Dir::open_ambient_dir(&result.handle, ambient_authority())
+        .map_err(|_| "native.workspace.folder.unavailable")?;
+    check_directory_write(&dir, "native.workspace.folder.readOnly")?;
     Ok(result)
 }
 
@@ -93,15 +89,17 @@ fn check_target(dir: &Dir, name: &str) -> Result<(), String> {
             return Err("native.workspace.create.checkAccessFailed".into());
         }
     }
-    if dir
-        .dir_metadata()
-        .map_err(|_| "native.workspace.folder.unavailable")?
-        .permissions()
-        .readonly()
-    {
-        return Err("native.workspace.parent.readOnly".into());
-    }
-    Ok(())
+    check_directory_write(dir, "native.workspace.parent.readOnly")
+}
+
+fn check_directory_write(dir: &Dir, read_only: &str) -> Result<(), String> {
+    situate_host::fs::check_directory_write(dir).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::PermissionDenied {
+            read_only.into()
+        } else {
+            "native.workspace.folder.unavailable".into()
+        }
+    })
 }
 
 enum InitialMetadata {
@@ -567,6 +565,25 @@ mod tests {
         let dir = Dir::open_ambient_dir(temp.path(), ambient_authority()).unwrap();
         assert!(open_child_directory(&dir, "Garden").is_err());
         assert!(!temp.path().join("existing/.situate").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_read_only_attribute_does_not_prevent_workspace_creation_or_opening() {
+        fn set_read_only(path: &Path) {
+            let mut permissions = fs::metadata(path).unwrap().permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(path, permissions).unwrap();
+            assert!(fs::metadata(path).unwrap().permissions().readonly());
+        }
+        let temp = tempfile::tempdir().unwrap();
+        set_read_only(temp.path());
+        let preview = preflight(temp.path(), "Garden").unwrap();
+        assert!(!Path::new(&preview).exists());
+        let location = create_for_onboarding(temp.path(), "Garden").unwrap();
+        assert_eq!(location.handle, preview);
+        set_read_only(Path::new(&preview));
+        assert_eq!(inspect(Path::new(&preview)).unwrap(), location);
     }
 
     #[cfg(unix)]
