@@ -172,6 +172,23 @@ test("default journeys retain saved state across restart and keep chat drafts in
     },
   });
   await profile.exercise();
+  const model = {
+    role: "AXComboBox",
+    name: "Model",
+    window: "Qualification predecessor — Situate",
+  };
+  const modelSelection = actions.findIndex(
+    (step) => step.focus?.name === "Model",
+  );
+  assert.ok(modelSelection > 0);
+  assert.deepEqual(actions.slice(modelSelection - 1, modelSelection + 5), [
+    { assert: model },
+    { focus: model },
+    { key: { key: "down", modifiers: [] } },
+    { assert: { ...model, role: "AXStaticText", name: "gpt-4.1-mini" } },
+    { key: { key: "return", modifiers: [] } },
+    { assert: { role: "AXButton", name: "Check and continue" } },
+  ]);
   const newChat = actions.findIndex((step) => step.click?.name === "New chat");
   assert.ok(newChat >= 2);
   assert.deepEqual(actions.slice(newChat - 2, newChat), [

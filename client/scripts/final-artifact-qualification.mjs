@@ -368,7 +368,7 @@ function validateAction(action) {
     );
   } else if (action.key) {
     assert(
-      ["return", "a", "g", "w"].includes(action.key.key) &&
+      ["return", "down", "a", "g", "w"].includes(action.key.key) &&
         Array.isArray(action.key.modifiers) &&
         action.key.modifiers.every((value) =>
           ["command", "shift"].includes(value),
@@ -396,6 +396,7 @@ function validateAction(action) {
         "AXButton",
         "AXMenuItem",
         "AXPopUpButton",
+        "AXComboBox",
         "AXStaticText",
         "AXTextField",
         "AXCheckBox",
@@ -432,7 +433,7 @@ export function accessibilityScript(pid, action) {
     return `${prefix}if count of (windows whose subrole is "AXDialog") is not 1 then error "Owned window must be unique"\nset field to value of attribute "AXFocusedUIElement"\nif role of field is not "AXTextField" then error "Folder field is not focused"${checkValue}\nend tell\nend tell`;
   }
   if (action.key) {
-    const code = { return: 36, tab: 48, escape: 53 }[action.key.key];
+    const code = { return: 36, down: 125 }[action.key.key];
     const modifiers = action.key.modifiers.length
       ? ` using {${action.key.modifiers.map((value) => `${value} down`).join(", ")}}`
       : "";
@@ -476,7 +477,7 @@ if not enabled of item 1 of openers then return "pending"
 return "reveal"
 end tell
 end tell`;
-  return `${prefix}${selectWindow}${enumerate}set matches to {}\nrepeat with elementRef in entries\ntry\nset candidate to contents of elementRef\nif role of candidate is ${quote(target.role)} and (name of candidate is ${label} or description of candidate is ${label}) then set end of matches to candidate\nend try\nend repeat\nif count of matches is not 1 then error ("Accessibility target must be unique: " & (count of matches))\n${["AXButton", "AXPopUpButton"].includes(target.role) ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
+  return `${prefix}${selectWindow}${enumerate}set matches to {}\nrepeat with elementRef in entries\ntry\nset candidate to contents of elementRef\nif role of candidate is ${quote(target.role)} and (name of candidate is ${label} or description of candidate is ${label}) then set end of matches to candidate\nend try\nend repeat\nif count of matches is not 1 then error ("Accessibility target must be unique: " & (count of matches))\n${["AXButton", "AXPopUpButton", "AXComboBox"].includes(target.role) ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
 }
 
 export async function checkAccessibilityAction(
