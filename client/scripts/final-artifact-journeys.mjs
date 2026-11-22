@@ -316,12 +316,12 @@ export function finalArtifactJourneys({ actions, seed, verifyFiles, phase }) {
         ),
       );
       await click(button("Dismiss", window));
-      await click({ role: "AXPopUpButton", name: "Model", window });
-      await fill(
-        { role: "AXTextField", name: "Model ID" },
-        "{{fixture.model}}",
-      );
-      await click(button("Use model ID"));
+      const model = { role: "AXComboBox", name: "Model", window };
+      await expect(model);
+      await actions([{ focus: model }]);
+      await key("down");
+      await expect(text(PINNED_AGENT_MODEL, window));
+      await key("return");
       await click(button("Check and continue"));
       await click({
         role: "AXCheckBox",

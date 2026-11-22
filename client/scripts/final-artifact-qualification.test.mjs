@@ -564,6 +564,16 @@ test("AX entry, window assertions and chords reject unreviewed roles and keys", 
     }),
     /command down, shift down/,
   );
+  assert.match(
+    accessibilityScript(123, { key: { key: "down", modifiers: [] } }),
+    /key code 125/,
+  );
+  assert.match(
+    accessibilityScript(123, {
+      focus: { role: "AXComboBox", name: "Model", window: "Qualification" },
+    }),
+    /role of candidate is "AXComboBox"[\s\S]*AXFocused/,
+  );
   for (const action of [
     { windows: 0 },
     { key: { key: "r", modifiers: ["command"] } },
