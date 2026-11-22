@@ -107,6 +107,7 @@ test("extended plan includes every category and both reference modes", () => {
 
 test("supported selection separates diagnostics from unavailable native hosts", () => {
   const native = [
+    "client-browser-msedge",
     "client-core-macos",
     "client-host",
     "client-host-clippy",
@@ -901,7 +902,11 @@ test("document selection is shared by unit, feedback and full changed profiles",
     for (const profile of [{ unit: true }, { feedback: true }, {}]) {
       const expected = profile.unit ? [] : ["root-format"];
       if (!profile.unit && !profile.feedback)
-        expected.push("root-history-secrets", "root-secrets");
+        expected.push(
+          "root-line-endings",
+          "root-history-secrets",
+          "root-secrets",
+        );
       if (file.startsWith("requirements/data/"))
         expected.push("requirements-unit", "requirements-catalog");
       expected.push("design-contracts");

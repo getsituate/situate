@@ -146,6 +146,17 @@ test("only release planning gives Intel macOS compatibility a 45-minute suite bu
   assert.equal(timeout("release"), 2700);
 });
 
+test("editing the external sign-in page selects Edge on macOS", () => {
+  const edgeLane = (path) =>
+    planPaths([path], { mode: "verify" }).lanes.find(({ suites }) =>
+      suites.includes("client-browser-msedge"),
+    );
+  const lane = edgeLane("client/app/tests/browser/auth-callback.spec.ts");
+  assert.equal(lane?.id, "macos-code");
+  assert.equal(lane.host, "macos");
+  assert.equal(edgeLane("client/app/src/App.vue"), undefined);
+});
+
 test("release-only browser selection still runs both product engines", () => {
   const paths = ["tools/native-vm.mjs"];
   const browserJobs = (mode) =>
@@ -169,6 +180,7 @@ test("release source gates are complete, unique and exclude diagnostics and advi
   for (const id of [
     "client-browser-chromium",
     "client-browser-webkit-smoke",
+    "client-browser-msedge",
     "client-native",
     "client-agent-e2e",
     "client-migrations",

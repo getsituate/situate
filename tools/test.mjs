@@ -277,6 +277,9 @@ export function suiteInventory(files, host = process.platform) {
       : ["npm", ["run", script]];
   add("root-lint", "runner", "check", ".", ...npm("lint"));
   add("root-format", "runner", "check", ".", ...npm("format:check"));
+  node("root-line-endings", "runner", "check", [
+    "tools/check-line-endings.mjs",
+  ]);
   add("root-history-secrets", "runner", "check", ".", "gitleaks", [
     "git",
     ".",
@@ -474,6 +477,7 @@ export function suiteInventory(files, host = process.platform) {
     ["chromium", false],
     ["webkit", true],
     ["webkit", false],
+    ["msedge", false],
   ])
     add(
       `client-browser-${engine}${smoke ? "-smoke" : ""}`,
@@ -493,7 +497,11 @@ export function suiteInventory(files, host = process.platform) {
         "--output",
         `test-results/browser/${engine}${smoke ? "-smoke" : ""}`,
       ],
-      matching(/^client\/app\/tests\/browser\/.*\.(test|spec)\.[cm]?[jt]s$/),
+      engine === "msedge"
+        ? ["client/app/tests/browser/auth-callback.spec.ts"]
+        : matching(
+            /^client\/app\/tests\/browser\/.*\.(test|spec)\.[cm]?[jt]s$/,
+          ),
     );
   add(
     "client-visual",
@@ -763,6 +771,7 @@ export function suiteInventory(files, host = process.platform) {
         "client-browser-chromium",
         "client-browser-webkit",
         "client-browser-webkit-smoke",
+        "client-browser-msedge",
         "client-visual",
         "client-visual-fixture",
         "client-native",
@@ -779,7 +788,10 @@ export function suiteInventory(files, host = process.platform) {
     )
       suite.npm = "client";
     if (suite.project === "requirements") suite.npm = "requirements";
-    if (suite.id.startsWith("client-browser-"))
+    if (
+      suite.id.startsWith("client-browser-") &&
+      suite.id !== "client-browser-msedge"
+    )
       suite.browsers = [suite.args[suite.args.indexOf("--project") + 1]];
     if (
       [

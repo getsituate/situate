@@ -11,6 +11,15 @@ export default defineConfig({
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },
     { name: "webkit", use: { browserName: "webkit" } },
+    ...(process.platform === "darwin"
+      ? [
+          {
+            name: "msedge",
+            testMatch: "**/auth-callback.spec.ts",
+            use: { channel: "msedge" as const },
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: "node ../scripts/browser-server.mjs",

@@ -59,6 +59,7 @@ test("security policy selects document checks without runtime or build suites", 
   const documentChecks = new Set([
     "quick-source",
     "root-format",
+    "root-line-endings",
     "root-secrets",
     "root-history-secrets",
     "design-contracts",

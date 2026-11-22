@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "ai-callback-line-endings",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Build portability fix for the Windows preview; no change to the macOS sign-in flow."
+}

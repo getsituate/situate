@@ -10,6 +10,7 @@ const deferred = new Set([
 ]);
 
 const appleHostOnly = new Set([
+  "client-browser-msedge",
   "client-core-macos",
   "client-host",
   "client-host-clippy",

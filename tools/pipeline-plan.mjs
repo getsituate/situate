@@ -24,6 +24,7 @@ const families = [
     "linux",
     [
       "root-format",
+      "root-line-endings",
       "root-lint",
       "root-secrets",
       "root-history-secrets",
@@ -79,6 +80,7 @@ const families = [
     "macos-code",
     "macos",
     [
+      "client-browser-msedge",
       "client-core-macos",
       "client-host",
       "client-host-clippy",
