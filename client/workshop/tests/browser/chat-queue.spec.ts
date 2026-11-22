@@ -433,15 +433,21 @@ test("long queues reflow, preserve drafts across environment changes, and retain
     ),
   ).toBe(true);
   await preview.screenshot({ path: testInfo.outputPath("queue-narrow.png") });
-  for (const label of [
-    "Pending steering messages",
-    "Pending follow-up messages",
-  ]) {
-    const box = await preview.getByLabel(label, { exact: true }).boundingBox();
-    expect(box!.y + box!.height).toBeLessThan(844);
-    await preview.getByLabel(label, { exact: true }).focus();
-    await preview.keyboard.press("End");
-  }
+  await preview.setViewportSize({ width: 390, height: 480 });
+  const pending = preview.getByRole("region", {
+    name: "4 pending messages",
+    exact: true,
+  });
+  await preview.getByRole("button", { name: "Edit all pending" }).focus();
+  await preview.keyboard.press("Tab");
+  await expect(pending).toBeFocused();
+  await preview.keyboard.press("End");
+  await expect
+    .poll(() => pending.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await preview.keyboard.press("Tab");
+  await expect(pending.locator("summary").first()).toBeFocused();
+  await preview.setViewportSize({ width: 390, height: 844 });
   await selectOption(page.getByLabel("Platform profile"), "ios");
   await page.getByLabel("Keyboard occlusion").check();
   await expect(composer(preview)).toHaveValue("Keep this draft\n");

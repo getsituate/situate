@@ -325,6 +325,25 @@ test("file history is read-only and file chat keeps an attachment and draft", as
   await fits(preview);
 });
 
+test("the file tree opens root-folder actions with the keyboard", async ({
+  page,
+}) => {
+  const preview = await open(page, "files-source");
+  const tree = preview.getByRole("navigation", { name: "Files and folders" });
+  await preview
+    .getByRole("searchbox", { name: "Filter files by name" })
+    .focus();
+  await preview.keyboard.press("Tab");
+  await expect(tree).toBeFocused();
+  await preview.keyboard.press("Shift+F10");
+  const menu = preview.getByRole("menu");
+  await expect(
+    menu.getByRole("menuitem", { name: "New folder…" }),
+  ).toBeVisible();
+  await preview.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+});
+
 test("file actions target the selected item without discarding another file’s draft", async ({
   page,
 }) => {

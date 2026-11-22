@@ -20,6 +20,8 @@ const dialogControl = ref<InstanceType<typeof SituateDialog>>();
 const dialog = computed(() => dialogControl.value?.element);
 const heading = ref<HTMLElement>();
 const reader = ref<HTMLElement>();
+const filePath = ref<HTMLElement>();
+const pathOverflows = ref(false);
 let opener: HTMLElement | null = null;
 const current = computed(() =>
   props.files.find((file) => file.key === props.selected && !file.deleted),
@@ -30,6 +32,24 @@ const path = computed(() => {
   const relative = [file.folder, file.name].filter(Boolean).join("/");
   return workspaceFilePath(props.workspacePath, relative);
 });
+watch(
+  [filePath, path],
+  ([element], _, onCleanup) => {
+    if (!element) return;
+    if (typeof ResizeObserver === "undefined") {
+      pathOverflows.value = true;
+      return;
+    }
+    const measure = () => {
+      pathOverflows.value = element.scrollHeight > element.clientHeight;
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
+    measure();
+  },
+  { flush: "post" },
+);
 function close() {
   emit("select", null);
 }
@@ -113,7 +133,13 @@ onBeforeUnmount(() => dialog.value?.close());
               copy.closeFile
             }}</SituateButton>
           </div>
-          <p class="imported-file-path" tabindex="0">{{ path }}</p>
+          <p
+            ref="filePath"
+            class="imported-file-path"
+            :tabindex="pathOverflows ? 0 : undefined"
+          >
+            {{ path }}
+          </p>
         </header>
         <section
           ref="reader"

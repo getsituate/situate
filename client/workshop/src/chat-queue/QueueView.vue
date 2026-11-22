@@ -152,6 +152,7 @@ function keydown(event: KeyboardEvent) {
               variant="plain"
               type="button"
               class="pending-toggle"
+              :id="`${pendingDetailsId}-toggle`"
               :aria-expanded="pendingExpanded"
               :aria-controls="pendingDetailsId"
               @click="pendingExpanded = !pendingExpanded"
@@ -179,6 +180,9 @@ function keydown(event: KeyboardEvent) {
             v-show="pendingExpanded"
             :id="pendingDetailsId"
             class="pending-list"
+            role="region"
+            :aria-labelledby="`${pendingDetailsId}-toggle`"
+            tabindex="0"
           >
             <section
               v-for="kind in ['steering', 'follow-up'] as const"
@@ -203,7 +207,6 @@ function keydown(event: KeyboardEvent) {
                 <div
                   class="pending-items"
                   role="region"
-                  tabindex="0"
                   :aria-label="
                     kind === 'steering'
                       ? 'Pending steering messages'
@@ -407,7 +410,8 @@ function keydown(event: KeyboardEvent) {
   text-align: left;
   cursor: pointer;
 }
-.pending-toggle:focus-visible {
+.pending-toggle:focus-visible,
+.pending-list:focus-visible {
   outline: var(--situate-stroke-focus) solid var(--situate-cobalt);
   outline-offset: var(--situate-focus-offset);
   border-radius: 8px;
