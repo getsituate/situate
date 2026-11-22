@@ -750,7 +750,7 @@ test("qualification route diagnostics authorize trusted hosted dispatch before f
   assert.equal(calls.length, 1);
 });
 
-test("paused or superseded main releases skip planning without claiming verification", async (t) => {
+test("automatic release selection honors the pause without consulting the current main SHA", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-release-selection-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const env = {
@@ -771,31 +771,17 @@ test("paused or superseded main releases skip planning without claiming verifica
     { enabled: false, reason: "paused" },
   );
   assert.equal(readFileSync(env.GITHUB_OUTPUT, "utf8"), "enabled=false\n");
-  for (const [sha, expected] of [
-    [env.GITHUB_SHA, { enabled: true, reason: "enabled" }],
-    ["b".repeat(40), { enabled: false, reason: "superseded" }],
-  ])
-    assert.deepEqual(
-      await main(
-        ["release-selection", "--workflow", "create"],
-        { ...env, PIPELINE_RELEASE_ENABLED: "true" },
-        (command, args) => {
-          assert.equal(command, "gh");
-          assert.equal(
-            args.at(-1),
-            "repos/getsituate/situate/git/ref/heads/main",
-          );
-          return JSON.stringify({
-            ref: "refs/heads/main",
-            object: { type: "commit", sha },
-          });
-        },
-      ),
-      expected,
-    );
+  assert.deepEqual(
+    await main(
+      ["release-selection", "--workflow", "create"],
+      { ...env, PIPELINE_RELEASE_ENABLED: "true" },
+      execute,
+    ),
+    { enabled: true, reason: "enabled" },
+  );
   assert.equal(
     readFileSync(env.GITHUB_OUTPUT, "utf8"),
-    "enabled=false\nenabled=true\nenabled=false\n",
+    "enabled=false\nenabled=true\n",
   );
   for (const changed of [
     { GITHUB_REPOSITORY: "other/repository" },

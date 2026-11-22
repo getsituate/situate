@@ -68,6 +68,8 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     ]);
     if (name === "publish-macos")
       allowed.add("./.github/workflows/slack-notify.yml");
+    if (name === "release-macos")
+      allowed.add("./.github/workflows/publish-macos.yml");
     if (name === "sonarcloud")
       allowed.add(
         "SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4",
@@ -309,13 +311,33 @@ test("creator can follow a successful aggregate when unselected lanes were skipp
   );
 });
 
-test("macOS release runs serialize before planning, separately from publication effects", () => {
+test("macOS release serializes planning through automatic publication and keeps only one pending push", () => {
   const workflow = read("release-macos"),
     publisher = read("publish-macos");
   assert.match(
     workflow.split("jobs:")[0],
     /^concurrency:\n {2}group: situate-release-create\n {2}cancel-in-progress: false$/m,
   );
+  assert.match(job(workflow, "publish"), /needs: create/);
+  assert.match(
+    job(workflow, "publish"),
+    /if: \$\{\{ !cancelled\(\) && needs\.create\.result == 'success' \}\}/,
+  );
+  assert.match(
+    job(workflow, "publish"),
+    /uses: \.\/\.github\/workflows\/publish-macos\.yml/,
+  );
+  assert.match(
+    job(workflow, "publish"),
+    /release_id: \$\{\{ needs\.create\.outputs\.release_id \}\}/,
+  );
+  assert.match(
+    job(workflow, "create"),
+    /release_id: \$\{\{ steps\.github_release\.outputs\.release_id \}\}/,
+  );
+  assert.match(publisher, /workflow_call:/);
+  assert.match(publisher, /workflow_dispatch:/);
+  assert.doesNotMatch(publisher, /workflow_run:/);
   for (const effect of [job(workflow, "create"), job(publisher, "publish")]) {
     assert.match(effect, /group: situate-release-effects/);
     assert.match(effect, /cancel-in-progress: false/);
@@ -341,7 +363,10 @@ test("hosting waiters can read producer runs without production write permission
     ["release-macos", "hosting-ready"],
   ]) {
     const body = job(read(workflow), id);
-    assert.match(body, /run: node tools\/wait-for-hosting\.mjs\n/);
+    assert.match(
+      body,
+      /run: node tools\/wait-for-hosting\.mjs(?: --release)?\n/,
+    );
     assert.match(body, /permissions:\n {6}actions: read\n/);
     assert.match(body, /^ {6}deployments: read$/m);
     assert.doesNotMatch(body, /(?:actions|contents|deployments): write/);
@@ -492,7 +517,7 @@ test("macOS release checks verified hosting before starting release effects", ()
   const hosting = job(workflow, "hosting-ready");
   assert.match(hosting, /needs: plan/);
   assert.match(hosting, /deployments: read/);
-  assert.match(hosting, /run: node tools\/wait-for-hosting\.mjs/);
+  assert.match(hosting, /run: node tools\/wait-for-hosting\.mjs --release/);
   assert.doesNotMatch(hosting, /secrets\.|contents: write/);
   assert.match(job(workflow, "create"), /needs:[\s\S]*hosting-ready,/);
 });
@@ -529,13 +554,14 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   for (const name of ["release-macos", "publish-macos"])
     assert.match(read(name), /actions-adapter\.mjs release-gate/);
   const publisher = read("publish-macos");
-  assert.match(publisher, /workflow_run:[\s\S]*workflows: \[Release macOS\]/);
-  assert.match(publisher, /release_id:/);
   assert.match(
     publisher,
-    /head_repository\.full_name == 'getsituate\/situate'/,
+    /PIPELINE_RELEASE_ID: \$\{\{ inputs\.release_id \}\}/,
   );
-  assert.match(publisher, /head_branch == 'main'/);
+  assert.match(job(publisher, "publish"), /environment: macos-publication/);
+  assert.match(publisher, /github\.repository == 'getsituate\/situate'/);
+  assert.match(publisher, /github\.ref == 'refs\/heads\/main'/);
+  assert.doesNotMatch(creator, /PIPELINE_REQUIRE_LATEST_MAIN/);
   assert.match(publisher, /publish-prepare --workflow publish/);
   assert.match(publisher, /publish-run --workflow publish/);
   assert.match(job(publisher, "publish"), /runs-on: macos-latest/);
@@ -562,7 +588,10 @@ test("creator and publisher have gated execution paths with signing scoped to bu
     7,
   );
   assert.equal(
-    (publisher.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY:/g) ?? []).length,
+    (
+      publisher.match(/SITUATE_RELEASE_SSH_PRIVATE_KEY: \$\{\{ secrets\./g) ??
+      []
+    ).length,
     2,
   );
   assert.doesNotMatch(

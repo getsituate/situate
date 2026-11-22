@@ -453,6 +453,19 @@ test("a change to protected main takes precedence over a terminal producer obser
   assert.deepEqual(waits, [20_000]);
 });
 
+test("the release waiter keeps checking the pinned hosting inputs after a newer push", async () => {
+  const absent = observe({ applied: null }).read;
+  const ready = observe().read;
+  let reads = 0;
+  const { run, waits } = consumer({
+    mode: "--release",
+    observe: () => (++reads === 1 ? absent() : ready()),
+    mainRevision: () => assert.fail("A release must not look up the main tip"),
+  });
+  await run;
+  assert.deepEqual(waits, [20_000]);
+});
+
 test("one-shot check and probe do not consult producer runs", async () => {
   for (const mode of ["--check", "--probe"]) {
     const { run, waits, producerReads } = consumer({

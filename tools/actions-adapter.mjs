@@ -386,16 +386,9 @@ export async function main(
       );
     if (!["true", "false"].includes(env.PIPELINE_RELEASE_ENABLED))
       throw new Error("Select an explicit release automation state.");
-    let reason = "paused";
-    if (env.PIPELINE_RELEASE_ENABLED === "true") {
-      const { releaseSourceIsCurrent } = await import("./actions-release.mjs");
-      reason = (await releaseSourceIsCurrent(env, execute))
-        ? "enabled"
-        : "superseded";
-    }
-    const enabled = reason === "enabled";
+    const enabled = env.PIPELINE_RELEASE_ENABLED === "true";
     output({ enabled: String(enabled) }, env);
-    return { enabled, reason };
+    return { enabled, reason: enabled ? "enabled" : "paused" };
   }
   if (command === "release-gate") {
     const { requireProvisioned } = await import("./actions-release.mjs");
@@ -425,12 +418,14 @@ export async function main(
   }
   if (command === "create-stage" || command === "publish-run") {
     const { runReleaseStage } = await import("./actions-release.mjs");
-    return runReleaseStage(
+    const result = await runReleaseStage(
       env,
       command === "create-stage" ? "create" : "publish",
       values.stage,
       execute,
     );
+    if (result?.release_id) output({ release_id: result.release_id }, env);
+    return result;
   }
   if (command === "publish-prepare") {
     const { preparePublish } = await import("./actions-release.mjs");

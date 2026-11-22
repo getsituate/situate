@@ -1,10 +1,20 @@
 name: Publish macOS
 
 on:
-  workflow_run:
-    workflows: [Release macOS]
-    types: [completed]
-    branches: [main]
+  workflow_call:
+    inputs:
+      release_id:
+        type: string
+        required: true
+    secrets:
+      SITUATE_RELEASE_CONFIG_JSON:
+        required: false
+      SITUATE_RELEASE_SSH_PRIVATE_KEY:
+        required: false
+      SITUATE_RELEASE_SSH_KNOWN_HOSTS:
+        required: false
+      SLACK_RELEASE_WEBHOOK_URL:
+        required: false
   workflow_dispatch:
     inputs:
       release_id:
@@ -20,7 +30,7 @@ jobs:
     concurrency:
       group: situate-release-effects
       cancel-in-progress: false
-    if: github.repository == 'getsituate/situate' && (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' || github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == 'getsituate/situate' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push')
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     environment: macos-publication
     timeout-minutes: 60
@@ -28,7 +38,6 @@ jobs:
       published_release_id: ${{ steps.promote.outcome == 'success' && steps.plan.outputs.release_id || '' }}
     permissions:
       contents: read
-      actions: read
       deployments: read
     env:
       PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_PUBLICATION_ENABLED }}
