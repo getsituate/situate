@@ -146,6 +146,34 @@ describe("creation", () => {
       "violet",
     );
   });
+  it("displays the Windows destination while checking it and submits the original parent ID", async () => {
+    const id = String.raw`path:\\?\C:\Users\Test\Documents`;
+    vi.mocked(chooseParent).mockResolvedValue({
+      id,
+      name: "Documents",
+      display: String.raw`C:\Users\Test\Documents`,
+    });
+    let finishCheck!: (path: string) => void;
+    vi.mocked(preflight).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCheck = resolve;
+        }),
+    );
+    const run = vi.fn().mockResolvedValue(true);
+    const wrapper = mount(WorkspaceCreateForm, { props: { run, busy: false } });
+    await flushPromises();
+    await wrapper.get("#workspace-name").setValue("Field notes");
+    const destination = wrapper.get<HTMLInputElement>("#workspace-parent");
+    const expected = String.raw`C:\Users\Test\Documents\Field notes`;
+    expect(destination.element.value).toBe(expected);
+    expect(preflight).toHaveBeenCalledWith(id, "Field notes");
+    finishCheck(expected);
+    await flushPromises();
+    expect(destination.element.value).toBe(expected);
+    await wrapper.get("form").trigger("submit");
+    expect(run).toHaveBeenCalledWith("create", id, "Field notes", "violet");
+  });
   it("places destination errors above colors and clears stale operation errors on edits", async () => {
     const wrapper = mount(WorkspaceCreateForm, {
       props: { run: vi.fn(), busy: false },

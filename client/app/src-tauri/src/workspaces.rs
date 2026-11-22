@@ -32,10 +32,35 @@ impl From<&Location> for Entry {
         Self {
             id: l.id.clone(),
             name: l.name.clone(),
-            display: l.display.clone(),
+            display: workspace_display_path(&l.display),
         }
     }
 }
+fn workspace_display_path(path: &str) -> String {
+    #[cfg(windows)]
+    let path = situate_host_windows::fs::display_path(Path::new(path))
+        .to_str()
+        .unwrap_or(path);
+    path.to_owned()
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn workspace_display_does_not_expose_verbatim_prefix_on_short_drive_paths() {
+    let handle = r"\\?\C:\Users\Test\Documents";
+    let location = Location {
+        id: format!("path:{handle}"),
+        name: "Documents".into(),
+        display: handle.into(),
+        kind: "path".into(),
+        handle: handle.into(),
+    };
+    let entry = Entry::from(&location);
+    assert_eq!(entry.display, r"C:\Users\Test\Documents");
+    assert_eq!(entry.id, format!("path:{handle}"));
+    assert_eq!(location.handle, handle);
+}
+
 #[derive(Clone, Serialize)]
 pub struct Failure {
     pub location: Entry,
@@ -511,10 +536,6 @@ fn native(
                 .map(|p| fs::location(&p))
                 .transpose(),
             "inspect" => fs::inspect(path()?).map(Some),
-            "preflight" => {
-                fs::preflight(path()?, name.ok_or("native.workspace.name.required")?)?;
-                Ok(location.cloned())
-            }
             "create" => {
                 #[cfg(target_os = "macos")]
                 let create = fs::create_for_onboarding;
@@ -1044,18 +1065,29 @@ pub async fn workspace_preflight(
             .parents
             .get(&parent)
             .ok_or("native.workspace.parent.chooseAgain")?;
-        native(&app, "preflight", Some(location), Some(&name))?;
-        if location.display.starts_with("native.") || location.display.starts_with('{') {
-            Ok(situate_core::messages::error(
-                "native.workspace.location.child",
-                serde_json::json!({"parent": location.display, "name":name}),
-            ))
-        } else {
-            Ok(format!(
-                "{}/{}",
-                location.display.trim_end_matches('/'),
-                name
-            ))
+        #[cfg(desktop)]
+        {
+            if location.kind != "path" {
+                return Err("native.workspace.handle.unsupportedOnDevice".into());
+            }
+            let path = situate_core::workspaces::preflight(Path::new(&location.handle), &name)?;
+            Ok(workspace_display_path(&path))
+        }
+        #[cfg(mobile)]
+        {
+            native(&app, "preflight", Some(location), Some(&name))?;
+            if location.display.starts_with("native.") || location.display.starts_with('{') {
+                Ok(situate_core::messages::error(
+                    "native.workspace.location.child",
+                    serde_json::json!({"parent": location.display, "name":name}),
+                ))
+            } else {
+                Ok(format!(
+                    "{}/{}",
+                    location.display.trim_end_matches('/'),
+                    name
+                ))
+            }
         }
     })
     .await

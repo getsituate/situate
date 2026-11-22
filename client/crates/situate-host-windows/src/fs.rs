@@ -28,6 +28,8 @@ pub const RELEASE_CHILD_BEFORE_MOVE: bool = true;
 pub const REMOVE_FAILED_HISTORY_STAGE: bool = false;
 pub const STAGE_WORKSPACE_MARKER: bool = false;
 
+pub use dunce::simplified as display_path;
+
 pub fn private_file_options(_options: &mut OpenOptions) {}
 pub fn nonblocking_file_options(_options: &mut OpenOptions) {}
 pub fn private_dir_builder(_builder: &mut DirBuilder) {}

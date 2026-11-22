@@ -53,13 +53,14 @@ const errorBox = useTemplateRef<HTMLElement>("errorBox");
 let generation = 0;
 let alive = true;
 const validation = computed(() => nameError(name.value));
-const target = computed(() =>
-  parent.value && name.value
-    ? localizeProvidedText(parent.value.display).replace(/\/$/u, "") +
-      "/" +
-      name.value
-    : "",
-);
+const target = computed(() => {
+  if (!parent.value || !name.value) return "";
+  const { display } = parent.value;
+  if (/^(?:[a-z]:\\|\\\\)/iu.test(display)) {
+    return `${display.replace(/\\$/u, "")}\\${name.value}`;
+  }
+  return `${localizeProvidedText(display).replace(/\/$/u, "")}/${name.value}`;
+});
 const canCreate = computed(
   () =>
     checked.value &&
