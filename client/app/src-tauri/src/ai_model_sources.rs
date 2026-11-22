@@ -106,6 +106,60 @@ fn model_id(value: &Value) -> Result<String, String> {
         .ok_or_else(|| ERROR.into())
 }
 impl Protocol {
+    fn thinking(self, item: &Value) -> Option<ThinkingCapabilities> {
+        match self {
+            Self::Anthropic => {
+                let capabilities = &item["capabilities"];
+                let effort = &capabilities["effort"];
+                if effort["supported"] != true
+                    || capabilities["thinking"]["types"]["adaptive"]["supported"] != true
+                {
+                    return None;
+                }
+                ThinkingCapabilities::from_levels(
+                    &["low", "medium", "high", "xhigh", "max"],
+                    |level| effort[level]["supported"] == true,
+                    "medium",
+                )
+            }
+            Self::Router => {
+                let Some(reasoning) = item["reasoning"].as_object() else {
+                    return None;
+                };
+                let efforts = reasoning.get("supported_efforts")?;
+                if !(efforts.is_null() || efforts.is_array()) {
+                    return None;
+                }
+                let accepts = |effort: &str| {
+                    efforts.is_null()
+                        || efforts
+                            .as_array()
+                            .is_some_and(|items| items.iter().any(|item| item == effort))
+                };
+                let off = reasoning.get("mandatory").and_then(Value::as_bool) == Some(false)
+                    && accepts("none");
+                let preferred =
+                    if reasoning.get("default_enabled").and_then(Value::as_bool) == Some(false) {
+                        "off"
+                    } else {
+                        reasoning
+                            .get("default_effort")
+                            .and_then(Value::as_str)
+                            .unwrap_or("medium")
+                    };
+                ThinkingCapabilities::from_levels(
+                    &["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+                    |level| if level == "off" { off } else { accepts(level) },
+                    if preferred == "none" {
+                        "off"
+                    } else {
+                        preferred
+                    },
+                )
+            }
+            _ => None,
+        }
+    }
     fn selectable(self, id: &str, item: &Value) -> Option<DiscoveredModel> {
         fn contains(value: &Value, needle: &str) -> bool {
             value
@@ -139,6 +193,7 @@ impl Protocol {
             context_window,
             max_tokens,
             image_input: false,
+            thinking: self.thinking(item),
         })
     }
 }

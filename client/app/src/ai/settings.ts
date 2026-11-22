@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { reactive } from "vue";
 
 export type ThinkingLevel =
-  "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export interface ModelChoice {
   model: string;
   thinking: ThinkingLevel | "recommended";

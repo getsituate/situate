@@ -151,12 +151,19 @@ pub(super) fn resolve_choice(
         }
     }
     choice.discovered = observed.selectable(&choice.connection, &choice.model);
-    if choice.discovered.is_some() {
-        if kind != "chat" || !matches!(choice.thinking.as_str(), "off" | "recommended") {
+    if let Some(model) = &choice.discovered {
+        if kind != "chat" {
             return Err(MODEL_ERROR.into());
         }
-        choice.thinking = off();
-        choice.target().map_err(|_| MODEL_ERROR)?;
+        // Older versions saved "off" even when the model did not support disabling reasoning.
+        if choice.thinking == "recommended"
+            || (choice.thinking == "off" && !model.validate_thinking(&choice.connection, "off"))
+        {
+            choice.thinking = model
+                .thinking(&choice.connection)
+                .map_or_else(off, |(_, default)| default.into());
+        }
+        validate_snapshot(&choice, &choice.connection)?;
         observed.admits(&choice.model)?;
         return Ok(choice);
     }
@@ -181,8 +188,9 @@ pub(super) fn validate_snapshot(choice: &Choice, config: &Config) -> Result<(), 
         return Err("native.ai.access.changedDuringTurn".into());
     }
     choice.target()?;
-    if choice.discovered.is_some() {
-        return (choice.thinking == "off")
+    if let Some(model) = &choice.discovered {
+        return model
+            .validate_thinking(config, &choice.thinking)
             .then_some(())
             .ok_or_else(|| MODEL_ERROR.into());
     }

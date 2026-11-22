@@ -84,16 +84,23 @@ test(
     await page.keyboard.press("Escape");
     await settings(page);
     await expect(
-      page.getByText(t("ai.models.provider"), { exact: true }),
+      page.getByText(t("settings.ai.modelList"), { exact: true }),
     ).toBeVisible();
     await expect(page.locator("#settings-chat-model")).toHaveAttribute(
       "data-value",
       "gpt-5.4",
     );
+    const refresh = page.getByRole("button", {
+      name: t("ai.models.refresh"),
+      exact: true,
+    });
+    await expect(refresh).toBeEnabled();
+    await refresh.evaluate((element) =>
+      element.scrollIntoView({ block: "center", behavior: "instant" }),
+    );
+    await expect(refresh).toBeInViewport();
     await visual.capture("model.discovery.provider-observation");
-    await page
-      .getByRole("button", { name: t("ai.models.refresh"), exact: true })
-      .click();
+    await refresh.click();
     await expect(
       page.getByText(t("ai.models.empty"), { exact: true }),
     ).toBeVisible();

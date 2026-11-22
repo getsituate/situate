@@ -3,15 +3,19 @@ use super::*;
 const URL: &str = "https://models.dev/api.json";
 const MAX_BYTES: usize = 12 * 1024 * 1024;
 
-// The public catalog does not identify which OpenAI endpoint supports tools.
-// https://developers.openai.com/api/docs/changelog#november-2026
-const RESPONSES_WITH_TOOLS: &[&str] = &["gpt-6.2-astra", "gpt-6.2-sol"];
+pub(in crate::ai::discovery) fn capabilities() -> &'static OpenAiThinking {
+    static CAPABILITIES: std::sync::OnceLock<OpenAiThinking> = std::sync::OnceLock::new();
+    CAPABILITIES.get_or_init(|| {
+        serde_json::from_str(include_str!("../../src/ai/openai-discovered-thinking.json"))
+            .expect("verified OpenAI Responses capabilities")
+    })
+}
 
 pub(super) async fn enrich(catalog: &mut Catalog) {
     if !catalog
         .models
         .iter()
-        .any(|id| RESPONSES_WITH_TOOLS.contains(&id.as_str()))
+        .any(|id| capabilities().models.contains(id))
     {
         return;
     }
@@ -25,7 +29,7 @@ pub(super) async fn enrich(catalog: &mut Catalog) {
 pub(in crate::ai::discovery) async fn enrich_from(catalog: &mut Catalog, url: reqwest::Url) {
     let metadata = download(url).await;
     for id in &catalog.models {
-        if !RESPONSES_WITH_TOOLS.contains(&id.as_str()) {
+        if !capabilities().models.contains(id) {
             continue;
         }
         let fallback = DiscoveredModel {
@@ -33,6 +37,7 @@ pub(in crate::ai::discovery) async fn enrich_from(catalog: &mut Catalog, url: re
             context_window: 1_050_000,
             max_tokens: 128_000,
             image_input: true,
+            thinking: None,
         };
         let mut model = fallback;
         if let Some(entry) = metadata.as_ref().and_then(|data| data.get(id))

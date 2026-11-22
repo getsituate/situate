@@ -298,8 +298,8 @@ pub(super) fn select_conversation_thinking(
     if let Some(level) = &thinking
         && level != "recommended"
     {
-        if choice.discovered.is_some() {
-            if level != "off" {
+        if let Some(model) = &choice.discovered {
+            if !model.validate_thinking(&connection.config, level) {
                 return Err(MODEL_ERROR.into());
             }
         } else {

@@ -40,6 +40,9 @@ pub(super) fn supported_thinking_levels(
     config: &Config,
     model: &str,
 ) -> Result<Vec<String>, String> {
+    if let Some(verified) = discovery::openai_thinking(config, model) {
+        return Ok(verified.levels.clone());
+    }
     let (api, _, _) = target(config, model)?;
     let catalog: Value = serde_json::from_str(RECOMMENDATIONS).map_err(|_| MODEL_ERROR)?;
     let entry = catalog["verifiedThinking"].as_array().and_then(|entries| {
@@ -76,6 +79,9 @@ pub(super) fn comment_thinking(config: &Config, model: &str) -> Result<String, S
     Ok(levels[0].clone())
 }
 fn default_thinking(config: &Config, model: &str) -> Result<String, String> {
+    if let Some(verified) = discovery::openai_thinking(config, model) {
+        return Ok(verified.default.clone());
+    }
     let levels = supported_thinking_levels(config, model)?;
     let recommendations: Value = serde_json::from_str(RECOMMENDATIONS).map_err(|_| MODEL_ERROR)?;
     let access = if config.auth == Some(AuthKind::Oauth) {
@@ -129,12 +135,19 @@ fn validate_settings(
         if choice.model == "recommended" {
             continue;
         }
-        if is_chat && choice.catalog_revision.is_none()
-            && matches!(choice.thinking.as_str(), "recommended" | "off")
-            && (observed.selectable(config, &choice.model).is_some()
-                || (prior == Some(choice) && target(config, &choice.model).is_err()))
-        {
-            continue;
+        if is_chat && choice.catalog_revision.is_none() {
+            if let Some(model) = observed.selectable(config, &choice.model) {
+                if !matches!(choice.thinking.as_str(), "recommended" | "off")
+                    && !model.validate_thinking(config, &choice.thinking)
+                    && prior != Some(choice)
+                {
+                    return Err(MODEL_ERROR.into());
+                }
+                continue;
+            }
+            if prior == Some(choice) && target(config, &choice.model).is_err() {
+                continue;
+            }
         }
         target(config, &choice.model)?;
         if choice.thinking != "recommended" {
@@ -262,13 +275,19 @@ fn write_settings_observed(
             {
                 choice.thinking = thinking.clone();
             }
-            if choice.thinking != "recommended"
-                && !(choice.thinking == "off" && choice.catalog_revision.is_none()
-                    && (observed.selectable(config, &concrete).is_some()
-                        || (previous.as_ref().and_then(|p| p.settings.chat.as_ref()) == Some(choice)
-                            && target(config, &concrete).is_err())))
-            {
-                validate_thinking(config, &concrete, &choice.thinking)?;
+            if choice.thinking != "recommended" {
+                if let Some(model) = observed.selectable(config, &concrete) {
+                    if choice.thinking != "off"
+                        && !model.validate_thinking(config, &choice.thinking)
+                        && previous.as_ref().and_then(|p| p.settings.chat.as_ref()) != Some(choice)
+                    {
+                        return Err(MODEL_ERROR.into());
+                    }
+                } else if previous.as_ref().and_then(|p| p.settings.chat.as_ref()) != Some(choice)
+                    || target(config, &concrete).is_ok()
+                {
+                    validate_thinking(config, &concrete, &choice.thinking)?;
+                }
             }
             thinking_by_model.insert(concrete, choice.thinking.clone());
         } else if choice.thinking != "recommended" {

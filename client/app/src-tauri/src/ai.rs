@@ -1641,6 +1641,7 @@ fn credential_snapshot(
     }
     Ok(Some(CredentialSnapshot { manifest, record }))
 }
+#[cfg(test)]
 async fn prepare_refresh<K: KeyStore + Send + 'static>(
     storage: Storage,
     connection: Connection,
@@ -1666,6 +1667,7 @@ fn save_rotated_credentials(
     let expected = expected.ok_or(KEY_ERROR)?;
     storage.refresh_connection(keys, &expected.manifest, &expected.record, bytes)
 }
+#[cfg(test)]
 async fn refresh_connection<K, F, Fut>(
     storage: Storage,
     mut connection: Connection,
@@ -1834,6 +1836,8 @@ async fn send(
             request = request
                 .header("anthropic-version", "2023-06-01")
                 .header("x-api-key", &connection.key);
+        } else if let Some(credential) = &connection.oauth {
+            request = request.bearer_auth(&credential.access);
         } else if !connection.key.is_empty() {
             request = request.bearer_auth(&connection.key);
         }

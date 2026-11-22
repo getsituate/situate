@@ -657,6 +657,75 @@ test.each([
   },
 );
 
+test("a discovered GPT-6.2 Sol offers Maximum but not Off in chat", async () => {
+  const wrapper = mount(ChatModelPicker, {
+    attachTo: document.body,
+    props: {
+      ...props(),
+      status: {
+        ...status,
+        selectedModel: "gpt-6.2-sol",
+        thinkingInherited: false,
+        thinkingPreference: "off",
+        thinkingLevel: "medium",
+        recommendedThinkingLevel: "medium",
+      },
+    },
+  });
+  await flushPromises();
+  await openMenu(wrapper, 1);
+  expect(menu().get('[data-choice="max"]').text()).toContain(
+    "⟦settings.ai.thinking.max⟧",
+  );
+  expect(menu().find('[data-choice="off"]').exists()).toBe(false);
+  expect(
+    menu().get('[data-choice="recommended"]').attributes("aria-checked"),
+  ).toBe("true");
+});
+
+test.each(["anthropic", "openrouter"])(
+  "chat uses refreshed thinking levels for a discovered %s model",
+  async (provider) => {
+    const model = "discovered-reasoning-model";
+    const wrapper = mount(ChatModelPicker, {
+      attachTo: document.body,
+      props: {
+        ...props(),
+        status: {
+          ...status,
+          config: { provider, endpoint: null },
+          selectedModel: model,
+          thinkingInherited: false,
+          thinkingPreference: "recommended",
+          thinkingLevel: "medium",
+          recommendedThinkingLevel: "medium",
+          catalog: {
+            source: "provider",
+            models: [model],
+            selectable: [
+              {
+                id: model,
+                contextWindow: 32768,
+                maxTokens: 8192,
+                thinking: {
+                  levels: ["low", "medium", "max"],
+                  default: "medium",
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    await flushPromises();
+    await openMenu(wrapper, 1);
+    expect(menu().get('[data-choice="max"]').text()).toContain(
+      "⟦settings.ai.thinking.max⟧",
+    );
+    expect(menu().find('[data-choice="high"]').exists()).toBe(false);
+  },
+);
+
 test("expanded workspace default shows its resolved model, not an override on a different account", async () => {
   vi.mocked(getStatus).mockResolvedValue({
     ...status,

@@ -28,6 +28,7 @@ test("qualified discovery adds new chat models without exposing listing-only IDs
     expect.objectContaining({
       id: "vendor/qualified",
       api: "openai-completions",
+      reasoning: false,
     }),
   ]);
   expect(
@@ -61,6 +62,7 @@ test("qualified OpenAI IDs appear for API keys and direct login", () => {
         id: "gpt-6.2-sol",
         api: "openai-responses",
         input: ["text", "image"],
+        reasoning: true,
       }),
     ]);
   }

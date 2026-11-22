@@ -1,4 +1,7 @@
 use super::*;
+use crate::workspaces::{AuthorizationSession, with_authorization_session};
+use sha2::{Digest, Sha256};
+use situate_core::ai_storage::connections::Record;
 use std::collections::HashSet;
 
 const ERROR: &str = "native.ai.catalog.unavailable";
@@ -57,9 +60,75 @@ pub struct DiscoveredModel {
     pub max_tokens: u32,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub image_input: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingCapabilities>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ThinkingCapabilities {
+    pub levels: Vec<String>,
+    pub default: String,
+}
+
+impl ThinkingCapabilities {
+    pub(super) fn from_levels(
+        levels: &[&str],
+        supports: impl Fn(&str) -> bool,
+        preferred: &str,
+    ) -> Option<Self> {
+        let levels: Vec<String> = levels
+            .iter()
+            .copied()
+            .filter(|level| supports(level))
+            .map(str::to_owned)
+            .collect();
+        let default = levels
+            .iter()
+            .find(|level| level.as_str() == preferred)
+            .or_else(|| levels.first())?
+            .clone();
+        Some(Self { levels, default })
+    }
+}
+
+pub(super) fn openai_thinking(config: &Config, id: &str) -> Option<&'static OpenAiThinking> {
+    let capabilities = sources::openai_metadata::capabilities();
+    (config.provider == "openai"
+        && config.endpoint.is_none()
+        && capabilities.models.iter().any(|model| model == id))
+    .then_some(capabilities)
+}
+
+#[derive(Deserialize)]
+pub(super) struct OpenAiThinking {
+    models: Vec<String>,
+    pub(super) levels: Vec<String>,
+    pub(super) default: String,
 }
 
 impl DiscoveredModel {
+    pub(super) fn thinking(&self, config: &Config) -> Option<(&[String], &str)> {
+        if let Some(verified) = openai_thinking(config, &self.id) {
+            return Some((&verified.levels, &verified.default));
+        }
+        if matches!(config.provider.as_str(), "anthropic" | "openrouter")
+            && config.endpoint.is_none()
+        {
+            return self
+                .thinking
+                .as_ref()
+                .map(|thinking| (thinking.levels.as_slice(), thinking.default.as_str()));
+        }
+        None
+    }
+
+    pub(super) fn validate_thinking(&self, config: &Config, level: &str) -> bool {
+        self.thinking(config).map_or(level == "off", |(levels, _)| {
+            levels.iter().any(|allowed| allowed == level)
+        })
+    }
+
     pub(super) fn descriptor(&self, config: &Config) -> Option<Value> {
         if config.endpoint.is_some()
             || (config.auth == Some(AuthKind::Oauth) && config.provider != "openai")
@@ -79,7 +148,8 @@ impl DiscoveredModel {
         };
         let mut descriptor = serde_json::json!({
             "id":self.id,"name":self.id,"provider":config.provider,"type":"chat",
-            "api":api,"baseUrl":base,"input":input,"reasoning":false,"cost":null,
+            "api":api,"baseUrl":base,"input":input,
+            "reasoning":openai_thinking(config, &self.id).is_some() || self.thinking.is_some(),"cost":null,
             "contextWindow":self.context_window,"maxTokens":self.max_tokens,
             "compat":{"supportsStore":false,"supportsDeveloperRole":false,
                 "supportsReasoningEffort":false,"supportsUsageInStreaming":false,
@@ -88,7 +158,18 @@ impl DiscoveredModel {
         if config.auth == Some(AuthKind::Oauth) {
             descriptor["compat"]["supportsMaxOutputTokens"] = serde_json::json!(false);
         }
+        if config.provider == "anthropic" && self.thinking.is_some() {
+            descriptor["compat"]["forceAdaptiveThinking"] = serde_json::json!(true);
+            descriptor["thinkingLevelMap"] = serde_json::json!({"off":null});
+        }
         if config.provider == "openrouter" {
+            if self
+                .thinking
+                .as_ref()
+                .is_some_and(|thinking| thinking.levels.iter().any(|level| level == "off"))
+            {
+                descriptor["thinkingLevelMap"] = serde_json::json!({"off":"none"});
+            }
             descriptor["compat"]["openRouterRouting"] =
                 serde_json::json!({"require_parameters":true});
         }
@@ -301,7 +382,10 @@ pub(super) fn schedule_refresh(
     drop(pending);
     let window = window.to_owned();
     tauri::async_runtime::spawn_blocking(move || {
-        let changed = refresh_cached(&app, &window, &session, &key.1).unwrap_or(false);
+        let changed = matches!(
+            refresh_catalog(&app, &window, &session, &key.0, Some(&key.1), false),
+            Ok(Some((_, true)))
+        );
         if let Ok(mut pending) = app.state::<Ai>().catalog_refreshes.lock() {
             pending.remove(&key);
         }
@@ -311,49 +395,105 @@ pub(super) fn schedule_refresh(
     });
 }
 
-fn refresh_cached(
+fn catalog_fingerprint(
+    storage: &Storage,
+    keys: &impl KeyStore,
+    id: &str,
+) -> Result<[u8; 32], String> {
+    let bytes = storage.load_connection(keys, id)?.ok_or(KEY_ERROR)?;
+    Ok(Sha256::digest(bytes).into())
+}
+
+fn persist_refresh(
+    storage: &Storage,
+    keys: &impl KeyStore,
+    record: &Record,
+    fingerprint: [u8; 32],
+    connection: &mut Connection,
+    observed: Catalog,
+) -> Result<Status, String> {
+    ensure_unchanged(storage, record)?;
+    if catalog_fingerprint(storage, keys, &record.id)? != fingerprint {
+        return Err("native.ai.catalog.connectionChanged".into());
+    }
+    store_observation(storage, keys, record, connection, observed)
+}
+
+fn refresh_catalog(
     app: &tauri::AppHandle,
     window: &str,
-    session: &crate::workspaces::AuthorizationSession,
-    id: &str,
-) -> Result<bool, String> {
-    use crate::workspaces::with_authorization_session;
-    use sha2::{Digest, Sha256};
-
+    session: &AuthorizationSession,
+    scope: &str,
+    connection_id: Option<&str>,
+    manual: bool,
+) -> Result<Option<(Status, bool)>, String> {
+    let state = app.state::<Ai>();
     let keys = OsKeys(app.clone());
-    let (record, fingerprint, mut connection) =
-        with_authorization_session(app, window, session, |location| {
-            let storage = storage(app, location)?;
-            let record = storage.connection_record(id)?;
-            let bytes = storage.load_connection(&keys, id)?.ok_or(KEY_ERROR)?;
-            let fingerprint = Sha256::digest(&bytes);
-            Ok((record, fingerprint, decode_connection(&bytes)?))
-        })?;
-    if !due(&catalog(&connection), unix_seconds())
-        || connection
+    let token = CancellationToken::new();
+    let gate = || tauri::async_runtime::block_on(state.credential_guard(scope, &token));
+    let snapshot = {
+        let _gate = gate()?;
+        let (storage, _lock, mut connection) =
+            with_authorization_session(app, window, session, |location| {
+                let storage = storage(app, location)?;
+                let lock = storage.lock_credentials()?;
+                let connection = load_connection_id(&storage, app, connection_id)?;
+                Ok((storage, lock, connection))
+            })?;
+        let expired = connection
             .oauth
             .as_ref()
-            .is_some_and(|grant| grant.expired())
-    {
-        return Ok(false);
-    }
+            .is_some_and(|grant| grant.expired());
+        if !manual && (expired || !due(&catalog(&connection), unix_seconds())) {
+            return Ok(None);
+        }
+        let id = connection.config.connection_id.clone().ok_or(KEY_ERROR)?;
+        if expired {
+            let context = conversations::Context::new(
+                app.clone(),
+                window.into(),
+                scope.into(),
+                session.clone(),
+            );
+            connection = tauri::async_runtime::block_on(native_model::refresh(
+                &context,
+                storage,
+                connection,
+                token.clone(),
+            ))?;
+        }
+        with_authorization_session(app, window, session, |location| {
+            let storage = unrecovered_storage(app, location)?;
+            let record = capture_record(&storage, &connection)?;
+            let fingerprint = catalog_fingerprint(&storage, &keys, &id)?;
+            Ok((record, fingerprint, connection))
+        })?
+    };
+    let (record, fingerprint, mut connection) = snapshot;
     let observed = fetch_for_app(app, &connection);
     let previous = catalog(&connection);
     let changed = observed.source != Source::Unknown
         && (observed.source != previous.source
             || observed.models != previous.models
             || observed.selectable != previous.selectable);
+    let _gate = gate()?;
     with_authorization_session(app, window, session, |location| {
-        ensure_idle(app, &location.id)?;
         let storage = storage(app, location)?;
         let _lock = storage.lock_credentials()?;
-        ensure_unchanged(&storage, &record)?;
-        let bytes = storage.load_connection(&keys, id)?.ok_or(KEY_ERROR)?;
-        if Sha256::digest(&bytes) != fingerprint {
-            return Err("native.ai.catalog.connectionChanged".into());
+        let _preferences = storage.lock_preferences()?;
+        let mut status = persist_refresh(
+            &storage,
+            &keys,
+            &record,
+            fingerprint,
+            &mut connection,
+            observed,
+        )?;
+        if state.is_rejected(scope, Some(&record.id))? {
+            status.available = false;
+            status.reason = Some(REJECTED.into());
         }
-        store_observation(&storage, &keys, &record, &mut connection, observed)?;
-        Ok(changed)
+        Ok(Some((status, changed)))
     })
 }
 
@@ -365,42 +505,17 @@ pub async fn ai_refresh_models(
     connection_id: Option<String>,
 ) -> Result<Status, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        with_connection_mutation(&app, window.label(), &scope, |location| {
-            let storage = storage(&app, location)?;
-            let _lock = storage.lock_credentials()?;
-            let connection = load_connection_id(&storage, &app, connection_id.as_deref())?;
-            let connection_id = connection.config.connection_id.clone().ok_or(KEY_ERROR)?;
-            let mut status = if connection
-                .oauth
-                .as_ref()
-                .is_some_and(|oauth| oauth.expired())
-            {
-                tauri::async_runtime::block_on(refresh_connection(
-                    storage,
-                    connection,
-                    CancellationToken::new(),
-                    OsKeys(app.clone()),
-                    |old, cancel| async move { crate::openai_oauth::refresh(&old, &cancel).await },
-                ))?;
-                let storage = unrecovered_storage(&app, location)?;
-                let bytes = storage
-                    .load_connection(&OsKeys(app.clone()), &connection_id)?
-                    .ok_or("native.ai.access.required")?;
-                let mut connection = decode_connection(&bytes)?;
-                finish_setup(&storage, &app, &mut connection)
-            } else {
-                let mut connection = connection;
-                finish_setup(&storage, &app, &mut connection)
-            }?;
-            if app
-                .state::<Ai>()
-                .is_rejected(&scope, Some(&connection_id))?
-            {
-                status.available = false;
-                status.reason = Some(REJECTED.into());
-            }
-            Ok(status)
-        })
+        let session = crate::workspaces::authorization_session(&app, window.label(), &scope)?;
+        refresh_catalog(
+            &app,
+            window.label(),
+            &session,
+            &scope,
+            connection_id.as_deref(),
+            true,
+        )?
+        .map(|(status, _)| status)
+        .ok_or_else(|| ERROR.into())
     })
     .await
     .map_err(|_| KEY_ERROR.to_owned())?
