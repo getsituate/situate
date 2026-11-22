@@ -29,10 +29,12 @@ function git(root, args) {
 }
 
 export function migrationRevision(root, revision = "HEAD") {
-  assert(
-    typeof revision === "string" && !revision.startsWith("-"),
-    "Invalid migration candidate revision",
-  );
+  if (
+    typeof revision !== "string" ||
+    !/^[a-zA-Z0-9_@][a-zA-Z0-9_./@{}^~+-]*$/u.test(revision)
+  ) {
+    throw new Error("Invalid migration candidate revision");
+  }
   const resolved = git(root, [
     "rev-parse",
     "--verify",

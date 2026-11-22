@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import select
 import signal
@@ -245,16 +246,47 @@ def private_directory(path, error, *, parent_fd=None):
         os.close(fd)
 
 
+@contextmanager
+def coordination_directory(base):
+    error = "The coordination directory must be private and owned by the current user."
+    if base is not None:
+        base.mkdir(mode=0o700, exist_ok=True)
+        with private_directory(base, error) as fd:
+            yield fd
+        return
+
+    # Prefer the account home so per-command HOME and TMPDIR overrides do not split the lease.
+    try:
+        home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        forbidden_mode = 0o022
+    except KeyError:
+        # Sanitized environments can omit the CI container's synthetic passwd entry.
+        home = Path(os.environ.get("HOME", ""))
+        forbidden_mode = 0o077
+    if not home.is_absolute():
+        raise ValueError("The coordination home must be an absolute path.")
+    parent = os.open(home.resolve(strict=True), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(parent)
+        if info.st_uid != os.getuid() or info.st_mode & forbidden_mode:
+            raise ValueError("The coordination home must be owned by the current user and protected from other users.")
+        name = ".situate-coordination"
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent)
+        except FileExistsError:
+            pass
+        with private_directory(name, error, parent_fd=parent) as fd:
+            yield fd
+    finally:
+        os.close(parent)
+
+
 def acquire(resource, directory, base=None, child=None, pending=None):
-    # App fixtures override TMPDIR; the desktop lease must still be machine-local.
-    if base is None:
-        base = Path("/tmp").resolve() / ("situate-coordination-" + str(os.getuid()))
-    base.mkdir(mode=0o700, exist_ok=True)
     keys = ([f"build:{index}" for index in range(build_slots())] if resource == "build" else
             [resource if resource == "desktop" else "worktree:" + str(worktree_root(directory))])
     descriptors = []
     try:
-        with private_directory(base, "The coordination directory must be private and owned by the current user.") as base_fd:
+        with coordination_directory(base) as base_fd:
             for key in keys:
                 name = hashlib.sha256(key.encode()).hexdigest() + ".lock"
                 flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK

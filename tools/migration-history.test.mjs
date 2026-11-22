@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import {
+  migrationRevision,
   qualifyMigrationHistory,
   verifyMigrationHistory,
 } from "./migration-history.mjs";
@@ -248,6 +249,15 @@ test("candidate selectors qualify the selected commit rather than the checkout",
       verifyMigrationHistory(f.root, { publishedRevision: f.legacy, revision }),
       { publishedRevision: f.legacy, releasedMigrations: 0, migrations: 1 },
     );
+  }
+});
+
+test("candidate selectors reject option-like or malformed arguments", (t) => {
+  const { root } = fixture(t);
+  for (const revision of ["--help", "", "HEAD\n"]) {
+    assert.throws(() => migrationRevision(root, revision), {
+      message: "Invalid migration candidate revision",
+    });
   }
 });
 

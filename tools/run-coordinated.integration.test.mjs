@@ -10,6 +10,7 @@ import {
   realpathSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { constants, tmpdir } from "node:os";
@@ -215,6 +216,20 @@ function gated(directory, name, extra = "") {
       if (existsSync(${JSON.stringify(join(directory, `${name}-release`))})) clearInterval(timer);
     }, 10);`;
 }
+
+test("coordination refuses a symlink to an otherwise private directory", async (t) => {
+  const { directory, run } = fixture(t);
+  const target = join(directory, "private-target");
+  mkdirSync(target, { mode: 0o700 });
+  symlinkSync(target, join(directory, "coordination"));
+  const marker = join(directory, "started");
+  const child = run(
+    directory,
+    `import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, '');`,
+  );
+  assert.equal(await child.done, 2, child.output);
+  assert.equal(existsSync(marker), false);
+});
 
 test("worktree owners expose a private absent Docker lease without requiring Docker", async (t) => {
   const { directory, run } = fixture(t);

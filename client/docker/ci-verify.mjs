@@ -7,10 +7,37 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
+
+const toolchain = JSON.parse(readFileSync("/opt/volta/toolchain.json"));
+for (const version of [toolchain.node, toolchain.npm]) {
+  assert.match(version, /^\d+\.\d+\.\d+$/u);
+}
+const executableDirectories = [
+  `/opt/volta/tools/image/npm/${toolchain.npm}/bin`,
+  `/opt/volta/tools/image/node/${toolchain.node}/bin`,
+  "/opt/volta/bin",
+  "/opt/java/openjdk/bin",
+  "/usr/local/cargo/bin",
+  "/usr/local/sbin",
+  "/usr/local/bin",
+  "/usr/sbin",
+  "/usr/bin",
+  "/sbin",
+  "/bin",
+];
+for (const directory of executableDirectories) {
+  const info = statSync(directory);
+  assert.ok(
+    info.isDirectory() && info.uid === 0 && (info.mode & 0o022) === 0,
+    `Executable search directory must be root-owned and not writable by group or others: ${directory}`,
+  );
+}
+process.env.PATH = executableDirectories.join(":");
 
 const toolNoticePins = {
   situate: "39f4fd9c29f32e6190133a824c0ae273d9a1a867c13afefd8c486741f0ba181a",
@@ -69,7 +96,6 @@ const output = (command, args) =>
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-const toolchain = JSON.parse(readFileSync("/opt/volta/toolchain.json"));
 assert.equal(output("volta", ["--version"]), toolchain.version);
 assert.equal(output("node", ["--version"]), `v${toolchain.node}`);
 assert.equal(output("npm", ["--version"]), toolchain.npm);
