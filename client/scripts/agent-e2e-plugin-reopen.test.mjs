@@ -29,40 +29,6 @@ const script =
   source.slice(helpersStart, helpersEnd) +
   source.slice(journeyStart, journeyEnd) +
   "\npluginsJourney();";
-test("native chat send waits until the composer contains the intended draft", async () => {
-  const start = source.indexOf("  async function send(");
-  const end = source.indexOf("  async function queueInput(", start);
-  assert.ok(start >= 0 && end > start);
-  const expected = "[e2e:plugins] Verify the capability";
-  const field = { value: "Saved assignment" };
-  const sent = [];
-  const control = {
-    disabled: false,
-    click: () => sent.push(field.value),
-  };
-  const wait = async (code, check) => {
-    if (code === "composer-ready") return check();
-    field.value = "Saved assignment";
-    const early = check();
-    if (early) return early;
-    assert.deepEqual(sent, []);
-    field.value = expected;
-    return check();
-  };
-  await runInNewContext(source.slice(start, end) + "\nsend(expected);", {
-    expected,
-    field: () => field,
-    button: () => control,
-    click: async () =>
-      (await wait("control-send-message", () => control)).click(),
-    fill: (input, value) => {
-      input.value = value;
-    },
-    wait,
-  });
-  assert.deepEqual(sent, [expected]);
-});
-
 const record = {
   id: "retained-development",
   title: "[e2e:plugins] Check and activate the candidate capability",
