@@ -536,7 +536,7 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
           <p v-if="state.dialogSaved" role="status">{{ c.dialogSaved }}</p>
           <SituateDialog
             ref="dialog"
-            fade-backdrop
+            data-fade-backdrop
             aria-labelledby="example-dialog-heading"
             aria-describedby="example-dialog-description"
             @close="emit('patch', { dialogOpen: false })"

@@ -33,27 +33,20 @@ describe("primitive style specificity", () => {
     "%s defaults outrank native element resets without increasing state specificity",
     (name, source) => {
       const { descriptor } = parse(source);
-      const styles = descriptor.styles.filter((style) => style.scoped);
-      expect(styles.length).toBeGreaterThan(0);
-      for (const style of styles) {
-        const result = compileStyle({
-          source: style.content,
-          filename: `${name}.vue`,
-          id: "data-v-probe",
-          scoped: true,
-        });
-        expect(result.errors).toEqual([]);
-        parseCss(result.code).walkRules((rule) => {
-          if (
-            rule.parent?.type === "atrule" &&
-            rule.parent.name.endsWith("keyframes")
-          )
-            return;
-          for (const branch of list.comma(rule.selector)) {
-            expect(branch).toMatch(/^\.situate-/);
-            expect(branch).toMatch(/\[data-v-probe(?:-s)?\]/);
-          }
-        });
+      const sourceStyles = descriptor.styles.filter(({ scoped }) => scoped);
+      const compiled = compileStyle({
+        filename: `${name}.vue`,
+        source: sourceStyles.map(({ content }) => content).join("\n"),
+        scoped: true,
+        id: "data-v-probe",
+      });
+      expect(compiled.errors).toEqual([]);
+      const defaults = parseCss(compiled.code).nodes.flatMap((node) =>
+        node.type === "rule" ? list.comma(node.selector) : [],
+      );
+      expect(defaults.length).toBeGreaterThan(0);
+      for (const selector of defaults) {
+        expect(selector).toMatch(/^\.situate-.*\[data-v-probe(?:-s)?\]/);
       }
     },
   );

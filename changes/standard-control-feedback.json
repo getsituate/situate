@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "id": "standard-control-feedback",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "standard-control-feedback",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Clearer feedback when using controls",
+          "paragraphs": [
+            "Buttons and menu items show a subtle inset shadow when pressed. Tabs, switches, and choice controls use brief transitions to show what changed. Situate respects your Reduce Motion setting."
+          ]
+        },
+        {
+          "id": "file-search-and-save-recovery",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "File search and save recovery",
+          "paragraphs": [
+            "When a file search finds no matches, you can clear the search and return to the search field in one step. If a file fails to save, you can retry from the error dialog without losing your edits."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "standard-control-feedback",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Klarere Rückmeldung bei der Bedienung",
+          "paragraphs": [
+            "Buttons und Menüeinträge zeigen beim Drücken einen leichten Innenschatten. Kurze Übergänge machen sichtbar, was sich bei Tabs, Schaltern und Auswahlfeldern ändert. Situate berücksichtigt die Systemeinstellung „Bewegung reduzieren“."
+          ]
+        },
+        {
+          "id": "file-search-and-save-recovery",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Dateisuche und Wiederholen fehlgeschlagener Speichervorgänge",
+          "paragraphs": [
+            "Wenn die Dateisuche keine Treffer liefert, kannst du die Suche zurücksetzen und direkt im Suchfeld weiterschreiben. Schlägt das Speichern einer Datei fehl, kannst du es im Fehlerdialog erneut versuchen. Deine Änderungen bleiben erhalten."
+          ]
+        }
+      ]
+    }
+  }
+}

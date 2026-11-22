@@ -44,20 +44,17 @@ function position() {
       ? (anchor?.left ?? left)
       : (anchor?.right ?? left + popup.offsetWidth) - popup.offsetWidth);
   popup.style.left = `${Math.max(left, Math.min(right - popup.offsetWidth, x))}px`;
+  const opensAbove = !props.point && y + height > bottom;
   const placement = Math.max(
     top,
-    Math.min(bottom - height, !props.point && y + height > bottom ? above : y),
+    Math.min(bottom - height, opensAbove ? above : y),
   );
   popup.style.top = `${placement}px`;
-  if (anchor && !props.point && !props.staticSurface) {
+  if (anchor)
     popup.style.setProperty(
       "--popover-approach",
-      placement >= anchor.bottom ? "-3px" : "3px",
+      placement < anchor.bottom ? "3px" : "-3px",
     );
-    popup.dataset.anchored = "";
-  } else {
-    delete popup.dataset.anchored;
-  }
 }
 function dismiss(restore = true) {
   if (closing || !props.open) return;
@@ -198,6 +195,7 @@ defineExpose({ element, dismiss });
       role="dialog"
       tabindex="-1"
       :popover="point ? 'manual' : 'auto'"
+      :data-anchored="(anchor && !point && !staticSurface) || undefined"
       class="situate-popover"
       :aria-label="label"
       v-bind="$attrs"

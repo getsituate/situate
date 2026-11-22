@@ -2,11 +2,7 @@
 import { onBeforeUnmount, ref, watch } from "vue";
 import SituateDialogActions from "./SituateDialogActions.vue";
 const props = withDefaults(
-  defineProps<{
-    appearance?: "default" | "plain";
-    open?: boolean;
-    fadeBackdrop?: boolean;
-  }>(),
+  defineProps<{ appearance?: "default" | "plain"; open?: boolean }>(),
   {
     open: undefined,
     appearance: "default",
@@ -37,7 +33,6 @@ defineExpose({
   <dialog
     ref="element"
     :class="appearance === 'plain' ? undefined : 'situate-dialog'"
-    :data-fade-backdrop="fadeBackdrop || undefined"
   >
     <header v-if="$slots.header" class="situate-dialog__header">
       <slot name="header" />
