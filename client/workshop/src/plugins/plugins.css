@@ -135,7 +135,7 @@
   align-items: center;
   gap: 22px;
   border-radius: 28px 28px 28px 8px;
-  background: var(--situate-accent-soft, var(--situate-lilac));
+  background: var(--situate-content-wash);
   padding: 24px;
 }
 .plugin-create-panel img {

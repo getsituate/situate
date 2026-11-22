@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { SituateButton, SituateRadio, SituateDialog } from "@situate/ui";
+import {
+  SituateButton,
+  SituateRadio,
+  SituateDialog,
+  SituateIcon,
+} from "@situate/ui";
 import {
   computed,
   nextTick,
@@ -10,7 +15,13 @@ import {
   watch,
 } from "vue";
 import { t, type MessageKey } from "@situate/localization";
-import { accents, accentLabels, accentStyle, type Accent } from "./accents";
+import {
+  accents,
+  accentLabels,
+  accentStyle,
+  companionAccents,
+  type Accent,
+} from "./accents";
 
 const props = defineProps<{
   accent: Accent;
@@ -166,7 +177,12 @@ function colorName(color: Accent): string {
         :for="`${id}-accent-${color}`"
         class="appearance-option"
         :style="accentStyle(color)"
-        :title="colorName(color)"
+        :title="
+          t('settings.appearance.pairName', {
+            primary: colorName(color),
+            companion: colorName(companionAccents[color]),
+          })
+        "
       >
         <SituateRadio
           :id="`${id}-accent-${color}`"
@@ -175,14 +191,20 @@ function colorName(color: Accent): string {
           :name="`${id}-workspace-accent`"
           :value="color"
           :checked="accent === color"
+          :aria-description="
+            t('settings.appearance.companion', {
+              color: colorName(companionAccents[color]),
+            })
+          "
           @change="select(color)"
         />
         <span class="appearance-option-content">
-          <span class="appearance-swatch" aria-hidden="true">
-            <svg v-if="accent === color" viewBox="0 0 24 24">
-              <path d="m6 12 4 4 8-8" />
-            </svg>
-          </span>
+          <span class="appearance-swatch" aria-hidden="true"></span>
+          <SituateIcon
+            v-if="accent === color"
+            name="check"
+            class="appearance-selected"
+          />
           <span class="appearance-color-name">
             {{ colorName(color) }}
             <small v-if="color === 'violet'">{{
@@ -263,24 +285,29 @@ function colorName(color: Accent): string {
   outline-offset: var(--situate-focus-offset);
 }
 .appearance-swatch {
-  display: grid;
-  place-items: center;
   width: 40px;
   height: 40px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--situate-accent);
-  color: var(--situate-accent-on);
-  border: 1px solid var(--situate-accent-edge);
+  background: linear-gradient(
+    to right,
+    var(--situate-accent) 63%,
+    var(--situate-content-accent) 63%
+  );
+  border: 1px solid var(--situate-control-line);
 }
-.appearance-swatch svg {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.appearance-selected {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 10px;
+  width: 16px;
+  height: 16px;
+  color: var(--situate-accent-strong);
+  pointer-events: none;
+}
+.compact .appearance-selected {
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
 }
 .appearance-color-name {
   font-size: 14px;
@@ -350,9 +377,16 @@ function colorName(color: Accent): string {
   padding: 4px;
   border-radius: var(--situate-radius-small);
 }
+.swatches .appearance-selected {
+  inset-block-start: 3px;
+  inset-inline-end: 3px;
+  width: 12px;
+  height: 12px;
+}
 .swatches .appearance-swatch {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
+  margin-inline-end: 3px;
 }
 .swatches .appearance-color-name {
   position: absolute;
@@ -364,6 +398,9 @@ function colorName(color: Accent): string {
 @media (forced-colors: active) {
   .appearance-option input:checked + .appearance-option-content {
     border-color: Highlight;
+  }
+  .appearance-selected {
+    color: CanvasText;
   }
   .appearance-swatch {
     forced-color-adjust: none;

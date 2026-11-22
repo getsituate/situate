@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import { SituateButton, SituateIcon } from "@situate/ui";
 import { t } from "@situate/localization";
 import type { RetainedQuestion } from "../../ai/question";
+import type { ContentReference } from "../../files/content-reference";
 import {
   historySections,
   isHistoryDetail,
@@ -11,7 +12,11 @@ import {
 } from "./work-history";
 import ChatDuration from "./ChatDuration.vue";
 import TranscriptEntries from "./TranscriptEntries.vue";
-const props = defineProps<{ period: HistoryPeriod; scope: string }>();
+const props = defineProps<{
+  period: HistoryPeriod;
+  scope: string;
+  openReference?: (reference: ContentReference) => void;
+}>();
 const emit = defineEmits<{
   preview: [preview: NonNullable<RetainedQuestion["preview"]>];
 }>();
@@ -105,6 +110,7 @@ const elapsed = computed(() =>
       <TranscriptEntries
         :entries="[segment.entry]"
         :scope="scope"
+        :open-reference="openReference"
         @preview="emit('preview', $event)"
       />
     </div>

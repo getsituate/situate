@@ -95,6 +95,12 @@ it("keeps the saved selection visible in read-only workspaces and translates in 
   expect(wrapper.get("legend").text()).toBe("Akzentfarbe");
   expect(wrapper.text()).toContain("Pfirsich");
   expect(wrapper.text()).toContain("schreibgeschützt");
+  expect(wrapper.get('[value="peach"]').attributes("aria-description")).toBe(
+    "Kombiniert mit Himmelblau",
+  );
+  expect(wrapper.get("label:has(input[value=peach])").attributes("title")).toBe(
+    "Pfirsich mit Himmelblau",
+  );
 });
 
 it("keeps independent color groups and descriptions when used twice", async () => {

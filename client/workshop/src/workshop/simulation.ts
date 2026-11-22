@@ -181,6 +181,11 @@ export const scenarios = [
   { id: "files-read", label: "Read a file", group: "Files and editing" },
   { id: "files-source", label: "Edit Markdown", group: "Files and editing" },
   { id: "files-chat", label: "Chat with a file", group: "Files and editing" },
+  {
+    id: "files-chat-with-reply",
+    label: "Chat with a file reply",
+    group: "Files and editing",
+  },
   { id: "files-history", label: "Version history", group: "Files and editing" },
   {
     id: "files-save-error",

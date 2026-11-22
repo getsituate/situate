@@ -1,6 +1,6 @@
 import { selectOption, selectOptions } from "./select";
 import { expect, test, type Page } from "./test";
-import { accents } from "../../src/settings/accents";
+import { accents, companionAccents } from "../../src/settings/accents";
 import copy from "../../src/localization/en.appearance.json" with { type: "json" };
 
 async function open(controls: Page) {
@@ -37,9 +37,38 @@ test("all brand accents apply immediately with readable contrast and intact artw
   await expect(preview.getByRole("radio")).toHaveCount(6);
   await expect(preview.getByLabel("Find an action")).toHaveCount(0);
   for (const accent of accents) {
-    await preview
-      .getByRole("radio", { name: new RegExp(`^${copy.colors[accent]}`) })
-      .check();
+    const color = preview.getByRole("radio", {
+      name: new RegExp(`^${copy.colors[accent]}`),
+    });
+    const companion = companionAccents[accent];
+    await expect(color).toHaveAccessibleDescription(
+      copy.companion.replace("{color}", copy.colors[companion]),
+    );
+    await color.check();
+    await expect(preview.locator(".appearance-selected")).toHaveCount(1);
+    const swatch = preview
+      .locator(".appearance-option")
+      .filter({ has: color })
+      .locator(".appearance-swatch");
+    const fills = await swatch.evaluate(
+      (node, { accent, companion }) => {
+        const probe = document.createElement("span");
+        node.append(probe);
+        probe.style.color = `var(--situate-${accent})`;
+        const primary = getComputedStyle(probe).color;
+        probe.style.color = `var(--situate-${companion})`;
+        const secondary = getComputedStyle(probe).color;
+        probe.remove();
+        return {
+          primary,
+          secondary,
+          gradient: getComputedStyle(node).backgroundImage,
+        };
+      },
+      { accent, companion },
+    );
+    expect(fills.gradient).toContain(`${fills.primary} 63%`);
+    expect(fills.gradient).toContain(`${fills.secondary} 63%`);
     await expect(root).toHaveAttribute("data-workspace-accent", accent);
     await expect(
       page.getByLabel("Workspace accent", { exact: true }),
@@ -73,6 +102,8 @@ test("all brand accents apply immediately with readable contrast and intact artw
         contrast("var(--situate-accent-strong)", "var(--situate-surface)"),
         contrast("var(--situate-accent-strong)", "var(--situate-paper)"),
         contrast("var(--situate-accent-strong)", "var(--situate-accent-soft)"),
+        contrast("var(--situate-muted)", "var(--situate-content-tint)"),
+        contrast("var(--situate-muted)", "var(--situate-content-wash)"),
       ];
       probe.remove();
       return results;

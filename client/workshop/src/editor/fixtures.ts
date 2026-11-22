@@ -1,4 +1,23 @@
-import type { EditorFile, Version } from "./model";
+import type { EditorChat, EditorFile, Version } from "./model";
+
+export function workshopInvitation(): Pick<EditorChat, "title" | "exchange"> {
+  return {
+    title: "Workshop invitation",
+    exchange: {
+      request: "What should I ask people to bring to the autumn workshop?",
+      reply:
+        "Ask everyone to bring one example of something that gets in the way of their work. You can supply the paper, pens, and notebooks. The preparation note has the materials list.",
+      file: {
+        fileKey: "preparation.md",
+        name: "preparation.md",
+        version: null,
+      },
+      excerpt:
+        "Keep it simple: notebooks, a timer and a clear wall for our ideas.",
+      appearance: "preview",
+    },
+  };
+}
 
 const outline = `---
 id: 4c149f64-ea2d-426c-82a0-b7bedfa56c21

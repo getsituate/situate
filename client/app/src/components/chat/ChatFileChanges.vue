@@ -6,7 +6,10 @@ defineProps<{ changes: VerifiedChange[]; isError?: boolean }>();
 
 <template>
   <template v-for="change in changes" :key="change.path">
-    <header class="change-header">
+    <header
+      class="change-header"
+      :class="{ 'created-file': !isError && change.before === null }"
+    >
       <span class="change-path" data-localization-content="user">{{
         change.path
       }}</span
@@ -45,6 +48,9 @@ defineProps<{ changes: VerifiedChange[]; isError?: boolean }>();
   background: var(--situate-paper);
   font-size: 12px;
   border-bottom: 1px solid var(--situate-line);
+}
+.change-header.created-file {
+  background: var(--situate-content-wash, var(--situate-paper));
 }
 .change-path {
   font-family: var(--situate-font-mono);

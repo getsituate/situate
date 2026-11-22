@@ -4,7 +4,7 @@ import { createSimulation, reduceSimulation } from "../workshop/simulation";
 import { screenControls } from "../workshop/screen-controls";
 
 describe("workspace accents", () => {
-  it("offers six brand colors without changing artwork tokens", () => {
+  it("pairs each workspace color with a contrasting brand hue", () => {
     expect(accents).toEqual([
       "violet",
       "cobalt",
@@ -13,11 +13,19 @@ describe("workspace accents", () => {
       "peach",
       "lemon",
     ]);
-    for (const accent of accents) {
+    const companions = ["peach", "peach", "peach", "sky", "sky", "sky"];
+    for (const [index, accent] of accents.entries()) {
       const style = accentStyle(accent);
       expect(style["--situate-accent"]).toBe(`var(--situate-${accent})`);
+      expect(style["--situate-content-accent"]).toBe(
+        `var(--situate-${companions[index]})`,
+      );
       expect(
-        Object.keys(style).every((key) => key.startsWith("--situate-accent")),
+        Object.keys(style).every(
+          (key) =>
+            key.startsWith("--situate-accent") ||
+            key.startsWith("--situate-content"),
+        ),
       ).toBe(true);
     }
     expect(accentStyle("lemon")["--situate-accent-on"]).toBe(

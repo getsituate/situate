@@ -1,7 +1,8 @@
 {
   "title": "Appearance",
   "accentColor": "Accent color",
-  "help": "Choose a color for {workspace}. Changes apply immediately.",
+  "help": "Choose a color pair for {workspace}. Changes apply immediately.",
+  "companion": "Paired with {color}",
   "default": "Default",
   "colors": {
     "violet": "Violet",

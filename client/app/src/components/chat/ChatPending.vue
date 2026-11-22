@@ -207,6 +207,7 @@ h3 {
   padding: 4px 8px;
   border: 1px solid var(--situate-line);
   border-radius: 6px;
+  background: var(--situate-content-wash, var(--situate-paper));
 }
 button:focus:where(html:not([data-input-modality="pointer"]) *),
 :deep(summary):focus:where(html:not([data-input-modality="pointer"]) *),

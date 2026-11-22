@@ -47,6 +47,14 @@
       () => document.documentElement.dataset.workspaceAccent === accent,
       "Workspace accent did not load",
     );
+    const companion = accent === "tangerine" ? "sky" : "peach";
+    assert(
+      document.documentElement.style.getPropertyValue(
+        "--situate-content-accent",
+      ) ===
+        "var(--situate-" + companion + ")",
+      "Workspace companion accent differs from the creation choice",
+    );
     if (!document.querySelector(".setup-frame .situate-button--normal")) {
       const provider = await wait(
         () => button("OpenAI-compatible server"),

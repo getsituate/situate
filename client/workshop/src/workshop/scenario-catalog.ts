@@ -261,6 +261,7 @@ const definitions = [
       "files-read",
       "files-source",
       "files-chat",
+      "files-chat-with-reply",
       "files-history",
       "files-save-error",
       "files-empty",

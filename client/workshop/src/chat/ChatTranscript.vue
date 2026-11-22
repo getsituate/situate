@@ -5,7 +5,7 @@ import ChatMarkdown from "./ChatMarkdown.vue";
 import { historyCopy } from "./work-history";
 import { workDurationText } from "./work-time";
 import SituateDisclosure from "../ui/SituateDisclosure.vue";
-import { SituateButton } from "../ui";
+import FilePreviewButton from "../components/FilePreviewButton.vue";
 import ChatMessage from "../components/ChatMessage.vue";
 import ChatSystemMessage from "../components/ChatSystemMessage.vue";
 import { groupEvents, type Event } from "./model";
@@ -56,18 +56,16 @@ const blocks = computed(() => groupEvents(props.events));
         {{ workDurationText(block.workDuration, locale) }}
       </p>
       <div v-if="block.files?.length" class="message-files">
-        <SituateButton
+        <FilePreviewButton
           v-for="file in block.files"
           :key="file.path"
-          variant="plain"
           class="message-file"
+          :name="file.label ?? file.path"
           @click="
             ($event.currentTarget as HTMLElement).focus();
             emit('file', file.path);
           "
-          >{{ file.label ?? file.path }}
-          <span aria-hidden="true">↗</span></SituateButton
-        >
+        />
       </div>
     </ChatMessage>
     <ChatMessage
@@ -128,7 +126,12 @@ const blocks = computed(() => groupEvents(props.events));
       class="change-card"
       :aria-label="`${block.label}: ${block.file}`"
     >
-      <header>
+      <header
+        :class="{
+          'file-preview-header':
+            !block.before && !block.contentNotice && block.after,
+        }"
+      >
         <span class="file-icon" aria-hidden="true">≡</span
         ><strong>{{ block.file }}</strong
         ><span class="change-state"

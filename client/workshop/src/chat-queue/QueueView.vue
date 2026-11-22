@@ -510,7 +510,8 @@ function keydown(event: KeyboardEvent) {
   padding: 3px 8px;
   border: 1px solid var(--situate-line);
   border-radius: 8px;
-  color: var(--situate-muted);
+  background: var(--situate-content-wash);
+  color: var(--situate-ink);
   font-size: 12px;
 }
 .attachment.removable {

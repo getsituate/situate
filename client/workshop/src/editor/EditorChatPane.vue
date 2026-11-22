@@ -7,6 +7,8 @@ import {
   SituateButton,
 } from "../ui";
 import ChatPaneHeader from "../components/ChatPaneHeader.vue";
+import ChatMessage from "../components/ChatMessage.vue";
+import FilePreviewButton from "../components/FilePreviewButton.vue";
 import bend from "../brand/bend/svg/wave-welcome.svg";
 import {
   resolveReference,
@@ -37,6 +39,10 @@ const references = computed(() =>
     ...resolveReference(props.state, reference),
   })),
 );
+const replyFile = computed(() => {
+  const exchange = props.chat.exchange;
+  return exchange ? resolveReference(props.state, exchange.file) : null;
+});
 function fit() {
   const element = input.value?.element;
   if (element?.clientWidth) {
@@ -49,7 +55,7 @@ watch(
   () => nextTick(fit),
 );
 onMounted(() => {
-  if (props.visible) input.value?.element?.focus();
+  if (props.visible && !props.chat.exchange) input.value?.element?.focus();
   fit();
 });
 function focus() {
@@ -82,9 +88,31 @@ defineExpose({ focus });
         @click="emit('close')"
       />
     </ChatPaneHeader>
-    <div class="empty-chat">
-      <div class="welcome">
-        <div class="greeting">
+    <div :class="chat.exchange ? 'active-chat' : 'empty-chat'">
+      <div v-if="chat.exchange && replyFile" class="transcript-scroll">
+        <div class="transcript">
+          <ChatMessage speaker="user" hide-speaker>
+            <p>{{ chat.exchange.request }}</p>
+          </ChatMessage>
+          <ChatMessage speaker="assistant" hide-speaker>
+            <p>{{ chat.exchange.reply }}</p>
+            <FilePreviewButton
+              class="reply-file"
+              :name="replyFile.name"
+              :appearance="chat.exchange.appearance"
+              :disabled="replyFile.state === 'missing'"
+              :excerpt="
+                replyFile.state === 'missing'
+                  ? replyFile.detail
+                  : chat.exchange.excerpt
+              "
+              @click="emit('open', chat.exchange.file)"
+            />
+          </ChatMessage>
+        </div>
+      </div>
+      <div :class="chat.exchange ? 'chat-footer' : 'welcome'">
+        <div v-if="!chat.exchange" class="greeting">
           <img :src="bend" width="128" height="128" alt="" />
           <h3>Good to see you.</h3>
         </div>
@@ -188,6 +216,31 @@ defineExpose({ focus });
   width: 100%;
   max-width: 680px;
   min-width: 0;
+}
+.active-chat {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.transcript-scroll {
+  flex: 1;
+  overflow: auto;
+}
+.transcript,
+.chat-footer {
+  width: min(100%, 728px);
+  margin-inline: auto;
+  padding: 24px;
+}
+.chat-footer {
+  padding-block-start: 12px;
+}
+.reply-file {
+  margin-block-start: 16px;
+}
+.attachment-chip[data-state="ready"] {
+  background: var(--situate-content-wash);
 }
 .greeting {
   display: flex;
@@ -323,6 +376,10 @@ button:focus-visible {
 @container (max-width: 400px) {
   .empty-chat {
     padding: 16px;
+  }
+  .transcript,
+  .chat-footer {
+    padding-inline: 16px;
   }
   .input-actions {
     flex-direction: column;

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useId } from "vue";
-import { SituateRadio } from "../ui";
+import { SituateIcon, SituateRadio } from "../ui";
 import copy from "../localization/en.appearance.json";
-import { accents, accentStyle, type Accent } from "./accents";
+import { accents, accentStyle, companionAccents, type Accent } from "./accents";
 
 defineProps<{
   accent: Accent;
@@ -39,14 +39,21 @@ const appearanceId = useId();
           name="workspace-accent"
           :value="color"
           :checked="accent === color"
+          :aria-description="
+            copy.companion.replace(
+              '{color}',
+              copy.colors[companionAccents[color]],
+            )
+          "
           @change="emit('select', color)"
         />
         <span class="appearance-option-content">
-          <span class="appearance-swatch" aria-hidden="true">
-            <svg v-if="accent === color" viewBox="0 0 24 24">
-              <path d="m6 12 4 4 8-8" />
-            </svg>
-          </span>
+          <span class="appearance-swatch" aria-hidden="true"></span>
+          <SituateIcon
+            v-if="accent === color"
+            name="check"
+            class="appearance-selected"
+          />
           <span class="appearance-color-name">
             {{ copy.colors[color] }}
             <small v-if="color === 'violet'">{{ copy.default }}</small>
@@ -124,24 +131,25 @@ const appearanceId = useId();
   outline-offset: var(--situate-focus-offset);
 }
 .appearance-swatch {
-  display: grid;
-  place-items: center;
   width: 40px;
   height: 40px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--situate-accent);
-  color: var(--situate-accent-on);
-  border: 1px solid var(--situate-accent-edge);
+  background: linear-gradient(
+    to right,
+    var(--situate-accent) 63%,
+    var(--situate-content-accent) 63%
+  );
+  border: 1px solid var(--situate-control-line);
 }
-.appearance-swatch svg {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.appearance-selected {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 10px;
+  width: 16px;
+  height: 16px;
+  color: var(--situate-accent-strong);
+  pointer-events: none;
 }
 .appearance-color-name {
   font-size: 14px;

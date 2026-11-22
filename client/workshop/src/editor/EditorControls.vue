@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useId } from "vue";
+import { computed, useId } from "vue";
 import { SituateSelect, SituateButton, SituateCheckbox } from "../ui";
 import {
   currentFile,
@@ -9,6 +9,7 @@ import {
   setHistory,
   setMode,
   type EditorState,
+  type ReferenceAppearance,
 } from "./model";
 import { useEditorState } from "./use-editor-state";
 import {
@@ -20,6 +21,19 @@ const fieldId = useId();
 const props = defineProps<{ state: EditorState }>();
 const emit = defineEmits<{ "update:state": [state: EditorState] }>();
 const { state, update } = useEditorState(props, emit);
+const activeExchange = computed(
+  () =>
+    state.value.chats.find((chat) => chat.key === state.value.activeChat)
+      ?.exchange,
+);
+function setReferenceAppearance(event: Event) {
+  const appearance = (event.target as HTMLSelectElement)
+    .value as ReferenceAppearance;
+  update((next) => {
+    const chat = next.chats.find((chat) => chat.key === next.activeChat);
+    if (chat?.exchange) chat.exchange.appearance = appearance;
+  });
+}
 function showDialog(kind: string) {
   update((next) => {
     const file = currentFile(next);
@@ -79,6 +93,21 @@ function outcome(event: Event) {
 </script>
 <template>
   <section class="editor-controls" aria-label="Editor controls">
+    <label
+      v-if="activeExchange && !state.dialog && !state.conflict?.open"
+      :for="`${fieldId}-reference-appearance`"
+    >
+      File reference accent
+      <SituateSelect
+        :id="`${fieldId}-reference-appearance`"
+        :value="activeExchange.appearance"
+        @change="setReferenceAppearance"
+      >
+        <option value="neutral">No secondary accent</option>
+        <option value="icon">Tinted icon</option>
+        <option value="preview">Tinted preview</option>
+      </SituateSelect>
+    </label>
     <section
       v-if="state.conflict"
       class="conflict-controls"

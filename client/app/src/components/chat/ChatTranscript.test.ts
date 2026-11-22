@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import ChatTranscript from "./ChatTranscript.vue";
 import ChatSystemAnnouncement from "./ChatSystemAnnouncement.vue";
@@ -87,6 +87,62 @@ test.each([true, false])(
     );
   },
 );
+
+test("imported files open their original references and stay outside activity", async () => {
+  const openReference = vi.fn();
+  const files = Array.from({ length: 11 }, (_, index) => ({
+    kind: "live" as const,
+    path: `Imported/Notes-${index + 1}.md`,
+    workspaceId: "workspace",
+    anchorRevision: "a".repeat(40),
+  }));
+  const wrapper = transcript();
+  const toolName = "show_imported_files";
+  await wrapper.setProps({
+    messages: [
+      {
+        ...response(""),
+        stopReason: "toolUse",
+        content: [
+          { type: "toolCall", id: "import", name: toolName, arguments: {} },
+        ],
+      },
+      {
+        role: "toolResult",
+        toolName,
+        toolCallId: "import",
+        timestamp: 2,
+        content: [],
+        isError: false,
+        details: {
+          files: [
+            ...files,
+            { ...files[0], workspaceId: "other", path: "Other.md" },
+          ],
+        },
+      },
+      response("The notes are ready."),
+    ],
+    workBlocks: [
+      { id: "import", messageCount: 3, durationMs: 1000, outcome: "complete" },
+    ],
+    openReference,
+  });
+  expect(wrapper.find(".work-history").exists()).toBe(true);
+  expect(wrapper.get(".imported-files").text()).not.toContain("Other.md");
+  expect(wrapper.get(".imported-files").element.closest("[hidden]")).toBeNull();
+  const cards = () => wrapper.findAll(".imported-file");
+  expect(cards()).toHaveLength(10);
+  const more = () => wrapper.find(".imported-files button:not(.imported-file)");
+  await more().trigger("click");
+  expect(cards()).toHaveLength(11);
+  expect(more().exists()).toBe(false);
+  expect(cards().at(-1)?.text()).toBe("Imported/Notes-11.md");
+  await cards().at(-1)!.trigger("click");
+  expect(openReference).toHaveBeenCalledExactlyOnceWith(files.at(-1));
+  await wrapper.setProps({ scope: "unrelated" });
+  expect(wrapper.find(".imported-files").exists()).toBe(false);
+});
 
 test("an empty conversation retains only its silent live region", () => {
   const wrapper = transcript();

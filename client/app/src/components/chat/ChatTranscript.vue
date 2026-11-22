@@ -6,6 +6,7 @@ import type { AgentMessage } from "../../ai/contracts";
 import type { PluginNotice } from "../../ai/plugin-notices";
 import type { RetainedQuestion } from "../../ai/question";
 import type { ToolActivity } from "./transcript";
+import type { ContentReference } from "../../files/content-reference";
 import { conversationHistory } from "./work-history";
 import TranscriptEntries from "./TranscriptEntries.vue";
 import ChatWorkHistory from "./ChatWorkHistory.vue";
@@ -19,6 +20,7 @@ const props = defineProps<{
   activity: ToolActivity[];
   running: boolean;
   scope: string;
+  openReference?: (reference: ContentReference) => void;
   notices?: PluginNotice[];
   questions?: RetainedQuestion[];
   announcement?: PluginNotice;
@@ -51,12 +53,14 @@ const blocks = computed(() =>
         v-if="block.kind === 'history'"
         :period="block"
         :scope="scope"
+        :open-reference="openReference"
         @preview="emit('preview', $event)"
       />
       <TranscriptEntries
         v-else
         :entries="[block]"
         :scope="scope"
+        :open-reference="openReference"
         @preview="emit('preview', $event)"
       />
     </template>
