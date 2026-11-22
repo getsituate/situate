@@ -29,7 +29,7 @@ const read = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const quality = JSON.parse(read("tools/toolchain.quality.json"));
 
-test("CI helper and project-license changes invalidate image inputs", (t) => {
+test("CI helpers and the license invalidate the image lock, but the mounted verifier does not", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-ci-inputs-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const file of imageInputs()) {
@@ -38,6 +38,9 @@ test("CI helper and project-license changes invalidate image inputs", (t) => {
     copyFileSync(new URL(`../${file}`, import.meta.url), target);
   }
   const before = inputDigest(directory);
+  writeFileSync(join(directory, "client/docker/ci-verify.mjs"), "export {};\n");
+  assert.equal(inputDigest(directory), before);
+
   const helper = "client/docker/ci-input-probe.py";
   writeFileSync(join(directory, helper), "print(1)\n");
   assert.ok(imageInputs(directory).includes(helper));

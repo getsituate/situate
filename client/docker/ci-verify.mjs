@@ -17,8 +17,9 @@ const toolchain = JSON.parse(readFileSync("/opt/volta/toolchain.json"));
 for (const version of [toolchain.node, toolchain.npm]) {
   assert.match(version, /^\d+\.\d+\.\d+$/u);
 }
+const npmDirectory = `/opt/volta/tools/image/npm/${toolchain.npm}/bin`;
 const executableDirectories = [
-  `/opt/volta/tools/image/npm/${toolchain.npm}/bin`,
+  npmDirectory,
   `/opt/volta/tools/image/node/${toolchain.node}/bin`,
   "/opt/volta/bin",
   "/opt/java/openjdk/bin",
@@ -140,7 +141,7 @@ try {
     [["run", "check"], project],
     [["exec", "--offline", "--", "node", "--version"], `${project}/child`],
   ])
-    execFileSync("npm", args, { cwd, stdio: "inherit" });
+    execFileSync(`${npmDirectory}/npm`, args, { cwd, stdio: "inherit" });
 } finally {
   rmSync(project, { recursive: true, force: true });
 }

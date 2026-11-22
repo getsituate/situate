@@ -15,6 +15,7 @@ export function imageInputs(directory = root) {
     "client/rust-toolchain.toml",
     "tools/toolchain.quality.json",
     ...readdirSync(resolve(directory, "client/docker"))
+      .filter((name) => name !== "ci-verify.mjs")
       .filter(
         (name) =>
           /^ci-.*\.(?:mjs|py|sh|json)$/.test(name) || name === "ci-NOTICES.md",

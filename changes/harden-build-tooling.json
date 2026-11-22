@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "harden-build-tooling",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Build tooling and Android test harness changes only."
+}
