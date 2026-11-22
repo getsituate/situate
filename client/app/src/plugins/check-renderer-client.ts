@@ -6,11 +6,12 @@ export interface PreviewIdentity {
   requestId: string;
 }
 export type PreviewRequest = PreviewIdentity & {
-  operation: "previewOpen" | "previewStep" | "previewClose";
+  operation: "previewValidate" | "previewOpen" | "previewStep" | "previewClose";
   args: {
     source?: PluginSource;
     sources?: PluginSource[];
     viewId?: string;
+    requireViewIcons?: boolean;
     action?: "read" | "click" | "fill" | "capture";
     selector?: string;
     value?: string;
@@ -29,7 +30,7 @@ export function validPreviewRequest(value: unknown): value is PreviewRequest {
     typeof request.requestId === "string" &&
     !!request.requestId &&
     request.requestId.length <= 256 &&
-    ["previewOpen", "previewStep", "previewClose"].includes(
+    ["previewValidate", "previewOpen", "previewStep", "previewClose"].includes(
       request.operation,
     ) &&
     !!request.args &&

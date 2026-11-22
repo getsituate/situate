@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "plugin-view-icons",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "plugin-view-icons",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Icons for plugin views",
+          "paragraphs": [
+            "Installed plugin views without a supported icon now show a default plug icon. When you check a plugin before activating changes, each of its views must specify a supported icon."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "plugin-view-icons",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Symbole für Plugin-Ansichten",
+          "paragraphs": [
+            "Ansichten installierter Plugins zeigen ein Stecker-Symbol, wenn kein unterstütztes Symbol hinterlegt ist. Beim Prüfen eines Plugins vor der Aktivierung von Änderungen muss jede seiner Ansichten ein unterstütztes Symbol angeben."
+          ]
+        }
+      ]
+    }
+  }
+}

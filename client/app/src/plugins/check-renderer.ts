@@ -1,4 +1,5 @@
 import { createPluginPreview } from "./preview";
+import { checkFailureCode } from "./check-errors";
 import { createPluginModule, type PluginModule } from "./module-source";
 import { importPluginModule, loadHostModules } from "./module";
 import { validateUiContributions } from "./contributions";
@@ -67,8 +68,13 @@ export function startCheckRenderer(
       await close(id);
       return true;
     }
-    if (request.operation === "previewOpen") {
-      if (typeof request.args.viewId !== "string")
+    if (
+      request.operation === "previewValidate" ||
+      request.operation === "previewOpen"
+    ) {
+      const openView = request.operation === "previewOpen";
+      const { viewId, requireViewIcons } = request.args;
+      if (openView && typeof viewId !== "string")
         throw new Error("plugins.previewInvalidArguments");
       let session = sessions.get(id);
       if (!session) {
@@ -165,7 +171,11 @@ export function startCheckRenderer(
               const returned = await imported.default(host);
               if (returned && typeof returned.dispose === "function")
                 owned.contributions.push({ dispose: () => returned.dispose() });
-              contributions = validateUiContributions(returned, pluginId);
+              contributions = validateUiContributions(
+                returned,
+                pluginId,
+                requireViewIcons === true && current === source,
+              );
             }
             loaded.set(pluginId, contributions);
             loading.delete(pluginId);
@@ -173,13 +183,14 @@ export function startCheckRenderer(
           }
           owned.preview.setContributions(await load(source));
         } catch (error) {
-          await close(id);
+          await close(id).catch(() => undefined);
           throw error;
         }
       }
       if (!session.active || session.capturesPending)
         throw new Error("plugins.previewUnavailable");
-      await session.preview.open(request.args.viewId);
+      if (!openView || typeof viewId !== "string") return true;
+      await session.preview.open(viewId);
       session.preview.check();
       return true;
     }
@@ -241,8 +252,11 @@ export function startCheckRenderer(
       let error: string | undefined;
       try {
         value = await run(request);
-      } catch {
-        error = "plugins.previewUnavailable";
+      } catch (cause) {
+        error =
+          checkFailureCode(cause) === "plugins.viewIconRequired"
+            ? "plugins.viewIconRequired"
+            : "plugins.previewUnavailable";
       }
       await invoke("plugin_preview_ack", {
         generation: request.generation,

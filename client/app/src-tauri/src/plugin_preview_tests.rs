@@ -246,5 +246,9 @@ fn replies_require_explicit_values_and_do_not_expose_renderer_errors() {
         reply_result(None, Some("private plugin source".into())).unwrap(),
         Err(UNAVAILABLE.into())
     );
+    assert_eq!(
+        reply_result(None, Some("plugins.viewIconRequired".into())).unwrap(),
+        Err("plugins.viewIconRequired".into())
+    );
     assert!(reply_result(Some(Value::String("x".repeat(MAX_REPLY))), None).is_err());
 }
