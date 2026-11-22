@@ -29,7 +29,7 @@ import ImportStatus from "../onboarding/ImportStatus.vue";
 import { f as onboardingFlow } from "../onboarding/flow-content";
 import { selectFile } from "../editor/model";
 import SettingsView from "../settings/SettingsView.vue";
-import { accentStyle } from "../settings/accents";
+import { accentStyle, contentAccentStyle } from "../settings/accents";
 import ChatModelPicker from "../settings/ChatModelPicker.vue";
 import ChatView from "../chat/ChatView.vue";
 import DictationView from "../dictation/DictationView.vue";
@@ -358,7 +358,7 @@ function openImport() {
     :style="
       state.snapshot.current && !state.entryVisible && state.feature !== 'ai'
         ? accentStyle(state.settings.accent)
-        : {}
+        : contentAccentStyle('violet')
     "
   >
     <div class="scene-stack">

@@ -46,15 +46,34 @@ test("all six accents have readable controls and leave the wordmark unchanged", 
   const wordmark = await page
     .getByAltText("Situate", { exact: true })
     .getAttribute("src");
-  for (const name of [
-    "Violet",
-    "Cobalt",
-    "Sky",
-    "Tangerine",
-    "Peach",
-    "Lemon",
-  ]) {
-    await page.getByRole("radio", { name: new RegExp(`^${name}`) }).check();
+  for (const [name, companion] of [
+    ["Violet", "Peach"],
+    ["Cobalt", "Peach"],
+    ["Sky", "Peach"],
+    ["Tangerine", "Sky"],
+    ["Peach", "Sky"],
+    ["Lemon", "Sky"],
+  ] as const) {
+    const radio = page.getByRole("radio", { name: new RegExp(`^${name}`) });
+    await expect(radio).toHaveAccessibleDescription(`Paired with ${companion}`);
+    await radio.check();
+    const option = page.locator(".appearance-option").filter({ has: radio });
+    await expect(option.locator(".appearance-selected")).toBeVisible();
+    const swatch = await option.locator(".appearance-swatch").evaluate(
+      (node, names) => {
+        const probe = document.createElement("span");
+        node.append(probe);
+        const colors = names.map((color) => {
+          probe.style.color = `var(--situate-${color.toLowerCase()})`;
+          return getComputedStyle(probe).color;
+        });
+        probe.remove();
+        return { colors, gradient: getComputedStyle(node).backgroundImage };
+      },
+      [name, companion],
+    );
+    for (const color of swatch.colors) expect(swatch.gradient).toContain(color);
+    expect(swatch.colors[0]).not.toBe(swatch.colors[1]);
     await expect(page.locator("html")).toHaveAttribute(
       "data-workspace-accent",
       name.toLowerCase(),
@@ -89,6 +108,8 @@ test("all six accents have readable controls and leave the wordmark unchanged", 
         contrast("var(--situate-accent-strong)", "var(--situate-paper)"),
         contrast("var(--situate-accent-strong)", "var(--situate-accent-soft)"),
         contrast("var(--situate-accent-edge)", "var(--situate-surface)"),
+        contrast("var(--situate-muted)", "var(--situate-content-tint)"),
+        contrast("var(--situate-muted)", "var(--situate-content-wash)"),
       ];
       probe.remove();
       return values;
@@ -96,6 +117,8 @@ test("all six accents have readable controls and leave the wordmark unchanged", 
     for (const ratio of ratios.slice(0, 4))
       expect(ratio, name).toBeGreaterThanOrEqual(4.5);
     expect(ratios[4], `${name} edge`).toBeGreaterThanOrEqual(3);
+    for (const ratio of ratios.slice(5))
+      expect(ratio, `${name} companion`).toBeGreaterThanOrEqual(4.5);
     await expect(page.getByAltText("Situate", { exact: true })).toHaveAttribute(
       "src",
       wordmark!,

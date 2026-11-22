@@ -18,6 +18,15 @@ export const accentLabels = {
   lemon: "settings.appearance.lemon",
 } as const satisfies Record<Accent, MessageKey>;
 
+export const companionAccents = {
+  violet: "peach",
+  cobalt: "peach",
+  sky: "peach",
+  tangerine: "sky",
+  peach: "sky",
+  lemon: "sky",
+} as const satisfies Record<Accent, Accent>;
+
 export interface AppearanceSnapshot {
   accent: Accent;
   writable: boolean;
@@ -40,6 +49,9 @@ export function isAppearanceSnapshot(
 
 export function accentStyle(accent: Accent) {
   const color = `var(--situate-${accent})`;
+  const companion = companionAccents[accent];
+  const contentColor = `var(--situate-${companion})`;
+  const contentStrength = companion === "sky" ? 36 : 52;
   const dark = accent === "violet" || accent === "cobalt";
   const strong =
     accent === "violet"
@@ -48,6 +60,9 @@ export function accentStyle(accent: Accent) {
         ? `color-mix(in srgb, ${color} 85%, var(--situate-ink))`
         : `color-mix(in srgb, ${color} 35%, var(--situate-ink))`;
   return {
+    "--situate-content-accent": contentColor,
+    "--situate-content-tint": `color-mix(in srgb, ${contentColor} ${contentStrength}%, var(--situate-surface))`,
+    "--situate-content-wash": `color-mix(in srgb, ${contentColor} 25%, var(--situate-surface))`,
     "--situate-accent": color,
     "--situate-accent-strong": strong,
     "--situate-accent-on": dark

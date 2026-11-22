@@ -8,6 +8,26 @@ export const accents = [
 ] as const;
 export type Accent = (typeof accents)[number];
 
+export const companionAccents = {
+  violet: "peach",
+  cobalt: "peach",
+  sky: "peach",
+  tangerine: "sky",
+  peach: "sky",
+  lemon: "sky",
+} as const satisfies Record<Accent, Accent>;
+
+export function contentAccentStyle(accent: Accent) {
+  const companion = companionAccents[accent];
+  const color = `var(--situate-${companion})`;
+  const tint = companion === "sky" ? 36 : 52;
+  return {
+    "--situate-content-accent": color,
+    "--situate-content-tint": `color-mix(in srgb, ${color} ${tint}%, var(--situate-surface))`,
+    "--situate-content-wash": `color-mix(in srgb, ${color} 25%, var(--situate-surface))`,
+  };
+}
+
 export function accentStyle(accent: Accent) {
   const color = `var(--situate-${accent})`;
   const dark = accent === "violet" || accent === "cobalt";
@@ -18,6 +38,7 @@ export function accentStyle(accent: Accent) {
         ? `color-mix(in srgb, ${color} 85%, var(--situate-ink))`
         : `color-mix(in srgb, ${color} 35%, var(--situate-ink))`;
   return {
+    ...contentAccentStyle(accent),
     "--situate-accent": color,
     "--situate-accent-strong": strong,
     "--situate-accent-on": dark

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "workspace-accent-pairs",
+  "locales": {
+    "en": {
+      "title": "Workspace accent colors",
+      "entries": [
+        {
+          "id": "workspace-accent-pairs",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Two colors for each workspace accent",
+          "paragraphs": [
+            "Choose a color pair when creating a workspace or in Appearance. The companion color highlights file references and attachments in chat. Existing workspaces keep their selected accent."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Akzentfarben für Arbeitsbereiche",
+      "entries": [
+        {
+          "id": "workspace-accent-pairs",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Zwei Farben für jeden Arbeitsbereich",
+          "paragraphs": [
+            "Wähle beim Erstellen eines Arbeitsbereichs oder unter Erscheinungsbild ein Farbpaar. Die Begleitfarbe hebt Dateiverweise und Anhänge im Chat hervor. Bestehende Arbeitsbereiche behalten ihre gewählte Akzentfarbe."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -4,12 +4,18 @@ import type { RetainedQuestion } from "../../ai/question";
 import type { HistoryEntry } from "./work-history";
 import ChatMarkdown from "./ChatMarkdown.vue";
 import ChatImage from "./ChatImage.vue";
+import ChatImportedFiles from "./ChatImportedFiles.vue";
+import type { ContentReference } from "../../files/content-reference";
 import ChatDuration from "./ChatDuration.vue";
 import ChatToolCard from "./ChatToolCard.vue";
 import ChatToolGroup from "./ChatToolGroup.vue";
 import QuestionPrompt from "./QuestionPrompt.vue";
 import ChatSystemMessage from "./ChatSystemMessage.vue";
-defineProps<{ entries: HistoryEntry[]; scope: string }>();
+defineProps<{
+  entries: HistoryEntry[];
+  scope: string;
+  openReference?: (reference: ContentReference) => void;
+}>();
 const emit = defineEmits<{
   preview: [preview: NonNullable<RetainedQuestion["preview"]>];
 }>();
@@ -81,6 +87,12 @@ const emit = defineEmits<{
     <p v-else-if="entry.kind === 'failure'" class="history-failure">
       {{ localizeError(entry.error) }}
     </p>
+    <ChatImportedFiles
+      v-else-if="entry.kind === 'imported-files' && openReference"
+      :references="entry.references"
+      :scope="scope"
+      @open="openReference"
+    />
     <ChatToolGroup
       v-else-if="entry.kind === 'tools'"
       :calls="entry.calls"

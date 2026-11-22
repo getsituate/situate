@@ -34,6 +34,34 @@ function result(
     details,
   };
 }
+test("only presents valid live references from a successful import receipt", () => {
+  const file = {
+    kind: "live",
+    workspaceId: "garden",
+    path: "Reading.md",
+    anchorRevision: "a".repeat(40),
+  };
+  const call = assistant([
+    {
+      type: "toolCall",
+      id: "import",
+      name: "show_imported_files",
+      arguments: {},
+    },
+  ]);
+  const details = {
+    files: [file, file, { ...file, path: "../incorrect.md" }, "notes.md"],
+    missing: ["Unavailable.md"],
+  };
+  const files = (error: boolean) =>
+    transcriptBlocks(
+      [call, result("import", "show_imported_files", details, error)],
+      [],
+      false,
+    ).filter((block) => block.kind === "imported-files");
+  expect(files(false)).toMatchObject([{ references: [file] }]);
+  expect(files(true)).toEqual([]);
+});
 test("shows the conversational method explanation and groups its tool call in activity", () => {
   const blocks = transcriptBlocks(
     [

@@ -74,7 +74,15 @@ test(
     });
     await expect(name).toHaveValue("My workspace");
     await name.fill("Field notes");
-    await page.getByRole("radio", { name: "Cobalt", exact: true }).check();
+    const cobalt = page.getByRole("radio", { name: "Cobalt", exact: true });
+    await cobalt.check();
+    await expect(cobalt).toHaveAccessibleDescription("Paired with Peach");
+    const tile = page.locator(".appearance-option").filter({ has: cobalt });
+    await expect(tile.locator(".appearance-swatch")).toHaveCSS(
+      "background-image",
+      /linear-gradient/,
+    );
+    await expect(tile.locator(".appearance-selected")).toBeVisible();
     await visual.capture("onboarding.creation.ready");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(create).toBeFocused();
@@ -109,6 +117,15 @@ test(
       "data-workspace-accent",
       "cobalt",
     );
+    expect(
+      await page
+        .locator("html")
+        .evaluate((node) =>
+          (node as HTMLElement).style.getPropertyValue(
+            "--situate-content-accent",
+          ),
+        ),
+    ).toBe("var(--situate-peach)");
     await visual.capture("onboarding.access.providers");
     const creation = await page.evaluate(() =>
       Reflect.get(window, "__ipcCalls").find(
@@ -1286,8 +1303,9 @@ test(
   },
 );
 
-test("a successful import explains optional plugins in chat without a review or selection gate and retains it on reload", async ({
+test("a successful import explains optional plugins in chat without a review or selection gate and retains it on reload @visual-desktop", async ({
   page,
+  visual,
 }) => {
   await onboardingFixture(page, {
     importResult: true,
@@ -1302,6 +1320,17 @@ test("a successful import explains optional plugins in chat without a review or 
   await expect(page.getByText("Review helper", { exact: true })).toBeVisible();
   await expect(dock(page)).toHaveCount(0);
   expect(await progress(page)).toMatchObject({ step: "support", ideas: [] });
+  const file = page
+    .getByRole("list", { name: "Imported files" })
+    .getByRole("button", { name: "Open Reading.md" });
+  await expect(file).toBeVisible();
+  await file.scrollIntoViewIfNeeded();
+  await expect(file).toBeInViewport();
+  await visual.capture("onboarding.conversation.imported-files");
+  await file.click();
+  const reader = page.getByRole("dialog", { name: "Reading.md" });
+  await expect(reader).toContainText("An imported reading note.");
+  await reader.getByRole("button", { name: "Close", exact: true }).click();
   const id = (await progress(page)).conversationId;
   const conversation = (await conversations(page)).find(
     (item: { id: string }) => item.id === id,

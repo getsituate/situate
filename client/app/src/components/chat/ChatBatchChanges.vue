@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { SituateButton } from "@situate/ui";
+import { SituateButton, SituateIcon } from "@situate/ui";
 import { t } from "@situate/localization";
 import FileDialog from "../../files/FileDialog.vue";
 import { filesRequest } from "../../files/api";
@@ -77,7 +77,7 @@ watch(
 </script>
 
 <template>
-  <div class="batch-files">
+  <div class="batch-files" :class="{ 'completed-files': !isError }">
     <ul>
       <li v-for="file in visibleFiles" :key="file.path">
         <SituateButton
@@ -85,6 +85,7 @@ watch(
           class="batch-file"
           @click="selected = file.path"
         >
+          <SituateIcon name="notes" />
           <span class="batch-path" data-localization-content="user">{{
             file.path
           }}</span>
@@ -145,7 +146,22 @@ ul {
   text-align: start;
   cursor: pointer;
 }
+.completed-files ul {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+}
+.completed-files .batch-file {
+  border-radius: var(--situate-radius-control);
+  background: var(--situate-content-tint, var(--situate-paper));
+}
+.batch-file :deep(svg) {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
 .batch-path {
+  flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -166,6 +182,9 @@ ul {
 @media (hover: hover) {
   .batch-file:hover {
     background: var(--situate-paper);
+  }
+  .completed-files .batch-file:hover .batch-path {
+    text-decoration: underline;
   }
 }
 </style>

@@ -6,7 +6,7 @@ export { accents } from "../settings/accents";
 
 export const entryCopy = {
   eyebrow: "Your own way of working",
-  colorHelp: "Choose an accent for this workspace. You can change it later.",
+  colorHelp: "Choose a color pair for this workspace. You can change it later.",
   defaultName: "My workspace",
 };
 export type Accent = WorkspaceAccent;

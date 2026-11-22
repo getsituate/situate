@@ -408,7 +408,7 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
   padding-inline-start: 10px;
   border: 1px solid var(--situate-line);
   border-radius: 10px;
-  background: var(--situate-paper);
+  background: var(--situate-content-wash, var(--situate-paper));
   font-size: 12px;
 }
 .draft-attachment > span {

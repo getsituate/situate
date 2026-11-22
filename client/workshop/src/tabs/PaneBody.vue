@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import ViewChooser from "./ViewChooser.vue";
 import ConversationBody from "./ConversationBody.vue";
+import FilePreviewButton from "../components/FilePreviewButton.vue";
 import NavigationDashboard from "../navigation/NavigationDashboard.vue";
 import {
   SituateIcon,
@@ -158,14 +159,10 @@ function send() {
           <ul>
             <li v-for="point in chat.points" :key="point">{{ point }}</li>
           </ul>
-          <SituateButton
-            variant="plain"
-            class="note-link"
+          <FilePreviewButton
+            :name="viewNames.note"
             @click="emit('action', { type: 'open', id: pane.id, view: 'note' })"
-          >
-            <SituateIcon name="notes" />{{ viewNames.note
-            }}<SituateIcon name="forward" />
-          </SituateButton>
+          />
         </div>
       </template>
       <div
@@ -391,20 +388,6 @@ function send() {
 }
 .assistant-message li {
   padding-bottom: 8px;
-}
-.note-link {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--situate-note);
-  border: 1px solid var(--situate-line);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: start;
-}
-.note-link svg:last-child {
-  margin-inline-start: auto;
 }
 .chat-compose {
   margin: 12px 20px 20px;

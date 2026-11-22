@@ -164,7 +164,17 @@ async function journey({
     document: {
       visibilityState: "visible",
       hasFocus: () => focused,
-      documentElement: { dataset: { workspaceAccent: accent } },
+      documentElement: {
+        dataset: { workspaceAccent: accent },
+        style: {
+          getPropertyValue: (name) =>
+            name === "--situate-content-accent"
+              ? secondary
+                ? "var(--situate-peach)"
+                : "var(--situate-sky)"
+              : "",
+        },
+      },
       querySelectorAll: () =>
         screen === "entry" ? [create] : screen === "create" ? [confirm] : [],
       querySelector: (selector) => {

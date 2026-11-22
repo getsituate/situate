@@ -1,4 +1,4 @@
-import { editorFixtures } from "./fixtures";
+import { editorFixtures, workshopInvitation } from "./fixtures";
 import {
   conflictBlocksFile,
   createConflict,
@@ -9,6 +9,7 @@ export type EditorScene =
   | "read"
   | "source"
   | "chat"
+  | "chat-with-reply"
   | "history"
   | "save-error"
   | "empty"
@@ -38,11 +39,19 @@ export interface FileReference {
   name: string;
   version: Version | null;
 }
+export type ReferenceAppearance = "neutral" | "icon" | "preview";
 export interface EditorChat {
   key: string;
   title: string;
   draft: string;
   references: FileReference[];
+  exchange?: {
+    request: string;
+    reply: string;
+    file: FileReference;
+    excerpt: string;
+    appearance: ReferenceAppearance;
+  };
 }
 export type ItemTarget =
   { kind: "file"; key: string } | { kind: "folder"; path: string };
@@ -182,6 +191,10 @@ export function createEditorState(scene: EditorScene = "read"): EditorState {
     inspectVersion(state, state.files[0].versions[1]);
   }
   if (scene === "chat") openChat(state, referenceForCurrent(state));
+  if (scene === "chat-with-reply") {
+    openChat(state);
+    Object.assign(state.chats[0]!, workshopInvitation());
+  }
   if (scene === "save-error") {
     state.files[0].draft += "\nA thought to keep working on.\n";
     state.files[0].saveError = true;

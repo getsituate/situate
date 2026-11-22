@@ -643,6 +643,7 @@ defineExpose({
                   :aria-label="t('references.open', { path: reference.path })"
                   @click="openReference(reference)"
                 >
+                  <SituateIcon name="notes" />
                   <span data-localization-content="user">{{
                     reference.path
                   }}</span>
@@ -655,6 +656,7 @@ defineExpose({
                 :key="`${workspaceScope}:${conversationId ?? ''}`"
                 :messages="chat.state.transcript"
                 :message-offset="chat.state.messageOffset"
+                :open-reference="openReference"
                 @preview="questionPreview = $event"
                 :questions="questions"
                 :notices="chat.state.pluginNotices"
@@ -1213,6 +1215,17 @@ defineExpose({
   align-items: center;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+.content-references .reference-open {
+  background: var(--situate-content-wash, var(--situate-paper));
+}
+.submitted-references .reference-open {
+  background: var(--situate-content-tint, var(--situate-paper));
+}
+.reference-open :deep(svg) {
+  flex: none;
+  width: 16px;
+  height: 16px;
 }
 .content-references
   button:focus:where(html:not([data-input-modality="pointer"]) *),

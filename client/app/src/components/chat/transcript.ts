@@ -1,5 +1,10 @@
 import type { ActiveWorkBlock, WorkBlock } from "../../ai/work-blocks";
-import { validReferencePath } from "../../files/content-reference";
+import {
+  mergeReferences,
+  validReference,
+  validReferencePath,
+  type ContentReference,
+} from "../../files/content-reference";
 import type { RetainedQuestion } from "../../ai/question";
 import type { PluginNotice } from "../../ai/plugin-notices";
 import type {
@@ -55,6 +60,7 @@ export type TranscriptBlock = (
   | { key: string; kind: "stopped"; outcome?: "cancelled" | "error" }
   | { key: string; kind: "notice"; notice: PluginNotice }
   | { key: string; kind: "question"; question: RetainedQuestion }
+  | { key: string; kind: "imported-files"; references: ContentReference[] }
   | { key: string; kind: "tools"; calls: ToolView[] }
   | { key: string; kind: "change" | "call"; call: ToolView }
 ) & { messageIndex?: number };
@@ -112,6 +118,22 @@ export function importChangeReceipts(
       ? value.historyRevision
       : undefined;
   return { files, history };
+}
+function importedFileReferences(call: ToolView): ContentReference[] {
+  const details = call.result?.details;
+  if (
+    call.name !== "show_imported_files" ||
+    !call.result ||
+    call.result.isError ||
+    !details ||
+    typeof details !== "object"
+  )
+    return [];
+  const { files } = details as Record<string, unknown>;
+  if (!Array.isArray(files) || files.length > 10_000) return [];
+  return mergeReferences(
+    files.filter((file) => validReference(file) && file.kind === "live"),
+  );
 }
 export function transcriptBlocks(
   messages: AgentMessage[],
@@ -357,6 +379,14 @@ export function transcriptBlocks(
         if (previous?.kind === "tools") previous.calls.push(call);
         else grouped.push({ kind: "tools", key: call.key, calls: [call] });
       }
+      const references = importedFileReferences(call);
+      if (references.length)
+        grouped.push({
+          kind: "imported-files",
+          key: `imported:${call.key}`,
+          references,
+          messageIndex: call.messageIndex,
+        });
     }
   }
   return grouped;
