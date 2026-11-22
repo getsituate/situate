@@ -282,6 +282,19 @@ test("fixed independent families depend on planning and aggregate every selected
   }
 });
 
+test("the ARM64 installer job stages architecture-specific preview artifacts", () => {
+  const workflow = read("verify");
+  const lane = job(workflow, "windows-arm64-installer");
+  assert.match(
+    lane,
+    /SITUATE_WINDOWS_INSTALLER_TARGET: aarch64-pc-windows-msvc/,
+  );
+  assert.match(lane, /run: \.\/tools\/build-windows-installer-preview\.ps1/);
+  assert.match(lane, /name: windows-installer-preview-arm64-/);
+  assert.match(lane, /name: windows-update-pair-arm64-/);
+  assert.doesNotMatch(job(workflow, "required"), /windows-arm64-installer/);
+});
+
 test("Windows verify requires a native receipt and uploads the CI build after it passes", () => {
   const workflow = read("verify");
   const lane = job(workflow, "windows-native");

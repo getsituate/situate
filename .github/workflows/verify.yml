@@ -336,6 +336,36 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  windows-arm64-installer:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
+    runs-on: windows-2025
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    env:
+      SITUATE_WINDOWS_INSTALLER_TARGET: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - name: Build unsigned ARM64 installer preview
+        shell: pwsh
+        run: ./tools/build-windows-installer-preview.ps1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-installer-preview-arm64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/installer-preview/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-update-pair-arm64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/swu/pair/
+          if-no-files-found: error
+          retention-days: 7
+
   architecture:
     name: Architecture documentation
     runs-on: ubuntu-24.04

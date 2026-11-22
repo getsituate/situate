@@ -16,6 +16,7 @@ use windows::{
     core::{PCWSTR, s},
 };
 
+#[cfg(target_arch = "x86_64")]
 const DLLS: [(&str, u64, &str); 3] = [
     (
         "sherpa-onnx-c-api.dll",
@@ -31,6 +32,25 @@ const DLLS: [(&str, u64, &str); 3] = [
         "onnxruntime_providers_shared.dll",
         104960,
         "551d0e1fe4c227d8542314ba718d52f4379e0c7bfe729a37c59833a884e27b4d",
+    ),
+];
+
+#[cfg(target_arch = "aarch64")]
+const DLLS: [(&str, u64, &str); 3] = [
+    (
+        "sherpa-onnx-c-api.dll",
+        4862464,
+        "f5118f1182180fffa7bf541dc07e065046a21156fec282d0f4598e98c251f138",
+    ),
+    (
+        "onnxruntime.dll",
+        17635328,
+        "968d081836cad9af537105f59e34d4997bca2ce6d78ff39d3e47660620e8a642",
+    ),
+    (
+        "onnxruntime_providers_shared.dll",
+        104448,
+        "05fb0cc694b0671db544e77c55c3736d13be850b8b4045145e982e072e6f938f",
     ),
 ];
 

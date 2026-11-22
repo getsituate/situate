@@ -1,19 +1,25 @@
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+$target = $env:SITUATE_WINDOWS_INSTALLER_TARGET ?? 'x86_64-pc-windows-msvc'
+$archives = node client/scripts/windows-installer.mjs --runtime-archives $target | ConvertFrom-Json
+$pin = Select-String -LiteralPath client/rust-toolchain.toml -Pattern '^channel\s*=\s*"(\d+\.\d+\.\d+)"$'
+if (@($pin).Count -ne 1) { throw 'Missing exact Rust toolchain pin' }
+$env:RUSTUP_TOOLCHAIN = $pin.Matches[0].Groups[1].Value
+rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal --target $target
 $sherpa = Join-Path $env:RUNNER_TEMP sherpa.tar.bz2
 $onnx = Join-Path $env:RUNNER_TEMP onnx.tar.bz2
 $build = Join-Path $env:RUNNER_TEMP swp
-Invoke-WebRequest -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/sherpa-onnx-v2.0.2-win-x64-shared-MT-Release.tar.bz2' -OutFile $sherpa
-Invoke-WebRequest -Uri 'https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.28.2/onnxruntime-win-x64-MT-Release-1.28.2.tar.bz2' -OutFile $onnx
-node client/scripts/windows-installer.mjs $build $sherpa $onnx
-$files = @(Get-ChildItem -LiteralPath (Join-Path $build 'target/x86_64-pc-windows-msvc/release/bundle/nsis') -File -Filter '*.exe')
+Invoke-WebRequest -Uri $archives.sherpa.url -OutFile $sherpa
+Invoke-WebRequest -Uri $archives.onnx.url -OutFile $onnx
+node client/scripts/windows-installer.mjs $build $sherpa $onnx "--target=$Target"
+$files = @(Get-ChildItem -LiteralPath (Join-Path $build "target/$Target/release/bundle/nsis") -File -Filter '*.exe')
 if ($files.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
 $artifact = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'installer-preview')
 Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path $artifact.FullName 'setup.exe')
 [ordered]@{
     kind = 'situate-windows-installer-preview'
-    target = 'x86_64-pc-windows-msvc'
+    target = $Target
     source = $env:GITHUB_SHA
     sha256 = (Get-FileHash -LiteralPath (Join-Path $artifact.FullName 'setup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifact.FullName 'manifest.json')
-node client/scripts/windows-installer.mjs (Join-Path $env:RUNNER_TEMP swu) $sherpa $onnx --update-test
+node client/scripts/windows-installer.mjs (Join-Path $env:RUNNER_TEMP swu) $sherpa $onnx --update-test "--target=$Target"

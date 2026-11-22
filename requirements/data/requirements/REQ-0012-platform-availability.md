@@ -16,7 +16,7 @@ macOS is the currently released platform. **Windows is the next product platform
 
 Windows must support every product feature available on macOS, including features that currently require particular Mac hardware, such as dictation. Windows may use different platform mechanisms, but it must preserve the user-visible workflows and guarantees. Features must not be omitted to qualify an initial Windows release. Platform restrictions of individual plugins are governed by [REQ-0014](REQ-0014-plugin-platform-compatibility.md).
 
-Windows direct delivery requires a signed installer published in GitHub Releases and downloadable from Situate's website. CI builds and tests Windows; the release pipeline builds, qualifies and publishes the Windows artifacts. Direct installations on both desktop platforms use the [app update mechanism](REQ-0068-update-direct-desktop-installations.md). Desktop app-store distribution is optional; [package-manager support](REQ-0071-support-desktop-package-managers.md) is a separate should-have requirement. Mobile applications must be distributed through app stores. Direct Linux installation remains deferred.
+The first stable Windows release publishes signed x64 and ARM64 installers in GitHub Releases and enables direct updates for both architectures. The download link on Situate's website can be enabled separately after publication. CI builds and tests Windows; the release pipeline builds, qualifies and publishes the Windows artifacts. Direct installations on both desktop platforms use the [app update mechanism](REQ-0068-update-direct-desktop-installations.md). Desktop app-store distribution is optional; [package-manager support](REQ-0071-support-desktop-package-managers.md) is a separate should-have requirement. Mobile applications must be distributed through app stores. Direct Linux installation remains deferred.
 
 The deferred desktop and mobile targets retain the goal of equivalent functional scope, including local agent-driven plugin creation, modification and testing. Mobile is not intended as a read-only or consumption-only companion. No implementation from the previous prototype is to be carried forward; technology selection remains open within the [foundations](../foundations.md).
 
@@ -53,9 +53,10 @@ Subsequent platform prioritization: Windows is the next delivery target, with fe
 ### Windows
 
 - A supported Windows installation can run every feature available on macOS, including local agent-driven plugin creation, modification and testing. Native verification covers the Windows-specific paths for these features.
-- Users can install a signed Windows package from Situate's website and update it through the application without an app store.
-- CI builds and tests the Windows client. The release pipeline qualifies the exact Windows installer and update artifact before publishing them alongside macOS in GitHub Releases and promoting those same artifacts to the website and update feed.
-- Supported Windows versions and processor architectures are documented, and native qualification covers that support scope.
+- Users can install a signed x64 or ARM64 package from GitHub Releases and update it through the application without an app store.
+- CI builds and tests both Windows architectures. Before publication, the release pipeline qualifies the exact signed installer and update artifacts for both architectures. The stable update feed serves the matching installer for each architecture.
+- Enabling the Windows download link on Situate's website does not require a new release, rebuild, or re-signing. The link points to the same published installer for the selected architecture.
+- Supported Windows versions and architectures are documented, and native qualification covers that support scope. Physical-device checks may follow initial publication and precede enabling the website download link.
 
 ### Deferred platform criteria
 
@@ -68,7 +69,7 @@ These remain longer-term goals, not current release gates.
 
 ## Open questions
 
-- Which Windows versions and processor architectures should the initial release support? Which installer format and native qualification environments should it use?
+- Which Windows versions should the initial release support? Which installer format and native qualification environments should it use?
 - When should iOS, Linux desktop or Android enter active scope, and what native qualification is required before claiming support?
 - Which other operating system versions, Linux distributions and device classes are supported?
 - Which platform capabilities limit otherwise equivalent functionality, particularly local plugin execution and testing under mobile store rules?

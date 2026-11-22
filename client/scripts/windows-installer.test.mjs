@@ -3,7 +3,25 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { installerConfig, prepareInstaller } from "./windows-installer.mjs";
+import {
+  installerConfig,
+  prepareInstaller,
+  runtimeArchives,
+} from "./windows-installer.mjs";
+
+test("runtime downloads depend on the target, not the build machine", () => {
+  const x64 = runtimeArchives("x86_64-pc-windows-msvc");
+  const arm64 = runtimeArchives("aarch64-pc-windows-msvc");
+  assert.match(x64.sherpa.url, /-win-x64-shared-MT-Release\.tar\.bz2$/u);
+  assert.match(arm64.sherpa.url, /-win-arm64-shared-MT-Release\.tar\.bz2$/u);
+  assert.match(arm64.onnx.url, /-win-arm64-MT-Release-1\.28\.2\.tar\.bz2$/u);
+  assert.notEqual(x64.sherpa.sha256, arm64.sherpa.sha256);
+  assert.notEqual(x64.onnx.sha256, arm64.onnx.sha256);
+  assert.throws(
+    () => runtimeArchives("i686-pc-windows-msvc"),
+    /Unsupported Windows installer target/u,
+  );
+});
 
 test("the per-user NSIS preview includes only the dictation runtime and its notices", () => {
   const config = installerConfig(join(tmpdir(), "windows-installer-fixture"));
@@ -33,9 +51,11 @@ test("a corrupt archive is rejected before staging any resources", (t) => {
   const corrupt = join(root, "altered.tar.bz2");
   writeFileSync(corrupt, "altered archive");
   const output = join(root, "output");
-  assert.throws(
-    () => prepareInstaller(output, corrupt, corrupt),
-    /Archive checksum mismatch/,
-  );
+  for (const target of ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]) {
+    assert.throws(
+      () => prepareInstaller(output, corrupt, corrupt, target),
+      /Archive checksum mismatch/,
+    );
+  }
   assert.equal(existsSync(output), false);
 });
