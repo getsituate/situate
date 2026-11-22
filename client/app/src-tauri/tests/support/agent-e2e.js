@@ -480,19 +480,26 @@
       (message) => message.role === "assistant" && message.usage,
     );
     assert(
-      assistants.some((message) => message.usage.cost.total > 0),
-      "provider-cost-not-exercised",
+      assistants.some((message) => message.usage.totalTokens > 0),
+      "provider-token-counts-not-exercised",
     );
+    const counters = [
+      "input",
+      "output",
+      "cacheRead",
+      "cacheWrite",
+      "cacheWrite1h",
+      "reasoning",
+      "totalTokens",
+    ];
     for (const run of allRuns(record)) {
       for (const entry of run.usage ?? []) {
         if (entry.kind !== "main" || entry.usage == null) continue;
         assert(
           assistants.some((message) =>
-            Object.keys(entry.usage.cost).every(
-              (key) => message.usage.cost[key] === entry.usage.cost[key],
-            ),
+            counters.every((key) => message.usage[key] === entry.usage[key]),
           ),
-          "usage-cost-mismatch",
+          "usage-token-count-mismatch",
         );
       }
     }

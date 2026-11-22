@@ -355,6 +355,9 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                 }
             }
             progress("", "setup", serde_json::Value::Null);
+            if crate::agent_e2e::enabled() {
+                crate::ai::setup_model_metadata(app.handle());
+            }
             if let Err(error) = crate::agent_e2e::bootstrap(app.handle()) {
                 let _ = crate::agent_e2e::cleanup();
                 crate::agent_e2e::report_bootstrap_failure();

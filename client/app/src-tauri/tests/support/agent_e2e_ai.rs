@@ -43,19 +43,11 @@ pub(crate) fn configure(
     };
     if first_launch {
         let connection = Connection {
-            catalog: discovered.then(|| discovery::Catalog {
+            catalog: Some(discovery::Catalog {
                 source: discovery::Source::Provider,
-                models: vec![model_id.into()],
+                models: vec![model_id.into(), "gpt-4.1".into()],
                 checked_at: Some(discovery::unix_seconds()),
-                selectable: vec![discovery::DiscoveredModel {
-                    id: model_id.into(),
-                    name: None,
-                    thinking_levels: vec![],
-                    reasoning_none: false,
-                    context_window: 128_000,
-                    max_tokens: 16_384,
-                    image_input: false,
-                }],
+                ..Default::default()
             }),
             config: config.clone(),
             key: token.into(),

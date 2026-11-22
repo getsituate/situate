@@ -170,8 +170,8 @@ async fn download() -> Option<Vec<u8>> {
 pub(super) fn setup(app: &tauri::AppHandle) {
     #[cfg(feature = "native-smoke")]
     if crate::agent_e2e::enabled() {
+        let mut snapshot = parse(BUILT_IN.as_bytes()).expect("valid bundled model metadata");
         if crate::agent_e2e::uses_discovered_fixture() {
-            let mut snapshot = parse(BUILT_IN.as_bytes()).expect("valid bundled model metadata");
             let openai = snapshot.get_mut("openai").unwrap();
             let model = discovery::DiscoveredModel {
                 id: "fixture-discovered-chat".into(),
@@ -183,8 +183,8 @@ pub(super) fn setup(app: &tauri::AppHandle) {
                 reasoning_none: false,
             };
             openai.insert(model.id.clone(), model);
-            let _ = ACTIVE.set(RwLock::new(snapshot));
         }
+        let _ = ACTIVE.set(RwLock::new(snapshot));
         return;
     }
     let Ok(directory) = app.path().app_data_dir() else {
