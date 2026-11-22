@@ -73,7 +73,7 @@ describe("workspace layout session", () => {
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     writer.synchronizePluginIncarnations({ demo: "replacement" });
     expect(saved.owners).toEqual({ demo: "original" });
-    expect(writer.state.document!.pinnedViews).toEqual(["files"]);
+    expect(writer.state.document!.pinnedViews).toEqual([]);
     expect(
       writer.state.document!.layout.tabs[0]!.panes[0]!.navigation.entries.at(
         -1,
@@ -91,7 +91,7 @@ describe("workspace layout session", () => {
     });
     await flushing;
     expect(save.mock.calls[1]![3]).toEqual({ demo: "replacement" });
-    expect(save.mock.calls[1]![2].pinnedViews).toEqual(["files"]);
+    expect(save.mock.calls[1]![2].pinnedViews).toEqual([]);
   });
 
   it.each([false, true])(
@@ -115,7 +115,7 @@ describe("workspace layout session", () => {
       await loading;
       if (!inventoryFirst)
         restored.synchronizePluginIncarnations({ demo: "replacement" });
-      expect(restored.state.document!.pinnedViews).toEqual(["files"]);
+      expect(restored.state.document!.pinnedViews).toEqual([]);
       expect(
         restored.state.document!.layout.tabs[0]!.panes[0]!.navigation.entries.at(
           -1,
@@ -143,7 +143,7 @@ describe("workspace layout session", () => {
       await restored.load();
       restored.synchronizePluginIncarnations({ demo: "original" });
       expect(restored.state.document!.pinnedViews).toEqual(
-        proven ? ["files", "demo:board"] : ["files"],
+        proven ? ["demo:board"] : [],
       );
       expect(
         restored.state.document!.layout.tabs[0]!.panes[0]!.navigation.entries.at(
@@ -175,7 +175,7 @@ describe("workspace layout session", () => {
     owner.dispatch({ type: "close-tab", tabId: address.tabId });
     owner.open({ kind: "view", viewId: "gone:main" });
     owner.retainPluginViews(["kept"]);
-    expect(owner.state.document!.pinnedViews).toEqual(["files", "kept:main"]);
+    expect(owner.state.document!.pinnedViews).toEqual(["kept:main"]);
     const open =
       owner.state.document!.layout.tabs[0]!.panes[0]!.navigation.entries;
     expect(open.at(-1)!.target).toEqual({ kind: "empty" });
@@ -201,6 +201,7 @@ describe("workspace layout session", () => {
     await owner.load();
     await owner.flush();
     const original = owner.state.document;
+    expect(store.record.data?.pinnedViews).toEqual([]);
     expect(store.save).toHaveBeenCalledTimes(1);
     expect(
       original!.layout.tabs[0]!.panes[0]!.navigation.entries[0]!.target,
@@ -214,6 +215,7 @@ describe("workspace layout session", () => {
     const store = storage();
     const original = create(store, "original");
     await original.load();
+    original.pin("files");
     await original.flush();
     const document = original.state.document!;
     store.external({
@@ -302,7 +304,6 @@ describe("workspace layout session", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(store.save).toHaveBeenCalledTimes(2);
     expect(store.record.data?.pinnedViews).toEqual([
-      "files",
       "demo:first",
       "demo:second",
     ]);
@@ -327,7 +328,6 @@ describe("workspace layout session", () => {
     await vi.advanceTimersByTimeAsync(900);
     expect(store.save).toHaveBeenCalledTimes(2);
     expect(store.record.data?.pinnedViews).toEqual([
-      "files",
       "demo:first",
       "demo:second",
     ]);
@@ -360,10 +360,7 @@ describe("workspace layout session", () => {
     store.external(first);
     pending.resolve(store.record);
     await flush;
-    expect(store.record.data?.pinnedViews).toEqual([
-      "files",
-      "plugin:calendar",
-    ]);
+    expect(store.record.data?.pinnedViews).toEqual(["plugin:calendar"]);
     expect(owner.state.dirty).toBe(false);
   });
   it("keeps failed writes in memory and never automatically retries them", async () => {
@@ -421,7 +418,7 @@ describe("workspace layout session", () => {
     await owner.retry();
     expect(owner.state.error).toEqual(new Error("layoutHost.changedOnDisk"));
     expect(store.record.data?.pinnedViews).toEqual(["external:view"]);
-    expect(owner.state.document?.pinnedViews).toEqual([]);
+    expect(owner.state.document?.pinnedViews).toEqual(["files"]);
     await owner.reload();
     expect(owner.state.document?.pinnedViews).toEqual(["external:view"]);
   });

@@ -36,6 +36,26 @@ async function storedPins(page: Page) {
   });
 }
 
+test("a workspace without a saved layout offers Files without pinning it", async ({
+  page,
+}) => {
+  await workspaceFixture(page, shellState, { layout: {} });
+  await page.goto("/");
+  const chooser = page.locator(".view-chooser");
+  await expect(
+    chooser.getByText("No pinned views yet.", { exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => storedPins(page)).toEqual([]);
+  await chooser.getByRole("button", { name: "All views", exact: true }).click();
+  await expect(
+    chooser.getByRole("button", { name: "Pin Files", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await chooser.getByRole("button", { name: "Files", exact: true }).click();
+  await expect(page.locator(".browser-header")).toContainText("Files");
+});
+
+test.use({ localizationMode: "real" });
+
 for (const locale of ["en", "de"] as const) {
   test.describe(locale, () => {
     test.use({
