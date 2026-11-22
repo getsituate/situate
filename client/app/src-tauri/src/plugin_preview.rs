@@ -261,8 +261,11 @@ fn reply_result(
     value: Option<Value>,
     error: Option<String>,
 ) -> Result<Result<Value, String>, String> {
-    if error.is_some() {
-        return Ok(Err(UNAVAILABLE.into()));
+    if let Some(error) = error {
+        return Ok(Err(match error.as_str() {
+            "plugins.viewIconRequired" => error,
+            _ => UNAVAILABLE.into(),
+        }));
     }
     let value = value.ok_or(UNAVAILABLE)?;
     if serde_json::to_vec(&value).map_err(|_| UNAVAILABLE)?.len() > MAX_REPLY {
@@ -325,8 +328,10 @@ pub(crate) async fn executor_request(
         .get("operation")
         .and_then(Value::as_str)
         .ok_or(UNAVAILABLE)?;
-    if !["previewOpen", "previewStep", "previewClose"].contains(&operation)
-        || serde_json::to_vec(&request).map_err(|_| UNAVAILABLE)?.len() > 4 * 1024 * 1024
+    let loads_ui = matches!(operation, "previewValidate" | "previewOpen");
+    let max_request = if loads_ui { 16 } else { 4 } * 1024 * 1024;
+    if !(loads_ui || matches!(operation, "previewStep" | "previewClose"))
+        || serde_json::to_vec(&request).map_err(|_| UNAVAILABLE)?.len() > max_request
     {
         return Err(UNAVAILABLE.into());
     }
@@ -339,7 +344,7 @@ pub(crate) async fn executor_request(
         if locked.pending.len() >= 64 {
             return Err(UNAVAILABLE.into());
         }
-        let create = operation == "previewOpen" && !locked.presentations.contains_key(&identity);
+        let create = loads_ui && !locked.presentations.contains_key(&identity);
         if create {
             if locked.presentations.len() + locked.closing.len() >= 16
                 || locked.closing.contains_key(&identity)

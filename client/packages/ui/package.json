@@ -8,6 +8,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./icons": "./src/icons.ts",
     "./components/*": "./src/*.vue"
   },
   "dependencies": {

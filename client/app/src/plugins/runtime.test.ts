@@ -197,6 +197,26 @@ describe("plugin UI runtime", () => {
     expect(mocks.disposeModule).toHaveBeenCalledOnce();
   });
 
+  it("registers installed views and settings with a default when their icons cannot render", async () => {
+    const legacyView = {
+      id: "demo:main",
+      title: () => "Legacy",
+      component: { render: () => null },
+    };
+    mocks.importModule.mockResolvedValue({
+      default: () => ({
+        views: [legacyView],
+        settings: { ...legacyView, id: "demo:settings", icon: "unknown" },
+      }),
+    });
+    const { runtime, registry } = setup();
+    await runtime.ready;
+    expect(runtime.state.plugins[0].status).toBe("loaded");
+    expect(registry.definitions.get("demo:main")?.icon).toBe("plugins");
+    expect(registry.definitions.get("demo:settings")?.icon).toBe("plugins");
+    expect(legacyView).not.toHaveProperty("icon");
+  });
+
   it("takes one native snapshot per refresh without reimporting unchanged UI", async () => {
     const { runtime } = setup();
     await runtime.ready;

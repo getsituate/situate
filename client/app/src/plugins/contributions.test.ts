@@ -39,6 +39,20 @@ describe("plugin contribution boundaries", () => {
     );
   });
 
+  it.each([undefined, null, "", "  ", "unknown", "toString"])(
+    "uses the plugin icon on load and rejects %j when checking a publication",
+    (icon) => {
+      const legacy = { ...view, icon };
+      expect(
+        validateUiContributions({ views: [legacy] }, "demo").views,
+      ).toEqual([{ ...view, icon: "plugins" }]);
+      expect(legacy.icon).toBe(icon);
+      expect(() =>
+        validateUiContributions({ views: [legacy] }, "demo", true),
+      ).toThrow("plugins.viewIconRequired");
+    },
+  );
+
   it("preserves availability hooks without invoking them during validation", () => {
     const availability = vi.fn(() => ({ status: "missing" as const }));
     const result = validateUiContributions(
@@ -61,6 +75,7 @@ describe("plugin contribution boundaries", () => {
           dispose,
         },
         "demo",
+        true,
       ),
     ).toEqual({
       views: [view],

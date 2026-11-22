@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   link: vi.fn(),
   imported: vi.fn(),
-  validate: vi.fn(),
   dispose: vi.fn(),
 }));
 vi.mock("./module-source", () => ({ createPluginModule: mocks.link }));
@@ -15,7 +14,6 @@ vi.mock("./module", () => ({
   importPluginModule: mocks.imported,
   loadHostModules: async () => ({ vue: {}, ui: {} }),
 }));
-vi.mock("./contributions", () => ({ validateUiContributions: mocks.validate }));
 vi.mock("@situate/localization", () => ({ t: (key: string) => key }));
 let sequence = 0;
 const source = {
@@ -56,12 +54,13 @@ beforeEach(async () => {
   delete window.__situatePreviewCaptureFinished;
   mocks.invoke.mockResolvedValue(undefined);
   mocks.link.mockReturnValue({ url: "blob:ui", dispose: mocks.dispose });
-  mocks.validate.mockImplementation((value) => value);
   mocks.imported.mockResolvedValue({
     default: async () => ({
       views: [
         {
-          id: "example.view",
+          id: "example:main",
+          title: () => "Example",
+          icon: "folder",
           component: {
             render: () =>
               h("div", [
@@ -93,7 +92,7 @@ afterEach(async () => {
 
 it("imports only the captured UI graph and acknowledges mounted interactions", async () => {
   expect(
-    await send("previewOpen", { source, viewId: "example.view" }),
+    await send("previewOpen", { source, viewId: "example:main" }),
   ).toMatchObject({ ...identity, value: true });
   expect(mocks.link).toHaveBeenCalledWith(source, "ui");
   expect(await send("previewStep", { action: "read" })).toMatchObject({
@@ -112,8 +111,60 @@ it("imports only the captured UI graph and acknowledges mounted interactions", a
   expect(document.querySelector("[data-plugin-preview]")).toBeNull();
 });
 
+it("validates a publication without mounting and permits legacy dependency views", async () => {
+  const dependency = {
+    ...source,
+    manifest: { ...source.manifest, id: "legacy" },
+  };
+  const target = {
+    ...source,
+    manifest: { ...source.manifest, dependencies: ["legacy"] },
+  };
+  const factory = (await mocks.imported()).default;
+  mocks.imported
+    .mockResolvedValueOnce({
+      default: () => ({
+        views: [{ id: "legacy:main", title: () => "Legacy", component: {} }],
+      }),
+    })
+    .mockResolvedValueOnce({ default: factory });
+
+  expect(
+    await send("previewValidate", {
+      source: target,
+      sources: [dependency],
+      requireViewIcons: true,
+    }),
+  ).toMatchObject({ value: true });
+  expect(document.querySelector("[data-plugin-preview]")).toBeNull();
+  expect(await send("previewOpen", { viewId: "example:main" })).toMatchObject({
+    value: true,
+  });
+  expect(await send("previewStep", { action: "read" })).toMatchObject({
+    value: "Go",
+  });
+  expect(mocks.link).toHaveBeenCalledTimes(2);
+});
+
+it("rejects a settings view without an icon before a preview is opened", async () => {
+  mocks.imported.mockResolvedValue({
+    default: () => ({
+      settings: {
+        id: "example:settings",
+        title: () => "Settings",
+        component: {},
+      },
+    }),
+  });
+  expect(
+    await send("previewValidate", { source, requireViewIcons: true }),
+  ).toMatchObject({ error: "plugins.viewIconRequired" });
+  expect(document.querySelector("[data-plugin-preview]")).toBeNull();
+  expect(mocks.dispose).toHaveBeenCalledOnce();
+});
+
 it("acknowledges only a bounded rendered region for native capture", async () => {
-  await send("previewOpen", { source, viewId: "example.view" });
+  await send("previewOpen", { source, viewId: "example:main" });
   const root = document.querySelector("[data-plugin-preview] section")!;
   vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
     x: 0,
@@ -148,7 +199,7 @@ it("retains the preview and graph through close until native snapshot completion
       dispose: disposeContributions,
     }),
   });
-  await send("previewOpen", { source, viewId: "example.view" });
+  await send("previewOpen", { source, viewId: "example:main" });
   const container = document.querySelector("[data-plugin-preview]")!;
   const root = container.querySelector("section")!;
   vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
@@ -183,7 +234,7 @@ it("retains the preview and graph through close until native snapshot completion
 });
 
 it("keeps the opaque preview on uncertain acknowledgement failure until native finishes", async () => {
-  await send("previewOpen", { source, viewId: "example.view" });
+  await send("previewOpen", { source, viewId: "example:main" });
   const root = document.querySelector("[data-plugin-preview] section")!;
   vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
     x: 0,
@@ -207,7 +258,7 @@ it("keeps the opaque preview on uncertain acknowledgement failure until native f
 });
 
 it("closes immediately when capture bounds were rejected before acknowledgement", async () => {
-  await send("previewOpen", { source, viewId: "example.view" });
+  await send("previewOpen", { source, viewId: "example:main" });
   expect(await send("previewStep", { action: "capture" })).toMatchObject({
     error: "plugins.previewUnavailable",
   });
@@ -221,11 +272,8 @@ it("disposes invalid UI contributions before releasing graph URLs", async () => 
   mocks.imported.mockResolvedValue({
     default: async () => ({ dispose, tools: [] }),
   });
-  mocks.validate.mockImplementation(() => {
-    throw new Error("invalid");
-  });
   expect(
-    await send("previewOpen", { source, viewId: "example.view" }),
+    await send("previewOpen", { source, viewId: "example:main" }),
   ).toMatchObject({ error: "plugins.previewUnavailable" });
   expect(dispose).toHaveBeenCalledOnce();
   expect(mocks.dispose).toHaveBeenCalledOnce();
@@ -242,14 +290,19 @@ it("awaits the UI factory before acknowledging an open", async () => {
     ...identity,
     requestId: "waiting",
     operation: "previewOpen",
-    args: { source: source as never, viewId: "example.view" },
+    args: { source: source as never, viewId: "example:main" },
   });
   await vi.waitFor(() => expect(mocks.imported).toHaveBeenCalled());
   expect(mocks.invoke).not.toHaveBeenCalled();
   finish({
     default: async () => ({
       views: [
-        { id: "example.view", component: { render: () => h("p", "Ready") } },
+        {
+          id: "example:main",
+          title: () => "Ready",
+          icon: "folder",
+          component: { render: () => h("p", "Ready") },
+        },
       ],
     }),
   });
@@ -269,12 +322,17 @@ it("binds UI service requests to the original native invocation", async () => {
       await host.service.invoke("read", { key: "value" });
       return {
         views: [
-          { id: "example.view", component: { render: () => h("p", "Ready") } },
+          {
+            id: "example:main",
+            title: () => "Ready",
+            icon: "folder",
+            component: { render: () => h("p", "Ready") },
+          },
         ],
       };
     },
   });
-  await send("previewOpen", { source, viewId: "example.view" });
+  await send("previewOpen", { source, viewId: "example:main" });
   expect(mocks.invoke).toHaveBeenCalledWith("plugin_preview_service", {
     ...identity,
     pluginId: "example",
@@ -285,7 +343,7 @@ it("binds UI service requests to the original native invocation", async () => {
 });
 
 it("rejects steps for another generation instead of touching an existing preview", async () => {
-  await send("previewOpen", { source, viewId: "example.view" });
+  await send("previewOpen", { source, viewId: "example:main" });
   expect(
     await send(
       "previewStep",
@@ -297,7 +355,7 @@ it("rejects steps for another generation instead of touching an existing preview
 });
 
 it("does not repeat an interaction for a duplicate request", async () => {
-  await send("previewOpen", { source, viewId: "example.view" });
+  await send("previewOpen", { source, viewId: "example:main" });
   await send(
     "previewStep",
     { action: "click", selector: "button" },
@@ -317,7 +375,7 @@ it("does not repeat an interaction for a duplicate request", async () => {
 it("cleans captured graph URLs and returns no private factory exception", async () => {
   mocks.imported.mockRejectedValue(new Error("private source sentinel"));
   expect(
-    await send("previewOpen", { source, viewId: "example.view" }),
+    await send("previewOpen", { source, viewId: "example:main" }),
   ).toMatchObject({ error: "plugins.previewUnavailable" });
   expect(mocks.dispose).toHaveBeenCalledOnce();
   expect(JSON.stringify(mocks.invoke.mock.calls)).not.toContain(

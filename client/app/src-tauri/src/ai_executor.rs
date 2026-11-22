@@ -88,6 +88,7 @@ struct Invocation {
     ledger: tokio::sync::Mutex<Option<ManualLedger>>,
     action: Mutex<Option<crate::plugin_actions::ActionLease>>,
     images: Mutex<Vec<Value>>,
+    require_view_icons: bool,
     state: Mutex<InvocationState>,
     changed: Notify,
 }
@@ -173,7 +174,11 @@ struct InvocationRequest<'a> {
     kind: &'a str,
     name: &'a str,
     args: Value,
-    script: Option<&'a str>,
+    script: Option<CheckScript<'a>>,
+}
+struct CheckScript<'a> {
+    source: &'a str,
+    require_view_icons: bool,
 }
 type ManualInvocationOwners = (Arc<Workspace>, Arc<Generation>, Arc<Invocation>);
 
@@ -702,6 +707,7 @@ fn worker_error(value: &Value) -> String {
             | "plugins.checkTypeError"
             | "plugins.checkReferenceError"
             | "plugins.invalidContributions"
+            | "plugins.viewIconRequired"
             | "plugins.moduleImportInvalid"
             | "plugins.moduleImportUnsupported"
             | "plugins.moduleCycle"
@@ -1030,6 +1036,9 @@ impl CapturedPlugin {
             ledger: tokio::sync::Mutex::new(None),
             action: Mutex::new(None),
             images: Mutex::new(Vec::new()),
+            require_view_icons: script
+                .as_ref()
+                .is_some_and(|script| script.require_view_icons),
             state: Mutex::new(InvocationState::default()),
             changed: Notify::new(),
         });
@@ -1079,7 +1088,38 @@ impl CapturedPlugin {
                 .map_err(ToolOutcome::Failed)?;
             return Err(ToolOutcome::Failed(error));
         }
-        if self.workspace.send(json!({"type":"invoke","generation":generation.id,"invocationId":invocation.id,"kind":kind,"name":name,"args":args,"script":script})).await.is_err() { self.workspace.revoke(generation); }
+        let validation = if invocation.require_view_icons && !generation.source["uiEntry"].is_null()
+        {
+            preview_request(
+                &self.workspace,
+                generation,
+                &invocation,
+                json!({"operation":"previewValidate"}),
+            )
+            .await
+            .and_then(|result| {
+                if result == true {
+                    Ok(())
+                } else {
+                    Err(INVALID.into())
+                }
+            })
+        } else {
+            Ok(())
+        };
+        if let Err(error) = validation {
+            let mut state = lock(&invocation.state).map_err(ToolOutcome::Failed)?;
+            if state.terminal.is_none() {
+                state.terminal = Some(Terminal::Result(
+                    json!({"passed":false,"assertions":0,"error":error}),
+                ));
+            }
+        } else if invocation.cancel.is_cancelled()
+            || generation.revoked.load(Ordering::Acquire)
+            || self.workspace.send(json!({"type":"invoke","generation":generation.id,"invocationId":invocation.id,"kind":kind,"name":name,"args":args,"script":script.map(|script| script.source)})).await.is_err()
+        {
+            self.workspace.revoke(generation);
+        }
         drop(dispatch);
         let result = loop {
             let changed = invocation.changed.notified();
@@ -1859,6 +1899,7 @@ pub(crate) async fn check_inner(
     let workspace = workspace(context)
         .await
         .inspect_err(|error| check_diagnostic("workspace", error))?;
+    let require_view_icons = source["requireViewIcons"] == true;
     let (target, sources) = if source.get("source").is_some() {
         (
             source["source"].clone(),
@@ -1897,7 +1938,10 @@ pub(crate) async fn check_inner(
                     kind: "check",
                     name: "",
                     args: Value::Null,
-                    script: Some(&script),
+                    script: Some(CheckScript {
+                        source: &script,
+                        require_view_icons,
+                    }),
                 },
                 progress,
                 check_cancel.clone(),
@@ -2359,12 +2403,17 @@ async fn preview_request(
     if !args.is_object() {
         return Err(INVALID.into());
     }
-    if operation == "previewOpen" {
+    if matches!(operation.as_str(), "previewValidate" | "previewOpen") {
         args["source"] = generation.source.clone();
+        args["requireViewIcons"] = json!(invocation.require_view_icons);
         args["sources"] = Value::Array(
             lock(&workspace.generations)?
                 .values()
-                .filter(|g| g.test_id == generation.test_id && !g.revoked.load(Ordering::Acquire))
+                .filter(|g| {
+                    g.id != generation.id
+                        && g.test_id == generation.test_id
+                        && !g.revoked.load(Ordering::Acquire)
+                })
                 .map(|g| g.source.clone())
                 .collect(),
         );

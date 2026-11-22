@@ -282,6 +282,7 @@ fn invocation() -> Invocation {
         ledger: tokio::sync::Mutex::new(None),
         action: Mutex::new(None),
         images: Mutex::new(Vec::new()),
+        require_view_icons: false,
         state: Mutex::new(InvocationState::default()),
         changed: Notify::new(),
     }
@@ -447,6 +448,7 @@ fn manual_invocation() -> (tempfile::TempDir, Invocation) {
         })),
         action: Mutex::new(None),
         images: Mutex::new(Vec::new()),
+        require_view_icons: false,
         state: Mutex::new(InvocationState::default()),
         changed: Notify::new(),
     };

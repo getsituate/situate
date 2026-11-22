@@ -42,3 +42,7 @@ export const icons = {
 } as const;
 
 export type IconName = keyof typeof icons;
+
+export function isIconName(value: unknown): value is IconName {
+  return typeof value === "string" && Object.hasOwn(icons, value);
+}
