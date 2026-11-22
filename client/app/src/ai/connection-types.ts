@@ -11,6 +11,7 @@ export interface DiscoveredModel {
   contextWindow: number;
   maxTokens: number;
   imageInput?: boolean;
+  thinking?: { levels: string[]; default: string };
 }
 export interface ModelCatalog {
   source: "account" | "provider" | "static" | "unknown";

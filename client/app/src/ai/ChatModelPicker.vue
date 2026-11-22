@@ -215,20 +215,28 @@ function thinkingLabel(level: string): string {
       return t("settings.ai.thinking.high");
     case "xhigh":
       return t("settings.ai.thinking.xhigh");
+    case "max":
+      return t("settings.ai.thinking.max");
     default:
       return t("ai.choiceUnavailable");
   }
 }
 const levels = computed(() =>
   props.status?.config
-    ? supportedThinkingLevels(props.status.config, selected.value)
+    ? supportedThinkingLevels(
+        props.status.config,
+        selected.value,
+        props.status.catalog,
+      )
     : [],
 );
-const thinkingValue = computed(() =>
-  props.status?.thinkingInherited !== false
-    ? ""
-    : (props.status.thinkingPreference ?? "recommended"),
-);
+const thinkingValue = computed(() => {
+  if (props.status?.thinkingInherited !== false) return "";
+  const saved = props.status.thinkingPreference;
+  return saved === "off" && levels.value.length && !levels.value.includes(saved)
+    ? "recommended"
+    : (saved ?? "recommended");
+});
 const thinkingName = computed(() =>
   props.status?.thinkingLevel
     ? thinkingLabel(props.status.thinkingLevel)

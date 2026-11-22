@@ -8,6 +8,7 @@ import type { Config, ModelCatalog } from "./api";
 import type { ModelChoice, ThinkingLevel } from "./settings";
 import transports from "./transport-contract.json";
 import policy from "./provider-policy.json";
+import openAiDiscoveredThinking from "./openai-discovered-thinking.json";
 
 type EligibleModel = {
   id: string;
@@ -66,16 +67,44 @@ export function modelAvailability(
 }
 
 export const recommendationRevision = revision;
-export function supportedThinkingLevels(
+export function hasOpenAiDiscoveredThinking(
   config: Config,
   modelId: string,
-): ThinkingLevel[] {
-  const verified =
+): boolean {
+  return (
+    config.provider === "openai" &&
     config.endpoint === null &&
+    openAiDiscoveredThinking.models.includes(modelId)
+  );
+}
+function thinkingCapabilities(
+  config: Config,
+  modelId: string,
+  catalog?: ModelCatalog,
+) {
+  if (config.endpoint !== null) return undefined;
+  if (hasOpenAiDiscoveredThinking(config, modelId))
+    return openAiDiscoveredThinking;
+  const observed =
+    (config.provider === "anthropic" || config.provider === "openrouter") &&
+    (catalog?.source === "account" || catalog?.source === "provider") &&
+    catalog.models.includes(modelId)
+      ? catalog.selectable?.find((model) => model.id === modelId)?.thinking
+      : undefined;
+  return (
+    observed ??
     verifiedThinking.find(
       (entry) =>
         entry.provider === config.provider && entry.modelId === modelId,
-    );
+    )
+  );
+}
+export function supportedThinkingLevels(
+  config: Config,
+  modelId: string,
+  catalog?: ModelCatalog,
+): ThinkingLevel[] {
+  const verified = thinkingCapabilities(config, modelId, catalog);
   return verified ? (verified.levels as ThinkingLevel[]) : ["off"];
 }
 export function commentThinking(
@@ -92,13 +121,10 @@ export function modelChoice(
   config: Config,
   model: string,
   previous?: ModelChoice | null,
+  catalog?: ModelCatalog,
 ): ModelChoice {
-  const levels = supportedThinkingLevels(config, model);
-  const verified =
-    config.endpoint === null &&
-    verifiedThinking.find(
-      (entry) => entry.provider === config.provider && entry.modelId === model,
-    );
+  const levels = supportedThinkingLevels(config, model, catalog);
+  const verified = thinkingCapabilities(config, model, catalog);
   return {
     model,
     thinking:

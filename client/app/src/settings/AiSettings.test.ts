@@ -544,7 +544,9 @@ test.each(["account", "provider"] as const)(
     expect(
       wrapper.findAll('#settings-chat-model + select option[value="gpt-5.4"]'),
     ).toHaveLength(0);
-    expect(wrapper.text()).toContain(`⟦ai.models.${source}⟧`);
+    expect(wrapper.get(".model-discovery").text()).toBe(
+      "⟦settings.ai.modelList⟧⟦ai.models.refresh⟧",
+    );
     await chooseSelect(wrapper, "#settings-comment-model", "recommended");
     await flushPromises();
     expect(
@@ -655,9 +657,7 @@ test.each(["native.ai.storage.busy", "native.ai.catalog.connectionChanged"])(
     expect(wrapper.text()).toContain("⟦ai.models.empty⟧");
     await wrapper.get(".model-discovery button").trigger("click");
     await flushPromises();
-    expect(wrapper.get(".model-discovery [role=alert]").text()).toBe(
-      `⟦${reason}⟧`,
-    );
+    expect(wrapper.get("dialog[open] [role=alert]").text()).toBe(`⟦${reason}⟧`);
     expect(
       wrapper
         .get<HTMLButtonElement>("#settings-chat-model")
@@ -720,20 +720,38 @@ test("a late model refresh cannot replace another workspace's catalog", async ()
   ).toBeUndefined();
   expect(refreshChat).not.toHaveBeenCalled();
 });
-test("model refresh is disabled while a response is running", async () => {
+test("model refresh can update the catalog while a response is running", async () => {
   vi.mocked(workspaceChatActivity).mockReturnValue({
     running: true,
     selectingModel: false,
+  });
+  const initial: Status = {
+    config: { provider: "openai", endpoint: null, connectionId: "work" },
+    available: true,
+    selectedModel: null,
+    modelError: null,
+    reason: null,
+    catalog: { source: "account", models: ["gpt-4o-mini"] },
+  };
+  vi.mocked(getStatus).mockResolvedValue(initial);
+  vi.mocked(refreshModels).mockResolvedValue({
+    ...initial,
+    catalog: { source: "account", models: ["gpt-6.1-sol"] },
   });
   const wrapper = mount(AiSettings, {
     props: { workspaceScope: "discovery-running" },
   });
   await flushPromises();
+  const button = wrapper.get<HTMLButtonElement>(".model-discovery button");
+  expect(button.element.disabled).toBe(false);
+  await button.trigger("click");
+  await flushPromises();
+  expect(refreshModels).toHaveBeenCalledWith("discovery-running", "work");
   expect(
-    wrapper.get(".model-discovery button").attributes("disabled"),
-  ).toBeDefined();
-  await wrapper.get(".model-discovery button").trigger("click");
-  expect(refreshModels).not.toHaveBeenCalled();
+    wrapper
+      .find('#settings-chat-model + select option[value="gpt-6.1-sol"]')
+      .exists(),
+  ).toBe(true);
 });
 test("a stale save in the previous workspace never emits a saved event into the next", async () => {
   let finish!: (value: unknown) => void;
@@ -759,7 +777,7 @@ test("a stale save in the previous workspace never emits a saved event into the 
   ).toBe(false);
 });
 
-test("Recommended model retains an explicit supported thinking preference", async () => {
+test("recommendations show the current models and thinking without replacing saved preferences", async () => {
   const saved = {
     ...defaultAiSettings(),
     chat: {
@@ -775,6 +793,7 @@ test("Recommended model retains an explicit supported thinking preference", asyn
     selectedModel: "gpt-6.1-sol",
     modelError: null,
     modelInherited: true,
+    catalog: { source: "account", models: ["gpt-6.1-sol", "gpt-4o-mini"] },
   });
   vi.mocked(invoke).mockImplementation(async (command, args) =>
     command === "ai_settings_save"
@@ -793,6 +812,17 @@ test("Recommended model retains an explicit supported thinking preference", asyn
       .get<HTMLButtonElement>("#settings-chat-model")
       .attributes("data-value"),
   ).toBe("recommended");
+  expect(wrapper.get("#settings-chat-model").text()).toBe(
+    '⟦settings.ai.recommendedWithValue:{"value":"GPT-6.1 Sol"}⟧',
+  );
+  expect(wrapper.get("#settings-thinking").text()).toBe(
+    String.raw`⟦settings.ai.recommendedWithValue:{"value":"\u27e6settings.ai.thinking.medium\u27e7"}⟧`,
+  );
+  expect(
+    wrapper
+      .get('#settings-comment-model + select option[value="recommended"]')
+      .text(),
+  ).toBe('⟦settings.ai.recommendedWithValue:{"value":"GPT-4o mini"}⟧');
   await chooseSelect(wrapper, "#settings-thinking", "high");
   await flushPromises();
   expect(
@@ -804,6 +834,48 @@ test("Recommended model retains an explicit supported thinking preference", asyn
   });
   expect(refreshWorkspaceChats).toHaveBeenCalledWith("recommended-thinking");
 });
+test("a discovered GPT-6.2 Sol offers verified efforts and displays a legacy Off as Recommended", async () => {
+  const model = "gpt-6.2-sol";
+  const settings = {
+    ...defaultAiSettings(),
+    chat: { model, thinking: "off", catalogRevision: null },
+  };
+  vi.mocked(getStatus).mockResolvedValue({
+    config: { provider: "openai", endpoint: null, auth: "oauth" },
+    available: true,
+    reason: null,
+    selectedModel: model,
+    modelError: null,
+    catalog: {
+      source: "account",
+      models: [model],
+      selectable: [{ id: model, contextWindow: 1_050_000, maxTokens: 128_000 }],
+    },
+  });
+  vi.mocked(invoke).mockImplementation(async (command, args) =>
+    command === "ai_settings_save"
+      ? (args as { settings: unknown }).settings
+      : settings,
+  );
+  const wrapper = mount(AiSettings, {
+    props: { workspaceScope: "discovered-thinking" },
+  });
+  await flushPromises();
+  const thinking = wrapper.get<HTMLButtonElement>("#settings-thinking");
+  expect(thinking.element.disabled).toBe(false);
+  expect(thinking.attributes("data-value")).toBe("recommended");
+  expect(
+    wrapper
+      .findAll("#settings-thinking + select option")
+      .map((option) => option.attributes("value")),
+  ).toEqual(["recommended", "low", "medium", "high", "xhigh", "max"]);
+  await chooseSelect(wrapper, "#settings-thinking", "max");
+  await flushPromises();
+  expect(
+    workspaceAiSettings("discovered-thinking").state.settings?.chat?.thinking,
+  ).toBe("max");
+});
+
 test.each(["unsupported", "unknown", "noAccess"] as const)(
   "thinking remains visible and explains %s controls",
   async (state) => {

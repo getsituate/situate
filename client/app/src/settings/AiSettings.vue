@@ -31,7 +31,8 @@ import {
   SituateInput,
   SituateSelect,
 } from "@situate/ui";
-import { refreshWorkspaceChats, workspaceChatActivity } from "../ai/chat";
+import { refreshWorkspaceChats } from "../ai/chat";
+import ErrorDialog from "../errors/ErrorDialog.vue";
 const AiConnections = defineAsyncComponent(
   () => import("../ai/AiConnections.vue"),
 );
@@ -49,6 +50,8 @@ function thinkingLabel(level: ThinkingLevel): string {
       return t("settings.ai.thinking.high");
     case "xhigh":
       return t("settings.ai.thinking.xhigh");
+    case "max":
+      return t("settings.ai.thinking.max");
   }
 }
 const props = defineProps<{ workspaceScope?: string }>();
@@ -68,19 +71,13 @@ const status = ref<Status | null>(null);
 const editingConnection = ref(false);
 const refreshingModels = ref(false);
 const refreshError = ref<unknown>("");
-const refreshBlocked = computed(() => {
-  const activity = props.workspaceScope
-    ? workspaceChatActivity(props.workspaceScope)
-    : null;
-  return (
+const refreshBlocked = computed(
+  () =>
     !status.value?.config ||
     refreshingModels.value ||
     service.value?.state.saving ||
-    service.value?.state.loading ||
-    activity?.running ||
-    activity?.selectingModel
-  );
-});
+    service.value?.state.loading,
+);
 async function discoverModels(): Promise<void> {
   const scope = props.workspaceScope;
   if (!scope || refreshBlocked.value) return;
@@ -198,14 +195,18 @@ const disabled = computed(
       refreshingModels.value
     ),
 );
+const chatModel = computed(() =>
+  settings.value?.chat?.model === "recommended"
+    ? status.value?.selectedModel
+    : settings.value?.chat?.model,
+);
 const levels = computed(() => {
-  if (!settings.value?.chat || !status.value?.config) return [];
+  if (!chatModel.value || !status.value?.config) return [];
   try {
     return supportedThinkingLevels(
       status.value.config,
-      settings.value.chat.model === "recommended"
-        ? (status.value.selectedModel ?? "")
-        : settings.value.chat.model,
+      chatModel.value,
+      status.value.catalog,
     );
   } catch {
     return [];
@@ -225,6 +226,24 @@ const recommendations = computed(() => ({
     ? recommendedChoice(status.value.config, "comment", availability.value)
     : null,
 }));
+function modelRecommendation(modelId?: string): string {
+  const name = models.value.find((model) => model.id === modelId)?.name;
+  return name
+    ? t("settings.ai.recommendedWithValue", { value: name })
+    : t("settings.ai.recommended");
+}
+const thinkingPreference = computed(() => {
+  const saved = settings.value?.chat?.thinking;
+  return saved === "off" && levels.value.length && !levels.value.includes(saved)
+    ? "recommended"
+    : (saved ?? "recommended");
+});
+const recommendedThinking = computed(() => {
+  const config = status.value?.config;
+  if (!config || !chatModel.value || !levels.value.length) return null;
+  return modelChoice(config, chatModel.value, null, status.value?.catalog)
+    .thinking;
+});
 const customModelListId = useId();
 const customSuggestions = computed(() =>
   status.value?.config?.provider === "custom" &&
@@ -262,7 +281,12 @@ async function select(kind: "chat" | "comment", value: string): Promise<void> {
           catalogRevision: null,
         }
       : {
-          ...modelChoice(status.value.config, value, settings.value[kind]),
+          ...modelChoice(
+            status.value.config,
+            value,
+            settings.value[kind],
+            status.value.catalog,
+          ),
           thinking:
             kind === "comment"
               ? commentThinking(status.value.config, value)
@@ -289,7 +313,7 @@ function toggle(
 function thinking(event: Event): void {
   const control = event.target as HTMLSelectElement;
   const value = control.value as ThinkingLevel | "recommended";
-  control.value = settings.value?.chat?.thinking ?? "";
+  control.value = thinkingPreference.value;
   if (
     settings.value?.chat &&
     (value === "recommended" || levels.value.includes(value))
@@ -362,32 +386,29 @@ function thinking(event: Event): void {
         class="advanced-settings"
         :label="t('settings.ai.advanced')"
       >
-        <div v-if="status?.config" class="model-discovery">
-          <SituateButton
-            variant="ghost"
-            size="small"
-            type="button"
-            :disabled="refreshBlocked"
-            @click="discoverModels"
-          >
-            {{ t("ai.models.refresh") }}
-          </SituateButton>
-          <p v-if="refreshingModels" role="status">
-            {{ t("ai.models.refreshing") }}
-          </p>
-          <p v-if="refreshError" role="alert">
-            {{ localizeError(refreshError) }}
-          </p>
+        <div v-if="status?.config" class="model-discovery settings-group">
+          <div class="setting-row">
+            <div>
+              <span class="model-list-label">{{
+                t("settings.ai.modelList")
+              }}</span>
+              <p v-if="refreshingModels" role="status">
+                {{ t("ai.models.refreshing") }}
+              </p>
+            </div>
+            <SituateButton
+              class="refresh-models-button"
+              variant="secondary"
+              type="button"
+              :disabled="refreshBlocked"
+              @click="discoverModels"
+            >
+              {{ t("ai.models.refresh") }}
+            </SituateButton>
+          </div>
           <p v-if="status.catalog?.source === 'unknown'" role="alert">
             {{ t("ai.models.lookupFailed") }}
           </p>
-          <p v-else-if="status.catalog?.source === 'account'">
-            {{ t("ai.models.account") }}
-          </p>
-          <p v-else-if="status.catalog?.source === 'provider'">
-            {{ t("ai.models.provider") }}
-          </p>
-          <p v-else>{{ t("ai.models.static") }}</p>
           <p
             v-if="
               status.config.provider !== 'custom' &&
@@ -458,7 +479,7 @@ function thinking(event: Event): void {
                 value="recommended"
                 :disabled="!recommendations.chat"
               >
-                {{ t("settings.ai.recommended") }}
+                {{ modelRecommendation(recommendations.chat?.model) }}
               </option>
               <option
                 v-for="model in models"
@@ -476,7 +497,7 @@ function thinking(event: Event): void {
             }}</label
             ><SituateSelect
               id="settings-thinking"
-              :value="settings?.chat?.thinking ?? 'recommended'"
+              :value="thinkingPreference"
               :disabled="disabled || levels.length < 2"
               :aria-describedby="
                 levels.length < 2 || !status?.available
@@ -485,7 +506,13 @@ function thinking(event: Event): void {
               "
               @change="thinking"
               ><option value="recommended">
-                {{ t("settings.ai.recommended") }}
+                {{
+                  recommendedThinking && recommendedThinking !== "recommended"
+                    ? t("settings.ai.recommendedWithValue", {
+                        value: thinkingLabel(recommendedThinking),
+                      })
+                    : t("settings.ai.recommended")
+                }}
               </option>
               <option v-for="level in levels" :key="level" :value="level">
                 {{ thinkingLabel(level) }}
@@ -577,7 +604,7 @@ function thinking(event: Event): void {
                 value="recommended"
                 :disabled="!recommendations.comment"
               >
-                {{ t("settings.ai.recommended") }}
+                {{ modelRecommendation(recommendations.comment?.model) }}
               </option>
               <option
                 v-for="model in commentModels"
@@ -592,6 +619,12 @@ function thinking(event: Event): void {
         </section>
       </SituateDisclosure>
     </div>
+    <ErrorDialog
+      v-if="refreshError"
+      :open="true"
+      :message="localizeError(refreshError)"
+      @dismiss="refreshError = ''"
+    />
   </div>
 </template>
 
@@ -611,18 +644,20 @@ function thinking(event: Event): void {
   font-size: 13px;
   line-height: 1.6;
 }
-.model-discovery {
-  margin-bottom: 24px;
+.model-list-label {
+  font-size: 14px;
+  font-weight: 600;
 }
-.model-discovery p {
+.model-discovery > p {
   color: var(--situate-muted);
   font-size: 13px;
   line-height: 1.6;
 }
-.model-discovery button {
-  padding: 0;
+.refresh-models-button {
+  flex-shrink: 0;
+  min-height: 44px;
 }
-.ai-settings button,
+.ai-settings button:not(.refresh-models-button),
 .ai-settings input:not([type="checkbox"]) {
   min-height: 44px;
   font: inherit;
@@ -632,7 +667,7 @@ function thinking(event: Event): void {
   max-width: 100%;
   padding: 8px;
 }
-.ai-settings button {
+.ai-settings button:not(.refresh-models-button) {
   border: 0;
   background: transparent;
   text-decoration: underline;

@@ -1,0 +1,6 @@
+{
+  "models": ["gpt-6.2-astra", "gpt-6.2-sol"],
+  "levels": ["low", "medium", "high", "xhigh", "max"],
+  "default": "medium",
+  "source": "https://developers.openai.com/api/docs/guides/deployment-checklist"
+}

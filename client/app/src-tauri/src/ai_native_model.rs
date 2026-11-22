@@ -151,8 +151,8 @@ async fn execute_admitted(
                     &prepared_context.app,
                     prepared_choice.connection.connection_id.as_deref(),
                 )?;
+                // Catalog availability is checked at turn admission, not between tool calls.
                 model::validate_snapshot(&prepared_choice, &connection.config)?;
-                discovery::catalog(&connection).admits(&prepared_choice.model)?;
                 Ok((storage, lock, connection))
             })
         })
@@ -247,7 +247,7 @@ async fn execute_admitted(
     result
 }
 
-async fn refresh(
+pub(super) async fn refresh(
     context: &Context,
     storage: Storage,
     mut connection: Connection,
@@ -304,9 +304,6 @@ async fn refresh(
                     .with_location(|_| save_rotated_credentials(&storage, &keys, expected, &bytes))
             })
             .await?;
-    }
-    if connection.oauth.is_some() {
-        connection.key = connection.oauth.as_ref().ok_or(REJECTED)?.access.clone();
     }
     Ok(connection)
 }

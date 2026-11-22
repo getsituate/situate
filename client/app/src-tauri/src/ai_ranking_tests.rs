@@ -168,10 +168,11 @@ fn openai_recommends_sol_62_only_with_qualified_discovery_and_only_for_chat() {
             context_window: 1_050_000,
             max_tokens: 128_000,
             image_input: true,
+            thinking: None,
         });
         let chat = resolve_choice(recommended(), &observed, "chat").unwrap();
         assert_eq!(chat.model, "gpt-6.2-sol");
-        assert_eq!(chat.thinking, "off");
+        assert_eq!(chat.thinking, "medium");
         assert_eq!(chat.target().unwrap().0, "openai-responses");
         assert_eq!(
             resolve_choice(recommended(), &observed, "comment")

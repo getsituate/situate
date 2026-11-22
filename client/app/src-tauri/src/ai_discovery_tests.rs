@@ -601,18 +601,117 @@ async fn openai_responses_models_use_public_metadata_without_making_availability
         (model.context_window, model.max_tokens),
         (1_050_000, 128_000)
     );
-    let descriptor = model.descriptor(&config).unwrap();
-    let request = crate::ai_protocol::build_request(
-        "openai-responses",
-        &descriptor,
-        "off",
-        &[],
-        &[],
-        Some(4096),
-    )
+    let workspace = Workspace::new();
+    let storage = workspace.storage();
+    let mut connection = browser();
+    connection.catalog = Some(fallback);
+    workspace.save(&connection, false);
+    let observed = catalog(&connection);
+    model::save_observed(&storage, &connection.config, model.id.clone(), &observed).unwrap();
+    for (saved, effort) in [("off", "medium"), ("recommended", "medium"), ("max", "max")] {
+        let settings = serde_json::from_value(json!({
+            "version":1,"chat":{"model":model.id,"thinking":saved,"catalogRevision":null},
+            "comment":null,"generatedComments":true,"showInlineModel":false
+        }))
+        .unwrap();
+        model::save_current_settings(&storage, &connection, settings).unwrap();
+        let choice = model::admit_workspace(&storage, &connection).unwrap();
+        model::validate_snapshot(&choice, &connection.config).unwrap();
+        let descriptor = native_model::descriptor(&choice).unwrap();
+        assert_eq!(descriptor["reasoning"], true);
+        let request = crate::ai_protocol::build_request(
+            "openai-responses",
+            &descriptor,
+            &choice.thinking,
+            &[],
+            &[],
+            Some(4096),
+        )
+        .unwrap();
+        assert_eq!(request.body["model"], "gpt-6.2-sol");
+        assert_eq!(request.body["reasoning"]["effort"], effort);
+        assert!(request.body.get("max_output_tokens").is_none());
+    }
+    let unsupported = serde_json::from_value(json!({
+        "version":1,"chat":{"model":model.id,"thinking":"minimal","catalogRevision":null},
+        "comment":null,"generatedComments":true,"showInlineModel":false
+    }))
     .unwrap();
-    assert_eq!(request.body["model"], "gpt-6.2-sol");
-    assert!(request.body.get("max_output_tokens").is_none());
+    assert!(model::save_current_settings(&storage, &connection, unsupported).is_err());
+}
+
+#[tokio::test]
+async fn provider_reported_thinking_survives_reopen_and_uses_each_native_transport() {
+    for (provider, protocol, response, api) in [
+        (
+            "anthropic",
+            Protocol::Anthropic,
+            json!({"has_more":false,"data":[{
+                "id":"new-reasoning-model","type":"model","lifecycle":"active","max_input_tokens":32768,"max_tokens":8192,
+                "capabilities":{"effort":{"supported":true,"low":{"supported":true},"medium":{"supported":true},"max":{"supported":true}},"thinking":{"types":{"adaptive":{"supported":true}}}}
+            }]}),
+            "anthropic-messages",
+        ),
+        (
+            "openrouter",
+            Protocol::Router,
+            json!({"total_count":1,"data":[{
+                "id":"new-reasoning-model","architecture":{"input_modalities":["text"],"output_modalities":["text"]},
+                "supported_parameters":["tools","reasoning"],"endpoints":["/api/v1/chat/completions"],
+                "context_length":32768,"top_provider":{"max_completion_tokens":8192},
+                "reasoning":{"supported_efforts":["max","medium","low","none","unknown"],"mandatory":true,"default_effort":"medium"}
+            }]}),
+            "openai-completions",
+        ),
+    ] {
+        let endpoint = server(vec![(200, response)], None).await;
+        let observed = collect(request_to(&endpoint, protocol)).await.unwrap();
+        let workspace = Workspace::new();
+        let storage = workspace.storage();
+        let mut connection = Connection {
+            config: config(provider, AuthKind::ApiKey),
+            key: "synthetic-key".into(),
+            catalog: None,
+            oauth: None,
+            codex: None,
+        };
+        workspace.save(&connection, false);
+        store_observation(&storage, &workspace.keys, &mut connection, observed).unwrap();
+        let reopened = workspace.load(connection.config.connection_id.as_deref().unwrap());
+        let id = "new-reasoning-model";
+        let observed = catalog(&reopened);
+        let discovered = observed.selectable(&reopened.config, id).unwrap();
+        assert_eq!(
+            discovered.thinking.unwrap().levels,
+            ["low", "medium", "max"]
+        );
+        for (saved, expected) in [("recommended", "medium"), ("max", "max")] {
+            let settings = serde_json::from_value(json!({
+                "version":1,"chat":{"model":id,"thinking":saved,"catalogRevision":null},
+                "comment":null,"generatedComments":true,"showInlineModel":false
+            }))
+            .unwrap();
+            model::save_current_settings(&storage, &reopened, settings).unwrap();
+            let choice = model::admit_workspace(&storage, &reopened).unwrap();
+            let descriptor = native_model::descriptor(&choice).unwrap();
+            let request = crate::ai_protocol::build_request(
+                api,
+                &descriptor,
+                &choice.thinking,
+                &[],
+                &[],
+                None,
+            )
+            .unwrap();
+            if provider == "anthropic" {
+                assert_eq!(request.body["thinking"]["type"], "adaptive");
+                assert_eq!(request.body["output_config"]["effort"], expected);
+            } else {
+                assert_eq!(request.body["reasoning"]["effort"], expected);
+                assert_eq!(request.body["provider"]["require_parameters"], true);
+            }
+        }
+    }
 }
 
 #[tokio::test]
@@ -1198,6 +1297,69 @@ async fn external_configuration_and_selection_edits_during_discovery_are_not_rep
         );
         assert_eq!(catalog(&workspace.load(&second_id)).models, ["gpt-6.1-sol"]);
     }
+}
+
+#[tokio::test]
+async fn native_openai_request_authenticates_with_the_stored_browser_grant() {
+    let service = server(vec![(401, json!({}))], None).await;
+    let connection = browser();
+    assert!(connection.key.is_empty());
+    let result = send(
+        (
+            connection,
+            "openai-responses".into(),
+            service.url.to_string(),
+            "{}".into(),
+            HashMap::new(),
+        ),
+        CancellationToken::new(),
+        |_| Ok(()),
+        None,
+    )
+    .await;
+    assert_eq!(result.err().as_deref(), Some(REJECTED));
+    assert!(
+        service.requests.lock().unwrap()[0]
+            .to_ascii_lowercase()
+            .contains("authorization: bearer synthetic-access\r\n")
+    );
+}
+
+#[test]
+fn catalog_refresh_does_not_overwrite_credentials_renewed_during_discovery() {
+    let workspace = Workspace::new();
+    let storage = workspace.storage();
+    let mut captured = browser();
+    workspace.save(&captured, false);
+    let record = capture_record(&storage, &captured).unwrap();
+    let fingerprint = catalog_fingerprint(&storage, &workspace.keys, &record.id).unwrap();
+
+    let mut renewed = workspace.load(&record.id);
+    renewed.oauth.as_mut().unwrap().expires = u64::MAX;
+    workspace.save(&renewed, true);
+    assert!(storage.connection_record(&record.id).unwrap() == record);
+
+    let _lock = storage.lock_credentials().unwrap();
+    let result = persist_refresh(
+        &storage,
+        &workspace.keys,
+        &record,
+        fingerprint,
+        &mut captured,
+        Catalog {
+            source: Source::Account,
+            models: vec!["gpt-6.2-sol".into()],
+            ..Catalog::default()
+        },
+    );
+
+    assert_eq!(
+        result.err().as_deref(),
+        Some("native.ai.catalog.connectionChanged")
+    );
+    let saved = workspace.load(&record.id);
+    assert_eq!(saved.oauth.unwrap().expires, u64::MAX);
+    assert!(saved.catalog.is_none());
 }
 
 #[tokio::test]

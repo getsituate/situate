@@ -63,7 +63,7 @@ pub(super) struct Context {
     operations: Arc<Operations>,
 }
 impl Context {
-    fn new(
+    pub(super) fn new(
         app: tauri::AppHandle,
         window: String,
         scope: String,
@@ -2695,6 +2695,11 @@ async fn check_request(
     let reserve_key = key.clone();
     let reserve_id = request_id.clone();
     let cancelled = token.clone();
+    let gate = context
+        .app
+        .state::<Ai>()
+        .credential_guard(&context.scope, &token)
+        .await?;
     context
         .blocking(move || {
             captured.with_location(|location| {
@@ -2718,6 +2723,7 @@ async fn check_request(
             })
         })
         .await?;
+    drop(gate);
     let response=super::native_model::execute(&context,super::native_model::NativeRequest {
         key,run_id:request_id.clone(),request_id:format!("model-{request_id}"),kind:RequestKind::Main,sequence:1,
         messages:vec![json!({"role":"system","content":"Verify that this connection can answer. Reply briefly. Do not use tools or initiate other work."}),json!({"role":"user","content":"Reply briefly to confirm that this connection can answer.","timestamp":now_ms()})],definitions:vec![],max_tokens:Some(64),

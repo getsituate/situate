@@ -3,6 +3,7 @@ import type { Config, ModelCatalog } from "./connection-types";
 import catalog from "./catalog.generated.json";
 import transports from "./transport-contract.json";
 import policy from "./provider-policy.json";
+import { hasOpenAiDiscoveredThinking } from "./recommendations";
 
 export interface Provider {
   id: string;
@@ -118,7 +119,11 @@ export function availableChatModels(
       api,
       baseUrl,
       input: model.imageInput ? ["text", "image"] : ["text"],
-      reasoning: false,
+      reasoning:
+        hasOpenAiDiscoveredThinking(config, model.id) ||
+        ((config.provider === "anthropic" ||
+          config.provider === "openrouter") &&
+          !!model.thinking),
       cost: null,
     });
   }
