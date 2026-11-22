@@ -155,6 +155,7 @@ window.runPluginRuntimeSmoke = async () => {
     await invoke("smoke_progress", {
       stage: "plugin-runtime-initialization-start",
     });
+    let retained;
     try {
       await fixture("prepareFailedInitializer");
       const first = await snapshot(15000);
@@ -188,33 +189,37 @@ window.runPluginRuntimeSmoke = async () => {
           "Repeated capture restarted a failed or healthy generation",
         );
       await read(healthy(cached));
+      retained = initial;
     } finally {
-      await bounded(
-        () =>
-          invoke("plugin_executor", {
-            scope: current.id,
-            request: { operation: "stop" },
-          }),
-        5000,
-        "Initialization workers did not stop",
-      );
-      const outstanding = pending.slice();
-      await bounded(
-        () => Promise.allSettled(outstanding),
-        5000,
-        "Initialization requests did not settle after native stop",
-      );
+      if (!retained) {
+        await bounded(
+          () =>
+            invoke("plugin_executor", {
+              scope: current.id,
+              request: { operation: "stop" },
+            }),
+          5000,
+          "Initialization workers did not stop",
+        );
+        const outstanding = pending.slice();
+        await bounded(
+          () => Promise.allSettled(outstanding),
+          5000,
+          "Initialization requests did not settle after native stop",
+        );
+      }
       await fixture("clearFailedInitializers");
     }
+    await read(retained);
     await invoke("smoke_progress", {
       stage: "plugin-runtime-initialization-complete",
     });
   }
   await unavailableInitializers();
-  await runtime.refresh();
+  await runtime.refresh(undefined, true);
   await wait(
-    () => counter()?.querySelector("output").textContent.length > 0,
-    "The refreshed counter did not finish its initial service read",
+    () => counter()?.querySelector("output").textContent === "1",
+    "Removing failed initializers reset the healthy counter view",
   );
   listing = await request({ operation: "list" });
   async function disableHeldRoot(stop) {
