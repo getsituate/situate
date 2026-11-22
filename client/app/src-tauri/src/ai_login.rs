@@ -70,7 +70,7 @@ pub fn prepare_close(app: &tauri::AppHandle, scope: &str, window: &str) -> Resul
             .map_err(|_| oauth::ERROR)?
             .insert(scope.into());
         login.cancel();
-        let _ = app.emit_to(window, "ai-login-close-requested", ());
+        let _ = app.emit_to(window, "ai-login-close-requested", scope);
         return Ok(false);
     }
     Ok(true)

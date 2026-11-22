@@ -24,6 +24,7 @@ import { captureIncident, retainIncidentScopes } from "./errors/runtime";
 import { installRecoveryLifecycle, recoveryPreparing } from "./errors/native";
 import { retainedWorkspaces, releaseWorkspace } from "./files/sessions";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { listenInWindow } from "./window-events";
 import { onBackButtonPress } from "@tauri-apps/api/app";
 const DictationConfirmation = defineAsyncComponent(
   () => import("./dictation/DictationConfirmation.vue"),
@@ -266,16 +267,29 @@ watch(
   },
   { flush: "post" },
 );
+function ownsCloseRequest(scope: string): boolean {
+  const current = state.value;
+  return (
+    alive &&
+    !!scope &&
+    (current?.mobile
+      ? current.open.some((workspace) => workspace.id === scope)
+      : current?.current?.id === scope)
+  );
+}
+async function continueClose(scope: string): Promise<void> {
+  if (!state.value?.ready) await refresh();
+  if (ownsCloseRequest(scope)) await run("close", scope);
+}
 let closingLogin = false;
-async function closeLoginWorkspace(): Promise<void> {
-  const scope = state.value?.current?.id;
-  if (!scope || closingLogin) return;
+async function closeLoginWorkspace(scope: string): Promise<void> {
+  if (closingLogin || !ownsCloseRequest(scope)) return;
   closingLogin = true;
   try {
     await setup.value?.cancelAndWait();
     await onboarding.value?.cancelAndWait();
     await pendingAction;
-    if (alive && state.value?.current?.id === scope) await run("close", scope);
+    if (ownsCloseRequest(scope)) await run("close", scope);
   } catch {
     error.value = "navigation.signInCouldNotBeStoppedKeepThisWorkspace";
     await invoke("ai_cancel_close", { scope }).catch(() => {});
@@ -821,22 +835,24 @@ onMounted(async () => {
       return;
     }
     unlisten = stop;
-    const stopClose = await listen<{
-      scope?: string;
-      processes?: boolean;
-    } | null>(
-      "ai-close-requested",
-      (event) =>
-        void showCloseDialog(event.payload?.scope, event.payload?.processes),
-    );
+    const stopClose = await listenInWindow<{
+      scope: string;
+      processes: boolean;
+    }>("ai-close-requested", ({ payload }) => {
+      if (payload && ownsCloseRequest(payload.scope))
+        void showCloseDialog(payload.scope, payload.processes);
+    });
     if (!alive) {
       stopClose();
       return;
     }
     unlistenClose = stopClose;
-    const stopLoginClose = await listen("ai-login-close-requested", () => {
-      void closeLoginWorkspace();
-    });
+    const stopLoginClose = await listenInWindow<string>(
+      "ai-login-close-requested",
+      ({ payload }) => {
+        if (typeof payload === "string") void closeLoginWorkspace(payload);
+      },
+    );
     if (!alive) {
       stopLoginClose();
       return;
@@ -850,7 +866,7 @@ onMounted(async () => {
       return;
     }
     unlistenQuit = stopQuit;
-    for (const [name, callback] of [
+    for (const [name, callback, subscribe = listenInWindow] of [
       [
         "ai-models-changed",
         (scope: string) => {
@@ -858,18 +874,8 @@ onMounted(async () => {
             void refreshWorkspaceChats(scope);
         },
       ],
-      [
-        "dictation-close-requested",
-        (id: string) => {
-          void run("close", id);
-        },
-      ],
-      [
-        "files-close-requested",
-        (id: string) => {
-          void run("close", id);
-        },
-      ],
+      ["dictation-close-requested", continueClose],
+      ["files-close-requested", continueClose],
       [
         "updates-prepare-requested",
         (token: string) => {
@@ -885,6 +891,7 @@ onMounted(async () => {
           lifecycle.cancelUpdate(token);
           chatQuitPending.value = lifecycle.quitting;
         },
+        listen,
       ],
       [
         "files-quit-requested",
@@ -901,10 +908,11 @@ onMounted(async () => {
           lifecycle.cancelQuit(token);
           chatQuitPending.value = lifecycle.quitting;
         },
+        listen,
       ],
     ] as const) {
-      const stopLifecycle = await listen<string>(name, (event) => {
-        if (typeof event.payload === "string") callback(event.payload);
+      const stopLifecycle = await subscribe<string>(name, (event) => {
+        if (typeof event.payload === "string") void callback(event.payload);
       });
       if (!alive) {
         stopLifecycle();

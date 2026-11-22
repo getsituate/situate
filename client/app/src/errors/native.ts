@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { listenInWindow } from "../window-events";
 import type { LifecycleCoordinator } from "../lifecycle";
 import { shallowRef } from "vue";
 
@@ -53,7 +54,7 @@ export async function installRecoveryLifecycle(
   );
   try {
     listeners.push(
-      await listen<string>("recovery-prepare", ({ payload }) => {
+      await listenInWindow<string>("recovery-prepare", ({ payload }) => {
         if (
           registration &&
           !settled.has(payload) &&
@@ -82,7 +83,7 @@ export async function installRecoveryLifecycle(
       }),
     );
     listeners.push(
-      await listen<string>("recovery-completed", ({ payload }) => {
+      await listenInWindow<string>("recovery-completed", ({ payload }) => {
         void finish(payload).catch(() => {});
       }),
     );

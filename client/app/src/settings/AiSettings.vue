@@ -8,7 +8,7 @@ import {
   useId,
   watch,
 } from "vue";
-import { listen } from "@tauri-apps/api/event";
+import { listenInWindow } from "../window-events";
 import { t, localizeError } from "@situate/localization";
 import { getStatus, refreshModels, type Status } from "../ai/api";
 import { useModelCatalog } from "../ai/useModelCatalog";
@@ -128,10 +128,13 @@ let revision = 0;
 let alive = true;
 let stopCatalogListener: (() => void) | undefined;
 onMounted(async () => {
-  const stop = await listen<string>("ai-models-changed", ({ payload }) => {
-    if (payload === props.workspaceScope && !refreshBlocked.value)
-      void refresh();
-  }).catch(() => undefined);
+  const stop = await listenInWindow<string>(
+    "ai-models-changed",
+    ({ payload }) => {
+      if (payload === props.workspaceScope && !refreshBlocked.value)
+        void refresh();
+    },
+  ).catch(() => undefined);
   if (alive) stopCatalogListener = stop;
   else stop?.();
 });

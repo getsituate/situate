@@ -1,5 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listenInWindow } from "../window-events";
 import { workspaceCoordinator } from "../layout/registry";
 
 type Navigation =
@@ -69,13 +69,13 @@ export async function startNativePresentation(): Promise<() => void> {
       result: { ok, changed },
     }).catch(() => undefined);
   }
-  const stopRequests = await listen<{ id: string; scope: string }>(
+  const stopRequests = await listenInWindow<{ id: string; scope: string }>(
     "ai-presentation",
     ({ payload }) => void navigate(payload.id, payload.scope),
   );
   let stopCancellation: () => void;
   try {
-    stopCancellation = await listen<{ id: string }>(
+    stopCancellation = await listenInWindow<{ id: string }>(
       "ai-presentation-cancel",
       ({ payload }) => pending.get(payload.id)?.abort(),
     );
