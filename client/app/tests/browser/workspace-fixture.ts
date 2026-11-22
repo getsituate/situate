@@ -7,6 +7,51 @@ import {
 } from "./layout-fixture";
 import type { Snapshot } from "../../src/workspaces/api";
 import type { Config, ModelCatalog } from "../../src/ai/api";
+import inventory from "../../src/ai/catalog.generated.json" with { type: "json" };
+import recommendations from "../../src/ai/model-recommendations.json" with { type: "json" };
+import type { DiscoveredModel } from "../../src/ai/connection-types";
+
+const fixtureMetadata = Object.fromEntries(
+  inventory.providers
+    .filter(({ id }) => ["openai", "anthropic", "openrouter"].includes(id))
+    .map(({ id, models }) => [
+      id,
+      models.flatMap((model) => {
+        const descriptor = model as {
+          id: string;
+          name: string;
+          input?: string[];
+          type?: string;
+          contextWindow?: number;
+          maxTokens?: number;
+        };
+        if (
+          !descriptor.input?.includes("text") ||
+          (descriptor.type && descriptor.type !== "chat") ||
+          !descriptor.contextWindow ||
+          !descriptor.maxTokens
+        )
+          return [];
+        const levels =
+          recommendations.verifiedThinking.find(
+            (entry) => entry.provider === id && entry.modelId === descriptor.id,
+          )?.levels ?? [];
+        return [
+          {
+            id: descriptor.id,
+            name: descriptor.name,
+            contextWindow: descriptor.contextWindow,
+            maxTokens: descriptor.maxTokens,
+            imageInput: descriptor.input.includes("image"),
+            reasoningNone: levels.includes("off"),
+            thinkingLevels: levels.filter(
+              (level) => level !== "off",
+            ) as DiscoveredModel["thinkingLevels"],
+          },
+        ];
+      }),
+    ]),
+);
 import type { WorkspaceAiSettings } from "../../src/ai/settings";
 import type { ConversationRecord } from "../../src/ai/conversation-record";
 import type {
@@ -150,7 +195,6 @@ interface FixtureOptions {
   aiCatalogs?: Record<string, ModelCatalog>;
   aiRefreshCatalogs?: Record<string, ModelCatalog[]>;
   aiRefreshError?: string;
-  aiDeviceOutcome?: "success" | "denied" | "timeout" | "pending";
   aiModel?: string;
   showInlineModel?: boolean;
   aiModelError?: string;
@@ -190,9 +234,10 @@ export async function workspaceFixture(
   );
   await page.addInitScript<unknown>(
     (fixture) => {
-      const { initial, options } = fixture as {
+      const { initial, options, metadata } = fixture as {
         initial: Snapshot;
         options: FixtureOptions;
+        metadata: Record<string, DiscoveredModel[]>;
       };
       Object.defineProperty(window, "isTauri", { value: true });
       const state = structuredClone(initial);
@@ -410,7 +455,26 @@ export async function workspaceFixture(
             ? records.get(scope)?.get(override.connectionId)
             : connections.get(scope)) ??
           null;
-        const catalog = catalogs.get(`${scope}:${config?.connectionId}`);
+        const observed = catalogs.get(`${scope}:${config?.connectionId}`);
+        const providerModels = metadata[config?.provider ?? ""] ?? [];
+        let catalog: ModelCatalog | undefined = observed;
+        if (config?.provider === "custom")
+          catalog ??= { source: "manual", models: [] };
+        else if (
+          config &&
+          (!catalog ||
+            catalog.source === "account" ||
+            catalog.source === "provider")
+        ) {
+          const models = catalog?.models ?? providerModels.map(({ id }) => id);
+          catalog = {
+            source: catalog?.source ?? "provider",
+            models,
+            selectable:
+              catalog?.selectable ??
+              providerModels.filter(({ id }) => models.includes(id)),
+          };
+        }
         const settings = config
           ? settingsFor(scope, config.connectionId)
           : undefined;
@@ -2078,70 +2142,7 @@ export async function workspaceFixture(
                 saveRecord(login.scope, config),
               );
             }
-            if (command === "ai_codex_start") {
-              if (!options.aiDeviceOutcome)
-                throw new Error(
-                  "Device sign-in is not configured in this fixture.",
-                );
-              const id = `device-${++loginSequence}`;
-              logins.set(id, {
-                scope: String(args.scope),
-                cancelled: false,
-                connectionId: args.connectionId as string | undefined,
-                label: args.label as string | undefined,
-              });
-              return {
-                id,
-                userCode: "FAKE-CODE",
-                verificationUri: "https://example.invalid/device",
-                expiresAt: 4102444800,
-              };
-            }
-            if (command === "ai_codex_open") {
-              const login = logins.get(String(args.id));
-              if (!login || login.scope !== args.scope || login.cancelled)
-                throw "native.ai.login.cancelled";
-              return;
-            }
-            if (command === "ai_codex_wait") {
-              const login = logins.get(String(args.id));
-              if (!login || login.scope !== args.scope || login.cancelled)
-                throw "native.ai.login.cancelled";
-              if (options.aiDeviceOutcome === "denied")
-                throw "native.ai.login.denied";
-              if (options.aiDeviceOutcome === "timeout")
-                throw "native.ai.login.timeout";
-              const finish = () => {
-                const saved = saveRecord(login.scope, {
-                  provider: "openai-codex",
-                  endpoint: null,
-                  auth: "oauth",
-                  connectionId: login.connectionId,
-                  label: login.label,
-                });
-                return status(login.scope, undefined, saved);
-              };
-              if (options.aiDeviceOutcome === "pending") {
-                const result = await new Promise<
-                  ReturnType<typeof finish> | undefined
-                >((resolve) => {
-                  login.cancel = () => resolve(undefined);
-                  Object.defineProperty(window, "__finishDeviceLogin", {
-                    configurable: true,
-                    value: () => {
-                      if (!login.cancelled) resolve(finish());
-                    },
-                  });
-                });
-                if (result === undefined) throw "native.ai.login.cancelled";
-                return result;
-              }
-              return finish();
-            }
-            if (
-              command === "ai_openai_cancel" ||
-              command === "ai_codex_cancel"
-            ) {
+            if (command === "ai_openai_cancel") {
               const login = logins.get(String(args.id));
               if (login && login.scope === args.scope) {
                 login.cancelled = true;
@@ -2493,6 +2494,6 @@ export async function workspaceFixture(
         value: { unregisterListener: () => {} },
       });
     },
-    { initial, options },
+    { initial, options, metadata: fixtureMetadata },
   );
 }

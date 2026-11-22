@@ -10,26 +10,13 @@ const TOTAL_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MODELS: usize = 2000;
 const MAX_PAGES: usize = 20;
 
-fn bundled_ids(provider: &str) -> HashSet<String> {
-    let inventory: Value = serde_json::from_str(CATALOG).expect("bundled catalog");
-    inventory["providers"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|entry| entry["id"] == provider)
-        .and_then(|entry| entry["models"].as_array())
-        .into_iter()
-        .flatten()
-        .filter_map(|model| model["id"].as_str().map(str::to_owned))
-        .collect()
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
     Account,
     Provider,
     Static,
+    Manual,
     Unknown,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -53,82 +40,35 @@ impl Default for Catalog {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscoveredModel {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thinking_levels: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reasoning_none: bool,
     pub context_window: u32,
     pub max_tokens: u32,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub image_input: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thinking: Option<ThinkingCapabilities>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ThinkingCapabilities {
-    pub levels: Vec<String>,
-    pub default: String,
-}
-
-impl ThinkingCapabilities {
-    pub(super) fn from_levels(
-        levels: &[&str],
-        supports: impl Fn(&str) -> bool,
-        preferred: &str,
-    ) -> Option<Self> {
-        let levels: Vec<String> = levels
-            .iter()
-            .copied()
-            .filter(|level| supports(level))
-            .map(str::to_owned)
-            .collect();
-        let default = levels
-            .iter()
-            .find(|level| level.as_str() == preferred)
-            .or_else(|| levels.first())?
-            .clone();
-        Some(Self { levels, default })
-    }
-}
-
-pub(super) fn openai_thinking(config: &Config, id: &str) -> Option<&'static OpenAiThinking> {
-    let capabilities = sources::openai_metadata::capabilities();
-    (config.provider == "openai"
-        && config.endpoint.is_none()
-        && capabilities.models.iter().any(|model| model == id))
-    .then_some(capabilities)
-}
-
-#[derive(Deserialize)]
-pub(super) struct OpenAiThinking {
-    models: Vec<String>,
-    pub(super) levels: Vec<String>,
-    pub(super) default: String,
 }
 
 impl DiscoveredModel {
-    pub(super) fn thinking(&self, config: &Config) -> Option<(&[String], &str)> {
-        if let Some(verified) = openai_thinking(config, &self.id) {
-            return Some((&verified.levels, &verified.default));
+    pub(super) fn minimum_thinking(&self, config: &Config) -> &str {
+        if self.reasoning_none || config.provider == "anthropic" {
+            return "off";
         }
-        if matches!(config.provider.as_str(), "anthropic" | "openrouter")
-            && config.endpoint.is_none()
-        {
-            return self
-                .thinking
-                .as_ref()
-                .map(|thinking| (thinking.levels.as_slice(), thinking.default.as_str()));
-        }
-        None
+        self.thinking_levels
+            .first()
+            .map(String::as_str)
+            .unwrap_or("off")
     }
 
-    pub(super) fn validate_thinking(&self, config: &Config, level: &str) -> bool {
-        self.thinking(config).map_or(level == "off", |(levels, _)| {
-            levels.iter().any(|allowed| allowed == level)
-        })
+    pub(super) fn supports_thinking(&self, level: &str) -> bool {
+        level == "off" || self.thinking_levels.iter().any(|known| known == level)
     }
-
     pub(super) fn descriptor(&self, config: &Config) -> Option<Value> {
         if config.endpoint.is_some()
             || (config.auth == Some(AuthKind::Oauth) && config.provider != "openai")
@@ -147,9 +87,8 @@ impl DiscoveredModel {
             vec!["text"]
         };
         let mut descriptor = serde_json::json!({
-            "id":self.id,"name":self.id,"provider":config.provider,"type":"chat",
-            "api":api,"baseUrl":base,"input":input,
-            "reasoning":openai_thinking(config, &self.id).is_some() || self.thinking.is_some(),"cost":null,
+            "id":self.id,"name":self.name.as_deref().unwrap_or(&self.id),"provider":config.provider,"type":"chat",
+            "api":api,"baseUrl":base,"input":input,"reasoning":!self.thinking_levels.is_empty(),
             "contextWindow":self.context_window,"maxTokens":self.max_tokens,
             "compat":{"supportsStore":false,"supportsDeveloperRole":false,
                 "supportsReasoningEffort":false,"supportsUsageInStreaming":false,
@@ -157,19 +96,23 @@ impl DiscoveredModel {
         });
         if config.auth == Some(AuthKind::Oauth) {
             descriptor["compat"]["supportsMaxOutputTokens"] = serde_json::json!(false);
+            descriptor["compat"]["requiresDeveloperRole"] = serde_json::json!(true);
         }
-        if config.provider == "anthropic" && self.thinking.is_some() {
-            descriptor["compat"]["forceAdaptiveThinking"] = serde_json::json!(true);
-            descriptor["thinkingLevelMap"] = serde_json::json!({"off":null});
+        if !self.thinking_levels.is_empty() {
+            match config.provider.as_str() {
+                "anthropic" => {
+                    descriptor["compat"]["forceAdaptiveThinking"] = serde_json::json!(true);
+                    if self.id == "claude-sonnet-5-5" {
+                        descriptor["compat"]["supportsMidConvoEffort"] = serde_json::json!(true);
+                    }
+                }
+                "openai" | "openrouter" if self.reasoning_none => {
+                    descriptor["thinkingLevelMap"]["off"] = serde_json::json!("none");
+                }
+                _ => descriptor["thinkingLevelMap"]["off"] = Value::Null,
+            }
         }
         if config.provider == "openrouter" {
-            if self
-                .thinking
-                .as_ref()
-                .is_some_and(|thinking| thinking.levels.iter().any(|level| level == "off"))
-            {
-                descriptor["thinkingLevelMap"] = serde_json::json!({"off":"none"});
-            }
             descriptor["compat"]["openRouterRouting"] =
                 serde_json::json!({"require_parameters":true});
         }
@@ -187,9 +130,9 @@ impl Catalog {
         self.selectable
             .iter()
             .find(|model| model.id == id && model.descriptor(config).is_some())
-            .filter(|_| !bundled_ids(&config.provider).contains(id))
             .cloned()
     }
+    #[cfg(test)]
     pub(super) fn static_models(config: &Config) -> Self {
         let inventory: Value = serde_json::from_str(CATALOG).expect("bundled catalog");
         let models = inventory["providers"]
@@ -204,10 +147,19 @@ impl Catalog {
             .map(str::to_owned)
             .collect();
         Self {
-            source: Source::Static,
+            source: Source::Provider,
             models,
             checked_at: None,
             selectable: vec![],
+        }
+    }
+    pub(super) fn admits_selection(&self, config: &Config, model: &str) -> Result<(), String> {
+        match self.source {
+            Source::Manual if config.provider == "custom" => Ok(()),
+            Source::Account | Source::Provider if self.models.iter().any(|id| id == model) => {
+                Ok(())
+            }
+            _ => Err("native.ai.model.savedUnavailable".into()),
         }
     }
     pub(super) fn admits(&self, model: &str) -> Result<(), String> {
@@ -218,19 +170,24 @@ impl Catalog {
     }
 }
 pub(super) fn catalog(connection: &Connection) -> Catalog {
-    connection.catalog.clone().unwrap_or_else(|| {
-        if matches!(strategy(&connection.config), Ok(ModelRefresh::Bundled)) {
-            Catalog::static_models(&connection.config)
-        } else {
-            Catalog::default()
-        }
-    })
+    let mut catalog = observed(connection);
+    super::models_dev::qualify(&connection.config, &mut catalog);
+    catalog
+}
+
+pub(super) fn observed(connection: &Connection) -> Catalog {
+    connection
+        .catalog
+        .as_ref()
+        .filter(|catalog| catalog.source != Source::Static)
+        .cloned()
+        .unwrap_or_default()
 }
 #[path = "ai_model_sources.rs"]
 mod sources;
-use sources::{ModelRefresh, fetch, strategy};
 #[cfg(test)]
 use sources::{Protocol, Request, collect, observe, request};
+use sources::{fetch, strategy};
 
 pub(super) fn fetch_for_app(app: &tauri::AppHandle, connection: &Connection) -> Catalog {
     tauri::async_runtime::block_on(async {
@@ -249,7 +206,7 @@ pub(super) fn fetch_for_app(app: &tauri::AppHandle, connection: &Connection) -> 
 }
 const REFRESH_INTERVAL: u64 = 24 * 60 * 60;
 
-fn unix_seconds() -> u64 {
+pub(super) fn unix_seconds() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -357,15 +314,14 @@ pub(super) fn schedule_refresh(
     scope: String,
     status: &Status,
 ) {
+    super::models_dev::refresh(&app);
     let Some(config) = status.config.as_ref().filter(|_| status.available) else {
         return;
     };
     let Some(id) = config.connection_id.clone() else {
         return;
     };
-    if !matches!(strategy(config), Ok(ModelRefresh::Live(_)))
-        || !due(&status.catalog, unix_seconds())
-    {
+    if strategy(config).is_err() || !due(&status.catalog, unix_seconds()) {
         return;
     }
     let Ok(session) = crate::workspaces::authorization_session(&app, window, &scope) else {
@@ -471,7 +427,7 @@ fn refresh_catalog(
     };
     let (record, fingerprint, mut connection) = snapshot;
     let observed = fetch_for_app(app, &connection);
-    let previous = catalog(&connection);
+    let previous = self::observed(&connection);
     let changed = observed.source != Source::Unknown
         && (observed.source != previous.source
             || observed.models != previous.models

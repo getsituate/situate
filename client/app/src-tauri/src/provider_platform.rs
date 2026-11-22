@@ -118,7 +118,7 @@ fn browser_url(raw: &str) -> Result<url::Url, String> {
         (url.host_str(), url.path()),
         (
             Some("auth.openai.com"),
-            "/api/accounts/authorize" | "/oauth/authorize" | "/codex/device"
+            "/api/accounts/authorize" | "/oauth/authorize"
         ) | (Some("openrouter.ai"), "/auth")
     );
     if url.scheme() != "https"
@@ -474,20 +474,11 @@ mod tests {
     fn browser_handoff_only_accepts_fixed_https_provider_destinations() {
         for url in [
             "https://auth.openai.com/api/accounts/authorize?state=synthetic",
-            "https://auth.openai.com/codex/device",
             "https://openrouter.ai/auth?code_challenge=synthetic",
         ] {
             assert!(browser_url(url).is_ok());
         }
-        for url in [
-            "http://auth.openai.com/codex/device",
-            "https://auth.openai.com.evil.invalid/codex/device",
-            "https://user@auth.openai.com/codex/device",
-            "https://auth.openai.com:444/codex/device",
-            "file:///tmp/test",
-            "https://auth.openai.com/codex/device#secret",
-            "https://auth.openai.com/logout",
-        ] {
+        for url in ["file:///tmp/test", "https://auth.openai.com/logout"] {
             assert!(browser_url(url).is_err(), "{url}");
         }
     }

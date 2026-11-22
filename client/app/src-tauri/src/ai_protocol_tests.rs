@@ -4,8 +4,8 @@ use super::*;
 
 fn model(api: &str) -> Value {
     json!({"id":"fixture","api":api,"provider":match api {
-        "anthropic-messages"=>"anthropic","openai-codex-responses"=>"openai-codex",_=>"openai"
-    },"baseUrl":if api == "openai-codex-responses" {"https://chatgpt.com/backend-api"} else {"https://fixture.invalid"},"reasoning":true,"maxTokens":32000,
+        "anthropic-messages"=>"anthropic",_=>"openai"
+    },"baseUrl":"https://fixture.invalid","reasoning":true,"maxTokens":32000,
         "cost":{"input":1,"output":2,"cacheRead":0.5,"cacheWrite":1.25}})
 }
 fn same_origin(mut message: Value) -> Value {
@@ -113,7 +113,6 @@ fn completion_events(tool: bool) -> Vec<Value> {
 fn every_protocol_decodes_text_at_every_byte_boundary_without_duplicate_done_text() {
     for api in [
         "openai-responses",
-        "openai-codex-responses",
         "anthropic-messages",
         "openai-completions",
     ] {
@@ -140,7 +139,6 @@ fn every_protocol_decodes_text_at_every_byte_boundary_without_duplicate_done_tex
 fn every_protocol_round_trips_tool_calls_with_fragmented_arguments() {
     for api in [
         "openai-responses",
-        "openai-codex-responses",
         "anthropic-messages",
         "openai-completions",
     ] {
@@ -177,90 +175,35 @@ fn every_protocol_round_trips_tool_calls_with_fragmented_arguments() {
 }
 
 #[test]
-fn codex_has_distinct_instructions_encrypted_reasoning_and_done_contract() {
-    let api = "openai-codex-responses";
-    let mut model = model(api);
-    model["thinkingLevelMap"] = json!({"minimal":"low","off":null});
+fn responses_reasoning_and_phase_survive_native_continuation_without_encoded_signatures() {
+    let api = "openai-responses";
+    let reasoning = json!({"id":"rs_note","type":"reasoning","summary":[{"type":"summary_text","text":"Read the note."}],"encrypted_content":"synthetic-encrypted-reasoning"});
+    let events = vec![
+        json!({"type":"response.output_item.added","output_index":0,"item":{"id":"rs_note","type":"reasoning","summary":[]}}),
+        json!({"type":"response.reasoning_summary_text.delta","output_index":0,"delta":"Read the note."}),
+        json!({"type":"response.output_item.done","output_index":0,"item":reasoning}),
+        json!({"type":"response.completed","response":{"id":"resp_note","status":"completed","output":[reasoning]}}),
+    ];
+    let reply = assemble(api, model(api), &events, 1);
+    assert_eq!(reply["content"][0]["thinking"], "Read the note.");
+    assert_eq!(
+        reply["content"][0]["thinkingSignature"],
+        "synthetic-encrypted-reasoning"
+    );
     let request = build_request(
         api,
-        &model,
-        "minimal",
-        &[json!({"role":"system","content":"Answer briefly."}), user()],
-        &[tool()],
-        Some(256),
+        &model(api),
+        "medium",
+        &[user(), same_origin(reply)],
+        &[],
+        None,
     )
     .unwrap();
-    assert_eq!(request.body["instructions"], "Answer briefly.");
-    assert_eq!(request.body["input"][0]["role"], "user");
-    assert_eq!(request.body["store"], false);
-    assert_eq!(
-        request.body["reasoning"],
-        json!({"effort":"low","summary":"auto"})
-    );
-    assert_eq!(
-        request.body["include"],
-        json!(["reasoning.encrypted_content"])
-    );
-    assert_eq!(request.body["text"], json!({"verbosity":"low"}));
-    assert_eq!(request.body["tool_choice"], "auto");
-    assert_eq!(request.body["parallel_tool_calls"], true);
-    assert!(request.body["tools"][0].get("strict").unwrap().is_null());
-    for field in [
-        "max_output_tokens",
-        "prompt_cache_retention",
-        "prompt_cache_options",
-        "reasoning_effort",
-    ] {
-        assert!(request.body.get(field).is_none());
-    }
-    assert!(request.headers.is_empty());
-    assert!(
-        build_request(api, &model, "off", &[user()], &[], None)
-            .unwrap()
-            .body
-            .get("reasoning")
-            .is_none()
-    );
-    let mut events = response_events(true);
-    events.last_mut().unwrap()["type"] = json!("response.done");
-    let reply = assemble(api, model.clone(), &events, 3);
-    assert_eq!(reply["stopReason"], "toolUse");
-    assert_eq!(reply["responseId"], "resp_note");
-    model["baseUrl"] = json!("https://other.invalid");
-    assert!(build_request(api, &model, "off", &[user()], &[], None).is_err());
-}
-
-#[test]
-fn responses_reasoning_and_phase_survive_native_continuation_without_encoded_signatures() {
-    for api in ["openai-responses", "openai-codex-responses"] {
-        let reasoning = json!({"id":"rs_note","type":"reasoning","summary":[{"type":"summary_text","text":"Read the note."}],"encrypted_content":"synthetic-encrypted-reasoning"});
-        let events = vec![
-            json!({"type":"response.output_item.added","output_index":0,"item":{"id":"rs_note","type":"reasoning","summary":[]}}),
-            json!({"type":"response.reasoning_summary_text.delta","output_index":0,"delta":"Read the note."}),
-            json!({"type":"response.output_item.done","output_index":0,"item":reasoning}),
-            json!({"type":"response.completed","response":{"id":"resp_note","status":"completed","output":[reasoning]}}),
-        ];
-        let reply = assemble(api, model(api), &events, 1);
-        assert_eq!(reply["content"][0]["thinking"], "Read the note.");
-        assert_eq!(
-            reply["content"][0]["thinkingSignature"],
-            "synthetic-encrypted-reasoning"
-        );
-        let request = build_request(
-            api,
-            &model(api),
-            "medium",
-            &[user(), same_origin(reply)],
-            &[],
-            None,
-        )
-        .unwrap();
-        assert_eq!(request.body["input"][1], reasoning);
-        let reply = same_origin(assemble(api, model(api), &response_events(false), 8));
-        let request = build_request(api, &model(api), "off", &[reply], &[], None).unwrap();
-        assert_eq!(request.body["input"][0]["id"], "msg_note");
-        assert_eq!(request.body["input"][0]["phase"], "final_answer");
-    }
+    assert_eq!(request.body["input"][1], reasoning);
+    let reply = same_origin(assemble(api, model(api), &response_events(false), 8));
+    let request = build_request(api, &model(api), "off", &[reply], &[], None).unwrap();
+    assert_eq!(request.body["input"][0]["id"], "msg_note");
+    assert_eq!(request.body["input"][0]["phase"], "final_answer");
 }
 
 #[test]
@@ -387,7 +330,6 @@ fn usage_splits_cache_reads_and_writes_without_double_counting_reasoning() {
     for api in [
         "openai-completions",
         "openai-responses",
-        "openai-codex-responses",
         "anthropic-messages",
     ] {
         let mut events = match api {
@@ -412,7 +354,7 @@ fn usage_splits_cache_reads_and_writes_without_double_counting_reasoning() {
         assert_eq!(reply["usage"]["cacheWrite"], 10);
         assert_eq!(reply["usage"]["reasoning"], 5);
         assert_eq!(reply["usage"]["totalTokens"], 120);
-        assert!((reply["usage"]["cost"]["total"].as_f64().unwrap() - 0.0001275).abs() < 1e-12);
+        assert_eq!(reply["usage"].get("cost"), Some(&Value::Null));
     }
 }
 
@@ -443,20 +385,6 @@ fn unknown_counters_and_costs_are_null_including_missing_custom_rates() {
     assert_eq!(reply["usage"]["output"], 20);
     assert_eq!(reply["usage"]["totalTokens"], 120);
     assert!(reply["usage"]["cost"]["total"].is_null());
-}
-
-#[test]
-fn cost_tiers_use_total_prompt_including_cache() {
-    let api = "openai-responses";
-    let mut model = model(api);
-    model["cost"]["tiers"] =
-        json!([{"inputTokensAbove":50,"input":3,"output":4,"cacheRead":1,"cacheWrite":2}]);
-    let mut events = response_events(false);
-    events.last_mut().unwrap()["response"]["usage"] =
-        json!({"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":90}});
-    let reply = assemble(api, model, &events, 6);
-    assert_eq!(reply["usage"]["input"], 10);
-    assert!((reply["usage"]["cost"]["total"].as_f64().unwrap() - 0.0002).abs() < 1e-12);
 }
 
 #[test]
@@ -643,7 +571,6 @@ fn finish_reasons_are_preserved_and_filtering_is_terminal() {
 fn provider_errors_are_safe_sticky_and_leave_renderable_partial_content() {
     for api in [
         "openai-responses",
-        "openai-codex-responses",
         "anthropic-messages",
         "openai-completions",
     ] {
@@ -672,7 +599,6 @@ fn provider_errors_are_safe_sticky_and_leave_renderable_partial_content() {
 fn incomplete_and_malformed_streams_never_become_success() {
     for api in [
         "openai-responses",
-        "openai-codex-responses",
         "anthropic-messages",
         "openai-completions",
     ] {
@@ -796,7 +722,7 @@ fn multiple_response_content_parts_replay_as_one_item_with_one_identity() {
 }
 
 #[test]
-fn anthropic_long_cache_writes_are_a_subset_with_separate_pricing() {
+fn anthropic_long_cache_writes_are_reported_separately() {
     let api = "anthropic-messages";
     let events = [
         json!({"type":"message_start","message":{"id":"msg_note","usage":{"input_tokens":60,"output_tokens":0,"cache_read_input_tokens":30,"cache_creation_input_tokens":10,"cache_creation":{"ephemeral_1h_input_tokens":4,"ephemeral_5m_input_tokens":6}}}}),
@@ -807,7 +733,7 @@ fn anthropic_long_cache_writes_are_a_subset_with_separate_pricing() {
     assert_eq!(reply["usage"]["cacheWrite"], 10);
     assert_eq!(reply["usage"]["cacheWrite1h"], 4);
     assert_eq!(reply["usage"]["totalTokens"], 120);
-    assert!((reply["usage"]["cost"]["cacheWrite"].as_f64().unwrap() - 0.0000155).abs() < 1e-12);
+    assert_eq!(reply["usage"].get("cost"), Some(&Value::Null));
 }
 
 #[test]
@@ -835,7 +761,6 @@ fn explicit_null_or_invalid_optional_counters_are_not_invented_as_zero() {
 fn continuation_is_native_format_and_data_without_identity_attribution() {
     for api in [
         "openai-responses",
-        "openai-codex-responses",
         "anthropic-messages",
         "openai-completions",
     ] {
@@ -872,7 +797,7 @@ fn every_supported_catalog_model_builds_without_provider_retry_or_fallback_setti
     for provider in catalog["providers"].as_array().unwrap() {
         if !matches!(
             provider["id"].as_str(),
-            Some("openai" | "openai-codex" | "anthropic" | "openrouter")
+            Some("openai" | "anthropic" | "openrouter")
         ) {
             continue;
         }
@@ -900,7 +825,7 @@ fn every_supported_catalog_model_builds_without_provider_retry_or_fallback_setti
             }
         }
     }
-    assert_eq!(exercised.len(), 4);
+    assert_eq!(exercised.len(), 3);
 }
 
 #[test]
@@ -952,7 +877,6 @@ fn partial_tool_calls_only_expose_available_canonical_identity_and_object_argume
 fn opaque_replay_requires_live_verified_origin_even_for_the_same_protocol() {
     for api in [
         "openai-responses",
-        "openai-codex-responses",
         "anthropic-messages",
         "openai-completions",
     ] {
@@ -1015,11 +939,7 @@ fn opaque_replay_requires_live_verified_origin_even_for_the_same_protocol() {
 
 #[test]
 fn catalog_effort_mapping_controls_off_without_leaving_reasoning_at_provider_defaults() {
-    for api in [
-        "openai-responses",
-        "openai-codex-responses",
-        "openai-completions",
-    ] {
+    for api in ["openai-responses", "openai-completions"] {
         let mut model = model(api);
         model["thinkingLevelMap"] = json!({"off":"none","minimal":"low"});
         if api == "openai-completions" {
@@ -1037,29 +957,6 @@ fn catalog_effort_mapping_controls_off_without_leaving_reasoning_at_provider_def
                 .get("reasoning")
                 .is_none()
         );
-    }
-}
-
-#[test]
-fn known_responses_service_tiers_adjust_rates_and_unpriced_tiers_stay_unknown() {
-    let api = "openai-responses";
-    for (tier, multiplier) in [
-        ("flex", Some(0.5)),
-        ("priority", Some(2.0)),
-        ("default", Some(1.0)),
-        ("unpriced", None),
-    ] {
-        let mut events = response_events(false);
-        events.last_mut().unwrap()["response"]["service_tier"] = json!(tier);
-        let reply = assemble(api, model(api), &events, 1);
-        if let Some(multiplier) = multiplier {
-            assert!(
-                (reply["usage"]["cost"]["total"].as_f64().unwrap() - 0.000018 * multiplier).abs()
-                    < 1e-12
-            );
-        } else {
-            assert!(reply["usage"]["cost"]["total"].is_null());
-        }
     }
 }
 
@@ -1113,38 +1010,40 @@ fn non_consuming_finalization_matches_finish_on_success_including_eof_frames() {
 }
 
 #[test]
-fn responses_failed_and_codex_cancelled_terminals_are_safe_errors_not_success() {
-    for api in ["openai-responses", "openai-codex-responses"] {
-        for event in [
-            json!({"type":"response.failed","response":{"status":"failed","error":{"code":"fixture","message":"private-provider-detail"}}}),
-            json!({"type":"response.completed","response":{"status":"failed","error":{"message":"private-provider-detail"}}}),
-            json!({"type":"response.done","response":{"status":"cancelled","output":[]}}),
-        ] {
-            let mut parser = Assembler::new(api, model(api), 1).unwrap();
-            parser.push(&encoded(&[json!({"type":"response.output_text.delta","output_index":0,"delta":"Observed"})])).unwrap();
-            assert_eq!(parser.push(&encoded(&[event])).unwrap_err(), REJECTED);
-            assert_eq!(parser.partial()["content"][0]["text"], "Observed");
-            assert_eq!(parser.partial()["stopReason"], "error");
-            assert!(
-                !parser
-                    .partial()
-                    .to_string()
-                    .contains("private-provider-detail")
-            );
-            assert_eq!(parser.finalize().unwrap_err(), REJECTED);
-        }
+fn responses_failed_and_cancelled_terminals_are_safe_errors_not_success() {
+    let api = "openai-responses";
+    for event in [
+        json!({"type":"response.failed","response":{"status":"failed","error":{"code":"fixture","message":"private-provider-detail"}}}),
+        json!({"type":"response.completed","response":{"status":"failed","error":{"message":"private-provider-detail"}}}),
+        json!({"type":"response.done","response":{"status":"cancelled","output":[]}}),
+    ] {
         let mut parser = Assembler::new(api, model(api), 1).unwrap();
-        parser.push(&encoded(&[json!({"type":"response.created","response":{"id":"resp_unfinished","status":"in_progress","output":[]}})])).unwrap();
-        assert_eq!(parser.finalize().unwrap_err(), INCOMPLETE);
-        assert_eq!(parser.partial()["responseId"], "resp_unfinished");
+        parser
+            .push(&encoded(&[
+                json!({"type":"response.output_text.delta","output_index":0,"delta":"Observed"}),
+            ]))
+            .unwrap();
+        assert_eq!(parser.push(&encoded(&[event])).unwrap_err(), REJECTED);
+        assert_eq!(parser.partial()["content"][0]["text"], "Observed");
+        assert_eq!(parser.partial()["stopReason"], "error");
+        assert!(
+            !parser
+                .partial()
+                .to_string()
+                .contains("private-provider-detail")
+        );
+        assert_eq!(parser.finalize().unwrap_err(), REJECTED);
     }
+    let mut parser = Assembler::new(api, model(api), 1).unwrap();
+    parser.push(&encoded(&[json!({"type":"response.created","response":{"id":"resp_unfinished","status":"in_progress","output":[]}})])).unwrap();
+    assert_eq!(parser.finalize().unwrap_err(), INCOMPLETE);
+    assert_eq!(parser.partial()["responseId"], "resp_unfinished");
 }
 
 #[test]
 fn request_builder_excludes_catalog_credentials_destinations_and_transient_flags() {
     for api in [
         "openai-responses",
-        "openai-codex-responses",
         "openai-completions",
         "anthropic-messages",
     ] {
@@ -1171,7 +1070,7 @@ fn request_builder_excludes_catalog_credentials_destinations_and_transient_flags
 }
 
 #[test]
-fn native_e2e_fixture_usage_preserves_large_input_cache_and_catalog_pricing() {
+fn native_e2e_fixture_usage_preserves_large_input_and_cache_counts() {
     let api = "openai-responses";
     let catalog: Value =
         serde_json::from_str(include_str!("../../src/ai/catalog.generated.json")).unwrap();
@@ -1195,7 +1094,7 @@ fn native_e2e_fixture_usage_preserves_large_input_cache_and_catalog_pricing() {
     assert_eq!(reply["usage"]["cacheRead"], 17);
     assert_eq!(reply["usage"]["output"], 997);
     assert_eq!(reply["usage"]["totalTokens"], 1001000);
-    assert!((reply["usage"]["cost"]["total"].as_f64().unwrap() - 0.4015913).abs() < 1e-12);
+    assert_eq!(reply["usage"].get("cost"), Some(&Value::Null));
 }
 
 #[test]
@@ -1242,7 +1141,7 @@ fn verified_native_thinking_levels_use_their_protocol_specific_control_fields() 
     for entry in recommendations["verifiedThinking"].as_array().unwrap() {
         if !matches!(
             entry["provider"].as_str(),
-            Some("openai" | "openai-codex" | "anthropic" | "openrouter")
+            Some("openai" | "anthropic" | "openrouter")
         ) {
             continue;
         }
@@ -1285,14 +1184,10 @@ fn verified_native_thinking_levels_use_their_protocol_specific_control_fields() 
                 assert!(request.body.get("thinking").is_none());
                 assert!(request.body.get("output_config").is_none());
             }
-            if api == "openai-codex-responses" {
-                assert_eq!(request.body["store"], false);
-                assert!(request.body.get("max_output_tokens").is_none());
-            }
         }
         protocols.insert(api);
     }
-    assert_eq!(protocols.len(), 4);
+    assert_eq!(protocols.len(), 3);
 }
 
 #[test]

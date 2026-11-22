@@ -106,6 +106,7 @@ test.each(["showInlineModel", "generatedComments"] as const)(
 test("custom chat and comment model hints localize their selected identities", async () => {
   vi.mocked(getStatus).mockResolvedValue({
     config: { provider: "custom", endpoint: "https://example.com/v1" },
+    catalog: { source: "manual", models: [] },
     available: true,
     reason: null,
     selectedModel: null,
@@ -186,6 +187,7 @@ test("an unresolved recommendation remains the saved preference instead of an em
 test("a custom connection does not present Recommended as a server model ID", async () => {
   vi.mocked(getStatus).mockResolvedValue({
     config: { provider: "custom", endpoint: "http://localhost:8888/v1" },
+    catalog: { source: "manual", models: [] },
     available: true,
     reason: null,
     selectedModel: null,
@@ -216,8 +218,8 @@ test("a custom connection does not present Recommended as a server model ID", as
   );
 });
 
-test.each(["provider", "unknown"] as const)(
-  "custom %s observations are optional suggestions, never defaults or an ID allowlist",
+test.each(["provider", "unknown", "manual"] as const)(
+  "a custom connection uses its reported models and permits manual IDs only without discovery (%s)",
   async (source) => {
     vi.mocked(getStatus).mockResolvedValue({
       config: { provider: "custom", endpoint: "https://example.com/v1" },
@@ -225,65 +227,29 @@ test.each(["provider", "unknown"] as const)(
       reason: null,
       selectedModel: null,
       modelError: null,
-      catalog: {
-        source,
-        models: ["server/chat", "server/embedding", "server/chat"],
-      },
+      catalog: { source, models: source === "provider" ? ["server/chat"] : [] },
     });
-    vi.mocked(invoke).mockImplementation(async (command, args) =>
-      command === "ai_settings_save"
-        ? (args as { settings: unknown }).settings
-        : defaultAiSettings(),
-    );
+    vi.mocked(invoke).mockResolvedValue(defaultAiSettings());
     const wrapper = mount(AiSettings, {
-      props: { workspaceScope: `custom-suggestions-${source}` },
+      props: { workspaceScope: "custom-models" },
     });
     await flushPromises();
+    expect(wrapper.find("input#settings-chat-model").exists()).toBe(
+      source === "manual",
+    );
     expect(
       wrapper
-        .findAll("datalist option")
-        .map((option) => option.attributes("value")),
-    ).toEqual(source === "provider" ? ["server/chat", "server/embedding"] : []);
-    for (const selector of [
-      "#settings-chat-model",
-      "#settings-comment-model",
-    ]) {
-      expect(wrapper.get<HTMLInputElement>(selector).element.value).toBe("");
-      expect(wrapper.get(selector).attributes("list")).toBe(
-        source === "provider"
-          ? wrapper.get("datalist").attributes("id")
-          : undefined,
-      );
-    }
+        .find('#settings-chat-model + select option[value="server/chat"]')
+        .exists(),
+    ).toBe(source === "provider");
     expect(
-      wrapper.findAll(
-        '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
-      ),
-    ).toHaveLength(0);
-    expect(
-      vi
-        .mocked(invoke)
-        .mock.calls.filter(([command]) => command === "ai_settings_save"),
-    ).toEqual([]);
-    await wrapper.get("#settings-chat-model").setValue("unlisted-alias");
-    await wrapper
-      .findAll("form")
-      .find((form) => form.find("#settings-chat-model").exists())!
-      .trigger("submit");
-    await flushPromises();
-    expect(invoke).toHaveBeenCalledWith("ai_settings_save", {
-      scope: `custom-suggestions-${source}`,
-      settings: {
-        ...defaultAiSettings(),
-        chat: {
-          model: "unlisted-alias",
-          thinking: "recommended",
-          catalogRevision: null,
-        },
-      },
-    });
+      wrapper
+        .find('#settings-chat-model + select option[value="recommended"]')
+        .exists(),
+    ).toBe(false);
   },
 );
+
 test("stale account choices allow unrelated toggles and one-model-at-a-time repair", async () => {
   const saved = {
     ...defaultAiSettings(),
@@ -557,7 +523,7 @@ test.each(["account", "provider"] as const)(
     });
   },
 );
-test("explicit refresh failure retains manual static choices, then retry updates only the catalog", async () => {
+test("explicit refresh failure keeps the saved model but offers no unobserved models", async () => {
   const initial: Status = {
     config: { provider: "openai", endpoint: null, connectionId: "work" },
     available: true,
@@ -607,7 +573,7 @@ test("explicit refresh failure retains manual static choices, then retry updates
     wrapper
       .find('#settings-chat-model + select option[value="gpt-5.4"]')
       .exists(),
-  ).toBe(true);
+  ).toBe(false);
   await wrapper.get(".model-discovery button").trigger("click");
   await flushPromises();
   expect(wrapper.find(".model-discovery [role=alert]").exists()).toBe(false);
@@ -849,7 +815,14 @@ test("a discovered GPT-6.2 Sol offers verified efforts and displays a legacy Off
     catalog: {
       source: "account",
       models: [model],
-      selectable: [{ id: model, contextWindow: 1_050_000, maxTokens: 128_000 }],
+      selectable: [
+        {
+          id: model,
+          contextWindow: 1_050_000,
+          maxTokens: 128_000,
+          thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+        },
+      ],
     },
   });
   vi.mocked(invoke).mockImplementation(async (command, args) =>

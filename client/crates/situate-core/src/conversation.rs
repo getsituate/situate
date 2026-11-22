@@ -104,15 +104,8 @@ pub(crate) fn usage(value: &Value) -> bool {
     let counts = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
     fields(
         value,
-        &[
-            "input",
-            "output",
-            "cacheRead",
-            "cacheWrite",
-            "totalTokens",
-            "cost",
-        ],
-        &["cacheWrite1h", "reasoning"],
+        &["input", "output", "cacheRead", "cacheWrite", "totalTokens"],
+        &["cacheWrite1h", "reasoning", "cost"],
     ) && counts.iter().all(|key| accounting_number(&value[*key]))
         && ["cacheWrite1h", "reasoning"]
             .iter()
@@ -276,6 +269,15 @@ mod tests {
             invalid[index][field] = value;
             assert!(validate(&invalid).is_err());
         }
+    }
+
+    #[test]
+    fn reads_token_usage_without_cost() {
+        let messages = json!([{
+            "role":"assistant", "content":[], "timestamp":1, "stopReason":"stop",
+            "usage":{"input":1,"output":2,"cacheRead":0,"cacheWrite":0,"totalTokens":3}
+        }]);
+        validate(&messages).unwrap();
     }
 
     #[test]

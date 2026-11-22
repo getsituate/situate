@@ -8,13 +8,16 @@ export interface Config {
 }
 export interface DiscoveredModel {
   id: string;
+  name?: string;
+  thinkingLevels?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max")[];
+  reasoningNone?: boolean;
   contextWindow: number;
   maxTokens: number;
   imageInput?: boolean;
   thinking?: { levels: string[]; default: string };
 }
 export interface ModelCatalog {
-  source: "account" | "provider" | "static" | "unknown";
+  source: "account" | "provider" | "static" | "manual" | "unknown";
   models: string[];
   selectable?: DiscoveredModel[];
 }

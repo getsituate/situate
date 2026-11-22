@@ -328,68 +328,10 @@ test(
     });
   },
 );
-test(
-  "device login on the same phone waits for native approval and opens only its attempt",
-  { tag: "@visual-mobile" },
-  async ({ page, visual }) => {
-    await page.setViewportSize({ width: 375, height: 850 });
-    await workspaceFixture(page, shellState, {
-      aiDeviceOutcome: "pending",
-      aiConnections: configs,
-      aiModel: "gpt-4.1",
-    });
-    await page.goto("/");
-    await settings(page);
-    await page
-      .getByRole("button", { name: t("ai.connections.add"), exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: t("ai.providers.codex"), exact: true })
-      .click();
-    await page.getByLabel(t("ai.connections.label")).fill("Travel");
-    await page.locator(".ai-choices button").click();
-    await page
-      .getByRole("button", { name: t("ai.device.start"), exact: true })
-      .click();
-    await expect(page.locator(".device-code")).toHaveText("FAKE-CODE");
-    await expect(page.locator(".device-login input")).toHaveCount(0);
-    const colors = await page
-      .getByRole("button", { name: t("ai.device.open"), exact: true })
-      .evaluate((button) => {
-        const style = getComputedStyle(button);
-        return { text: style.color, background: style.backgroundColor };
-      });
-    expect(colors.text).not.toBe(colors.background);
-    await visual.capture("ai.connections.device-code");
-    await page
-      .getByRole("button", { name: t("ai.device.open"), exact: true })
-      .click();
-    await page.evaluate(() => {
-      window.dispatchEvent(new Event("focus"));
-      Reflect.get(window, "__finishDeviceLogin")();
-    });
-    await expect(
-      page.locator(".connections li").getByText("Travel", { exact: true }),
-    ).toBeVisible();
-    await expect(page.locator("#chat-connection")).toHaveAttribute(
-      "data-value",
-      "personal",
-    );
-    const calls = await page.evaluate(() =>
-      Reflect.get(window, "__ipcCalls").filter(
-        (call: { command: string }) => call.command === "ai_codex_open",
-      ),
-    );
-    expect(calls).toEqual([
-      { command: "ai_codex_open", args: { scope: "garden", id: "device-1" } },
-    ]);
-  },
-);
 test("the native login fixture preserves the cancellation error and does not save a connection", async ({
   page,
 }) => {
   await workspaceFixture(page, shellState, {
-    aiDeviceOutcome: "pending",
     aiLoginOutcome: "pending",
     aiConnections: configs,
   });
@@ -405,61 +347,15 @@ test("the native login fixture preserves the cancellation error and does not sav
     );
     await invoke("ai_openai_cancel", { scope, id });
 
-    const device = await invoke("ai_codex_start", { scope });
-    const deviceArgs = { scope, id: device.id };
-    const deviceResult = invoke("ai_codex_wait", deviceArgs).catch(
-      (reason: unknown) => reason,
-    );
-    await invoke("ai_codex_cancel", deviceArgs);
-    Reflect.get(window, "__finishDeviceLogin")();
     return {
       browser: await browserResult,
-      device: await deviceResult,
       before,
       after: await invoke("ai_connections", { scope }),
     };
   });
   expect(results.browser).toBe("native.ai.login.cancelled");
-  expect(results.device).toBe("native.ai.login.cancelled");
   expect(results.after).toEqual(results.before);
 });
-
-test(
-  "device authorization denial preserves existing access",
-  { tag: "@visual-mobile" },
-  async ({ page, visual }) => {
-    await page.setViewportSize({ width: 375, height: 850 });
-    await workspaceFixture(page, shellState, {
-      aiConnections: configs,
-      aiDeviceOutcome: "denied",
-    });
-    await page.goto("/");
-    await settings(page);
-    await page
-      .getByRole("button", { name: t("ai.connections.add"), exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: t("ai.providers.codex"), exact: true })
-      .click();
-    await page.locator(".ai-choices button").click();
-    await page
-      .getByRole("button", { name: t("ai.device.start"), exact: true })
-      .click();
-    await expect(
-      page.getByText(t("native.ai.login.denied"), { exact: true }),
-    ).toBeVisible();
-    await visual.capture("ai.connections.device-denied");
-    expect(
-      await page.evaluate(() =>
-        Reflect.get(window, "__ipcCalls").filter((call: { command: string }) =>
-          ["ai_save", "ai_remove", "ai_forget_connection"].includes(
-            call.command,
-          ),
-        ),
-      ),
-    ).toEqual([]);
-  },
-);
 
 test(
   "a new device offers ordinary local setup and retains the conversation draft",

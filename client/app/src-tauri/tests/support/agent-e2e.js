@@ -77,7 +77,7 @@
         if (warning && info) {
           assert(
             warning.querySelector('[role="alert"]')?.textContent.trim() ===
-              "The model list could not be refreshed. You can still choose a compatible model manually. Your saved choice has not changed.",
+              "The model list could not be refreshed. Try again. Your saved choice has not changed.",
             "unexpected-model-recovery",
           );
           const status = await invoke("ai_status", { scope: info.scope });
@@ -354,7 +354,7 @@
         if (
           origin === "model" &&
           message ===
-            "The model list could not be refreshed. You can still choose a compatible model manually. Your saved choice has not changed."
+            "The model list could not be refreshed. Try again. Your saved choice has not changed."
         ) {
           const status = await invoke("ai_status", { scope: info.scope });
           assert(
@@ -859,12 +859,17 @@
         markdown: await read("seed.md"),
       };
       if (info.mode === "fixture")
-        await wait(
-          "onboarding-access-model-ready",
-          () =>
-            query(".setup-access-panel .model-picker .error-trigger") &&
-            !document.querySelector("dialog.model-error[open]"),
-        );
+        await wait("onboarding-access-model-ready", async () => {
+          const status = await invoke("ai_status", { scope: info.scope });
+          const check = button("Check and continue");
+          return (
+            status.catalog?.source === "provider" &&
+            status.catalog.selectable?.some(({ id }) => id === info.model) &&
+            status.selectedModel === info.model &&
+            check &&
+            !check.disabled
+          );
+        });
       await click("Check and continue");
       await wait(
         "onboarding-access-checked",

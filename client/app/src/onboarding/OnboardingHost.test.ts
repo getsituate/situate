@@ -12,6 +12,7 @@ const mock = vi.hoisted(() => ({
   update: vi.fn(),
   retry: vi.fn(),
   restore: vi.fn(),
+  start: vi.fn(),
   support: vi.fn(),
   enter: vi.fn(),
   abort: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock("./session", () => ({
 vi.mock("./agent", () => ({
   checkSetupAccess: mock.check,
   restoreSetupConversation: mock.restore,
-  startSetupConversation: vi.fn(),
+  startSetupConversation: mock.start,
   enterSetupApp: mock.enter,
   recoverSetupQuestion: vi.fn(),
   continueSetupSupport: mock.support,
@@ -63,9 +64,9 @@ vi.mock("../dictation/runtime", () => ({
 vi.mock("../ai/AiSetup.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("../ai/ChatModelPicker.vue", () => ({
   default: {
-    props: ["appearance", "saving"],
+    props: ["appearance", "saving", "selectModel"],
     template:
-      '<div class="picker" :data-appearance="appearance" :aria-disabled="saving" />',
+      '<div class="picker" :data-appearance="appearance" :aria-disabled="saving"><button v-if="selectModel" data-alternate-model @click="selectModel(\'alternate-model\')">Alternate model</button></div>',
   },
 }));
 vi.mock("../components/ChatPane.vue", () => ({
@@ -76,10 +77,10 @@ vi.mock("../files/RenderedFile.vue", () => ({
 }));
 vi.mock("./OnboardingView.vue", () => ({
   default: {
-    props: ["canContinueSupport", "busy", "error"],
+    props: ["canContinueSupport", "busy", "error", "access"],
     emits: ["action"],
     template:
-      '<div><slot name="access" /><button data-support :disabled="busy || !canContinueSupport" @click="$emit(\'action\', \'support\')">Continue</button><button data-finish :disabled="busy" @click="$emit(\'action\', \'finish\')">Finish setup</button><slot name="notices" /></div>',
+      '<div><slot v-if="access" name="access" /><slot v-else name="start-recovery" /><button data-support :disabled="busy || !canContinueSupport" @click="$emit(\'action\', \'support\')">Continue</button><button data-finish :disabled="busy" @click="$emit(\'action\', \'finish\')">Finish setup</button><slot name="notices" /></div>',
   },
 }));
 enableAutoUnmount(afterEach);
@@ -133,6 +134,46 @@ it("blocks onboarding input and its reader during recovery preparation", async (
     wrapper.findComponent(OnboardingView).attributes("inert"),
   ).toBeUndefined();
   expect(wrapper.get("dialog").attributes("inert")).toBeUndefined();
+});
+it("lets users change the model after a failed chat start without losing setup input", async () => {
+  mock.state.record = {
+    ...newOnboardingRecord(),
+    step: "method",
+    description: "Review open tasks on Friday",
+  };
+  mock.start
+    .mockRejectedValueOnce(new Error("native.ai.model.chooseCatalog"))
+    .mockResolvedValueOnce({ id: "setup" });
+  mock.check.mockResolvedValue(undefined);
+  mock.model.mockResolvedValue({
+    available: true,
+    config: { provider: "openai" },
+    selectedModel: "alternate-model",
+  });
+  const wrapper = await host();
+  const view = wrapper.getComponent(OnboardingView);
+  view.vm.$emit("action", "start");
+  await flushPromises();
+  expect(view.props("access")).toBe(false);
+
+  await button(wrapper, "onboarding.access.change").trigger("click");
+  expect(view.props("access")).toBe(true);
+  await wrapper.get("[data-alternate-model]").trigger("click");
+  await flushPromises();
+  expect(mock.model).toHaveBeenCalledWith("test-workspace", "alternate-model");
+  await button(wrapper, "onboarding.access.check").trigger("click");
+  await flushPromises();
+  expect(view.props("access")).toBe(false);
+  expect(mock.start).toHaveBeenCalledOnce();
+  expect(mock.state.record).toMatchObject({
+    step: "method",
+    description: "Review open tasks on Friday",
+  });
+
+  view.vm.$emit("action", "start");
+  await flushPromises();
+  expect(mock.start).toHaveBeenCalledTimes(2);
+  expect(view.props("error")).toBeUndefined();
 });
 it("refreshes native onboarding progress when a pending decision arrives before the run ends", async () => {
   mock.restore.mockResolvedValue({ id: "setup" });

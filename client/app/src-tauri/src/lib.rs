@@ -8,7 +8,6 @@ mod ai_plugin_tools;
 mod ai_protocol;
 mod appearance;
 mod change_history;
-mod codex_oauth;
 
 mod conversation_projection;
 mod device_locale;
@@ -138,10 +137,6 @@ macro_rules! application_handler {
             crate::ai::login::ai_openai_start,
             crate::ai::login::ai_openai_wait,
             crate::ai::login::ai_openai_cancel,
-            crate::ai::login::codex::ai_codex_start,
-            crate::ai::login::codex::ai_codex_wait,
-            crate::ai::login::codex::ai_codex_cancel,
-            crate::ai::login::codex::ai_codex_open,
             $($extra),*
         ]
     };
@@ -214,6 +209,7 @@ pub fn run() {
         .setup(|app| {
             diagnostics::setup(app.handle());
             dictation::setup(app.handle());
+            ai::setup_model_metadata(app.handle());
             workspaces::setup(app.handle())?;
             updates::setup(app.handle());
             Ok(())

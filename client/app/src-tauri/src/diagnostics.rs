@@ -641,7 +641,6 @@ pub enum OperationKind {
     File(&'static str),
     Model,
     OpenAiLogin,
-    CodexLogin,
     Tool { shell: bool },
 }
 impl OperationKind {
@@ -650,7 +649,6 @@ impl OperationKind {
             Self::File(action) => ("storage", action, "files", "user"),
             Self::Model => ("model", "request", "model", "agent"),
             Self::OpenAiLogin => ("model", "connect", "openai_login", "user"),
-            Self::CodexLogin => ("model", "connect", "codex_login", "user"),
             Self::Tool { shell } => (
                 "tool",
                 "execute",

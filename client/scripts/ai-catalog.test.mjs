@@ -174,7 +174,6 @@ test("catalog validation runs without upstream packages and never rewrites sourc
     "catalog.provenance.json",
     "../../public/licenses/ai-catalog.txt",
     "model-recommendations.json",
-    "openai-discovered-thinking.json",
     "provider-policy.json",
     "transport-contract.json",
   ];
@@ -222,12 +221,8 @@ test("provider policy admits implemented methods without pruning the upstream in
     "anthropic",
     "custom",
     "openai",
-    "openai-codex",
     "openrouter",
   ]);
-  assert.deepEqual(policy.providers["openai-codex"].methods, {
-    oauth: { status: "implemented", flow: "device" },
-  });
   assert.deepEqual(
     Object.entries(policy.providers)
       .flatMap(([id, provider]) =>
@@ -239,7 +234,6 @@ test("provider policy admits implemented methods without pruning the upstream in
     [
       "anthropic/api_key",
       "custom/api_key",
-      "openai-codex/oauth",
       "openai/api_key",
       "openai/oauth",
       "openrouter/api_key",
@@ -279,8 +273,7 @@ test("invalid policy entries cannot silently expand access", () => {
         value.providers.openai.methods.oauth;
     },
     (value) => {
-      value.providers["openai-codex"].methods.api_key =
-        value.providers.openai.methods.api_key;
+      value.providers.openai.methods.oauth.flow = "device";
     },
   ]) {
     const invalid = structuredClone(policy);
@@ -307,7 +300,6 @@ test("bundled recommendations cover the pinned inventory without activating rese
       "openrouter/api_key",
       "openai/api_key",
       "openrouter/api_key",
-      "openai-codex/oauth",
     ],
   );
 });
@@ -315,7 +307,7 @@ test("discovery-only recommendations require a qualified OpenAI Responses model 
   for (const patch of [
     { modelId: "gpt-5.4" },
     { api: "openai-completions" },
-    { thinking: "off" },
+    { thinking: "unrecognized" },
     { priority: { chat: 5, comment: 1 } },
   ]) {
     const invalid = structuredClone(recommendations);
@@ -396,12 +388,12 @@ test("compact static models must exactly match canonical eligibility metadata", 
 });
 test("missing transport and unverified thinking cannot qualify static defaults", () => {
   const missingTransport = structuredClone(transports);
-  delete missingTransport.apis["openai-codex-responses"];
+  delete missingTransport.apis["anthropic-messages"];
   assert.throws(
     () => validateRecommendations(inventory, recommendations, missingTransport),
     /Ineligible recommendation model/u,
   );
-  for (const provider of ["anthropic", "openrouter", "openai-codex"]) {
+  for (const provider of ["anthropic", "openrouter"]) {
     const invalid = structuredClone(recommendations);
     invalid.verifiedThinking = invalid.verifiedThinking.filter(
       (entry) => entry.provider !== provider,
@@ -412,7 +404,7 @@ test("missing transport and unverified thinking cannot qualify static defaults",
   }
   const missing = structuredClone(recommendations);
   missing.rankedCandidates = missing.rankedCandidates.filter(
-    (entry) => entry.provider !== "openai-codex",
+    (entry) => entry.provider !== "anthropic",
   );
   assert.throws(
     () => validateRecommendations(inventory, missing, transports),

@@ -3,8 +3,6 @@ use crate::openai_oauth as oauth;
 use std::sync::Arc;
 use tokio::sync::watch;
 
-#[path = "ai_codex_login.rs"]
-pub mod codex;
 #[cfg(feature = "native-smoke")]
 #[path = "../tests/support/ai_login_smoke.rs"]
 pub(crate) mod smoke;
@@ -391,7 +389,6 @@ async fn run(
                 config,
                 key: String::new(),
                 oauth: Some(credential),
-                codex: None,
             };
             connections::save(&storage, &save_app, &connection, replacing)?;
             discovery::finish_setup(&storage, &save_app, &mut connection)
@@ -451,7 +448,7 @@ fn previous_credential(bytes: &[u8]) -> Result<Option<oauth::Credential>, String
     let invalid = "native.ai.login.savedIdentityInvalid";
     let connection = decode_connection(bytes).map_err(|_| invalid)?;
     let browser = connection.config.auth == Some(AuthKind::Oauth);
-    if browser != connection.oauth.is_some() || connection.codex.is_some() {
+    if browser != connection.oauth.is_some() {
         return Err(invalid.into());
     }
     let Some(credential) = connection.oauth else {

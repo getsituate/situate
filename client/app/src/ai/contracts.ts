@@ -68,7 +68,7 @@ export interface Usage {
   cacheWrite1h?: number | null;
   reasoning?: number | null;
   totalTokens: number | null;
-  cost: {
+  cost?: {
     input: number | null;
     output: number | null;
     cacheRead: number | null;

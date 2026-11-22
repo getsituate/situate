@@ -180,6 +180,7 @@ pub trait Host: Send + Sync + 'static {
     /// Never mutate the supplied portable record or invent original model attribution.
     fn context(
         &self,
+        run_id: &str,
         messages: Vec<Value>,
         config: RunConfig,
         cancel: CancellationToken,

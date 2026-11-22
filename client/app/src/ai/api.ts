@@ -92,28 +92,6 @@ export const startOpenAiLogin = (
     ...(diagnostic ? { diagnostic } : {}),
   });
 };
-export interface DeviceChallenge {
-  id: string;
-  userCode: string;
-  verificationUri: string;
-  expiresAt: number;
-}
-export const startCodexLogin = (
-  scope: string,
-  connectionId?: string,
-  label?: string,
-): Promise<DeviceChallenge> =>
-  invoke("ai_codex_start", {
-    scope,
-    ...(connectionId ? { connectionId } : {}),
-    ...(label ? { label } : {}),
-  });
-export const waitCodexLogin = (scope: string, id: string): Promise<Status> =>
-  invoke("ai_codex_wait", { scope, id });
-export const cancelCodexLogin = (scope: string, id: string): Promise<void> =>
-  invoke("ai_codex_cancel", { scope, id });
-export const openCodexLogin = (scope: string, id: string): Promise<void> =>
-  invoke("ai_codex_open", { scope, id });
 export const waitOpenAiLogin = (scope: string, id: string): Promise<Status> =>
   invoke("ai_openai_wait", { scope, id });
 export const cancelOpenAiLogin = (scope: string, id: string): Promise<void> =>

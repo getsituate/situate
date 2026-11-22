@@ -34,7 +34,7 @@ test("provider setup requests metadata only after the offer and keeps choices un
     await expect(page.locator(".ai-provider-grid")).toHaveCount(0);
     await expect.poll(() => requests.filter(catalogRequest).length).toBe(1);
     release();
-    await expect(page.locator(".ai-provider-grid button")).toHaveCount(5);
+    await expect(page.locator(".ai-provider-grid button")).toHaveCount(4);
     await expect(
       page.locator(".ai-provider-grid button").first(),
     ).toBeEnabled();

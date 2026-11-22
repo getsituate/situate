@@ -32,11 +32,10 @@ for (const width of [320, 375, 800, 1280, 1920]) {
       await expect(heading).toBeFocused();
       const list = page.getByRole("group", { name: "Choose a provider" });
       const choices = list.getByRole("button");
-      await expect(choices).toHaveCount(5);
+      await expect(choices).toHaveCount(4);
       const names = [
         "Anthropic",
         "OpenAI",
-        "OpenAI Codex",
         "OpenRouter",
         "OpenAI-compatible server",
       ];
@@ -52,7 +51,7 @@ for (const width of [320, 375, 800, 1280, 1920]) {
           expect(box!.y).toBeGreaterThanOrEqual(previous!.y + previous!.height);
         }
       }
-      await expect(list.locator(".provider-icon")).toHaveCount(5);
+      await expect(list.locator(".provider-icon")).toHaveCount(4);
       await expect(list.locator("small")).toHaveCount(0);
       await expect(page.getByRole("searchbox")).toHaveCount(0);
       await expect(setup.locator(".ai-subtitle")).toHaveCount(0);
@@ -154,30 +153,6 @@ for (const width of [320, 375, 800, 1280, 1920]) {
         .getByRole("button", { name: "Cancel sign-in", exact: true })
         .click();
       await page.getByRole("button", { name: "Back", exact: true }).click();
-      await list
-        .getByRole("button", { name: "OpenAI Codex", exact: true })
-        .click();
-      await expect(
-        page.getByRole("heading", {
-          name: "Connect OpenAI Codex",
-          exact: true,
-        }),
-      ).toBeVisible();
-      await expect(
-        page.getByRole("button", { name: "Sign in with Codex", exact: true }),
-      ).toHaveAccessibleDescription(/ChatGPT account.*Codex access/u);
-      await visual.capture("ai.setup.codex-method");
-      await page
-        .getByRole("button", { name: "Sign in with Codex", exact: true })
-        .click();
-      await expect(
-        page.getByRole("button", { name: "Get sign-in code", exact: true }),
-      ).toBeVisible();
-      await visual.capture("ai.setup.codex-ready");
-      await page
-        .getByRole("button", { name: "Cancel sign-in", exact: true })
-        .click();
-      await page.getByRole("button", { name: "Back", exact: true }).click();
       for (const provider of ["Anthropic", "OpenRouter"]) {
         await list.getByRole("button", { name: provider, exact: true }).click();
         await expect(
@@ -230,7 +205,7 @@ for (const width of [375, 1280]) {
         exact: true,
       });
       const choices = list.getByRole("button");
-      await expect(choices).toHaveCount(5);
+      await expect(choices).toHaveCount(4);
       const first = await choices.nth(0).boundingBox();
       const second = await choices.nth(1).boundingBox();
       expect(first!.x).toBe(second!.x);

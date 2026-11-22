@@ -61,13 +61,12 @@ watch(
   },
   { immediate: true },
 );
-const custom = computed(() => props.status?.config?.provider === "custom");
-const id = useId();
-const suggestions = computed(() =>
-  custom.value && props.status?.catalog?.source === "provider"
-    ? [...new Set(props.status.catalog.models)]
-    : [],
+const manualEntry = computed(
+  () =>
+    props.status?.config?.provider === "custom" &&
+    props.status.catalog?.source === "manual",
 );
+const id = useId();
 const dialogControl =
   useTemplateRef<InstanceType<typeof SituateDialog>>("dialogControl");
 const dialog = computed(() => dialogControl.value?.element);
@@ -77,7 +76,7 @@ const manualTriggerControl = useTemplateRef<InstanceType<typeof SituateButton>>(
 const manualTrigger = computed(() => manualTriggerControl.value?.element);
 const manual = ref("");
 const { catalog, loading, failed, reload } = useModelCatalog(
-  () => !!props.status?.config && !custom.value,
+  () => !!props.status?.config && !manualEntry.value,
 );
 const models = computed(() =>
   props.status?.config
@@ -432,7 +431,7 @@ async function retry(): Promise<void> {
   <div class="model-picker" :aria-busy="busy">
     <SituateButton
       variant="plain"
-      v-if="custom && status?.available"
+      v-if="manualEntry && status?.available"
       ref="manualTriggerControl"
       type="button"
       class="manual-trigger"
@@ -572,18 +571,9 @@ async function retry(): Promise<void> {
           :label="t('ai.modelID')"
           v-slot="{ controlAttrs }"
         >
-          <datalist v-if="suggestions.length" :id="`${id}-suggestions`">
-            <option
-              v-for="suggestion in suggestions"
-              :key="suggestion"
-              :value="suggestion"
-              data-localization-content="identity"
-            />
-          </datalist>
           <SituateInput
             v-bind="controlAttrs"
             v-model="manual"
-            :list="suggestions.length ? `${id}-suggestions` : undefined"
             required
             maxlength="256"
             autocomplete="off"

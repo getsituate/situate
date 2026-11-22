@@ -406,6 +406,7 @@ impl Host for Fixture {
     }
     async fn context(
         &self,
+        _run_id: &str,
         messages: Vec<Value>,
         _config: RunConfig,
         _cancel: CancellationToken,

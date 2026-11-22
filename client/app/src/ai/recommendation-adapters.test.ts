@@ -38,18 +38,12 @@ const scenarios = [
     api: "openai-responses",
     levels: ["off"],
   },
-  {
-    provider: "openai-codex",
-    id: "gpt-6.1-sol",
-    api: "openai-codex-responses",
-    levels: ["low", "medium", "high"],
-  },
 ] as const;
 for (const scenario of scenarios) {
   const config: Config = {
     provider: scenario.provider,
     endpoint: null,
-    auth: scenario.provider === "openai-codex" ? "oauth" : "api_key",
+    auth: "api_key",
   };
   test(`${scenario.provider}/${scenario.id}: the supported catalog preserves the access protocol and explicit model identity`, () => {
     expect(connectionModel(config, scenario.id)).toMatchObject({

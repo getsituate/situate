@@ -29,14 +29,21 @@ pub(crate) mod discovery;
 pub mod login;
 #[path = "ai_model.rs"]
 pub(crate) mod model;
+#[path = "ai_models_dev.rs"]
+mod models_dev;
 #[path = "ai_native_model.rs"]
 mod native_model;
+
+pub(crate) fn setup_model_metadata(app: &tauri::AppHandle) {
+    models_dev::setup(app);
+}
 #[path = "ai_storage_releases.rs"]
 mod storage_releases;
 
 const NETWORK_ERROR: &str = "native.ai.request.failed";
 const REJECTED: &str = "native.ai.access.rejected";
 const KEY_ERROR: &str = "native.ai.access.keyStorage";
+#[cfg(any(test, feature = "native-smoke"))]
 const CATALOG: &str = include_str!("../../src/ai/catalog.generated.json");
 const TRANSPORTS: &str = include_str!("../../src/ai/transport-contract.json");
 const PROVIDER_POLICY: &str = include_str!("../../src/ai/provider-policy.json");
@@ -118,8 +125,6 @@ struct Connection {
     key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     oauth: Option<crate::openai_oauth::Credential>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    codex: Option<crate::codex_oauth::Credential>,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -886,9 +891,8 @@ fn validate_credentials(connection: &Connection) -> Result<(), String> {
         connection.config.auth,
         connection.config.provider.as_str(),
         &connection.oauth,
-        &connection.codex,
     ) {
-        (Some(AuthKind::Oauth), "openai", Some(credential), None)
+        (Some(AuthKind::Oauth), "openai", Some(credential))
             if connection.key.is_empty()
                 && connection.config.endpoint.is_none()
                 && secret(&credential.access, 32 * 1024)
@@ -902,36 +906,7 @@ fn validate_credentials(connection: &Connection) -> Result<(), String> {
         {
             Ok(())
         }
-        (Some(AuthKind::Oauth), "openai-codex", None, Some(credential))
-            if connection.key.is_empty()
-                && connection.config.endpoint.is_none()
-                && secret(&credential.access, 32 * 1024)
-                && secret(&credential.refresh, 16 * 1024) =>
-        {
-            use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-            let parts: Vec<_> = credential.access.split('.').collect();
-            if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
-                return Err(invalid.into());
-            }
-            let claims: Value =
-                serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).map_err(|_| invalid)?)
-                    .map_err(|_| invalid)?;
-            let account = &credential.account_id;
-            if account.is_empty()
-                || account.len() > 256
-                || !account
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
-                || claims["https://api.openai.com/auth"]["chatgpt_account_id"].as_str()
-                    != Some(account.as_str())
-            {
-                return Err(invalid.into());
-            }
-            Ok(())
-        }
-        (None | Some(AuthKind::ApiKey), provider, None, None) if provider != "openai-codex" => {
-            Ok(())
-        }
+        (None | Some(AuthKind::ApiKey), _, None) => Ok(()),
         _ => Err(invalid.into()),
     }
 }
@@ -987,9 +962,7 @@ fn target_for(
     discovered: Option<&discovery::DiscoveredModel>,
 ) -> Result<(String, String, HashMap<String, String>), String> {
     admit_method(config)?;
-    if config.auth == Some(AuthKind::Oauth)
-        && !matches!(config.provider.as_str(), "openai" | "openai-codex")
-    {
+    if config.auth == Some(AuthKind::Oauth) && config.provider != "openai" {
         return Err("native.ai.provider.authenticationUnavailable".into());
     }
     if selected_model.trim().is_empty()
@@ -999,14 +972,14 @@ fn target_for(
         return Err("native.ai.model.choose".into());
     }
     let transports: Value = serde_json::from_str(TRANSPORTS).map_err(|_| NETWORK_ERROR)?;
-    let mut fixed_headers = HashMap::new();
-    let (api, base) = if config.provider == "custom" {
+    let (api, base, fixed_headers) = if config.provider == "custom" {
         (
             "openai-completions".to_owned(),
             config
                 .endpoint
                 .clone()
                 .ok_or("native.ai.endpoint.required")?,
+            HashMap::new(),
         )
     } else if let Some(model) = discovered {
         let descriptor = model
@@ -1016,97 +989,96 @@ fn target_for(
         (
             descriptor["api"].as_str().ok_or(NETWORK_ERROR)?.into(),
             descriptor["baseUrl"].as_str().ok_or(NETWORK_ERROR)?.into(),
+            HashMap::new(),
         )
     } else {
-        if config.endpoint.is_some() {
-            return Err("native.ai.endpoint.builtinOverride".into());
-        }
-        let catalog: Value =
-            serde_json::from_str(CATALOG).map_err(|_| "native.ai.catalog.unavailable")?;
-        let provider = catalog["providers"]
-            .as_array()
-            .and_then(|providers| providers.iter().find(|p| p["id"] == config.provider))
-            .ok_or("native.ai.provider.choose")?;
-        let method = if config.auth == Some(AuthKind::Oauth) {
-            "oauth"
-        } else {
-            "api_key"
-        };
-        if !provider["methods"]
-            .as_array()
-            .is_some_and(|methods| methods.iter().any(|entry| entry["id"] == method))
-        {
-            return Err("native.ai.provider.authenticationUnavailable".into());
-        }
-        let model = provider["models"]
-            .as_array()
-            .and_then(|models| models.iter().find(|m| m["id"] == selected_model))
-            .ok_or("native.ai.model.chooseCatalog")?;
-        if model.get("type").is_some_and(|kind| kind != "chat")
-            || !model["input"]
-                .as_array()
-                .is_some_and(|inputs| inputs.iter().any(|input| input == "text"))
-        {
-            return Err("native.ai.model.openaiTextRequired".into());
-        }
-        if let Some(headers) = model["headers"].as_object() {
-            for (name, value) in headers {
-                let name = name.to_ascii_lowercase();
-                if !transports["modelHeaders"]
-                    .as_array()
-                    .is_some_and(|allowed| {
-                        allowed.iter().any(|header| header.as_str() == Some(&name))
-                    })
-                {
-                    return Err("native.ai.model.headersUnsupported".into());
-                }
-                fixed_headers.insert(
-                    name,
-                    value
-                        .as_str()
-                        .ok_or("native.ai.model.headersInvalid")?
-                        .to_owned(),
-                );
-            }
-        }
-        (
-            model["api"].as_str().unwrap_or_default().into(),
-            model["baseUrl"].as_str().unwrap_or_default().into(),
-        )
+        legacy_target(config, selected_model, &transports)?
     };
     let path = transports["apis"][&api]["suffix"]
         .as_str()
         .ok_or("native.ai.model.transportUnsupported")?;
-    if config.auth == Some(AuthKind::Oauth) {
-        let expected = match config.provider.as_str() {
-            "openai" => ("openai-responses", "https://api.openai.com/v1"),
-            "openai-codex" => ("openai-codex-responses", "https://chatgpt.com/backend-api"),
-            _ => return Err("native.ai.provider.authenticationUnavailable".into()),
-        };
-        if (api.as_str(), base.as_str()) != expected {
-            return Err("native.ai.model.openaiRequired".into());
-        }
-    }
-    if api == "openai-codex-responses" {
-        if config.provider != "openai-codex"
-            || config.auth != Some(AuthKind::Oauth)
-            || base != "https://chatgpt.com/backend-api"
-            || path != "/codex/responses"
-        {
-            return Err("native.ai.model.transportUnsupported".into());
-        }
-        let native = transports["apis"][&api]["nativeHeaders"]
-            .as_object()
-            .ok_or(NETWORK_ERROR)?;
-        for (name, value) in native {
-            fixed_headers.insert(name.clone(), value.as_str().ok_or(NETWORK_ERROR)?.into());
-        }
+    if config.auth == Some(AuthKind::Oauth)
+        && (api.as_str(), base.as_str()) != ("openai-responses", "https://api.openai.com/v1")
+    {
+        return Err("native.ai.model.openaiRequired".into());
     }
     validate_http_consent(config, &base, false)?;
     let url = reqwest::Url::parse(&format!("{}{path}", base.trim_end_matches('/')))
         .map_err(|_| "native.ai.endpoint.invalid")?
         .to_string();
     Ok((api, url, fixed_headers))
+}
+
+#[cfg(not(any(test, feature = "native-smoke")))]
+fn legacy_target(
+    _: &Config,
+    _: &str,
+    _: &Value,
+) -> Result<(String, String, HashMap<String, String>), String> {
+    Err("native.ai.model.chooseCatalog".into())
+}
+
+#[cfg(any(test, feature = "native-smoke"))]
+fn legacy_target(
+    config: &Config,
+    selected_model: &str,
+    transports: &Value,
+) -> Result<(String, String, HashMap<String, String>), String> {
+    let mut fixed_headers = HashMap::new();
+    if config.endpoint.is_some() {
+        return Err("native.ai.endpoint.builtinOverride".into());
+    }
+    let catalog: Value =
+        serde_json::from_str(CATALOG).map_err(|_| "native.ai.catalog.unavailable")?;
+    let provider = catalog["providers"]
+        .as_array()
+        .and_then(|providers| providers.iter().find(|p| p["id"] == config.provider))
+        .ok_or("native.ai.provider.choose")?;
+    let method = if config.auth == Some(AuthKind::Oauth) {
+        "oauth"
+    } else {
+        "api_key"
+    };
+    if !provider["methods"]
+        .as_array()
+        .is_some_and(|methods| methods.iter().any(|entry| entry["id"] == method))
+    {
+        return Err("native.ai.provider.authenticationUnavailable".into());
+    }
+    let model = provider["models"]
+        .as_array()
+        .and_then(|models| models.iter().find(|m| m["id"] == selected_model))
+        .ok_or("native.ai.model.chooseCatalog")?;
+    if model.get("type").is_some_and(|kind| kind != "chat")
+        || !model["input"]
+            .as_array()
+            .is_some_and(|inputs| inputs.iter().any(|input| input == "text"))
+    {
+        return Err("native.ai.model.openaiTextRequired".into());
+    }
+    if let Some(headers) = model["headers"].as_object() {
+        for (name, value) in headers {
+            let name = name.to_ascii_lowercase();
+            if !transports["modelHeaders"]
+                .as_array()
+                .is_some_and(|allowed| allowed.iter().any(|header| header.as_str() == Some(&name)))
+            {
+                return Err("native.ai.model.headersUnsupported".into());
+            }
+            fixed_headers.insert(
+                name,
+                value
+                    .as_str()
+                    .ok_or("native.ai.model.headersInvalid")?
+                    .to_owned(),
+            );
+        }
+    }
+    Ok((
+        model["api"].as_str().unwrap_or_default().into(),
+        model["baseUrl"].as_str().unwrap_or_default().into(),
+        fixed_headers,
+    ))
 }
 
 pub fn ensure_idle(app: &tauri::AppHandle, scope: &str) -> Result<(), String> {
@@ -1385,7 +1357,6 @@ pub async fn ai_save(
                 config,
                 key,
                 oauth: None,
-                codex: None,
             };
             let expected = if replacing {
                 Some(
@@ -1707,48 +1678,6 @@ where
     Ok(connection)
 }
 
-#[cfg(test)]
-async fn refresh_codex_connection<K, F, Fut>(
-    storage: Storage,
-    mut connection: Connection,
-    token: CancellationToken,
-    keys: K,
-    refresh: F,
-) -> Result<Connection, String>
-where
-    K: KeyStore + Send + 'static,
-    F: FnOnce(crate::codex_oauth::Credential, CancellationToken) -> Fut,
-    Fut: std::future::Future<Output = Result<crate::codex_oauth::Credential, String>>,
-{
-    validate_credentials(&connection)?;
-    let old = connection.codex.clone().ok_or(REJECTED)?;
-    if old.expired() {
-        if token.is_cancelled() {
-            return Err("native.ai.response.stopped".into());
-        }
-        let (storage, authenticated, keys, expected) =
-            prepare_refresh(storage, connection, keys).await?;
-        connection = authenticated;
-        if token.is_cancelled() {
-            return Err("native.ai.response.stopped".into());
-        }
-        // The caller retains both credential locks until this save finishes, including on Stop.
-        let credential = refresh(old.clone(), CancellationToken::new()).await?;
-        if credential.account_id != old.account_id {
-            return Err(REJECTED.into());
-        }
-        connection.codex = Some(credential);
-        validate_credentials(&connection)?;
-        let bytes = serde_json::to_vec(&connection).map_err(|_| KEY_ERROR)?;
-        tauri::async_runtime::spawn_blocking(move || {
-            save_rotated_credentials(&storage, &keys, expected, &bytes)
-        })
-        .await
-        .map_err(|_| KEY_ERROR)??;
-    }
-    Ok(connection)
-}
-
 fn is_local_network(endpoint: &str) -> Result<bool, String> {
     let url = validate_endpoint(endpoint)?;
     let host = url.host_str().ok_or("native.ai.endpoint.requiredValid")?;
@@ -1825,14 +1754,7 @@ async fn send(
         for (name, value) in headers {
             request = request.header(name, value);
         }
-        if api == "openai-codex-responses" {
-            validate_credentials(&connection)?;
-            let credential = connection.codex.as_ref().ok_or(REJECTED)?;
-            request = request
-                .bearer_auth(&credential.access)
-                .header("chatgpt-account-id", &credential.account_id)
-                .header("accept", "text/event-stream");
-        } else if api == "anthropic-messages" {
+        if api == "anthropic-messages" {
             request = request
                 .header("anthropic-version", "2023-06-01")
                 .header("x-api-key", &connection.key);
@@ -1912,10 +1834,6 @@ pub(crate) fn model_error_code(error: &str) -> &'static str {
         _ => "transport",
     }
 }
-
-#[cfg(test)]
-#[path = "ai_codex_tests.rs"]
-mod codex_tests;
 
 #[cfg(test)]
 #[path = "ai_transport_tests.rs"]
@@ -2180,7 +2098,6 @@ pub(crate) mod tests {
             },
             key: "test-secret-never-display".into(),
             oauth: None,
-            codex: None,
         }
     }
     #[derive(Clone, Default)]
@@ -2225,7 +2142,6 @@ pub(crate) mod tests {
                 endpoint: None,
             },
             key: String::new(),
-            codex: None,
             oauth: Some(crate::openai_oauth::Credential {
                 access: "synthetic-access".into(),
                 refresh: "synthetic-refresh".into(),
@@ -2558,13 +2474,11 @@ pub(crate) mod tests {
             target(&old.config, "gpt-4o-mini").unwrap().1,
             "https://api.openai.com/v1/responses"
         );
-        let mut connection = browser_connection(0);
+        let connection = browser_connection(0);
         assert_eq!(
             target(&connection.config, "gpt-5.4").unwrap().1,
             "https://api.openai.com/v1/responses"
         );
-        connection.config.provider = "openai-codex".into();
-        assert!(target(&connection.config, "gpt-5.4").is_err());
     }
     #[test]
     fn native_record_keeps_exact_priced_tool_usage_without_provider_attribution() {

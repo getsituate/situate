@@ -719,6 +719,7 @@ defineExpose({
                 {{ localizeError(presentedError) }}
               </p>
               <template #actions>
+                <slot name="error-actions" />
                 <SituateButton
                   variant="secondary"
                   autofocus

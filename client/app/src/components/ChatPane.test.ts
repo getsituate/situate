@@ -84,6 +84,7 @@ function service() {
     selectionUncertain: false,
     status: {
       config: { provider: "custom", endpoint: "http://localhost:8888/v1" },
+      catalog: { source: "manual", models: [] },
       available: true,
       reason: null,
       selectedModel: "conversation-model",

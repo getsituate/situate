@@ -100,6 +100,12 @@ test.each([
     expect(loadConversation([message])).toEqual([message]);
   },
 );
+test("reads token usage without a cost field", () => {
+  const { cost, ...tokens } = usage;
+  expect(cost).toBeDefined();
+  const message = { ...assistant, usage: tokens };
+  expect(loadConversation([message])).toEqual([message]);
+});
 test("continuation and nested tool provenance survive native record validation", () => {
   const message = {
     ...assistant,

@@ -8,7 +8,7 @@ const source = await readFile(
   "utf8",
 );
 const catalogWarning =
-  "The model list could not be refreshed. You can still choose a compatible model manually. Your saved choice has not changed.";
+  "The model list could not be refreshed. Try again. Your saved choice has not changed.";
 
 test("sending waits for an editable composer with the intended draft", async () => {
   const sendSource = source.slice(

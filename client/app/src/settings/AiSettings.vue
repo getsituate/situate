@@ -5,7 +5,6 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
-  useId,
   watch,
 } from "vue";
 import { listenInWindow } from "../window-events";
@@ -131,7 +130,10 @@ onMounted(async () => {
   const stop = await listenInWindow<string>(
     "ai-models-changed",
     ({ payload }) => {
-      if (payload === props.workspaceScope && !refreshBlocked.value)
+      if (
+        (!payload || payload === props.workspaceScope) &&
+        !refreshBlocked.value
+      )
         void refresh();
     },
   ).catch(() => undefined);
@@ -176,7 +178,7 @@ const commentModels = computed(() =>
     if (
       status.value?.catalog?.selectable?.some((entry) => entry.id === model.id)
     )
-      return false;
+      return true;
     try {
       commentThinking(status.value!.config!, model.id, model);
       return true;
@@ -244,15 +246,18 @@ const thinkingPreference = computed(() => {
 const recommendedThinking = computed(() => {
   const config = status.value?.config;
   if (!config || !chatModel.value || !levels.value.length) return null;
-  return modelChoice(config, chatModel.value, null, status.value?.catalog)
-    .thinking;
+  const catalog = status.value?.catalog;
+  return models.value.some(({ id }) => id === chatModel.value) &&
+    catalog?.selectable?.some(({ id }) => id === chatModel.value)
+    ? recommendations.value.chat?.model === chatModel.value
+      ? recommendations.value.chat.thinking
+      : levels.value[0]
+    : modelChoice(config, chatModel.value).thinking;
 });
-const customModelListId = useId();
-const customSuggestions = computed(() =>
-  status.value?.config?.provider === "custom" &&
-  status.value.catalog?.source === "provider"
-    ? [...new Set(status.value.catalog.models)]
-    : [],
+const manualModel = computed(
+  () =>
+    status.value?.config?.provider === "custom" &&
+    status.value.catalog?.source === "manual",
 );
 const customChat = ref("");
 const customComment = ref("");
@@ -292,7 +297,12 @@ async function select(kind: "chat" | "comment", value: string): Promise<void> {
           ),
           thinking:
             kind === "comment"
-              ? commentThinking(status.value.config, value)
+              ? commentThinking(
+                  status.value.config,
+                  value,
+                  undefined,
+                  status.value.catalog,
+                )
               : ("recommended" as const),
         };
   await save({ ...settings.value, [kind]: choice });
@@ -342,14 +352,6 @@ function thinking(event: Event): void {
       @editing="editingConnection = $event"
     />
     <div v-show="!editingConnection">
-      <datalist v-if="customSuggestions.length" :id="customModelListId">
-        <option
-          v-for="id in customSuggestions"
-          :key="id"
-          :value="id"
-          data-localization-content="identity"
-        />
-      </datalist>
       <div
         v-if="
           statusError || status?.modelError || service?.state.error || failed
@@ -431,13 +433,12 @@ function thinking(event: Event): void {
           <div class="setting-row">
             <label for="settings-chat-model">{{ t("ai.model") }}</label>
             <form
-              v-if="status?.config?.provider === 'custom'"
+              v-if="manualModel"
               @submit.prevent="select('chat', customChat)"
             >
               <SituateInput
                 id="settings-chat-model"
                 v-model="customChat"
-                :list="customSuggestions.length ? customModelListId : undefined"
                 :placeholder="
                   settings?.chat?.model && settings.chat.model !== 'recommended'
                     ? t('model.selectedLabel', { name: settings.chat.model })
@@ -553,14 +554,13 @@ function thinking(event: Event): void {
           <div class="setting-row">
             <label for="settings-comment-model">{{ t("ai.model") }}</label>
             <form
-              v-if="status?.config?.provider === 'custom'"
+              v-if="manualModel"
               @submit.prevent="select('comment', customComment)"
             >
               <SituateInput
                 id="settings-comment-model"
                 aria-describedby="small-model-help"
                 v-model="customComment"
-                :list="customSuggestions.length ? customModelListId : undefined"
                 :placeholder="
                   settings?.comment?.model &&
                   settings.comment.model !== 'recommended'

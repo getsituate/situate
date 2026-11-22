@@ -9,13 +9,10 @@
           "flow": "api_key",
           "key": "required"
         },
-        "oauth": { "status": "implemented", "flow": "browser" }
-      }
-    },
-    "openai-codex": {
-      "endpoint": "none",
-      "methods": {
-        "oauth": { "status": "implemented", "flow": "device" }
+        "oauth": {
+          "status": "implemented",
+          "flow": "browser"
+        }
       }
     },
     "anthropic": {

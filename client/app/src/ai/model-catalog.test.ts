@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type { Config } from "./api";
 import inventory from "./catalog.generated.json";
 import policy from "./provider-policy.json";
@@ -31,12 +31,6 @@ test("qualified discovery adds new chat models without exposing listing-only IDs
       reasoning: false,
     }),
   ]);
-  expect(
-    availableChatModels(
-      { provider: "openai-codex", endpoint: null, auth: "oauth" },
-      observed,
-    ),
-  ).toEqual([]);
 });
 
 test("qualified OpenAI IDs appear for API keys and direct login", () => {
@@ -53,6 +47,7 @@ test("qualified OpenAI IDs appear for API keys and direct login", () => {
               contextWindow: 1_050_000,
               maxTokens: 128_000,
               imageInput: true,
+              thinkingLevels: ["low", "medium", "max"],
             },
           ],
         },
@@ -72,7 +67,6 @@ test("setup exposes only supported providers and authentication methods", () => 
   expect(providers.map(({ id }) => id).sort()).toEqual([
     "anthropic",
     "openai",
-    "openai-codex",
     "openrouter",
   ]);
   expect(
@@ -84,15 +78,6 @@ test("setup exposes only supported providers and authentication methods", () => 
         .find((provider) => provider.id === id)
         ?.methods.map(({ id }) => id),
     ).toEqual(["api_key"]);
-  expect(
-    providers
-      .find(({ id }) => id === "openai-codex")
-      ?.methods.map(({ id }) => id),
-  ).toEqual(["oauth"]);
-  expect(policy.providers["openai-codex"].methods.oauth).toEqual({
-    status: "implemented",
-    flow: "device",
-  });
 });
 
 test.each([
@@ -139,12 +124,12 @@ test.each(["account", "provider"] as const)(
   },
 );
 test.each(["static", "unknown"] as const)(
-  "%s retains statically compatible manual choices",
+  "%s never offers bundled choices",
   (source) => {
     const config: Config = { provider: "openai", endpoint: null };
-    expect(availableChatModels(config, { source, models: [] })).toEqual(
-      availableChatModels(config),
-    );
+    expect(
+      availableChatModels(config, { source, models: ["gpt-4o-mini"] }),
+    ).toEqual([]);
   },
 );
 test("connection-specific catalogs do not reuse another connection's same-provider candidates", () => {
@@ -163,67 +148,7 @@ test("connection-specific catalogs do not reuse another connection's same-provid
   ).toEqual(["gpt-6.1-sol"]);
 });
 
-test("Codex eligibility requires its own authentication, protocol and destination", async () => {
-  const catalog = await import("./model-catalog");
-  const models = catalog.availableChatModels({
-    provider: "openai-codex",
-    endpoint: null,
-    auth: "oauth",
-  });
-  expect(models.length).toBeGreaterThan(0);
-  for (const model of models)
-    expect(model).toMatchObject({
-      provider: "openai-codex",
-      api: "openai-codex-responses",
-      baseUrl: "https://chatgpt.com/backend-api",
-    });
-  for (const auth of [undefined, "api_key"] as const)
-    expect(
-      catalog.availableChatModels({
-        provider: "openai-codex",
-        endpoint: null,
-        auth,
-      }),
-    ).toEqual([]);
-  expect(
-    catalog.availableChatModels({
-      provider: "openai-codex",
-      endpoint: "https://other.invalid",
-      auth: "oauth",
-    }),
-  ).toEqual([]);
-});
-
-test("planned authentication is ineligible even when a catalog and adapter exist", async () => {
-  vi.resetModules();
-  vi.doMock("./provider-policy.json", () => ({
-    default: {
-      ...policy,
-      providers: {
-        ...policy.providers,
-        "openai-codex": {
-          endpoint: "none",
-          methods: { oauth: { status: "planned", flow: "device" } },
-        },
-      },
-    },
-  }));
-  try {
-    const catalog = await import("./model-catalog");
-    expect(
-      catalog.availableChatModels({
-        provider: "openai-codex",
-        endpoint: null,
-        auth: "oauth",
-      }),
-    ).toEqual([]);
-  } finally {
-    vi.doUnmock("./provider-policy.json");
-    vi.resetModules();
-  }
-});
-
-test("direct OpenAI browser access survives independently of Codex", () => {
+test("direct OpenAI browser access uses the public Responses API", () => {
   const config: Config = { provider: "openai", endpoint: null, auth: "oauth" };
   expect(availableChatModels(config).map(({ id }) => id)).toContain("gpt-5.4");
   expect(connectionModel(config, "gpt-5.4")).toMatchObject({
@@ -243,8 +168,7 @@ test("non-chat records are ineligible even when their transport supports text", 
 });
 
 const deferred = inventory.providers.filter(
-  ({ id }) =>
-    !["openai", "openai-codex", "anthropic", "openrouter"].includes(id),
+  ({ id }) => !["openai", "anthropic", "openrouter"].includes(id),
 );
 test.each(deferred)(
   "$id cannot resolve a catalog model through any authentication method",

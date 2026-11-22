@@ -33,10 +33,7 @@ pub(crate) fn configure(
     };
     bootstrap_step("bootstrap-provider-config");
     model::validate_config(&config)?;
-    let (api, _, _) = target(&config, model_id)?;
-    if api != "openai-responses" {
-        return Err(NETWORK_ERROR.into());
-    }
+    let discovered = model_id == "fixture-discovered-chat";
     bootstrap_step("bootstrap-credential-lock");
     let _lock = storage.lock_credentials()?;
     let (config, replacing) = if first_launch {
@@ -46,11 +43,23 @@ pub(crate) fn configure(
     };
     if first_launch {
         let connection = Connection {
-            catalog: None,
+            catalog: discovered.then(|| discovery::Catalog {
+                source: discovery::Source::Provider,
+                models: vec![model_id.into()],
+                checked_at: Some(discovery::unix_seconds()),
+                selectable: vec![discovery::DiscoveredModel {
+                    id: model_id.into(),
+                    name: None,
+                    thinking_levels: vec![],
+                    reasoning_none: false,
+                    context_window: 128_000,
+                    max_tokens: 16_384,
+                    image_input: false,
+                }],
+            }),
             config: config.clone(),
             key: token.into(),
             oauth: None,
-            codex: None,
         };
         bootstrap_step("bootstrap-credential-save");
         connections::save(&storage, app, &connection, replacing)?;
@@ -61,7 +70,7 @@ pub(crate) fn configure(
         return Err(KEY_ERROR.into());
     }
     if first_launch {
-        let thinking = if model_id == "gpt-4.1-mini" {
+        let thinking = if discovered || model_id == "gpt-4.1-mini" {
             "off"
         } else {
             "medium"
@@ -86,7 +95,10 @@ pub(crate) fn configure(
         storage.list_conversations()?;
     }
     bootstrap_step("bootstrap-model-validate");
-    let choice = model::required(&storage, &config)?;
+    let choice = model::admit_workspace(&storage, &restored)?;
+    if choice.target()?.0 != "openai-responses" {
+        return Err(NETWORK_ERROR.into());
+    }
     model::validate_snapshot(&choice, &config)?;
     Ok(())
 }

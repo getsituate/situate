@@ -31,6 +31,16 @@ pub(super) fn descriptor(choice: &model::Choice) -> Result<Value, String> {
                 "maxTokensField":"max_tokens"}
         }));
     }
+    legacy_descriptor(choice)
+}
+
+#[cfg(not(any(test, feature = "native-smoke")))]
+fn legacy_descriptor(_: &model::Choice) -> Result<Value, String> {
+    Err("native.ai.model.chooseCatalog".into())
+}
+
+#[cfg(any(test, feature = "native-smoke"))]
+fn legacy_descriptor(choice: &model::Choice) -> Result<Value, String> {
     let catalog: Value = serde_json::from_str(CATALOG).map_err(|_| NETWORK_ERROR)?;
     let mut descriptor = catalog["providers"]
         .as_array()
@@ -45,6 +55,7 @@ pub(super) fn descriptor(choice: &model::Choice) -> Result<Value, String> {
         .ok_or_else(|| "native.ai.model.chooseCatalog".to_owned())?;
     if choice.connection.provider == "openai" && choice.connection.auth == Some(AuthKind::Oauth) {
         descriptor["compat"]["supportsMaxOutputTokens"] = serde_json::json!(false);
+        descriptor["compat"]["requiresDeveloperRole"] = serde_json::json!(true);
     }
     Ok(descriptor)
 }
@@ -253,8 +264,7 @@ pub(super) async fn refresh(
     mut connection: Connection,
     token: CancellationToken,
 ) -> Result<Connection, String> {
-    let needs_refresh = connection.codex.as_ref().is_some_and(|c| c.expired())
-        || connection.oauth.as_ref().is_some_and(|c| c.expired());
+    let needs_refresh = connection.oauth.as_ref().is_some_and(|c| c.expired());
     if needs_refresh {
         if token.is_cancelled() {
             return Err("native.ai.response.stopped".into());
@@ -274,25 +284,7 @@ pub(super) async fn refresh(
             return Err("native.ai.response.stopped".into());
         }
         // Rotating credentials must be retained even when Stop arrives after dispatch.
-        if let Some(old) = connection.codex.clone() {
-            let credential = crate::codex_oauth::refresh(&old, &CancellationToken::new())
-                .await
-                .map_err(|error| {
-                    match error {
-                        crate::codex_oauth::Error::Cancelled => "native.ai.response.stopped",
-                        crate::codex_oauth::Error::Denied | crate::codex_oauth::Error::Expired => {
-                            REJECTED
-                        }
-                        crate::codex_oauth::Error::Failed => NETWORK_ERROR,
-                    }
-                    .to_owned()
-                })?;
-            if credential.account_id != old.account_id {
-                return Err(REJECTED.into());
-            }
-            connection.codex = Some(credential);
-            validate_credentials(&connection)?;
-        } else if let Some(old) = connection.oauth.clone() {
+        if let Some(old) = connection.oauth.clone() {
             connection.oauth =
                 Some(crate::openai_oauth::refresh(&old, &CancellationToken::new()).await?);
         }

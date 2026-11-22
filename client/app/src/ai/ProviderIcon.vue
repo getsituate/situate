@@ -9,7 +9,6 @@ const failed = ref(false);
 const source = computed(() => {
   switch (props.provider) {
     case "openai":
-    case "openai-codex":
       return openai;
     case "anthropic":
       return anthropic;

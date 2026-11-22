@@ -209,7 +209,10 @@ fn load_config(path: &Path) -> Result<Environment, String> {
             "workspace" | "onboarding" | "plugins"
         )
         || (config.journey == "plugins" && config.mode != "fixture")
-        || !matches!(config.model.as_str(), "gpt-4.1-mini" | "gpt-6.1-sol")
+        || !(matches!(config.model.as_str(), "gpt-4.1-mini" | "gpt-6.1-sol")
+            || (config.mode == "fixture"
+                && config.journey == "onboarding"
+                && config.model == "fixture-discovered-chat"))
         || !(1..=4096).contains(&config.max_output_tokens)
         || !(1..=900_000).contains(&config.timeout_ms)
         || config.provider_token.len() < 16
@@ -272,6 +275,12 @@ pub(crate) fn disabled_shell_capability() -> crate::shell_host::ShellCapability 
     shell.ownership = "none";
     shell
 }
+pub(crate) fn uses_discovered_fixture() -> bool {
+    ENVIRONMENT
+        .get()
+        .is_some_and(|env| env.config.journey == "onboarding" && env.config.mode == "fixture")
+}
+
 pub(crate) fn enabled() -> bool {
     ENVIRONMENT.get().is_some()
 }

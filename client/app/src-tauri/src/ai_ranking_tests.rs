@@ -165,10 +165,12 @@ fn openai_recommends_sol_62_only_with_qualified_discovery_and_only_for_chat() {
 
         observed.selectable.push(discovery::DiscoveredModel {
             id: "gpt-6.2-sol".into(),
+            name: None,
+            thinking_levels: vec!["low".into(), "medium".into(), "max".into()],
+            reasoning_none: false,
             context_window: 1_050_000,
             max_tokens: 128_000,
             image_input: true,
-            thinking: None,
         });
         let chat = resolve_choice(recommended(), &observed, "chat").unwrap();
         assert_eq!(chat.model, "gpt-6.2-sol");
@@ -291,7 +293,6 @@ fn same_provider_connections_keep_independent_explicit_settings() {
 fn qualified_provider_defaults_persist_independent_function_choices() {
     for (provider, expected_chat, expected_comment, comment_effort) in [
         ("anthropic", "claude-sonnet-5-5", "claude-sonnet-5-5", "low"),
-        ("openai-codex", "gpt-6.1-sol", "gpt-6.1-sol", "low"),
         (
             "openrouter",
             "openai/gpt-6.1-sol",
@@ -301,7 +302,7 @@ fn qualified_provider_defaults_persist_independent_function_choices() {
     ] {
         let (_directory, storage) = workspace();
         let config: Config = serde_json::from_value(json!({"provider": provider, "endpoint": null,
-            "auth": if provider == "openai-codex" { "oauth" } else { "api_key" }
+            "auth": "api_key"
         }))
         .unwrap();
         initialize(

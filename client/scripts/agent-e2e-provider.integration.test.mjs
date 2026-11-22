@@ -50,6 +50,27 @@ function events(payload) {
     .map((line) => JSON.parse(line.slice(6)));
 }
 
+test("the dynamically discovered onboarding model is fixture-only", async (t) => {
+  const model = "fixture-discovered-chat";
+  const broker = await start(t, { model });
+  const response = await post(broker, body({ model }));
+  assert.equal(response.status, 200);
+  assert.ok(
+    events(await response.text()).some(
+      (event) => event.type === "response.completed",
+    ),
+  );
+  await assert.rejects(
+    startAgentProvider({
+      mode: "openai",
+      model,
+      allowLive: true,
+      apiKey: "synthetic",
+    }),
+    { code: "model_not_allowed" },
+  );
+});
+
 test("fixture HTTP effects use a separate bounded capability without provider credentials or request budget", async (t) => {
   const broker = await start(t);
   const other = await start(t);

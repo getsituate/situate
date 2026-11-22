@@ -42,7 +42,6 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 // Protocol contract: @earendil-works/pi-ai 1.0.2, auth/oauth/openai-chatgpt (MIT).
-// This is the OpenAI direct-token flow, not the legacy Codex OAuth client.
 const AUTHORIZE: &str = "https://auth.openai.com/api/accounts/authorize";
 const TOKEN: &str = "https://auth.openai.com/api/accounts/oauth/token";
 const RESOURCE: &str = "https://api.openai.com/v1";

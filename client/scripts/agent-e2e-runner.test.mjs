@@ -253,6 +253,7 @@ test("onboarding selection reaches both native launches without enabling paid ac
         );
         assert.equal(config.journey, "onboarding");
         assert.equal(config.mode, "fixture");
+        assert.equal(config.model, "fixture-discovered-chat");
         phases.push(config.phase);
         await writeFile(
           config.reportPath,
@@ -269,6 +270,7 @@ test("onboarding selection reaches both native launches without enabling paid ac
   assert.equal(result.outcome, "passed");
   assert.equal(result.journey, "onboarding");
   assert.deepEqual(phases, ["exercise", "reopen"]);
+  assert.equal(providers[0].model, "fixture-discovered-chat");
   assert.equal(providers[0].allowLive, false);
   assert.equal(providers[0].apiKey, undefined);
 });
