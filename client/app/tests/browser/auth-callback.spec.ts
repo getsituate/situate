@@ -145,6 +145,30 @@ for (const callbackLocale of ["en-US", "de-DE"]) {
   });
 }
 
+test("confirmed connection fits beside the illustration on desktop", async ({
+  page,
+  baseURL,
+}) => {
+  await page.setViewportSize({ width: 1434, height: 751 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const evidence = await openCallback(page, baseURL!, "en");
+  const title = page.getByRole("heading", {
+    name: callbackText("en", "accepted.title"),
+  });
+  const art = page.locator(".callback-handoff");
+  for (const element of [
+    art,
+    title,
+    page.getByText(callbackText("en", "accepted.body")),
+    page.locator("summary"),
+  ]) {
+    await expect(element).toBeInViewport({ ratio: 1 });
+  }
+  const artBox = (await art.boundingBox())!;
+  expect(artBox.x + artBox.width).toBeLessThan((await title.boundingBox())!.x);
+  await evidence.check();
+});
+
 test("German native copy and return help remain readable in constrained viewports", async ({
   page,
   baseURL,

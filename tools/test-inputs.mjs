@@ -126,6 +126,19 @@ const rules = {
   "client-browser-chromium": product,
   "client-browser-webkit": product,
   "client-browser-webkit-smoke": product,
+  "client-browser-msedge": (file) =>
+    callbackAssets(file) ||
+    /^client\/app\/tests\/browser\/(?:auth-callback[^/]*|test\.ts|localization-audit[^/]*)$/.test(
+      file,
+    ) ||
+    /^client\/app\/src-tauri\/src\/(?:auth_callback|openai_oauth)\.rs$/.test(
+      file,
+    ) ||
+    /^client\/packages\/localization\//.test(file) ||
+    file === "client/app/playwright.config.ts" ||
+    file === "client/scripts/browser-server.mjs" ||
+    file === "tools/browser-server.mjs" ||
+    file === "tools/pipeline-setup.mjs",
   "client-visual": product,
   "client-visual-fixture": product,
   "workshop-vue": workshopInput,
@@ -200,6 +213,7 @@ const rules = {
   "pi-mcp": pi,
   "pi-test-hook": pi,
   "root-format": () => true,
+  "root-line-endings": () => true,
   "root-lint": (file) => /\.[cm]?[jt]sx?$|\.vue$/.test(file),
   "root-secrets": () => true,
   "root-history-secrets": () => true,
@@ -252,6 +266,7 @@ export function suiteAffectedFiles(suite, files) {
     if (
       [
         "root-format",
+        "root-line-endings",
         "root-secrets",
         "root-history-secrets",
         "quick-source",

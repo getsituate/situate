@@ -14,7 +14,9 @@ export function prerequisites(lane) {
     docker: lane.execution === "host-docker",
     rust:
       lane.host === "macos" &&
-      [...suites].some((id) => /^(dev-tui|client-)/.test(id)),
+      [...suites].some(
+        (id) => id !== "client-browser-msedge" && /^(dev-tui|client-)/.test(id),
+      ),
     coverage: suites.has("client-rust-coverage"),
     swift:
       lane.host === "macos" &&
@@ -165,8 +167,15 @@ export async function prepareLane(
     execute("xcrun", ["--find", "swift"]);
     execute("swift", ["--version"]);
   }
-  if (selected.native) {
+  if (selected.native || lane.suites.includes("client-browser-msedge"))
     execute(process.execPath, [join(directory, "tools/npm-ci.mjs"), "client"]);
+  if (lane.suites.includes("client-browser-msedge"))
+    coordinated(
+      process.execPath,
+      ["node_modules/playwright/cli.js", "install", "msedge"],
+      join(directory, "client"),
+    );
+  if (selected.native) {
     execute("launchctl", ["print", `gui/${process.getuid()}`]);
     execute("xcrun", ["--find", "clang"]);
     execute("python3", ["--version"]);

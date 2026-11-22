@@ -27,8 +27,19 @@ pub(super) fn response(language: Language, accepted: bool) -> &'static str {
 }
 
 fn build_response(language: Language, accepted: bool) -> String {
-    let style = format!("{TOKENS}\n{CSS}");
-    let script = format!("{PERFORMANCE}\n{SCORE}\n{RUNTIME}");
+    render_response(
+        language,
+        accepted,
+        &format!("{TOKENS}\n{CSS}"),
+        &format!("{PERFORMANCE}\n{SCORE}\n{RUNTIME}"),
+    )
+}
+
+fn render_response(language: Language, accepted: bool, style: &str, script: &str) -> String {
+    // CSP hashes apply to the inline text after HTML newline normalization.
+    let normalize = |text: &str| text.replace("\r\n", "\n").replace('\r', "\n");
+    let style = normalize(style);
+    let script = normalize(script);
     let policy = format!(
         "default-src 'none'; script-src 'sha256-{}'; style-src 'sha256-{}'; style-src-attr 'none'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
         STANDARD.encode(Sha256::digest(script.as_bytes())),
@@ -186,6 +197,21 @@ mod tests {
                 assert!(!policy.contains("unsafe-"));
             }
         }
+    }
+
+    #[test]
+    fn windows_checkout_line_endings_do_not_change_the_inline_assets_or_csp() {
+        let style = format!("{TOKENS}\n{CSS}");
+        let script = format!("{PERFORMANCE}\n{SCORE}\n{RUNTIME}");
+        assert_eq!(
+            render_response(
+                Language::En,
+                true,
+                &style.replace('\n', "\r\n"),
+                &script.replace('\n', "\r\n"),
+            ),
+            render_response(Language::En, true, &style, &script)
+        );
     }
 
     #[test]

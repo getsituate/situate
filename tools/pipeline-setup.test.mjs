@@ -67,6 +67,35 @@ test("Docker integration setup checks the host daemon without installing project
     ],
   );
 });
+test("Edge-only setup installs the browser without preparing Rust or Xcode", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "situate-edge-setup-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const calls = [];
+  await prepareLane(
+    { host: "macos", suites: ["client-browser-msedge"] },
+    {
+      directory,
+      platform: "darwin",
+      environment: { RUNNER_TEMP: directory },
+      execute: (...args) => calls.push(args),
+    },
+  );
+  assert.deepEqual(calls, [
+    [process.execPath, [join(directory, "tools/npm-ci.mjs"), "client"]],
+    [
+      process.execPath,
+      [
+        join(directory, "tools/run-coordinated.mjs"),
+        "--",
+        process.execPath,
+        "node_modules/playwright/cli.js",
+        "install",
+        "msedge",
+      ],
+      { cwd: join(directory, "client") },
+    ],
+  ]);
+});
 test("native macOS setup retains pinned Rust and exposes its binary path", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "situate-setup-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
