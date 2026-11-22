@@ -83,7 +83,7 @@ export function createLayoutSession(
             ? {
                 version: 1,
                 layout: emptyLayout(),
-                pinnedViews: ["files"],
+                pinnedViews: [],
               }
             : decodeLayoutDocument(record.data);
         state.error = "";

@@ -106,7 +106,7 @@ it("detects an externally deleted plugin and removes its pinned and open views w
   });
   await vi.advanceTimersByTimeAsync(2000);
   expect(runtime.state.plugins).toEqual([]);
-  expect(ui.session.state.document!.pinnedViews).toEqual(["files"]);
+  expect(ui.session.state.document!.pinnedViews).toEqual([]);
   expect(
     ui.session.state.document!.layout.tabs[0]!.panes[0]!.navigation.entries.at(
       -1,
@@ -174,7 +174,7 @@ it("discards old presentation and pins when an installation is replaced between 
   expect(runtime.state.plugins).toHaveLength(1);
   expect(entry.target).toEqual({ kind: "empty" });
   expect(entry.presentation).toBeNull();
-  expect(ui.session.state.document!.pinnedViews).toEqual(["files"]);
+  expect(ui.session.state.document!.pinnedViews).toEqual([]);
   vi.mocked(invoke).mockImplementation(original);
 });
 
