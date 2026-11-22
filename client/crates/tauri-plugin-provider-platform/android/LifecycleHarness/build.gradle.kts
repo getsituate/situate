@@ -16,7 +16,12 @@ android {
         versionCode = 1
         versionName = "1"
     }
-    buildTypes.named("release") { isMinifyEnabled = true }
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import {
+  migrationInventory,
   migrationRevision,
   qualifyMigrationHistory,
   verifyMigrationHistory,
@@ -238,10 +239,19 @@ test("candidate selectors qualify the selected commit rather than the checkout",
   f.migrations(names.slice(0, 1));
   const candidate = f.commit();
   f.git("branch", "qualification-candidate", candidate);
+  f.git(
+    "tag",
+    "-a",
+    "migration-candidate",
+    "-m",
+    "Candidate snapshot",
+    candidate,
+  );
   f.migrations(names);
   f.commit();
   for (const revision of [
-    "qualification-candidate",
+    "refs/heads/qualification-candidate",
+    "migration-candidate",
     "HEAD^",
     candidate.slice(0, 12),
   ]) {
@@ -257,6 +267,15 @@ test("candidate selectors reject option-like or malformed arguments", (t) => {
   for (const revision of ["--help", "", "HEAD\n"]) {
     assert.throws(() => migrationRevision(root, revision), {
       message: "Invalid migration candidate revision",
+    });
+  }
+});
+
+test("inventory requires a full object ID rather than a revision selector", (t) => {
+  const { root, legacy } = fixture(t);
+  for (const revision of ["HEAD", legacy.slice(0, 12)]) {
+    assert.throws(() => migrationInventory(root, revision), {
+      message: "Invalid migration inventory revision",
     });
   }
 });

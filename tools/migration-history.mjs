@@ -14,7 +14,8 @@ const m0002Original = "710b321fd962d68c6275febd4bd23466313b4cb1";
 const m0002Corrected = "12127a6e3b206a5ce3efd85c12b1b97058941878";
 const fullRevision = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u;
 
-function git(root, args) {
+function git(root, options, ...operands) {
+  const args = [...options, "--end-of-options", ...operands];
   return execFileSync("/usr/bin/git", args, {
     cwd: root,
     encoding: "utf8",
@@ -35,12 +36,11 @@ export function migrationRevision(root, revision = "HEAD") {
   ) {
     throw new Error("Invalid migration candidate revision");
   }
-  const resolved = git(root, [
-    "rev-parse",
-    "--verify",
-    "--end-of-options",
+  const resolved = git(
+    root,
+    ["rev-parse", "--verify"],
     `${revision}^{commit}`,
-  ]).trim();
+  ).trim();
   assert(fullRevision.test(resolved), "Invalid migration candidate revision");
   return resolved;
 }
@@ -50,7 +50,7 @@ export function migrationInventory(root, revision) {
     typeof revision === "string" && fullRevision.test(revision),
     "Invalid migration inventory revision",
   );
-  const tree = git(root, ["ls-tree", "-r", "-z", revision, "--", directory]);
+  const tree = git(root, ["ls-tree", "-r", "-z"], revision, "--", directory);
   const files = new Map(
     tree
       .split("\0")
@@ -83,7 +83,7 @@ export function migrationInventory(root, revision) {
   const read = (file) => {
     const oid = files.get(file);
     assert(oid, `Missing migration source: ${file}`);
-    return git(root, ["cat-file", "blob", oid]);
+    return git(root, ["cat-file", "blob"], oid);
   };
   const source = read(registryPath);
   const declarations = [
@@ -147,13 +147,13 @@ export function verifyMigrationHistory(
   for (const at of [publishedRevision, candidate]) {
     let type;
     try {
-      type = git(root, ["cat-file", "-t", at]).trim();
+      type = git(root, ["cat-file", "-t"], at).trim();
     } catch {
       /* Missing local history must not trigger an implicit fetch. */
     }
     assert(type === "commit", `Missing local migration history commit: ${at}`);
   }
-  git(root, ["merge-base", "--is-ancestor", publishedRevision, candidate]);
+  git(root, ["merge-base", "--is-ancestor"], publishedRevision, candidate);
   const published = migrationInventory(root, publishedRevision);
   const current = migrationInventory(root, candidate);
   for (const file of published.implementations) {

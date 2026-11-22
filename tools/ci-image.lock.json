@@ -2,5 +2,5 @@
   "version": 2,
   "platforms": ["linux/amd64", "linux/arm64"],
   "image": "ghcr.io/getsituate/situate-ci-linux@sha256:c2f119881ecdbceb889df962108cf9c5c30091eecf7a35830e8701145860d8d8",
-  "inputsSha256": "6bab0d199d7dfabeb32f663397899a6b0ae30f0d46ceda3957be7e53e66ca551"
+  "inputsSha256": "90a4f7effa585e312e11ac9f0c651bcaa963cc909e05ec9f5973b26a06cecfe2"
 }
