@@ -183,7 +183,7 @@ export function checkProduct(browser, origin, proofs, inspect) {
           const chapter = page.locator(`.product-contents a[href="#${id}"]`);
           await chapter.focus();
           await page.keyboard.press("Enter");
-          assert.equal(new URL(page.url()).hash, `#${id}`);
+          await page.waitForURL(`${origin}/product.html#${id}`);
           assert.ok(
             await page
               .locator(`#${id}`)
@@ -261,7 +261,7 @@ export function checkProduct(browser, origin, proofs, inspect) {
         for (const panel of await page.locator(".screen-panel").all())
           assert.ok(await panel.isVisible());
         await page.locator('.product-contents a[href="#choices"]').click();
-        assert.equal(new URL(page.url()).hash, "#choices");
+        await page.waitForURL(`${origin}/product.html#choices`);
         await page.locator(".ending .button").click();
         await page.waitForURL(`${origin}/#download`);
       } finally {
@@ -307,7 +307,7 @@ export function checkProduct(browser, origin, proofs, inspect) {
         await page
           .locator('.product-contents a[href="#plugins"]')
           .press("Enter");
-        assert.equal(new URL(page.url()).hash, "#plugins");
+        await page.waitForURL(`${origin}/product.html#plugins`);
         await page.locator(".workstyle-example").screenshot({
           path: join(
             proofs,
