@@ -54,17 +54,10 @@ function checkWorkflowBootstrap(name, workflow) {
     const block = jobs[index + 1];
     const context = `${name}: ${id}`;
     const steps = block.split(/^ {4}steps:\n/m)[1];
-    if (name === "release-macos.yml" && id === "publish") {
-      assert.equal(steps, undefined, context);
-      assert.match(
-        block,
-        /^ {4}uses: \.\/\.github\/workflows\/publish-macos\.yml$/m,
-      );
-      continue;
-    }
     if (
       (name === "notify-slack.yml" && id === "notify") ||
-      (name === "publish-macos.yml" && id === "notify-release")
+      (["release-macos.yml", "publish-macos.yml"].includes(name) &&
+        id === "notify-release")
     ) {
       assert.equal(steps, undefined, context);
       assert.match(
@@ -164,6 +157,8 @@ function checkWorkflowBootstrap(name, workflow) {
                 "deploy-hosting.yml: production":
                   /^node (?:infrastructure\/production\/immutable\/continuous-deploy\.mjs|tools\/wait-for-hosting\.mjs --select)$/,
                 "publish-macos.yml: publish":
+                  /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|wait-for-hosting\.mjs --probe)$/,
+                "release-macos.yml: publish":
                   /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|wait-for-hosting\.mjs --probe)$/,
               }[context] ??
                 /^node tools\/actions-adapter\.mjs [a-z-]+(?: .*)?$/),

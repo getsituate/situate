@@ -66,10 +66,8 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
           ]
         : []),
     ]);
-    if (name === "publish-macos")
+    if (["publish-macos", "release-macos"].includes(name))
       allowed.add("./.github/workflows/slack-notify.yml");
-    if (name === "release-macos")
-      allowed.add("./.github/workflows/publish-macos.yml");
     if (name === "sonarcloud")
       allowed.add(
         "SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4",
@@ -325,20 +323,19 @@ test("macOS release serializes planning through automatic publication and keeps 
   );
   assert.match(
     job(workflow, "publish"),
-    /uses: \.\/\.github\/workflows\/publish-macos\.yml/,
-  );
-  assert.match(
-    job(workflow, "publish"),
-    /release_id: \$\{\{ needs\.create\.outputs\.release_id \}\}/,
+    /PIPELINE_RELEASE_ID: \$\{\{ needs\.create\.outputs\.release_id \}\}/,
   );
   assert.match(
     job(workflow, "create"),
     /release_id: \$\{\{ steps\.github_release\.outputs\.release_id \}\}/,
   );
-  assert.match(publisher, /workflow_call:/);
   assert.match(publisher, /workflow_dispatch:/);
-  assert.doesNotMatch(publisher, /workflow_run:/);
-  for (const effect of [job(workflow, "create"), job(publisher, "publish")]) {
+  assert.doesNotMatch(publisher, /workflow_run:|workflow_call:/);
+  for (const effect of [
+    job(workflow, "create"),
+    job(workflow, "publish"),
+    job(publisher, "publish"),
+  ]) {
     assert.match(effect, /group: situate-release-effects/);
     assert.match(effect, /cancel-in-progress: false/);
   }
@@ -408,6 +405,24 @@ test("the Slack failure notifier observes repository workflows on main", () => {
   assert.match(workflow, /"pull_request","pull_request_target","merge_group"/);
   assert.match(workflow, /uses: \.\/\.github\/workflows\/slack-notify\.yml/);
   assert.match(workflow, /secrets\.SLACK_FAILURE_WEBHOOK_URL/);
+});
+
+test("automatic publication uses the same protected job as manual recovery", () => {
+  const manual = job(read("publish-macos"), "publish");
+  const automatic = job(read("release-macos"), "publish");
+  assert.match(automatic, /^ {4}environment: macos-publication$/m);
+  assert.doesNotMatch(automatic, /^ {4}uses:/m);
+  assert.equal(
+    automatic
+      .replace(/^ {4}needs: create\n/m, "")
+      .replace(/^ {4}if: .+\n/m, "")
+      .replace("needs.create.outputs.release_id", "inputs.release_id"),
+    manual.replace(/^ {4}if: .+\n/m, ""),
+  );
+  assert.equal(
+    job(read("release-macos"), "notify-release"),
+    job(read("publish-macos"), "notify-release"),
+  );
 });
 
 test("the Slack changelog only follows a successful promotion of a selected release", () => {
