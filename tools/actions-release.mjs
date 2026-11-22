@@ -7,14 +7,14 @@ import {
   trustedReleaseCacheHost,
   releaseCachePaths,
 } from "./release-build-cache.mjs";
-import { assertLatestMain } from "./pipeline-operations.mjs";
+import { readOperation } from "./pipeline-state.mjs";
 
 const repository = "getsituate/situate";
 const positive = /^[1-9][0-9]*$/;
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 export function requireProvisioned(env, workflow) {
-  const expectedPath =
-    workflow === "create" ? "release-macos" : "publish-macos";
+  const automatic = env.GITHUB_EVENT_NAME === "push";
+  const expectedPath = automatic ? "release-macos" : "publish-macos";
   if (
     env.PIPELINE_RELEASE_ENABLED !== "true" ||
     env.GITHUB_REF_PROTECTED !== "true" ||
@@ -22,30 +22,15 @@ export function requireProvisioned(env, workflow) {
     env.GITHUB_REF !== "refs/heads/main" ||
     env.GITHUB_WORKFLOW_REF !==
       `${repository}/.github/workflows/${expectedPath}.yml@refs/heads/main` ||
-    !(workflow === "create"
-      ? env.GITHUB_EVENT_NAME === "push"
-      : ["workflow_dispatch", "workflow_run"].includes(env.GITHUB_EVENT_NAME))
+    !(
+      automatic ||
+      (workflow === "publish" && env.GITHUB_EVENT_NAME === "workflow_dispatch")
+    )
   )
     throw new Error(
       "Release automation is blocked: attested provisioning, protected main and the exact trusted workflow are required.",
     );
 }
-export async function releaseSourceIsCurrent(env, execute) {
-  requireProvisioned(env, "create");
-  if (!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? ""))
-    throw new Error("Invalid release source revision.");
-  try {
-    await assertLatestMain(
-      { repository, source: env.GITHUB_SHA },
-      { environment: env, execute },
-    );
-    return true;
-  } catch (error) {
-    if (error.code !== "RELEASE_SOURCE_SUPERSEDED") throw error;
-    return false;
-  }
-}
-
 function stateDirectory(env, workflow, create = false) {
   if (
     !positive.test(env.GITHUB_RUN_ID ?? "") ||
@@ -233,8 +218,6 @@ export function stageEnvironment(env, workflow, stage) {
     stage === "build" &&
     env.SITUATE_RELEASE_BUILD_CACHE === "1" &&
     trustedReleaseCacheHost(env);
-  if (workflow === "create" && stage === "inputs")
-    names.push("PIPELINE_REQUIRE_LATEST_MAIN");
   if (cacheEnabled)
     names.push(
       "SITUATE_RELEASE_BUILD_CACHE",
@@ -251,7 +234,13 @@ export function stageEnvironment(env, workflow, stage) {
   if (cacheEnabled) environment.CARGO_HOME = releaseCachePaths(env).cargoHome;
   return environment;
 }
-export async function runReleaseStage(env, workflow, stage, execute) {
+export async function runReleaseStage(
+  env,
+  workflow,
+  stage,
+  execute,
+  root = fileURLToPath(new URL("../", import.meta.url)),
+) {
   requireProvisioned(env, workflow);
   const state = stateDirectory(env, workflow);
   const plan = readJson(join(state, "plan.json"));
@@ -303,7 +292,22 @@ export async function runReleaseStage(env, workflow, stage, execute) {
       },
       launch,
     );
-  return launch(environment);
+  await launch(environment);
+  if (stage === "github") {
+    const operation = readOperation(root, plan.operation);
+    const completed = operation.stages.at(-1);
+    const releaseId = String(completed?.output?.releaseId ?? "");
+    if (
+      operation.status !== "paused" ||
+      operation.stages.some(({ status }) => status !== "passed") ||
+      operation.plan.authorizationDigest !== plan.authorizationDigest ||
+      completed?.name !== "github" ||
+      completed.status !== "passed" ||
+      !positive.test(releaseId)
+    )
+      throw new Error("Missing completed GitHub Release identity.");
+    return { release_id: releaseId };
+  }
 }
 export async function prepareReleaseDependencies(
   directory,
@@ -374,92 +378,9 @@ export async function prepareReleaseDependencies(
       { stdio: "inherit" },
     );
 }
-export function resolveProducerRelease(event, execute) {
-  const producer = event.workflow_run;
-  if (
-    !positive.test(String(producer?.id ?? "")) ||
-    !positive.test(String(producer?.run_attempt ?? ""))
-  )
-    throw new Error("Missing exact producer run identity.");
-  const api = (path, extra = []) =>
-    JSON.parse(execute("gh", ["api", `repos/${repository}/${path}`, ...extra]));
-  const run = api(
-    `actions/runs/${producer.id}/attempts/${producer.run_attempt}`,
-  );
-  if (
-    run.id !== producer.id ||
-    run.run_attempt !== producer.run_attempt ||
-    run.repository?.full_name !== repository ||
-    run.head_repository?.full_name !== repository ||
-    run.path !== ".github/workflows/release-macos.yml" ||
-    run.event !== "push" ||
-    run.head_branch !== "main" ||
-    run.conclusion !== "success" ||
-    run.head_sha !== producer.head_sha ||
-    !/^[a-f0-9]{40}$/.test(run.head_sha ?? "")
-  )
-    throw new Error("Untrusted release producer.");
-  const jobs = api(
-    `actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
-  );
-  if (jobs.total_count !== jobs.jobs?.length)
-    throw new Error("Incomplete producer job inventory.");
-  const creator = jobs.jobs.filter(
-    ({ name }) => name === "Create GitHub Release",
-  );
-  if (creator.length !== 1) throw new Error("Missing exact creator job.");
-  if (creator[0].conclusion === "skipped") return null;
-  if (creator[0].conclusion !== "success")
-    throw new Error("Release creation did not succeed.");
-  const pages = api("releases?per_page=100", ["--paginate", "--slurp"]);
-  const releases = pages.flat();
-  if (releases.length > 1000)
-    throw new Error("Release inventory exceeds the supported lookup limit.");
-  const matches = [];
-  for (const release of releases.filter(
-    ({ draft, published_at }) => !draft && published_at,
-  )) {
-    const assets =
-      release.assets?.filter(({ name }) => name === "github-release.json") ??
-      [];
-    if (assets.length !== 1) continue;
-    const asset = assets[0];
-    if (
-      !positive.test(String(asset.id)) ||
-      !Number.isSafeInteger(asset.size) ||
-      asset.size < 1 ||
-      asset.size > 1024 * 1024
-    )
-      throw new Error("Invalid GitHub Release identity evidence.");
-    const evidence = api(`releases/assets/${asset.id}`, [
-      "--header",
-      "Accept: application/octet-stream",
-    ]);
-    if (
-      evidence.identity?.operationId === `actions-${run.id}-${run.run_attempt}`
-    ) {
-      if (
-        evidence.identity.repository !== repository ||
-        evidence.identity.sourceRevision !== run.head_sha ||
-        evidence.identity.tag !== release.tag_name
-      )
-        throw new Error("Release evidence differs from its producer.");
-      matches.push(release);
-    }
-  }
-  if (matches.length !== 1 || !positive.test(String(matches[0].id)))
-    throw new Error("Expected one exact completed producer release.");
-  return String(matches[0].id);
-}
 export function preparePublish(env, execute) {
   requireProvisioned(env, "publish");
-  let releaseId = env.PIPELINE_RELEASE_ID;
-  if (env.GITHUB_EVENT_NAME === "workflow_run")
-    releaseId = resolveProducerRelease(
-      JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8")),
-      execute,
-    );
-  if (releaseId === null) return { selected: false };
+  const releaseId = env.PIPELINE_RELEASE_ID;
   if (!positive.test(releaseId ?? ""))
     throw new Error("Select an exact completed GitHub Release ID.");
   const { state, configuration } = configureRelease(env, "publish");
@@ -483,6 +404,19 @@ export function preparePublish(env, execute) {
     throw new Error(
       "Publication plan differs from the exact selected release.",
     );
+  if (env.GITHUB_EVENT_NAME === "push") {
+    const identity = plan.release?.identity;
+    const prefix = `actions-${env.GITHUB_RUN_ID}-`;
+    if (
+      !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? "") ||
+      identity?.sourceRevision !== env.GITHUB_SHA ||
+      !identity?.operationId?.startsWith(prefix) ||
+      !positive.test(identity.operationId.slice(prefix.length)) ||
+      BigInt(identity.operationId.slice(prefix.length)) >
+        BigInt(env.GITHUB_RUN_ATTEMPT)
+    )
+      throw new Error("Release evidence differs from its producer.");
+  }
   privateJson(join(state, "plan.json"), plan);
   return { selected: true, state, release_id: releaseId };
 }

@@ -24,7 +24,7 @@ export async function main(
     env.GITHUB_REPOSITORY !== "getsituate/situate" ||
     env.GITHUB_REF !== "refs/heads/main" ||
     !revisionPattern.test(revision ?? "") ||
-    (mode && !["--check", "--select", "--probe"].includes(mode))
+    (mode && !["--check", "--select", "--probe", "--release"].includes(mode))
   )
     throw new Error("Hosting readiness requires a trusted main revision.");
   const git = (args) => {
@@ -48,12 +48,13 @@ export async function main(
       "The checkout does not match the hosting readiness revision.",
     );
   const input = { token: env.GH_TOKEN, revision };
-  if (!mode) {
+  if (!mode || mode === "--release") {
     return waitForHosting(input, {
       observe,
       producer,
       wait,
       verifyMain: () => {
+        if (mode === "--release") return;
         if (
           git([
             "ls-remote",

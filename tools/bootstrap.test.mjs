@@ -54,6 +54,14 @@ function checkWorkflowBootstrap(name, workflow) {
     const block = jobs[index + 1];
     const context = `${name}: ${id}`;
     const steps = block.split(/^ {4}steps:\n/m)[1];
+    if (name === "release-macos.yml" && id === "publish") {
+      assert.equal(steps, undefined, context);
+      assert.match(
+        block,
+        /^ {4}uses: \.\/\.github\/workflows\/publish-macos\.yml$/m,
+      );
+      continue;
+    }
     if (
       (name === "notify-slack.yml" && id === "notify") ||
       (name === "publish-macos.yml" && id === "notify-release")
@@ -104,7 +112,7 @@ function checkWorkflowBootstrap(name, workflow) {
         commands,
         [
           "python3 tools/pipeline-bootstrap.py",
-          "node tools/wait-for-hosting.mjs",
+          "node tools/wait-for-hosting.mjs --release",
         ],
         context,
       );

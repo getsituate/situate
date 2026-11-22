@@ -10,46 +10,48 @@ const source = await readFile(
 const catalogWarning =
   "The model list could not be refreshed. You can still choose a compatible model manually. Your saved choice has not changed.";
 
-test("sending waits for an enabled editable composer and uses the observed element", async () => {
+test("sending waits for an editable composer with the intended draft", async () => {
   const sendSource = source.slice(
     source.indexOf("  async function send(text) {"),
     source.indexOf("  async function queueInput("),
   );
-  const input = { disabled: true, readOnly: false };
-  let current = input;
-  let filled = false;
-  let sent = false;
+  const input = { disabled: true, readOnly: false, value: "Saved assignment" };
+  const sent = [];
+  const control = { disabled: true, click: () => sent.push(input.value) };
   await runInNewContext(
     `(async () => { ${sendSource}; await send('Synthetic request'); })()`,
     {
-      field: () => current,
+      field: () => input,
       wait: async (name, check) => {
-        assert.equal(name, "composer-ready");
+        if (name === "composer-ready") {
+          assert.equal(check(), false);
+          input.disabled = false;
+          input.readOnly = true;
+          assert.equal(check(), false);
+          input.readOnly = false;
+          return check();
+        }
+        assert.equal(name, "control-send-message");
+        assert.equal(input.value, "Synthetic request");
         assert.equal(check(), false);
-        input.disabled = false;
-        input.readOnly = true;
+        control.disabled = false;
+        input.value = "Saved assignment";
         assert.equal(check(), false);
-        input.readOnly = false;
-        const observed = check();
-        assert.equal(observed, input);
-        current = null;
-        return observed;
+        assert.deepEqual(sent, []);
+        input.value = "Synthetic request";
+        assert.equal(check(), true);
       },
       fill: (element, text) => {
         assert.equal(element, input);
-        assert.equal(element.disabled, false);
-        assert.equal(element.readOnly, false);
-        assert.equal(text, "Synthetic request");
-        filled = true;
+        element.value = text;
       },
-      click: async (name) => {
-        assert.equal(filled, true);
-        assert.equal(name, "Send message");
-        sent = true;
+      button: (label) => {
+        assert.equal(label, "Send message");
+        return control;
       },
     },
   );
-  assert.equal(sent, true);
+  assert.deepEqual(sent, ["Synthetic request"]);
 });
 
 test("stopping waits for activity presentation to clear after draft recall", async () => {

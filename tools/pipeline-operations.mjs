@@ -309,57 +309,10 @@ function publish(root, args, environment = process.env) {
   );
 }
 
-export async function assertLatestMain(
-  plan,
-  { environment = process.env, execute = execFileSync } = {},
-) {
-  assert.equal(
-    plan.repository,
-    "getsituate/situate",
-    "Unexpected release repository",
-  );
-  const ref = JSON.parse(
-    execute(
-      "gh",
-      [
-        "api",
-        "--hostname",
-        "github.com",
-        "--method",
-        "GET",
-        "repos/getsituate/situate/git/ref/heads/main",
-      ],
-      {
-        env: publicationEnvironment(environment),
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 15_000,
-        maxBuffer: 65536,
-      },
-    ),
-  );
-  assert(
-    ref.ref === "refs/heads/main" &&
-      ref.object?.type === "commit" &&
-      sha.test(ref.object.sha),
-    "Current main identity is unavailable",
-  );
-  if (ref.object.sha !== plan.source) {
-    const error = new Error("Superseded unclaimed release source");
-    error.code = "RELEASE_SOURCE_SUPERSEDED";
-    throw error;
-  }
-}
-
 export async function productionStages(
   root,
   plan,
-  {
-    environment = process.env,
-    assertCurrentSource = assertLatestMain,
-    checkpointStore,
-    publicationAdapter,
-  } = {},
+  { environment = process.env, checkpointStore, publicationAdapter } = {},
 ) {
   const configRecord = readConfiguration(root, plan.configurationFile, {
     environment,
@@ -567,8 +520,6 @@ export async function productionStages(
     compatibility: async ({ operation, resume = false }) => {
       const claim = fresh ? null : await coordinator();
       if (resume && claim) await claim.inspect();
-      if (!resume && environment.PIPELINE_REQUIRE_LATEST_MAIN === "true")
-        await assertCurrentSource(plan, { environment });
       if (claim) await claim.claim({ resume });
       const currentBaseline = await readBaseline(root, {
         repository: plan.repository,

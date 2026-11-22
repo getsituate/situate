@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -17,12 +18,11 @@ import {
   prepareCreate,
   preparePublish,
   prepareReleaseDependencies,
-  releaseSourceIsCurrent,
   requireProvisioned,
-  resolveProducerRelease,
   runReleaseStage,
   stageEnvironment,
 } from "./actions-release.mjs";
+import { operationDirectory, sealPlan } from "./pipeline-state.mjs";
 
 const source = "a".repeat(40);
 const sourcePlan = {
@@ -137,49 +137,6 @@ test("enabled delivery requires exact protected workflow and attested private co
   );
   assert.throws(() => configureRelease(env, "create"), /EEXIST/);
 });
-test("release selection skips only a superseded protected main revision", async (t) => {
-  const env = { ...environment(t), GITHUB_SHA: source, GH_TOKEN: "synthetic" };
-  const readMain =
-    (sha, type = "commit") =>
-    (command, args, options) => {
-      assert.equal(command, "gh");
-      assert.equal(args.at(-1), "repos/getsituate/situate/git/ref/heads/main");
-      assert.equal(options.env.GH_TOKEN, "synthetic");
-      assert.equal(options.env.SITUATE_RELEASE_CONFIG_JSON, undefined);
-      return JSON.stringify({
-        ref: "refs/heads/main",
-        object: { type, sha },
-      });
-    };
-  assert.equal(await releaseSourceIsCurrent(env, readMain(source)), true);
-  assert.equal(
-    await releaseSourceIsCurrent(env, readMain("b".repeat(40))),
-    false,
-  );
-  await assert.rejects(
-    releaseSourceIsCurrent(env, readMain(source, "tag")),
-    /Current main identity is unavailable/,
-  );
-  await assert.rejects(
-    releaseSourceIsCurrent(env, () => {
-      throw new Error("API unavailable");
-    }),
-    /API unavailable/,
-  );
-  for (const changes of [
-    { GITHUB_SHA: "" },
-    { GITHUB_REF_PROTECTED: "false" },
-    { PIPELINE_RELEASE_ENABLED: "false" },
-  ]) {
-    await assert.rejects(
-      releaseSourceIsCurrent({ ...env, ...changes }, () =>
-        assert.fail("Unexpected lookup"),
-      ),
-      /Invalid release source revision|blocked/,
-    );
-  }
-});
-
 test("legacy recovery metadata remains readable without validating operational recovery", (t) => {
   const env = environment(t);
   const bytes = JSON.stringify({
@@ -194,6 +151,21 @@ test("legacy recovery metadata remains readable without validating operational r
   assert.equal(readFileSync(configuration, "utf8"), bytes);
 });
 
+function recordGitHubStage(root, plan, status = "passed") {
+  const directory = operationDirectory(root, plan.operation);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, "operation.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      operationId: plan.operation,
+      plan,
+      status: "paused",
+      stages: [{ name: "github", status, output: { releaseId: 314 } }],
+    }),
+  );
+}
+
 test("creator retains original receipts and authorizes final staged plan without recovery evidence or rebinding", async (t) => {
   const env = environment(t);
   const receipts = [
@@ -207,6 +179,11 @@ test("creator retains original receipts and authorizes final staged plan without
     },
   ];
   const calls = [];
+  const sealed = sealPlan({
+    ...sourcePlan,
+    operation: "actions-42-2",
+    verificationPlan: sourcePlan,
+  });
   const execute = (_command, args, options) => {
     assert.equal(options.env.PIPELINE_FRESH_RELEASE, "1");
     calls.push(args);
@@ -215,13 +192,9 @@ test("creator retains original receipts and authorizes final staged plan without
         readFileSync(args[args.indexOf("--verification-plan") + 1], "utf8"),
       );
       assert.deepEqual(original, sourcePlan);
-      return JSON.stringify({
-        ...sourcePlan,
-        operation: "actions-42-2",
-        verificationPlan: original,
-        authorizationDigest: "d".repeat(64),
-      });
+      return JSON.stringify(sealed);
     }
+    if (args.at(-1) === "github") recordGitHubStage(env.RUNNER_TEMP, sealed);
   };
   const { state } = await prepareCreate(env, execute, async (plan) => {
     assert.deepEqual(plan, sourcePlan);
@@ -231,13 +204,28 @@ test("creator retains original receipts and authorizes final staged plan without
     JSON.parse(readFileSync(join(state, "receipts.json"), "utf8")),
     receipts,
   );
-  for (const stage of ["inputs", "build", "qualify", "github"])
-    await runReleaseStage(env, "create", stage, execute);
+  for (const stage of ["inputs", "build", "qualify"])
+    assert.equal(
+      await runReleaseStage(env, "create", stage, execute),
+      undefined,
+    );
+  assert.deepEqual(
+    await runReleaseStage(env, "create", "github", execute, env.RUNNER_TEMP),
+    { release_id: "314" },
+  );
   assert.equal(calls.length, 5);
   for (const args of calls.slice(1)) {
     assert.ok(args.includes("--receipts"));
-    assert.equal(args[args.indexOf("--confirm") + 1], "d".repeat(64));
+    assert.equal(
+      args[args.indexOf("--confirm") + 1],
+      sealed.authorizationDigest,
+    );
   }
+  recordGitHubStage(env.RUNNER_TEMP, sealed, "failed");
+  await assert.rejects(
+    runReleaseStage(env, "create", "github", () => {}, env.RUNNER_TEMP),
+    /Missing completed GitHub Release identity/,
+  );
   await assert.rejects(
     () => runReleaseStage(env, "create", "skip-qualification", execute),
     /Unsupported/,
@@ -378,11 +366,15 @@ test("hosted stages forward shared SSH inputs only to operations that need the h
       SSH_AUTH_SOCK: "/synthetic/agent",
     };
     const { state } = configureRelease(env, workflow);
-    writeFileSync(
-      join(state, "plan.json"),
-      JSON.stringify({ ...sourcePlan, workflow }),
-      { mode: 0o600 },
-    );
+    const plan = sealPlan({
+      ...sourcePlan,
+      workflow,
+      operation: "actions-42-2",
+    });
+    writeFileSync(join(state, "plan.json"), JSON.stringify(plan), {
+      mode: 0o600,
+    });
+    if (workflow === "create") recordGitHubStage(state, plan);
     const execute = (_command, _args, { env: child }) => {
       assert.equal(
         child.SITUATE_RELEASE_SSH_PRIVATE_KEY,
@@ -400,7 +392,7 @@ test("hosted stages forward shared SSH inputs only to operations that need the h
     for (const stage of workflow === "create"
       ? ["inputs", "build", "qualify", "github"]
       : [undefined])
-      await runReleaseStage(env, workflow, stage, execute);
+      await runReleaseStage(env, workflow, stage, execute, state);
     await assert.rejects(
       () =>
         runReleaseStage(
@@ -556,60 +548,39 @@ test("publisher selects exact explicit release and calls standalone publish, nev
   assert.ok(!calls[1].includes("--receipts"));
   assert.ok(!calls.flat().some((value) => /build|latest/.test(value)));
 });
-function producerFixture() {
-  const run = {
-    id: 42,
-    run_attempt: 2,
-    repository: { full_name: "getsituate/situate" },
-    head_repository: { full_name: "getsituate/situate" },
-    path: ".github/workflows/release-macos.yml",
-    event: "push",
-    head_branch: "main",
-    conclusion: "success",
-    head_sha: source,
-  };
-  const release = {
-    id: 314,
-    tag_name: "v2026.11.1",
-    draft: false,
-    published_at: "2026-11-13T00:00:00Z",
-    assets: [{ id: 2718, name: "github-release.json", size: 200 }],
-  };
-  const evidence = {
-    identity: {
-      repository: "getsituate/situate",
-      operationId: "actions-42-2",
-      sourceRevision: source,
-      tag: release.tag_name,
-    },
-  };
-  const jobs = {
-    total_count: 1,
-    jobs: [{ name: "Create GitHub Release", conclusion: "success" }],
-  };
-  return { run, release, evidence, jobs, event: { workflow_run: run } };
-}
-test("automatic handoff binds exact repository, workflow attempt, source, operation and completed release", () => {
-  const fixture = producerFixture();
-  const execute = (_command, args) => {
-    const url = args[1];
-    if (url.includes("/jobs?")) return JSON.stringify(fixture.jobs);
-    if (url.includes("releases/assets/"))
-      return JSON.stringify(fixture.evidence);
-    if (url.includes("releases?")) return JSON.stringify([[fixture.release]]);
-    return JSON.stringify(fixture.run);
-  };
-  assert.equal(resolveProducerRelease(fixture.event, execute), "314");
-  fixture.evidence.identity.sourceRevision = "f".repeat(40);
+test("automatic publication only accepts an exact release from the same run and source", (t) => {
+  for (const [operationId, sourceRevision, accepted] of [
+    ["actions-42-2", source, true],
+    ["actions-42-1", source, true],
+    ["actions-42-3", source, false],
+    ["actions-417-2", source, false],
+    ["actions-42-2", "f".repeat(40), false],
+  ]) {
+    const env = {
+      ...environment(t),
+      GITHUB_SHA: source,
+      PIPELINE_RELEASE_ID: "314",
+    };
+    const execute = (_command, args) => {
+      assert.equal(args[args.indexOf("--release-id") + 1], "314");
+      return JSON.stringify({
+        workflow: "publish",
+        repository: "getsituate/situate",
+        releaseId: "314",
+        release: { identity: { operationId, sourceRevision } },
+      });
+    };
+    if (accepted) assert.equal(preparePublish(env, execute).release_id, "314");
+    else
+      assert.throws(
+        () => preparePublish(env, execute),
+        /differs from its producer/,
+      );
+  }
+  const env = environment(t, "publish");
   assert.throws(
-    () => resolveProducerRelease(fixture.event, execute),
-    /differs/,
+    () => requireProvisioned({ ...env, GITHUB_EVENT_NAME: "push" }, "publish"),
+    /blocked/,
   );
-  fixture.jobs.jobs[0].conclusion = "skipped";
-  assert.equal(resolveProducerRelease(fixture.event, execute), null);
-  fixture.run.path = ".github/workflows/verify.yml";
-  assert.throws(
-    () => resolveProducerRelease(fixture.event, execute),
-    /Untrusted/,
-  );
+  assert.throws(() => requireProvisioned(env, "create"), /blocked/);
 });

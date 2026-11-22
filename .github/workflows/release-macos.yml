@@ -32,7 +32,6 @@ jobs:
         run: node tools/actions-adapter.mjs release-selection --workflow create
         env:
           PIPELINE_RELEASE_ENABLED: ${{ vars.MACOS_RELEASE_ENABLED }}
-          GH_TOKEN: ${{ github.token }}
       - id: plan
         if: steps.selection.outputs.enabled == 'true'
         run: python3 tools/pipeline-container.py actions plan --workflow create
@@ -414,7 +413,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/wait-for-hosting.mjs
+      - run: node tools/wait-for-hosting.mjs --release
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -445,6 +444,8 @@ jobs:
     runs-on: macos-latest
     environment: macos-release
     timeout-minutes: 180
+    outputs:
+      release_id: ${{ steps.github_release.outputs.release_id }}
     permissions:
       contents: write
       deployments: read
@@ -492,7 +493,6 @@ jobs:
       - run: node tools/actions-adapter.mjs prepare-release
       - run: node tools/actions-adapter.mjs create-stage --stage inputs
         env:
-          PIPELINE_REQUIRE_LATEST_MAIN: "true"
           GH_TOKEN: ${{ github.token }}
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
@@ -538,8 +538,21 @@ jobs:
       - run: node tools/wait-for-hosting.mjs --check
         env:
           GH_TOKEN: ${{ github.token }}
-      - run: node tools/actions-adapter.mjs create-stage --stage github
+      - id: github_release
+        run: node tools/actions-adapter.mjs create-stage --stage github
         env:
           GH_TOKEN: ${{ github.token }}
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
+
+  publish:
+    needs: create
+    if: ${{ !cancelled() && needs.create.result == 'success' }}
+    uses: ./.github/workflows/publish-macos.yml
+    permissions:
+      contents: read
+      deployments: read
+    with:
+      release_id: ${{ needs.create.outputs.release_id }}
+    secrets:
+      SLACK_RELEASE_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
