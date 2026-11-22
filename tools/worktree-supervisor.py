@@ -245,16 +245,38 @@ def private_directory(path, error, *, parent_fd=None):
         os.close(fd)
 
 
+@contextmanager
+def coordination_directory(base):
+    error = "The coordination directory must be private and owned by the current user."
+    if base is not None:
+        base.mkdir(mode=0o700, exist_ok=True)
+        with private_directory(base, error) as fd:
+            yield fd
+        return
+
+    # Ignore TMPDIR so all worktrees on the host share the same lease directory.
+    parent = os.open(Path("/tmp").resolve(), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(parent)
+        if info.st_uid != 0 or not info.st_mode & stat.S_ISVTX:
+            raise ValueError("The system temporary directory must be root-owned and sticky.")
+        name = "situate-coordination-" + str(os.getuid())
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent)
+        except FileExistsError:
+            pass
+        with private_directory(name, error, parent_fd=parent) as fd:
+            yield fd
+    finally:
+        os.close(parent)
+
+
 def acquire(resource, directory, base=None, child=None, pending=None):
-    # App fixtures override TMPDIR; the desktop lease must still be machine-local.
-    if base is None:
-        base = Path("/tmp").resolve() / ("situate-coordination-" + str(os.getuid()))
-    base.mkdir(mode=0o700, exist_ok=True)
     keys = ([f"build:{index}" for index in range(build_slots())] if resource == "build" else
             [resource if resource == "desktop" else "worktree:" + str(worktree_root(directory))])
     descriptors = []
     try:
-        with private_directory(base, "The coordination directory must be private and owned by the current user.") as base_fd:
+        with coordination_directory(base) as base_fd:
             for key in keys:
                 name = hashlib.sha256(key.encode()).hexdigest() + ".lock"
                 flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK

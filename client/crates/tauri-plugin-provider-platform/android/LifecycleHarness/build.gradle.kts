@@ -16,6 +16,7 @@ android {
         versionCode = 1
         versionName = "1"
     }
+    buildTypes.named("release") { isMinifyEnabled = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
