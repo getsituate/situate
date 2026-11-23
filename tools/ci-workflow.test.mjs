@@ -308,7 +308,14 @@ test("the desktop CD builds Windows for the reserved version before creating the
   const build = job(workflow, "windows-build");
   const creator = job(workflow, "create");
   assert.match(build, /environment: windows-release/);
-  assert.match(build, /github\.ref_protected/);
+  assert.match(
+    build,
+    /github\.ref_protected && needs\.plan\.outputs\.enabled == 'true' && needs\.plan\.outputs\.app_impact == 'true'/,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /WINDOWS_RELEASE_ENABLED|needs\.plan\.outputs\.windows/,
+  );
   assert.match(
     build,
     /target: x86_64-pc-windows-msvc[\s\S]*target: aarch64-pc-windows-msvc/,
@@ -332,7 +339,7 @@ test("the desktop CD builds Windows for the reserved version before creating the
   );
   assert.match(
     creator,
-    /actions-windows-release\.mjs collect[\s\S]*create-stage --stage github/,
+    /- run: node tools\/actions-windows-release\.mjs collect[\s\S]*create-stage --stage github/,
   );
 });
 

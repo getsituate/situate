@@ -691,11 +691,7 @@ export async function productionStages(
       const github =
         publicationAdapter?.github ?? githubAdapter({ environment });
       let windowsNotes;
-      if (environment.SITUATE_WINDOWS_RELEASE_ENABLED === "true") {
-        assert(
-          fresh,
-          "Combined Windows releases require the integrated CD workflow",
-        );
+      if (fresh) {
         const { assembleWindowsRelease } =
           await import("../client/scripts/windows-release.mjs");
         const { qualifiedWindowsAssets } =

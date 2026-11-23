@@ -21,7 +21,6 @@ jobs:
       plan: ${{ steps.plan.outputs.plan }}
       digest: ${{ steps.plan.outputs.digest }}
       app_impact: ${{ steps.plan.outputs.app_impact }}
-      windows: ${{ vars.WINDOWS_RELEASE_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -421,7 +420,7 @@ jobs:
   windows-build:
     name: Build Windows (${{ matrix.arch }})
     needs: [plan, required, hosting-ready]
-    if: needs.plan.outputs.windows == 'true' && github.ref_protected
+    if: github.ref_protected && needs.plan.outputs.enabled == 'true' && needs.plan.outputs.app_impact == 'true'
     runs-on: windows-2025
     environment: windows-release
     timeout-minutes: 150
@@ -513,7 +512,7 @@ jobs:
       cancel-in-progress: false
     runs-on: macos-latest
     environment: macos-release
-    timeout-minutes: ${{ needs.plan.outputs.windows == 'true' && 360 || 180 }}
+    timeout-minutes: 360
     outputs:
       release_id: ${{ steps.github_release.outputs.release_id }}
     permissions:
@@ -567,10 +566,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
-      - if: needs.plan.outputs.windows == 'true'
-        run: node tools/actions-windows-release.mjs reservation
-      - if: needs.plan.outputs.windows == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - run: node tools/actions-windows-release.mjs reservation
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows-reservation-${{ github.run_attempt }}
           path: ${{ runner.temp }}/windows-release-inputs/reservation.json
@@ -633,8 +630,7 @@ jobs:
         env:
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
-      - if: needs.plan.outputs.windows == 'true'
-        run: node tools/actions-windows-release.mjs collect
+      - run: node tools/actions-windows-release.mjs collect
         env:
           GH_TOKEN: ${{ github.token }}
       - run: node tools/wait-for-hosting.mjs --check
@@ -643,7 +639,6 @@ jobs:
       - id: github_release
         run: node tools/actions-adapter.mjs create-stage --stage github
         env:
-          SITUATE_WINDOWS_RELEASE_ENABLED: ${{ needs.plan.outputs.windows }}
           SITUATE_WINDOWS_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_WINDOWS_UPDATER_PUBLIC_KEY }}
           GH_TOKEN: ${{ github.token }}
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}

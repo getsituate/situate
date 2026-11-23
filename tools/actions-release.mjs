@@ -200,7 +200,6 @@ export function stageEnvironment(env, workflow, stage) {
     names.push("SITUATE_UPDATER_PUBLIC_KEY", "APPLE_TEAM_ID");
   if (workflow === "create" && stage === "github")
     names.push(
-      "SITUATE_WINDOWS_RELEASE_ENABLED",
       "SITUATE_WINDOWS_X64",
       "SITUATE_WINDOWS_ARM64",
       "SITUATE_WINDOWS_QUALIFICATION_FILE",

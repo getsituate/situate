@@ -61,7 +61,7 @@ test("publication creates a private download root and rejects linked storage", a
   assert.equal(calls.length, 1);
 });
 
-test("hosted GitHub creation bypasses recovery; legacy local creation retains its checkpoints", async (t) => {
+test("hosted GitHub creation requires Windows evidence; legacy local creation retains its checkpoints", async (t) => {
   for (const path of ["ordinary", "reconcile", "hosted"])
     for (const failure of path === "hosted"
       ? ["none"]
@@ -168,8 +168,8 @@ test("hosted GitHub creation bypasses recovery; legacy local creation retains it
       if (path === "hosted") {
         assert.equal(stages.persistIntent, undefined);
         assert.equal(stages.persistOutcome, undefined);
-        assert.equal((await invoke()).releaseId, 42);
-        assert.deepEqual(calls, ["publish"]);
+        await assert.rejects(invoke(), /Missing Windows qualification receipt/);
+        assert.deepEqual(calls, []);
       } else if (failure !== "none") {
         await assert.rejects(invoke(), /terminal/);
         assert.deepEqual(calls, ["publish", "checkpoint"]);

@@ -82,7 +82,7 @@ The app's history was sealed before signing from approved declarations and retai
 
 ## Windows direct releases
 
-The protected-main release workflow builds the macOS packages and, when the repository variable `WINDOWS_RELEASE_ENABLED` is `true`, the x64 and ARM64 Windows NSIS installers for the same reserved version and checkout. It does not start a separate Windows workflow. Leave the variable unset until the Windows signing and qualification environments are ready.
+The protected-main release workflow builds the macOS packages and the x64 and ARM64 Windows NSIS installers for the same reserved version and checkout. Windows builds start automatically as part of the same run.
 
 Restrict `windows-release` and `windows-qualification` to `main`. `windows-release` supplies `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. Set `SITUATE_WINDOWS_UPDATER_PUBLIC_KEY` in `macos-release` to the same public key so the shared publisher can verify Windows signatures without access to the Windows private key. Do not assign the private key to the qualification environment.
 
