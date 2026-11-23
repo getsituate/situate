@@ -1061,7 +1061,7 @@ export function dependencyOwnerBirth(pid) {
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `$ErrorActionPreference = 'Stop'; try { $process = Get-Process -Id ${pid} } catch { if ($_.FullyQualifiedErrorId -notlike 'NoProcessFoundForGivenId,*') { throw }; return }; $start = $process.StartTime; if (!$start) { throw 'Cannot identify process start time' }; $start.ToUniversalTime().Ticks`,
+      `$ErrorActionPreference = 'Stop'; try { $process = Get-Process -Id ${pid} } catch { if ($_.FullyQualifiedErrorId -notlike 'NoProcessFoundForGivenId,*') { throw }; exit 0 }; $start = $process.StartTime; if (!$start) { throw 'Cannot identify process start time' }; $start.ToUniversalTime().Ticks`,
     ],
     { encoding: "utf8", timeout: 30_000 },
   ).trim();
