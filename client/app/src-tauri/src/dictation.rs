@@ -16,7 +16,7 @@ struct State {
     model: String,
     progress: u64,
     owner: Option<Owner>,
-    #[cfg(all(windows, target_arch = "x86_64"))]
+    #[cfg(windows)]
     session: windows::Session,
 }
 impl Default for State {
@@ -25,7 +25,7 @@ impl Default for State {
             model: "missing".into(),
             progress: 0,
             owner: None,
-            #[cfg(all(windows, target_arch = "x86_64"))]
+            #[cfg(windows)]
             session: windows::Session::default(),
         }
     }
@@ -48,10 +48,10 @@ impl State {
 pub(crate) struct Dictation(Mutex<State>);
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(all(windows, target_arch = "x86_64"))]
+#[cfg(windows)]
 mod windows;
 
-#[cfg(not(all(windows, target_arch = "x86_64")))]
+#[cfg(not(windows))]
 fn command(action: &str, id: &str) {
     #[cfg(target_os = "macos")]
     macos::command(action, id);
@@ -59,7 +59,7 @@ fn command(action: &str, id: &str) {
     let _ = (action, id);
 }
 
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 fn receive(app: &tauri::AppHandle, event: Value) {
     let capability = app.state::<Dictation>();
     let Ok(mut state) = capability.0.lock() else {
@@ -102,7 +102,7 @@ fn receive(app: &tauri::AppHandle, event: Value) {
         }
         if event["phase"] == "finished" {
             let window = owner.window.clone();
-            #[cfg(all(windows, target_arch = "x86_64"))]
+            #[cfg(windows)]
             let event = if state.session.discard.is_cancelled() {
                 json!({ "id": event["id"], "phase": "finished" })
             } else {
@@ -123,9 +123,9 @@ fn receive(app: &tauri::AppHandle, event: Value) {
 pub(crate) fn setup(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     macos::setup(app);
-    #[cfg(all(windows, target_arch = "x86_64"))]
+    #[cfg(windows)]
     windows::setup(app);
-    #[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = app;
 }
 
@@ -150,9 +150,9 @@ pub(crate) fn forget_window(app: &tauri::AppHandle, window: &str) {
         && let Some(owner) = &state.owner
         && owner.window == window
     {
-        #[cfg(all(windows, target_arch = "x86_64"))]
+        #[cfg(windows)]
         state.session.discard.cancel();
-        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        #[cfg(not(windows))]
         command("discard", &owner.id);
     }
 }
@@ -163,13 +163,13 @@ pub(crate) async fn discard_conversation(
     conversation: &str,
 ) -> Result<(), String> {
     discard_target(&app.state::<Dictation>(), scope, conversation, |id| {
-        #[cfg(all(windows, target_arch = "x86_64"))]
+        #[cfg(windows)]
         if let Ok(state) = app.state::<Dictation>().0.lock()
             && state.owner.as_ref().is_some_and(|owner| owner.id == id)
         {
             state.session.discard.cancel();
         }
-        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        #[cfg(not(windows))]
         command("discard", id);
     })
     .await
@@ -212,7 +212,7 @@ async fn discard_target(
     .map_err(|_| "dictation.failed")?
 }
 
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 pub(crate) async fn stop_for_update(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<Dictation>();
     let id = state
@@ -235,7 +235,7 @@ pub(crate) async fn stop_for_update(app: &tauri::AppHandle) -> Result<(), String
     wait_until_idle(&state).await
 }
 
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 async fn wait_until_idle(state: &Dictation) -> Result<(), String> {
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
@@ -264,18 +264,18 @@ pub(crate) fn dictation_snapshot(
     let state = capability.0.lock().map_err(|_| "dictation.failed")?;
     Ok(json!({
         "supported": supported(&app),
-        "mobileDownload": cfg!(all(windows, target_arch = "x86_64")),
+        "mobileDownload": cfg!(windows),
         "model": state.model, "progress": state.progress, "busy": state.owner.is_some(),
         "owner": state.owner.as_ref().filter(|o| o.window == window.label()),
     }))
 }
 
 fn supported(app: &tauri::AppHandle) -> bool {
-    #[cfg(all(windows, target_arch = "x86_64"))]
+    #[cfg(windows)]
     {
         app.try_state::<windows::Paths>().is_some()
     }
-    #[cfg(not(all(windows, target_arch = "x86_64")))]
+    #[cfg(not(windows))]
     {
         let _ = app;
         cfg!(target_os = "macos")
@@ -308,13 +308,13 @@ pub(crate) fn dictation_start(
         conversation,
         phase: "permission".into(),
     })?;
-    #[cfg(all(windows, target_arch = "x86_64"))]
+    #[cfg(windows)]
     {
         state.session = windows::Session::default();
         windows::start(&app, &id, state.session.clone());
     }
     drop(state);
-    #[cfg(not(all(windows, target_arch = "x86_64")))]
+    #[cfg(not(windows))]
     command("start", &id);
     let _ = app.emit("dictation-changed", ());
     Ok(())
@@ -328,9 +328,9 @@ pub(crate) fn dictation_control(
     id: Option<String>,
 ) -> Result<(), String> {
     if action == "retry" || action == "download" {
-        #[cfg(all(windows, target_arch = "x86_64"))]
+        #[cfg(windows)]
         windows::retry(&app, &action);
-        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        #[cfg(not(windows))]
         if action == "retry" {
             command("retry", "");
         }
@@ -347,13 +347,13 @@ pub(crate) fn dictation_control(
     if !state.authorized(window.label(), id.as_deref()) {
         return Err("dictation.failed".into());
     }
-    #[cfg(all(windows, target_arch = "x86_64"))]
+    #[cfg(windows)]
     if action == "discard" {
         state.session.discard.cancel();
     } else {
         state.session.stop.cancel();
     }
-    #[cfg(not(all(windows, target_arch = "x86_64")))]
+    #[cfg(not(windows))]
     command(&action, id.as_deref().unwrap_or_default());
     Ok(())
 }

@@ -454,7 +454,7 @@ pub fn forget_window(app: &tauri::AppHandle, window: &str) {
     });
 }
 
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 pub(crate) fn application_event<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     mut event: EventInput,

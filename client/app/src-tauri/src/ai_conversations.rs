@@ -1764,7 +1764,7 @@ impl Conversations {
             })
             || !self.checks.lock().map_err(|_| NETWORK_ERROR)?.is_empty())
     }
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     pub(crate) async fn update_quiescence(&self) -> Result<UpdateQuiescence, String> {
         self.recovery_quiescence(None).await
     }

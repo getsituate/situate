@@ -1,10 +1,10 @@
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 mod cache;
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 mod install;
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 mod lifecycle;
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 mod native;
 mod policy;
 
@@ -60,7 +60,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 mod diagnostics;
 
 #[derive(Clone, Serialize)]
@@ -79,9 +79,9 @@ pub(crate) struct Snapshot {
 }
 pub(crate) struct Updates {
     snapshot: Mutex<Snapshot>,
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     native: Mutex<Option<std::sync::Arc<native::Native>>>,
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     preparation: lifecycle::Preparation,
 }
 impl Updates {
@@ -90,10 +90,7 @@ impl Updates {
             snapshot: Mutex::new(Snapshot {
                 supported: policy::direct(
                     option_env!("SITUATE_DISTRIBUTION"),
-                    cfg!(any(
-                        target_os = "macos",
-                        all(windows, target_arch = "x86_64")
-                    )),
+                    cfg!(any(target_os = "macos", windows)),
                 ),
                 installed_version: version,
                 phase: Phase::Current,
@@ -105,9 +102,9 @@ impl Updates {
                 error: None,
                 running_actions: false,
             }),
-            #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+            #[cfg(any(target_os = "macos", windows))]
             native: Mutex::new(None),
-            #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+            #[cfg(any(target_os = "macos", windows))]
             preparation: lifecycle::Preparation::default(),
         }
     }
@@ -122,15 +119,15 @@ impl Updates {
 pub(crate) fn setup(app: &tauri::AppHandle) {
     let state = Updates::new(app.package_info().version.to_string());
     app.manage(state);
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     native::setup(app);
 }
 pub(crate) fn window_changed(app: &tauri::AppHandle, window: &str) {
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     if let Some(state) = app.try_state::<Updates>() {
         state.preparation.window_changed(app, window);
     }
-    #[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = (app, window);
 }
 #[cfg(all(test, target_os = "macos"))]
@@ -153,7 +150,7 @@ pub(crate) fn seal_test_admission<R: tauri::Runtime>(app: &tauri::AppHandle<R>) 
 }
 
 pub(crate) fn admission_held<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     {
         app.try_state::<Updates>().is_some_and(|s| {
             s.preparation
@@ -161,7 +158,7 @@ pub(crate) fn admission_held<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bo
                 .load(std::sync::atomic::Ordering::Acquire)
         })
     }
-    #[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = app;
         false
@@ -170,7 +167,7 @@ pub(crate) fn admission_held<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bo
 pub(crate) fn ensure_mutation_admitted<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     if app.try_state::<Updates>().is_some_and(|state| {
         state
             .preparation
@@ -179,7 +176,7 @@ pub(crate) fn ensure_mutation_admitted<R: tauri::Runtime>(
     }) {
         return Err("native.updates.busy".into());
     }
-    #[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = app;
     Ok(())
 }
@@ -199,9 +196,9 @@ pub(crate) fn updates_snapshot<R: tauri::Runtime>(
 }
 #[tauri::command]
 pub(crate) fn updates_check(app: tauri::AppHandle) -> Result<Snapshot, String> {
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     native::service(&app)?.check(app.clone(), true);
-    #[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     return Err("native.updates.unsupported".into());
     #[allow(unreachable_code)]
     updates_snapshot(app)
@@ -213,14 +210,14 @@ pub(crate) fn updates_install(
     artifact_id: String,
     force: Option<bool>,
 ) -> Result<Snapshot, String> {
-    #[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+    #[cfg(any(target_os = "macos", windows))]
     native::service(&app)?.install(
         app.clone(),
         abort_running,
         artifact_id,
         force.unwrap_or(false),
     )?;
-    #[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (abort_running, artifact_id, force);
         return Err("native.updates.unsupported".into());
@@ -228,13 +225,13 @@ pub(crate) fn updates_install(
     #[allow(unreachable_code)]
     updates_snapshot(app)
 }
-#[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+#[cfg(not(any(target_os = "macos", windows)))]
 #[tauri::command]
 pub(crate) fn updates_preparation_status(token: String) -> Result<serde_json::Value, String> {
     let _ = token;
     Err("native.updates.unsupported".into())
 }
-#[cfg(not(any(target_os = "macos", all(windows, target_arch = "x86_64"))))]
+#[cfg(not(any(target_os = "macos", windows)))]
 #[tauri::command]
 pub(crate) fn updates_prepare_ack(
     token: String,
@@ -244,7 +241,7 @@ pub(crate) fn updates_prepare_ack(
     let _ = (token, approved, reason);
     Err("native.updates.unsupported".into())
 }
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 #[tauri::command]
 pub(crate) fn updates_preparation_status(
     app: tauri::AppHandle,
@@ -255,7 +252,7 @@ pub(crate) fn updates_preparation_status(
         .preparation
         .status(window.label(), &token)
 }
-#[cfg(any(target_os = "macos", all(windows, target_arch = "x86_64")))]
+#[cfg(any(target_os = "macos", windows))]
 #[tauri::command]
 pub(crate) fn updates_prepare_ack(
     app: tauri::AppHandle,

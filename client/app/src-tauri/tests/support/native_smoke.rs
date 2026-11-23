@@ -370,7 +370,7 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                 return Err(error.into());
             }
             crate::diagnostics::setup(app.handle());
-            #[cfg(all(windows, target_arch = "x86_64"))]
+            #[cfg(windows)]
             if directory.join("smoke-dictation.pcm16").is_file() {
                 crate::dictation::setup(app.handle());
             }
@@ -516,7 +516,7 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                             .eval(include_str!("windows-plugin-smoke.js"))
                             .expect("load Windows plugin smoke");
                     }
-                    #[cfg(all(windows, target_arch = "x86_64"))]
+                    #[cfg(windows)]
                     if webview
                         .app_handle()
                         .path()
