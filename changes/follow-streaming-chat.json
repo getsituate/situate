@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "follow-streaming-chat",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "follow-streaming-chat",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Keep following chat replies",
+          "paragraphs": [
+            "The chat keeps scrolling with a reply when you reach the end just as more text arrives."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "follow-streaming-chat",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Chatantworten weiterverfolgen",
+          "paragraphs": [
+            "Der Chat scrollt automatisch weiter, wenn du das Ende erreichst und gleichzeitig neuer Antworttext erscheint."
+          ]
+        }
+      ]
+    }
+  }
+}

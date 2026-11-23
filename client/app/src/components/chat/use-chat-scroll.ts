@@ -1,5 +1,7 @@
 import { nextTick, ref, watch, type Ref } from "vue";
 
+const endThreshold = 48;
+
 export function useChatScroll(
   viewport: Readonly<Ref<HTMLElement | null>>,
   content: Readonly<Ref<HTMLElement | null>>,
@@ -25,7 +27,8 @@ export function useChatScroll(
     height = element.clientHeight;
     width = element.clientWidth;
     contentHeight = element.scrollHeight;
-    awayFromEnd.value = height > 0 && contentHeight - height - top > 48;
+    awayFromEnd.value =
+      height > 0 && contentHeight - height - top > endThreshold;
     const edge = element.getBoundingClientRect().top;
     const item = Array.from(
       content.value?.querySelectorAll<HTMLElement>(
@@ -47,15 +50,22 @@ export function useChatScroll(
     );
     if (element.scrollTop !== clampedTop) {
       restoreTop = undefined;
+      // A stream update can move the end before the reader's scroll event arrives.
+      const reachedPreviousEnd =
+        element.scrollTop > top &&
+        contentHeight - height - element.scrollTop <= endThreshold;
       following =
-        element.scrollHeight - element.clientHeight - element.scrollTop <= 48;
+        reachedPreviousEnd ||
+        element.scrollHeight - element.clientHeight - element.scrollTop <=
+          endThreshold;
     }
     if (restoreTop !== undefined) {
       element.scrollTop = restoreTop;
       if (element.scrollTop === restoreTop) {
         restoreTop = undefined;
         following =
-          element.scrollHeight - element.clientHeight - element.scrollTop <= 48;
+          element.scrollHeight - element.clientHeight - element.scrollTop <=
+          endThreshold;
       }
     } else if (following) element.scrollTop = element.scrollHeight;
     else if (anchor && content.value?.contains(anchor.element)) {
@@ -87,7 +97,8 @@ export function useChatScroll(
     if (element.scrollTop !== top) {
       restoreTop = undefined;
       following =
-        element.scrollHeight - element.clientHeight - element.scrollTop <= 48;
+        element.scrollHeight - element.clientHeight - element.scrollTop <=
+        endThreshold;
     }
     remember();
     if (movingUp && element.scrollTop <= 160) loadOlder?.();
