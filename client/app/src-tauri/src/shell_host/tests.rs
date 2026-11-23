@@ -126,7 +126,7 @@ async fn split_unicode_and_invalid_bytes_are_explicitly_lossy() {
     let result = run(command).await;
     assert_eq!(result.stdout.captured_bytes, 2);
     assert_eq!(result.stdout.total_bytes, 4);
-    assert_eq!(result.stdout.text, "�");
+    assert_eq!(result.stdout.text, "\u{fffd}");
     assert!(result.stdout.truncated);
 }
 
