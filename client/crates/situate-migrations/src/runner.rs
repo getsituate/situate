@@ -277,10 +277,10 @@ pub fn initialize_fresh(managed: &Dir, app_version: &str) -> Result<()> {
     }
     let mut value = metadata::initial();
     for migration in registry::MIGRATIONS {
-        if let Some(minimum) = registry::minimum_version(migration)? {
-            if minimum.cmp_precedence(&metadata::parse(&value)?.0).is_gt() {
-                value["minimumAppVersion"] = minimum.to_string().into();
-            }
+        if let Some(minimum) = registry::minimum_version(migration)?
+            && minimum.cmp_precedence(&metadata::parse(&value)?.0).is_gt()
+        {
+            value["minimumAppVersion"] = minimum.to_string().into();
         }
     }
     require_app(&value, &Version::parse(app_version).unwrap())?;

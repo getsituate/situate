@@ -48,8 +48,8 @@ impl MigrationDescriptor {
     }
 }
 
-pub type PluginHistoryMigration =
-    fn(&Path, &str, &str, fn(&[u8]) -> Result<Option<Vec<u8>>>) -> Result<String>;
+pub type ManifestConversion = fn(&[u8]) -> Result<Option<Vec<u8>>>;
+pub type PluginHistoryMigration = fn(&Path, &str, &str, ManifestConversion) -> Result<String>;
 
 /// A held capability for managed data only. Paths never include the workspace root.
 pub struct MigrationWorkspace<'a> {

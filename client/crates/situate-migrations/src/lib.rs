@@ -7,7 +7,8 @@ mod registry;
 mod runner;
 
 pub use migration::{
-    Migration, MigrationDescriptor, MigrationId, MigrationWorkspace, PluginHistoryMigration,
+    ManifestConversion, Migration, MigrationDescriptor, MigrationId, MigrationWorkspace,
+    PluginHistoryMigration,
 };
 pub use registry::MIGRATIONS;
 pub use runner::{

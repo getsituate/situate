@@ -117,7 +117,7 @@ pub fn migrate_manifest_revision(
     root: &Path,
     id: &str,
     revision: &str,
-    convert: fn(&[u8]) -> Result<Option<Vec<u8>>, situate_migrations::MigrationError>,
+    convert: situate_migrations::ManifestConversion,
 ) -> Result<String, situate_migrations::MigrationError> {
     let invalid = || io::Error::other("Plugin history could not be migrated");
     if !valid_revision(revision) {
