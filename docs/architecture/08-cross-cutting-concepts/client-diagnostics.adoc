@@ -149,6 +149,7 @@ External calls record an adapter/operation classification and result code, not a
 Shell tool calls likewise omit command text, arguments, environment and stdout/stderr.
 No automatic forwarding of `console`, arbitrary dependency logs, panic payloads or raw provider errors is enabled.
 Third-party integrations need explicit adapters producing approved technical fields.
+The optional macOS model failure recording writes directly to a private file in application data, outside the diagnostic collector. It buffers only response bytes for model streams started while recording is on and replaces the previous recording on failure. It is not included in diagnostic log collection or analytics.
 
 The frontend installs Vue, script-error, resource-error and unhandled-rejection handlers before mounting the application. View boundaries that consume Vue errors record the failure before showing their fallback.
 These handlers emit `runtime.failed` with a finite boundary and error code; they do not inspect exception messages, stacks, rejection payloads or component objects. Unknown failures use `unknown`.

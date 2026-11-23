@@ -709,6 +709,7 @@ const sidebarActions = {
       </SituateDialog>
     </section>
     <SettingsView
+      :mobile="mobile"
       v-if="settingsVisible"
       ref="settings"
       :workspace-scope="currentWorkspaceId"

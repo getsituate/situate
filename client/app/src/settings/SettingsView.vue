@@ -24,6 +24,7 @@ import { updates, updateReady } from "../updates/runtime";
 import UpdateSettings from "../updates/UpdateSettings.vue";
 import AboutSituate from "../updates/AboutSituate.vue";
 import AnalyticsSettings from "../analytics/AnalyticsSettings.vue";
+import ModelDiagnosticsSettings from "./ModelDiagnosticsSettings.vue";
 import { analyticsPreference } from "../analytics/runtime";
 import UpdateSymbol from "../updates/UpdateSymbol.vue";
 import type { Accent, AppearanceSnapshot } from "./accents";
@@ -31,6 +32,7 @@ import type { WorkspaceAiSettings } from "../ai/settings";
 import "./settings.css";
 const AiSettings = defineAsyncComponent(() => import("./AiSettings.vue"));
 const props = defineProps<{
+  mobile?: boolean;
   workspaceScope?: string;
   workspaceName?: string;
   appearance?: AppearanceSnapshot | null;
@@ -65,6 +67,7 @@ type SettingsPage =
   | "dictation"
   | "updates"
   | "analytics"
+  | "diagnostics"
   | "about";
 const page = ref<SettingsPage>("formats");
 const aiVisited = ref(false);
@@ -103,6 +106,12 @@ const analyticsCategoryControl = useTemplateRef<
 const analyticsCategory = computed(
   () => analyticsCategoryControl.value?.element,
 );
+const diagnosticsCategoryControl = useTemplateRef<
+  InstanceType<typeof SituateButton>
+>("diagnosticsCategoryControl");
+const diagnosticsCategory = computed(
+  () => diagnosticsCategoryControl.value?.element,
+);
 const aboutCategoryControl = useTemplateRef<InstanceType<typeof SituateButton>>(
   "aboutCategoryControl",
 );
@@ -131,6 +140,7 @@ async function back(): Promise<void> {
     updates: updatesCategory,
     about: aboutCategory,
     analytics: analyticsCategory,
+    diagnostics: diagnosticsCategory,
   };
   selected[page.value].value?.focus();
 }
@@ -206,7 +216,10 @@ function change(field: "language" | keyof Formats, event: Event): void {
       />
       <span>{{
         t(
-          page === "updates" || page === "about" || page === "analytics"
+          page === "updates" ||
+            page === "about" ||
+            page === "analytics" ||
+            page === "diagnostics"
             ? "updates.scope"
             : page === "dictation"
               ? "dictation.scope"
@@ -311,6 +324,18 @@ function change(field: "language" | keyof Formats, event: Event): void {
           <span class="category-arrow" aria-hidden="true">›</span>
         </SituateButton>
         <SituateButton
+          v-if="!mobile"
+          variant="plain"
+          ref="diagnosticsCategoryControl"
+          type="button"
+          :aria-current="page === 'diagnostics' ? 'page' : undefined"
+          @click="openPage('diagnostics')"
+        >
+          <SituateIcon name="info" class="category-symbol" />
+          <span>{{ t("settings.modelDiagnostics.title") }}</span>
+          <span class="category-arrow" aria-hidden="true">›</span>
+        </SituateButton>
+        <SituateButton
           variant="plain"
           ref="aboutCategoryControl"
           type="button"
@@ -335,19 +360,21 @@ function change(field: "language" | keyof Formats, event: Event): void {
           <header class="settings-page-heading">
             <h2 ref="title" tabindex="-1">
               {{
-                page === "analytics"
-                  ? t("settings.analytics.title")
-                  : page === "about"
-                    ? t("releaseHistory.about")
-                    : page === "updates"
-                      ? t("updates.title")
-                      : page === "dictation"
-                        ? t("dictation.title")
-                        : page === "appearance"
-                          ? t("settings.appearance.title")
-                          : page === "ai"
-                            ? t("settings.ai.title")
-                            : t("settings.formats.title")
+                page === "diagnostics"
+                  ? t("settings.modelDiagnostics.title")
+                  : page === "analytics"
+                    ? t("settings.analytics.title")
+                    : page === "about"
+                      ? t("releaseHistory.about")
+                      : page === "updates"
+                        ? t("updates.title")
+                        : page === "dictation"
+                          ? t("dictation.title")
+                          : page === "appearance"
+                            ? t("settings.appearance.title")
+                            : page === "ai"
+                              ? t("settings.ai.title")
+                              : t("settings.formats.title")
               }}
             </h2>
           </header>
@@ -362,6 +389,7 @@ function change(field: "language" | keyof Formats, event: Event): void {
           <UpdateSettings v-if="page === 'updates' && updates.supported" />
           <AboutSituate v-if="page === 'about'" />
           <AnalyticsSettings v-if="page === 'analytics'" />
+          <ModelDiagnosticsSettings v-if="page === 'diagnostics'" />
           <DictationSettings v-if="page === 'dictation'" />
           <AppearanceSettings
             v-if="page === 'appearance'"
