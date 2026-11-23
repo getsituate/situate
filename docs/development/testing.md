@@ -244,7 +244,11 @@ npm run test:agent
 npm run test:agent -- --journey onboarding
 ```
 
-`SITUATE_NATIVE_VM_CONFIG` selects another configuration file. Set `SITUATE_NATIVE_EXECUTOR=vm` to require configured VM execution, or `SITUATE_NATIVE_EXECUTOR=local` to explicitly use the local desktop. Without a configuration, existing local execution remains available. A configured but unavailable VM fails the test; it never falls back to launching a host window. Paid agent-provider runs are not supported in VM mode and fail before credentials are read. The separate public-repository live qualification command also requires explicit local execution; it does not bypass VM selection to open a host window.
+`SITUATE_NATIVE_VM_CONFIG` selects another configuration file. Agents must set `SITUATE_NATIVE_EXECUTOR=vm` for native tests that open app windows unless the user explicitly authorizes a host run. This makes missing VM configuration an error. A busy guest queues the run; an unavailable guest fails it. Neither causes a fallback to the host.
+
+`SITUATE_NATIVE_EXECUTOR=local` selects the host desktop. Without an executor setting or a VM configuration, the runner also uses the host desktop. Both paths require explicit user authorization for agents. A general request to run tests does not authorize host execution, even if the VM is unavailable or a VM run fails.
+
+Paid agent-provider runs are not supported in VM mode and fail before credentials are read. The separate public-repository live qualification command also requires explicit local execution; it does not bypass VM selection to open a host window.
 
 VM builds share the owned, worktree-local `client/target/agent-e2e-build/` build directory and use the [shared compiler cache](#local-compiler-cache). Native smoke retains its debug-profile and incremental-compilation overrides; agent journeys retain disabled incremental compilation and line-table debug information. The host transfers an immutable package containing the built executable, required test scripts, and synthetic fixtures. It does not transfer the checkout, installed dependencies, `.env`, credentials, or compiler caches. Checksums and file modes bind execution to the transferred package. The fixture provider, isolated application data and test keychain, restart checks, and cleanup run inside the guest.
 
