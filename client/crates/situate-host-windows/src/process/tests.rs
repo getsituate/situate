@@ -20,7 +20,7 @@ fn request(cwd: &Path, script: &str) -> CommandRequest {
             .expect("system PowerShell is required")
             .into(),
         args: make_script_args(&shell.interpreter_args, script.into()),
-        timeout_ms: 15_000,
+        timeout_ms: 60_000,
         output_limit_bytes: 32_768,
     }
 }
@@ -41,7 +41,13 @@ async fn powershell_preserves_unicode_cwd_and_drains_both_pipes_past_limit() {
     );
     command.output_limit_bytes = 8;
     let result = execute(command, CancellationToken::new()).await.unwrap();
-    assert_eq!(result.outcome, CommandOutcome::Exited);
+    assert_eq!(
+        result.outcome,
+        CommandOutcome::Exited,
+        "stdout: {:?}, stderr: {:?}",
+        result.stdout,
+        result.stderr
+    );
     assert_eq!(result.exit_code, Some(17));
     assert_eq!(result.signal, None);
     assert_eq!(result.stdout.text, "雪aaaaa");
@@ -78,11 +84,11 @@ async fn windows_job_drains_live_children_on_cancel_timeout_and_leader_exit() {
         "#,
         );
         if expected == CommandOutcome::TimedOut {
-            command.timeout_ms = 8_000;
+            command.timeout_ms = 45_000;
         }
         let token = CancellationToken::new();
         let worker = tokio::spawn(execute(command, token.clone()));
-        let pid = tokio::time::timeout(Duration::from_secs(6), async {
+        let started = tokio::time::timeout(Duration::from_secs(40), async {
             loop {
                 if let Ok(text) = std::fs::read_to_string(root.path().join("child.txt"))
                     && let Ok(pid) = text.parse::<u32>()
@@ -92,8 +98,15 @@ async fn windows_job_drains_live_children_on_cancel_timeout_and_leader_exit() {
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
         })
-        .await
-        .expect("the job's child did not start");
+        .await;
+        let pid = match started {
+            Ok(pid) => pid,
+            Err(_) => {
+                token.cancel();
+                let result = worker.await.unwrap();
+                panic!("the job's child did not start: {result:?}");
+            }
+        };
         let raw = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
         assert!(!raw.is_null());
         let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
@@ -118,9 +131,8 @@ async fn windows_job_drains_live_children_on_cancel_timeout_and_leader_exit() {
         );
         assert!(!result.stdout.incomplete && !result.stderr.incomplete);
     }
-    tokio::join!(
-        check(CommandOutcome::Cancelled),
-        check(CommandOutcome::TimedOut),
-        check(CommandOutcome::Exited)
-    );
+    // Each case waits for its own PowerShell child to start on a cold runner.
+    check(CommandOutcome::Cancelled).await;
+    check(CommandOutcome::Exited).await;
+    check(CommandOutcome::TimedOut).await;
 }
