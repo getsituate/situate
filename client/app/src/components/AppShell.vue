@@ -683,7 +683,7 @@ const sidebarActions = {
       ref="drawerControl"
       class="navigation-drawer"
       :aria-label="t('navigation.workspaceNavigation')"
-      @cancel.prevent="closeNavigation"
+      @cancel.self.prevent="closeNavigation"
       @close="navigationOpen = drawer?.open ?? false"
       @click="$event.target === drawer && closeNavigation()"
     >

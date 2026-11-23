@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "archive-conversations",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "archive-conversations",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Archive conversations",
+          "paragraphs": [
+            "Archive a conversation from its menu to move it out of the main list. Open Archive in the sidebar to read or restore it. When the sidebar is wide enough, hovering over a conversation reveals an archive button beside its menu."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "archive-conversations",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Gespräche archivieren",
+          "paragraphs": [
+            "Über das Menü kannst du ein Gespräch archivieren und so aus der Hauptliste entfernen. Im Archiv der Seitenleiste kannst du es lesen oder wiederherstellen. Wenn die Seitenleiste breit genug ist, erscheint beim Überfahren eines Gesprächs ein Archivieren-Button neben dem Menü."
+          ]
+        }
+      ]
+    }
+  }
+}

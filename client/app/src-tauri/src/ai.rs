@@ -1456,7 +1456,24 @@ pub async fn ai_conversations(
 ) -> Result<Vec<ConversationSummary>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         crate::workspaces::with_open_storage(&app, window.label(), &scope, |location| {
-            local_storage(&app, location)?.list_conversations()
+            local_storage(&app, location)?.list_conversations_for_navigation()
+        })
+    })
+    .await
+    .map_err(|_| "native.ai.conversation.storageUnavailable".to_owned())?
+}
+
+#[tauri::command]
+pub async fn ai_conversation_archive(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    scope: String,
+    conversation: String,
+    archived: bool,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::workspaces::with_open_storage(&app, window.label(), &scope, |location| {
+            local_storage(&app, location)?.set_conversation_archived(&conversation, archived)
         })
     })
     .await

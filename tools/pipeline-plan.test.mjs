@@ -68,6 +68,33 @@ test("developer-only inputs and required declarations do not activate app lanes"
   );
 });
 
+test("large visual updates keep the Actions plan small without changing suite selection", () => {
+  const snapshots = Array.from(
+    { length: 1_000 },
+    (_, i) =>
+      `client/app/tests/visual/baselines/${i % 2 ? "mobile" : "desktop"}/chat.conversations.fixture-${i}-1280x800-en-US.png`,
+  );
+  const source = "client/app/src/App.vue";
+  const plan = planPaths([source, ...snapshots]);
+  assert.deepEqual(
+    suites(plan),
+    suites(planPaths([source, ...snapshots.slice(0, 2)])),
+  );
+  const reasons = plan.lanes.find(({ id }) => id === "browser").reasons;
+  assert.ok(reasons.includes(`Input changed: ${source}`));
+  assert.ok(
+    reasons.includes(
+      "Inputs changed: 500 visual baselines in client/app/tests/visual/baselines/desktop/",
+    ),
+  );
+  assert.ok(
+    reasons.includes(
+      "Inputs changed: 500 visual baselines in client/app/tests/visual/baselines/mobile/",
+    ),
+  );
+  assert.ok(Buffer.byteLength(JSON.stringify(plan)) < 128 * 1024);
+});
+
 test("public website inputs require browser verification without triggering an app release", () => {
   for (const path of [
     "website/styles.css",

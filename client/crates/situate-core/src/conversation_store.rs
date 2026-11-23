@@ -37,6 +37,8 @@ pub struct ConversationSummary {
     pub id: String,
     pub title: String,
     pub revision: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub archived: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -253,6 +255,17 @@ impl Storage {
         Ok(record)
     }
     pub fn list_conversations(&self) -> Result<Vec<ConversationSummary>, String> {
+        self.list_conversation_summaries(false)
+    }
+
+    pub fn list_conversations_for_navigation(&self) -> Result<Vec<ConversationSummary>, String> {
+        self.list_conversation_summaries(true)
+    }
+
+    fn list_conversation_summaries(
+        &self,
+        include_archive: bool,
+    ) -> Result<Vec<ConversationSummary>, String> {
         let _lock = self.lock_named("conversations.lock")?;
         let Some(root) = self.conversations_directory(false)? else {
             return Ok(Vec::new());
@@ -288,6 +301,7 @@ impl Storage {
                 id: metadata.id,
                 title: metadata.title,
                 revision: metadata.revision,
+                archived: include_archive && self.conversation_archived_unlocked(id)?,
             });
         }
         summaries.sort_by(|a, b| a.id.cmp(&b.id));

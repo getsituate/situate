@@ -124,6 +124,7 @@ export type TabsAction =
   | { type: "new-conversation"; id?: string }
   | { type: "pin-view"; view: PinnedView }
   | { type: "archive-conversation"; id: string }
+  | { type: "delete-conversation"; id: string }
   | { type: "rename-conversation"; id: string; title: string }
   | { type: "send"; id: string }
   | { type: "conversation-ai"; id: string; value: AiState }
@@ -241,7 +242,10 @@ export const hasActivity = (state: TabsState, tabId: string) =>
     (item) => item.activity === "working" && item.tabIds.includes(tabId),
   );
 function visit(state: TabsState, tab: TopicTab, pane: Pane, view: ViewTarget) {
-  if (view.startsWith("conversation:") && !state.conversations[view.slice(13)])
+  if (
+    (view === "chat" && !state.conversations.garden) ||
+    (view.startsWith("conversation:") && !state.conversations[view.slice(13)])
+  )
     return;
   if (currentTarget(pane) !== view) {
     pane.history = [...pane.history.slice(0, pane.cursor + 1), view];
@@ -492,6 +496,22 @@ export function reduceTabs(previous: TabsState, action: TabsAction): TabsState {
     case "archive-conversation": {
       const conversation = state.conversations[action.id];
       if (conversation) conversation.archived = !conversation.archived;
+      break;
+    }
+    case "delete-conversation": {
+      if (!state.conversations[action.id]) break;
+      delete state.conversations[action.id];
+      const isDeleted = (target: ViewTarget) =>
+        target === `conversation:${action.id}` ||
+        (target === "chat" && action.id === "garden");
+      for (const tab of [...state.tabs, ...state.closedTabs]) {
+        for (const pane of Object.values(tab.panes)) {
+          if (isDeleted(currentTarget(pane))) pane.availability = "ready";
+          pane.history = pane.history.map((view) =>
+            isDeleted(view) ? "empty" : view,
+          );
+        }
+      }
       break;
     }
     case "draft":

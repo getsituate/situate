@@ -12,6 +12,7 @@ const INVALID: &str = "native.ai.conversation.versionInvalid";
 const CONFLICT: &str = "native.ai.conversation.conflict";
 const STORAGE: &str = "native.ai.storage.failed";
 const DURABILITY: &str = "native.ai.conversation.durability";
+const ARCHIVE: &str = "archive.json";
 #[cfg(test)]
 #[derive(Clone, Copy)]
 enum Fault {
@@ -250,6 +251,18 @@ fn file(
         Err(_) => Err(STORAGE.into()),
     }
 }
+fn read_archive(dir: &Dir) -> Result<bool, String> {
+    let Some(file) = file(dir, ARCHIVE, false, false)? else {
+        return Ok(false);
+    };
+    let mut bytes = Vec::new();
+    file.take(6).read_to_end(&mut bytes).map_err(|_| STORAGE)?;
+    match bytes.as_slice() {
+        b"true" => Ok(true),
+        b"false" => Ok(false),
+        _ => Err(INVALID.into()),
+    }
+}
 fn metadata(dir: &Dir, id: &str) -> Result<Option<ConversationMetadata>, String> {
     let Some(mut file) = file(dir, "metadata.json", false, false)? else {
         return Ok(None);
@@ -426,6 +439,24 @@ impl Storage {
         };
         open_dir(&root, id, create)
     }
+    pub(crate) fn conversation_archived_unlocked(&self, id: &str) -> Result<bool, String> {
+        let dir = self.conversation_dir(id, false)?.ok_or(CONFLICT)?;
+        read_archive(&dir)
+    }
+
+    pub fn set_conversation_archived(&self, id: &str, archived: bool) -> Result<(), String> {
+        let _lock = self.lock_named("conversations.lock")?;
+        let dir = self.conversation_dir(id, false)?.ok_or(CONFLICT)?;
+        metadata(&dir, id)?.ok_or(CONFLICT)?;
+        read_archive(&dir)?;
+        let temp = format!("archive-{}.tmp", uuid::Uuid::new_v4());
+        let bytes: &[u8] = if archived { b"true" } else { b"false" };
+        if !Self::replace_in(&dir, ARCHIVE, &temp, bytes)? {
+            return Err(DURABILITY.into());
+        }
+        Ok(())
+    }
+
     pub fn create_conversation_metadata(
         &self,
         value: &ConversationMetadata,

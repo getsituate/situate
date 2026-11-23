@@ -70,8 +70,12 @@ test("navigation supports tasks, conversations, responsive tabs and draft confir
     .filter({ hasText: /^\s*Archive\b/ })
     .click();
   await preview
-    .getByRole("button", { name: "Restore Prepare the workshop", exact: true })
+    .getByRole("button", {
+      name: "Options for Prepare the workshop",
+      exact: true,
+    })
     .click();
+  await preview.getByRole("button", { name: "Restore", exact: true }).click();
   await selectOption(
     page.getByLabel("Prepare the workshop", { exact: true }),
     "approval",

@@ -344,15 +344,27 @@ describe("sidebar and controls", () => {
     expect(wrapper.text()).toContain("Working · Reading notes");
     expect(wrapper.text()).toContain("Needs approval");
     expect(wrapper.find("nav").exists()).toBe(false);
+    const archive = wrapper.get(".conversation-archive");
+    expect(archive.attributes("open")).toBeUndefined();
     await wrapper
-      .get(".conversation-row .action-list button:nth-child(2)")
+      .get('[aria-label="Archive Prepare the workshop"]')
       .trigger("click");
+    expect(archive.get("summary").text()).toBe("Archive");
+    const archived = archive
+      .findAll(".conversation-row")
+      .find((row) =>
+        row.find('[aria-label="Options for Prepare the workshop"]').exists(),
+      )!;
+    expect(archived.get(".conversation-title").text()).toContain(
+      "Prepare the workshop",
+    );
+    const restore = archived
+      .findAll(".action-list button")
+      .find((button) => button.text() === "Restore")!;
+    await restore.trigger("click");
     expect(
-      wrapper.find('[aria-label="Restore Prepare the workshop"]').exists(),
-    ).toBe(true);
-    await wrapper
-      .get('[aria-label="Restore Prepare the workshop"]')
-      .trigger("click");
+      archive.find('[aria-label="Options for Prepare the workshop"]').exists(),
+    ).toBe(false);
     expect(
       wrapper.find('[aria-label="Options for Prepare the workshop"]').exists(),
     ).toBe(true);

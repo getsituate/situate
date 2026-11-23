@@ -8,7 +8,6 @@ defineProps<{
     | "documents"
     | "pin"
     | "archive"
-    | "restore"
     | "clock"
     | "attention"
     | "calendar"
@@ -22,7 +21,6 @@ const paths = {
     "M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   pin: "M8 3h8l-1 7 3 4H6l3-4zm4 11v7",
   archive: "M4 8v12h16V8M3 3h18v5H3zm6 5h6",
-  restore: "M4 8v12h16V8M3 3h18v5H3zm9 14v-7m-3 3 3-3 3 3",
   clock: "M12 7v5l3 2",
   attention: "M12 7v6m0 3h.01",
 };

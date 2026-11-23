@@ -483,6 +483,43 @@ test("a stale listing cannot restore a deleted conversation", async () => {
   expect(inventory.state.conversations).toEqual([]);
 });
 
+test("archiving survives an in-flight listing and later conversation updates", async () => {
+  const chat = await ready();
+  const inventory = workspaceConversations("scope");
+  await inventory.refresh();
+  const stale = copy(inventory.state.conversations);
+  let finishStale!: (list: unknown) => void;
+  mock.invoke.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishStale = resolve;
+      }),
+  );
+  const refresh = inventory.refresh();
+  mock.invoke
+    .mockImplementationOnce(async (command, args) => {
+      expect(command).toBe("ai_conversation_archive");
+      expect(args).toEqual({
+        scope: "scope",
+        conversation: "chat",
+        archived: true,
+      });
+    })
+    .mockResolvedValueOnce([
+      { id: "chat", title: "Chat", revision: 0, archived: true },
+    ]);
+
+  await inventory.setArchived("chat", true);
+  finishStale(stale);
+  await refresh;
+  expect(inventory.state.conversations[0]?.archived).toBe(true);
+  await chat.renameTitle("Garden");
+  expect(inventory.state.conversations[0]).toMatchObject({
+    title: "Garden",
+    archived: true,
+  });
+});
+
 test("listing conversations does not read AI access or attach chat owners", async () => {
   ensure();
   const list = workspaceConversations("scope");

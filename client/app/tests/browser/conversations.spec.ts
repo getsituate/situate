@@ -96,7 +96,7 @@ for (const viewport of [
   test(
     `conversation titles stay on one line and rename without moving the list at ${viewport.width}px`,
     { tag: viewport.width < 600 ? "@visual-mobile" : "@visual-desktop" },
-    async ({ page, visual }) => {
+    async ({ page, visual, visualEnabled }) => {
       const fullTitle =
         "Plan the garden with a quiet reading corner and leave enough room for herbs to grow";
       await workspaceFixture(
@@ -151,6 +151,11 @@ for (const viewport of [
       await input.press("Enter");
       await expect(title).toHaveText("Garden with reading corner");
       await expect(options).toBeFocused();
+      if (visualEnabled && viewport.width >= 600) {
+        await expect(page.getByRole("tooltip")).toHaveText(
+          "Conversation options: Garden with reading corner",
+        );
+      }
       await visual.capture("chat.conversations.title-renamed");
       await options.click();
       await page
@@ -196,6 +201,112 @@ for (const viewport of [
     },
   );
 }
+
+test(
+  "archives an open conversation and can read and restore it after reopening",
+  { tag: "@visual-desktop" },
+  async ({ page, visual }) => {
+    const title = "Garden plans";
+    const message = "Keep the herbs by the kitchen.";
+    await workspaceFixture(page, shellState, {
+      aiConversations: [
+        {
+          id: "legacy",
+          title,
+          draft: "An unfinished thought",
+          messages: [{ role: "user", content: message, timestamp: 1 }],
+        },
+      ],
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    const sidebar = page.getByRole("navigation", {
+      name: "Workspace navigation",
+    });
+    const archive = sidebar.locator(".conversation-archive");
+    const summary = archive.locator("summary");
+    const item = sidebar.getByRole("button", { name: title, exact: true });
+    const shortcut = sidebar.getByRole("button", {
+      name: `Archive ${title}`,
+      exact: true,
+    });
+    await item.click();
+    await expect(page.getByText(message, { exact: true })).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(shortcut).toHaveCSS("opacity", "0");
+    await item.hover();
+    await expect(shortcut).toHaveCSS("opacity", "1");
+    await shortcut.click();
+    await expect(summary).toHaveText("Archive");
+    await expect(summary).toBeFocused();
+    await expect(item).toHaveCount(0);
+    await expect(page.getByText(message, { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(archive).toHaveJSProperty("open", false);
+    await summary.press("Enter");
+    await archive.getByRole("button", { name: title, exact: true }).click();
+    await expect(page.getByText(message, { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveValue("An unfinished thought");
+    await visual.capture("chat.conversations.archive-open");
+    await archive
+      .getByRole("button", { name: `Conversation options: ${title}` })
+      .click();
+    await page
+      .getByRole("menuitem", { name: "Restore conversation", exact: true })
+      .click();
+    await expect(archive.getByText("No archived conversations.")).toBeVisible();
+    await expect(item).toBeVisible();
+    await page.reload();
+    await expect(item).toBeVisible();
+  },
+);
+
+test("narrow sidebar keeps archive in the menu and reports a failed save", async ({
+  page,
+}) => {
+  await workspaceFixture(page, shellState, {
+    aiConversationTitle: "Garden plans",
+    aiArchiveFailures: 1,
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  const handle = page.getByRole("separator", { name: "Resize sidebar" });
+  await handle.press("Home");
+  const sidebar = page.getByRole("navigation", {
+    name: "Workspace navigation",
+  });
+  const options = sidebar.getByRole("button", {
+    name: "Conversation options: Garden plans",
+  });
+  await options.hover();
+  await expect(
+    sidebar.getByRole("button", { name: "Archive Garden plans", exact: true }),
+  ).toHaveCount(0);
+  const action = page.getByRole("menuitem", {
+    name: "Archive conversation",
+    exact: true,
+  });
+  await options.click();
+  await action.click();
+  const error = page
+    .getByRole("alert")
+    .filter({ hasText: "The change to the archive could not be confirmed." });
+  await expect(error).toBeVisible();
+  await error.locator("..").press("Escape");
+  await expect(options).toBeFocused();
+  await options.click();
+  await action.click();
+  const archive = sidebar.locator(".conversation-archive");
+  const summary = archive.locator("summary");
+  await expect(summary).toBeFocused();
+  await expect(options).toHaveCount(0);
+  await summary.click();
+  await expect(
+    archive.getByRole("button", { name: "Garden plans", exact: true }),
+  ).toBeVisible();
+});
 
 async function actions(page: Page) {
   return page.evaluate(() =>

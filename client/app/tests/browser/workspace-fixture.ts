@@ -188,6 +188,7 @@ interface FixtureOptions {
   >;
   aiSaveError?: boolean;
   aiDeleteFailures?: number;
+  aiArchiveFailures?: number;
   aiHoldConversationList?: boolean;
   aiConversationLoadErrors?: Record<string, string>;
   aiLoginOutcome?: "success" | "denied" | "pending";
@@ -436,6 +437,7 @@ export async function workspaceFixture(
         modelErrors.set(initial.current.id, options.aiModelError);
       let selectionFailures = options.aiSelectionFailures ?? 0;
       let deleteFailures = options.aiDeleteFailures ?? 0;
+      let archiveFailures = options.aiArchiveFailures ?? 0;
       const conversationListGate = options.aiHoldConversationList
         ? new Promise<void>((resolve) => {
             Reflect.set(window, "__releaseConversationList", resolve);
@@ -642,6 +644,7 @@ export async function workspaceFixture(
       ) as {
         records: [string, ConversationRecord][];
         deleted?: string[];
+        archived?: string[];
         owners: [string, Omit<ConversationSnapshot, "record">][];
         receipts: [string, string][];
         requests: NativeConversationFixtureRequest[];
@@ -650,6 +653,7 @@ export async function workspaceFixture(
       for (const [key, record] of retainedNative?.records ?? [])
         conversations.set(key, record);
       const deletedConversations = new Set(retainedNative?.deleted ?? []);
+      const archivedConversations = new Set(retainedNative?.archived ?? []);
       for (const key of deletedConversations) conversations.delete(key);
       const nativeOwners = new Map<
         string,
@@ -671,6 +675,7 @@ export async function workspaceFixture(
           JSON.stringify({
             records: [...conversations],
             deleted: [...deletedConversations],
+            archived: [...archivedConversations],
             owners: [...nativeOwners],
             receipts: [...nativeReceipts],
             requests: nativeRequests,
@@ -2183,10 +2188,11 @@ export async function workspaceFixture(
                 conversation(String(args.scope));
               return [...conversations.entries()]
                 .filter(([key]) => key.startsWith(`${args.scope}:`))
-                .map(([, record]) => ({
+                .map(([key, record]) => ({
                   id: record.id,
                   title: record.title,
                   revision: record.revision,
+                  ...(archivedConversations.has(key) ? { archived: true } : {}),
                   ...(record.development
                     ? { development: record.development }
                     : {}),
@@ -2344,6 +2350,20 @@ export async function workspaceFixture(
                 );
               return snapshot;
             }
+            if (command === "ai_conversation_archive") {
+              const key = nativeKey(
+                String(args.scope),
+                String(args.conversation),
+              );
+              if (!conversations.has(key) || archiveFailures > 0) {
+                archiveFailures = Math.max(0, archiveFailures - 1);
+                throw "native.ai.conversation.storageUnavailable";
+              }
+              if (args.archived) archivedConversations.add(key);
+              else archivedConversations.delete(key);
+              persistNative();
+              return;
+            }
             if (command === "ai_conversation_delete") {
               const scope = String(args.scope),
                 id = String(args.conversation);
@@ -2357,6 +2377,7 @@ export async function workspaceFixture(
                 throw "native.ai.conversation.storageUnavailable";
               }
               conversations.delete(key);
+              archivedConversations.delete(key);
               deletedConversations.add(key);
               nativeChannels.delete(key);
               persistNative();

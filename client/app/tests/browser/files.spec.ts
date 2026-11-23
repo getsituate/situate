@@ -622,7 +622,9 @@ test("silent merged content preserves live caret and explicit historical inspect
       (element: HTMLTextAreaElement) => element.selectionStart,
     ),
   ).toBe(3);
-  await expect(page.locator('[role="alert"], [role="status"]')).toHaveCount(0);
+  await expect(
+    page.locator('[role="alert"], [role="status"]').filter({ hasText: /\S/ }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", {
       name: keyLabel("files.versionHistory"),

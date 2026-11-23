@@ -1,20 +1,25 @@
 import "../ui/popover-test-environment";
 import { afterEach, expect, test, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
+import { reactive } from "vue";
+import AppSidebar from "./AppSidebar.vue";
 import ConversationListItem from "./ConversationListItem.vue";
 import { dictation } from "../dictation/runtime";
-const { renameTitle, deleteConversation } = vi.hoisted(() => ({
+const { renameTitle, deleteConversation, setArchived } = vi.hoisted(() => ({
   renameTitle: vi.fn(async () => {}),
   deleteConversation: vi.fn(async () => {}),
+  setArchived: vi.fn<(id: string, archived: boolean) => Promise<void>>(),
 }));
 vi.mock("../ai/chat", () => ({
   workspaceChat: vi.fn(() => ({ renameTitle, deleteConversation })),
+  workspaceConversations: vi.fn(() => ({ setArchived })),
 }));
 enableAutoUnmount(afterEach);
 afterEach(() => {
   vi.restoreAllMocks();
   renameTitle.mockReset().mockResolvedValue(undefined);
   deleteConversation.mockReset().mockResolvedValue(undefined);
+  setArchived.mockReset();
   dictation.owner = null;
   document.body.replaceChildren();
 });
@@ -33,6 +38,94 @@ function render() {
     },
   });
 }
+test("archives and restores a conversation without closing the other entries", async () => {
+  const conversations = reactive([
+    { id: "garden", title: "Garden", revision: 1, archived: false },
+    { id: "notes", title: "Notes", revision: 2, archived: false },
+  ]);
+  setArchived.mockImplementation(async (id, archived) => {
+    conversations.find((item) => item.id === id)!.archived = archived;
+  });
+  const wrapper = mount(AppSidebar, {
+    attachTo: document.body,
+    props: {
+      currentWorkspaceId: "workspace",
+      conversations,
+      selectedConversation: "garden",
+      conversationRunning: (id: string) => id === "garden",
+    },
+  });
+  const archive = wrapper.get<HTMLDetailsElement>(".conversation-archive");
+  const summary = archive.get("summary");
+  expect(summary.text()).toBe("⟦navigation.conversationArchive⟧");
+  expect(archive.element.open).toBe(false);
+  await wrapper.get(".quick-archive").trigger("click");
+  await flushPromises();
+  expect(setArchived).toHaveBeenCalledExactlyOnceWith("garden", true);
+  expect(wrapper.get('[role="status"].sr-only').text()).toBe(
+    "⟦chat.conversationArchived⟧",
+  );
+  expect(wrapper.get(".conversation-actions").element).toBe(
+    document.activeElement,
+  );
+  expect(
+    archive.get('.conversation-destination[aria-current="page"]').text(),
+  ).toBe("Garden");
+  expect(archive.find(".quick-archive").exists()).toBe(false);
+  archive.element.open = true;
+  await archive.get(".conversation-actions").trigger("click");
+  await flushPromises();
+  const restore = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+  ].find((item) => item.textContent?.trim() === "⟦chat.restoreConversation⟧");
+  expect(restore).toBeDefined();
+  restore!.click();
+  await flushPromises();
+  expect(setArchived).toHaveBeenLastCalledWith("garden", false);
+  expect(wrapper.get('[role="status"].sr-only').text()).toBe(
+    "⟦chat.conversationRestored⟧",
+  );
+  expect(archive.text()).toContain("⟦navigation.noArchivedConversations⟧");
+  expect(summary.element).toBe(document.activeElement);
+  expect(
+    wrapper.get('.conversation-destination[aria-current="page"]').text(),
+  ).toBe("Garden");
+});
+
+test("keeps the row in place on archive failure and allows retry", async () => {
+  let reject!: (error: Error) => void;
+  setArchived.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  const wrapper = render();
+  const announceArchiveChange = vi.fn();
+  await wrapper.setProps({ announceArchiveChange });
+  const shortcut = wrapper.get(".quick-archive");
+  await shortcut.trigger("click");
+  await shortcut.trigger("click");
+  expect(setArchived).toHaveBeenCalledTimes(1);
+  expect(announceArchiveChange).not.toHaveBeenCalled();
+  reject(new Error("Storage unavailable"));
+  await flushPromises();
+  const error = wrapper.get(".error-dialog");
+  expect(error.text()).toContain("⟦chat.archiveChangeFailed⟧");
+  await error.trigger("cancel");
+  expect(wrapper.find(".error-dialog").exists()).toBe(false);
+  expect(wrapper.get(".conversation-actions").element).toBe(
+    document.activeElement,
+  );
+  setArchived.mockResolvedValueOnce();
+  await shortcut.trigger("click");
+  await flushPromises();
+  expect(announceArchiveChange).toHaveBeenCalledExactlyOnceWith(
+    "workspace",
+    true,
+  );
+});
+
 async function edit(wrapper: ReturnType<typeof render>) {
   await wrapper.get(".conversation-actions").trigger("click");
   await flushPromises();
@@ -46,7 +139,11 @@ async function confirmDeletion(wrapper: ReturnType<typeof render>) {
   await flushPromises();
   const items =
     document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
-  items[1]!.click();
+  const remove = [...items].find((item) =>
+    item.textContent?.includes("⟦chat.deleteConversation⟧"),
+  );
+  expect(remove).toBeDefined();
+  remove!.click();
   await flushPromises();
   return wrapper.get("dialog");
 }

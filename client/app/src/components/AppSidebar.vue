@@ -8,6 +8,7 @@ import {
   SituateMenu,
   SituateIcon,
   SituateIconButton,
+  SituateDisclosure,
   type IconName,
 } from "@situate/ui";
 import wordmark from "../../../../design/brand/assets/wordmark.svg";
@@ -57,6 +58,19 @@ const emit = defineEmits<{
 }>();
 const menuOpen = ref(false);
 const moreOpen = ref(false);
+const archiveFeedback = ref("");
+const activeConversations = computed(() =>
+  (props.conversations ?? []).filter((item) => !item.archived),
+);
+const archivedConversations = computed(() =>
+  (props.conversations ?? []).filter((item) => item.archived),
+);
+function archiveChanged(scope: string, archived: boolean) {
+  if (scope !== props.currentWorkspaceId) return;
+  archiveFeedback.value = t(
+    archived ? "chat.conversationArchived" : "chat.conversationRestored",
+  );
+}
 const moreId = useId();
 const navigation = useTemplateRef<HTMLElement>("navigation");
 const pinnedChoices = computed(() =>
@@ -82,6 +96,7 @@ watch(
   () => props.currentWorkspaceId,
   () => {
     moreOpen.value = false;
+    archiveFeedback.value = "";
   },
 );
 async function pin(id: string): Promise<void> {
@@ -404,12 +419,12 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
           />
         </div>
         <ul
-          v-if="conversations?.length"
+          v-if="activeConversations.length"
           class="nav-list"
           :aria-busy="conversationsBusy"
         >
           <li
-            v-for="item in conversations"
+            v-for="item in activeConversations"
             :key="`${currentWorkspaceId}:${item.id}`"
           >
             <ConversationListItem
@@ -418,12 +433,43 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
               :selected="selectedConversation === item.id"
               :running="!!conversationRunning?.(item.id)"
               @open="emit('conversation', item.id)"
+              :announce-archive-change="archiveChanged"
             />
           </li>
         </ul>
-        <p v-else-if="!conversationsBusy" class="empty-conversations">
+        <p
+          v-else-if="!conversationsBusy && !archivedConversations.length"
+          class="empty-conversations"
+        >
           {{ t("navigation.noConversationsYet") }}
         </p>
+        <SituateDisclosure
+          v-if="currentWorkspaceId"
+          :key="currentWorkspaceId"
+          class="conversation-archive"
+          :label="t('navigation.conversationArchive')"
+        >
+          <ul
+            v-if="archivedConversations.length"
+            class="nav-list"
+            :aria-busy="conversationsBusy"
+          >
+            <li v-for="item in archivedConversations" :key="item.id">
+              <ConversationListItem
+                :item="item"
+                :scope="currentWorkspaceId"
+                :selected="selectedConversation === item.id"
+                :running="!!conversationRunning?.(item.id)"
+                @open="emit('conversation', item.id)"
+                :announce-archive-change="archiveChanged"
+              />
+            </li>
+          </ul>
+          <p v-else-if="!conversationsBusy" class="empty-conversations">
+            {{ t("navigation.noArchivedConversations") }}
+          </p>
+        </SituateDisclosure>
+        <span class="sr-only" role="status">{{ archiveFeedback }}</span>
       </section>
     </div>
 
@@ -728,7 +774,23 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   font-weight: var(--situate-weight-emphasis);
 }
 .conversations {
+  container: conversation-list / inline-size;
   margin-top: var(--situate-space-8);
+}
+.conversation-archive > :deep(summary) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 12px;
+  color: var(--situate-muted);
+  font-size: var(--situate-text-small);
+}
+.conversation-archive > :deep(summary .disclosure-chevron) {
+  flex: none;
+  margin: 0;
+}
+.conversation-archive .nav-list {
+  padding-inline-start: 12px;
 }
 .section-heading {
   display: flex;

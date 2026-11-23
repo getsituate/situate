@@ -25,8 +25,6 @@
   "conversationHeading": "Conversations",
   "openConversation": "Open {title}",
   "archive": "Archive",
-  "archiveConversation": "Archive {title}",
-  "restoreConversation": "Restore {title}",
   "noPinnedViews": "No pinned views yet.",
   "noPinnedHelp": "Pin views from the main menu to keep them here.",
   "conversationHistory": "Conversation history",

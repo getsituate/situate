@@ -207,7 +207,12 @@ function updateSummary(
     (item) => item.id === record.id,
   );
   if (index < 0) owner.state.conversations.push(summary);
-  else owner.state.conversations[index] = summary;
+  else {
+    const archived = owner.state.conversations[index]!.archived;
+    owner.state.conversations[index] = archived
+      ? { ...summary, archived }
+      : summary;
+  }
   owner.state.conversations.sort(compareConversations);
 }
 export function workspaceConversations(scope: string) {
@@ -229,7 +234,7 @@ export function workspaceConversations(scope: string) {
           .map((item) => {
             const record = owner.sessions.get(item.id)?.record;
             return record && record.revision > item.revision
-              ? conversationSummary(record)
+              ? { ...conversationSummary(record), archived: item.archived }
               : item;
           })
           .sort(compareConversations);
@@ -243,6 +248,20 @@ export function workspaceConversations(scope: string) {
       } finally {
         if (version === owner.listVersion) owner.state.loading = false;
       }
+    },
+    async setArchived(conversation: string, archived: boolean): Promise<void> {
+      await invoke("ai_conversation_archive", {
+        scope,
+        conversation,
+        archived,
+      });
+      if (workspaces.get(scope) !== owner) return;
+      const item = owner.state.conversations.find(
+        (item) => item.id === conversation,
+      );
+      if (item) item.archived = archived;
+      // A listing started before the save may still carry the old archive status.
+      if (owner.state.loading) void this.refresh();
     },
     async create(): Promise<string | undefined> {
       if (owner.state.creating || owner.state.loading) return;
