@@ -108,9 +108,11 @@ const activeTarget = computed(() => {
   return pane ? currentEntry(pane.navigation).target : undefined;
 });
 const viewChoices = computed(() =>
-  [...(ui.value?.registry.definitions.values() ?? [])]
-    .filter((view) => !["conversation", "empty"].includes(view.id))
-    .map((view) => ({ id: view.id, title: view.title(), icon: view.icon })),
+  (ui.value?.registry.browsableViews ?? []).map((view) => ({
+    id: view.id,
+    title: view.title(),
+    icon: view.icon,
+  })),
 );
 const media = window.matchMedia("(min-width: 1184px)");
 const wide = ref(media.matches);

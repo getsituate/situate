@@ -24,6 +24,7 @@ export interface ViewDefinition {
   readonly title: () => string;
   readonly icon: IconName;
   readonly component: Component;
+  readonly settingsOnly?: boolean;
   readonly availability?: (target: ViewTarget) => ViewAvailability;
   readonly reveal?: (
     contentId: string,
@@ -130,6 +131,12 @@ export function createViewRegistry(scope = "") {
   return {
     get definitions() {
       return state.definitions;
+    },
+    get browsableViews() {
+      return [...state.definitions.values()].filter(
+        (view) =>
+          !view.settingsOnly && !["conversation", "empty"].includes(view.id),
+      );
     },
     register,
     registerPlugin,
