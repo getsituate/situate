@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "sonarqube-analysis-warnings",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Static analysis configuration and a test literal only; application behavior is unchanged."
+}
