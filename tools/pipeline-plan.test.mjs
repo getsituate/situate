@@ -137,13 +137,13 @@ test("macOS compatibility selects the short desktop journey and only runs recogn
   ]);
 });
 
-test("only release planning gives Intel macOS compatibility a 45-minute suite budget", () => {
-  const timeout = (mode) =>
-    planPaths(["client/app/src/App.vue"], { mode }).lanes.find(
+test("Intel macOS compatibility allows 45 minutes per suite in PR and release verification", () => {
+  for (const mode of ["verify", "release"]) {
+    const lane = planPaths(["client/app/src/App.vue"], { mode }).lanes.find(
       ({ id }) => id === "macos-compatibility",
-    ).timeoutSeconds;
-  assert.equal(timeout("verify"), 1800);
-  assert.equal(timeout("release"), 2700);
+    );
+    assert.equal(lane.timeoutSeconds, 2700, mode);
+  }
 });
 
 test("editing the external sign-in page selects Edge on macOS", () => {

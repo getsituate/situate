@@ -168,7 +168,8 @@ function select(paths, { mode, inventory, appImpact }) {
   const lanes = families.flatMap(([id, host, ids, execution]) => {
     const suites = selected.filter((suite) => ids.includes(suite.id));
     let timeoutSeconds = 600;
-    if (id === "macos-compatibility" && mode === "release") {
+    if (id === "macos-compatibility") {
+      // Cold Intel builds can consume the full 30 minutes before the smoke test starts.
       timeoutSeconds = 2700;
     } else if (
       [
@@ -177,7 +178,6 @@ function select(paths, { mode, inventory, appImpact }) {
         "browser-webkit",
         "macos-code",
         "macos-native",
-        "macos-compatibility",
       ].includes(id)
     ) {
       timeoutSeconds = 1800;
