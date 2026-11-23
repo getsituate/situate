@@ -61,11 +61,10 @@ function createWorkspaceUi(workspaceId: string) {
   let previous = new Set<string>();
   const abandoned = new Set<string>();
   const stopChats = watchEffect(() => {
-    const durable = new Set(
-      workspaceConversations(workspaceId).state.conversations.map(
-        (item) => item.id,
-      ),
-    );
+    const { conversations, deletedConversationIds } =
+      workspaceConversations(workspaceId).state;
+    session.forgetConversations(deletedConversationIds);
+    const durable = new Set(conversations.map((item) => item.id));
     const layout = session.state.document?.layout;
     const currentIds = new Set(
       layout?.tabs.flatMap((tab) =>
@@ -81,7 +80,11 @@ function createWorkspaceUi(workspaceId: string) {
     previous = currentIds;
     const discarded = new Set<string>();
     for (const id of abandoned) {
-      if (currentIds.has(id) || durable.has(id)) {
+      if (
+        currentIds.has(id) ||
+        durable.has(id) ||
+        deletedConversationIds.has(id)
+      ) {
         abandoned.delete(id);
         continue;
       }

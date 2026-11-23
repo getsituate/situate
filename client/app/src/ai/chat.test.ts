@@ -1603,6 +1603,27 @@ test("an acknowledged answer can continue natively without blocking steering beh
   finish();
   await answer;
 });
+test("workspace close does not reload an unavailable conversation without draft changes", async () => {
+  const missing = workspaceChat("scope", "missing");
+  const edited = await ready("scope", "edited");
+  mock.invoke.mockImplementation((command, args) =>
+    command === "ai_conversation_subscribe" && args.conversation === "missing"
+      ? Promise.reject("native.ai.conversation.invalidId")
+      : native(command, args),
+  );
+  await missing.refresh();
+  expect(missing.state.loadError).toBe("native.ai.conversation.invalidId");
+  edited.state.draft = "Keep this draft";
+
+  await expect(saveChatDrafts("scope")).resolves.toBeUndefined();
+  expect(ensure("scope", "edited").record.draft).toBe("Keep this draft");
+
+  missing.state.draft = "Do not lose this draft";
+  await expect(saveChatDrafts("scope")).rejects.toBe(
+    "native.ai.conversation.invalidId",
+  );
+  expect(missing.state.draft).toBe("Do not lose this draft");
+});
 test("final workspace flush rechecks earlier conversations for newly entered input", async () => {
   const first = await ready(),
     second = await ready("scope", "other");

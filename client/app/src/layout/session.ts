@@ -5,6 +5,7 @@ import { layoutAction } from "../diagnostics/actions";
 import {
   emptyLayout,
   reduceLayout,
+  removeConversations,
   selectedTab,
   type LayoutIntent,
   type PaneAddress,
@@ -347,6 +348,14 @@ export function createLayoutSession(
     state.dirty = true;
     schedule();
   }
+  function forgetConversations(deleted: ReadonlySet<string>) {
+    if (disposed || !state.document) return;
+    const layout = removeConversations(state.document.layout, deleted, nextId);
+    if (layout === state.document.layout) return;
+    state.document = { ...state.document, layout };
+    state.dirty = true;
+    schedule();
+  }
   function retainPluginViews(installedIds: readonly string[]) {
     if (disposed || !state.document) return;
     const installed = new Set(installedIds);
@@ -395,6 +404,7 @@ export function createLayoutSession(
     current,
     open,
     mapTargets,
+    forgetConversations,
     retainPluginViews,
     synchronizePluginIncarnations,
     dispose,

@@ -166,6 +166,54 @@ export type LayoutIntent =
   | ({ readonly type: "maximize" } & PaneAddress)
   | ({ readonly type: "close-pane" } & PaneAddress);
 
+export function removeConversations(
+  state: LayoutState,
+  deleted: ReadonlySet<string>,
+  nextId: () => string,
+): LayoutState {
+  if (!deleted.size) return state;
+  function cleanTab(tab: TopicTab): TopicTab {
+    const conversationIds = tab.conversationIds.filter(
+      (id) => !deleted.has(id),
+    );
+    const panes = tab.panes.map((pane) => {
+      const { entries, cursor } = pane.navigation;
+      const retained: NavigationEntry[] = [];
+      let preceding = -1;
+      for (const [index, item] of entries.entries()) {
+        const { target } = item;
+        if (
+          (target.kind === "conversation" ||
+            target.kind === "new-conversation") &&
+          deleted.has(target.conversationId)
+        )
+          continue;
+        retained.push(item);
+        if (index <= cursor) preceding = retained.length - 1;
+      }
+      if (retained.length === entries.length) return pane;
+      if (!retained.length) retained.push(entry({ kind: "empty" }, nextId));
+      return navigatePane(pane, {
+        entries: retained,
+        cursor: Math.max(0, preceding),
+      });
+    });
+    return conversationIds.length === tab.conversationIds.length &&
+      panes.every((pane, index) => pane === tab.panes[index])
+      ? tab
+      : { ...tab, panes, conversationIds };
+  }
+  const tabs = state.tabs.map(cleanTab);
+  const closedTabs = state.closedTabs.map((closed) => {
+    const tab = cleanTab(closed.tab);
+    return tab === closed.tab ? closed : { ...closed, tab };
+  });
+  return tabs.every((tab, index) => tab === state.tabs[index]) &&
+    closedTabs.every((closed, index) => closed === state.closedTabs[index])
+    ? state
+    : { ...state, tabs, closedTabs };
+}
+
 export function emptyLayout(): LayoutState {
   return { tabs: [], activeTabId: null, closedTabs: [] };
 }

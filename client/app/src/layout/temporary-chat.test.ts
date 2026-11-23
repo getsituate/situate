@@ -11,6 +11,7 @@ const chats = vi.hoisted(() => ({
   summaries: {
     conversations: [] as { id: string; title: string }[],
     loaded: false,
+    deletedConversationIds: new Set<string>(),
   },
   discard: vi.fn(),
 }));
@@ -29,12 +30,20 @@ vi.mock("../ai/chat", () => ({
 afterEach(() => {
   retainWorkspaceUi([]);
   chats.sessions.clear();
-  chats.summaries = { conversations: [], loaded: false };
+  chats.summaries = {
+    conversations: [],
+    loaded: false,
+    deletedConversationIds: new Set(),
+  };
   vi.clearAllMocks();
 });
 
 async function setup() {
-  chats.summaries = reactive({ conversations: [], loaded: false });
+  chats.summaries = reactive({
+    conversations: [],
+    loaded: false,
+    deletedConversationIds: new Set<string>(),
+  });
   chats.discard.mockImplementation((_scope: string, id: string) => {
     const state = chats.sessions.get(id)!;
     if (!state.ephemeral || state.running || state.unsaved) return false;

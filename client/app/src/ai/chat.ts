@@ -146,6 +146,7 @@ interface Session {
 interface WorkspaceChats {
   state: {
     conversations: ConversationSummary[];
+    deletedConversationIds: Set<string>;
     selected: string;
     loading: boolean;
     creating: boolean;
@@ -162,6 +163,7 @@ function workspace(scope: string): WorkspaceChats {
     value = {
       state: reactive({
         conversations: [],
+        deletedConversationIds: new Set<string>(),
         selected: "legacy",
         loading: false,
         creating: false,
@@ -752,7 +754,7 @@ export function workspaceChat(
     clearTimeout(current.draftTimer);
     const save = current.draftWrites.then(async () => {
       if (!live() || current.state.ephemeral) return;
-      await load();
+      if (!sameInput(input(), current.draftBase)) await load();
       if (current.client.hasUncertainAction || current.state.unsaved)
         throw new Error("ai.saveTheConversationBeforeClosing");
       current.actionError = undefined;
@@ -1131,6 +1133,7 @@ export function workspaceChat(
         current.stopWatching?.();
         current.temporaryAttachments?.clear();
         owner.sessions.delete(conversation);
+        owner.state.deletedConversationIds.add(conversation);
         ++owner.listVersion;
         owner.state.loading = false;
         owner.state.conversations = owner.state.conversations.filter(
