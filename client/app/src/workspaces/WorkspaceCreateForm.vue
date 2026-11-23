@@ -10,6 +10,7 @@ import {
   watch,
 } from "vue";
 import { SituateField, SituateInput, SituateButton } from "@situate/ui";
+import ErrorDialog from "../errors/ErrorDialog.vue";
 import AppearanceSettings from "../settings/AppearanceSettings.vue";
 import { accentStyle, type Accent } from "../settings/accents";
 import {
@@ -78,6 +79,8 @@ const canAttempt = computed(
     (!!validation.value || canCreate.value),
 );
 const operationError = ref(props.operationError);
+const pathTooLong = "native.workspace.create.pathTooLong";
+const showPathError = ref(false);
 watch(
   () => props.operationError,
   (value) => (operationError.value = value),
@@ -88,7 +91,11 @@ function isDestinationError(value: unknown): boolean {
     /^native\.workspace\.(folder|parent|name)\./u.test(value)
   );
 }
-const message = computed(() => operationError.value || error.value);
+const message = computed(() =>
+  operationError.value === pathTooLong
+    ? error.value
+    : operationError.value || error.value,
+);
 const destinationError = computed(() =>
   isDestinationError(operationError.value) ? operationError.value : error.value,
 );
@@ -154,9 +161,13 @@ async function create(): Promise<void> {
     return;
   }
   if (!canCreate.value || !parent.value) return;
-  if (await props.run("create", parent.value.id, name.value, accent.value))
+  if (await props.run("create", parent.value.id, name.value, accent.value)) {
     emit("opened");
-  else await check();
+  } else {
+    await nextTick();
+    if (operationError.value === pathTooLong) showPathError.value = true;
+    else await check();
+  }
 }
 onMounted(() => {
   document.getElementById("create-title")?.focus();
@@ -325,4 +336,9 @@ onBeforeUnmount(() => {
       >{{ t("workspace.createWorkspace") }}</SituateButton
     >
   </footer>
+  <ErrorDialog
+    :open="showPathError"
+    :message="localizeError(pathTooLong)"
+    @dismiss="showPathError = false"
+  />
 </template>

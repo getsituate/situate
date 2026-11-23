@@ -75,6 +75,12 @@ impl From<io::Error> for ContentError {
 }
 impl From<git2::Error> for ContentError {
     fn from(e: git2::Error) -> Self {
+        if cfg!(windows)
+            && e.class() == git2::ErrorClass::Filesystem
+            && e.message().starts_with("path too long:")
+        {
+            return Self::History("native.content.history.pathTooLong".into());
+        }
         Self::History(e.to_string())
     }
 }
@@ -898,8 +904,23 @@ fn require_absent(dir: &Dir, name: &str, message: &str) -> Result<()> {
     }
 }
 
+fn history_stage_name(id: uuid::Uuid) -> String {
+    format!("history-init-{id}")
+}
+
+#[cfg(windows)]
+pub(crate) fn workspace_history_path_fits(root: &Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+
+    // libgit2 reserves room for a packed object lock before opening a repository.
+    let stage = root
+        .join(".situate")
+        .join(history_stage_name(uuid::Uuid::nil()));
+    stage.as_os_str().encode_wide().count() + "/objects/pack/pack-.pack.lock".len() + 40 <= 260
+}
+
 fn initialize_history(root: &Dir, marker: &Dir, history_path: &Path) -> Result<Repository> {
-    let stage = format!("history-init-{}", uuid::Uuid::new_v4());
+    let stage = history_stage_name(uuid::Uuid::new_v4());
     marker.create_dir(&stage)?;
     let initialize = || -> Result<()> {
         let stage_path = history_path.with_file_name(&stage);

@@ -128,6 +128,33 @@ fn history_tree_sync_propagates_file_sharing_errors() {
 }
 
 #[cfg(windows)]
+#[test]
+fn moving_a_workspace_to_a_shorter_path_recovers_existing_history() {
+    let temp = tempfile::tempdir().unwrap();
+    let short = temp.path().join("work");
+    fs::create_dir_all(short.join(".situate")).unwrap();
+    fs::write(short.join("note.md"), "keep this").unwrap();
+    let revision = ContentStore::open(&short)
+        .unwrap()
+        .record_external_changes()
+        .unwrap();
+
+    let long = temp.path().join("w".repeat(220));
+    fs::rename(&short, &long).unwrap();
+    let error = ContentStore::open(&long)
+        .err()
+        .expect("expected path limit");
+    assert_eq!(error.to_string(), "native.content.history.pathTooLong");
+
+    fs::rename(&long, &short).unwrap();
+    let store = ContentStore::open(&short).unwrap();
+    assert_eq!(
+        store.read_revision("note.md", &revision).unwrap(),
+        b"keep this"
+    );
+}
+
+#[cfg(windows)]
 mod windows_history_sync {
     use super::*;
     use situate_host::windows_test_support::MetadataExt;

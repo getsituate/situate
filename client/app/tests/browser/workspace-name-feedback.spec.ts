@@ -1,6 +1,42 @@
 import { expect, test } from "./test";
 import { workspaceFixture, shellState } from "./workspace-fixture";
 
+test.describe("creation errors", () => {
+  test.use({ locale: "en-US", localizationMode: "real" });
+  test("a Windows path limit rejects creation in a dismissible error dialog", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await workspaceFixture(
+      page,
+      { ...shellState, current: null, known: [], open: [] },
+      { createError: "native.workspace.create.pathTooLong" },
+    );
+    await page.goto("/");
+    await page.getByRole("button", { name: "Create a workspace" }).click();
+    const name = page.locator("#workspace-name");
+    await name.fill("Field notes");
+    const create = page.getByRole("button", {
+      name: "Create workspace",
+      exact: true,
+    });
+    await expect(create).toBeEnabled();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await create.click();
+    const error = page.getByRole("dialog", {
+      name: "Action could not be completed",
+    });
+    await expect(error.getByRole("alert")).toContainText(
+      "The folder path is too long",
+    );
+    await error.getByRole("button", { name: "Dismiss" }).click();
+    await expect(error).toHaveCount(0);
+    await expect(name).toHaveValue("Field notes");
+    await expect(create).toBeEnabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+});
+
 for (const locale of ["en-US", "de-DE"] as const) {
   test.describe(locale, () => {
     test.use({ locale, localizationMode: "real" });

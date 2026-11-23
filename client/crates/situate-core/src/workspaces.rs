@@ -135,6 +135,10 @@ fn create_initialized(
     let dir = Dir::open_ambient_dir(&parent.handle, ambient_authority())
         .map_err(|_| "native.workspace.folder.unavailable")?;
     check_target(&dir, name)?;
+    #[cfg(windows)]
+    if !crate::content::workspace_history_path_fits(Path::new(&preview)) {
+        return Err("native.workspace.create.pathTooLong".into());
+    }
     dir.create_dir(name).map_err(|e| {
         if e.kind() == std::io::ErrorKind::AlreadyExists {
             "native.workspace.folder.exists".into()
@@ -597,6 +601,20 @@ mod tests {
         assert_eq!(result.unwrap_err(), "native.workspace.parent.readOnly");
         assert!(!temp.path().join("Garden").exists());
     }
+    #[test]
+    #[cfg(windows)]
+    fn too_long_for_git_history_leaves_the_parent_untouched() {
+        let temp = tempfile::tempdir().unwrap();
+        let name = "n".repeat(175);
+        preflight(temp.path(), &name).unwrap();
+
+        assert_eq!(
+            create_for_onboarding(temp.path(), &name).unwrap_err(),
+            "native.workspace.create.pathTooLong"
+        );
+        assert!(fs::read_dir(temp.path()).unwrap().next().is_none());
+    }
+
     #[test]
     fn exclusive_creation_survives_race_after_preflight() {
         let temp = tempfile::tempdir().unwrap();
