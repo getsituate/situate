@@ -266,7 +266,7 @@ function releaseInputs(version) {
   return {
     source,
     version,
-    updater: updaterSigningConfiguration(root, {
+    updater: updaterSigningConfiguration(client, {
       ...process.env,
       SITUATE_UPDATER_ENDPOINT: windowsStableEndpoint,
     }),

@@ -82,7 +82,7 @@ The app's history was sealed before signing from approved declarations and retai
 
 ## Windows direct releases
 
-Dispatch **Build Windows release candidates** on protected `main` with a reserved stable version. The `windows-release` environment supplies the Tauri signing key and password as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. The build creates separate x64 and ARM64 NSIS installers and Tauri signatures. It neither signs them with Authenticode nor publishes them.
+Dispatch **Build Windows release candidates** on protected `main` with a reserved stable version. The `windows-release` environment supplies the Tauri signing key and password as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. The build creates separate x64 and ARM64 NSIS installers and Tauri signatures. It neither signs them with Authenticode nor publishes them. Set `SITUATE_UPDATER_PUBLIC_KEY` to the same key when assembling, publishing, and activating the feed.
 
 ```sh
 node client/scripts/windows-release.mjs CANDIDATE VERSION SOURCE_SHA X64_ARTIFACT ARM64_ARTIFACT
