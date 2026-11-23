@@ -342,9 +342,12 @@ export function validateFinalArtifactConfiguration(configuration) {
         ),
       `Blocked: native lifecycle assertions are required for ${name}`,
     );
-    [...scenario.before, ...scenario.actions, ...scenario.after].forEach(
-      validateAction,
-    );
+    for (const action of [
+      ...scenario.before,
+      ...scenario.actions,
+      ...scenario.after,
+    ])
+      validateAction(action);
   }
   assert(
     configuration.updateActions?.length &&
