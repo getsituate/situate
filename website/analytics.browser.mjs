@@ -295,7 +295,7 @@ export async function checkAnalytics(browser, origin, proofs) {
         f.events.map((event) => event.event),
         ["$pageview"],
       );
-      assert.deepEqual(f.sdkRequests.toSorted(), [
+      assert.deepEqual(f.sdkRequests.toSorted(compareStrings), [
         "/vendor/posthog-1.447.4.min.js",
         "/vendor/posthog-web-vitals-1.447.4.min.js",
       ]);
@@ -397,7 +397,7 @@ export async function checkAnalytics(browser, origin, proofs) {
       const first = f.events[0].properties;
       // Route interception can lose unload requests when the document is replaced.
       await f.page.evaluate(() =>
-        window.dispatchEvent(new PageTransitionEvent("pagehide")),
+        window.dispatchEvent(new window.PageTransitionEvent("pagehide")),
       );
       await eventually(
         () =>
