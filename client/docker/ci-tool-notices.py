@@ -372,26 +372,27 @@ def verify_binaries(manifest, root, arch):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["collect", "verify"])
-    parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path("/opt/ci-tools"))
-    parser.add_argument("--manifest", type=pathlib.Path)
-    parser.add_argument("--cache", type=pathlib.Path, default=pathlib.Path("/var/cache/situate-ci-tool-notices"))
     args = parser.parse_args()
-    manifest = json.loads((args.manifest or args.root / "tool-notices/manifest.json").read_text())
-    quality = json.loads((args.root / "toolchain.quality.json").read_text())
+    root = pathlib.Path("/opt/ci-tools")
+    installed_manifest = root / "tool-notices/manifest.json"
+    source_manifest = pathlib.Path("/ci-input/client/docker/ci-tool-notices.json")
+    collecting = args.action == "collect"
+    manifest_bytes = (source_manifest if collecting else installed_manifest).read_bytes()
+    manifest = json.loads(manifest_bytes)
+    quality = json.loads((root / "toolchain.quality.json").read_text())
     check_manifest(manifest, quality)
     arch = {"x86_64": "amd64", "aarch64": "arm64"}[platform.machine()]
-    if args.action == "collect":
-        collect(manifest, args.root, args.cache)
-        build_source_tool(manifest, args.root, "cargo-llvm-cov", arch)
-        verify_binaries(manifest, args.root, arch)
-        if args.manifest:
-            (args.root / "tool-notices/manifest.json").write_bytes(args.manifest.read_bytes())
-        (args.root / "tool-notices/retained-notices.json").write_text(json.dumps(retained_notices(args.root), indent=2) + "\n")
+    if collecting:
+        collect(manifest, root, pathlib.Path("/var/cache/situate-ci-tool-notices"))
+        build_source_tool(manifest, root, "cargo-llvm-cov", arch)
+        verify_binaries(manifest, root, arch)
+        installed_manifest.write_bytes(manifest_bytes)
+        (root / "tool-notices/retained-notices.json").write_text(json.dumps(retained_notices(root), indent=2) + "\n")
     else:
-        verify_binaries(manifest, args.root, arch)
-        verify_archives(manifest, args.root)
-        expected = json.loads((args.root / "tool-notices/retained-notices.json").read_text())
-        require(expected == retained_notices(args.root), "Distribution notice inventory/hash mismatch")
+        verify_binaries(manifest, root, arch)
+        verify_archives(manifest, root)
+        expected = json.loads((root / "tool-notices/retained-notices.json").read_text())
+        require(expected == retained_notices(root), "Distribution notice inventory/hash mismatch")
     print(f"{len(manifest['artifacts'])} tool archives and retained distribution notices verified.")
 
 

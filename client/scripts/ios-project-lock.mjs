@@ -5,7 +5,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 export function assertLocalPath(root, path) {
   const parts = relative(root, path).split(/[\\/]/);
@@ -23,6 +23,16 @@ export function assertLocalPath(root, path) {
       if (error.code !== "ENOENT") throw error;
     }
   }
+}
+
+export function resolveLocalChild(root, path) {
+  if (typeof path !== "string" || !path)
+    throw new Error("Expected a file or directory path.");
+  const absolute = resolve(path);
+  if (!absolute.startsWith(`${root}${sep}`))
+    throw new Error(`Path must stay inside ${root}.`);
+  assertLocalPath(root, absolute);
+  return absolute;
 }
 
 export function acquireIosProject(

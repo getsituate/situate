@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { basename, resolve, join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { chromium, expect } from "@playwright/test";
 import * as vite from "vite";
 import { startBrowserServer } from "../../tools/browser-server.mjs";
-import { assertLocalPath } from "./ios-project-lock.mjs";
+import { assertLocalPath, resolveLocalChild } from "./ios-project-lock.mjs";
 
 function validateScene(scene) {
   if (typeof scene !== "string" || !scene || /[^a-z0-9-]/u.test(scene))
@@ -29,8 +29,13 @@ async function main() {
     allowPositionals: true,
   });
   const root = fileURLToPath(new URL("..", import.meta.url));
-  const output = resolve(
-    positionals[0] ?? join(root, "test-results/design-screenshots"),
+  if (positionals.length > 1)
+    throw new Error("Provide at most one screenshot output directory.");
+  const results = join(root, "test-results");
+  assertLocalPath(root, results);
+  const output = resolveLocalChild(
+    results,
+    positionals[0] ?? join(results, "design-screenshots"),
   );
   await mkdir(output, { recursive: true });
   const indexPath = join(output, "index.md");

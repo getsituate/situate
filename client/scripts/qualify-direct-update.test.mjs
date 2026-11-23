@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import {
   createReleaseFixture,
   fixtureSnapshot,
+  main,
   observeUpdate,
   releasePair,
 } from "./qualify-direct-update.mjs";
@@ -40,6 +41,7 @@ function releases(t, versions = ["0.0.1", "0.0.2"]) {
   const root = temporary(t);
   const signer = createUpdaterSignerFixture();
   const options = {
+    root,
     publicKey: signer.publicKey,
     teamId: "TEAM123456",
     app: join(root, "Situate.app"),
@@ -195,7 +197,11 @@ test("observations bind exact A and B, original receipt, and unchanged owned fix
   installed = "4".repeat(64);
   const after = await observeUpdate(
     "finish",
-    { receipt: options.receipt, publicKey: options.publicKey },
+    {
+      root: options.root,
+      receipt: options.receipt,
+      publicKey: options.publicKey,
+    },
     dependencies,
   );
   const result = JSON.parse(readFileSync(after));
@@ -287,6 +293,51 @@ test("receipts cannot modify observed inputs or change during observation", asyn
   );
 });
 
+test("observations require receipts and all selected inputs inside their qualification directory", async (t) => {
+  const options = releases(t);
+  const outside = temporary(t);
+  const dependencies = {
+    pair: () => assert.fail("Unscoped inputs reached release verification"),
+  };
+  for (const name of ["from", "to", "app", "workspace", "receipt"])
+    await assert.rejects(
+      observeUpdate("begin", { ...options, [name]: outside }, dependencies),
+      /must stay inside/,
+    );
+  await assert.rejects(
+    observeUpdate(
+      "finish",
+      { ...options, receipt: join(outside, "before.json") },
+      dependencies,
+    ),
+    /must stay inside/,
+  );
+  const alias = join(options.root, "alias");
+  symlinkSync(outside, alias);
+  await assert.rejects(
+    observeUpdate(
+      "begin",
+      { ...options, receipt: join(alias, "before.json") },
+      dependencies,
+    ),
+    /must not use a symbolic link/,
+  );
+  await observeUpdate("begin", options, {
+    pair: syntheticPair,
+    bundle: () => "3".repeat(64),
+  });
+  const receipt = JSON.parse(readFileSync(options.receipt));
+  receipt.inputs.workspace = outside;
+  writeFileSync(options.receipt, JSON.stringify(receipt));
+  await assert.rejects(
+    observeUpdate("finish", options, dependencies),
+    /must stay inside/,
+  );
+  assert.throws(() => statSync(`${options.receipt}.after.json`), {
+    code: "ENOENT",
+  });
+});
+
 test("fixtures have a readable legacy workspace marker and allow production initialization", (t) => {
   const root = temporary(t);
   const workspace = join(root, "workspace");
@@ -325,6 +376,15 @@ test("fixture creation never adopts existing directories and snapshots reject li
   const file = join(workspace, "release-sentinel.md");
   linkSync(file, join(root, "hardlink"));
   assert.throws(() => fixtureSnapshot(workspace), /regular/);
+});
+
+test("the fixture command refuses to create a workspace outside the qualification directory", async (t) => {
+  const workspace = join(temporary(t), "workspace");
+  await assert.rejects(
+    main(["fixture", "--workspace", workspace]),
+    /must stay inside/,
+  );
+  assert.throws(() => statSync(workspace), { code: "ENOENT" });
 });
 
 test("help needs no credentials and makes no Apple calls", () => {

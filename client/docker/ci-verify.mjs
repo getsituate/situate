@@ -43,7 +43,7 @@ process.env.PATH = executableDirectories.join(":");
 const toolNoticePins = {
   situate: "39f4fd9c29f32e6190133a824c0ae273d9a1a867c13afefd8c486741f0ba181a",
   manifest: "b6541bece874b908ea88a6124b58e4033f4e409375555750015ec7c5c5235470",
-  verifier: "c2e0240106229e078b022d288e27096d4c686718f9245cdf230fb2e0d0746b8c",
+  verifier: "9264f7704a0754b29ba03005fedc74288f7647b9d6bed70981558d54eaad8146",
 };
 for (const [path, expected] of [
   ["/opt/ci-tools/LICENSE-Situate.txt", toolNoticePins.situate],

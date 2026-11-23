@@ -375,7 +375,7 @@ Capture scenes from the [design workshop](../docs/development/design-workshop.md
 npm run screenshots:workspaces
 # Include navigation, dashboard, file editor, history and chat scenes:
 npm run screenshots:design
-# Optional output directory, relative to the current directory:
+# Optional output directory within test-results/:
 npm run screenshots:design -- test-results/design-review
 ```
 
@@ -677,15 +677,18 @@ Use a dedicated disposable macOS account or VM with no personal workspaces or cr
 
 `fixture` creates a new legacy workspace with an empty readable `.situate` directory, an ownership marker and two synthetic content files. Open it as an existing workspace; production admission initializes the workspace identity. Do not use **Create workspace** for this already populated folder.
 
-The local observer reads only the explicitly selected bundles, release files, fixture ownership marker and two fixed synthetic workspace files, and checks that `.situate` remains a readable directory. It never reads `.env`, signs, installs, launches, publishes or changes routing. Set `SITUATE_UPDATER_PUBLIC_KEY` in the environment. Run from the repository root, using canonical absolute paths for directories; keep receipts outside the app and workspace under a private, Git-ignored artifact directory.
+The local observer reads only the explicitly selected bundles, release files, fixture ownership marker and two fixed synthetic workspace files, and checks that `.situate` remains a readable directory. It never reads `.env`, signs, installs, launches, publishes or changes routing. Set `SITUATE_UPDATER_PUBLIC_KEY` in the environment. Run from the repository root. Keep the release directories, installed test app, workspace and receipts under the Git-ignored `client/target/direct-update/` directory, without symlinks in the selected paths. Keep receipts outside the observed directories.
 
 ```sh
-node client/scripts/qualify-direct-update.mjs fixture --workspace /ABSOLUTE/NEW_WORKSPACE
-# Install A from its verified DMG at the app path below; leave the app stopped.
-node tools/run-coordinated.mjs -- node client/scripts/qualify-direct-update.mjs begin --from /ABSOLUTE/RELEASE_A --to /ABSOLUTE/RELEASE_B --from-revision FULL_SHA_A --to-revision FULL_SHA_B --team-id TEAM123456 --app /ABSOLUTE/Situate.app --workspace /ABSOLUTE/NEW_WORKSPACE --receipt /ABSOLUTE/ARTIFACTS/before.json
-# Launch that A, choose Open workspace and select NEW_WORKSPACE, then update through the product UI,
-# verify B relaunches and reopens the workspace, then quit B normally.
-node tools/run-coordinated.mjs -- node client/scripts/qualify-direct-update.mjs finish --receipt /ABSOLUTE/ARTIFACTS/before.json
+run=client/target/direct-update/run-1
+mkdir -m 700 -p "$run"
+node client/scripts/qualify-direct-update.mjs fixture --workspace "$run/workspace"
+# Copy the complete release directories to release-a and release-b under "$run".
+# Install A from its verified DMG as "$run/Situate.app"; leave the app stopped.
+node tools/run-coordinated.mjs -- node client/scripts/qualify-direct-update.mjs begin --from "$run/release-a" --to "$run/release-b" --from-revision FULL_SHA_A --to-revision FULL_SHA_B --team-id TEAM123456 --app "$run/Situate.app" --workspace "$run/workspace" --receipt "$run/before.json"
+# Launch A, open "$run/workspace", then update through the product UI.
+# Verify B relaunches and reopens the workspace, then quit B normally.
+node tools/run-coordinated.mjs -- node client/scripts/qualify-direct-update.mjs finish --receipt "$run/before.json"
 ```
 
 Replace the example team with the unchanged release team. Both observations revalidate both manifests, artifact hashes, updater signatures, production configuration, DMG/archive equality and Apple assessments. `begin` requires the installed A bundle digest; `finish` requires the exact B digest and unchanged fixture ownership/content. Receipts are exclusive mode-0600 files; completion writes `before.json.after.json` without replacing the original. Any mismatch blocks the observation. Preserve evidence rather than automatically retrying an uncertain installation.

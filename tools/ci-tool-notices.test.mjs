@@ -36,6 +36,24 @@ function python(code) {
   assert.equal(result.status, 0, result.stderr || result.error?.message);
 }
 
+test("the image notice commands do not accept path overrides", () => {
+  for (const [action, option] of [
+    ["collect", "--manifest"],
+    ["collect", "--cache"],
+    ["verify", "--root"],
+  ]) {
+    const result = spawnSync(
+      "python3",
+      ["-B", helper, action, option, "notices"],
+      {
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 2, result.stderr || result.error?.message);
+    assert.match(result.stderr, /unrecognized arguments/);
+  }
+});
+
 test("notice selection preserves nested copied-code terms and source-header notices", () => {
   python(`
 files = {'pkg/LICENSE': b'MIT text', 'pkg/vendor/COPYING.txt': b'BSD copyright', 'pkg/legal/third-party.md': b'Apache notices', 'pkg/src/lib.rs': b'code'}
