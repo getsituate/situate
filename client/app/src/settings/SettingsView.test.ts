@@ -69,6 +69,17 @@ it("restores the selected category without adding a navigation entry", async () 
   wrapper.unmount();
 });
 
+it("does not restore the analytics category before its preference is available", () => {
+  const wrapper = mount(SettingsView, {
+    props: { ...props, presentation: { page: "analytics", detail: true } },
+  });
+  expect(wrapper.get(".settings-page-heading").text()).toBe(
+    "Language & formats",
+  );
+  expect(wrapper.find(".settings-detail-open").exists()).toBe(false);
+  wrapper.unmount();
+});
+
 it("keeps saving and background refresh silent while retaining initial loading and errors", async () => {
   const wrapper = mount(SettingsView, { props: { ...props, saving: true } });
   expect(wrapper.find('[role="status"]').exists()).toBe(false);

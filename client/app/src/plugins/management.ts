@@ -6,6 +6,11 @@ import { selectedTab } from "../layout/model";
 import { currentEntry, sameTarget } from "../layout/navigation";
 import type { NavigationTicket } from "../layout/session";
 
+export type PluginManagementUi = Pick<
+  WorkspaceUi,
+  "plugins" | "coordinator" | "registry" | "session"
+>;
+
 export function pluginManagementGroup(plugin: DeepReadonly<RuntimePlugin>) {
   return plugin.manifest?.kind ?? "tool";
 }
@@ -19,7 +24,7 @@ export function pluginSettingsId(
 }
 
 export async function openPluginSettings(
-  ui: WorkspaceUi,
+  ui: PluginManagementUi,
   plugin: DeepReadonly<RuntimePlugin> | undefined,
   ticket?: NavigationTicket,
 ) {

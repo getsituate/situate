@@ -11,11 +11,14 @@ import {
 import { t, localizeError } from "@situate/localization";
 import "@situate/localization/plugin-management";
 import { SituateButton, SituateDialogActions } from "@situate/ui";
-import { workspaceUi } from "../layout/runtime";
 import type { NavigationTicket } from "../layout/session";
 import { recoveryMode } from "../recovery";
 import type { PluginRuntime, RuntimePlugin } from "./runtime";
-import { openPluginSettings, pluginManagementGroup } from "./management";
+import {
+  openPluginSettings,
+  pluginManagementGroup,
+  type PluginManagementUi,
+} from "./management";
 import PluginCard from "./management/PluginCard.vue";
 import FileEditor from "../files/FileEditor.vue";
 import PluginUninstallDialog from "./management/PluginUninstallDialog.vue";
@@ -25,6 +28,7 @@ import bend from "../../../../design/brand/bend/svg/wave-welcome.svg";
 import curiousBend from "../../../../design/brand/bend/svg/point-curious.svg";
 import "./management/layout.css";
 const props = defineProps<{
+  ui: PluginManagementUi;
   scope: string;
   selectedPlugin?: string;
   ticket?: NavigationTicket;
@@ -183,8 +187,8 @@ watch(
   },
 );
 watch(
-  () => props.scope,
-  async (scope) => {
+  () => props.ui,
+  async (ui) => {
     const current = ++generation;
     runtime.value = undefined;
     selected.value = props.selectedPlugin;
@@ -200,7 +204,7 @@ watch(
     loading.value = true;
     busy.value = false;
     try {
-      const instance = await workspaceUi(scope).plugins;
+      const instance = await ui.plugins;
       if (current !== generation) return;
       if (!instance) throw new Error("plugins.workspaceUnavailable");
       runtime.value = instance;
@@ -229,7 +233,7 @@ async function retryInventory() {
   const current = generation;
   busy.value = true;
   try {
-    const instance = runtime.value ?? (await workspaceUi(props.scope).plugins);
+    const instance = runtime.value ?? (await props.ui.plugins);
     if (current !== generation) return;
     if (!instance) throw new Error("plugins.workspaceUnavailable");
     runtime.value = instance;
@@ -440,7 +444,7 @@ function settings(id: string) {
   const current = generation;
   void perform(`settings:${id}`, async () => {
     const opened = await openPluginSettings(
-      workspaceUi(props.scope),
+      props.ui,
       plugins.value.find((p) => p.id === id),
       props.ticket,
     );

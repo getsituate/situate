@@ -13,10 +13,8 @@ vi.mock("../files/api", async (original) => ({
   filesRequest: vi.fn(),
 }));
 const mocks = vi.hoisted(() => ({
-  ui: vi.fn(),
   recovery: false as boolean | undefined,
 }));
-vi.mock("../layout/runtime", () => ({ workspaceUi: mocks.ui }));
 vi.mock("../recovery", () => ({
   recoveryMode: () => mocks.recovery,
   pluginMayExecute: () => mocks.recovery === false,
@@ -88,7 +86,6 @@ function setup(
     },
     registry: { definitions: new Map([["weekly:settings", {}]]) },
   };
-  mocks.ui.mockReturnValue(ui);
   vi.mocked(filesRequest).mockImplementation(async (request) => {
     if (request.operation === "snapshot")
       return {
@@ -117,6 +114,7 @@ function setup(
     mount(PluginManagement, {
       attachTo: document.body,
       props: {
+        ui: ui as never,
         scope: "garden",
         selectedPlugin,
         onDevelop,
@@ -134,7 +132,6 @@ function action(
 }
 beforeEach(() => {
   mocks.recovery = false;
-  mocks.ui.mockReset();
   vi.mocked(filesRequest).mockReset();
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
@@ -171,7 +168,6 @@ test("waits for lazy runtime initialization then renders icon-free cards includi
   );
   expect(wrapper.get('[data-plugin-id="broken"] h3').text()).toBe("broken");
   expect(wrapper.find(".plugin-card-artwork").exists()).toBe(false);
-  expect(mocks.ui).toHaveBeenCalledWith("garden");
 });
 test("opens a selected plugin directly and returns to its collection without Settings", async () => {
   const fixture = setup();
@@ -822,7 +818,7 @@ test("discards a late runtime initialization when the workspace changes", async 
   const wrapper = first.render();
   await flushPromises();
   const second = setup([plugin("other")]);
-  await wrapper.setProps({ scope: "other-workspace" });
+  await wrapper.setProps({ scope: "other-workspace", ui: second.ui as never });
   await flushPromises();
   resolve(first.runtime);
   await flushPromises();

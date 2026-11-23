@@ -632,6 +632,7 @@ const sidebarActions = {
             <template #plugins="{ component, entry, ticket }">
               <component
                 :is="component"
+                :ui="ui"
                 :scope="ui.session.workspaceId"
                 :selected-plugin="
                   entry.target.kind === 'view'

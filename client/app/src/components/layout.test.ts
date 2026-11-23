@@ -17,6 +17,7 @@ import type { FilesRequest } from "../files/api";
 import { SituateIconButton, SituateTooltip } from "@situate/ui";
 import AppSidebar from "./AppSidebar.vue";
 import ChatPane from "./ChatPane.vue";
+import { updates } from "../updates/runtime";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -339,6 +340,34 @@ describe("workspace view host", () => {
     expect(
       workspaceUi("garden").session.state.document!.layout.tabs,
     ).toHaveLength(1);
+  });
+  it("opens the Updates category in the current pane and returns to the file", async () => {
+    const wrapper = await mountHost();
+    const supported = updates.supported;
+    updates.supported = true;
+    try {
+      expect(await wrapper.vm.showUpdates()).toBe(true);
+      await settleViews();
+      expect(wrapper.get(".settings-page-heading").text()).toBe(
+        "⟦updates.title⟧",
+      );
+      expect(wrapper.vm.back()).toBe(true);
+      await settleViews();
+      expect(wrapper.find(".source-text").exists()).toBe(true);
+    } finally {
+      updates.supported = supported;
+    }
+  });
+  it("lets the application open Updates separately when the workspace layout cannot be loaded", async () => {
+    const invokeNormally = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "layout_load")
+        throw new Error("native.layout.storage.failed");
+      return invokeNormally(command, args);
+    });
+    const wrapper = await mountHost();
+    expect(await wrapper.vm.showUpdates()).toBe(false);
+    expect(wrapper.find(".situate-error-screen").exists()).toBe(true);
   });
   it("supports direct selected entry and reopening without entering Settings", async () => {
     const wrapper = await mountHost();
