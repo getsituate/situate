@@ -10,7 +10,8 @@ import {
   SituateDialog,
 } from "@situate/ui";
 import WorkingIndicator from "./WorkingIndicator.vue";
-import { workspaceChat } from "../ai/chat";
+import { workspaceChat, workspaceConversations } from "../ai/chat";
+import ErrorDialog from "../errors/ErrorDialog.vue";
 import { ownsDictation } from "../dictation/runtime";
 import type { ConversationSummary } from "../ai/conversation-record";
 
@@ -20,7 +21,7 @@ const props = defineProps<{
   selected: boolean;
   running: boolean;
 }>();
-const emit = defineEmits<{ open: [] }>();
+const emit = defineEmits<{ open: []; archiveChanged: [archived: boolean] }>();
 const title = computed(() => props.item.title || t("navigation.newChat"));
 const interruptsWork = computed(
   () => props.running || ownsDictation(props.scope, props.item.id),
@@ -38,10 +39,50 @@ const editing = ref(false);
 const saving = ref(false);
 const error = ref(false);
 const draft = ref("");
+const moving = ref(false);
+const archiveError = ref(false);
 const trigger =
   useTemplateRef<InstanceType<typeof SituateIconButton>>("trigger");
 const anchor = computed(() => trigger.value?.element);
 const input = useTemplateRef<InstanceType<typeof SituateInput>>("input");
+async function changeArchive() {
+  if (moving.value) return;
+  const archived = !props.item.archived;
+  const button = trigger.value?.element;
+  const row = button?.closest(".conversation-row");
+  const entry = row?.closest("li");
+  const neighbor = entry?.nextElementSibling ?? entry?.previousElementSibling;
+  const summary = row
+    ?.closest(".conversations")
+    ?.querySelector<HTMLElement>("summary");
+  menuOpen.value = false;
+  button?.focus();
+  moving.value = true;
+  try {
+    await workspaceConversations(props.scope).setArchived(
+      props.item.id,
+      archived,
+    );
+    emit("archiveChanged", archived);
+    await nextTick();
+    if (document.activeElement === document.body) {
+      const target = neighbor?.querySelector<HTMLElement>(
+        ".conversation-actions",
+      );
+      if (target?.isConnected) target.focus();
+      else if (summary?.isConnected) summary.focus();
+    }
+  } catch {
+    archiveError.value = true;
+  } finally {
+    moving.value = false;
+  }
+}
+async function dismissArchiveError() {
+  archiveError.value = false;
+  await nextTick();
+  trigger.value?.focus();
+}
 async function confirmDelete() {
   menuOpen.value = false;
   deleteError.value = false;
@@ -215,6 +256,14 @@ async function save() {
         </SituateButton>
       </SituateTooltip>
       <SituateIconButton
+        v-if="!item.archived"
+        class="quick-archive"
+        icon="archive"
+        :label="t('chat.archiveConversationNamed', { title })"
+        :aria-disabled="moving || undefined"
+        @click="changeArchive"
+      />
+      <SituateIconButton
         ref="trigger"
         icon="more"
         class="conversation-actions"
@@ -223,8 +272,9 @@ async function save() {
         aria-haspopup="menu"
         :aria-controls="menuId"
         :popovertarget="menuId"
-        @click.prevent="menuOpen = !menuOpen"
-        @keydown.down.prevent="menuOpen = true"
+        :aria-disabled="moving || undefined"
+        @click.prevent="!moving && (menuOpen = !menuOpen)"
+        @keydown.down.prevent="!moving && (menuOpen = true)"
       />
       <SituateMenu
         :id="menuId"
@@ -239,6 +289,19 @@ async function save() {
           tabindex="-1"
           @click="rename"
           >{{ t("chat.renameConversation") }}</SituateButton
+        >
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="changeArchive"
+          >{{
+            t(
+              item.archived
+                ? "chat.restoreConversation"
+                : "chat.archiveConversation",
+            )
+          }}</SituateButton
         >
         <SituateButton
           variant="plain"
@@ -284,6 +347,11 @@ async function save() {
         </SituateButton>
       </template>
     </SituateDialog>
+    <ErrorDialog
+      :open="archiveError"
+      :message="t('chat.archiveChangeFailed')"
+      @dismiss="dismissArchiveError"
+    />
   </div>
 </template>
 
@@ -343,6 +411,23 @@ async function save() {
 }
 .conversation-actions {
   flex: none;
+}
+.quick-archive.situate-icon-button {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  @container conversation-list (min-width: 14rem) {
+    .quick-archive.situate-icon-button {
+      display: inline-grid;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .conversation-row:hover .quick-archive.situate-icon-button,
+    .conversation-row:has(:focus-visible) .quick-archive.situate-icon-button {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
 }
 .title-form {
   width: 100%;

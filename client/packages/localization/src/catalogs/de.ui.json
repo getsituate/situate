@@ -227,6 +227,8 @@
   "navigation.additionalViewsAreUnavailable": "Weitere Ansichten sind nicht verfügbar.",
   "navigation.more": "Weitere",
   "navigation.moreViews": "Weitere Ansichten",
+  "navigation.conversationArchive": "Archiv",
+  "navigation.noArchivedConversations": "Keine archivierten Gespräche.",
   "navigation.conversations": "Gespräche",
   "navigation.workspaceChat": "Arbeitsbereichs-Chat",
   "navigation.noConversationsYet": "Noch keine Gespräche.",

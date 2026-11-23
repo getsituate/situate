@@ -148,11 +148,33 @@ describe("workspace navigation within topic panes", () => {
     expect(state.tabs).toHaveLength(1);
     expect(state.conversations[first]!.messages).toEqual(["First draft"]);
     expect(hasActivity(state, state.active)).toBe(true);
+    const beforeArchive = state;
     state = reduceTabs(state, { type: "archive-conversation", id: first });
-    expect(state.conversations[first]!.archived).toBe(true);
-    expect(
-      currentTarget(activeTab(state)!.panes[activeTab(state)!.active]!),
-    ).toBe(`conversation:${first}`);
+    expect(state.conversations[first]).toEqual({
+      ...beforeArchive.conversations[first],
+      archived: true,
+    });
+    expect(state.tabs).toEqual(beforeArchive.tabs);
+    state = reduceTabs(state, { type: "archive-conversation", id: first });
+    expect(state).toEqual(beforeArchive);
+  });
+
+  it("does not reopen a deleted conversation through a closed tab or pane history", () => {
+    let state = createTabsState("tabs-empty");
+    state = reduceTabs(state, { type: "navigate", view: "chat" });
+    const tabId = state.active;
+    const paneId = activeTab(state)!.active;
+    state = reduceTabs(state, { type: "navigate", view: "tasks" });
+    state = reduceTabs(state, { type: "close-tab", id: tabId });
+    state = reduceTabs(state, { type: "delete-conversation", id: "garden" });
+
+    expect(state.conversations.garden).toBeUndefined();
+    state = reduceTabs(state, { type: "reopen-tab" });
+    expect(currentTarget(activeTab(state)!.panes[paneId]!)).toBe("tasks");
+    state = reduceTabs(state, { type: "history", id: paneId, delta: -1 });
+    expect(currentTarget(activeTab(state)!.panes[paneId]!)).toBe("empty");
+    state = reduceTabs(state, { type: "navigate", view: "chat" });
+    expect(currentTarget(activeTab(state)!.panes[paneId]!)).toBe("empty");
   });
 
   it("creates a destination when navigating without any open tabs", () => {

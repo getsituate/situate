@@ -2,11 +2,13 @@
 import { nextTick, ref, useId } from "vue";
 import {
   SituateButton,
+  SituateDialog,
   SituateIconButton,
   SituateInput,
   SituatePopover,
 } from "../ui";
 import copy from "../localization/en.conversation-list.json";
+import NavigationIcon from "./NavigationIcon.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -15,7 +17,7 @@ const props = withDefaults(
     working?: boolean;
     needsApproval?: boolean;
     selected?: boolean;
-    archivable?: boolean;
+    archived?: boolean;
     navigable?: boolean;
   }>(),
   { navigable: true },
@@ -24,11 +26,13 @@ const emit = defineEmits<{
   open: [];
   rename: [title: string];
   archive: [];
+  delete: [];
 }>();
 const id = useId();
 const options = ref<InstanceType<typeof SituateIconButton>>();
 const input = ref<InstanceType<typeof SituateInput>>();
 const menuOpen = ref(false);
+const confirmDelete = ref(false);
 const editing = ref(false);
 const draft = ref("");
 const feedback = ref("");
@@ -49,8 +53,25 @@ async function finish(save: boolean) {
   await nextTick();
   options.value?.focus();
 }
+function moveConversation() {
+  menuOpen.value = false;
+  emit("archive");
+}
+function askToDelete() {
+  menuOpen.value = false;
+  confirmDelete.value = true;
+}
+async function cancelDelete() {
+  confirmDelete.value = false;
+  await nextTick();
+  options.value?.focus();
+}
+function deleteConversation() {
+  confirmDelete.value = false;
+  emit("delete");
+}
 function keyboard(event: KeyboardEvent) {
-  if (event.isComposing) return;
+  if (!editing.value || event.isComposing) return;
   if (event.key === "Enter" && event.target === input.value?.element) {
     event.preventDefault();
     void finish(true);
@@ -129,7 +150,15 @@ function paste(event: ClipboardEvent) {
         >{{ title }}<span class="sr-only"> · {{ status }}</span></component
       >
       <SituateIconButton
+        v-if="!archived"
+        class="quick-archive"
+        :label="copy.archiveLabel.replace('{title}', title)"
+        @click="moveConversation"
+        ><NavigationIcon name="archive"
+      /></SituateIconButton>
+      <SituateIconButton
         ref="options"
+        class="conversation-options"
         icon="more"
         :label="copy.options.replace('{title}', title)"
         aria-haspopup="dialog"
@@ -163,17 +192,35 @@ function paste(event: ClipboardEvent) {
         <SituateButton variant="plain" @click="startRename">{{
           copy.rename
         }}</SituateButton>
-        <SituateButton
-          v-if="archivable"
-          variant="plain"
-          @click="
-            menuOpen = false;
-            emit('archive');
-          "
-          >{{ copy.archive }}</SituateButton
-        >
+        <SituateButton variant="plain" @click="moveConversation">{{
+          archived ? copy.restore : copy.archive
+        }}</SituateButton>
+        <SituateButton variant="plain" @click="askToDelete">{{
+          copy.delete
+        }}</SituateButton>
       </div>
     </SituatePopover>
+    <SituateDialog
+      v-if="confirmDelete"
+      :open="confirmDelete"
+      :aria-labelledby="`${id}-delete-title`"
+      :aria-describedby="`${id}-delete-description`"
+      @cancel.stop.prevent="cancelDelete"
+    >
+      <h2 :id="`${id}-delete-title`">{{ copy.deleteTitle }}</h2>
+      <p :id="`${id}-delete-description`">
+        {{ copy.deleteDescription.replace("{title}", title) }}
+        <template v-if="working">{{ copy.deleteWorking }}</template>
+      </p>
+      <template #actions>
+        <SituateButton variant="secondary" autofocus @click="cancelDelete">{{
+          copy.cancelDelete
+        }}</SituateButton>
+        <SituateButton variant="danger" @click="deleteConversation">{{
+          copy.confirmDelete
+        }}</SituateButton>
+      </template>
+    </SituateDialog>
     <span class="sr-only" aria-live="polite" aria-atomic="true">{{
       feedback
     }}</span>
@@ -216,6 +263,23 @@ function paste(event: ClipboardEvent) {
 .selected :deep(.conversation-title) {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
   font-weight: 600;
+}
+.quick-archive.situate-icon-button {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  @container conversation-list (min-width: 14rem) {
+    .quick-archive.situate-icon-button {
+      display: inline-grid;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .conversation-row:hover .quick-archive.situate-icon-button,
+    .conversation-row:has(:focus-visible) .quick-archive.situate-icon-button {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
 }
 .title-input {
   flex: 1;

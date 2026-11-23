@@ -46,7 +46,11 @@ async function confirmDeletion(wrapper: ReturnType<typeof render>) {
   await flushPromises();
   const items =
     document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
-  items[1]!.click();
+  const remove = [...items].find((item) =>
+    item.textContent?.includes("⟦chat.deleteConversation⟧"),
+  );
+  expect(remove).toBeDefined();
+  remove!.click();
   await flushPromises();
   return wrapper.get("dialog");
 }

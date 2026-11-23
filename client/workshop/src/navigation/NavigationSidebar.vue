@@ -11,6 +11,7 @@ import {
 } from "../tabs/model";
 import { catalogView, viewCatalog } from "../tabs/catalog";
 import copy from "../localization/en.tabs.json";
+import conversationCopy from "../localization/en.conversation-list.json";
 import { SituateIconButton, SituateButton, SituateIcon as UiIcon } from "../ui";
 import SituateIcon from "./NavigationIcon.vue";
 import { views } from "./fixtures";
@@ -75,9 +76,19 @@ const conversations = computed(() =>
       }))
     : state.value.conversations,
 );
+const active = computed(() =>
+  conversations.value.filter((item) => !item.archived),
+);
 const archive = computed(() =>
   conversations.value.filter((item) => item.archived),
 );
+const activeList = ref<HTMLUListElement>();
+const archivedList = ref<HTMLUListElement>();
+const disclosure = ref<InstanceType<typeof SituateDisclosure>>();
+const conversationFeedback = ref("");
+function conversationTarget(id: string) {
+  return id === "garden" ? "chat" : (`conversation:${id}` as const);
+}
 function navigateView(id: PinnedView) {
   if (props.topics) emit("topicAction", { type: "navigate", view: id });
   else update(openView(state.value, id as ViewId));
@@ -90,10 +101,7 @@ function newConversation() {
 }
 function openConversation(id: string) {
   if (!props.topics) return;
-  emit("topicAction", {
-    type: "navigate",
-    view: id === "garden" ? "chat" : `conversation:${id}`,
-  });
+  emit("topicAction", { type: "navigate", view: conversationTarget(id) });
   emit("navigate");
 }
 function renameItem(id: string, title: string) {
@@ -107,9 +115,37 @@ function renameItem(id: string, title: string) {
       ),
     });
 }
-function archiveItem(id: string) {
-  if (props.topics) emit("topicAction", { type: "archive-conversation", id });
-  else update(archiveConversation(state.value, id));
+async function changeConversation(id: string, action: "archive" | "delete") {
+  const item = conversations.value.find((item) => item.id === id);
+  if (!item) return;
+  const index = (item.archived ? archive : active).value.findIndex(
+    (item) => item.id === id,
+  );
+  if (props.topics) {
+    emit("topicAction", { type: `${action}-conversation`, id });
+  } else if (action === "archive") {
+    update(archiveConversation(state.value, id));
+  } else {
+    update({
+      ...state.value,
+      conversations: state.value.conversations.filter((item) => item.id !== id),
+    });
+  }
+  const message =
+    action === "delete"
+      ? conversationCopy.deleted
+      : item.archived
+        ? conversationCopy.restored
+        : conversationCopy.archived;
+  conversationFeedback.value = message.replace("{title}", item.title);
+  await nextTick();
+  const list = (item.archived ? archivedList : activeList).value;
+  const options = list?.querySelectorAll<HTMLButtonElement>(
+    ".conversation-options",
+  );
+  const neighbor = options?.[index] ?? options?.[index - 1];
+  if (neighbor) neighbor.focus();
+  else disclosure.value?.focus();
 }
 async function pin(id: PinnedView) {
   if (!props.topics) return;
@@ -229,42 +265,52 @@ function status(value: string) {
         />
       </div>
       <slot name="conversation-items" />
-      <ConversationRow
-        v-for="item in conversations.filter((item) => !item.archived)"
-        :key="item.id"
-        :title="item.title"
-        :navigable="!!topics"
-        :status="status(item.status)"
-        :working="item.status === 'working'"
-        :needs-approval="item.status === 'approval'"
-        :selected="
-          selected ===
-          (item.id === 'garden' ? 'chat' : `conversation:${item.id}`)
-        "
-        archivable
-        @open="openConversation(item.id)"
-        @rename="renameItem(item.id, $event)"
-        @archive="archiveItem(item.id)"
-      />
-      <SituateDisclosure>
-        <template #label>
-          {{ copy.archive }} <span>{{ archive.length }}</span>
-        </template>
-        <div
-          v-for="item in archive"
-          :key="item.id"
-          class="nav-row conversation"
+      <ul ref="activeList" class="conversation-list" role="list">
+        <li v-for="item in active" :key="item.id">
+          <ConversationRow
+            :title="item.title"
+            :navigable="!!topics"
+            :status="status(item.status)"
+            :working="item.status === 'working'"
+            :needs-approval="item.status === 'approval'"
+            :selected="selected === conversationTarget(item.id)"
+            @open="openConversation(item.id)"
+            @rename="renameItem(item.id, $event)"
+            @archive="changeConversation(item.id, 'archive')"
+            @delete="changeConversation(item.id, 'delete')"
+          />
+        </li>
+      </ul>
+      <SituateDisclosure
+        ref="disclosure"
+        class="conversation-archive"
+        :label="copy.archive"
+      >
+        <ul
+          v-if="archive.length"
+          ref="archivedList"
+          class="conversation-list"
+          role="list"
         >
-          <div>
-            {{ item.title }}<small>{{ status(item.status) }}</small>
-          </div>
-          <SituateIconButton
-            :label="copy.restoreConversation.replace('{title}', item.title)"
-            @click="archiveItem(item.id)"
-            ><SituateIcon name="restore"
-          /></SituateIconButton>
-        </div>
+          <li v-for="item in archive" :key="item.id">
+            <ConversationRow
+              :title="item.title"
+              :navigable="!!topics"
+              :status="status(item.status)"
+              :working="item.status === 'working'"
+              :needs-approval="item.status === 'approval'"
+              :selected="selected === conversationTarget(item.id)"
+              archived
+              @open="openConversation(item.id)"
+              @rename="renameItem(item.id, $event)"
+              @archive="changeConversation(item.id, 'archive')"
+              @delete="changeConversation(item.id, 'delete')"
+            />
+          </li>
+        </ul>
+        <p v-else class="empty-archive">{{ conversationCopy.emptyArchive }}</p>
       </SituateDisclosure>
+      <span class="sr-only" role="status">{{ conversationFeedback }}</span>
     </section>
   </div>
 </template>
@@ -325,9 +371,6 @@ h2 {
 :deep(summary .disclosure-chevron) {
   flex: none;
   margin: 0;
-}
-:deep(summary) span {
-  margin-left: auto;
 }
 .views-heading {
   min-height: 44px;
@@ -394,7 +437,22 @@ h2 {
   font-weight: var(--situate-weight-emphasis);
 }
 .conversations {
+  container: conversation-list / inline-size;
   margin-top: 32px;
+}
+.conversation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.conversation-archive .conversation-list {
+  padding-inline-start: 12px;
+}
+.empty-archive {
+  margin: 0;
+  padding: 4px 12px 12px;
+  color: var(--situate-muted);
+  font-size: var(--situate-text-small);
 }
 .section-heading {
   display: flex;
@@ -403,43 +461,6 @@ h2 {
 }
 .section-heading h2 {
   margin-bottom: 0;
-}
-.conversation {
-  min-height: 68px;
-}
-.conversation > div,
-.conversation-destination {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-small {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  color: var(--situate-muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-small :deep(svg) {
-  width: 14px;
-  height: 14px;
-}
-.conversation-destination {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: start;
-  padding: 8px 0;
-  font: inherit;
-}
-.conversation-destination[aria-current="page"] {
-  color: var(--situate-accent-strong, var(--situate-violet-deep));
-  font-weight: 600;
-}
-.working {
-  color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
 button:focus-visible,
 :deep(summary):focus-visible {

@@ -170,6 +170,14 @@
       ["ai_openai_start", { scope: "foreign-workspace" }],
       ["ai_conversations", { scope: "foreign-workspace" }],
       [
+        "ai_conversation_archive",
+        {
+          scope: "foreign-workspace",
+          conversation: "ownership-probe",
+          archived: true,
+        },
+      ],
+      [
         "ai_conversation_read",
         { scope: "foreign-workspace", conversation: "ownership-probe" },
       ],
@@ -258,6 +266,28 @@
       throw new Error(
         "Native draft editing or receipt replay changed saved conversation state",
       );
+    await invoke("ai_conversation_archive", { ...args, archived: true });
+    const archived = (
+      await invoke("ai_conversations", { scope: current.id })
+    ).find((item) => item.id === id);
+    const afterArchive = await invoke("ai_conversation_snapshot", args);
+    if (
+      archived?.archived !== true ||
+      afterArchive.generation !== saved.generation ||
+      canonicalJson(afterArchive.record) !== canonicalJson(saved.record)
+    )
+      throw new Error(
+        "Archiving changed the open conversation or did not persist",
+      );
+    await invoke("ai_conversation_archive", { ...args, archived: false });
+    const restored = (
+      await invoke("ai_conversations", { scope: current.id })
+    ).find((item) => item.id === id);
+    if (!restored || restored.archived)
+      throw new Error(
+        "Restoring did not return the conversation to the active list",
+      );
+
     const reject = async (command, request, expected, message) => {
       let error;
       try {

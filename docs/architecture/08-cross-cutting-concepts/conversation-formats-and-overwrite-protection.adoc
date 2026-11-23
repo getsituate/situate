@@ -15,7 +15,11 @@ Under <<adr-0016,ADR-0016>>, each conversation owns one directory inside its wor
 .situate/conversations/<conversation-id>/
   metadata.json
   history.jsonl
+  archive.json       (optional)
 ----
+
+The archive marker is a JSON boolean. Older conversations without the file are active.
+Archiving atomically replaces only this marker; it does not change the history or metadata revision, stop a run, or exclude the conversation from context tools.
 
 .Metadata is mutable; original history grows by appending entries.
 image::{architecture-diagrams-root}/append-conversation-storage.svg["The Conversation Owner appends history.jsonl before atomically replacing metadata.json in the conversation directory.",width=650]

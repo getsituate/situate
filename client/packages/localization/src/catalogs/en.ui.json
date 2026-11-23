@@ -227,6 +227,8 @@
   "navigation.additionalViewsAreUnavailable": "Additional views are unavailable.",
   "navigation.more": "More",
   "navigation.moreViews": "More views",
+  "navigation.conversationArchive": "Archive",
+  "navigation.noArchivedConversations": "No archived conversations.",
   "navigation.conversations": "Conversations",
   "navigation.workspaceChat": "Workspace chat",
   "navigation.noConversationsYet": "No conversations yet.",

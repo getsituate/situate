@@ -42,6 +42,7 @@ export interface ConversationSummary {
   title: string;
   revision: number;
   lastUserMessageAt?: number;
+  archived?: boolean;
 }
 export interface ConversationRecord extends ConversationSummary {
   version: 2;
@@ -224,6 +225,7 @@ export function readConversationList(value: unknown): ConversationSummary[] {
       summary(item) &&
       (item.lastUserMessageAt === undefined ||
         Number.isFinite(item.lastUserMessageAt)) &&
+      (item.archived === undefined || typeof item.archived === "boolean") &&
       Object.keys(item).every((key) =>
         [
           "id",
@@ -231,6 +233,7 @@ export function readConversationList(value: unknown): ConversationSummary[] {
           "revision",
           "development",
           "lastUserMessageAt",
+          "archived",
         ].includes(key),
       ),
   );

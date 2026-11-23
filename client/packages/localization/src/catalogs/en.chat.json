@@ -1,4 +1,10 @@
 {
+  "chat.archiveConversation": "Archive conversation",
+  "chat.archiveConversationNamed": "Archive {title}",
+  "chat.restoreConversation": "Restore conversation",
+  "chat.conversationArchived": "Conversation archived.",
+  "chat.conversationRestored": "Conversation restored.",
+  "chat.archiveChangeFailed": "The change to the archive could not be confirmed. Try again.",
   "chat.deleteConversation": "Delete conversation…",
   "chat.deleteTitle": "Delete conversation?",
   "chat.deleteConfirmation": "Do you want to delete this conversation?",

@@ -19,6 +19,57 @@ fn message(id: &str, parent: Option<&str>) -> HistoryEntry {
     )
 }
 #[test]
+fn archive_and_restore_leave_released_conversation_files_readable_and_unchanged() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().canonicalize().unwrap();
+    let dir = path.join(".situate/conversations/one");
+    fs::create_dir_all(&dir).unwrap();
+    // Version 3 metadata and version 1 history as written by v2026.11.1.
+    let metadata = br#"{"version":3,"id":"one","title":"Garden","revision":1,"selectedEntryId":"m","messageCount":1,"eventCount":0,"lastUserMessageAt":1.0}"#;
+    let history = br#"{"version":1,"id":"m","parentId":null,"type":"message","data":{"message":{"role":"user","content":"Keep the herbs","timestamp":1}}}
+"#;
+    fs::write(dir.join("metadata.json"), metadata).unwrap();
+    fs::write(dir.join("history.jsonl"), history).unwrap();
+    let storage = Storage::open(&path, "test").unwrap();
+    let record = storage.read_conversation("one").unwrap().unwrap();
+    assert!(!storage.list_conversations_for_navigation().unwrap()[0].archived);
+    assert!(storage.set_conversation_archived("missing", true).is_err());
+    storage.set_conversation_archived("one", true).unwrap();
+    let reopened = Storage::open(&path, "test").unwrap();
+    assert!(reopened.list_conversations_for_navigation().unwrap()[0].archived);
+    assert_eq!(reopened.list_conversations().unwrap().len(), 1);
+    assert_eq!(reopened.read_conversation("one").unwrap().unwrap(), record);
+    assert_eq!(fs::read(dir.join("metadata.json")).unwrap(), metadata);
+    assert_eq!(fs::read(dir.join("history.jsonl")).unwrap(), history);
+
+    // An older metadata/history writer never rewrites the archive file.
+    reopened
+        .append_conversation_entries("one", 1, &[message("next", Some("m"))], Some("next"))
+        .unwrap();
+    assert!(reopened.list_conversations_for_navigation().unwrap()[0].archived);
+    reopened.set_conversation_archived("one", false).unwrap();
+    let reopened = Storage::open(&path, "test").unwrap();
+    assert!(!reopened.list_conversations_for_navigation().unwrap()[0].archived);
+    let record = reopened.read_conversation("one").unwrap().unwrap();
+    assert_eq!(record.messages[0]["content"], "Keep the herbs");
+    assert_eq!(record.messages[1]["content"], "next");
+}
+
+#[test]
+fn archive_ignores_interrupted_writes_and_does_not_replace_unreadable_status() {
+    let (temp, storage) = workspace();
+    let dir = temp.path().join(".situate/conversations/one");
+    storage.set_conversation_archived("one", true).unwrap();
+    fs::write(dir.join("archive-abandoned.tmp"), b"fal").unwrap();
+    assert!(storage.list_conversations_for_navigation().unwrap()[0].archived);
+    fs::write(dir.join(ARCHIVE), b"invalid").unwrap();
+    assert!(storage.set_conversation_archived("one", false).is_err());
+    assert!(storage.list_conversations_for_navigation().is_err());
+    assert!(storage.read_conversation("one").unwrap().is_some());
+    assert_eq!(fs::read(dir.join(ARCHIVE)).unwrap(), b"invalid");
+}
+
+#[test]
 fn deletion_removes_only_the_current_conversation_and_reopens_without_it() {
     let (temp, storage) = workspace();
     storage.create_conversation("other", "Other").unwrap();

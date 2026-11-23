@@ -322,6 +322,14 @@ impl Storage {
         crate::durable_storage::sync_directory(&self.dir).is_ok()
     }
     pub(crate) fn replace(&self, name: &str, temp: &str, bytes: &[u8]) -> Result<bool, String> {
+        Self::replace_in(&self.dir, name, temp, bytes)
+    }
+    pub(crate) fn replace_in(
+        dir: &Dir,
+        name: &str,
+        temp: &str,
+        bytes: &[u8],
+    ) -> Result<bool, String> {
         let mut options = OpenOptions::new();
         options
             .write(true)
@@ -332,18 +340,18 @@ impl Storage {
             use cap_std::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = self.dir.open_with(temp, &options).map_err(|_| ERROR)?;
+        let mut file = dir.open_with(temp, &options).map_err(|_| ERROR)?;
         let result = (|| {
             file.write_all(bytes)?;
             file.sync_all()?;
-            self.dir.rename(temp, &self.dir, name)
+            dir.rename(temp, dir, name)
         })();
         if result.is_err() {
-            let _ = self.dir.remove_file(temp);
+            let _ = dir.remove_file(temp);
         }
-        // A failed directory sync is after the rename commit: never delete its new key.
+        // A failed directory sync is after the rename commit.
         result
-            .map(|_| self.sync_directory())
+            .map(|_| crate::durable_storage::sync_directory(dir).is_ok())
             .map_err(|_| ERROR.into())
     }
 }

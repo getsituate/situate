@@ -1,4 +1,10 @@
 {
+  "chat.archiveConversation": "Gespräch archivieren",
+  "chat.archiveConversationNamed": "„{title}“ archivieren",
+  "chat.restoreConversation": "Gespräch wiederherstellen",
+  "chat.conversationArchived": "Gespräch archiviert.",
+  "chat.conversationRestored": "Gespräch wiederhergestellt.",
+  "chat.archiveChangeFailed": "Die Änderung am Archiv konnte nicht bestätigt werden. Versuche es erneut.",
   "chat.deleteConversation": "Gespräch löschen…",
   "chat.deleteTitle": "Gespräch löschen?",
   "chat.deleteConfirmation": "Möchtest du dieses Gespräch löschen?",
