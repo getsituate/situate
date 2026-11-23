@@ -43,6 +43,15 @@ test("selects only current predecessor native updater stages and approved error 
     { ...event, origin: "renderer" },
     { ...event, event: "app.started" },
     { ...event, attributes: { stage: "private" } },
+    {
+      ...event,
+      attributes: {
+        stage: "check_finished",
+        error_code: "http",
+        detail: "private path",
+      },
+    },
+    { ...event, attributes: { stage: "download_finished" } },
     event,
     {
       ...event,
@@ -55,6 +64,8 @@ test("selects only current predecessor native updater stages and approved error 
     entries.map((entry) => JSON.stringify(entry)).join("\n") + '\n{"partial":',
   );
   assert.deepEqual(observeUpdater(account), [
+    "check_finished:http",
+    "download_finished",
     "prepare_window:files_pending",
     "install_replace:unknown",
     "install_finished",

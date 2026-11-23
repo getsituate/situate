@@ -480,10 +480,29 @@ end tell`;
   return `${prefix}${selectWindow}${enumerate}set matches to {}\nrepeat with elementRef in entries\ntry\nset candidate to contents of elementRef\nif role of candidate is ${quote(target.role)} and (name of candidate is ${label} or description of candidate is ${label}) then set end of matches to candidate\nend try\nend repeat\nif count of matches is not 1 then error ("Accessibility target must be unique: " & (count of matches))\n${["AXButton", "AXPopUpButton", "AXComboBox"].includes(target.role) ? 'if not enabled of item 1 of matches then error "Accessibility control is disabled"\n' : ""}${action.click ? 'perform action "AXPress" of item 1 of matches' : action.focus ? 'set value of attribute "AXFocused" of item 1 of matches to true' : target.value !== undefined ? `if value of item 1 of matches is not ${quote(target.value)} then error "Accessibility value differs"` : 'if not (exists item 1 of matches) then error "Accessibility assertion failed"'}\nend tell\nend tell`;
 }
 
+export function accessibilityFailureCode(error) {
+  const message = error?.cause?.message;
+  if (typeof message !== "string") return "ax_unavailable";
+  const count = /Accessibility target must be unique: (\d+) \(-2700\)$/.exec(
+    message,
+  );
+  if (count)
+    return count[1] === "0" ? "ax_target_missing" : "ax_target_ambiguous";
+  if (message.endsWith("Workspace navigation target must be unique (-2700)"))
+    return "ax_target_ambiguous";
+  if (message.endsWith("Accessibility control is disabled (-2700)"))
+    return "ax_target_disabled";
+  if (message.endsWith("Owned window must be unique (-2700)"))
+    return "ax_window_unavailable";
+  if (message.endsWith("Accessibility value differs (-2700)"))
+    return "ax_value_mismatch";
+  return "ax_unavailable";
+}
+
 export async function checkAccessibilityAction(
   pid,
   action,
-  { execute, options },
+  { execute, options, pending = () => {} },
 ) {
   const script = accessibilityScript(pid, action);
   if (action.navigation) {
@@ -539,6 +558,7 @@ export async function checkAccessibilityAction(
         action.folderField === undefined)
     )
       throw error;
+    pending(error);
     return false;
   }
 }
@@ -834,7 +854,7 @@ export function createFinalArtifactQualificationHost(
       configuration.account.mode === "ephemeral-host",
     );
   }
-  async function actions(items) {
+  async function actions(items, phase) {
     for (const original of items) {
       const action = structuredClone(original);
       if (action.type !== undefined)
@@ -851,10 +871,32 @@ export function createFinalArtifactQualificationHost(
         action.folderField = join(stateRoot, "workspace");
       else if (action.folderField === "{{upgradeWorkspace}}")
         action.folderField = join(stateRoot, "workspace", upgradeWorkspaceName);
-      await waitFor(
-        () => checkAccessibilityAction(pid, action, { execute, options }),
-        "accessibility assertion",
-      );
+      let lastPending;
+      try {
+        await waitFor(
+          () =>
+            checkAccessibilityAction(pid, action, {
+              execute,
+              options,
+              pending: (error) => {
+                lastPending = error;
+              },
+            }),
+          "accessibility assertion",
+        );
+      } catch (error) {
+        if (phase === "update")
+          reporter.emit(
+            "update",
+            accessibilityFailureCode(
+              error.qualificationCommand === "accessibility"
+                ? error
+                : lastPending,
+            ),
+            "accessibility",
+          );
+        throw error;
+      }
     }
   }
   function retainedFiles() {
@@ -1004,6 +1046,7 @@ export function createFinalArtifactQualificationHost(
         "Installed candidate changed before update qualification",
       );
       let upgrade;
+      let predecessorStartedAt;
       await qualifyPredecessorUpdate({
         install: async () => {
           deviceStateIsolationPending = true;
@@ -1012,6 +1055,7 @@ export function createFinalArtifactQualificationHost(
           await startProviderPhase();
           rmSync(app, { recursive: true });
           const previous = configuration.predecessor;
+          predecessorStartedAt = Date.now();
           await installDmg(previous.directory, previous.manifest.artifacts[0], {
             updater: true,
           });
@@ -1026,7 +1070,8 @@ export function createFinalArtifactQualificationHost(
               join(stateRoot, "workspace"),
             );
             upgrade = upgradeWorkspaceJourney({
-              actions,
+              actions: (items) => actions(items, "update"),
+              progress: (code) => reporter.emit("update", code, "upgrade_step"),
               verify: (expected) => verifyUpgradeWorkspace(root, expected),
               verifyCancellation: async (expectedDraft) => {
                 assert(
@@ -1052,10 +1097,9 @@ export function createFinalArtifactQualificationHost(
         report: () => provider.report(),
         update: async () => {
           const previousPid = pid;
-          const since = Date.now();
           try {
             if (upgrade) await upgrade.update();
-            else await actions(configuration.updateActions);
+            else await actions(configuration.updateActions, "update");
             pid = undefined;
             launchPending = true;
             await waitFor(async () => {
@@ -1083,17 +1127,7 @@ export function createFinalArtifactQualificationHost(
                   : "bundle_unverified",
               "updater",
             );
-            const events = observeUpdater({
-              ...configuration.account,
-              identifier,
-              version: previous.version,
-              since,
-            });
-            for (const event of events.length
-              ? events
-              : ["updater_unavailable"])
-              reporter.emit("update", event, "updater");
-            reporter.check(failure);
+            throw failure;
           }
         },
         reopen: async (report) => {
@@ -1105,6 +1139,18 @@ export function createFinalArtifactQualificationHost(
           await quit();
           await launch();
         },
+      }).catch((failure) => {
+        if (predecessorStartedAt !== undefined) {
+          const events = observeUpdater({
+            ...configuration.account,
+            identifier,
+            version: configuration.predecessor.manifest.artifacts[0].version,
+            since: predecessorStartedAt,
+          });
+          for (const event of events.length ? events : ["updater_unavailable"])
+            reporter.emit("update", event, "updater");
+        }
+        reporter.check(failure);
       });
       return {
         predecessorManifestSha256: predecessor.manifestSha256,

@@ -145,6 +145,33 @@ test("updater codes are accepted only for the update phase and never include raw
   );
 });
 
+test("upgrade step failures replace earlier transient polling errors without exposing private data", (t) => {
+  const path = fixture(t);
+  const emit = qualificationProgressWriter(path);
+  const lines = [];
+  const observer = observeQualificationProgress(path, {
+    output: { write: (line) => lines.push(line) },
+  });
+  emit("journeys", "nonzero", "accessibility");
+  emit("update", "find_cancel:started", "upgrade_step");
+  emit("update", "ax_target_ambiguous", "accessibility");
+  emit("update", "find_cancel:failed", "upgrade_step");
+  emit("update", "prepare_window:files_pending", "updater");
+  emit("cleanup", "completed");
+  assert.throws(() =>
+    emit("update", "private document:failed", "upgrade_step"),
+  );
+  assert.throws(() => emit("journeys", "find_cancel:failed", "upgrade_step"));
+  assert.throws(() => emit("update", "ax_target_ambiguous", "launch"));
+  const { failure } = observer.summary("failed");
+  assert.equal(failure.command, "upgrade_step");
+  assert.equal(failure.status, "find_cancel:failed");
+  assert.match(lines.join(""), /prepare_window:files_pending/);
+  assert.match(lines.join(""), /ax_target_ambiguous/);
+  assert.doesNotMatch(lines.join(""), /private document/);
+  observer.close();
+});
+
 test("unknown fields, codes, linked files, permissions and excessive records fail closed without echoing input", (t) => {
   const path = fixture(t);
   const emit = qualificationProgressWriter(path);
