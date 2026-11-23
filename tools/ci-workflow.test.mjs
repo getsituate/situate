@@ -232,7 +232,13 @@ test("fixed independent families depend on planning and aggregate every selected
           lane,
           /DEVELOPER_DIR: \/Applications\/Xcode_26\.3\.app\/Contents\/Developer/,
         );
-      assert.ok(lane.includes(`.lanes.*.id, '${id}')`));
+      assert.ok(
+        lane.includes(
+          name === "verify"
+            ? `fromJSON(needs.plan.outputs.lanes), '${id}')`
+            : `.lanes.*.id, '${id}')`,
+        ),
+      );
       assert.match(lane, /receipt:.*steps\.lane\.outputs\.receipt/);
       assert.match(lane, /PIPELINE_PLAN_DIGEST:.*needs\.plan\.outputs\.digest/);
       assert.match(lane, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);

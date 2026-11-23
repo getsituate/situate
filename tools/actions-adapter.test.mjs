@@ -13,6 +13,8 @@ import test from "node:test";
 import {
   aggregate,
   digest,
+  decodeWorkflowPlan,
+  encodeVerifyPlan,
   eventSelection,
   laneHosts,
   main,
@@ -25,6 +27,26 @@ import {
   sonarLcov,
 } from "./actions-adapter.mjs";
 import { encodeActionsReceipt } from "./actions-receipts.mjs";
+
+test("large Verify plans cross the job environment without changing their digest", () => {
+  const plan = {
+    lanes: [{ id: "windows-native" }],
+    paths: Array.from(
+      { length: 3000 },
+      (_, index) =>
+        `client/app/tests/visual/baselines/desktop/synthetic-workspace-state-${index}-1280x900.png`,
+    ),
+  };
+  assert.ok(Buffer.byteLength(JSON.stringify(plan)) > 128 * 1024);
+  const payload = encodeVerifyPlan(plan);
+  assert.ok(Buffer.byteLength(payload) < 24 * 1024);
+  assert.deepEqual(decodeWorkflowPlan(payload), plan);
+  assert.equal(digest(decodeWorkflowPlan(payload)), digest(plan));
+  assert.throws(
+    () => decodeWorkflowPlan("gzip:!"),
+    /Invalid compressed verification plan/,
+  );
+});
 
 test("desktop preflight uses the shared adapter without production credentials", async () => {
   const evidence = { desktopUnlocked: true, accessibilityTrusted: true };

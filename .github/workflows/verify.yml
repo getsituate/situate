@@ -21,6 +21,7 @@ jobs:
       pull-requests: read
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
+      lanes: ${{ steps.plan.outputs.lanes }}
       digest: ${{ steps.plan.outputs.digest }}
       app_impact: ${{ steps.plan.outputs.app_impact }}
     steps:
@@ -36,7 +37,7 @@ jobs:
 
   policy:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'policy')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'policy')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -55,7 +56,7 @@ jobs:
 
   tooling:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'tooling')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -74,7 +75,7 @@ jobs:
 
   tooling-macos:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'tooling-macos')
     runs-on: macos-latest
     timeout-minutes: 120
     outputs:
@@ -95,7 +96,7 @@ jobs:
 
   docker-integration:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'docker-integration')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'docker-integration')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -116,7 +117,7 @@ jobs:
 
   frontend:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'frontend')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'frontend')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -136,7 +137,7 @@ jobs:
 
   rust:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'rust')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'rust')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -156,7 +157,7 @@ jobs:
 
   macos-code:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'macos-code')
     runs-on: macos-latest
     timeout-minutes: 120
     outputs:
@@ -178,7 +179,7 @@ jobs:
 
   browser:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'browser')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'browser')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -205,7 +206,7 @@ jobs:
 
   browser-webkit:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'browser-webkit')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'browser-webkit')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -225,7 +226,7 @@ jobs:
 
   macos-native:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'macos-native')
     runs-on: macos-latest
     timeout-minutes: 120
     outputs:
@@ -249,7 +250,7 @@ jobs:
 
   macos-compatibility:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-compatibility')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'macos-compatibility')
     runs-on: macos-15-intel
     timeout-minutes: 60
     outputs:
@@ -273,7 +274,7 @@ jobs:
 
   windows-native:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'windows-native')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'windows-native')
     runs-on: windows-2025
     timeout-minutes: 120
     permissions:

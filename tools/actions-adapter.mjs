@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { gzipSync, gunzipSync } from "node:zlib";
 
 import {
   encodeActionsReceipt,
@@ -18,6 +19,33 @@ import {
 } from "./actions-receipts.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sha = /^[a-f0-9]{40}$/;
+const planWireLimit = 24 * 1024;
+const planDecodedLimit = 2 * 1024 * 1024;
+
+export function encodeVerifyPlan(plan) {
+  const bytes = Buffer.from(JSON.stringify(plan));
+  if (bytes.length > planDecodedLimit)
+    throw new Error("Verification plan exceeds the decoded size limit.");
+  const encoded = `gzip:${gzipSync(bytes, { level: 9 }).toString("base64")}`;
+  if (encoded.length > planWireLimit)
+    throw new Error("Verification plan exceeds the runner environment limit.");
+  return encoded;
+}
+
+export function decodeWorkflowPlan(value) {
+  if (!value?.startsWith("gzip:")) return JSON.parse(value);
+  if (
+    value.length > planWireLimit ||
+    !/^gzip:[A-Za-z0-9+/]+={0,2}$/u.test(value)
+  ) {
+    throw new Error("Invalid compressed verification plan.");
+  }
+  return JSON.parse(
+    gunzipSync(Buffer.from(value.slice(5), "base64"), {
+      maxOutputLength: planDecodedLimit,
+    }),
+  );
+}
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
 export const laneHosts = {
   policy: "linux",
@@ -653,7 +681,12 @@ export async function main(
     const matrix = matrices(plan);
     output(
       {
-        plan,
+        ...(workflow === "verify"
+          ? {
+              plan: encodeVerifyPlan(plan),
+              lanes: plan.lanes.map(({ id }) => id),
+            }
+          : { plan }),
         digest: digest(plan),
         linux: matrix.linux,
         macos: matrix.macos,
@@ -665,7 +698,7 @@ export async function main(
     );
     return plan;
   }
-  const plan = validatePlan(JSON.parse(env.PIPELINE_PLAN));
+  const plan = validatePlan(decodeWorkflowPlan(env.PIPELINE_PLAN));
   if (digest(plan) !== env.PIPELINE_PLAN_DIGEST)
     throw new Error("Workflow plan digest mismatch.");
   if (command === "source-reuse") {

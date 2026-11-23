@@ -718,7 +718,9 @@ test("verification delegates selected lanes directly from planning without optio
       assert.match(block, /needs: plan\n/);
       assert.ok(
         block.includes(
-          `contains(fromJSON(${name === "release-macos" ? `needs.plan.outputs.plan || '{"lanes":[]}'` : "needs.plan.outputs.plan"}).lanes.*.id, '${lane}')`,
+          name === "release-macos"
+            ? `contains(fromJSON(needs.plan.outputs.plan || '{"lanes":[]}').lanes.*.id, '${lane}')`
+            : `contains(fromJSON(needs.plan.outputs.lanes), '${lane}')`,
         ),
       );
       const macos = lane.startsWith("macos-") || lane === "tooling-macos";
