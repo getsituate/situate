@@ -498,7 +498,10 @@ test("the Slack changelog only follows a successful promotion of a selected rele
   );
   assert.match(notify, /needs: publish/);
   assert.doesNotMatch(notify, /vars\./);
-  assert.match(notify, /needs\.publish\.outputs\.published_release_id != ''/);
+  assert.match(
+    notify,
+    /^ {4}if: \$\{\{ !cancelled\(\) && needs\.publish\.result == 'success' && needs\.publish\.outputs\.published_release_id != '' \}\}$/m,
+  );
   assert.match(
     notify,
     /release_id: .*needs\.publish\.outputs\.published_release_id/,
