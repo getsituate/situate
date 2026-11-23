@@ -521,6 +521,7 @@
         `Pane: ${title}`,
     );
   }
+  const settingControl = (id) => query(`.ai-settings [id^="${id}-"]`);
   async function settings() {
     await navigation();
     const control = await wait("settings-navigation", () =>
@@ -533,16 +534,16 @@
       ),
     );
     ai.click();
-    await wait(
-      "ai-settings-ready",
-      () => query("#settings-inline") && !query("#settings-inline").disabled,
-    );
+    await wait("ai-settings-ready", () => {
+      const control = settingControl("settings-inline");
+      return control && !control.disabled;
+    });
     const advanced = query(".ai-settings details.advanced-settings");
     if (advanced && !advanced.open) advanced.querySelector("summary").click();
   }
   async function toggle(id, checked) {
     const control = await wait("setting-" + id, () => {
-      const element = query("#" + id);
+      const element = settingControl(id);
       return element && !element.disabled && element;
     });
     if (control.checked !== checked) control.click();
@@ -1907,7 +1908,7 @@
     if (info.mode === "fixture") {
       await settings();
       const commentModel = await wait("comment-model-selectable", () => {
-        const control = query("#settings-comment-model");
+        const control = settingControl("settings-comment-model");
         return control && !control.disabled && control;
       });
       commentModel.click();

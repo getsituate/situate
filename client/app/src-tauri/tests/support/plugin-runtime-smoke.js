@@ -415,12 +415,14 @@ window.runPluginRuntimeSmoke = async () => {
   );
   management().click();
   await wait(card, "Plugin management did not show the fresh installation");
-  card().querySelector('[data-action="more"]').click();
-  await wait(
-    () => document.querySelector('[role="menuitem"]'),
-    "The plugin menu did not open",
-  );
-  document.querySelector('[role="menuitem"]').click();
+  const more = card().querySelector('[data-action="more"]');
+  more.click();
+  const uninstall = await wait(() => {
+    const menuId = more.getAttribute("aria-controls");
+    const menu = menuId && document.getElementById(menuId);
+    return menu?.querySelector('[role="menuitem"]');
+  }, "The plugin menu did not open");
+  uninstall.click();
   const confirm = () =>
     document.querySelector(
       ".plugin-uninstall-dialog[open] .situate-button--danger",
