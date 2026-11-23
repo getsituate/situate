@@ -539,6 +539,44 @@ test("failed post-update product assertions fail qualification before restart", 
   assert.equal(restarted, false);
 });
 
+test("the upgrade journey finishes the draft before dismissing its save error", async () => {
+  const steps = [];
+  const diskChecks = [];
+  const unavailable = new Error("No update in this fixture");
+  const journey = upgradeWorkspaceJourney({
+    actions: async (batch) => {
+      if (batch.some(({ assert }) => assert?.name === "Update available"))
+        throw unavailable;
+      steps.push(...batch);
+    },
+    verify: async (text) => diskChecks.push(text),
+    writable: async () => {},
+  });
+  const window = "Upgrade workspace — Situate";
+  const editor = { role: "AXTextArea", name: "Markdown source", window };
+  const dismiss = { role: "AXButton", name: "Dismiss", window };
+  const saved =
+    "# Field notes\n\nStation A: light rain.\n\nStation B: clear.\n";
+  const draft = `${saved}\nUnsaved cancellation marker\n`;
+  await assert.rejects(journey.update(), (error) => error === unavailable);
+  assert.deepEqual(steps, [
+    { focus: editor },
+    { replaceText: { ...editor, value: draft } },
+    {
+      assert: {
+        role: "AXStaticText",
+        name: "Action could not be completed",
+        window,
+      },
+    },
+    { assert: dismiss },
+    { click: dismiss },
+    { assert: { ...editor, value: draft } },
+    { assert: { role: "AXStaticText", name: "Not saved", window } },
+  ]);
+  assert.deepEqual(diskChecks, [saved]);
+});
+
 test("a failed Cancel lookup reports the exact step and restores workspace writes", async () => {
   const events = [];
   const writable = [];
@@ -549,6 +587,7 @@ test("a failed Cancel lookup reports the exact step and restores workspace write
       assert.ok(!steps.some(({ click }) => click?.name === "Cancel"));
     },
     progress: (event) => events.push(event),
+    verify: async () => {},
     writable: async (enabled) => writable.push(enabled),
   });
   await assert.rejects(journey.update(), (actual) => actual === error);
@@ -626,7 +665,24 @@ test("AX entry, window assertions and chords reject unreviewed roles and keys", 
     }),
     /role of candidate is "AXComboBox"[\s\S]*AXFocused/,
   );
+  const editor = {
+    role: "AXTextArea",
+    name: "Markdown source",
+    window: "Qualification",
+  };
+  const replacement = accessibilityScript(123, {
+    replaceText: { ...editor, value: 'Draft "quoted"\nNext line' },
+  });
+  assert.match(replacement, /count of matches is not 1/);
+  assert.ok(
+    replacement.includes(
+      String.raw`set value of attribute "AXValue" of item 1 of matches to "Draft \"quoted\"\nNext line"`,
+    ),
+  );
   for (const action of [
+    { replaceText: { ...editor, role: "AXTextField", value: "Draft" } },
+    { replaceText: { ...editor, window: undefined, value: "Draft" } },
+    { replaceText: { ...editor, value: "x".repeat(16385) } },
     { windows: 0 },
     { key: { key: "r", modifiers: ["command"] } },
     { key: { key: "g", modifiers: ["option"] } },
