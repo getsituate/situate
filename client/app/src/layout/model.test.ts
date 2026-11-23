@@ -3,6 +3,7 @@ import {
   emptyLayout,
   normalizeLayout,
   reduceLayout,
+  removeConversations,
   selectedTab,
   tabHasActivity,
   tabTitle,
@@ -380,6 +381,29 @@ function expectValid(state: LayoutState) {
     expect(state.tabs.map((item) => item.id)).toContain(state.activeTabId);
   else expect(state.activeTabId).toBeNull();
 }
+
+it("clears panes with no surviving history and selects the next surviving entry otherwise", () => {
+  const open = tab(
+    "tab",
+    pane("only-chat", [conversation]),
+    pane("forward", [conversation, file, otherFile], 0),
+  );
+  const layout: LayoutState = {
+    tabs: [open],
+    activeTabId: open.id,
+    closedTabs: [],
+  };
+  const result = removeConversations(layout, new Set(["chat-1"]), () => "new");
+  const [cleared, forward] = result.tabs[0]!.panes;
+  expect(cleared!.navigation).toEqual({
+    entries: [{ id: "new", target: { kind: "empty" }, presentation: null }],
+    cursor: 0,
+  });
+  expect(forward!.navigation).toEqual({
+    entries: open.panes[1]!.navigation.entries.slice(1),
+    cursor: 0,
+  });
+});
 
 describe("conversation opening and pane history", () => {
   it("reveals an existing conversation in an inactive tab without changing either history", () => {

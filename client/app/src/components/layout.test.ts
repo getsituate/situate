@@ -261,6 +261,62 @@ describe("workspace view host", () => {
     await settleViews();
     return wrapper.getComponent(managementStub);
   }
+  it("removes a conversation from open and closed tab histories only after deletion succeeds", async () => {
+    const { session } = workspaceUi("garden");
+    await session.load();
+    const first = session.capture().address!;
+    const target = { kind: "conversation", conversationId: "legacy" } as const;
+    const files = currentEntry(
+      session.state.document!.layout.tabs[0]!.panes[0]!.navigation,
+    );
+    session.open(target);
+    session.open({ kind: "empty" });
+    session.dispatch({ type: "new-tab" });
+    session.open(target);
+    session.dispatch({
+      type: "close-tab",
+      tabId: session.capture().address!.tabId,
+    });
+    session.dispatch({ type: "history", delta: -1, ...first });
+    await nextTick();
+    const before = session.state.document;
+    const native = vi.mocked(invoke).getMockImplementation()!;
+    let deleted = false;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "ai_conversation_delete") {
+        if (!deleted) throw new Error("Storage unavailable");
+        return;
+      }
+      return native(command, args);
+    });
+
+    await expect(
+      workspaceChat("garden", "legacy").deleteConversation(),
+    ).rejects.toThrow("Storage unavailable");
+    expect(session.state.document).toBe(before);
+    deleted = true;
+    await workspaceChat("garden", "legacy").deleteConversation();
+    await session.flush();
+    retainWorkspaceUi([]);
+    closeChats([]);
+    const reopened = workspaceUi("garden").session;
+    await reopened.load();
+
+    const { tabs, closedTabs } = reopened.state.document!.layout;
+    expect(tabs[0]!.conversationIds).toEqual([]);
+    const navigation = tabs[0]!.panes[0]!.navigation;
+    expect(currentEntry(navigation)).toEqual(files);
+    expect(navigation.entries.map(({ target }) => target.kind)).toEqual([
+      "view",
+      "empty",
+    ]);
+    expect(closedTabs[0]!.tab.conversationIds).toEqual([]);
+    expect(
+      closedTabs[0]!.tab.panes[0]!.navigation.entries.map(
+        ({ target }) => target,
+      ),
+    ).toEqual([{ kind: "empty" }]);
+  });
   it("opens Plugins independently from Settings and returns to the retained workspace", async () => {
     const wrapper = await mountHost();
     const layout = structuredClone(

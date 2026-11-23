@@ -183,7 +183,7 @@ it("waits for inventory before mounting a retained target and leaves no missing 
     wrapper.unmount();
   }
 });
-it("shows the existing new-tab chooser for a deleted conversation while preserving its history target", async () => {
+it("shows the new-tab chooser for an unavailable conversation target", async () => {
   const component = markRaw(
     defineComponent({ render: () => h("div", "Conversation content") }),
   );
@@ -232,10 +232,6 @@ it("shows the existing new-tab chooser for a deleted conversation while preservi
     expect(wrapper.get(".view-chooser").text()).toContain(
       "⟦layoutHost.chooserTitle⟧",
     );
-    expect(pane.navigation.entries[0]!.target).toEqual({
-      kind: "conversation",
-      conversationId: "garden",
-    });
     await wrapper.get(".new-conversation").trigger("click");
     expect(wrapper.emitted("newConversation")).toHaveLength(1);
     const chooser = wrapper.get(".view-chooser").html();

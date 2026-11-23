@@ -65,7 +65,9 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => () => {}),
 }));
 vi.mock("../ai/chat", () => ({
-  workspaceConversations: () => ({ state: { conversations: [] } }),
+  workspaceConversations: () => ({
+    state: { conversations: [], deletedConversationIds: new Set() },
+  }),
 }));
 
 let recoveryRevision = 0;

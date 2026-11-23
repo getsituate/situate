@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "remove-deleted-conversation-history-entries",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "remove-deleted-conversation-history-entries",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Remove deleted conversations from navigation history",
+          "paragraphs": [
+            "Deleting a conversation removes it from the back and forward history of open and recently closed tabs. A missing conversation no longer prevents you from closing the workspace if its draft has not changed."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "remove-deleted-conversation-history-entries",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Gelöschte Gespräche aus dem Navigationsverlauf entfernen",
+          "paragraphs": [
+            "Wenn du ein Gespräch löschst, verschwindet es aus dem Vor- und Zurückverlauf offener und kürzlich geschlossener Tabs. Ein fehlendes Gespräch blockiert das Schließen des Arbeitsbereichs nicht mehr, wenn sein Entwurf unverändert ist."
+          ]
+        }
+      ]
+    }
+  }
+}
