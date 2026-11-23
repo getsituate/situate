@@ -82,7 +82,11 @@ The app's history was sealed before signing from approved declarations and retai
 
 ## Windows direct releases
 
-Dispatch **Build Windows release candidates** on protected `main` with a reserved stable version. The `windows-release` environment supplies the Tauri signing key and password as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. The build creates separate x64 and ARM64 NSIS installers and Tauri signatures. It neither signs them with Authenticode nor publishes them. Set `SITUATE_UPDATER_PUBLIC_KEY` to the same key when assembling, publishing, and activating the feed.
+The protected-main release workflow builds the macOS packages and, when the repository variable `WINDOWS_RELEASE_ENABLED` is `true`, the x64 and ARM64 Windows NSIS installers for the same reserved version and checkout. It does not start a separate Windows workflow. Leave the variable unset until the Windows signing and qualification environments are ready.
+
+Restrict `windows-release` and `windows-qualification` to `main`. `windows-release` supplies `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. Set `SITUATE_WINDOWS_UPDATER_PUBLIC_KEY` in `macos-release` to the same public key so the shared publisher can verify Windows signatures without access to the Windows private key. Do not assign the private key to the qualification environment.
+
+Download the two Windows artifacts from the same workflow run and attempt. Assemble the candidate with `SITUATE_UPDATER_PUBLIC_KEY` set to the Windows public key:
 
 ```sh
 node client/scripts/windows-release.mjs CANDIDATE VERSION SOURCE_SHA X64_ARTIFACT ARM64_ARTIFACT
@@ -98,11 +102,7 @@ For the first Windows release only, the publisher accepts `{ "result": "deferred
 
 Record successful checks in the qualification JSON. Its `kind` is `windows-exact-artifact-qualification`, `manifestSha256` is the hash of the assembled `manifest.json`, and `architectures` lists x64 then ARM64, with each manifest `target` and installer `sha256`. Under `systems`, record `install`, `update`, and `uninstall` as `passed` for both `windows-10-22h2` and `windows-11`. `webview2Bootstrap` records the `target` and `sha256` of the installer tested without WebView2, with `result` set to `passed`. Keep the qualification evidence with the candidate; do not substitute a result from another build or an emulated x64 run for an ARM64 run.
 
-The annotated `windows-vVERSION` tag must point to the qualified source commit. The Windows publisher uses that existing tag, stages the verified assets in a draft, verifies GitHub's copies, and makes it a stable release without changing the repository's latest-release selection. It does not replace published assets. Set `SITUATE_UPDATER_PUBLIC_KEY` in the publication environment; the private key is not needed.
-
-```sh
-node infrastructure/releases/publish-windows.mjs CANDIDATE QUALIFICATION_JSON
-```
+Set the `SITUATE_WINDOWS_RELEASE_QUALIFICATION` environment variable in `windows-qualification` to the qualification JSON and approve the **Record Windows qualification** job in the same run. Require a reviewer for this environment. The release job verifies that the receipt describes its exact candidate before sealing the Windows installers, signatures and checksums alongside the macOS packages in the single `vVERSION` GitHub Release. A missing or invalid receipt prevents release creation. A build or review that misses the workflow deadline cannot publish its candidate in a later run.
 
 After the release is public, run the feed activator on the distribution host with its exact release ID and a verified copy of the assembled candidate. It compares the GitHub assets with the candidate before atomically replacing `windows-release/update.json`. It refuses older versions and differing bytes under the current version.
 

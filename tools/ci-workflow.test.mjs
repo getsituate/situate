@@ -14,7 +14,6 @@ const pipelineWorkflows = [
   "deploy-website",
   "deploy-architecture",
   "release-macos",
-  "release-windows",
   "publish-macos",
   "dependency-monitoring",
   "diagnostics",
@@ -64,7 +63,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             "actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
           ]
         : []),
-      ...(["deploy-website", "release-windows"].includes(name)
+      ...(["deploy-website", "release-macos"].includes(name)
         ? ["actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"]
         : []),
       ...(name === "verify"
@@ -105,7 +104,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
             : name === "verify-hosting" && match[1].startsWith("terraform ")
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
-              : ["verify", "release-windows"].includes(name) &&
+              : ["verify", "release-macos"].includes(name) &&
                   match[1].endsWith(".ps1")
                 ? /^\.\/tools\/(?:build-windows-installer-preview|probe-windows-webview2|test-windows-arm64)\.ps1$/
                 : /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
@@ -150,11 +149,6 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
         body.includes("runs-on: windows-11-arm")
       ) {
         assert.match(body, /run: \.\/tools\/test-windows-arm64\.ps1/);
-      } else if (name === "release-windows") {
-        assert.match(
-          body,
-          /run: python tools\/pipeline-bootstrap\.py[\s\S]*run: \.\/tools\/build-windows-installer-preview\.ps1/,
-        );
       } else if (body.includes("run: node ")) {
         const python = body.includes("runs-on: windows-2025")
           ? "python"
@@ -226,7 +220,7 @@ test("fixed independent families depend on planning and aggregate every selected
   for (const name of ["verify", "release-macos"]) {
     const workflow = read(name);
     assert.doesNotMatch(
-      workflow.split("\n  create:")[0],
+      workflow.split(/\n {2}(?:create|windows-build):/)[0],
       /secrets\.|actions: write|contents: write|packages: write|ACTIONS_RUNTIME/,
     );
     assert.match(
@@ -309,24 +303,37 @@ test("fixed independent families depend on planning and aggregate every selected
   }
 });
 
-test("Windows candidates build from protected main without publication credentials", () => {
-  const workflow = read("release-windows");
-  const build = job(workflow, "build");
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(
-    build,
-    /github\.ref == 'refs\/heads\/main' && github\.ref_protected/,
-  );
+test("the desktop CD builds Windows for the reserved version before creating the shared release", () => {
+  const workflow = read("release-macos");
+  const build = job(workflow, "windows-build");
+  const creator = job(workflow, "create");
   assert.match(build, /environment: windows-release/);
+  assert.match(build, /github\.ref_protected/);
   assert.match(
     build,
     /target: x86_64-pc-windows-msvc[\s\S]*target: aarch64-pc-windows-msvc/,
   );
   assert.match(
     build,
+    /SITUATE_WINDOWS_RELEASE_VERSION:.*steps\.reservation\.outputs\.version/,
+  );
+  assert.match(
+    build,
     /TAURI_SIGNING_PRIVATE_KEY:.*secrets\.TAURI_SIGNING_PRIVATE_KEY/,
   );
-  assert.doesNotMatch(workflow, /contents: write|WEBSITE_SSH|pull_request/);
+  assert.doesNotMatch(build, /contents: write|SSH/);
+  assert.match(
+    job(workflow, "windows-qualification"),
+    /needs: windows-build[\s\S]*environment: windows-qualification/,
+  );
+  assert.match(
+    creator,
+    /create-stage --stage inputs[\s\S]*actions-windows-release\.mjs reservation/,
+  );
+  assert.match(
+    creator,
+    /actions-windows-release\.mjs collect[\s\S]*create-stage --stage github/,
+  );
 });
 
 test("PR verification fails if selected native ARM64 tests cannot run or fail", () => {

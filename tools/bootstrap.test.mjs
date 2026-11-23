@@ -119,6 +119,16 @@ function checkWorkflowBootstrap(name, workflow) {
         ["./tools/probe-windows-webview2.ps1"],
         context,
       );
+    } else if (name === "release-macos.yml" && id === "windows-qualification") {
+      assert.match(block, /^ {4}runs-on: windows-11-arm$/m, context);
+      assert.deepEqual(
+        commands,
+        [
+          "./tools/test-windows-arm64.ps1",
+          "./tools/test-windows-release-arm64.ps1",
+        ],
+        context,
+      );
     } else if (name === "verify.yml" && id === "windows-arm64-native") {
       assert.match(block, /^ {4}runs-on: windows-11-arm$/m, context);
       assert.deepEqual(commands, ["./tools/test-windows-arm64.ps1"], context);
@@ -180,16 +190,16 @@ function checkWorkflowBootstrap(name, workflow) {
           command,
           name === "release-macos.yml" &&
             ["create", "macos-compatibility"].includes(id)
-            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|swift-plan|start|report)|wait-for-hosting\.mjs --(?:probe|check))$/
+            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|swift-plan|start|report)|actions-windows-release\.mjs (?:reservation|collect)|wait-for-hosting\.mjs --(?:probe|check))$/
             : ({
-                "diagnostics.yml: launch-check":
-                  /^node tools\/qualification-launch-check\.mjs$/,
                 "verify.yml: windows-smoke-build":
                   /^(?:node tools\/build-windows-smoke\.mjs windows-smoke-artifact|\.\/tools\/build-windows-installer-preview\.ps1)$/,
                 "verify.yml: windows-arm64-installer":
                   /^\.\/tools\/build-windows-installer-preview\.ps1$/,
-                "release-windows.yml: build":
-                  /^\.\/tools\/build-windows-installer-preview\.ps1$/,
+                "release-macos.yml: windows-build":
+                  /^(?:node tools\/actions-windows-release\.mjs version|\.\/tools\/build-windows-installer-preview\.ps1)$/,
+                "diagnostics.yml: launch-check":
+                  /^node tools\/qualification-launch-check\.mjs$/,
                 "verify-hosting.yml: offline":
                   /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
                 "deploy-hosting.yml: rehearse":

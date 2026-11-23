@@ -59,6 +59,7 @@ test("the qualification baseline shares the release identity but uses only the i
       version: "2026.11.20",
     },
     updater: {
+      SITUATE_RELEASE_VERSION: "2026.11.20",
       SITUATE_DISTRIBUTION: "direct",
       SITUATE_UPDATER_PUBLIC_KEY: "fixture public key",
       SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",

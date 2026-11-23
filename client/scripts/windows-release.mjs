@@ -16,7 +16,7 @@ import {
 
 export const windowsStableEndpoint =
   "https://getsituate.com/releases/windows/current/update.json";
-const architectures = {
+export const windowsArchitectures = {
   "x86_64-pc-windows-msvc": {
     download: "x64",
     updater: "windows-x86_64",
@@ -41,25 +41,36 @@ export function stableWindowsVersion(version) {
 }
 
 export function windowsReleaseTag(version) {
-  return `windows-v${stableWindowsVersion(version)}`;
+  return `v${stableWindowsVersion(version)}`;
 }
 
 export function windowsReleaseFilename(version, target) {
   stableWindowsVersion(version);
-  if (!Object.hasOwn(architectures, target))
+  if (!Object.hasOwn(windowsArchitectures, target))
     throw new Error("Unsupported Windows release target.");
-  return `Situate-${version}-windows-${architectures[target].download}-setup.exe`;
+  return `Situate-${version}-windows-${windowsArchitectures[target].download}-setup.exe`;
+}
+
+export function windowsAssetNames(version) {
+  return [
+    "windows-release.json",
+    "SHA256SUMS.txt",
+    ...Object.keys(windowsArchitectures).flatMap((target) => {
+      const file = windowsReleaseFilename(version, target);
+      return [file, `${file}.sig`];
+    }),
+  ];
 }
 
 export function verifyApplicationMachine(bytes, target) {
   const offset = bytes.length >= 64 ? bytes.readUInt32LE(0x3c) : 0;
   if (
-    !Object.hasOwn(architectures, target) ||
+    !Object.hasOwn(windowsArchitectures, target) ||
     bytes.toString("ascii", 0, 2) !== "MZ" ||
     offset < 64 ||
     offset + 6 > bytes.length ||
     bytes.readUInt32LE(offset) !== 0x4550 ||
-    bytes.readUInt16LE(offset + 4) !== architectures[target].machine
+    bytes.readUInt16LE(offset + 4) !== windowsArchitectures[target].machine
   ) {
     throw new Error(
       `Windows application does not match release target ${target}.`,
@@ -101,7 +112,7 @@ export function windowsReleaseMetadata(
     throw new Error("Expected the exact release checkout SHA.");
   const platforms = {};
   const artifacts = [];
-  for (const [target, { updater }] of Object.entries(architectures)) {
+  for (const [target, { updater }] of Object.entries(windowsArchitectures)) {
     const directory = directories[target];
     const manifest = JSON.parse(
       readFileSync(join(directory, "manifest.json"), "utf8"),
@@ -161,7 +172,7 @@ export function assembleWindowsRelease(
     if (
       copied.sha256 !== sha256 ||
       copied.signature !==
-        feed.platforms[architectures[target].updater].signature
+        feed.platforms[windowsArchitectures[target].updater].signature
     ) {
       throw new Error(`Copied installer differs from its manifest: ${file}`);
     }

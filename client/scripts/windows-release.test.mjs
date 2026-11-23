@@ -92,7 +92,7 @@ test("Windows publication metadata routes both exact installers through the stab
       ].map(([target, key]) => [
         key,
         {
-          url: `https://github.com/getsituate/situate/releases/download/windows-v2026.11.20/${filenames[target]}`,
+          url: `https://github.com/getsituate/situate/releases/download/v2026.11.20/${filenames[target]}`,
           signature: signer.sign(payloads[target], version, filenames[target]),
         },
       ]),

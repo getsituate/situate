@@ -302,6 +302,7 @@ function buildRelease(directory, config, target, { source, version, updater }) {
   writeFileSync(config, JSON.stringify(overlay));
   const environment = {
     ...buildEnvironment(),
+    SITUATE_RELEASE_VERSION: version,
     SITUATE_DISTRIBUTION: updater.public.distribution,
     SITUATE_UPDATER_ENDPOINT: updater.public.endpoint,
     SITUATE_UPDATER_PUBLIC_KEY: updater.public.publicKey,
@@ -379,6 +380,7 @@ export function qualificationBaseline(version, environment) {
       version: stableWindowsVersion(version),
     },
     updater: {
+      SITUATE_RELEASE_VERSION: version,
       SITUATE_DISTRIBUTION: "direct",
       SITUATE_UPDATER_PUBLIC_KEY: publicKey,
       SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",

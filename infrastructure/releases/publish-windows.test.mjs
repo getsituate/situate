@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createUpdaterSignerFixture } from "../../client/scripts/updater-signing-fixture.mjs";
-import { publishWindows } from "./publish-windows.mjs";
+import { qualifiedWindowsAssets } from "./publish-windows.mjs";
 
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const version = "2026.11.20";
 const source = "5".repeat(40);
-const tag = "windows-v2026.11.20";
+const tag = "v2026.11.20";
 
 function setup(t) {
   const folder = mkdtempSync(join(tmpdir(), "situate-publish-windows-"));
@@ -71,161 +71,56 @@ function setup(t) {
     })),
   };
 
-  let release;
-  let revision = source;
-  const remote = new Map();
-  const calls = [];
-  const github = {
-    getTag(repo, requested) {
-      assert.equal(repo, "getsituate/situate");
-      assert.equal(requested, tag);
-      return { sourceRevision: revision };
-    },
-    listReleases(repo) {
-      assert.equal(repo, "getsituate/situate");
-      return release ? [structuredClone(release)] : [];
-    },
-    createDraft(repo, draft) {
-      assert.equal(repo, "getsituate/situate");
-      assert.equal(draft.prerelease, false);
-      assert.equal(draft.make_latest, "false");
-      assert.match(draft.body, /Windows may warn or block installation/);
-      assert(
-        draft.body.includes(
-          readFileSync(join(folder, "SHA256SUMS.txt"), "utf8"),
-        ),
-      );
-      assert.equal(draft.draft, true);
-      calls.push("create");
-      release = { ...draft, id: 12, assets: [] };
-      return structuredClone(release);
-    },
-    uploadAsset(repo, id, name, bytes) {
-      assert.equal(repo, "getsituate/situate");
-      assert.equal(id, 12);
-      assert.equal(release.draft, true);
-      assert(Buffer.from(bytes).equals(readFileSync(join(folder, name))));
-      calls.push(name);
-      const asset = {
-        name,
-        id: remote.size + 1,
-        state: "uploaded",
-        size: bytes.length,
-      };
-      release.assets.push(asset);
-      remote.set(asset.id, Buffer.from(bytes));
-    },
-    getRelease(repo, id) {
-      assert.equal(repo, "getsituate/situate");
-      assert.equal(id, 12);
-      return structuredClone(release);
-    },
-    downloadAsset(repo, releaseId, id) {
-      assert.equal(repo, "getsituate/situate");
-      assert.equal(releaseId, 12);
-      return remote.get(id);
-    },
-    finalize(repo, id) {
-      assert.equal(repo, "getsituate/situate");
-      assert.equal(id, 12);
-      calls.push("finalize");
-      release.draft = false;
-    },
-  };
-  return {
-    folder,
-    qualification,
-    signer,
-    github,
-    calls,
-    remote,
-    setRevision: (value) => {
-      revision = value;
-    },
-  };
+  return { folder, qualification, signer, artifacts };
 }
 
-test("publishes exactly the qualified installers and signatures as a stable Windows release", async (t) => {
-  const f = setup(t);
-  const publish = () =>
-    publishWindows(f.folder, f.qualification, f.signer.publicKey, f.github);
-  assert.deepEqual(await publish(), { id: 12, version, source });
-  assert.deepEqual(f.calls, [
-    "create",
-    "Situate-2026.11.20-windows-x64-setup.exe",
-    "Situate-2026.11.20-windows-x64-setup.exe.sig",
-    "Situate-2026.11.20-windows-arm64-setup.exe",
-    "Situate-2026.11.20-windows-arm64-setup.exe.sig",
+const identity = { version, tag, sourceRevision: source };
+
+test("validates and stages both signed Windows installers for the common release", (t) => {
+  const { folder, qualification, signer, artifacts } = setup(t);
+  const result = qualifiedWindowsAssets(
+    folder,
+    qualification,
+    signer.publicKey,
+    identity,
+  );
+  assert.deepEqual(Object.keys(result.files), [
+    ...artifacts.flatMap(({ file }) => [file, `${file}.sig`]),
     "SHA256SUMS.txt",
-    "finalize",
+    "windows-release.json",
   ]);
-  const previous = [...f.calls];
-  await publish();
-  assert.deepEqual(f.calls, previous);
-  f.remote.set(2, Buffer.alloc(f.remote.get(2).length));
-  await assert.rejects(publish(), /Published bytes differ/);
-  assert.deepEqual(f.calls, previous);
-});
-
-test("only the first Windows release can explicitly defer the bootstrap check", async (t) => {
-  const f = setup(t);
-  const qualification = {
-    ...f.qualification,
-    webview2Bootstrap: {
-      result: "deferred",
-      debt: "debt-windows-webview2-first-install",
-    },
-  };
-  const list = f.github.listReleases;
-  f.github.listReleases = () => [
-    { tag_name: "windows-v2026.10.1", draft: false },
-  ];
-  const publish = () =>
-    publishWindows(f.folder, qualification, f.signer.publicKey, f.github);
-  await assert.rejects(publish(), /Only the first Windows release/);
-  assert.deepEqual(f.calls, []);
-  f.github.listReleases = list;
-  const result = await publish();
-  const release = f.github.getRelease("getsituate/situate", result.id);
-  assert.doesNotMatch(release.body, /WebView2/u);
-});
-
-test("does not write to GitHub without both exact qualification records and the reviewed tag", async (t) => {
-  const f = setup(t);
-  await assert.rejects(
-    publishWindows(
-      f.folder,
-      {
-        ...f.qualification,
-        architectures: f.qualification.architectures.slice(0, 1),
+  assert.match(result.notes, /Windows may warn or block installation/);
+  assert.equal(result.deferred, false);
+  const deferred = qualifiedWindowsAssets(
+    folder,
+    {
+      ...qualification,
+      webview2Bootstrap: {
+        result: "deferred",
+        debt: "debt-windows-webview2-first-install",
       },
-      f.signer.publicKey,
-      f.github,
-    ),
+    },
+    signer.publicKey,
+    identity,
   );
-  const incomplete = structuredClone(f.qualification);
+  assert.equal(deferred.deferred, true);
+  assert.doesNotMatch(deferred.notes, /WebView2/u);
+});
+
+test("rejects a wrong source, incomplete qualification, or altered installer", (t) => {
+  const { folder, qualification, signer, artifacts } = setup(t);
+  const stage = (receipt, release = identity) =>
+    qualifiedWindowsAssets(folder, receipt, signer.publicKey, release);
+  assert.throws(() =>
+    stage(qualification, { ...identity, sourceRevision: "4".repeat(40) }),
+  );
+  const incomplete = structuredClone(qualification);
   delete incomplete.architectures[1].systems["windows-10-22h2"];
-  await assert.rejects(
-    publishWindows(f.folder, incomplete, f.signer.publicKey, f.github),
+  assert.throws(() => stage(incomplete));
+  assert.throws(
+    () => stage({ ...qualification, webview2Bootstrap: undefined }),
+    /WebView2 bootstrap qualification/,
   );
-  for (const bootstrap of [
-    undefined,
-    { ...f.qualification.webview2Bootstrap, sha256: "0".repeat(64) },
-  ]) {
-    await assert.rejects(
-      publishWindows(
-        f.folder,
-        { ...f.qualification, webview2Bootstrap: bootstrap },
-        f.signer.publicKey,
-        f.github,
-      ),
-      /WebView2 bootstrap qualification must identify an exact Windows installer/,
-    );
-  }
-  f.setRevision("0".repeat(40));
-  await assert.rejects(
-    publishWindows(f.folder, f.qualification, f.signer.publicKey, f.github),
-    /tag must point/,
-  );
-  assert.deepEqual(f.calls, []);
+  writeFileSync(join(folder, artifacts[0].file), "altered");
+  assert.throws(() => stage(qualification));
 });

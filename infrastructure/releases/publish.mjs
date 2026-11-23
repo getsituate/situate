@@ -1,3 +1,4 @@
+import { windowsAssetNames } from "../../client/scripts/windows-release.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
@@ -226,6 +227,9 @@ export function verifyDownloadReceipt(directory, manifest, receipt) {
         item.updater.signaturePath,
       ]),
     "github-release.json",
+    ...(receipt?.assets?.some?.(({ name }) => name === "windows-release.json")
+      ? windowsAssetNames(manifest.version)
+      : []),
   ].sort(compareCodeUnits);
   if (
     receipt?.schemaVersion !== 1 ||

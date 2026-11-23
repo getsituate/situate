@@ -29,7 +29,14 @@ import {
   readOnlyGitHubAdapter,
 } from "../infrastructure/releases/github.mjs";
 
+import {
+  windowsArchitectures,
+  windowsReleaseFilename,
+  windowsAssetNames,
+} from "../client/scripts/windows-release.mjs";
+
 export const EVIDENCE_ASSET = "github-release.json";
+const windowsManifest = "windows-release.json";
 export const PUBLIC_METADATA_ASSETS = Object.freeze([
   "manifest.json",
   "release-inputs.json",
@@ -77,9 +84,10 @@ function sameIdentity(actual, expected) {
     assert.equal(actual?.[key], expected[key], `Release ${key} differs`);
 }
 
-function publicAsset(name) {
+function publicAsset(name, windows = []) {
   return (
     PUBLIC_METADATA_ASSETS.includes(name) ||
+    windows.includes(name) ||
     /^[A-Za-z0-9][A-Za-z0-9._-]*-direct\.(?:dmg|app\.tar\.gz(?:\.sig)?)$/.test(
       name,
     )
@@ -98,9 +106,12 @@ export function validateReleaseEvidence(evidence, identity) {
   assert.equal(evidence.distribution, "direct");
   assert(Array.isArray(evidence.assets), "Missing public asset inventory");
   const names = new Set();
+  const windows = evidence.assets.some(({ name }) => name === windowsManifest)
+    ? windowsAssetNames(identity.version)
+    : [];
   for (const asset of evidence.assets) {
     assert(
-      publicAsset(asset.name) && !names.has(asset.name),
+      publicAsset(asset.name, windows) && !names.has(asset.name),
       "Unexpected or duplicate public asset",
     );
     names.add(asset.name);
@@ -114,7 +125,11 @@ export function validateReleaseEvidence(evidence, identity) {
   for (const name of PUBLIC_METADATA_ASSETS)
     assert(names.has(name), `Missing public asset ${name}`);
   const packages = [...names].filter(
-    (name) => !PUBLIC_METADATA_ASSETS.includes(name),
+    (name) => !PUBLIC_METADATA_ASSETS.includes(name) && !windows.includes(name),
+  );
+  assert(
+    windows.every((name) => names.has(name)),
+    "Incomplete Windows package set",
   );
   assert.equal(packages.length, 3, "Expected DMG, updater and signature");
   const dmg = packages.find((name) => name.endsWith(".dmg"));
@@ -199,10 +214,33 @@ function verifyContents(files, evidence, { metadataOnly = false } = {}) {
     artifact.updater?.path,
     artifact.updater?.signaturePath,
   ];
+  const windows = files[windowsManifest]
+    ? windowsAssetNames(manifest.version)
+    : [];
+  if (windows.length) {
+    const assembled = parse(windowsManifest);
+    assert.equal(assembled.source, evidence.identity.sourceRevision);
+    assert.equal(assembled.version, evidence.identity.version);
+    assert.deepEqual(
+      assembled.artifacts,
+      Object.keys(windowsArchitectures).map((target) => {
+        const file = windowsReleaseFilename(manifest.version, target);
+        const { size, sha256 } = evidence.assets.find(
+          ({ name }) => name === file,
+        );
+        return { target, file, size, sha256 };
+      }),
+      "Windows manifest differs from the sealed installers",
+    );
+  }
   assert.deepEqual(
     [...packageNames].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     evidence.assets
-      .filter((asset) => !PUBLIC_METADATA_ASSETS.includes(asset.name))
+      .filter(
+        (asset) =>
+          !PUBLIC_METADATA_ASSETS.includes(asset.name) &&
+          !windows.includes(asset.name),
+      )
       .map((asset) => asset.name)
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     "Manifest package inventory differs",
@@ -287,7 +325,12 @@ function verifyContents(files, evidence, { metadataOnly = false } = {}) {
   return manifest;
 }
 
-export function createEvidenceFromDirectory({ identity, directory, producer }) {
+export function createEvidenceFromDirectory({
+  identity,
+  directory,
+  producer,
+  windowsFiles,
+}) {
   validateIdentity(identity);
   const manifestPath = join(directory, "manifest.json");
   assert(
@@ -324,6 +367,16 @@ export function createEvidenceFromDirectory({ identity, directory, producer }) {
     files[name] = readFileSync(path);
     return { name, size: files[name].length, sha256: releaseHash(files[name]) };
   });
+  if (windowsFiles) {
+    const expected = windowsAssetNames(identity.version);
+    assert.deepEqual(Object.keys(windowsFiles).sort(), [...expected].sort());
+    for (const name of expected) {
+      const bytes = windowsFiles[name];
+      assert(Buffer.isBuffer(bytes));
+      files[name] = bytes;
+      assets.push({ name, size: bytes.length, sha256: releaseHash(bytes) });
+    }
+  }
   const evidence = {
     schemaVersion: 1,
     identity,
@@ -623,7 +676,11 @@ async function inspectReleaseData(
         `sha256:${expected.sha256}`,
         "Remote asset digest differs",
       );
-    if (metadataOnly && !PUBLIC_METADATA_ASSETS.includes(expected.name))
+    if (
+      metadataOnly &&
+      !PUBLIC_METADATA_ASSETS.includes(expected.name) &&
+      expected.name !== windowsManifest
+    )
       continue;
     const data = Buffer.from(
       await github.downloadAsset(identity.repository, release.id, asset.id),
