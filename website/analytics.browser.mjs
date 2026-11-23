@@ -18,11 +18,11 @@ const release = {
 
 const compareStrings = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
-async function eventually(condition) {
+async function eventually(condition, describe = () => "") {
   const deadline = Date.now() + 5000;
   while (!condition()) {
     if (Date.now() > deadline)
-      assert.fail("Expected analytics request was not observed");
+      assert.fail(`Expected analytics request was not observed ${describe()}`);
     await new Promise((resolve) => {
       setTimeout(resolve, 20);
     });
@@ -48,6 +48,13 @@ export async function checkAnalytics(browser, origin, proofs) {
     await context.addInitScript(
       ({ blockStorage }) => {
         window.analyticsStorageWrites = [];
+        window.analyticsFetches = [];
+        const fetch = window.fetch;
+        window.fetch = function (url, options) {
+          if (String(url).startsWith("https://eu.i.posthog.com/e/"))
+            window.analyticsFetches.push(options.keepalive);
+          return fetch.call(this, url, options);
+        };
         const write = Storage.prototype.setItem;
         Storage.prototype.setItem = function (key, value) {
           window.analyticsStorageWrites.push([key, value]);
@@ -65,6 +72,7 @@ export async function checkAnalytics(browser, origin, proofs) {
       { blockStorage },
     );
     const events = [];
+    const measurements = [];
     const ingestion = [];
     const sdkRequests = [];
     const unexpected = [];
@@ -94,7 +102,12 @@ export async function checkAnalytics(browser, origin, proofs) {
               ).toString(),
             );
           }
-          events.push(...(data.batch || (Array.isArray(data) ? data : [data])));
+          for (const event of data.batch ||
+            (Array.isArray(data) ? data : [data])) {
+            if (["$pageleave", "$web_vitals"].includes(event.event))
+              measurements.push(event);
+            else events.push(event);
+          }
         }
         await route.fulfill({
           status: failIngestion ? 503 : 200,
@@ -161,6 +174,7 @@ export async function checkAnalytics(browser, origin, proofs) {
       context,
       page,
       events,
+      measurements,
       ingestion,
       sdkRequests,
       unexpected,
@@ -281,11 +295,10 @@ export async function checkAnalytics(browser, origin, proofs) {
         f.events.map((event) => event.event),
         ["$pageview"],
       );
-      assert.equal(
-        f.sdkRequests.length,
-        1,
-        "the actual pinned bundle is loaded once",
-      );
+      assert.deepEqual(f.sdkRequests.toSorted(), [
+        "/vendor/posthog-1.447.4.min.js",
+        "/vendor/posthog-web-vitals-1.447.4.min.js",
+      ]);
       await f.page.evaluate(() => {
         window.dispatchEvent(new Event("pageshow"));
         document.dispatchEvent(new Event("visibilitychange"));
@@ -359,6 +372,7 @@ export async function checkAnalytics(browser, origin, proofs) {
             "$device_type",
             "surface",
             "environment",
+            ...(event.event === "$pageview" ? ["$pageview_id"] : []),
             ...(event.event === "download_clicked"
               ? ["platform", "version"]
               : []),
@@ -380,11 +394,54 @@ export async function checkAnalytics(browser, origin, proofs) {
         /secret-query|secret-fragment|secret-referrer|synthetic-private/,
       );
       assert.deepEqual(await f.context.cookies(), []);
-      const id = f.events[0].properties.distinct_id;
+      const first = f.events[0].properties;
+      // Route interception can lose unload requests when the document is replaced.
+      await f.page.evaluate(() =>
+        window.dispatchEvent(new PageTransitionEvent("pagehide")),
+      );
+      await eventually(
+        () =>
+          ["$pageleave", "$web_vitals"].every((name) =>
+            f.measurements.some(
+              ({ event, properties }) =>
+                event === name && properties.$pathname === "/",
+            ),
+          ),
+        () => JSON.stringify(f.measurements.map(({ event }) => event)),
+      );
+      const leave = f.measurements.find(
+        ({ event }) => event === "$pageleave",
+      ).properties;
+      assert.equal(leave.$prev_pageview_id, first.$pageview_id);
+      assert.equal(leave.$prev_pageview_pathname, "/");
+      assert.equal(leave.$session_id, first.$session_id);
+      assert.ok(leave.$prev_pageview_duration > 0);
+      assert.ok(
+        await f.page.evaluate(
+          () =>
+            window.analyticsFetches.length > 0 &&
+            window.analyticsFetches.every(Boolean),
+        ),
+      );
+      const metrics = f.measurements.filter(
+        ({ event }) => event === "$web_vitals",
+      );
+      assert.ok(
+        metrics.some(({ properties }) =>
+          Object.keys(properties).some((key) =>
+            /^\$web_vitals_(LCP|INP|CLS|FCP)_value$/.test(key),
+          ),
+        ),
+      );
+      assert.doesNotMatch(
+        JSON.stringify(f.measurements),
+        /secret-query|secret-fragment|secret-referrer|synthetic-private|\$web_vitals_\w+_event|\$prev_pageview_\w*scroll/,
+      );
       await f.page.goto(`${production}/privacy.html`);
       await eventually(() => f.events.length === 5);
       assert.equal(f.events[4].properties.$pathname, "/privacy.html");
-      assert.equal(f.events[4].properties.distinct_id, id);
+      assert.equal(f.events[4].properties.distinct_id, first.distinct_id);
+      assert.equal(f.events[4].properties.$session_id, first.$session_id);
       const other = await f.context.newPage();
       await other.goto(`${production}/product.html`);
       await eventually(() => f.events.length === 6);
@@ -401,7 +458,9 @@ export async function checkAnalytics(browser, origin, proofs) {
       await f.page.evaluate(() =>
         window.situateAnalytics.capture("waitlist_form_opened"),
       );
+      const beforeReload = f.ingestion.length;
       await f.page.reload();
+      assert.equal(f.ingestion.length, beforeReload);
       assert.equal(
         f.events.length,
         6,
@@ -476,7 +535,7 @@ export async function checkAnalytics(browser, origin, proofs) {
         await f.page.locator("[data-analytics-panel]").screenshot({
           path: join(proofs, "analytics-storage-error.png"),
         });
-      } else await eventually(() => f.sdkRequests.length === 1);
+      } else await eventually(() => f.sdkRequests.length === 2);
       assert.deepEqual(f.events, []);
       assert.deepEqual(f.errors, []);
       assert.ok(
@@ -492,7 +551,7 @@ export async function checkAnalytics(browser, origin, proofs) {
     try {
       await f.page.goto(production);
       await f.grant();
-      await eventually(() => f.sdkRequests.length === 1);
+      await eventually(() => f.sdkRequests.length === 2);
       await f.decline();
       f.releaseSdk();
       await f.page.waitForFunction(() => !!window.posthog);
@@ -555,25 +614,30 @@ export async function checkAnalytics(browser, origin, proofs) {
     }
   }
 
-  {
+  for (const expired of [true, false]) {
     const f = await fixture();
     try {
       await f.context.addInitScript(
-        ({ preferenceKey }) => {
+        ({ preferenceKey, expired }) => {
           localStorage.setItem(
             preferenceKey,
-            JSON.stringify({ decision: "granted", expires: Date.now() - 1 }),
+            JSON.stringify(
+              expired
+                ? { decision: "granted", version: 2, expires: Date.now() - 1 }
+                : { decision: "granted", expires: Date.now() + 3600000 },
+            ),
           );
           localStorage.setItem(
             "ph_situate_website_v1",
             JSON.stringify({ distinct_id: "expired-id" }),
           );
         },
-        { preferenceKey },
+        { preferenceKey, expired },
       );
       await f.page.goto(production);
       assert.ok(await f.page.locator("[data-analytics-panel]").isVisible());
       assert.deepEqual(f.sdkRequests, []);
+      assert.deepEqual(f.ingestion, []);
       assert.doesNotMatch(JSON.stringify(await f.storage()), /expired-id/);
     } finally {
       await f.context.close();

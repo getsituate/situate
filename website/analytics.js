@@ -5,6 +5,11 @@
   const preferenceKey = "situate.website.analytics.v1";
   const namespace = "situate_website_v1";
   const identityKey = `ph_${namespace}_identity`;
+  const sessionKey = `ph_${namespace}_visit`;
+  const consentVersion = 2;
+  const sessionIdle = 30 * 60 * 1000;
+  const webVitals = ["LCP", "INP", "CLS", "FCP"];
+  const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
   const lifetime = 180 * 24 * 60 * 60 * 1000;
   const token = window.situateAnalyticsConfig?.token;
   const panel = document.querySelector("[data-analytics-panel]");
@@ -24,7 +29,9 @@
     try {
       const value = JSON.parse(localStorage.getItem(preferenceKey));
       if (
-        ["granted", "denied"].includes(value?.decision) &&
+        (value?.decision === "denied" ||
+          (value?.decision === "granted" &&
+            value.version === consentVersion)) &&
         Number.isFinite(value.expires) &&
         value.expires > Date.now() &&
         value.expires <= Date.now() + lifetime
@@ -102,11 +109,29 @@
     return "$direct";
   }
 
+  function previousSession() {
+    try {
+      const { id, lastEvent } = JSON.parse(sessionStorage.getItem(sessionKey));
+      const age = Date.now() - lastEvent;
+      if (
+        typeof id === "string" &&
+        uuid.test(id) &&
+        age >= 0 &&
+        age < sessionIdle
+      )
+        return id;
+    } catch {
+      // A visit can still be measured on this page without session storage.
+    }
+  }
+
   function sanitize(event) {
     if (
       !allowed() ||
       ![
         "$pageview",
+        "$pageleave",
+        "$web_vitals",
         "download_clicked",
         "waitlist_form_opened",
         "waitlist_signup_reported",
@@ -135,6 +160,36 @@
       surface: "website",
       environment: "production",
     };
+    if (event.event === "$pageview" || event.event === "$pageleave") {
+      if (
+        typeof properties.$pageview_id !== "string" ||
+        !uuid.test(properties.$pageview_id)
+      )
+        return null;
+      safe.$pageview_id = properties.$pageview_id;
+    }
+    if (event.event === "$pageleave") {
+      if (
+        properties.$prev_pageview_id !== safe.$pageview_id ||
+        !Number.isFinite(properties.$prev_pageview_duration) ||
+        properties.$prev_pageview_duration < 0
+      )
+        return null;
+      safe.$prev_pageview_id = safe.$pageview_id;
+      safe.$prev_pageview_duration = properties.$prev_pageview_duration;
+      safe.$prev_pageview_pathname = safe.$pathname;
+    }
+    if (event.event === "$web_vitals") {
+      let measured = false;
+      for (const metric of webVitals) {
+        const key = `$web_vitals_${metric}_value`;
+        if (Number.isFinite(properties[key]) && properties[key] >= 0) {
+          safe[key] = properties[key];
+          measured = true;
+        }
+      }
+      if (!measured) return null;
+    }
     if (event.event === "download_clicked") {
       if (
         typeof properties.version !== "string" ||
@@ -144,6 +199,14 @@
       safe.platform = "macos";
       safe.version = properties.version;
     }
+    try {
+      sessionStorage.setItem(
+        sessionKey,
+        JSON.stringify({ id: safe.$session_id, lastEvent: Date.now() }),
+      );
+    } catch {
+      // Storage may be unavailable even when analytics consent is granted.
+    }
     return {
       event: event.event,
       properties: safe,
@@ -152,77 +215,91 @@
     };
   }
 
+  function loadScript(src) {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.head.append(script);
+    });
+  }
+
   async function start() {
     if (!allowed()) return;
     if (sdk) return sdk;
     if (loading) return loading;
     const current = generation;
-    loading = new Promise((resolve) => {
-      const script = document.createElement("script");
-      script.src = "/vendor/posthog-1.447.4.min.js";
-      script.async = true;
-      script.onload = () => {
-        try {
-          if (current !== generation || !allowed()) return resolve();
-          controller = new AbortController();
-          const identity = localStorage.getItem(identityKey);
-          sdk = window.posthog.init(token, {
-            api_host: "https://eu.i.posthog.com",
-            ui_host: "https://eu.posthog.com",
-            // SDK persistence also retains raw entry/referrer URLs; persist only its generated browser ID.
-            persistence: "memory",
-            bootstrap: /^[0-9a-f-]{36}$/.test(identity || "")
-              ? { distinctID: identity, isIdentifiedID: false }
-              : {},
-            persistence_name: namespace,
-            consent_persistence_name: `ph_${namespace}_consent`,
-            cross_subdomain_cookie: false,
-            person_profiles: "never",
-            autocapture: false,
-            capture_pageview: false,
-            capture_pageleave: false,
-            capture_heatmaps: false,
-            capture_dead_clicks: false,
-            rageclick: false,
-            capture_exceptions: false,
-            capture_performance: false,
-            capture_web_vitals: false,
-            enable_recording_console_log: false,
-            disable_session_recording: true,
-            disable_surveys: true,
-            disable_conversations: true,
-            disable_product_tours: true,
-            disable_web_experiments: true,
-            disable_external_dependency_loading: true,
-            advanced_disable_flags: true,
-            opt_in_site_apps: false,
-            save_campaign_params: false,
-            save_referrer: false,
-            mask_personal_data_properties: true,
-            disable_capture_url_hashes: true,
-            get_current_url: () => origin + pagePath(),
-            ip: false,
-            debug: false,
-            request_batching: false,
-            disable_compression: true,
-            disable_beacon: true,
-            api_transport: "fetch",
-            fetch_options: {
-              signal: controller.signal,
-              credentials: "omit",
-              referrerPolicy: "no-referrer",
-            },
-            before_send: sanitize,
-          });
-          localStorage.setItem(identityKey, sdk.get_distinct_id());
-          resolve(sdk);
-        } catch {
-          stop();
-          resolve();
-        }
-      };
-      script.onerror = () => resolve();
-      document.head.append(script);
+    loading = Promise.all([
+      loadScript("/vendor/posthog-1.447.4.min.js"),
+      loadScript("/vendor/posthog-web-vitals-1.447.4.min.js"),
+    ]).then(([sdkLoaded, vitalsLoaded]) => {
+      try {
+        if (!sdkLoaded || current !== generation || !allowed()) return;
+        controller = new AbortController();
+        const identity = localStorage.getItem(identityKey);
+        sdk = window.posthog.init(token, {
+          api_host: "https://eu.i.posthog.com",
+          ui_host: "https://eu.posthog.com",
+          // SDK persistence also retains raw entry/referrer URLs; persist only its generated browser ID.
+          persistence: "memory",
+          bootstrap: {
+            ...(uuid.test(identity || "") && {
+              distinctID: identity,
+              isIdentifiedID: false,
+            }),
+            sessionID: previousSession(),
+          },
+          persistence_name: namespace,
+          consent_persistence_name: `ph_${namespace}_consent`,
+          cross_subdomain_cookie: false,
+          person_profiles: "never",
+          autocapture: false,
+          capture_pageview: false,
+          capture_pageleave: true,
+          disable_scroll_properties: true,
+          capture_heatmaps: false,
+          capture_dead_clicks: false,
+          rageclick: false,
+          capture_exceptions: false,
+          capture_performance: {
+            web_vitals: vitalsLoaded,
+            web_vitals_allowed_metrics: webVitals,
+            web_vitals_attribution: false,
+          },
+          enable_recording_console_log: false,
+          disable_session_recording: true,
+          disable_surveys: true,
+          disable_conversations: true,
+          disable_product_tours: true,
+          disable_web_experiments: true,
+          disable_external_dependency_loading: true,
+          advanced_disable_flags: true,
+          opt_in_site_apps: false,
+          save_campaign_params: false,
+          save_referrer: false,
+          mask_personal_data_properties: true,
+          disable_capture_url_hashes: true,
+          get_current_url: () => origin + pagePath(),
+          ip: false,
+          debug: false,
+          request_batching: false,
+          disable_compression: true,
+          disable_beacon: true,
+          api_transport: "fetch",
+          fetch_options: {
+            signal: controller.signal,
+            credentials: "omit",
+            referrerPolicy: "no-referrer",
+          },
+          before_send: sanitize,
+        });
+        localStorage.setItem(identityKey, sdk.get_distinct_id());
+        return sdk;
+      } catch {
+        stop();
+      }
     });
     return loading;
   }
@@ -264,7 +341,11 @@
     try {
       localStorage.setItem(
         preferenceKey,
-        JSON.stringify({ decision, expires: Date.now() + lifetime }),
+        JSON.stringify({
+          decision,
+          version: consentVersion,
+          expires: Date.now() + lifetime,
+        }),
       );
     } catch {
       blocked = true;

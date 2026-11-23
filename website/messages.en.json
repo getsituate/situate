@@ -2,7 +2,7 @@
   "analytics.settings": "Analytics preferences",
   "analytics.category": "Optional website analytics",
   "analytics.title": "Help improve this website",
-  "analytics.body": "With your permission, PostHog measures page visits, download clicks and waitlist form activity so we can understand what’s useful.",
+  "analytics.body": "With your permission, PostHog measures which pages you visit, how long you stay, how well pages load and respond, and whether you use downloads or the waitlist.",
   "analytics.details": "Uses browser IDs. No session recordings or form contents. Change your choice anytime in the footer.",
   "analytics.privacy": "How analytics works",
   "analytics.accept": "Allow analytics",

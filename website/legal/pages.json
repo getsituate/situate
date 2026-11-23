@@ -109,6 +109,12 @@
             "type": "link",
             "key": "credits.posthogLicense",
             "href": "https://getsituate.com/vendor/posthog-LICENSE.txt"
+          },
+          { "type": "paragraph", "key": "credits.webVitals" },
+          {
+            "type": "link",
+            "key": "credits.webVitalsLicense",
+            "href": "https://getsituate.com/vendor/web-vitals-LICENSE.txt"
           }
         ]
       }
