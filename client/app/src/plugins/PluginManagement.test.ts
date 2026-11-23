@@ -6,6 +6,7 @@ import type { RuntimePlugin } from "./runtime";
 import type { PluginDisableState } from "./types";
 import { openPluginSettings, pluginSettingsId } from "./management";
 import { filesRequest } from "../files/api";
+import { emptyLayout, reduceLayout, type LayoutState } from "../layout/model";
 import { releaseWorkspace, retainedWorkspaces } from "../files/sessions";
 vi.mock("../files/api", async (original) => ({
   ...(await original<typeof import("../files/api")>()),
@@ -35,7 +36,10 @@ const plugin = (id: string, enabled = true): RuntimePlugin => ({
     skills: [],
   },
 });
-function setup(plugins: RuntimePlugin[] = [plugin("weekly")]) {
+function setup(
+  plugins: RuntimePlugin[] = [plugin("weekly")],
+  layout?: LayoutState,
+) {
   const state = shallowReactive({
     status: "ready",
     error: null as string | null,
@@ -78,7 +82,10 @@ function setup(plugins: RuntimePlugin[] = [plugin("weekly")]) {
   const ui = {
     plugins: Promise.resolve(runtime),
     coordinator: { open: vi.fn(async () => true) },
-    session: { workspaceId: "garden", state: { document: undefined } },
+    session: {
+      workspaceId: "garden",
+      state: { document: layout && { layout } },
+    },
     registry: { definitions: new Map([["weekly:settings", {}]]) },
   };
   mocks.ui.mockReturnValue(ui);
@@ -330,6 +337,24 @@ test("opens only an available enabled settings contribution using semantic navig
       settingsId: "quiet:settings",
     }),
   ).toBeUndefined();
+});
+test("returns to settings already open in the active pane without navigating", async () => {
+  let id = 0;
+  const layout = reduceLayout(
+    emptyLayout(),
+    { type: "open", target: { kind: "view", viewId: "weekly:settings" } },
+    () => String(++id),
+  );
+  const fixture = setup(
+    [{ ...plugin("weekly"), settingsId: "weekly:settings" }],
+    layout,
+  );
+  const wrapper = fixture.render();
+  await flushPromises();
+  await action(wrapper, "configure").trigger("click");
+  await flushPromises();
+  expect(wrapper.emitted("opened")).toEqual([[]]);
+  expect(fixture.ui.coordinator.open).not.toHaveBeenCalled();
 });
 test("does not announce opening when semantic navigation is discarded", async () => {
   const fixture = setup([
