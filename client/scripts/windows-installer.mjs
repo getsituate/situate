@@ -14,6 +14,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { windowsTarget } from "../../tools/test-windows.mjs";
 import { prepareDependencies } from "../../tools/test.mjs";
+import { updaterSigningConfiguration } from "./updater-signing.mjs";
+import {
+  readWindowsInstaller,
+  stableWindowsVersion,
+  verifyApplicationMachine,
+  windowsReleaseFilename,
+  windowsStableEndpoint,
+} from "./windows-release.mjs";
 
 const client = fileURLToPath(new URL("../", import.meta.url));
 const app = join(client, "app");
@@ -69,6 +77,7 @@ function verifiedArchive(path, expected) {
   return (member) =>
     execFileSync("tar", ["-xOf", "-", member], {
       input: archive,
+      env: buildEnvironment(),
       maxBuffer: 32 * 1024 * 1024,
       windowsHide: true,
     });
@@ -152,13 +161,21 @@ async function main(args) {
   }
   const { values, positionals } = parseArgs({
     args,
-    options: { target: { type: "string" }, "update-test": { type: "boolean" } },
+    options: {
+      target: { type: "string" },
+      "update-test": { type: "boolean" },
+      "release-version": { type: "string" },
+    },
     allowPositionals: true,
   });
   const target = values.target ?? windowsTarget;
-  if (positionals.length !== 3) {
+  const version = values["release-version"];
+  if (
+    positionals.length !== 3 ||
+    (version !== undefined && values["update-test"])
+  ) {
     throw new Error(
-      "Usage: node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE [--update-test] [--target=RUST_TARGET]",
+      "Usage: node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE [--update-test | --release-version=VERSION] [--target=RUST_TARGET]",
     );
   }
   if (
@@ -172,9 +189,10 @@ async function main(args) {
     process.env.SITUATE_DISTRIBUTION !== undefined
   ) {
     throw new Error(
-      "Unset TAURI_CONFIG and SITUATE_DISTRIBUTION before building the preview installer.",
+      "Unset TAURI_CONFIG and SITUATE_DISTRIBUTION before building the installer.",
     );
   }
+  const release = version === undefined ? undefined : releaseInputs(version);
   const [output, sherpaArchive, onnxArchive] = positionals;
   const directory = resolve(output);
   const config = prepareInstaller(
@@ -183,11 +201,15 @@ async function main(args) {
     onnxArchive,
     target,
   );
-  const dependencies = await prepareDependencies("client", { force: true });
+  const dependencies = await prepareDependencies("client", {
+    force: true,
+    environment: buildEnvironment(),
+  });
   try {
     if (dependencies.failure) throw new Error(dependencies.failure.error);
-    if (values["update-test"]) buildUpdatePair(directory, config, target);
-    else buildInstaller(directory, config, target, process.env);
+    if (release) buildRelease(directory, config, target, release);
+    else if (values["update-test"]) buildUpdatePair(directory, config, target);
+    else buildInstaller(directory, config, target, buildEnvironment());
   } finally {
     dependencies.release();
   }
@@ -217,6 +239,106 @@ function buildInstaller(directory, config, target, environment) {
   );
 }
 
+function buildEnvironment() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key]) => !/^TAURI_SIGNING_PRIVATE_KEY(?:_PASSWORD)?$/iu.test(key),
+    ),
+  );
+}
+
+function releaseInputs(version) {
+  stableWindowsVersion(version);
+  const root = resolve(client, "..");
+  const git = (...args) =>
+    execFileSync("git", args, {
+      cwd: root,
+      env: buildEnvironment(),
+      encoding: "utf8",
+    }).trim();
+  const source = git("rev-parse", "HEAD");
+  if (
+    git("status", "--porcelain") ||
+    (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== source)
+  ) {
+    throw new Error("Build a Windows release from its clean, exact checkout.");
+  }
+  return {
+    source,
+    version,
+    updater: updaterSigningConfiguration(root, {
+      ...process.env,
+      SITUATE_UPDATER_ENDPOINT: windowsStableEndpoint,
+    }),
+  };
+}
+
+function buildRelease(directory, config, target, { source, version, updater }) {
+  const overlay = JSON.parse(readFileSync(config, "utf8"));
+  overlay.identifier = "com.getsituate.app";
+  overlay.productName = "Situate";
+  overlay.version = version;
+  writeFileSync(config, JSON.stringify(overlay));
+  const environment = {
+    ...buildEnvironment(),
+    SITUATE_DISTRIBUTION: updater.public.distribution,
+    SITUATE_UPDATER_ENDPOINT: updater.public.endpoint,
+    SITUATE_UPDATER_PUBLIC_KEY: updater.public.publicKey,
+  };
+  buildInstaller(directory, config, target, environment);
+  const built = join(directory, "target", target, "release");
+  verifyApplicationMachine(
+    readFileSync(join(built, "situate-client.exe")),
+    target,
+  );
+  const bundle = join(built, "bundle", "nsis");
+  const files = readdirSync(bundle).filter((file) => file.endsWith(".exe"));
+  if (files.length !== 1) throw new Error("Expected one NSIS installer");
+  const artifact = join(directory, "release");
+  mkdirSync(artifact);
+  const output = join(artifact, windowsReleaseFilename(version, target));
+  copyFileSync(join(bundle, files[0]), output);
+  try {
+    execFileSync(
+      process.execPath,
+      [tauriCli, "signer", "sign", "--app-version", version, output],
+      {
+        cwd: app,
+        env: { ...environment, ...updater.signer },
+        stdio: "pipe",
+      },
+    );
+  } catch {
+    throw new Error(
+      "Windows updater signing failed. Check the updater key and password.",
+    );
+  }
+  const { file, size, sha256 } = readWindowsInstaller(
+    artifact,
+    version,
+    target,
+    updater.public.publicKey,
+  );
+  writeFileSync(
+    join(artifact, "manifest.json"),
+    `${JSON.stringify(
+      {
+        kind: "situate-windows-release",
+        source,
+        version,
+        target,
+        file,
+        size,
+        sha256,
+        authenticode: false,
+      },
+      null,
+      2,
+    )}\n`,
+    { flag: "wx" },
+  );
+}
+
 function buildUpdatePair(directory, config, target) {
   const signer = mkdtempSync(join(directory, "signer-"));
   const key = join(signer, "fixture.key");
@@ -234,11 +356,11 @@ function buildUpdatePair(directory, config, target) {
         "--write-keys",
         key,
       ],
-      { cwd: app, stdio: "pipe" },
+      { cwd: app, env: buildEnvironment(), stdio: "pipe" },
     );
     const publicKey = readFileSync(`${key}.pub`, "utf8").trim();
     const environment = {
-      ...process.env,
+      ...buildEnvironment(),
       SITUATE_DISTRIBUTION: "direct",
       SITUATE_UPDATER_PUBLIC_KEY: publicKey,
       SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
@@ -279,7 +401,7 @@ function buildUpdatePair(directory, config, target) {
           version,
           output,
         ],
-        { cwd: app, stdio: "pipe" },
+        { cwd: app, env: buildEnvironment(), stdio: "pipe" },
       );
       packages.push({
         version,
