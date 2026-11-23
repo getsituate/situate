@@ -34,8 +34,8 @@ test("qualifies foreground interactions and reports a new UTC day without remoun
     const activity = add.mock.calls.find(
       ([name]) => name === "click",
     )?.[1] as EventListener;
-    const interact = (trusted = true) =>
-      activity({ isTrusted: trusted } as Event);
+    const interact = (trusted = true, extra = {}) =>
+      activity({ isTrusted: trusted, ...extra } as Event);
     const change = vi.mocked(listen).mock.calls[0]![1];
     const deliveries = () =>
       vi
@@ -45,10 +45,22 @@ test("qualifies foreground interactions and reports a new UTC day without remoun
         );
     expect(deliveries()).toEqual([]);
     interact(false);
+    const toggle = document.createElement("input");
+    toggle.setAttribute("data-analytics-preference", "");
+    interact(true, { target: toggle });
+    interact(true, { repeat: true });
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    visibility.mockReturnValueOnce("hidden");
+    interact();
     focus.mockReturnValue(false);
     interact();
     expect(deliveries()).toEqual([]);
     focus.mockReturnValue(true);
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("IPC unavailable"));
+    interact();
+    await flushPromises();
+    expect(deliveries()).toHaveLength(1);
+    vi.mocked(invoke).mockClear();
     interact();
     interact();
     expect(deliveries()).toEqual([
@@ -77,4 +89,29 @@ test("qualifies foreground interactions and reports a new UTC day without remoun
     vi.useRealTimers();
     vi.restoreAllMocks();
   }
+});
+
+test("leaves activity untracked when the native preference cannot be read", async () => {
+  vi.mocked(invoke).mockReset().mockRejectedValue(new Error("IPC unavailable"));
+  const stop = vi.fn();
+  vi.mocked(listen).mockResolvedValue(stop);
+  const listener = vi.spyOn(window, "addEventListener");
+  const view = mount(
+    defineComponent({
+      setup() {
+        trackDailyActivity(() => null);
+        return () => h("div", "Workspace");
+      },
+    }),
+  );
+  try {
+    await flushPromises();
+    expect(view.text()).toBe("Workspace");
+    expect(listener.mock.calls.map(([event]) => event)).not.toContain("click");
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("analytics_preference");
+  } finally {
+    view.unmount();
+    listener.mockRestore();
+  }
+  expect(stop).toHaveBeenCalledOnce();
 });

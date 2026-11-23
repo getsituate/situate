@@ -9,6 +9,8 @@ import {
 import SettingsView from "./SettingsView.vue";
 import { defaultAiSettings } from "../ai/settings";
 import { getStatus } from "../ai/api";
+import { invoke } from "@tauri-apps/api/core";
+import { setAnalyticsPreference } from "../analytics/runtime";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async () => defaultAiSettings()),
 }));
@@ -284,4 +286,41 @@ it("offers retry without claiming settings were saved", async () => {
   expect(wrapper.emitted("retry")).toHaveLength(1);
   expect(wrapper.text()).not.toContain("Settings saved.");
   wrapper.unmount();
+});
+
+it("keeps the analytics choice when saving fails and applies a successful retry", async () => {
+  const wrapper = mount(SettingsView, { props, attachTo: document.body });
+  const category = () =>
+    wrapper.findAll("button").find((item) => item.text().startsWith("Usage analytics"));
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  try {
+    expect(category()).toBeUndefined();
+    await setAnalyticsPreference(true);
+    await category()!.trigger("click");
+    expect(wrapper.get("h2").text()).toBe("Usage analytics");
+    const control = wrapper.get<HTMLInputElement>('[role="switch"]');
+    expect(control.element.checked).toBe(true);
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("unwritable"));
+    await control.setValue(false);
+    await flushPromises();
+    expect(control.element.checked).toBe(true);
+    const dialog = wrapper.get("dialog.error-dialog");
+    expect(dialog.text()).toContain(
+      "Could not save your analytics preference.",
+    );
+    await dialog.get("button").trigger("click");
+    expect(wrapper.find("dialog.error-dialog").exists()).toBe(false);
+    await control.setValue(false);
+    await flushPromises();
+    expect(invoke).toHaveBeenLastCalledWith("analytics_set_preference", {
+      enabled: false,
+    });
+    expect(control.element.checked).toBe(false);
+    await wrapper.get(".settings-back").trigger("click");
+    expect(document.activeElement).toBe(category()!.element);
+  } finally {
+    wrapper.unmount();
+  }
 });
