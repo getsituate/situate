@@ -210,20 +210,6 @@ function change(field: "language" | keyof Formats, event: Event): void {
     :class="{ 'settings-detail-open': detail }"
     :aria-label="t('settings.title')"
   >
-    <header class="settings-topbar">
-      <span>{{
-        t(
-          page === "updates" ||
-            page === "about" ||
-            page === "analytics" ||
-            page === "diagnostics"
-            ? "updates.scope"
-            : page === "dictation"
-              ? "dictation.scope"
-              : "settings.workspace",
-        )
-      }}</span>
-    </header>
     <div class="settings-layout">
       <nav class="settings-categories" :aria-label="t('settings.categories')">
         <h1>{{ t("settings.title") }}</h1>

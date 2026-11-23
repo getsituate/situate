@@ -15,10 +15,6 @@ test("language and each format save independently while the chat draft remains i
   await page
     .getByRole("button", { name: keyLabel("navigation.settings"), exact: true })
     .click();
-  await expect(page.locator(".settings-topbar")).toHaveText(
-    keyLabel("settings.workspace"),
-  );
-  await expect(page.locator(".settings-topbar button")).toHaveCount(0);
   await chooseSelect(
     page.getByLabel(keyLabel("settings.language.label"), { exact: true }),
     "de",

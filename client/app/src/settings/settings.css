@@ -8,15 +8,6 @@
   container: settings / inline-size;
   background: var(--situate-surface);
 }
-.settings-topbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--situate-line);
-  font-size: 14px;
-}
 .settings-layout {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
@@ -153,9 +144,6 @@
   .settings-layout {
     display: block;
     overflow: hidden;
-  }
-  .settings-topbar {
-    padding-inline: 16px;
   }
   .settings-categories {
     height: 100%;
