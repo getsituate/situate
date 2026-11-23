@@ -353,7 +353,7 @@ export function validateFinalArtifactConfiguration(configuration) {
       ),
     "Blocked: native production updater actions are required",
   );
-  configuration.updateActions.forEach(validateAction);
+  for (const action of configuration.updateActions) validateAction(action);
   return configuration;
 }
 
