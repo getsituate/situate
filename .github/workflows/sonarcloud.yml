@@ -41,4 +41,5 @@ jobs:
           args: >-
             -Dsonar.organization=getsituate
             -Dsonar.projectKey=getsituate_situate
+            -Dsonar.scanner.autoconfig.enabled=false
             -Dsonar.javascript.lcov.reportPaths=${{ runner.temp }}/situate-vue.lcov
