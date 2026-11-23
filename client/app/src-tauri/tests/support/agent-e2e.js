@@ -1388,14 +1388,13 @@
       await selectConversation("Plugin capability graph");
     }
     if (info.phase === "exercise") {
-      const assignment =
-        "Check and activate the candidate capability, then use the current tool.";
+      const assignment = `${marker} Check and activate the candidate capability, then use the current tool.`;
       const settings = await invoke("ai_settings_load", { scope: info.scope });
       await wait(
         "plugins-assignment-draft",
         () => field()?.value === assignment,
       );
-      await send(`${marker} ${assignment}`);
+      await send(assignment);
       stage = "plugins-fixture-arrival";
       await invoke("agent_e2e_control", { action: "wait", marker });
       stage = "plugins-settings-change";
