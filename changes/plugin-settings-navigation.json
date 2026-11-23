@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "plugin-settings-navigation",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "plugin-settings-navigation",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Open plugin settings from Plugins",
+          "paragraphs": [
+            "Plugin settings no longer appear in the view lists. Use Settings on the plugin’s card to open its settings or return to them if they’re already open."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "plugin-settings-navigation",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Plugin-Einstellungen über Plugins öffnen",
+          "paragraphs": [
+            "Plugin-Einstellungen erscheinen nicht mehr in den Ansichtslisten. Über ‚Einstellungen‘ auf der Plugin-Karte kannst du sie öffnen oder zu einer bereits geöffneten Einstellungsseite zurückkehren."
+          ]
+        }
+      ]
+    }
+  }
+}

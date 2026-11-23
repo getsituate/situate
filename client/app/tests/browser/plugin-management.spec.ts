@@ -1028,6 +1028,15 @@ export default ({vue}) => ({
     page.getByText("Reading list settings", { exact: true }).last(),
   ).toBeVisible();
   await expect(page.getByTestId("open-count")).toHaveText("1");
+
+  await sidebar.getByRole("button", { name: "Plugins", exact: true }).click();
+  await page
+    .locator(".plugin-card-grid")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  await expect(page.locator(".plugin-card-grid")).toHaveCount(0);
+  await expect(page.getByTestId("open-count")).toHaveText("1");
+
   await expect(
     sidebar.locator('[data-view-pin="reading-list:settings"]'),
   ).toHaveCount(0);

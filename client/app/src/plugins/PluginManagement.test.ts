@@ -78,6 +78,7 @@ function setup(plugins: RuntimePlugin[] = [plugin("weekly")]) {
   const ui = {
     plugins: Promise.resolve(runtime),
     coordinator: { open: vi.fn(async () => true) },
+    session: { workspaceId: "garden", state: { document: undefined } },
     registry: { definitions: new Map([["weekly:settings", {}]]) },
   };
   mocks.ui.mockReturnValue(ui);
