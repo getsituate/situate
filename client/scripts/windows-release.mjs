@@ -153,8 +153,11 @@ export function assembleWindowsRelease(
     }
   }
   for (const { target, file, sha256 } of artifacts) {
+    const copied = readWindowsInstaller(output, version, target, publicKey);
     if (
-      readWindowsInstaller(output, version, target, publicKey).sha256 !== sha256
+      copied.sha256 !== sha256 ||
+      copied.signature !==
+        feed.platforms[architectures[target].updater].signature
     ) {
       throw new Error(`Copied installer differs from its manifest: ${file}`);
     }

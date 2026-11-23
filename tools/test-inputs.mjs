@@ -12,7 +12,7 @@ const platformInput =
 const declarations = /^changes\//;
 const swiftPolicy = /^\.(?:swift-format|swiftlint\.yml)$/;
 const delivery =
-  /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime(?:-authorization|-recovery)?|release-checkpoint(?:-[a-z-]+)?|qualification-runtime-envelope|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|promote|recovery|checkpoint(?:-commit)?|launch-trace|qualification-(?:host|route-guardian)))(?:\.test)?\.(?:mjs|py)$/;
+  /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime(?:-authorization|-recovery)?|release-checkpoint(?:-[a-z-]+)?|qualification-runtime-envelope|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|promote|recovery|checkpoint(?:-commit)?|launch-trace|windows-feed|qualification-(?:host|route-guardian)))(?:\.test)?\.(?:mjs|py)$/;
 const migrationContracts =
   /^tools\/(?:migration-history|published-migrations)(?:\.test)?\.mjs$/;
 const migrationConsumers =
@@ -112,6 +112,9 @@ const rules = {
     ].includes(file),
   "delivery-unit": (file) =>
     delivery.test(file) ||
+    /^client\/scripts\/(?:windows-release|updater-signing(?:-fixture)?)\.mjs$/.test(
+      file,
+    ) ||
     declarations.test(file) ||
     /^releases\//.test(file) ||
     file === "tools/test.mjs" ||
