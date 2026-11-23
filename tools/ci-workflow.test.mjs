@@ -107,7 +107,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
               : ["verify", "release-windows"].includes(name) &&
                   match[1].endsWith(".ps1")
-                ? /^\.\/tools\/build-windows-installer-preview\.ps1$/
+                ? /^\.\/tools\/(?:build-windows-installer-preview|test-windows-arm64)\.ps1$/
                 : /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
       );
     }
@@ -136,6 +136,11 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
         assert.match(body, /run: python3 tools\/build-architecture\.py/);
       } else if (name === "deploy-architecture" && !body.includes("run: ")) {
         assert.match(body, /uses: actions\/deploy-pages@/);
+      } else if (
+        name === "verify" &&
+        body.includes("runs-on: windows-11-arm")
+      ) {
+        assert.match(body, /run: \.\/tools\/test-windows-arm64\.ps1/);
       } else if (name === "release-windows") {
         assert.match(
           body,
@@ -158,7 +163,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     assert.doesNotMatch(otherJobs, /runs-on: macos-1[0-9]/);
     assert.doesNotMatch(
       workflow,
-      /runs-on: windows(?!-2025\b)|--target.*(?:ios|android)/,
+      /runs-on: windows(?!(?:-2025|-11-arm)\b)|--target.*(?:ios|android)/,
     );
   }
 });
@@ -313,6 +318,26 @@ test("Windows candidates build from protected main without publication credentia
     /TAURI_SIGNING_PRIVATE_KEY:.*secrets\.TAURI_SIGNING_PRIVATE_KEY/,
   );
   assert.doesNotMatch(workflow, /contents: write|WEBSITE_SSH|pull_request/);
+});
+
+test("PR verification fails if selected native ARM64 tests cannot run or fail", () => {
+  const workflow = read("verify");
+  const arm = job(workflow, "windows-arm64-native");
+  const x64 = job(workflow, "windows-native");
+  assert.equal(
+    arm.match(/^ {4}if: (.+)$/m)?.[1],
+    x64.match(/^ {4}if: (.+)$/m)?.[1],
+  );
+  assert.match(arm, /runs-on: windows-11-arm/);
+  assert.match(arm, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(arm, /run: \.\/tools\/test-windows-arm64\.ps1/);
+  assert.doesNotMatch(arm, /secrets\.|continue-on-error/);
+  const required = job(workflow, "required");
+  assert.match(required.split("    if:")[0], /windows-arm64-native,/);
+  assert.match(
+    required,
+    /contains\(fromJSON\(needs\.plan\.outputs\.lanes\), 'windows-native'\) && needs\.windows-arm64-native\.result != 'success'\s+run: exit 1/,
+  );
 });
 
 test("the ARM64 installer job stages architecture-specific preview artifacts", () => {

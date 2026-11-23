@@ -466,7 +466,9 @@ node tools/pipeline.mjs run verify --plan /PATH/TO/verify-plan.json
 
 Use full commit SHAs and retain complete Git history. Plans report changed paths, suite IDs, execution hosts, relevance reasons and application impact before work starts. The Linux tool-container lanes are `policy`, `tooling`, `frontend`, `rust`, `browser` and `browser-webkit`. The last two run in parallel in GitHub Actions on the pinned Linux/AMD64 image. `browser` runs Chromium product flows and selected executor and website checks; `browser-webkit` runs the WebKit smoke suite. `docker-integration` uses host Node/Docker orchestration without a nested daemon. Native macOS work belongs to `tooling-macos`, `macos-code` and `macos-native`. A local macOS invocation launches the same Linux tool image for portable lanes; it cannot substitute native-host results for those container results. A missing selected host, failed suite, cancellation, absent receipt or unexpected skip fails aggregation. Rust, product-browser and native lanes allow 1800 seconds per suite for cold builds and single-worker runs; other lanes use 600 seconds. The five-second quick budget is unchanged.
 
-For relevant client changes, Verify selects `windows-native` on a GitHub-hosted `windows-2025` x64 runner. It builds the unbundled Tauri executable and runs the locked Rust workspace tests for the exact checkout. After both checks pass, download the short-lived `windows-ci-x64-…` artifact from that run. Its manifest records the checkout SHA, target, runner/toolchain versions and executable hash. The lane requires neither signing credentials nor an interactive desktop. It does not test WebView2 rendering, package an installer or qualify a Windows release. The Windows execution path currently requires the hosted runner; a local Verify invocation cannot substitute for it.
+For relevant client changes, Verify requires two Windows jobs. `windows-native` builds the unbundled Tauri executable and runs the locked Rust workspace tests on `windows-2025` x64. `windows-arm64-native` runs the locked core and Windows host tests on `windows-11-arm` with a native ARM64 compiler and test binaries. Both jobs test the exact checkout without signing credentials or an interactive desktop. The runner labels do not establish which Windows releases the app supports.
+
+The short-lived `windows-ci-x64-…` artifact records the checkout SHA, target, runner and toolchain versions, and executable hash. Neither job exercises WebView2 rendering or qualifies a release installer. A local Verify invocation cannot substitute for the hosted jobs.
 
 GitHub Actions runs the broad Rust, Swift, and desktop suites on Apple Silicon (`macos-code` and `macos-native`). The `macos-compatibility` job runs on macOS 15 Intel. Client changes run the short launch and workspace-reopen test. Dictation changes also run a synthetic speech sample through the real recognizer with the pinned model. That test downloads and verifies the model in a temporary directory; a download or recognition failure fails the job. App releases require both checks. To run either locally on the current Mac, use `node tools/test.mjs --suite client-native-compatibility` or `node tools/test.mjs --suite client-dictation-recognition`.
 
@@ -498,7 +500,7 @@ The [monitoring workflow](../../.github/workflows/dependency-monitoring.yml) sup
 
 ### History storage tests
 
-The core suite includes ordinary history initialization, external content changes, repeated object reuse, failed publication and flush retries, and reopening a workspace in a separate process. The Windows cases exercise real file/directory sharing errors and retained identities under a restricted token. These Windows-specific cases are outside current supported verification. Before resuming Windows support, run the complete Rust workspace suite on native Windows; successful macOS tests do not establish Windows behavior.
+The core suite covers history initialization, external content changes, object reuse, publication and flush failures, and reopening a workspace in a separate process. Native Windows tests also exercise filesystem sharing errors, retained identities under a restricted token, and recovery when a workspace is moved from a path too long for its Git history.
 
 Tests with READONLY hardlink aliases retain their synthetic fixtures at the printed temporary paths, including on failure. Automatic cleanup could change attributes through an outside alias. The subprocess tests check readability after reopening, not persistence after power loss. Restricted-token execution does not establish equivalence to every account, security descriptor or filesystem configuration.
 
@@ -524,7 +526,7 @@ When changing an image input, [build and publish the image locally](../../client
 
 ### Deferred platforms
 
-iOS, Android, Windows and Linux desktop have no active product packaging or qualification lanes. No mobile workflow is retained for reactivation. Reintroducing a platform requires an explicit scope decision, native verification and separately reviewed provisioning; shared or historical tests do not establish support. Useful historical readers and focused device contracts can remain without becoming required macOS gates.
+iOS, Android and Linux desktop have no active product packaging or qualification lanes. No mobile workflow is retained for reactivation. Reintroducing a platform requires an explicit scope decision, native verification and separately reviewed provisioning; shared or historical tests do not establish support. Useful historical readers and focused device contracts can remain without becoming required macOS gates.
 
 ## Localization checks
 

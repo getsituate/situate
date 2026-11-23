@@ -113,6 +113,9 @@ function checkWorkflowBootstrap(name, workflow) {
         ],
         context,
       );
+    } else if (name === "verify.yml" && id === "windows-arm64-native") {
+      assert.match(block, /^ {4}runs-on: windows-11-arm$/m, context);
+      assert.deepEqual(commands, ["./tools/test-windows-arm64.ps1"], context);
     } else if (name === "deploy-website.yml" && id === "website") {
       assert.match(block, /^ {4}runs-on: ubuntu-24\.04$/m, context);
       assert.deepEqual(commands, websiteDeliveryCommands, context);

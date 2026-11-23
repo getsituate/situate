@@ -67,6 +67,7 @@ const windowsNative = (file) =>
   (native(file) ||
     (/^client\/scripts\//.test(file) && !platformInput.test(file)) ||
     file === ".github/workflows/verify.yml" ||
+    file === "tools/test-windows-arm64.ps1" ||
     /^tools\/(?:test(?:-windows[^/]*)?|test-(?:inputs|scope)|pipeline(?:-[^/]*)?|source-verification[^/]*|actions-adapter)\.(?:mjs|py)$/.test(
       file,
     ));

@@ -302,6 +302,25 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  windows-arm64-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'windows-native')
+    runs-on: windows-11-arm
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    env:
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_TARGET_DIR: ${{ runner.temp }}/situate-arm64-target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - shell: pwsh
+        run: ./tools/test-windows-arm64.ps1
+
   windows-smoke-build:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
     runs-on: windows-2025
@@ -399,6 +418,7 @@ jobs:
         macos-native,
         macos-compatibility,
         windows-native,
+        windows-arm64-native,
       ]
     if: always()
     runs-on: ubuntu-24.04
@@ -414,6 +434,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - if: needs.architecture.result != 'success'
+        run: exit 1
+      - if: contains(fromJSON(needs.plan.outputs.lanes), 'windows-native') && needs.windows-arm64-native.result != 'success'
         run: exit 1
       - run: python3 tools/pipeline-container.py actions aggregate --workflow verify
         env:
