@@ -111,6 +111,10 @@ test("complete sources, explicit whole-file choice, dismissal, focus trapping an
     "font-size",
     "14px",
   );
+  await preview.setViewportSize({ width: 1200, height: 2000 });
+  await expect(editorSource).toHaveJSProperty("tabIndex", -1);
+  await expect(fileSource).toHaveJSProperty("tabIndex", -1);
+  await preview.setViewportSize({ width: 1200, height: 900 });
   const expected = await source(preview, "file").textContent();
   await choose(preview, "file");
   await expect(review(preview)).toContainText(

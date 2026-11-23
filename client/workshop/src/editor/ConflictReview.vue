@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { SituateButton, SituateDialog, SituateRadio } from "../ui";
+import { vOverflowTabStop } from "../ui/overflow-tab-stop";
 import {
   computed,
   nextTick,
@@ -64,7 +65,7 @@ function keyboard(event: KeyboardEvent) {
   if (event.key !== "Tab") return;
   const elements = [
     ...dialog.value!.element!.querySelectorAll<HTMLElement>(
-      "button:not(:disabled), input:not(:disabled), pre",
+      'button:not(:disabled), input:not(:disabled), [tabindex="0"]',
     ),
   ].filter((el) => el.getClientRects().length && !el.matches(":disabled"));
   const first = elements[0],
@@ -244,14 +245,17 @@ watch(
               {{ bytes(c[choice]) }} bytes
             </p>
           </header>
-          <pre
+          <div
+            v-overflow-tab-stop
+            class="candidate-source"
             data-dialog-document
             :data-source="choice"
             role="region"
             :aria-label="name(choice) + ' complete source'"
-            tabindex="0"
             @scroll="scroll(choice, $event)"
-            >{{ c[choice] }}</pre>
+          >
+            <pre>{{ c[choice] }}</pre>
+          </div>
           <small data-dialog-help
             >End of {{ name(choice).toLowerCase() }}</small
           >
@@ -397,15 +401,18 @@ button[aria-pressed="true"] {
   padding: 8px 12px;
   background: var(--situate-paper);
 }
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.candidate-source {
   overflow: auto;
   flex: 1;
   min-height: 60px;
-  margin: 0;
   padding: 12px;
   font: 0.875rem/1.65 var(--situate-font-mono);
+}
+.candidate-source pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 small {
   padding: 4px 12px;

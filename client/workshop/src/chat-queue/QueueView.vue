@@ -10,6 +10,7 @@ import {
   SituateButton,
   SituateTextarea,
 } from "../ui";
+import { vOverflowTabStop } from "../ui/overflow-tab-stop";
 import { isRunning, type QueueAction, type QueueState } from "./model";
 const props = defineProps<{
   state: QueueState;
@@ -178,11 +179,11 @@ function keydown(event: KeyboardEvent) {
           </header>
           <div
             v-show="pendingExpanded"
+            v-overflow-tab-stop
             :id="pendingDetailsId"
             class="pending-list"
             role="region"
             :aria-labelledby="`${pendingDetailsId}-toggle`"
-            tabindex="0"
           >
             <section
               v-for="kind in ['steering', 'follow-up'] as const"
