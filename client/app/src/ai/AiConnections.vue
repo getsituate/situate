@@ -13,6 +13,8 @@ import {
   SituateDialog,
   SituateButton,
   SituateDialogActions,
+  SituateIcon,
+  SituateInfoButton,
   SituateInput,
   SituateSelect,
 } from "@situate/ui";
@@ -238,21 +240,23 @@ const confirmationTitle = computed(() => {
       @connected="connected"
     />
     <template v-else>
-      <p class="device-intro">
-        <strong>{{ t("ai.connections.thisDevice") }}</strong
-        ><br />{{ t("ai.connections.deviceScope") }}
-      </p>
       <div class="connections-heading">
-        <h3 :id="`connections-heading--${id}`" ref="title" tabindex="-1">
-          {{ t("ai.connections.title") }}
-        </h3>
+        <div class="connections-title">
+          <h3 :id="`connections-heading--${id}`" ref="title" tabindex="-1">
+            {{ t("ai.connections.title") }}
+          </h3>
+          <SituateInfoButton
+            :label="t('ai.connections.info')"
+            :text="t('ai.connections.deviceScope')"
+          />
+        </div>
         <SituateButton
-          variant="ghost"
+          class="add-connection"
           size="small"
-          type="button"
           :disabled="blocked || !!error"
           @click="edit(undefined, $event)"
         >
+          <SituateIcon name="plus" />
           {{ t("ai.connections.add") }}
         </SituateButton>
       </div>
@@ -326,6 +330,7 @@ const confirmationTitle = computed(() => {
       <div v-if="error && !confirmation" role="alert">
         <p>{{ localizeError(error) }}</p>
         <SituateButton
+          class="connection-retry"
           variant="ghost"
           size="small"
           type="button"
@@ -343,10 +348,9 @@ const confirmationTitle = computed(() => {
           {{ t("settings.ai.chat") }}
         </h3>
         <div class="setting-row">
-          <label :for="`chat-connection--${id}`"
-            >{{ t("ai.connections.chat")
-            }}<small>{{ t("ai.connections.nextReplies") }}</small></label
-          >
+          <label :for="`chat-connection--${id}`">{{
+            t("ai.connections.chat")
+          }}</label>
           <SituateSelect
             :id="`chat-connection--${id}`"
             :value="selected ?? ''"
@@ -473,17 +477,25 @@ const confirmationTitle = computed(() => {
 .connections {
   min-width: 0;
 }
-.device-intro {
-  color: var(--situate-muted);
-  font-size: 13px;
-  line-height: 1.65;
-  margin: 0 0 24px;
-}
 .connections-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: var(--situate-space-3);
+}
+.connections-title,
+.add-connection {
+  display: inline-flex;
+  align-items: center;
+}
+.add-connection {
+  justify-content: center;
+  gap: var(--situate-space-2);
+}
+.add-connection .situate-icon {
+  width: 16px;
+  height: 16px;
 }
 h3 {
   font-size: 16px;
@@ -526,7 +538,7 @@ strong {
   flex-wrap: wrap;
   gap: 12px;
 }
-.connections button:not(:where(.situate-dialog button)) {
+:is(.connection-actions button, .connection-retry) {
   min-height: 44px;
   padding: 4px;
   font: inherit;
@@ -538,19 +550,13 @@ strong {
   text-underline-offset: 4px;
   cursor: pointer;
 }
-.connections button:not(:where(.situate-dialog button)):disabled {
+:is(.connection-actions button, .connection-retry):disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
 :focus:where(html:not([data-input-modality="pointer"]) *) {
   outline: var(--situate-stroke-focus) solid var(--situate-cobalt);
   outline-offset: var(--situate-focus-offset);
-}
-.chat-connection small {
-  display: block;
-  color: var(--situate-muted);
-  font-weight: normal;
-  margin-top: 8px;
 }
 .chat-connection h3 {
   margin-bottom: 12px;

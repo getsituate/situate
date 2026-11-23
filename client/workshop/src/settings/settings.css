@@ -191,6 +191,20 @@
   gap: 12px;
   margin-bottom: 8px;
 }
+.settings-connections-title {
+  display: flex;
+  align-items: center;
+}
+.settings-add-connection {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.settings-add-connection .situate-icon {
+  width: 16px;
+  height: 16px;
+}
 .provider-row {
   display: flex;
   align-items: center;
@@ -240,10 +254,6 @@
   color: var(--situate-muted);
   font-size: 12px;
   margin-top: 4px;
-}
-.settings-advanced {
-  border-top: 1px solid var(--situate-line);
-  border-bottom: 1px solid var(--situate-line);
 }
 .settings-advanced summary {
   cursor: pointer;

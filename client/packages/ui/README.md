@@ -6,7 +6,7 @@ The production client imports reusable Vue components from `@situate/ui`. Compon
 
 - Actions: `SituateButton`, `SituateIconButton`, `SituateIcon`.
 - Forms: `SituateInput`, `SituateTextarea`, `SituateCheckbox`, `SituateRadio`, `SituateSelect`, `SituateSwitch`, `SituateFilterChip`, `SituateField`.
-- Feedback and surfaces: `SituateBadge`, `SituateNotice`, `SituateEmptyState`, `SituatePanel`, `SituateDialog`, `SituateDialogActions`, `SituatePopover`, `SituateMenu`, `SituateDisclosure`, `SituateTooltip`, `SituateProgress`.
+- Feedback and surfaces: `SituateBadge`, `SituateNotice`, `SituateEmptyState`, `SituatePanel`, `SituateDialog`, `SituateDialogActions`, `SituatePopover`, `SituateMenu`, `SituateDisclosure`, `SituateTooltip`, `SituateInfoButton`, `SituateProgress`.
 - Layout: `SituateScrollbars`, `SituateResizeHandle`.
 
 ```vue
@@ -39,7 +39,9 @@ Supply labels and messages from the application's localization catalog. `Field` 
 
 `Button` supports `variant="primary|secondary|ghost|danger|plain"`, `size="normal|small"`, `disabled` and `busy`. Busy controls cannot be activated and expose `aria-busy`; callers supply the progress wording. `IconButton` requires an accessible `label` and accepts an icon name or default-slot artwork.
 
-Button's optional `title` and IconButton's `title` or `label` supply shared hover/keyboard-focus help instead of native title bubbles. Caller descriptions are preserved. `Tooltip` can also bind an `anchor` and emit `describe` with its description ID, or supply `triggerAttrs` through its default slot. Its text is supplementary: the trigger still needs an accessible name.
+Button's optional `title` and IconButton's `title` or `label` supply shared hover/keyboard-focus help instead of native title bubbles. Caller descriptions are preserved. Set `:show-tooltip="false"` when the button opens its own help surface. `Tooltip` can also bind an `anchor` and emit `describe` with its description ID, or supply `triggerAttrs` through its default slot. Its text is supplementary: the trigger still needs an accessible name.
+
+Use `InfoButton` for short, optional explanations next to headings or labels. Supply a localized `label` for the button and localized `text` for the popover. For links or actions, use `Popover` directly.
 
 Text controls accept native attributes/listeners and optional `v-model`. Checkbox and Switch models are boolean; Radio and Select models are single string/number values. Switch also supports native `checked`/`change` ownership. FilterChip requires a localized `removeLabel`, renders its content in the default slot, and emits `remove` with the click event.
 

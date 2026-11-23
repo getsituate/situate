@@ -45,6 +45,8 @@
   "popoverClose": "Close collection details",
   "tooltipTrigger": "About reminders",
   "tooltip": "Reminders appear beside the notes you choose to revisit.",
+  "infoLabel": "About archived notes",
+  "infoText": "Archived notes are hidden from the collection but still appear in search.",
   "progress": "Notes prepared",
   "progressPending": "Preparing notes…",
   "progressCount": "3 of 5 notes prepared",

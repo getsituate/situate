@@ -21,7 +21,7 @@ for (const width of [1280, 780, 390]) {
       exact: true,
     });
     await expect(heading).toBeVisible();
-    await preview.getByRole("button", { name: "+ Add connection" }).click();
+    await preview.getByRole("button", { name: "Add connection" }).click();
     await expect(
       preview.getByRole("heading", { name: "Choose a provider" }),
     ).toBeVisible();

@@ -81,6 +81,7 @@ export const componentGroups = {
     "SituateBadge",
     "SituateEmptyState",
     "SituateTooltip",
+    "SituateInfoButton",
     "SituateProgress",
   ],
   layout: [

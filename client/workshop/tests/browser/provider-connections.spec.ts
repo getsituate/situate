@@ -111,7 +111,7 @@ for (const width of [1280, 390, 320]) {
     const preview = await open(page);
     await preview.setViewportSize({ width, height: 800 });
     await preview
-      .getByRole("button", { name: "+ Add connection", exact: true })
+      .getByRole("button", { name: "Add connection", exact: true })
       .click();
     const provider = preview.locator('[data-provider="openai"]');
     await expect(provider).toBeEnabled();

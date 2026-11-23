@@ -10,6 +10,7 @@ import {
   SituateField,
   SituateIcon,
   SituateIconButton,
+  SituateInfoButton,
   SituateInput,
   SituateNotice,
   SituatePanel,
@@ -450,6 +451,13 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
               >{{ c.tooltipTrigger }}</SituateButton
             >
           </SituateTooltip>
+        </article>
+        <article data-component="SituateInfoButton">
+          <h3>SituateInfoButton</h3>
+          <SituateInfoButton
+            :label="c.infoLabel"
+            :text="state.longLabels ? c.sampleLongNote : c.infoText"
+          />
         </article>
         <article data-component="SituateProgress">
           <h3>SituateProgress</h3>

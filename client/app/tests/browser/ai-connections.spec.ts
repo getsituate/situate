@@ -19,6 +19,32 @@ async function settings(page: Page) {
     .getByRole("button", { name: t("settings.ai.title"), exact: true })
     .click();
 }
+test.describe("connection help on touch screens", () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  test("opens on tap without hover and dismisses on another tap", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 850 });
+    await workspaceFixture(page, shellState);
+    await page.goto("/");
+    expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(
+      true,
+    );
+    await settings(page);
+    const help = page.getByRole("button", { name: t("ai.connections.info") });
+    const panel = page.getByRole("dialog", { name: t("ai.connections.info") });
+    await expect(panel).toBeHidden();
+    await help.tap();
+    await expect(panel).toBeVisible();
+    await help.tap();
+    await expect(panel).toBeHidden();
+    await help.tap();
+    await page.getByRole("heading", { name: t("ai.connections.title") }).tap();
+    await expect(panel).toBeHidden();
+  });
+});
+
 const configs = [
   {
     connectionId: "personal",
@@ -45,6 +71,66 @@ for (const width of [375, 1280]) {
       });
       await draft.fill("Outline the weekend planting plan.");
       await settings(page);
+      const connections = page.getByRole("region", {
+        name: t("ai.connections.title"),
+        exact: true,
+      });
+      const add = connections.getByRole("button", {
+        name: t("ai.connections.add"),
+        exact: true,
+      });
+      const help = connections.getByRole("button", {
+        name: t("ai.connections.info"),
+        exact: true,
+      });
+      const helpDialog = page.getByRole("dialog", {
+        name: t("ai.connections.info"),
+        exact: true,
+      });
+      const scope = page.getByText(
+        "Connections stay on this device and don’t sync to other devices.",
+        { exact: true },
+      );
+      await expect(add).toBeEnabled();
+      await expect(add).toHaveClass(/situate-button--primary/);
+      await expect(scope).toBeHidden();
+      await expect(help).toHaveAttribute("aria-expanded", "false");
+      await expect(help).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await visual.capture("ai.connections.overview");
+
+      await help.press("Enter");
+      await expect(helpDialog).toBeFocused();
+      await expect(helpDialog).toHaveAccessibleDescription(
+        "Connections stay on this device and don’t sync to other devices.",
+      );
+      await expect(help).toHaveAttribute("aria-expanded", "true");
+      await expect(help).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await visual.capture("ai.connections.device-help");
+      await page.keyboard.press("Escape");
+      await expect(helpDialog).toBeHidden();
+      await expect(help).toBeFocused();
+      if (width === 1280) {
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await help.hover();
+        await expect(help).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+        await page.mouse.down();
+        await expect(help).toHaveCSS("box-shadow", "none");
+        await expect(help.locator("svg")).toHaveCSS("translate", "none");
+        await expect(helpDialog).toBeHidden();
+        await page.mouse.up();
+        await page.emulateMedia({ reducedMotion: "reduce" });
+      } else {
+        await help.click();
+      }
+      await expect(helpDialog).toBeVisible();
+      await help.click();
+      await expect(helpDialog).toBeHidden();
+      await help.click();
+      await connections
+        .getByRole("heading", { name: t("ai.connections.title"), exact: true })
+        .click();
+      await expect(helpDialog).toBeHidden();
+
       const work = page
         .locator(".connections li")
         .filter({ has: page.getByText("Work", { exact: true }) });
@@ -379,6 +465,9 @@ test(
     await expect(
       page.getByText(t("ai.connections.empty"), { exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Default connection for chats" }),
+    ).toBeDisabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
     await visual.capture("ai.connections.new-device");
     await page
@@ -392,6 +481,24 @@ test(
       .locator(".ai-embedded")
       .getByRole("button", { name: t("navigation.cancel"), exact: true })
       .click();
+    await page.getByText(t("settings.ai.advanced"), { exact: true }).click();
+    await expect(
+      page.getByRole("combobox", { name: t("settings.ai.thinking") }),
+    ).toBeDisabled();
+    const smallModelHelp = page.getByRole("button", {
+      name: "About Small Model",
+    });
+    await expect(
+      page.getByText("For conversation titles and activity comments."),
+    ).toBeHidden();
+    await smallModelHelp.click();
+    const help = page.getByRole("dialog", { name: "About Small Model" });
+    await expect(help).toHaveAccessibleDescription(
+      "For conversation titles and activity comments.",
+    );
+    await visual.capture("ai.connections.small-model-help");
+    await page.keyboard.press("Escape");
+    await expect(help).toBeHidden();
     await page
       .getByRole("button", {
         name: t("navigation.openNavigation"),

@@ -28,6 +28,7 @@ import {
   SituateButton,
   SituateSwitch,
   SituateDisclosure,
+  SituateInfoButton,
   SituateInput,
   SituateSelect,
 } from "@situate/ui";
@@ -61,10 +62,10 @@ const emit = defineEmits<{
   connect: [];
 }>();
 const service = computed(() =>
-  props.workspaceScope
+  props.workspaceScope && status.value?.config
     ? workspaceAiSettings(
         props.workspaceScope,
-        status.value?.config?.connectionId,
+        status.value.config.connectionId,
       )
     : null,
 );
@@ -158,7 +159,7 @@ async function refresh(): Promise<void> {
     const loaded = await getStatus(scope);
     if (!alive || request !== revision) return;
     status.value = loaded;
-    await workspaceAiSettings(scope, loaded.config?.connectionId).refresh();
+    await service.value?.refresh();
   } catch {
     if (request === revision) statusError.value = true;
   }
@@ -343,7 +344,7 @@ function thinking(event: Event): void {
   <div
     :key="workspaceScope"
     class="ai-settings"
-    :aria-busy="service?.state.loading || service?.state.saving"
+    :aria-busy="service ? service.state.loading || service.state.saving : false"
   >
     <AiConnections
       v-if="workspaceScope"
@@ -513,7 +514,7 @@ function thinking(event: Event): void {
               :value="thinkingPreference"
               :disabled="disabled || levels.length < 2"
               :aria-describedby="
-                levels.length < 2 || !status?.available
+                status?.available && levels.length < 2
                   ? `thinking-unavailable-${id}`
                   : undefined
               "
@@ -533,16 +534,14 @@ function thinking(event: Event): void {
             >
           </div>
           <p
-            v-if="levels.length < 2 || !status?.available"
+            v-if="status?.available && levels.length < 2"
             :id="`thinking-unavailable-${id}`"
             class="thinking-explanation"
           >
             {{
-              !status?.available
-                ? t("settings.ai.thinking.noAccess")
-                : status?.config?.endpoint
-                  ? t("settings.ai.thinking.unknown")
-                  : t("settings.ai.thinking.unsupported")
+              status.config?.endpoint
+                ? t("settings.ai.thinking.unknown")
+                : t("settings.ai.thinking.unsupported")
             }}
           </p>
         </section>
@@ -550,12 +549,15 @@ function thinking(event: Event): void {
           class="settings-group"
           :aria-labelledby="`ai-comments-heading-${id}`"
         >
-          <h3 :id="`ai-comments-heading-${id}`">
-            {{ t("settings.ai.smallModel") }}
-          </h3>
-          <p :id="`small-model-help-${id}`">
-            {{ t("settings.ai.smallModelHelp") }}
-          </p>
+          <div class="small-model-heading">
+            <h3 :id="`ai-comments-heading-${id}`">
+              {{ t("settings.ai.smallModel") }}
+            </h3>
+            <SituateInfoButton
+              :label="t('settings.ai.smallModelInfo')"
+              :text="t('settings.ai.smallModelHelp')"
+            />
+          </div>
           <div class="setting-row">
             <label :for="`settings-generated-${id}`">{{
               t("settings.ai.generatedComments")
@@ -577,7 +579,6 @@ function thinking(event: Event): void {
             >
               <SituateInput
                 :id="`settings-comment-model-${id}`"
-                :aria-describedby="`small-model-help-${id}`"
                 v-model="customComment"
                 :placeholder="
                   settings?.comment?.model &&
@@ -599,7 +600,6 @@ function thinking(event: Event): void {
             <SituateSelect
               v-else
               :id="`settings-comment-model-${id}`"
-              :aria-describedby="`small-model-help-${id}`"
               :value="settings?.comment?.model ?? ''"
               :disabled="disabled"
               @change="selectEvent('comment', $event)"
@@ -650,15 +650,15 @@ function thinking(event: Event): void {
 </template>
 
 <style scoped>
-.advanced-settings {
-  margin-top: 24px;
-  border-top: 1px solid var(--situate-line);
-}
 .advanced-settings > :deep(summary) {
   padding: 20px 0;
   cursor: pointer;
   font-weight: 600;
   min-height: 44px;
+}
+.small-model-heading {
+  display: flex;
+  align-items: center;
 }
 .thinking-explanation {
   color: var(--situate-muted);

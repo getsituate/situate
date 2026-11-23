@@ -1,6 +1,6 @@
 :is(
   .situate-button,
-  .situate-icon-button,
+  .situate-icon-button:where(:not([data-press-feedback="none"])),
   .situate-filter-chip,
   :where(.situate-menu) [role^="menuitem"]
 ):where(:not(:disabled, [aria-disabled="true"])) {
@@ -31,12 +31,13 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .situate-icon-button:where(:enabled) > svg,
+  .situate-icon-button:where(:enabled:not([data-press-feedback="none"])) > svg,
   .situate-filter-chip:where(:enabled) > .filter-chip-remove {
     transition: translate 80ms var(--situate-ease-settle);
   }
 
-  .situate-icon-button:where(:enabled:active) > svg,
+  .situate-icon-button:where(:enabled:active:not([data-press-feedback="none"]))
+    > svg,
   .situate-filter-chip:where(:enabled:active) > .filter-chip-remove {
     translate: 0 1px;
     transition-duration: 0s;

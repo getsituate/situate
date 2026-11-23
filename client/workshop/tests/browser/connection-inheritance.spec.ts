@@ -21,7 +21,7 @@ test("a removed account's conversation override can return to the current defaul
     .getByRole("button", { name: "AI & models", exact: true })
     .click();
   await preview
-    .getByRole("button", { name: "+ Add connection", exact: true })
+    .getByRole("button", { name: "Add connection", exact: true })
     .click();
   await preview.locator('[data-provider="anthropic"]').click();
   await preview.locator('[data-method="key"]').click();
