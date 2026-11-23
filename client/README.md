@@ -503,7 +503,7 @@ For an interactive provider test, finish both ordinary smoke launches first, the
 
 ## App usage analytics
 
-To make Usage analytics available in a macOS build, supply `SITUATE_POSTHOG_TOKEN` in the build environment. Use the public project token for the website's EU PostHog project, not a PostHog personal API key. The GitHub macOS release build reads the shared repository variable `SITUATE_POSTHOG_TOKEN`. Without the token, analytics is unavailable. A configured app still sends nothing until the user enables sharing. Use an isolated test project for live development checks.
+To make Usage analytics available in a macOS build, supply `SITUATE_POSTHOG_TOKEN` in the build environment. Use the public project token for the website's EU PostHog project, not a PostHog personal API key. The GitHub macOS release build reads the shared repository variable `SITUATE_POSTHOG_TOKEN`. Without the token, analytics is unavailable. In configured builds, sharing is on by default and can be switched off under Usage analytics. Use an isolated test project for live development checks.
 
 ## Local release packages
 

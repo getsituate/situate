@@ -116,6 +116,45 @@ test("read-only settings stay visible without issuing writes", async ({
   ).toEqual([]);
 });
 
+test.describe("Usage analytics settings", () => {
+  test.use({ localizationMode: "real" });
+
+  test(
+    "can turn off usage analytics",
+    { tag: ["@visual-desktop", "@visual-mobile"] },
+    async ({ page, visual }) => {
+      await workspaceFixture(page, shellState, { analyticsEnabled: true });
+      await page.goto("/");
+      const settings = page.getByRole("button", {
+        name: "Settings",
+        exact: true,
+      });
+      const navigation = page.getByRole("button", {
+        name: "Open navigation",
+        exact: true,
+      });
+      await expect(settings.or(navigation).first()).toBeVisible();
+      if (!(await settings.isVisible())) await navigation.click();
+      await settings.click();
+      await page
+        .getByRole("button", { name: "Usage analytics", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "Usage analytics", exact: true }),
+      ).toBeVisible();
+      const sharing = page.getByRole("switch", {
+        name: "Share usage analytics with Situate",
+      });
+      await expect(sharing).toBeChecked();
+      await visual.capture("settings.analytics-enabled");
+      await sharing.click();
+      await expect(sharing).not.toBeChecked();
+      await expect(sharing).toBeEnabled();
+      await visual.capture("settings.analytics-disabled");
+    },
+  );
+});
+
 test.describe("German settings layout", () => {
   test.use({ localizationMode: "real", locale: "de-DE" });
   for (const width of [320, 375, 768, 1440]) {

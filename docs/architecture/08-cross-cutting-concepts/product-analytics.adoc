@@ -5,7 +5,7 @@ endif::[]
 [[product-analytics]]
 === Product analytics
 
-Situate stores product analytics under pseudonyms to understand how people use the app within and across installations. On configured macOS builds, app analytics is off until the user enables it. The destination is the same PostHog project used by the website, but browser and app identities remain separate unless an attribution mechanism is explicitly adopted.
+Situate stores product analytics under pseudonyms to understand how people use the app within and across installations. On configured macOS builds, app analytics is on by default. The user can turn it off in Settings or the workspace chooser. The destination is the same PostHog project used by the website, but browser and app identities remain separate unless an attribution mechanism is explicitly adopted.
 
 ==== Installation and workspace identities
 
@@ -38,6 +38,6 @@ Persistent pseudonyms and the activity linked to them are not anonymous. Do not 
 
 The first trusted interaction in a focused app window reserves one `app_daily_active` event per installation and UTC day. This works across midnight without restarting the app; foreground time alone does not count. Events include a UTC timestamp, app version, platform and operating system version. A missing workspace context is represented by a null workspace ID. No local time is transmitted; if a future event needs local-time analysis, it can add an optional `local_hour` (0–23) taken at the time of the interaction.
 
-The native host stores the reservation before attempting delivery. An unsuccessful or interrupted send can undercount activity but does not trigger a resend or block app use. Withdrawal stops further sends and cancels pending requests where possible; it cannot retract data already received by PostHog. The app and website use independent preferences.
+The native host stores the reservation before attempting delivery. An unsuccessful or interrupted send can undercount activity but does not trigger a resend or block app use. Turning analytics off stops further sends and cancels pending requests where possible; it cannot retract data already received by PostHog. The app and website use independent preferences.
 
 External processing remains subject to the link:{architecture-repository-root}/requirements/data/foundations.md#hosting-and-data-processing[hosting and data-processing constraints]. Website-to-app attribution requires a separate design: the current website event records a download click, while the app can observe its first launch, not a completed download or installation.

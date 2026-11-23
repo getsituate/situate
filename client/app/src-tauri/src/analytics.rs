@@ -15,7 +15,7 @@ use uuid::Uuid;
 const ENDPOINT: &str = "https://eu.i.posthog.com/i/v0/e/";
 const ERROR: &str = "settings.analytics.error";
 
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct LocalState {
     enabled: bool,
     installation_id: Option<Uuid>,
@@ -25,7 +25,11 @@ struct LocalState {
 fn load(path: &Path) -> io::Result<LocalState> {
     match fs::read(path) {
         Ok(bytes) => serde_json::from_slice(&bytes).map_err(io::Error::other),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(LocalState::default()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(LocalState {
+            enabled: true,
+            installation_id: None,
+            last_day: None,
+        }),
         Err(error) => Err(error),
     }
 }
@@ -145,8 +149,8 @@ fn reserve_day(path: &Path, state: &mut LocalState, now: OffsetDateTime) -> Opti
     if !state.enabled || state.last_day.is_some_and(|last| last >= day) {
         return None;
     }
-    let id = state.installation_id?;
     let mut next = state.clone();
+    let id = *next.installation_id.get_or_insert_with(Uuid::new_v4);
     next.last_day = Some(day);
     // Reserve before sending: a restart after an uncertain delivery must not resend it.
     save(path, &next).ok()?;

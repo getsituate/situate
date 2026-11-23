@@ -19,7 +19,7 @@ test("qualifies foreground interactions and reports a new UTC day without remoun
   const remove = vi.spyOn(window, "removeEventListener");
   const stop = vi.fn();
   vi.mocked(listen).mockResolvedValue(stop);
-  vi.mocked(invoke).mockResolvedValueOnce(false).mockResolvedValue(undefined);
+  vi.mocked(invoke).mockResolvedValueOnce(true).mockResolvedValue(undefined);
   let scope: string | null = "workspace-a";
   const view = mount(
     defineComponent({
@@ -43,9 +43,7 @@ test("qualifies foreground interactions and reports a new UTC day without remoun
         .mock.calls.filter(
           ([command]) => command === "analytics_daily_activity",
         );
-    interact();
     expect(deliveries()).toEqual([]);
-    change({ event: "analytics-preference-changed", id: 1, payload: true });
     interact(false);
     focus.mockReturnValue(false);
     interact();

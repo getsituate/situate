@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { t } from "@situate/localization";
+import { SituateSwitch } from "@situate/ui";
 import ErrorDialog from "../errors/ErrorDialog.vue";
 import { analyticsPreference, setAnalyticsPreference } from "./runtime";
 
@@ -24,9 +25,8 @@ async function change(event: Event): Promise<void> {
 </script>
 
 <template>
-  <label data-analytics-preference>
-    <input
-      type="checkbox"
+  <label class="analytics-choice" data-analytics-preference>
+    <SituateSwitch
       :checked="analyticsPreference === true"
       :disabled="saving"
       @change="change"
@@ -41,3 +41,11 @@ async function change(event: Event): Promise<void> {
     @dismiss="failed = false"
   />
 </template>
+
+<style scoped>
+.analytics-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+</style>

@@ -10,13 +10,9 @@ fn reserves_only_one_event_per_utc_day_across_restart() {
     let mut local = load(&path).unwrap();
     let before = OffsetDateTime::parse("2026-05-01T23:59:59Z", &Rfc3339).unwrap();
     let after = OffsetDateTime::parse("2026-05-02T00:00:01Z", &Rfc3339).unwrap();
-    assert_eq!(reserve_day(&path, &mut local, before), None);
     assert!(!path.exists());
-
-    let installation = Uuid::parse_str(INSTALLATION).unwrap();
-    local.enabled = true;
-    local.installation_id = Some(installation);
-    assert_eq!(reserve_day(&path, &mut local, before), Some(installation));
+    let installation = reserve_day(&path, &mut local, before).expect("enabled on first use");
+    assert_eq!(installation.get_version_num(), 4);
     assert_eq!(reserve_day(&path, &mut local, before), None);
     let mut reopened = load(&path).unwrap();
     assert_eq!(reserve_day(&path, &mut reopened, before), None);
@@ -32,7 +28,7 @@ fn reserves_only_one_event_per_utc_day_across_restart() {
 }
 
 #[test]
-fn unreadable_state_does_not_grant_consent() {
+fn unreadable_state_does_not_fall_back_to_the_enabled_default() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("analytics-v1.json");
     fs::write(&path, b"{invalid").unwrap();
