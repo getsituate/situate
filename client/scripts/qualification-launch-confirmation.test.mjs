@@ -140,6 +140,47 @@ test("ambiguous, foreign, blocking and expired dialogs never press", async () =>
   }
 });
 
+test("baseline distinguishes a query failure, expired sample and caller cancellation", async (t) => {
+  const clock = t.mock.method(
+    AbortSignal,
+    "timeout",
+    () => new AbortController().signal,
+  );
+  assert.equal(
+    await query("baseline", {
+      execute: async () => {
+        throw new Error("private system error");
+      },
+    }),
+    "query_failed",
+  );
+  assert.equal(
+    await query("baseline", { execute: async () => "private native output" }),
+    "query_failed",
+  );
+  const deadline = new AbortController();
+  clock.mock.mockImplementation((ms) => {
+    assert.equal(ms, 1500);
+    return deadline.signal;
+  });
+  assert.equal(
+    await query("baseline", {
+      execute: async () => {
+        deadline.abort();
+        return "absent";
+      },
+    }),
+    "query_timeout",
+  );
+  assert.equal(
+    await query("baseline", {
+      signal: AbortSignal.abort(),
+      execute: () => assert.fail("Queried after cancellation"),
+    }),
+    "query_cancelled",
+  );
+});
+
 test("a press with uncertain outcome is never retried or reported confirmed", async () => {
   const f = fixture({ failPress: true });
   assert.equal(await query("confirm", f), "press-unknown");

@@ -249,6 +249,7 @@ test("first install confirms once during a pending launch and drains the confirm
   assert.deepEqual(calls, ["baseline", "open", "confirm"]);
   assert.deepEqual(events, [
     "started",
+    "confirmation_baseline_clear",
     "exited_zero",
     "confirmation_confirmed",
     "completed",
@@ -259,8 +260,10 @@ test("unknown baseline prevents launch and a fast launch does not trigger a pres
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let launches = 0;
   const calls = [];
+  const statuses = [];
   let baseline = "unexpected";
   const execute = createQualificationProcess({
+    progress: (_phase, status) => statuses.push(status),
     launchConsent: (mode) => {
       calls.push(mode);
       return baseline;
@@ -272,17 +275,25 @@ test("unknown baseline prevents launch and a fast launch does not trigger a pres
     },
   });
   const args = ["-n", "/synthetic/Situate.app"];
-  await assert.rejects(
-    execute("open", args, { confirmFirstLaunch: true }),
-    (error) =>
-      error.uncertain &&
-      /clear macOS confirmation baseline/.test(error.cause.message),
-  );
+  for (const [result, status] of [
+    ["unexpected", "confirmation_baseline_dialog_present"],
+    ["query_timeout", "confirmation_baseline_timeout"],
+    ["query_failed", "confirmation_baseline_query_failed"],
+  ]) {
+    baseline = result;
+    await assert.rejects(
+      execute("open", args, { confirmFirstLaunch: true }),
+      (error) =>
+        error.qualificationLaunchNotStarted === true &&
+        /clear macOS confirmation baseline/.test(error.cause.message),
+    );
+    assert.ok(statuses.includes(status));
+  }
   assert.equal(launches, 0);
   baseline = "absent";
   await execute("open", args, { confirmFirstLaunch: true });
   t.mock.timers.tick(4000);
-  assert.deepEqual(calls, ["baseline", "baseline"]);
+  assert.deepEqual(calls, ["baseline", "baseline", "baseline", "baseline"]);
   assert.equal(launches, 1);
 });
 
