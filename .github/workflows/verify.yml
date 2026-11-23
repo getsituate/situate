@@ -322,6 +322,24 @@ jobs:
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/situate-arm64-target
 
+  windows-webview-probe:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [windows-2025, windows-11-arm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - shell: pwsh
+        run: ./tools/probe-windows-webview2.ps1
+
   windows-smoke-build:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
     runs-on: windows-2025

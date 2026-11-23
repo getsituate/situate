@@ -113,6 +113,12 @@ function checkWorkflowBootstrap(name, workflow) {
         ],
         context,
       );
+    } else if (name === "verify.yml" && id === "windows-webview-probe") {
+      assert.deepEqual(
+        commands,
+        ["./tools/probe-windows-webview2.ps1"],
+        context,
+      );
     } else if (name === "verify.yml" && id === "windows-arm64-native") {
       assert.match(block, /^ {4}runs-on: windows-11-arm$/m, context);
       assert.deepEqual(commands, ["./tools/test-windows-arm64.ps1"], context);

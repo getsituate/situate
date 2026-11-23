@@ -88,11 +88,11 @@ Dispatch **Build Windows release candidates** on protected `main` with a reserve
 node client/scripts/windows-release.mjs CANDIDATE VERSION SOURCE_SHA X64_ARTIFACT ARM64_ARTIFACT
 ```
 
-Before publishing, qualify the exact installers on native x64 and ARM64 Windows:
+Before publishing, qualify the exact installers on native x64 and ARM64 systems running Windows 10 22H2 and Windows 11. Hosted Windows Server checks do not substitute for client qualification.
 
 1. Install as a standard user in a disposable profile. Confirm the workspace chooser opens, create a synthetic workspace, and check that the app uninstalls without removing the workspace.
 2. Build a test baseline with a version lower than the candidate and the same updater public key. On the Windows build host, run `node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE --target=RUST_TARGET --qualification-baseline=BASELINE_VERSION`. This installer uses the production app identity and a private feed at `https://example.invalid/update.json`; install it only in a disposable profile without a production installation. From the baseline, install the unchanged candidate through the app's updater. Confirm restart into the candidate and preservation of the workspace and a stored draft.
-3. On a separate disposable image without WebView2, confirm the embedded bootstrapper can install the runtime and the same candidate opens the workspace chooser. A new app profile on a machine with WebView2 does not exercise this path.
+3. On a separate disposable image without WebView2, confirm the embedded bootstrapper can install the runtime and the same candidate opens the workspace chooser. A new app profile on a machine with WebView2 does not exercise this path. On the Windows support PR, the `windows-webview-probe` job reports whether the hosted images already have the runtime registered.
 
 Record only successful checks in the qualification JSON. Its `kind` is `windows-exact-artifact-qualification`, `manifestSha256` is the hash of the assembled `manifest.json`, and `architectures` lists x64 then ARM64, with each manifest `target` and installer `sha256` plus `install`, `update`, and `uninstall` set to `passed`. `webview2Bootstrap` records the `target` and `sha256` of the installer tested without WebView2, with `result` set to `passed`. Keep the qualification evidence with the candidate; do not substitute a result from another build or an emulated x64 run for an ARM64 run.
 
