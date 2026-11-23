@@ -197,9 +197,9 @@ const {
 const appShell = useTemplateRef<InstanceType<typeof AppShell>>("appShell");
 const settingsScope = ref("");
 const globalUpdatesOpen = ref(false);
-function showUpdates(): void {
-  if (appShell.value && !dictation.owner) void appShell.value.showUpdates();
-  else globalUpdatesOpen.value = true;
+async function showUpdates(): Promise<void> {
+  if (!dictation.owner && (await appShell.value?.showUpdates())) return;
+  globalUpdatesOpen.value = true;
 }
 const closeDialogControl =
   useTemplateRef<InstanceType<typeof WorkspaceCloseDialog>>(

@@ -62,6 +62,91 @@ async function paneOptions(page: Page) {
   }
   return page.getByRole("dialog", { name: "Pane layout", exact: true });
 }
+test("settings and plugins open in the chosen pane without replacing another pane @visual-desktop", async ({
+  page,
+  visual,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  let sequence = 0;
+  const nextId = () => `management-${++sequence}`;
+  let layout = reduceLayout(emptyLayout(), { type: "new-tab" }, nextId);
+  const tab = layout.tabs[0]!;
+  layout = reduceLayout(
+    layout,
+    {
+      type: "split",
+      tabId: tab.id,
+      paneId: tab.activePaneId,
+      edge: "right",
+    },
+    nextId,
+  );
+  layout = reduceLayout(
+    layout,
+    {
+      type: "open",
+      target: { kind: "view", viewId: "settings" },
+      destination: { tabId: tab.id, paneId: tab.activePaneId },
+    },
+    nextId,
+  );
+  await workspaceFixture(page, shellState, {
+    layout: {
+      records: {
+        garden: {
+          revision: "management-layout",
+          data: { version: 1, layout, pinnedViews: [] },
+        },
+      },
+    },
+  });
+  await page.goto("/");
+  const settingsPane = page.locator(`[data-pane="${tab.activePaneId}"]`);
+  const otherPane = page
+    .locator(".pane-tile")
+    .filter({ has: page.locator(".view-chooser") });
+  const otherPaneId = await otherPane.getAttribute("data-pane");
+  const destination = page.locator(`[data-pane="${otherPaneId}"]`);
+  await destination
+    .getByRole("button", { name: "All views", exact: true })
+    .click();
+  await destination
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  await expect(
+    settingsPane.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  await destination
+    .getByRole("button", { name: "Language & formats", exact: true })
+    .click();
+  const language = destination.getByLabel("Interface language", {
+    exact: true,
+  });
+  await expect(language).toBeVisible();
+  const languageId = await language.getAttribute("id");
+  await expect(page.locator(`[id="${languageId}"]`)).toHaveCount(1);
+  await destination
+    .getByRole("button", { name: "All settings", exact: true })
+    .click();
+  await destination
+    .getByRole("button", { name: "Plugins", exact: true })
+    .click();
+  await expect(
+    destination.getByRole("heading", { name: "Plugins", exact: true }),
+  ).toBeVisible();
+  await expect(
+    settingsPane.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  await visual.capture("layout.management-split");
+  await destination
+    .getByRole("button", { name: "Back in this pane", exact: true })
+    .click();
+  await expect(
+    destination.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("tab")).toHaveCount(1);
+});
+
 for (const width of [1440, 390]) {
   test(
     `layout capacity errors appear only after an opening attempt at ${width}px`,

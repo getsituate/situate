@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { useId, ref } from "vue";
 import { SituateButton, SituateDialog } from "@situate/ui";
 import { t } from "@situate/localization";
 import ReleaseHistory from "./ReleaseHistory.vue";
 import { loadInstalledVersion } from "./release-history";
+const id = useId();
 const open = ref(false);
 async function show(event: MouseEvent) {
   (event.currentTarget as HTMLElement).focus();
@@ -19,11 +20,11 @@ async function show(event: MouseEvent) {
     :open="open"
     class="release-dialog"
     fade-backdrop
-    aria-labelledby="release-history-title"
+    :aria-labelledby="`release-history-title-${id}`"
     @cancel.prevent="open = false"
   >
     <template #header
-      ><h2 id="release-history-title">
+      ><h2 :id="`release-history-title-${id}`">
         {{ t("releaseHistory.history") }}
       </h2></template
     >

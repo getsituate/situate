@@ -4,6 +4,12 @@ import type { WorkspaceUi } from "../layout/runtime";
 import { guardDictation } from "../dictation/runtime";
 import { selectedTab } from "../layout/model";
 import { currentEntry, sameTarget } from "../layout/navigation";
+import type { NavigationTicket } from "../layout/session";
+
+export type PluginManagementUi = Pick<
+  WorkspaceUi,
+  "plugins" | "coordinator" | "registry" | "session"
+>;
 
 export function pluginManagementGroup(plugin: DeepReadonly<RuntimePlugin>) {
   return plugin.manifest?.kind ?? "tool";
@@ -18,8 +24,9 @@ export function pluginSettingsId(
 }
 
 export async function openPluginSettings(
-  ui: WorkspaceUi,
+  ui: PluginManagementUi,
   plugin: DeepReadonly<RuntimePlugin> | undefined,
+  ticket?: NavigationTicket,
 ) {
   const viewId = pluginSettingsId(plugin);
   if (!viewId) return false;
@@ -27,6 +34,7 @@ export async function openPluginSettings(
   if (!definition) return false;
   const target = { kind: "view", viewId } as const;
   const alreadyOpen = () => {
+    if (ticket) return false;
     const layout = ui.session.state.document?.layout;
     const tab = layout && selectedTab(layout);
     const pane = tab?.panes.find((item) => item.id === tab.activePaneId);
@@ -38,5 +46,5 @@ export async function openPluginSettings(
       ui.registry.definitions.get(viewId) === definition &&
       alreadyOpen()
     );
-  return ui.coordinator.open(target);
+  return ui.coordinator.open(target, ticket);
 }

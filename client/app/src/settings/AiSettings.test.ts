@@ -58,7 +58,9 @@ beforeEach(() => {
 test("without an open workspace settings stay disabled and do not read storage", async () => {
   const wrapper = mount(AiSettings);
   await flushPromises();
-  expect(wrapper.get("#settings-inline").attributes("disabled")).toBeDefined();
+  expect(
+    wrapper.get("[id^='settings-inline-']").attributes("disabled"),
+  ).toBeDefined();
   expect(invoke).not.toHaveBeenCalled();
   expect(getStatus).not.toHaveBeenCalled();
 });
@@ -68,10 +70,11 @@ test("inline selection defaults hidden while comments stay enabled", async () =>
   });
   await flushPromises();
   expect(
-    wrapper.get<HTMLInputElement>("#settings-inline").element.checked,
+    wrapper.get<HTMLInputElement>("[id^='settings-inline-']").element.checked,
   ).toBe(false);
   expect(
-    wrapper.get<HTMLInputElement>("#settings-generated").element.checked,
+    wrapper.get<HTMLInputElement>("[id^='settings-generated-']").element
+      .checked,
   ).toBe(true);
 });
 test.each(["showInlineModel", "generatedComments"] as const)(
@@ -83,8 +86,8 @@ test.each(["showInlineModel", "generatedComments"] as const)(
     await flushPromises();
     const selector =
       setting === "showInlineModel"
-        ? "#settings-inline"
-        : "#settings-generated";
+        ? "[id^='settings-inline-']"
+        : "[id^='settings-generated-']";
     const control = wrapper.get<HTMLInputElement>(selector);
     expect(control.attributes("role")).toBe("switch");
     const saved = control.element.checked;
@@ -121,21 +124,21 @@ test("custom chat and comment model hints localize their selected identities", a
     props: { workspaceScope: "ui-custom-models" },
   });
   await flushPromises();
-  expect(wrapper.get("#settings-chat-model").attributes("placeholder")).toBe(
-    '⟦model.selectedLabel:{"name":"chat-model"}⟧',
-  );
-  expect(wrapper.get("#settings-comment-model").attributes("placeholder")).toBe(
-    '⟦model.selectedLabel:{"name":"comment-model"}⟧',
-  );
+  expect(
+    wrapper.get("[id^='settings-chat-model-']").attributes("placeholder"),
+  ).toBe('⟦model.selectedLabel:{"name":"chat-model"}⟧');
+  expect(
+    wrapper.get("[id^='settings-comment-model-']").attributes("placeholder"),
+  ).toBe('⟦model.selectedLabel:{"name":"comment-model"}⟧');
   vi.mocked(invoke).mockResolvedValue(defaultAiSettings());
   await wrapper.setProps({ workspaceScope: "ui-custom-empty" });
   await flushPromises();
-  expect(wrapper.get("#settings-chat-model").attributes("placeholder")).toBe(
-    "⟦ai.modelID⟧",
-  );
-  expect(wrapper.get("#settings-comment-model").attributes("placeholder")).toBe(
-    "⟦ai.modelID⟧",
-  );
+  expect(
+    wrapper.get("[id^='settings-chat-model-']").attributes("placeholder"),
+  ).toBe("⟦ai.modelID⟧");
+  expect(
+    wrapper.get("[id^='settings-comment-model-']").attributes("placeholder"),
+  ).toBe("⟦ai.modelID⟧");
 });
 test("an unresolved recommendation remains the saved preference instead of an empty selection", async () => {
   vi.mocked(getStatus).mockResolvedValue({
@@ -169,11 +172,11 @@ test("an unresolved recommendation remains the saved preference instead of an em
   await flushPromises();
   for (const id of ["settings-chat-model", "settings-comment-model"]) {
     expect(
-      wrapper.get<HTMLButtonElement>(`#${id}`).attributes("data-value"),
+      wrapper.get<HTMLButtonElement>(`[id^=${id}-]`).attributes("data-value"),
     ).toBe("recommended");
     expect(
       wrapper
-        .get(`#${id} + select option[value="recommended"]`)
+        .get(`[id^=${id}-] + select option[value="recommended"]`)
         .attributes("disabled"),
     ).toBeDefined();
   }
@@ -210,12 +213,12 @@ test("a custom connection does not present Recommended as a server model ID", as
     props: { workspaceScope: "custom-recommended" },
   });
   await flushPromises();
-  expect(wrapper.get("#settings-chat-model").attributes("placeholder")).toBe(
-    "⟦ai.modelID⟧",
-  );
-  expect(wrapper.get("#settings-comment-model").attributes("placeholder")).toBe(
-    "⟦ai.modelID⟧",
-  );
+  expect(
+    wrapper.get("[id^='settings-chat-model-']").attributes("placeholder"),
+  ).toBe("⟦ai.modelID⟧");
+  expect(
+    wrapper.get("[id^='settings-comment-model-']").attributes("placeholder"),
+  ).toBe("⟦ai.modelID⟧");
 });
 
 test.each(["provider", "unknown", "manual"] as const)(
@@ -234,17 +237,17 @@ test.each(["provider", "unknown", "manual"] as const)(
       props: { workspaceScope: "custom-models" },
     });
     await flushPromises();
-    expect(wrapper.find("input#settings-chat-model").exists()).toBe(
+    expect(wrapper.find("input[id^=settings-chat-model-]").exists()).toBe(
       source === "manual",
     );
     expect(
       wrapper
-        .find('#settings-chat-model + select option[value="server/chat"]')
+        .find('[id^=settings-chat-model-] + select option[value="server/chat"]')
         .exists(),
     ).toBe(source === "provider");
     expect(
       wrapper
-        .find('#settings-chat-model + select option[value="recommended"]')
+        .find('[id^=settings-chat-model-] + select option[value="recommended"]')
         .exists(),
     ).toBe(false);
   },
@@ -281,13 +284,17 @@ test("stale account choices allow unrelated toggles and one-model-at-a-time repa
     props: { workspaceScope: "stale-choice-repair" },
   });
   await flushPromises();
-  await wrapper.get("#settings-inline").setValue(true);
+  await wrapper.get("[id^='settings-inline-']").setValue(true);
   await flushPromises();
   expect(invoke).toHaveBeenLastCalledWith("ai_settings_save", {
     scope: "stale-choice-repair",
     settings: { ...saved, showInlineModel: true },
   });
-  await chooseSelect(wrapper, "#settings-chat-model", "openai/gpt-6.1-sol");
+  await chooseSelect(
+    wrapper,
+    "[id^='settings-chat-model-']",
+    "openai/gpt-6.1-sol",
+  );
   await flushPromises();
   expect(
     workspaceAiSettings("stale-choice-repair").state.settings,
@@ -296,7 +303,11 @@ test("stale account choices allow unrelated toggles and one-model-at-a-time repa
     chat: { model: "openai/gpt-6.1-sol" },
     comment: saved.comment,
   });
-  await chooseSelect(wrapper, "#settings-comment-model", "openai/gpt-6.1-sol");
+  await chooseSelect(
+    wrapper,
+    "[id^='settings-comment-model-']",
+    "openai/gpt-6.1-sol",
+  );
   await flushPromises();
   expect(
     workspaceAiSettings("stale-choice-repair").state.settings,
@@ -327,11 +338,11 @@ test("comment selection persists separately with lowest verified effort", async 
   await vi.waitFor(() =>
     expect(
       wrapper
-        .findAll("#settings-comment-model + select option")
+        .findAll("[id^='settings-comment-model-'] + select option")
         .some((option) => option.attributes("value") === "gpt-6.1-sol"),
     ).toBe(true),
   );
-  await chooseSelect(wrapper, "#settings-comment-model", "gpt-6.1-sol");
+  await chooseSelect(wrapper, "[id^='settings-comment-model-']", "gpt-6.1-sol");
   await flushPromises();
   expect(workspaceAiSettings("ui-comments").state.settings).toMatchObject({
     chat: { model: "gpt-6.1-sol", thinking: "high" },
@@ -365,7 +376,7 @@ test("recommendation options wait for the loaded catalog and selection uses only
   await flushPromises();
   expect(
     wrapper.findAll(
-      '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
+      '[id^=settings-chat-model-] + select option[value="recommended"], [id^=settings-comment-model-] + select option[value="recommended"]',
     ),
   ).toHaveLength(0);
   const mini = modelCatalog
@@ -376,19 +387,19 @@ test("recommendation options wait for the loaded catalog and selection uses only
   await flushPromises();
   expect(
     wrapper.findAll(
-      '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
+      '[id^=settings-chat-model-] + select option[value="recommended"], [id^=settings-comment-model-] + select option[value="recommended"]',
     ),
   ).toHaveLength(2);
-  expect(wrapper.get("#settings-chat-model").attributes("data-value")).toBe(
-    "gpt-6.1-sol",
-  );
-  await chooseSelect(wrapper, "#settings-comment-model", "recommended");
+  expect(
+    wrapper.get("[id^='settings-chat-model-']").attributes("data-value"),
+  ).toBe("gpt-6.1-sol");
+  await chooseSelect(wrapper, "[id^='settings-comment-model-']", "recommended");
   await flushPromises();
   expect(workspaceAiSettings("ui-ranked-static").state.settings).toMatchObject({
     chat: { model: "gpt-6.1-sol", thinking: "high" },
     comment: { model: "recommended", thinking: "recommended" },
   });
-  await chooseSelect(wrapper, "#settings-chat-model", "recommended");
+  await chooseSelect(wrapper, "[id^='settings-chat-model-']", "recommended");
   await flushPromises();
   expect(
     workspaceAiSettings("ui-ranked-static").state.settings?.chat,
@@ -412,7 +423,7 @@ test.each(["failed", "empty"])(
     await flushPromises();
     expect(
       wrapper.findAll(
-        '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
+        '[id^=settings-chat-model-] + select option[value="recommended"], [id^=settings-comment-model-] + select option[value="recommended"]',
       ),
     ).toHaveLength(0);
     expect(
@@ -435,7 +446,7 @@ test("an unmounted workspace settings view cannot emit completion from a pending
     props: { workspaceScope: "ui-unmounted-save" },
   });
   await flushPromises();
-  await wrapper.get("#settings-inline").setValue(true);
+  await wrapper.get("[id^='settings-inline-']").setValue(true);
   wrapper.unmount();
   finish({ ...defaultAiSettings(), showInlineModel: true });
   await flushPromises();
@@ -501,19 +512,25 @@ test.each(["account", "provider"] as const)(
     await flushPromises();
     expect(
       wrapper
-        .get<HTMLButtonElement>("#settings-chat-model")
+        .get<HTMLButtonElement>("[id^='settings-chat-model-']")
         .attributes("data-value"),
     ).toBe("gpt-6.1-sol");
     expect(
-      wrapper.get("#settings-chat-model").attributes("disabled"),
+      wrapper.get("[id^='settings-chat-model-']").attributes("disabled"),
     ).toBeUndefined();
     expect(
-      wrapper.findAll('#settings-chat-model + select option[value="gpt-5.4"]'),
+      wrapper.findAll(
+        '[id^=settings-chat-model-] + select option[value="gpt-5.4"]',
+      ),
     ).toHaveLength(0);
     expect(wrapper.get(".model-discovery").text()).toBe(
       "⟦settings.ai.modelList⟧⟦ai.models.refresh⟧",
     );
-    await chooseSelect(wrapper, "#settings-comment-model", "recommended");
+    await chooseSelect(
+      wrapper,
+      "[id^='settings-comment-model-']",
+      "recommended",
+    );
     await flushPromises();
     expect(
       workspaceAiSettings(`discovery-${source}`, "work").state.settings,
@@ -563,15 +580,15 @@ test("explicit refresh failure keeps the saved model but offers no unobserved mo
   );
   expect(
     wrapper.findAll(
-      '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
+      '[id^=settings-chat-model-] + select option[value="recommended"], [id^=settings-comment-model-] + select option[value="recommended"]',
     ),
   ).toHaveLength(0);
   expect(
-    wrapper.get("#settings-chat-model").attributes("disabled"),
+    wrapper.get("[id^='settings-chat-model-']").attributes("disabled"),
   ).toBeUndefined();
   expect(
     wrapper
-      .find('#settings-chat-model + select option[value="gpt-5.4"]')
+      .find('[id^=settings-chat-model-] + select option[value="gpt-5.4"]')
       .exists(),
   ).toBe(false);
   await wrapper.get(".model-discovery button").trigger("click");
@@ -579,12 +596,12 @@ test("explicit refresh failure keeps the saved model but offers no unobserved mo
   expect(wrapper.find(".model-discovery [role=alert]").exists()).toBe(false);
   expect(
     wrapper
-      .find('#settings-chat-model + select option[value="gpt-5.4"]')
+      .find('[id^=settings-chat-model-] + select option[value="gpt-5.4"]')
       .exists(),
   ).toBe(false);
   expect(
     wrapper
-      .get<HTMLButtonElement>("#settings-chat-model")
+      .get<HTMLButtonElement>("[id^='settings-chat-model-']")
       .attributes("data-value"),
   ).toBe("gpt-6.1-sol");
   expect(refreshChat).toHaveBeenCalledTimes(2);
@@ -617,7 +634,7 @@ test.each(["native.ai.storage.busy", "native.ai.catalog.connectionChanged"])(
     await flushPromises();
     expect(
       wrapper.findAll(
-        '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
+        '[id^=settings-chat-model-] + select option[value="recommended"], [id^=settings-comment-model-] + select option[value="recommended"]',
       ),
     ).toHaveLength(0);
     expect(wrapper.text()).toContain("⟦ai.models.empty⟧");
@@ -626,12 +643,12 @@ test.each(["native.ai.storage.busy", "native.ai.catalog.connectionChanged"])(
     expect(wrapper.get("dialog[open] [role=alert]").text()).toBe(`⟦${reason}⟧`);
     expect(
       wrapper
-        .get<HTMLButtonElement>("#settings-chat-model")
+        .get<HTMLButtonElement>("[id^='settings-chat-model-']")
         .attributes("data-value"),
     ).toBe("gpt-5.4");
     expect(
       wrapper
-        .get<HTMLButtonElement>("#settings-comment-model")
+        .get<HTMLButtonElement>("[id^='settings-comment-model-']")
         .attributes("data-value"),
     ).toBe("gpt-4o-mini");
     expect(refreshChat).not.toHaveBeenCalled();
@@ -673,12 +690,12 @@ test("a late model refresh cannot replace another workspace's catalog", async ()
   await flushPromises();
   expect(
     wrapper
-      .find('#settings-chat-model + select option[value="gpt-4o-mini"]')
+      .find('[id^=settings-chat-model-] + select option[value="gpt-4o-mini"]')
       .exists(),
   ).toBe(false);
   expect(
     wrapper
-      .find('#settings-chat-model + select option[value="gpt-6.1-sol"]')
+      .find('[id^=settings-chat-model-] + select option[value="gpt-6.1-sol"]')
       .exists(),
   ).toBe(true);
   expect(
@@ -715,7 +732,7 @@ test("model refresh can update the catalog while a response is running", async (
   expect(refreshModels).toHaveBeenCalledWith("discovery-running", "work");
   expect(
     wrapper
-      .find('#settings-chat-model + select option[value="gpt-6.1-sol"]')
+      .find('[id^=settings-chat-model-] + select option[value="gpt-6.1-sol"]')
       .exists(),
   ).toBe(true);
 });
@@ -732,14 +749,14 @@ test("a stale save in the previous workspace never emits a saved event into the 
     props: { workspaceScope: "ui-stale-a" },
   });
   await flushPromises();
-  await wrapper.get("#settings-inline").setValue(true);
+  await wrapper.get("[id^='settings-inline-']").setValue(true);
   await wrapper.setProps({ workspaceScope: "ui-stale-b" });
   await flushPromises();
   finish({ ...defaultAiSettings(), showInlineModel: true });
   await flushPromises();
   expect(wrapper.emitted("saved")).toBeUndefined();
   expect(
-    wrapper.get<HTMLInputElement>("#settings-inline").element.checked,
+    wrapper.get<HTMLInputElement>("[id^='settings-inline-']").element.checked,
   ).toBe(false);
 });
 
@@ -771,25 +788,25 @@ test("recommendations show the current models and thinking without replacing sav
   });
   await flushPromises();
   expect(
-    wrapper.get("#settings-thinking").attributes("disabled"),
+    wrapper.get("[id^='settings-thinking-']").attributes("disabled"),
   ).toBeUndefined();
   expect(
     wrapper
-      .get<HTMLButtonElement>("#settings-chat-model")
+      .get<HTMLButtonElement>("[id^='settings-chat-model-']")
       .attributes("data-value"),
   ).toBe("recommended");
-  expect(wrapper.get("#settings-chat-model").text()).toBe(
+  expect(wrapper.get("[id^='settings-chat-model-']").text()).toBe(
     '⟦settings.ai.recommendedWithValue:{"value":"GPT-6.1 Sol"}⟧',
   );
-  expect(wrapper.get("#settings-thinking").text()).toBe(
+  expect(wrapper.get("[id^='settings-thinking-']").text()).toBe(
     String.raw`⟦settings.ai.recommendedWithValue:{"value":"\u27e6settings.ai.thinking.medium\u27e7"}⟧`,
   );
   expect(
     wrapper
-      .get('#settings-comment-model + select option[value="recommended"]')
+      .get('[id^=settings-comment-model-] + select option[value="recommended"]')
       .text(),
   ).toBe('⟦settings.ai.recommendedWithValue:{"value":"GPT-4o mini"}⟧');
-  await chooseSelect(wrapper, "#settings-thinking", "high");
+  await chooseSelect(wrapper, "[id^='settings-thinking-']", "high");
   await flushPromises();
   expect(
     workspaceAiSettings("recommended-thinking").state.settings?.chat,
@@ -834,15 +851,15 @@ test("a discovered GPT-6.2 Sol offers verified efforts and displays a legacy Off
     props: { workspaceScope: "discovered-thinking" },
   });
   await flushPromises();
-  const thinking = wrapper.get<HTMLButtonElement>("#settings-thinking");
+  const thinking = wrapper.get<HTMLButtonElement>("[id^='settings-thinking-']");
   expect(thinking.element.disabled).toBe(false);
   expect(thinking.attributes("data-value")).toBe("recommended");
   expect(
     wrapper
-      .findAll("#settings-thinking + select option")
+      .findAll("[id^='settings-thinking-'] + select option")
       .map((option) => option.attributes("value")),
   ).toEqual(["recommended", "low", "medium", "high", "xhigh", "max"]);
-  await chooseSelect(wrapper, "#settings-thinking", "max");
+  await chooseSelect(wrapper, "[id^='settings-thinking-']", "max");
   await flushPromises();
   expect(
     workspaceAiSettings("discovered-thinking").state.settings?.chat?.thinking,
@@ -876,12 +893,12 @@ test.each(["unsupported", "unknown", "noAccess"] as const)(
     });
     await flushPromises();
     expect(
-      wrapper.get("#settings-thinking").attributes("disabled"),
+      wrapper.get("[id^='settings-thinking-']").attributes("disabled"),
     ).toBeDefined();
     expect(
-      wrapper.get("#settings-thinking").attributes("aria-describedby"),
-    ).toBe("thinking-unavailable");
-    expect(wrapper.get("#thinking-unavailable").text()).toBe(
+      wrapper.get("[id^='settings-thinking-']").attributes("aria-describedby"),
+    ).toMatch(/^thinking-unavailable-/);
+    expect(wrapper.get("[id^='thinking-unavailable-']").text()).toBe(
       `⟦settings.ai.thinking.${state}⟧`,
     );
   },

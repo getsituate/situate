@@ -98,7 +98,7 @@ for (const accent of accents) {
           await page
             .getByRole("button", { name: "Language & formats", exact: true })
             .click();
-          const control = page.locator("#settings-language");
+          const control = page.locator("[id^=settings-language-]");
           await expect(control).toHaveAttribute("data-value", "en");
           await expect(page.locator("html")).toHaveAttribute(
             "data-workspace-accent",
@@ -194,7 +194,7 @@ for (const accent of accents) {
       });
       await page.goto("/");
       await page.getByRole("button", { name: "Settings", exact: true }).click();
-      const control = page.locator("#settings-language");
+      const control = page.locator("[id^=settings-language-]");
       await expect(control).toBeDisabled();
       await expect(control.locator("+ select")).toBeDisabled();
       const values = await contrast(control);

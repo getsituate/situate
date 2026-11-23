@@ -204,10 +204,12 @@ async function openCustom() {
     .findAll("button")
     .find((button) => button.text().includes("⟦ai.compatibleEndpoint⟧"))!
     .trigger("click");
-  await wrapper.get("#ai-endpoint").setValue("http://localhost:8888/v1");
+  await wrapper
+    .get("input[id^=ai-endpoint--]")
+    .setValue("http://localhost:8888/v1");
   expect(wrapper.find("#ai-model").exists()).toBe(false);
   await wrapper.get('.ai-note input[type="checkbox"]').setValue(true);
-  await wrapper.get("#ai-key").setValue("synthetic-secret");
+  await wrapper.get("input[id^=ai-key--]").setValue("synthetic-secret");
   return wrapper;
 }
 test("show-key switch changes visibility without saving or replacing the credential draft", async () => {
@@ -216,17 +218,21 @@ test("show-key switch changes visibility without saving or replacing the credent
   const consent = wrapper.get('.ai-note input[type="checkbox"]');
   expect(consent.attributes("role")).not.toBe("switch");
   expect(consent.attributes("required")).toBeDefined();
-  expect(wrapper.get("#ai-key").attributes("type")).toBe("password");
+  expect(wrapper.get("input[id^=ai-key--]").attributes("type")).toBe(
+    "password",
+  );
   await reveal.setValue(true);
-  expect(wrapper.get("#ai-key").attributes("type")).toBe("text");
-  expect(wrapper.get<HTMLInputElement>("#ai-key").element.value).toBe(
-    "synthetic-secret",
-  );
+  expect(wrapper.get("input[id^=ai-key--]").attributes("type")).toBe("text");
+  expect(
+    wrapper.get<HTMLInputElement>("input[id^=ai-key--]").element.value,
+  ).toBe("synthetic-secret");
   await reveal.setValue(false);
-  expect(wrapper.get("#ai-key").attributes("type")).toBe("password");
-  expect(wrapper.get<HTMLInputElement>("#ai-key").element.value).toBe(
-    "synthetic-secret",
+  expect(wrapper.get("input[id^=ai-key--]").attributes("type")).toBe(
+    "password",
   );
+  expect(
+    wrapper.get<HTMLInputElement>("input[id^=ai-key--]").element.value,
+  ).toBe("synthetic-secret");
   expect(api.saveConnection).not.toHaveBeenCalled();
   wrapper.unmount();
 });
@@ -262,7 +268,7 @@ test.each([
   "HTTP consent for %s is bound to the canonical destination and resets on every edit",
   async (input, canonical) => {
     const wrapper = await openCustom();
-    await wrapper.get("#ai-endpoint").setValue(input);
+    await wrapper.get("input[id^=ai-endpoint--]").setValue(input);
     expect(
       (
         wrapper.get('.ai-note input[type="checkbox"]')
@@ -271,7 +277,7 @@ test.each([
     ).toBe(false);
     await wrapper.get("form").trigger("submit");
     expect(api.saveConnection).not.toHaveBeenCalled();
-    await wrapper.get("#ai-key").setValue("");
+    await wrapper.get("input[id^=ai-key--]").setValue("");
     await wrapper.get('.ai-note input[type="checkbox"]').setValue(true);
     await wrapper.get("form").trigger("submit");
     await flushPromises();
@@ -331,7 +337,7 @@ test("embedded reconnect retains connection identity, label and draft when nativ
     },
   });
   await flushPromises();
-  await wrapper.get("#ai-key").setValue("synthetic-key");
+  await wrapper.get("input[id^=ai-key--]").setValue("synthetic-key");
   await wrapper.get("form").trigger("submit");
   await flushPromises();
   expect(api.saveConnection).toHaveBeenCalledWith(
@@ -348,9 +354,9 @@ test("embedded reconnect retains connection identity, label and draft when nativ
   expect(wrapper.get("[role=alert]").text()).toContain(
     "⟦native.ai.secureStore.locked⟧",
   );
-  expect((wrapper.get("#ai-key").element as HTMLInputElement).value).toBe(
-    "synthetic-key",
-  );
+  expect(
+    (wrapper.get("input[id^=ai-key--]").element as HTMLInputElement).value,
+  ).toBe("synthetic-key");
   expect(wrapper.emitted("connected")).toBeUndefined();
   wrapper.unmount();
 });
@@ -414,13 +420,15 @@ test("cancel discards a credential without replacing access", async () => {
     .find((button) => button.text() === "⟦navigation.cancel⟧")!
     .trigger("click");
   expect(api.saveConnection).not.toHaveBeenCalled();
-  expect(wrapper.find("#ai-key").exists()).toBe(false);
+  expect(wrapper.find("input[id^=ai-key--]").exists()).toBe(false);
   await wrapper.get(".ai-primary-choice").trigger("click");
   await wrapper
     .findAll("button")
     .find((button) => button.text().includes("⟦ai.compatibleEndpoint⟧"))!
     .trigger("click");
-  expect((wrapper.get("#ai-key").element as HTMLInputElement).value).toBe("");
+  expect(
+    (wrapper.get("input[id^=ai-key--]").element as HTMLInputElement).value,
+  ).toBe("");
   wrapper.unmount();
 });
 test("provider selection shows four named choices without search or helper copy and Back preserves the origin", async () => {
@@ -480,13 +488,13 @@ test.each([
     expect(wrapper.text()).not.toContain(
       "⟦ai.yourProvidersTermsAndChargesApplyEnvironmentVariablesCommands⟧",
     );
-    expect(wrapper.get('label[for="ai-connection-label"]').text()).toBe(
+    expect(wrapper.get('label[for^="ai-connection-label--"]').text()).toBe(
       "⟦ai.connections.label⟧",
     );
     expect(
-      wrapper.get("#ai-connection-label").attributes("required"),
+      wrapper.get("input[id^=ai-connection-label--]").attributes("required"),
     ).toBeUndefined();
-    await wrapper.get("#ai-connection-label").setValue("Personal");
+    await wrapper.get("input[id^=ai-connection-label--]").setValue("Personal");
     const apiKey = wrapper
       .findAll(".ai-choices button")
       .find((button) => button.text().includes("⟦ai.apiKeyMethod⟧"))!;
@@ -496,12 +504,16 @@ test.each([
     );
     await apiKey.trigger("click");
     expect(
-      (wrapper.get("#ai-connection-label").element as HTMLInputElement).value,
+      (
+        wrapper.get("input[id^=ai-connection-label--]")
+          .element as HTMLInputElement
+      ).value,
     ).toBe("Personal");
-    expect(wrapper.get("#ai-key").attributes("aria-describedby")).toBe(
-      "ai-key-help",
-    );
-    expect(wrapper.get("#ai-key-help").text()).toBe(`⟦${help}⟧`);
+    const description = wrapper.get("[id^=ai-key--][id$=-help]");
+    expect(
+      wrapper.get("input[id^=ai-key--]").attributes("aria-describedby"),
+    ).toBe(description.attributes("id"));
+    expect(description.text()).toBe(`⟦${help}⟧`);
     expect(api.saveConnection).not.toHaveBeenCalled();
     wrapper.unmount();
   },
@@ -521,7 +533,7 @@ test("back from an API-key form returns to authentication choices and clears the
     .findAll(".ai-choices button")
     .find((button) => button.attributes("disabled") === undefined)!
     .trigger("click");
-  await wrapper.get("#ai-key").setValue("synthetic-secret");
+  await wrapper.get("input[id^=ai-key--]").setValue("synthetic-secret");
   await wrapper
     .findAll("button")
     .find((button) => button.text() === "⟦workspace.back⟧")!
@@ -529,12 +541,14 @@ test("back from an API-key form returns to authentication choices and clears the
   expect(wrapper.get("h1").text()).toBe(
     '⟦ai.connectProvider:{"name":"Anthropic"}⟧',
   );
-  expect(wrapper.find("#ai-key").exists()).toBe(false);
+  expect(wrapper.find("input[id^=ai-key--]").exists()).toBe(false);
   await wrapper
     .findAll(".ai-choices button")
     .find((button) => button.attributes("disabled") === undefined)!
     .trigger("click");
-  expect((wrapper.get("#ai-key").element as HTMLInputElement).value).toBe("");
+  expect(
+    (wrapper.get("input[id^=ai-key--]").element as HTMLInputElement).value,
+  ).toBe("");
   expect(api.saveConnection).not.toHaveBeenCalled();
   wrapper.unmount();
 });
@@ -568,7 +582,7 @@ test("OpenAI browser sign-in completes setup only after saved access is returned
   const wrapper = await openBrowserLogin();
   expect(wrapper.get("h1").text()).toBe("⟦ai.signInToOpenAI⟧");
   expect(api.startOpenAiLogin).not.toHaveBeenCalled();
-  expect(wrapper.find("#ai-key").exists()).toBe(false);
+  expect(wrapper.find("input[id^=ai-key--]").exists()).toBe(false);
   expect(wrapper.find("#openai-browser-model").exists()).toBe(false);
   await wrapper
     .findAll("button")
@@ -692,20 +706,21 @@ test("changing the interface language updates retained errors without clearing c
     expect(wrapper.get("[role=alert]").text()).not.toContain(
       "The AI connection",
     );
-    expect((wrapper.get("#ai-key").element as HTMLInputElement).value).toBe(
-      "synthetic-secret",
-    );
     expect(
-      (wrapper.get("#ai-endpoint").element as HTMLInputElement).value,
+      (wrapper.get("input[id^=ai-key--]").element as HTMLInputElement).value,
+    ).toBe("synthetic-secret");
+    expect(
+      (wrapper.get("input[id^=ai-endpoint--]").element as HTMLInputElement)
+        .value,
     ).toBe("http://localhost:8888/v1");
     setPreferences({ ...previous, language: "en" });
     await flushPromises();
     expect(wrapper.get("[role=alert]").text()).toContain(
       "was written, but durable storage could not be confirmed",
     );
-    expect((wrapper.get("#ai-key").element as HTMLInputElement).value).toBe(
-      "synthetic-secret",
-    );
+    expect(
+      (wrapper.get("input[id^=ai-key--]").element as HTMLInputElement).value,
+    ).toBe("synthetic-secret");
   } finally {
     wrapper.unmount();
     Reflect.set(globalThis, "__SITUATE_LOCALIZATION_KEYS__", keyMode);
@@ -772,7 +787,7 @@ test("saving another connection confirms the returned record without selecting o
     },
   });
   await flushPromises();
-  await wrapper.get("#ai-form").trigger("submit");
+  await wrapper.get("[id^=ai-form--]").trigger("submit");
   await flushPromises();
   expect(wrapper.emitted("connected")?.[0]).toEqual([added]);
   expect(api.getStatus).toHaveBeenCalledTimes(1);

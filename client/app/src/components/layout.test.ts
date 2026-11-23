@@ -17,6 +17,7 @@ import type { FilesRequest } from "../files/api";
 import { SituateIconButton, SituateTooltip } from "@situate/ui";
 import AppSidebar from "./AppSidebar.vue";
 import ChatPane from "./ChatPane.vue";
+import { updates } from "../updates/runtime";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -317,31 +318,56 @@ describe("workspace view host", () => {
       ),
     ).toEqual([{ kind: "empty" }]);
   });
-  it("opens Plugins independently from Settings and returns to the retained workspace", async () => {
+  it("opens Plugins from Settings in the active pane and restores each previous view", async () => {
     const wrapper = await mountHost();
-    const layout = structuredClone(
-      workspaceUi("garden").session.state.document,
-    );
     const management = await openManagement(wrapper);
     expect(management.props("scope")).toBe("garden");
     expect(wrapper.find(".settings-view").exists()).toBe(false);
-    expect(wrapper.find(".topic-window").exists()).toBe(false);
+    expect(wrapper.find(".topic-window").exists()).toBe(true);
     expect(wrapper.getComponent(AppSidebar).props()).toMatchObject({
       pluginsActive: true,
       settingsActive: false,
       filesActive: false,
-      activeView: undefined,
+      activeView: "plugins",
     });
-    expect(workspaceUi("garden").session.state.document).toEqual(layout);
     expect(wrapper.vm.back()).toBe(true);
     await settleViews();
     expect(wrapper.find(".management-stub").exists()).toBe(false);
-    expect(wrapper.find(".settings-view").exists()).toBe(false);
+    expect(wrapper.find(".settings-view").exists()).toBe(true);
+    expect(wrapper.vm.back()).toBe(true);
+    await settleViews();
     expect(wrapper.find(".source-text").exists()).toBe(true);
-    expect(workspaceUi("garden").session.state.document).toEqual(layout);
-    expect(document.activeElement).toBe(
-      wrapper.get(".open-navigation").element,
-    );
+    expect(
+      workspaceUi("garden").session.state.document!.layout.tabs,
+    ).toHaveLength(1);
+  });
+  it("opens the Updates category in the current pane and returns to the file", async () => {
+    const wrapper = await mountHost();
+    const supported = updates.supported;
+    updates.supported = true;
+    try {
+      expect(await wrapper.vm.showUpdates()).toBe(true);
+      await settleViews();
+      expect(wrapper.get(".settings-page-heading").text()).toBe(
+        "⟦updates.title⟧",
+      );
+      expect(wrapper.vm.back()).toBe(true);
+      await settleViews();
+      expect(wrapper.find(".source-text").exists()).toBe(true);
+    } finally {
+      updates.supported = supported;
+    }
+  });
+  it("lets the application open Updates separately when the workspace layout cannot be loaded", async () => {
+    const invokeNormally = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "layout_load")
+        throw new Error("native.layout.storage.failed");
+      return invokeNormally(command, args);
+    });
+    const wrapper = await mountHost();
+    expect(await wrapper.vm.showUpdates()).toBe(false);
+    expect(wrapper.find(".situate-error-screen").exists()).toBe(true);
   });
   it("supports direct selected entry and reopening without entering Settings", async () => {
     const wrapper = await mountHost();
@@ -369,14 +395,43 @@ describe("workspace view host", () => {
     expect(wrapper.find(".settings-view").exists()).toBe(false);
     expect(wrapper.getComponent(AppSidebar).props("pluginsActive")).toBe(true);
   });
-  it("closes plugin inspection when switching workspaces without restoring it implicitly", async () => {
+  it("keeps an unpublished chat draft during a detour into settings", async () => {
     const wrapper = await mountHost();
+    await openNavigation(wrapper);
+    await hostButton(wrapper, "⟦navigation.newChat⟧").trigger("click");
+    await settleViews();
+    const document = workspaceUi("garden").session.state.document!;
+    const target = currentEntry(
+      document.layout.tabs[0]!.panes[0]!.navigation,
+    ).target;
+    if (target.kind !== "new-conversation") throw new Error("Missing draft");
+    const chat = workspaceChat("garden", target.conversationId);
+    chat.state.draft = "A draft before checking settings";
+    await chat.saveDraft();
     await openManagement(wrapper);
+    expect(wrapper.vm.back()).toBe(true);
+    await settleViews();
+    expect(wrapper.vm.back()).toBe(true);
+    await settleViews();
+    expect(wrapper.getComponent(ChatPane).props("conversationId")).toBe(
+      target.conversationId,
+    );
+    expect(workspaceChat("garden", target.conversationId).state.draft).toBe(
+      "A draft before checking settings",
+    );
+  });
+  it("restores plugin inspection only in the workspace where it was opened", async () => {
+    const wrapper = await mountHost();
+    await wrapper.vm.showPlugins("sample");
+    await settleViews();
     await wrapper.setProps({ currentWorkspaceId: "notes" });
     await settleViews();
+    expect(wrapper.find(".management-stub").exists()).toBe(false);
     await wrapper.setProps({ currentWorkspaceId: "garden" });
     await settleViews();
-    expect(wrapper.find(".management-stub").exists()).toBe(false);
+    expect(wrapper.getComponent(managementStub).props("selectedPlugin")).toBe(
+      "sample",
+    );
   });
   it.each([
     [undefined, false],
@@ -442,14 +497,13 @@ describe("workspace view host", () => {
     source.element.setSelectionRange(5, 9);
     source.element.scrollTop = 48;
     await source.trigger("select");
-    const retained = ui.session.state.document;
     await openNavigation(wrapper);
     await wrapper.get(".settings-action").trigger("click");
     await settleViews();
     expect(wrapper.get(".settings-view").isVisible()).toBe(true);
-    expect(ui.session.state.document).toEqual(retained);
     expect(wrapper.vm.back()).toBe(true);
     await settleViews();
+    const retained = ui.session.state.document;
     expect(wrapper.find(".settings-view").exists()).toBe(false);
     expect(wrapper.get<HTMLTextAreaElement>(".source-text").element.value).toBe(
       "# An unsaved planting plan",

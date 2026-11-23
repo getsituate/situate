@@ -6,6 +6,7 @@ import {
   onMounted,
   ref,
   watch,
+  useId,
 } from "vue";
 import { listenInWindow } from "../window-events";
 import { t, localizeError } from "@situate/localization";
@@ -32,6 +33,7 @@ import {
 } from "@situate/ui";
 import { refreshWorkspaceChats } from "../ai/chat";
 import ErrorDialog from "../errors/ErrorDialog.vue";
+const id = useId();
 const AiConnections = defineAsyncComponent(
   () => import("../ai/AiConnections.vue"),
 );
@@ -377,11 +379,11 @@ function thinking(event: Event): void {
         </SituateButton>
       </div>
       <div class="setting-row">
-        <label for="settings-inline">{{
+        <label :for="`settings-inline-${id}`">{{
           t("settings.ai.showInlineModel")
         }}</label
         ><SituateSwitch
-          id="settings-inline"
+          :id="`settings-inline-${id}`"
           :checked="settings?.showInlineModel ?? false"
           :disabled="disabled"
           @change="toggle('showInlineModel', $event)"
@@ -428,16 +430,23 @@ function thinking(event: Event): void {
             {{ t("ai.models.empty") }}
           </p>
         </div>
-        <section class="settings-group" aria-labelledby="ai-chat-heading">
-          <h3 id="ai-chat-heading">{{ t("settings.ai.chatModel") }}</h3>
+        <section
+          class="settings-group"
+          :aria-labelledby="`ai-chat-heading-${id}`"
+        >
+          <h3 :id="`ai-chat-heading-${id}`">
+            {{ t("settings.ai.chatModel") }}
+          </h3>
           <div class="setting-row">
-            <label for="settings-chat-model">{{ t("ai.model") }}</label>
+            <label :for="`settings-chat-model-${id}`">{{
+              t("ai.model")
+            }}</label>
             <form
               v-if="manualModel"
               @submit.prevent="select('chat', customChat)"
             >
               <SituateInput
-                id="settings-chat-model"
+                :id="`settings-chat-model-${id}`"
                 v-model="customChat"
                 :placeholder="
                   settings?.chat?.model && settings.chat.model !== 'recommended'
@@ -457,7 +466,7 @@ function thinking(event: Event): void {
             </form>
             <SituateSelect
               v-else
-              id="settings-chat-model"
+              :id="`settings-chat-model-${id}`"
               :value="settings?.chat?.model ?? ''"
               :disabled="disabled"
               @change="selectEvent('chat', $event)"
@@ -496,16 +505,16 @@ function thinking(event: Event): void {
             </SituateSelect>
           </div>
           <div class="setting-row">
-            <label for="settings-thinking">{{
+            <label :for="`settings-thinking-${id}`">{{
               t("settings.ai.thinking")
             }}</label
             ><SituateSelect
-              id="settings-thinking"
+              :id="`settings-thinking-${id}`"
               :value="thinkingPreference"
               :disabled="disabled || levels.length < 2"
               :aria-describedby="
                 levels.length < 2 || !status?.available
-                  ? 'thinking-unavailable'
+                  ? `thinking-unavailable-${id}`
                   : undefined
               "
               @change="thinking"
@@ -525,7 +534,7 @@ function thinking(event: Event): void {
           </div>
           <p
             v-if="levels.length < 2 || !status?.available"
-            id="thinking-unavailable"
+            :id="`thinking-unavailable-${id}`"
             class="thinking-explanation"
           >
             {{
@@ -537,29 +546,38 @@ function thinking(event: Event): void {
             }}
           </p>
         </section>
-        <section class="settings-group" aria-labelledby="ai-comments-heading">
-          <h3 id="ai-comments-heading">{{ t("settings.ai.smallModel") }}</h3>
-          <p id="small-model-help">{{ t("settings.ai.smallModelHelp") }}</p>
+        <section
+          class="settings-group"
+          :aria-labelledby="`ai-comments-heading-${id}`"
+        >
+          <h3 :id="`ai-comments-heading-${id}`">
+            {{ t("settings.ai.smallModel") }}
+          </h3>
+          <p :id="`small-model-help-${id}`">
+            {{ t("settings.ai.smallModelHelp") }}
+          </p>
           <div class="setting-row">
-            <label for="settings-generated">{{
+            <label :for="`settings-generated-${id}`">{{
               t("settings.ai.generatedComments")
             }}</label
             ><SituateSwitch
-              id="settings-generated"
+              :id="`settings-generated-${id}`"
               :checked="settings?.generatedComments ?? true"
               :disabled="disabled"
               @change="toggle('generatedComments', $event)"
             />
           </div>
           <div class="setting-row">
-            <label for="settings-comment-model">{{ t("ai.model") }}</label>
+            <label :for="`settings-comment-model-${id}`">{{
+              t("ai.model")
+            }}</label>
             <form
               v-if="manualModel"
               @submit.prevent="select('comment', customComment)"
             >
               <SituateInput
-                id="settings-comment-model"
-                aria-describedby="small-model-help"
+                :id="`settings-comment-model-${id}`"
+                :aria-describedby="`small-model-help-${id}`"
                 v-model="customComment"
                 :placeholder="
                   settings?.comment?.model &&
@@ -580,8 +598,8 @@ function thinking(event: Event): void {
             </form>
             <SituateSelect
               v-else
-              id="settings-comment-model"
-              aria-describedby="small-model-help"
+              :id="`settings-comment-model-${id}`"
+              :aria-describedby="`small-model-help-${id}`"
               :value="settings?.comment?.model ?? ''"
               :disabled="disabled"
               @change="selectEvent('comment', $event)"

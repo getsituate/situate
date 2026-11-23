@@ -356,7 +356,7 @@ function cancelSkip(): void {
   <section
     class="ai-setup"
     :class="{ 'ai-embedded': embedded }"
-    aria-labelledby="ai-heading"
+    :aria-labelledby="`ai-heading--${formId}`"
   >
     <header v-if="!embedded">
       <img
@@ -415,7 +415,9 @@ function cancelSkip(): void {
       >
         <div class="ai-heading">
           <p class="ai-eyebrow">{{ eyebrow }}</p>
-          <h1 id="ai-heading" ref="heading" tabindex="-1">{{ title }}</h1>
+          <h1 :id="`ai-heading--${formId}`" ref="heading" tabindex="-1">
+            {{ title }}
+          </h1>
           <p v-if="subtitle" class="ai-subtitle">{{ subtitle }}</p>
         </div>
         <div
@@ -519,7 +521,7 @@ function cancelSkip(): void {
       </template>
       <div v-else-if="stage === 'method'" class="ai-connection-panel">
         <SituateField
-          id="ai-connection-label"
+          :id="`ai-connection-label--${formId}`"
           :label="t('ai.connections.label')"
           v-slot="{ controlAttrs }"
         >
@@ -532,19 +534,19 @@ function cancelSkip(): void {
             :key="method.id"
             class="ai-method-choice"
             type="button"
-            :aria-labelledby="`ai-method-${method.id}`"
-            :aria-describedby="`ai-method-${method.id}-help`"
+            :aria-labelledby="`ai-method-${method.id}--${formId}`"
+            :aria-describedby="`ai-method-${method.id}-help--${formId}`"
             :disabled="!methodAvailable(method.id)"
             @click="stage = method.id === 'oauth' ? 'browser' : 'form'"
           >
-            <strong :id="`ai-method-${method.id}`">{{
+            <strong :id="`ai-method-${method.id}--${formId}`">{{
               method.id === "oauth" && providerId === "openai"
                 ? t("ai.signInWithChatGPT")
                 : method.id === "oauth"
                   ? t("ai.browserMethod")
                   : t("ai.apiKeyMethod")
             }}</strong
-            ><small :id="`ai-method-${method.id}-help`">{{
+            ><small :id="`ai-method-${method.id}-help--${formId}`">{{
               !methodAvailable(method.id)
                 ? t("ai.notAvailableHereYet")
                 : method.id === "oauth"
@@ -574,12 +576,12 @@ function cancelSkip(): void {
       </fieldset>
       <form
         v-else-if="stage === 'form'"
-        id="ai-form"
+        :id="`ai-form--${formId}`"
         class="ai-connection-panel"
         @submit.prevent="save"
       >
         <SituateField
-          id="ai-connection-label"
+          :id="`ai-connection-label--${formId}`"
           :label="t('ai.connections.label')"
           v-slot="{ controlAttrs }"
         >
@@ -592,7 +594,7 @@ function cancelSkip(): void {
         </SituateField>
         <template v-if="providerId === 'custom'">
           <SituateField
-            id="ai-endpoint"
+            :id="`ai-endpoint--${formId}`"
             :label="t('ai.openaiCompatibleEndpoint')"
             :help="t('ai.chatCompletionsOnlyUseHTTPSForHostedEndpointsOr')"
             v-slot="{ controlAttrs }"
@@ -627,7 +629,7 @@ function cancelSkip(): void {
           </div>
         </template>
         <SituateField
-          id="ai-key"
+          :id="`ai-key--${formId}`"
           :label="providerId === 'custom' ? t('ai.optionalKey') : t('ai.key')"
           :help="apiKeyHelp"
           v-slot="{ controlAttrs }"
@@ -775,7 +777,7 @@ function cancelSkip(): void {
       <SituateButton
         v-if="stage === 'form'"
         type="submit"
-        form="ai-form"
+        :form="`ai-form--${formId}`"
         :busy="busy"
         :disabled="!!unavailable"
         >{{ t("ai.saveAIAccess") }}</SituateButton
@@ -790,10 +792,10 @@ function cancelSkip(): void {
     <SituateDialog
       v-if="!required"
       ref="skipDialogControl"
-      aria-labelledby="skip-heading"
+      :aria-labelledby="`skip-heading--${formId}`"
       @cancel.prevent="cancelSkip"
     >
-      <h2 id="skip-heading">{{ t("ai.continueWithoutAI") }}</h2>
+      <h2 :id="`skip-heading--${formId}`">{{ t("ai.continueWithoutAI") }}</h2>
       <p>{{ t("ai.youCanUseLocalContentChatAndAIActions") }}</p>
       <template #actions>
         <SituateButton variant="secondary" type="button" @click="cancelSkip">

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue";
+import { useId, onBeforeUnmount, ref } from "vue";
 import { SituateButton, SituateDialog, SituateTextarea } from "@situate/ui";
 import { t } from "@situate/localization";
 import { loadLicenses } from "./licenses";
 
+const id = useId();
 const open = ref(false);
 const text = ref("");
 const loading = ref(false);
@@ -45,11 +46,11 @@ onBeforeUnmount(() => request?.abort());
     :open="open"
     class="licenses-dialog"
     :class="{ 'has-notices': !!text && !loading && !failed }"
-    aria-labelledby="licenses-title"
+    :aria-labelledby="`licenses-title-${id}`"
     @cancel.prevent="close"
   >
     <template #header
-      ><h2 id="licenses-title">{{ t("licenses.title") }}</h2></template
+      ><h2 :id="`licenses-title-${id}`">{{ t("licenses.title") }}</h2></template
     >
     <template v-if="open">
       <p v-if="loading" role="status">{{ t("licenses.loading") }}</p>

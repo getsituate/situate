@@ -86,7 +86,7 @@ test(
     await expect(
       page.getByText(t("settings.ai.modelList"), { exact: true }),
     ).toBeVisible();
-    await expect(page.locator("#settings-chat-model")).toHaveAttribute(
+    await expect(page.locator("[id^='settings-chat-model-']")).toHaveAttribute(
       "data-value",
       "gpt-5.4",
     );
@@ -106,10 +106,10 @@ test(
     ).toBeVisible();
     await expect(
       page.locator(
-        '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
+        '[id^=settings-chat-model-] + select option[value="recommended"], [id^=settings-comment-model-] + select option[value="recommended"]',
       ),
     ).toHaveCount(0);
-    await expect(page.locator("#settings-chat-model")).toHaveAttribute(
+    await expect(page.locator("[id^='settings-chat-model-']")).toHaveAttribute(
       "data-value",
       "gpt-5.4",
     );
@@ -166,11 +166,13 @@ test(
     await expect(lookupWarning).toBeVisible();
     await expect(
       page.locator(
-        '#settings-chat-model + select option[value="recommended"], #settings-comment-model + select option[value="recommended"]',
+        '[id^=settings-chat-model-] + select option[value="recommended"], [id^=settings-comment-model-] + select option[value="recommended"]',
       ),
     ).toHaveCount(0);
     await expect(
-      page.locator('#settings-chat-model + select option[value="gpt-5.4"]'),
+      page.locator(
+        '[id^=settings-chat-model-] + select option[value="gpt-5.4"]',
+      ),
     ).toHaveCount(0);
     await lookupWarning.evaluate((element) =>
       element.scrollIntoView({ block: "center", behavior: "instant" }),
@@ -297,15 +299,22 @@ test("switching same-provider connection IDs updates catalog candidates in Setti
   });
   await page.goto("/");
   await settings(page);
-  await chooseSelect(page.locator("#chat-connection"), "personal");
+  await chooseSelect(page.locator("[id^=chat-connection--]"), "personal");
   await expect(
-    page.locator('#settings-chat-model + select option[value="gpt-4o-mini"]'),
+    page.locator(
+      '[id^=settings-chat-model-] + select option[value="gpt-4o-mini"]',
+    ),
   ).toHaveCount(0);
   await expect(
-    page.locator('#settings-chat-model + select option[value="gpt-6.1-sol"]'),
+    page.locator(
+      '[id^=settings-chat-model-] + select option[value="gpt-6.1-sol"]',
+    ),
   ).toHaveCount(1);
-  await chooseSelect(page.locator("#settings-chat-model"), "recommended");
-  await expect(page.locator("#settings-chat-model")).toHaveAttribute(
+  await chooseSelect(
+    page.locator("[id^='settings-chat-model-']"),
+    "recommended",
+  );
+  await expect(page.locator("[id^='settings-chat-model-']")).toHaveAttribute(
     "data-value",
     "recommended",
   );
@@ -321,13 +330,15 @@ test("switching same-provider connection IDs updates catalog candidates in Setti
     page.getByRole("button", { name: t("ai.model"), exact: true }),
   ).toHaveAttribute("aria-description", /gpt-6\.1-sol/u);
   await settings(page);
-  await chooseSelect(page.locator("#chat-connection"), "work");
-  await expect(page.locator("#settings-chat-model")).toHaveAttribute(
+  await chooseSelect(page.locator("[id^=chat-connection--]"), "work");
+  await expect(page.locator("[id^='settings-chat-model-']")).toHaveAttribute(
     "data-value",
     "gpt-4o-mini",
   );
   await expect(
-    page.locator('#settings-chat-model + select option[value="gpt-6.1-sol"]'),
+    page.locator(
+      '[id^=settings-chat-model-] + select option[value="gpt-6.1-sol"]',
+    ),
   ).toHaveCount(0);
 });
 
@@ -367,15 +378,17 @@ test(
     await expect(trigger).toBeFocused();
     await settings(page);
     for (const id of ["settings-chat-model", "settings-comment-model"]) {
-      await expect(page.locator(`#${id}`)).toHaveValue("");
+      await expect(page.locator(`[id^=${id}-]`)).toHaveValue("");
     }
-    await page.locator("#settings-comment-model").fill("comment-alias");
+    await page.locator("[id^='settings-comment-model-']").fill("comment-alias");
     await page
       .locator(".ai-settings form")
-      .filter({ has: page.locator("#settings-comment-model") })
+      .filter({ has: page.locator("[id^='settings-comment-model-']") })
       .getByRole("button", { name: t("ai.useModelID"), exact: true })
       .click();
-    await expect(page.locator("#settings-comment-model")).toHaveAttribute(
+    await expect(
+      page.locator("[id^='settings-comment-model-']"),
+    ).toHaveAttribute(
       "placeholder",
       t("model.selectedLabel", { name: "comment-alias" }),
     );

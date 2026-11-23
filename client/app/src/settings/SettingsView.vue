@@ -3,12 +3,13 @@ import {
   computed,
   defineAsyncComponent,
   nextTick,
-  onMounted,
   ref,
+  useId,
   useTemplateRef,
   watch,
 } from "vue";
-import { SituateButton, SituateIcon, SituateIconButton } from "@situate/ui";
+import { SituateButton, SituateIcon } from "@situate/ui";
+import type { PresentationValue } from "../layout/navigation";
 import {
   t,
   type Formats,
@@ -44,9 +45,7 @@ const props = defineProps<{
   loading: boolean;
   saving: boolean;
   error: MessageKey | "";
-  showNavigation: boolean;
-  navigationId: string;
-  navigationOpen: boolean;
+  presentation?: PresentationValue;
 }>();
 const emit = defineEmits<{
   change: [value: Preferences];
@@ -54,23 +53,44 @@ const emit = defineEmits<{
   retryAppearance: [];
   "ai-settings-saved": [settings: WorkspaceAiSettings];
   retry: [];
-  close: [];
   connect: [];
   plugins: [];
-  navigation: [event: MouseEvent];
+  presentation: [value: PresentationValue];
 }>();
+const id = useId();
+const pages = [
+  "formats",
+  "appearance",
+  "ai",
+  "dictation",
+  "updates",
+  "analytics",
+  "diagnostics",
+  "about",
+] as const;
+type SettingsPage = (typeof pages)[number];
 const detail = ref(false);
-type SettingsPage =
-  | "formats"
-  | "appearance"
-  | "ai"
-  | "dictation"
-  | "updates"
-  | "analytics"
-  | "diagnostics"
-  | "about";
 const page = ref<SettingsPage>("formats");
 const aiVisited = ref(false);
+watch(
+  () => props.presentation,
+  (value) => {
+    if (!value || typeof value !== "object" || !("page" in value)) return;
+    const restored = pages.find((candidate) => candidate === value.page);
+    if (
+      !restored ||
+      (restored === "updates" && !updates.supported) ||
+      (restored === "dictation" && !dictation.supported) ||
+      (restored === "analytics" && analyticsPreference.value === null) ||
+      (restored === "diagnostics" && props.mobile)
+    )
+      return;
+    page.value = restored;
+    detail.value = "detail" in value && value.detail === true;
+    if (restored === "ai") aiVisited.value = true;
+  },
+  { immediate: true },
+);
 watch(
   () => props.workspaceScope,
   () => {
@@ -126,11 +146,13 @@ async function openPage(value: SettingsPage): Promise<void> {
   if (value === "ai") aiVisited.value = true;
   page.value = value;
   detail.value = true;
+  emit("presentation", { page: value, detail: true });
   await nextTick();
   title.value?.focus();
 }
 async function back(): Promise<void> {
   detail.value = false;
+  emit("presentation", { page: page.value, detail: false });
   await nextTick();
   const selected = {
     formats: category,
@@ -144,22 +166,6 @@ async function back(): Promise<void> {
   };
   selected[page.value].value?.focus();
 }
-function navigateBack(): void {
-  if (detail.value && window.matchMedia("(max-width: 760px)").matches)
-    void back();
-  else emit("close");
-}
-defineExpose({
-  back: navigateBack,
-  openDictation: () => openPage("dictation"),
-  openUpdates: () => updates.supported && openPage("updates"),
-});
-onMounted(() => {
-  (window.matchMedia("(max-width: 760px)").matches
-    ? category.value
-    : title.value
-  )?.focus();
-});
 const dates: { value: Formats["date"]; key: MessageKey }[] = [
   { value: "dmy-dot", key: "settings.formats.date.dmyDot" },
   { value: "dmy-slash", key: "settings.formats.date.dmySlash" },
@@ -204,29 +210,6 @@ function change(field: "language" | keyof Formats, event: Event): void {
     :class="{ 'settings-detail-open': detail }"
     :aria-label="t('settings.title')"
   >
-    <header class="settings-topbar">
-      <SituateIconButton
-        v-if="showNavigation"
-        class="open-navigation"
-        icon="menu"
-        :label="t('navigation.openNavigation')"
-        :aria-controls="navigationId"
-        :aria-expanded="navigationOpen"
-        @click="emit('navigation', $event)"
-      />
-      <span>{{
-        t(
-          page === "updates" ||
-            page === "about" ||
-            page === "analytics" ||
-            page === "diagnostics"
-            ? "updates.scope"
-            : page === "dictation"
-              ? "dictation.scope"
-              : "settings.workspace",
-        )
-      }}</span>
-    </header>
     <div class="settings-layout">
       <nav class="settings-categories" :aria-label="t('settings.categories')">
         <h1>{{ t("settings.title") }}</h1>
@@ -424,23 +407,25 @@ function change(field: "language" | keyof Formats, event: Event): void {
             <template v-if="snapshot">
               <section
                 class="settings-group"
-                aria-labelledby="language-heading"
+                :aria-labelledby="`language-heading-${id}`"
               >
-                <h3 id="language-heading">
+                <h3 :id="`language-heading-${id}`">
                   {{ t("settings.language.heading") }}
                 </h3>
                 <div class="setting-row">
                   <div>
-                    <label for="settings-language">{{
+                    <label :for="`settings-language-${id}`">{{
                       t("settings.language.label")
                     }}</label>
-                    <p id="language-help">{{ t("settings.language.help") }}</p>
+                    <p :id="`language-help-${id}`">
+                      {{ t("settings.language.help") }}
+                    </p>
                   </div>
                   <SituateSelect
-                    id="settings-language"
+                    :id="`settings-language-${id}`"
                     :value="snapshot.language"
                     :disabled="saving || loading || !snapshot.writable"
-                    aria-describedby="language-help"
+                    :aria-describedby="`language-help-${id}`"
                     @change="change('language', $event)"
                   >
                     <option value="en">
@@ -452,16 +437,19 @@ function change(field: "language" | keyof Formats, event: Event): void {
                   </SituateSelect>
                 </div>
               </section>
-              <section class="settings-group" aria-labelledby="formats-heading">
-                <h3 id="formats-heading">
+              <section
+                class="settings-group"
+                :aria-labelledby="`formats-heading-${id}`"
+              >
+                <h3 :id="`formats-heading-${id}`">
                   {{ t("settings.formats.heading") }}
                 </h3>
                 <div class="setting-row">
-                  <label for="settings-time">{{
+                  <label :for="`settings-time-${id}`">{{
                     t("settings.formats.time.label")
                   }}</label
                   ><SituateSelect
-                    id="settings-time"
+                    :id="`settings-time-${id}`"
                     :value="snapshot.formats.time"
                     :disabled="saving || loading || !snapshot.writable"
                     @change="change('time', $event)"
@@ -474,11 +462,11 @@ function change(field: "language" | keyof Formats, event: Event): void {
                   >
                 </div>
                 <div class="setting-row">
-                  <label for="settings-date">{{
+                  <label :for="`settings-date-${id}`">{{
                     t("settings.formats.date.label")
                   }}</label
                   ><SituateSelect
-                    id="settings-date"
+                    :id="`settings-date-${id}`"
                     :value="snapshot.formats.date"
                     :disabled="saving || loading || !snapshot.writable"
                     @change="change('date', $event)"
@@ -492,11 +480,11 @@ function change(field: "language" | keyof Formats, event: Event): void {
                   >
                 </div>
                 <div class="setting-row">
-                  <label for="settings-number">{{
+                  <label :for="`settings-number-${id}`">{{
                     t("settings.formats.number.label")
                   }}</label
                   ><SituateSelect
-                    id="settings-number"
+                    :id="`settings-number-${id}`"
                     :value="snapshot.formats.number"
                     :disabled="saving || loading || !snapshot.writable"
                     @change="change('number', $event)"

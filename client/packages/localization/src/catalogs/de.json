@@ -71,7 +71,6 @@
   "settings.analytics.description": "Situate teilt pseudonyme Nutzungsdaten mit PostHog. So können wir besser verstehen, wie die App genutzt wird, und sie verbessern. Namen, Pfade und Inhalte von Arbeitsbereichen werden nicht übertragen.",
   "settings.analytics.withdrawal": "Du kannst die Freigabe jederzeit beenden.",
   "settings.analytics.error": "Deine Einstellung zur Nutzungsanalyse konnte nicht gespeichert werden. Versuche es bitte erneut.",
-  "settings.workspace": "Einstellungen des Arbeitsbereichs",
   "settings.categories": "Einstellungsbereiche",
   "settings.formats.title": "Sprache & Formate",
   "settings.back": "Alle Einstellungen",

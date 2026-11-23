@@ -180,7 +180,7 @@ it("discards old presentation and pins when an installation is replaced between 
   vi.mocked(invoke).mockImplementation(original);
 });
 
-it("starts a workspace with only file and conversation views when plugins may execute", async () => {
+it("registers the built-in views when plugins may execute", async () => {
   acceptRecoveryState({
     revision: ++recoveryRevision,
     recovery: false,
@@ -192,6 +192,8 @@ it("starts a workspace with only file and conversation views when plugins may ex
   expect(runtime.state.plugins[0]?.status).toBe("loaded");
   expect([...ui.registry.definitions.keys()]).toEqual([
     "files",
+    "settings",
+    "plugins",
     "conversation",
   ]);
 });
@@ -238,6 +240,8 @@ it("keeps built-in navigation available and suppresses plugins in every workspac
     ).toThrow("layoutHost.pluginUnavailable");
     expect([...ui.registry.definitions.keys()]).toEqual([
       "files",
+      "settings",
+      "plugins",
       "conversation",
     ]);
   }

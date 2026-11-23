@@ -113,7 +113,7 @@ for (const width of [320, 375, 800, 1280, 1920]) {
       const name = page.getByLabel("Connection name (optional)");
       await name.fill("Personal");
       const labelBox = await setup
-        .locator('label[for="ai-connection-label"]')
+        .locator('label[for^="ai-connection-label--"]')
         .boundingBox();
       const inputBox = await name.boundingBox();
       expect(inputBox!.y - labelBox!.y - labelBox!.height).toBeCloseTo(8, 0);

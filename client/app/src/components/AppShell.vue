@@ -31,9 +31,6 @@ import AppSidebar from "./AppSidebar.vue";
 import SituateErrorScreen from "./SituateErrorScreen.vue";
 import ErrorActions from "../errors/ErrorActions.vue";
 import ErrorDialog from "../errors/ErrorDialog.vue";
-const PluginManagement = defineAsyncComponent(
-  () => import("../plugins/PluginManagement.vue"),
-);
 import {
   SituateDialog,
   SituateDialogActions,
@@ -41,9 +38,7 @@ import {
   SituateIconButton,
   SituateResizeHandle,
 } from "@situate/ui";
-const SettingsView = defineAsyncComponent(
-  () => import("../settings/SettingsView.vue"),
-);
+import type { NavigationTicket } from "../layout/session";
 import type { Accent, AppearanceSnapshot } from "../settings/accents";
 import type { Workspace } from "../workspaces/api";
 import { workspaceUi } from "../layout/runtime";
@@ -53,7 +48,11 @@ import {
   type LayoutIntent,
   type PaneAddress,
 } from "../layout/model";
-import { currentEntry, type ViewTarget } from "../layout/navigation";
+import {
+  currentEntry,
+  type PresentationValue,
+  type ViewTarget,
+} from "../layout/navigation";
 const WorkspaceLayout = defineAsyncComponent(
   () => import("../layout/components/WorkspaceLayout.vue"),
 );
@@ -108,11 +107,9 @@ const activeTarget = computed(() => {
   return pane ? currentEntry(pane.navigation).target : undefined;
 });
 const viewChoices = computed(() =>
-  (ui.value?.registry.browsableViews ?? []).map((view) => ({
-    id: view.id,
-    title: view.title(),
-    icon: view.icon,
-  })),
+  (ui.value?.registry.browsableViews ?? [])
+    .filter((view) => view.id !== "settings" && view.id !== "plugins")
+    .map((view) => ({ id: view.id, title: view.title(), icon: view.icon })),
 );
 const media = window.matchMedia("(min-width: 1184px)");
 const wide = ref(media.matches);
@@ -120,72 +117,45 @@ const sidebarCollapsed = ref(false);
 const sidebarWidth = ref(300);
 const sidebarId = useId();
 const navigationOpen = ref(false);
-const settingsVisible = ref(false);
-const pendingUpdatesPage = ref(false);
-async function showUpdates(): Promise<void> {
-  if (!(await showSettings())) return;
-  pendingUpdatesPage.value = true;
-  await nextTick();
-  if (settings.value) {
-    await settings.value.openUpdates();
-    pendingUpdatesPage.value = false;
-  }
+function showSettings(page?: "updates" | "dictation") {
+  return open(
+    { kind: "view", viewId: "settings" },
+    undefined,
+    page && { page, detail: true },
+  );
 }
-const pendingDictationPage = ref(false);
-watch(dictationSettingsRequested, async () => {
-  pendingDictationPage.value = true;
-  await showSettings();
-  await nextTick();
-  if (settings.value) {
-    await settings.value.openDictation();
-    pendingDictationPage.value = false;
-  }
-});
-const pluginsVisible = ref(false);
-const inspectedPlugin = ref<string>();
-async function showPlugins(id?: string) {
-  if (!management.value || !(await guardDictation(props.currentWorkspaceId)))
-    return;
-  closeNavigation();
-  settingsVisible.value = false;
-  inspectedPlugin.value = id;
-  pluginsVisible.value = true;
+async function showUpdates(): Promise<boolean> {
+  const owner = ui.value;
+  await owner?.session.load();
+  if (!owner?.session.state.document || owner !== ui.value) return false;
+  await showSettings("updates");
+  return true;
+}
+watch(dictationSettingsRequested, () => void showSettings("dictation"));
+function showPlugins(id?: string, ticket?: NavigationTicket) {
+  return open({ kind: "view", viewId: "plugins", contentId: id }, ticket);
 }
 let workspaceGeneration = 0;
-const management = computed(() => {
-  const scope = props.currentWorkspaceId;
+async function developPlugin(ticket: NavigationTicket, pluginId?: string) {
   const owner = ui.value;
   const chats = conversations.value;
   const generation = workspaceGeneration;
-  if (!scope || !owner || !chats) return;
-  const current = () =>
-    ui.value === owner && generation === workspaceGeneration;
-  return {
-    scope,
-    async onDevelop(pluginId?: string) {
-      if (!current()) return;
-      await owner.session.load();
-      if (!current()) return;
-      const ticket = owner.session.capture();
-      const id = await chats.createDevelopment(pluginId);
-      if (!id || !current() || !owner.session.current(ticket)) return;
-      const opened = await owner.coordinator.open(
-        { kind: "new-conversation", conversationId: id },
-        ticket,
-      );
-      if (!opened || !current()) return;
-      pluginsVisible.value = false;
-      settingsVisible.value = false;
-      await focusView();
-    },
-  };
-});
-async function closePlugins() {
-  pluginsVisible.value = false;
-  await nextTick();
-  shell.value
-    ?.querySelector<HTMLButtonElement>(".plugins-action, .open-navigation")
-    ?.focus();
+  if (!owner || !chats || !owner.session.current(ticket)) return;
+  const id = await chats.createDevelopment(pluginId);
+  if (!id) return;
+  const current = () => generation === workspaceGeneration;
+  let opened = false;
+  try {
+    if (!current()) return;
+    opened = await owner.coordinator.open(
+      { kind: "new-conversation", conversationId: id },
+      ticket,
+      { isCurrent: current },
+    );
+    if (opened && current()) await focusView();
+  } finally {
+    if (!opened) discardUnsentChat(ticket.workspaceId, id);
+  }
 }
 const operationError = ref<unknown>("");
 const layoutError = computed(
@@ -200,24 +170,6 @@ const drawerControl =
   useTemplateRef<InstanceType<typeof SituateDialog>>("drawerControl");
 const drawer = computed(() => drawerControl.value?.element);
 const shell = useTemplateRef<HTMLElement>("shell");
-const settings = useTemplateRef<InstanceType<typeof SettingsView>>("settings");
-watch(settings, (view) => {
-  if (view && pendingUpdatesPage.value) {
-    pendingUpdatesPage.value = false;
-    void view.openUpdates();
-  }
-  if (view && pendingDictationPage.value) {
-    pendingDictationPage.value = false;
-    void view.openDictation();
-  }
-});
-const pluginManagement =
-  useTemplateRef<InstanceType<typeof PluginManagement>>("pluginManagement");
-async function managementOpened() {
-  pluginsVisible.value = false;
-  settingsVisible.value = false;
-  await focusView();
-}
 const layout = useTemplateRef<InstanceType<typeof WorkspaceLayout>>("layout");
 let viewFocusPending = false;
 const reloadDialogControl = useTemplateRef<InstanceType<typeof SituateDialog>>(
@@ -228,8 +180,6 @@ watch(
   () => props.currentWorkspaceId,
   () => {
     ++workspaceGeneration;
-    pluginsVisible.value = false;
-    settingsVisible.value = false;
     operationError.value = "";
     closeNavigation();
     void conversations.value?.refresh();
@@ -248,17 +198,28 @@ async function focusView() {
   viewFocusPending = !layout.value;
   layout.value?.focusPaneHeader();
 }
-async function open(target: ViewTarget) {
-  if (!(await guardDictation(props.currentWorkspaceId))) return;
-  closeNavigation();
-  pluginsVisible.value = false;
-  settingsVisible.value = false;
+async function open(
+  target: ViewTarget,
+  ticket?: NavigationTicket,
+  presentation?: PresentationValue,
+) {
+  const owner = ui.value;
+  if (!owner) return;
+  const generation = workspaceGeneration;
+  const current = () => generation === workspaceGeneration;
   operationError.value = "";
   try {
-    await ui.value?.coordinator.open(target);
-    await focusView();
+    const opened = await owner.coordinator.open(
+      target,
+      ticket,
+      { isCurrent: current },
+      presentation,
+    );
+    if (!current()) return;
+    closeNavigation();
+    if (opened || presentation !== undefined) await focusView();
   } catch (error) {
-    operationError.value = error;
+    if (current()) operationError.value = error;
   }
 }
 async function newConversation(
@@ -272,8 +233,6 @@ async function newConversation(
   await owner.session.load();
   const ticket = owner.session.capture(address);
   closeNavigation();
-  pluginsVisible.value = false;
-  settingsVisible.value = false;
   operationError.value = "";
   let draftId: string | undefined;
   let opened = false;
@@ -366,20 +325,6 @@ function openWorkspace(id: string) {
   closeNavigation();
   emit("openWorkspace", id);
 }
-async function showSettings(): Promise<boolean> {
-  if (!(await guardDictation(props.currentWorkspaceId))) return false;
-  closeNavigation();
-  pluginsVisible.value = false;
-  settingsVisible.value = true;
-  return true;
-}
-async function closeSettings() {
-  settingsVisible.value = false;
-  await nextTick();
-  shell.value
-    ?.querySelector<HTMLButtonElement>(".settings-action, .open-navigation")
-    ?.focus();
-}
 async function openNavigation(event: MouseEvent) {
   viewFocusPending = false;
   if (wide.value) {
@@ -429,15 +374,6 @@ function back(): boolean {
     closeNavigation();
     return true;
   }
-  if (pluginsVisible.value) {
-    if (pluginManagement.value?.back()) return true;
-    void closePlugins();
-    return true;
-  }
-  if (settingsVisible.value) {
-    settings.value?.back();
-    return true;
-  }
   if (layout.value?.back()) return true;
   if (!document.value && layoutError.value) {
     showWorkspaces();
@@ -447,6 +383,7 @@ function back(): boolean {
   const pane = tab?.panes.find((item) => item.id === tab.activePaneId);
   if (tab && pane && pane.navigation.cursor > 0) {
     intent({ type: "history", tabId: tab.id, paneId: pane.id, delta: -1 });
+    void focusView();
     return true;
   }
   return false;
@@ -483,9 +420,6 @@ async function revealConversation(conversationId: string): Promise<void> {
     activeTarget.value.conversationId !== conversationId
   )
     throw new Error("plugins.workspaceUnavailable");
-  pluginsVisible.value = false;
-  settingsVisible.value = false;
-  await nextTick();
   await focusView();
 }
 defineExpose({
@@ -497,6 +431,7 @@ defineExpose({
 });
 onMounted(() => media.addEventListener("change", updateLayout));
 onBeforeUnmount(() => {
+  ++workspaceGeneration;
   media.removeEventListener("change", updateLayout);
   closeNavigation();
 });
@@ -507,8 +442,6 @@ const sidebar = computed(() => ({
   mobile: props.mobile,
   conversations: conversations.value?.state.conversations,
   selectedConversation:
-    !settingsVisible.value &&
-    !pluginsVisible.value &&
     activeTarget.value?.kind === "conversation"
       ? activeTarget.value.conversationId
       : undefined,
@@ -516,21 +449,19 @@ const sidebar = computed(() => ({
     conversations.value?.state.loading || conversations.value?.state.creating,
   conversationRunning: conversations.value?.running,
   filesActive:
-    !settingsVisible.value &&
-    !pluginsVisible.value &&
     activeTarget.value?.kind === "view" &&
     activeTarget.value.viewId === "files",
-  settingsActive: settingsVisible.value,
-  pluginsActive: pluginsVisible.value,
+  settingsActive:
+    activeTarget.value?.kind === "view" &&
+    activeTarget.value.viewId === "settings",
+  pluginsActive:
+    activeTarget.value?.kind === "view" &&
+    activeTarget.value.viewId === "plugins",
   availableViews: viewChoices.value,
-  pluginsAvailable: !!management.value,
+  pluginsAvailable: !!ui.value,
   pinnedViews: document.value?.pinnedViews ?? [],
   activeView:
-    !settingsVisible.value &&
-    !pluginsVisible.value &&
-    activeTarget.value?.kind === "view"
-      ? activeTarget.value.viewId
-      : undefined,
+    activeTarget.value?.kind === "view" ? activeTarget.value.viewId : undefined,
 }));
 const sidebarActions = {
   conversation: (id: string) =>
@@ -542,7 +473,7 @@ const sidebarActions = {
   workspaces: showWorkspaces,
   closeWorkspace,
   openWorkspace,
-  connect: showSettings,
+  connect: () => showSettings(),
   plugins: () => {
     void showPlugins();
   },
@@ -573,10 +504,7 @@ const sidebarActions = {
         :controls="sidebarId"
       />
     </aside>
-    <section
-      v-if="ui && !settingsVisible && !pluginsVisible"
-      class="workspace-content"
-    >
+    <section v-if="ui" class="workspace-content">
       <slot name="setup" />
       <header
         v-if="!layout && (!wide || sidebarCollapsed)"
@@ -675,8 +603,49 @@ const sidebarActions = {
             @reference="reference($event, { tabId: tab.id, paneId: pane.id })"
             @identity="identity"
             @error="operationError = $event"
-            @plugins="showPlugins($event)"
-        /></template>
+          >
+            <template #settings="{ component, entry, ticket, retain }">
+              <component
+                :is="component"
+                :mobile="mobile"
+                :workspace-scope="currentWorkspaceId"
+                :workspace-name="workspaceName"
+                :appearance="appearance"
+                :accent="accent"
+                :appearance-loading="appearanceLoading"
+                :appearance-saving="appearanceSaving"
+                :appearance-error="appearanceError"
+                :snapshot="localization ?? null"
+                :loading="localizationLoading ?? false"
+                :saving="localizationSaving ?? false"
+                :error="localizationError ?? ''"
+                :presentation="entry.presentation"
+                @presentation="retain"
+                @accent="emit('accent', $event)"
+                @retry-appearance="emit('retryAppearance')"
+                @plugins="showPlugins(undefined, ticket)"
+                @connect="emit('connect')"
+                @change="emit('preferences', $event)"
+                @retry="emit('retryLocalization')"
+              />
+            </template>
+            <template #plugins="{ component, entry, ticket }">
+              <component
+                :is="component"
+                :ui="ui"
+                :scope="ui.session.workspaceId"
+                :selected-plugin="
+                  entry.target.kind === 'view'
+                    ? entry.target.contentId
+                    : undefined
+                "
+                :ticket="ticket"
+                :on-develop="(id?: string) => developPlugin(ticket, id)"
+                @opened="focusView"
+              />
+            </template>
+          </ViewHost>
+        </template>
       </WorkspaceLayout>
       <SituateDialog
         ref="reloadDialogControl"
@@ -707,52 +676,6 @@ const sidebarActions = {
           </SituateButton>
         </SituateDialogActions>
       </SituateDialog>
-    </section>
-    <SettingsView
-      :mobile="mobile"
-      v-if="settingsVisible"
-      ref="settings"
-      :workspace-scope="currentWorkspaceId"
-      :workspace-name="workspaceName"
-      :appearance="appearance"
-      :accent="accent"
-      :appearance-loading="appearanceLoading"
-      :appearance-saving="appearanceSaving"
-      :appearance-error="appearanceError"
-      @accent="emit('accent', $event)"
-      @retry-appearance="emit('retryAppearance')"
-      :snapshot="localization ?? null"
-      :loading="localizationLoading ?? false"
-      :saving="localizationSaving ?? false"
-      :error="localizationError ?? ''"
-      :show-navigation="!wide || sidebarCollapsed"
-      :navigation-id="navigationId"
-      :navigation-open="navigationOpen"
-      @navigation="openNavigation"
-      @close="closeSettings"
-      @plugins="showPlugins()"
-      @connect="emit('connect')"
-      @change="emit('preferences', $event)"
-      @retry="emit('retryLocalization')"
-    />
-    <section v-if="pluginsVisible && management" class="workspace-content">
-      <header v-if="!wide || sidebarCollapsed" class="layout-recovery-header">
-        <SituateIconButton
-          class="open-navigation"
-          icon="menu"
-          :label="t('navigation.openNavigation')"
-          :aria-controls="navigationId"
-          :aria-expanded="navigationOpen"
-          @click="openNavigation"
-        />
-      </header>
-      <PluginManagement
-        :key="management.scope"
-        ref="pluginManagement"
-        :selected-plugin="inspectedPlugin"
-        v-bind="management"
-        @opened="managementOpened"
-      />
     </section>
     <SituateDialog
       appearance="plain"

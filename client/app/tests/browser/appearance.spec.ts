@@ -154,9 +154,15 @@ test("selection survives navigation, reload and workspace switches without disca
     "data-workspace-accent",
     "cobalt",
   );
-  await page
-    .getByRole("button", { name: "Back in this pane", exact: true })
-    .click();
+  const back = page.getByRole("button", {
+    name: "Back in this pane",
+    exact: true,
+  });
+  await back.click();
+  await expect(
+    page.getByRole("radio", { name: "Cobalt", exact: true }),
+  ).toBeChecked();
+  await back.click();
   await expect(
     page.getByRole("textbox", { name: "Message", exact: true }),
   ).toHaveValue("An unsent question");
@@ -169,8 +175,14 @@ test("selection survives navigation, reload and workspace switches without disca
   await expect(
     page.getByRole("radio", { name: "Cobalt", exact: true }),
   ).toBeChecked();
+  await expect
+    .poll(async () =>
+      page.evaluate(async () =>
+        JSON.stringify((await window.__layoutTest.stored("garden")).data),
+      ),
+    )
+    .toContain('"presentation":{"page":"appearance","detail":true}');
   await page.reload();
-  await openAppearance(page);
   await expect(
     page.getByRole("radio", { name: "Cobalt", exact: true }),
   ).toBeChecked();

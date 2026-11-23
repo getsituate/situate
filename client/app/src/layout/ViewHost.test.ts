@@ -13,6 +13,7 @@ import ViewHost from "./ViewHost.vue";
 import { closeChats, saveChatDrafts, workspaceConversations } from "../ai/chat";
 import { workspaceUi, retainWorkspaceUi, type WorkspaceUi } from "./runtime";
 import type { Pane, TopicTab } from "./model";
+import { acceptRecoveryState } from "../recovery";
 
 const diagnostics = vi.hoisted(() => ({ emit: vi.fn(), resolve: vi.fn() }));
 vi.mock("../diagnostics", () => ({
@@ -29,6 +30,73 @@ function conversationDefinition(component: Component) {
     component,
   };
 }
+
+it.each([
+  ["⟦recovery.manage⟧", undefined],
+  ["⟦pluginManagement.inspect⟧", "reading"],
+] as const)(
+  "opens %s from a suspended plugin in the same pane",
+  async (label, contentId) => {
+    const pane: Pane = {
+      id: "pane",
+      navigation: {
+        cursor: 0,
+        entries: [
+          {
+            id: "entry",
+            target: { kind: "view", viewId: "reading:list" },
+            presentation: null,
+          },
+        ],
+      },
+    };
+    const tab = { id: "tab" } as TopicTab;
+    const open = vi.fn(async () => true);
+    acceptRecoveryState({ revision: 0, recovery: true, resumed: [] });
+    const wrapper = mount(ViewHost, {
+      props: {
+        ui: {
+          session: {
+            workspaceId: "workspace",
+            capture: (address: unknown) => ({ address }),
+            state: { document: null },
+          },
+          registry: { definitions: new Map(), browsableViews: [] },
+          coordinator: { open },
+          plugins: Promise.resolve({
+            state: { plugins: [{ id: "reading", enabled: true }] },
+          }),
+        } as unknown as WorkspaceUi,
+        pane,
+        tab,
+        workspaceName: "Workspace",
+      },
+    });
+    try {
+      await flushPromises();
+      const action = wrapper
+        .findAll("button")
+        .find((button) => button.text() === label);
+      expect(action).toBeDefined();
+      await action!.trigger("click");
+      expect(open).toHaveBeenCalledWith(
+        {
+          kind: "view",
+          viewId: "plugins",
+          ...(contentId ? { contentId } : {}),
+        },
+        expect.objectContaining({
+          address: { tabId: tab.id, paneId: pane.id },
+        }),
+        undefined,
+        undefined,
+      );
+    } finally {
+      wrapper.unmount();
+      acceptRecoveryState({ revision: 0, recovery: false, resumed: [] });
+    }
+  },
+);
 
 it("renders temporary chats with conversation props and preserves the mounted pane on promotion", async () => {
   const mounted = vi.fn();

@@ -13,10 +13,8 @@ vi.mock("../files/api", async (original) => ({
   filesRequest: vi.fn(),
 }));
 const mocks = vi.hoisted(() => ({
-  ui: vi.fn(),
   recovery: false as boolean | undefined,
 }));
-vi.mock("../layout/runtime", () => ({ workspaceUi: mocks.ui }));
 vi.mock("../recovery", () => ({
   recoveryMode: () => mocks.recovery,
   pluginMayExecute: () => mocks.recovery === false,
@@ -88,7 +86,6 @@ function setup(
     },
     registry: { definitions: new Map([["weekly:settings", {}]]) },
   };
-  mocks.ui.mockReturnValue(ui);
   vi.mocked(filesRequest).mockImplementation(async (request) => {
     if (request.operation === "snapshot")
       return {
@@ -117,6 +114,7 @@ function setup(
     mount(PluginManagement, {
       attachTo: document.body,
       props: {
+        ui: ui as never,
         scope: "garden",
         selectedPlugin,
         onDevelop,
@@ -134,7 +132,6 @@ function action(
 }
 beforeEach(() => {
   mocks.recovery = false;
-  mocks.ui.mockReset();
   vi.mocked(filesRequest).mockReset();
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
@@ -171,14 +168,12 @@ test("waits for lazy runtime initialization then renders icon-free cards includi
   );
   expect(wrapper.get('[data-plugin-id="broken"] h3').text()).toBe("broken");
   expect(wrapper.find(".plugin-card-artwork").exists()).toBe(false);
-  expect(mocks.ui).toHaveBeenCalledWith("garden");
 });
 test("opens a selected plugin directly and returns to its collection without Settings", async () => {
   const fixture = setup();
   const wrapper = fixture.render("weekly");
   await flushPromises();
   expect(wrapper.get(".plugin-files-view h1").text()).toBe("Plugin weekly");
-  expect(document.activeElement).toBe(wrapper.get("h1").element);
   expect(filesRequest).toHaveBeenCalledWith({
     workspaceId: "garden",
     pluginId: "weekly",
@@ -320,12 +315,19 @@ test("opens only an available enabled settings contribution using semantic navig
   ]);
   const wrapper = fixture.render();
   await flushPromises();
+  const ticket = {
+    workspaceId: "garden",
+    address: { tabId: "topic", paneId: "management" },
+    generation: 0,
+    paneGeneration: 0,
+  };
+  await wrapper.setProps({ ticket });
   await action(wrapper, "configure").trigger("click");
   await flushPromises();
-  expect(fixture.ui.coordinator.open).toHaveBeenCalledExactlyOnceWith({
-    kind: "view",
-    viewId: "weekly:settings",
-  });
+  expect(fixture.ui.coordinator.open).toHaveBeenCalledExactlyOnceWith(
+    { kind: "view", viewId: "weekly:settings" },
+    ticket,
+  );
   expect(wrapper.emitted("opened")).toEqual([[]]);
   expect(wrapper.get('[data-plugin-id="quiet"]').text()).not.toContain(
     "⟦pluginManagement.configure⟧",
@@ -816,7 +818,7 @@ test("discards a late runtime initialization when the workspace changes", async 
   const wrapper = first.render();
   await flushPromises();
   const second = setup([plugin("other")]);
-  await wrapper.setProps({ scope: "other-workspace" });
+  await wrapper.setProps({ scope: "other-workspace", ui: second.ui as never });
   await flushPromises();
   resolve(first.runtime);
   await flushPromises();
