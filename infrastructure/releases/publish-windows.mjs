@@ -78,7 +78,8 @@ export async function publishWindows(
   if (!release) {
     const body = [
       "Choose the installer for your Windows architecture: x64 or ARM64.",
-      "These installers do not have a Windows publisher signature. Windows may warn or block installation. Compare the installer with the SHA-256 values in `SHA256SUMS.txt`.",
+      "These installers do not have an Authenticode (Windows publisher) signature. Windows may warn or block installation.",
+      `SHA-256 checksums:\n\n\`\`\`text\n${sums}\`\`\``,
     ].join("\n\n");
     release = await github.createDraft(RELEASE_REPOSITORY, {
       tag_name: tag,

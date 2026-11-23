@@ -76,6 +76,11 @@ function setup(t) {
       assert.equal(draft.prerelease, false);
       assert.equal(draft.make_latest, "false");
       assert.match(draft.body, /Windows may warn or block installation/);
+      assert(
+        draft.body.includes(
+          readFileSync(join(folder, "SHA256SUMS.txt"), "utf8"),
+        ),
+      );
       assert.equal(draft.draft, true);
       calls.push("create");
       release = { ...draft, id: 12, assets: [] };
