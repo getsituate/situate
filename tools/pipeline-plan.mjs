@@ -120,6 +120,31 @@ function validateMode(mode) {
     throw new Error(`Unknown planning mode: ${mode}`);
 }
 
+function laneReasons(suites) {
+  const reasons = new Set(suites.flatMap((suite) => suite.reasons));
+  const baselines = new Map();
+  for (const reason of reasons) {
+    const match =
+      /^Input changed: (client\/app\/tests\/visual\/baselines\/[^/]+)\/.+\.png$/.exec(
+        reason,
+      );
+    if (!match) continue;
+    const directory = match[1];
+    const entries = baselines.get(directory) ?? [];
+    entries.push(reason);
+    baselines.set(directory, entries);
+  }
+  // Actions jobs pass this plan in an environment variable with a per-string size limit.
+  for (const [directory, entries] of baselines) {
+    if (entries.length < 2) continue;
+    for (const entry of entries) reasons.delete(entry);
+    reasons.add(
+      `Inputs changed: ${entries.length} visual baselines in ${directory}/`,
+    );
+  }
+  return [...reasons];
+}
+
 function select(paths, { mode, inventory, appImpact }) {
   validateMode(mode);
   const mandatory = inventory.filter(supportedSuiteEnabled);
@@ -190,7 +215,7 @@ function select(paths, { mode, inventory, appImpact }) {
             ...(execution ? { execution } : {}),
             timeoutSeconds,
             suites: suites.map((suite) => suite.id),
-            reasons: [...new Set(suites.flatMap((suite) => suite.reasons))],
+            reasons: laneReasons(suites),
           },
         ]
       : [];
