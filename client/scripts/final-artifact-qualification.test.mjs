@@ -12,7 +12,9 @@ import { Readable } from "node:stream";
 import { test } from "node:test";
 import { qualificationFixture } from "../../tools/release-qualification-fixture.mjs";
 import { createQualificationProcess } from "./final-artifact-process.mjs";
+import { upgradeWorkspaceJourney } from "./upgrade-workspace-journey.mjs";
 import {
+  accessibilityFailureCode,
   accessibilityScript,
   checkAccessibilityAction,
   captureQualificationDeviceState,
@@ -535,6 +537,56 @@ test("failed post-update product assertions fail qualification before restart", 
     /draft missing/,
   );
   assert.equal(restarted, false);
+});
+
+test("a failed Cancel lookup reports the exact step and restores workspace writes", async () => {
+  const events = [];
+  const writable = [];
+  const error = new Error("Synthetic accessibility failure");
+  const journey = upgradeWorkspaceJourney({
+    actions: async (steps) => {
+      if (steps.some(({ assert }) => assert?.name === "Cancel")) throw error;
+      assert.ok(!steps.some(({ click }) => click?.name === "Cancel"));
+    },
+    progress: (event) => events.push(event),
+    writable: async (enabled) => writable.push(enabled),
+  });
+  await assert.rejects(journey.update(), (actual) => actual === error);
+  assert.deepEqual(events.slice(-3), [
+    "observe_unsaved_dialog:completed",
+    "find_cancel:started",
+    "find_cancel:failed",
+  ]);
+  assert.deepEqual(writable, [false, true]);
+});
+
+test("accessibility diagnostics distinguish missing, ambiguous and unrelated errors without returning native text", () => {
+  for (const [message, expected] of [
+    [
+      "osascript failed (1).\n87:90: execution error: Accessibility target must be unique: 0 (-2700)",
+      "ax_target_missing",
+    ],
+    [
+      "osascript failed (1).\n87:90: execution error: Accessibility target must be unique: 2 (-2700)",
+      "ax_target_ambiguous",
+    ],
+    [
+      "osascript failed (1).\n87:90: execution error: Accessibility control is disabled (-2700)",
+      "ax_target_disabled",
+    ],
+    [
+      "osascript failed (1).\nprivate process or path information",
+      "ax_unavailable",
+    ],
+  ])
+    assert.equal(
+      accessibilityFailureCode(
+        new Error("Native command failed", {
+          cause: new Error(message),
+        }),
+      ),
+      expected,
+    );
 });
 
 test("AX entry, window assertions and chords reject unreviewed roles and keys", () => {
