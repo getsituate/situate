@@ -271,10 +271,25 @@ jobs:
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-compatibility
 
+  architecture:
+    name: Architecture documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: gem install asciidoctor --version 2.0.26 --no-document --user-install --bindir "$RUNNER_TEMP/bin"
+      - run: python3 tools/build-architecture.py "$RUNNER_TEMP/architecture"
+        env:
+          ASCIIDOCTOR: ${{ runner.temp }}/bin/asciidoctor
+
   required:
     name: PR verification
     needs:
       [
+        architecture,
         plan,
         policy,
         tooling,
@@ -301,6 +316,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - if: needs.architecture.result != 'success'
+        run: exit 1
       - run: python3 tools/pipeline-container.py actions aggregate --workflow verify
         env:
           PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
