@@ -8,7 +8,7 @@ import {
 test.use({ localizationMode: "real" });
 
 test(
-  "streamed Markdown follows growth, stops on upward scrolling and stays put at completion",
+  "streamed Markdown follows the end even when scrolling and growth coincide, but leaves earlier messages in place",
   { tag: "@webkit-smoke" },
   async ({ page }) => {
     await page.setViewportSize({ width: 1040, height: 760 });
@@ -22,9 +22,12 @@ test(
       aiHoldPartialResponse: true,
       aiResponseText: "",
     });
-    async function stream(text: string, done = false) {
-      await page.evaluate(
-        ({ text, done }) => {
+    const region = page.locator(".transcript-scroll");
+    async function stream(text: string, action?: "finish" | "return-to-end") {
+      await region.evaluate(
+        (element, { text, action }) => {
+          if (action === "return-to-end")
+            element.scrollTop = element.scrollHeight;
           const native = Reflect.get(
             window,
             "__nativeConversationFixture",
@@ -34,7 +37,8 @@ test(
             (current.partialMessage?.content
               .map((block) => (block.type === "text" ? block.text : ""))
               .join("") ?? "") + text;
-          if (done) native.finish("garden", "legacy", accumulated);
+          if (action === "finish")
+            native.finish("garden", "legacy", accumulated);
           else
             native.publish("garden", "legacy", {
               partialMessage: {
@@ -46,7 +50,7 @@ test(
               },
             });
         },
-        { text, done },
+        { text, action },
       );
     }
     await page.goto("/");
@@ -59,7 +63,6 @@ test(
     await expect(
       page.getByRole("button", { name: "Stop response", exact: true }),
     ).toBeVisible();
-    const region = page.locator(".transcript-scroll");
     const distance = () =>
       region.evaluate(
         (element) =>
@@ -75,6 +78,17 @@ test(
       );
       await expect.poll(distance).toBeLessThanOrEqual(1);
     }
+    await region.evaluate((element) => (element.scrollTop -= 400));
+    await expect(
+      page.getByRole("button", { name: "Scroll to end", exact: true }),
+    ).toBeVisible();
+    await stream(
+      "\n\n## Night\n\n" + "Write a short summary.\n\n".repeat(14),
+      "return-to-end",
+    );
+    await expect(page.locator(".chat-markdown").last()).toContainText("Night");
+    await expect.poll(distance).toBeLessThanOrEqual(1);
+
     const bounds = (await region.boundingBox())!;
     await page.mouse.move(
       bounds.x + bounds.width / 2,
@@ -109,7 +123,7 @@ test(
     await expect(page.locator(".chat-markdown").last()).toContainText(
       "Weekend",
     );
-    await stream("", true);
+    await stream("", "finish");
     await expect(
       page.getByRole("button", { name: "Stop response", exact: true }),
     ).toHaveCount(0);
