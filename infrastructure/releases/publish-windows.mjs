@@ -15,6 +15,8 @@ const targets = new Map([
   ["aarch64-pc-windows-msvc", "windows-aarch64"],
 ]);
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const webview2Disclosure =
+  "If WebView2 is not already installed, setup needs an internet connection to download it from Microsoft. First installation without an existing WebView2 Runtime has not been verified.";
 
 export async function publishWindows(
   candidate,
@@ -44,9 +46,18 @@ export async function publishWindows(
     checks.push({
       target,
       sha256,
-      install: "passed",
-      update: "passed",
-      uninstall: "passed",
+      systems: {
+        "windows-10-22h2": {
+          install: "passed",
+          update: "passed",
+          uninstall: "passed",
+        },
+        "windows-11": {
+          install: "passed",
+          update: "passed",
+          uninstall: "passed",
+        },
+      },
     });
     const sidecar = readFileSync(join(candidate, `${file}.sig`));
     assert.equal(sidecar.toString("utf8").trim(), signature);
@@ -62,14 +73,22 @@ export async function publishWindows(
   }
   assert.deepEqual(qualification.architectures, checks);
   const bootstrap = qualification.webview2Bootstrap;
-  assert(
-    bootstrap?.result === "passed" &&
-      packages.some(
-        ({ target, sha256 }) =>
-          target === bootstrap.target && sha256 === bootstrap.sha256,
-      ),
-    "WebView2 bootstrap qualification must identify an exact Windows installer.",
-  );
+  const deferred = bootstrap?.result === "deferred";
+  if (deferred) {
+    assert.deepEqual(bootstrap, {
+      result: "deferred",
+      debt: "debt-windows-webview2-first-install",
+    });
+  } else {
+    assert(
+      bootstrap?.result === "passed" &&
+        packages.some(
+          ({ target, sha256 }) =>
+            target === bootstrap.target && sha256 === bootstrap.sha256,
+        ),
+      "WebView2 bootstrap qualification must identify an exact Windows installer.",
+    );
+  }
   assert.deepEqual(manifest.artifacts, packages);
   assert.deepEqual(
     JSON.parse(readFileSync(join(candidate, "update.json"), "utf8")),
@@ -78,16 +97,24 @@ export async function publishWindows(
   const sums = `${packages.map(({ file, sha256 }) => `${sha256}  ${file}`).join("\n")}\n`;
   assert.equal(readFileSync(join(candidate, "SHA256SUMS.txt"), "utf8"), sums);
   local.set("SHA256SUMS.txt", Buffer.from(sums));
-  const existing = (await github.listReleases(RELEASE_REPOSITORY)).filter(
-    (record) => record.tag_name === tag,
-  );
+  const releases = await github.listReleases(RELEASE_REPOSITORY);
+  if (deferred) {
+    assert(
+      releases.every(
+        ({ tag_name }) => tag_name === tag || !tag_name.startsWith("windows-v"),
+      ),
+      "Only the first Windows release may defer the WebView2 bootstrap check.",
+    );
+  }
+  const existing = releases.filter((record) => record.tag_name === tag);
   assert(existing.length <= 1, "Duplicate Windows release tag.");
   assertTag(await github.getTag(RELEASE_REPOSITORY, tag), manifest.source);
   let release = existing[0];
   if (!release) {
     const body = [
-      "Choose the installer for your Windows architecture: x64 or ARM64.",
+      "Requires Windows 10 version 22H2 or Windows 11. Choose the installer for your architecture: x64 or ARM64.",
       "These installers do not have an Authenticode (Windows publisher) signature. Windows may warn or block installation.",
+      ...(deferred ? [webview2Disclosure] : []),
       `SHA-256 checksums:\n\n\`\`\`text\n${sums}\`\`\``,
     ].join("\n\n");
     release = await github.createDraft(RELEASE_REPOSITORY, {
@@ -102,6 +129,11 @@ export async function publishWindows(
   async function verify(inventory, allowMissing) {
     assert.equal(inventory.tag_name, tag);
     assert.equal(inventory.prerelease, false);
+    if (deferred)
+      assert(
+        inventory.body?.includes(webview2Disclosure),
+        "Missing WebView2 disclosure in release notes.",
+      );
     assert(Array.isArray(inventory.assets));
     assert.equal(
       new Set(inventory.assets.map(({ name }) => name)).size,

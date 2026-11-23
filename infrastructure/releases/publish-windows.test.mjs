@@ -56,9 +56,18 @@ function setup(t) {
     architectures: artifacts.map(({ target, sha256 }) => ({
       target,
       sha256,
-      install: "passed",
-      update: "passed",
-      uninstall: "passed",
+      systems: {
+        "windows-10-22h2": {
+          install: "passed",
+          update: "passed",
+          uninstall: "passed",
+        },
+        "windows-11": {
+          install: "passed",
+          update: "passed",
+          uninstall: "passed",
+        },
+      },
     })),
   };
 
@@ -158,6 +167,32 @@ test("publishes exactly the qualified installers and signatures as a stable Wind
   assert.deepEqual(f.calls, previous);
 });
 
+test("only the first Windows release can explicitly defer the bootstrap check", async (t) => {
+  const f = setup(t);
+  const qualification = {
+    ...f.qualification,
+    webview2Bootstrap: {
+      result: "deferred",
+      debt: "debt-windows-webview2-first-install",
+    },
+  };
+  const list = f.github.listReleases;
+  f.github.listReleases = () => [
+    { tag_name: "windows-v2026.10.1", draft: false },
+  ];
+  const publish = () =>
+    publishWindows(f.folder, qualification, f.signer.publicKey, f.github);
+  await assert.rejects(publish(), /Only the first Windows release/);
+  assert.deepEqual(f.calls, []);
+  f.github.listReleases = list;
+  const result = await publish();
+  const release = f.github.getRelease("getsituate/situate", result.id);
+  assert.match(
+    release.body,
+    /installation without an existing WebView2 Runtime has not been verified/,
+  );
+});
+
 test("does not write to GitHub without both exact qualification records and the reviewed tag", async (t) => {
   const f = setup(t);
   await assert.rejects(
@@ -170,6 +205,11 @@ test("does not write to GitHub without both exact qualification records and the 
       f.signer.publicKey,
       f.github,
     ),
+  );
+  const incomplete = structuredClone(f.qualification);
+  delete incomplete.architectures[1].systems["windows-10-22h2"];
+  await assert.rejects(
+    publishWindows(f.folder, incomplete, f.signer.publicKey, f.github),
   );
   for (const bootstrap of [
     undefined,
