@@ -2,7 +2,10 @@ import { basename } from "node:path";
 import { run } from "./ios-xcode.mjs";
 import { qualificationProgressReporter } from "../../tools/qualification-progress.mjs";
 import { observeLaunchDialog } from "./qualification-launch-observation.mjs";
-import { queryLaunchConsent } from "./qualification-launch-confirmation.mjs";
+import {
+  launchBaselineStatus,
+  queryLaunchConsent,
+} from "./qualification-launch-confirmation.mjs";
 
 export const qualificationCommandTimeouts = Object.freeze({
   accessibility: 30_000,
@@ -96,6 +99,7 @@ export function createQualificationProcess({
     reporter.emit(phase, "started", code, 0);
     const confirm = code === "launch" && options.confirmFirstLaunch === true;
     let stopObservation, cancelUnstarted, confirmation;
+    let launchInvoked = false;
     const reportLaunch = (status) =>
       reporter.emit(
         phase,
@@ -108,18 +112,23 @@ export function createQualificationProcess({
         if (
           basename(args.at(-1)) !== "Situate.app" ||
           args.length !== 2 ||
-          args[0] !== "-n" ||
-          (await launchConsent("baseline", {
-            environment: options.env,
-            signal,
-          })) !== "absent"
+          args[0] !== "-n"
         ) {
           reportLaunch("confirmation_baseline_blocked");
+          throw new Error("Invalid first-launch command");
+        }
+        const baseline = await launchConsent("baseline", {
+          environment: options.env,
+          signal,
+        });
+        if (baseline !== "absent") {
+          reportLaunch(launchBaselineStatus(baseline));
           throw new Error(
             "First launch requires a clear macOS confirmation baseline",
           );
         }
         signal.throwIfAborted();
+        reportLaunch(launchBaselineStatus(baseline));
       }
       if (code === "launch") {
         const observationSignal = new AbortController();
@@ -196,6 +205,7 @@ export function createQualificationProcess({
         code === "launch"
           ? ["--stdout", "/dev/null", "--stderr", "/dev/null", ...args]
           : args;
+      launchInvoked = code === "launch";
       const result = await execute(command, commandArgs, {
         ...options,
         capture: true,
@@ -252,6 +262,8 @@ export function createQualificationProcess({
       );
       error.qualificationCommand = code;
       error.qualificationStatus = status;
+      if (code === "launch" && !launchInvoked)
+        error.qualificationLaunchNotStarted = true;
       error.uncertain = true;
       throw error;
     } finally {

@@ -390,7 +390,7 @@ Local coverage is opt-in. On macOS, `node tools/test.mjs --coverage` measures Vu
 
 Reports live under `client/target/coverage/`: Vue HTML/LCOV in `vue/` and Rust LCOV in `rust.lcov`. Coverage does not execute signed-installation/update journeys or impose a universal percentage threshold. Inspect uncovered behavior rather than treating aggregate percentages as acceptance evidence.
 
-The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides explicit `coverage`, `design`, `visual`, `provider`, `signing` and `qualification-route` selections on trusted main. These do not feed required verification or release results. Paid provider diagnostics additionally require protected authorization and the dedicated test credential; ordinary fixtures make no paid calls. No coverage-commenting workflow is active.
+The [Diagnostics workflow](../../.github/workflows/diagnostics.yml) provides explicit `coverage`, `design`, `visual`, `provider`, `signing`, `qualification-route` and `launch-check` selections on trusted main. These do not feed required verification or release results. Paid provider diagnostics additionally require protected authorization and the dedicated test credential; ordinary fixtures make no paid calls. No coverage-commenting workflow is active.
 
 The `signing` selection tests Developer ID signing access in a temporary Keychain on macOS, using the protected `macos-release` environment. It does not build, notarize or publish an application or reserve a version. Run `node tools/signing-check.mjs` locally with the [Apple signing inputs](../../client/README.md#apple-distribution) to perform the baseline check.
 
@@ -399,6 +399,19 @@ On the disposable GitHub-hosted runner, the workflow uses the same temporary Key
 The optional `--probe-search-list` comparison is restricted to disposable GitHub-hosted execution: it retains the unregistered baseline, appends its own Keychain and repeats both attempts, then confirms cleanup. Baseline failures remain nonpassing even if registered signing succeeds.
 
 The `qualification-route` selection uses the protected `macos-release` environment with only its configuration and SSH inputs. It stages a synthetic feed under a fresh diagnostic identity, exercises the production route guardian and credential-free routing inspector, and checks normal TLS, private identity/feed hashes, public isolation and unchanged public feed. Cleanup failures remain blocking. It does not read retained candidates, reserve versions, build, notarize, publish or qualify application installation/update behavior. Route errors report bounded startup/callback/cleanup facts and allowlisted failure codes; they do not print SSH arguments or raw child errors.
+
+### Diagnose macOS first launch
+
+In GitHub Actions, dispatch **Diagnostics** on `main` with `selection=launch-check`. It uses the release runner type and the same desktop preflight and first-launch baseline query. Each sample reports its duration and one of: clear, dialog present, query timeout, query failure, or cancellation. A blocked sample fails the check without starting an app. Enable `launch_published_dmg` to also install and launch the pinned public `v2026.11.14` DMG when all samples are clear. It verifies the DMG and app digests, then uses the release's Gatekeeper, notarization ticket and first-launch checks. It does not build, reserve, sign, notarize, publish, or qualify a release; it does not exercise production routing or updates.
+
+To run the same check locally without using the host desktop, run from a checkout in an unlocked disposable macOS VM with the pinned Node.js version and Accessibility and System Events access for the test runner:
+
+```sh
+SITUATE_NATIVE_EXECUTOR=vm node tools/qualification-launch-check.mjs --samples 10
+SITUATE_NATIVE_EXECUTOR=vm node tools/qualification-launch-check.mjs --published-dmg --disposable-account
+```
+
+The signed DMG check refuses accounts that already have Situate application data or a running instance. If launch or cleanup is uncertain, use a fresh guest before repeating. Keep OS version and runner image in any comparison. Logs contain fixed status codes and timings, not dialog contents or raw subprocess output.
 
 ## CI gates
 

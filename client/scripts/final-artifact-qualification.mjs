@@ -624,7 +624,17 @@ export function isOwnedTranslocatedExecutable(
   }
 }
 
-export function createFinalArtifactQualificationHost(
+export function createFinalArtifactQualificationHost(configuration, options) {
+  validateFinalArtifactConfiguration(configuration);
+  return createNativeQualificationHost(configuration, options);
+}
+
+export function createSignedFirstLaunchDiagnostic(account, options) {
+  assert.equal(account.mode, "ephemeral-host");
+  return createNativeQualificationHost({ account }, options, true);
+}
+
+function createNativeQualificationHost(
   configuration,
   {
     execute = createQualificationProcess(),
@@ -632,20 +642,22 @@ export function createFinalArtifactQualificationHost(
     signal,
     progress = () => {},
   } = {},
+  launchDiagnostic = false,
 ) {
   const reporter = qualificationProgressReporter(progress);
-  validateFinalArtifactConfiguration(configuration);
   const safeEnv = Object.fromEntries(
     ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "LANG", "LC_ALL"]
       .filter((name) => environment[name] !== undefined)
       .map((name) => [name, environment[name]]),
   );
   const options = { env: safeEnv, signal, capture: true };
-  const routing = createQualificationRouting(configuration.routing, {
-    execute,
-    environment: safeEnv,
-    signal,
-  });
+  const routing = launchDiagnostic
+    ? null
+    : createQualificationRouting(configuration.routing, {
+        execute,
+        environment: safeEnv,
+        signal,
+      });
   let app;
   let pid;
   let identifier;
@@ -720,12 +732,18 @@ export function createFinalArtifactQualificationHost(
   }
   async function launch(start = true, previousPid, confirmFirstLaunch = false) {
     launchPending = true;
-    if (start)
-      await execute(
-        "open",
-        ["-n", app],
-        confirmFirstLaunch ? { ...options, confirmFirstLaunch } : options,
-      );
+    if (start) {
+      try {
+        await execute(
+          "open",
+          ["-n", app],
+          confirmFirstLaunch ? { ...options, confirmFirstLaunch } : options,
+        );
+      } catch (error) {
+        if (error?.qualificationLaunchNotStarted) launchPending = false;
+        throw error;
+      }
+    }
     await waitFor(async () => {
       const matching = [];
       for (const id of await applicationPids()) {
@@ -931,43 +949,112 @@ export function createFinalArtifactQualificationHost(
         );
       }
   }
+  async function prepareAccount(artifact) {
+    assert(
+      process.platform === "darwin",
+      "Final-artifact native qualification requires macOS",
+    );
+    requireNativeDesktop();
+    const user = userInfo();
+    assert(
+      user.uid === configuration.account.uid &&
+        user.username === configuration.account.name &&
+        realpathSync(homedir()) === realpathSync(configuration.account.home),
+      "Refusing to use a personal or different macOS account",
+    );
+    assert(
+      !Object.keys(environment).some(
+        (name) =>
+          /^(APPLE_|TAURI_SIGNING_|SITUATE_RELEASE_SSH|GH_TOKEN|GITHUB_TOKEN)/.test(
+            name,
+          ) && environment[name],
+      ),
+      "Qualification account must not receive signing or publication credentials",
+    );
+    identifier = artifact.identifier;
+    assert(
+      /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(identifier),
+      "Invalid signed application identifier",
+    );
+    archiveCandidateDeviceState = captureQualificationDeviceState({
+      home: configuration.account.home,
+      identifier,
+      uid: configuration.account.uid,
+    });
+    assert(
+      (await applicationPids()).length === 0,
+      "Qualification account already has a running Situate application",
+    );
+  }
+  function prepareDirectory() {
+    owned = mkdtempSync(
+      join(configuration.account.home, "situate-final-artifact-"),
+    );
+    app = join(owned, "Situate.app");
+    writeFileSync(
+      join(owned, "ownership.json"),
+      JSON.stringify({ pid: process.pid }),
+      { flag: "wx", mode: 0o600 },
+    );
+  }
+  async function cleanup() {
+    try {
+      assert(
+        !launchPending || pid,
+        "Application launch outcome is unknown; retain the isolated account and package for inspection",
+      );
+      await quit();
+    } finally {
+      await provider?.close();
+    }
+    assert(
+      !deviceStateIsolationPending,
+      "Device-state isolation did not finish; retain the disposable account and archive for inspection",
+    );
+    assert(
+      !mountUncertain,
+      "Mount outcome is unknown; retain the isolated account and package for inspection",
+    );
+    assert(
+      !placementUncertain,
+      "Finder placement outcome is unknown; retain isolated storage for inspection",
+    );
+    if (owned) {
+      if (launchDiagnostic) archiveCandidateDeviceState(owned);
+      rmSync(owned, { recursive: true });
+    }
+  }
+  if (launchDiagnostic)
+    return async (directory, artifact) => {
+      let failure;
+      let phase = "prepare";
+      const cleanupFailures = [];
+      try {
+        reporter.emit(phase, "started");
+        await prepareAccount(artifact);
+        prepareDirectory();
+        reporter.emit(phase, "completed");
+        phase = "install";
+        reporter.emit(phase, "started");
+        await installDmg(directory, artifact);
+        reporter.emit(phase, "completed");
+      } catch (error) {
+        failure = error;
+        reporter.emit(phase, "failed");
+      }
+      try {
+        reporter.emit("cleanup", "started");
+        await cleanup();
+        reporter.emit("cleanup", "completed");
+      } catch (error) {
+        cleanupFailures.push(error);
+        reporter.emit("cleanup", "failed");
+      }
+      reporter.check(failure, cleanupFailures);
+    };
   return {
     async prepare({ manifest }) {
-      assert(
-        process.platform === "darwin",
-        "Final-artifact native qualification requires macOS",
-      );
-      requireNativeDesktop();
-      const user = userInfo();
-      assert(
-        user.uid === configuration.account.uid &&
-          user.username === configuration.account.name &&
-          realpathSync(homedir()) === realpathSync(configuration.account.home),
-        "Refusing to use a personal or different macOS account",
-      );
-      assert(
-        !Object.keys(environment).some(
-          (name) =>
-            /^(APPLE_|TAURI_SIGNING_|SITUATE_RELEASE_SSH|GH_TOKEN|GITHUB_TOKEN)/.test(
-              name,
-            ) && environment[name],
-        ),
-        "Qualification account must not receive signing or publication credentials",
-      );
-      identifier = manifest.artifacts[0].identifier;
-      assert(
-        /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(identifier),
-        "Invalid signed application identifier",
-      );
-      archiveCandidateDeviceState = captureQualificationDeviceState({
-        home: configuration.account.home,
-        identifier,
-        uid: configuration.account.uid,
-      });
-      assert(
-        (await applicationPids()).length === 0,
-        "Qualification account already has a running Situate application",
-      );
+      await prepareAccount(manifest.artifacts[0]);
       const route = await routing.inspect();
       assert(
         route.isolatedRouting === true &&
@@ -1005,15 +1092,7 @@ export function createFinalArtifactQualificationHost(
         predecessor.manifest.artifacts[0],
         { execute, env: safeEnv, signal },
       );
-      owned = mkdtempSync(
-        join(configuration.account.home, "situate-final-artifact-"),
-      );
-      app = join(owned, "Situate.app");
-      writeFileSync(
-        join(owned, "ownership.json"),
-        JSON.stringify({ pid: process.pid }),
-        { flag: "wx", mode: 0o600 },
-      );
+      prepareDirectory();
       stateRoot = join(owned, "candidate-state");
       seedWorkspace();
       await startProviderPhase();
@@ -1187,30 +1266,7 @@ export function createFinalArtifactQualificationHost(
         isolatedRouting: route.isolatedRouting,
       };
     },
-    async cleanup() {
-      try {
-        assert(
-          !launchPending || pid,
-          "Application launch outcome is unknown; retain the isolated account and package for inspection",
-        );
-        await quit();
-      } finally {
-        await provider?.close();
-      }
-      assert(
-        !deviceStateIsolationPending,
-        "Device-state isolation did not finish; retain the disposable account and archive for inspection",
-      );
-      assert(
-        !mountUncertain,
-        "Mount outcome is unknown; retain the isolated account and package for inspection",
-      );
-      assert(
-        !placementUncertain,
-        "Finder placement outcome is unknown; retain isolated storage for inspection",
-      );
-      if (owned) rmSync(owned, { recursive: true });
-    },
+    cleanup,
   };
   async function startProviderPhase() {
     await provider?.close();

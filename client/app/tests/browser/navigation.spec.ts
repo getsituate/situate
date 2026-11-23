@@ -439,6 +439,7 @@ test("unavailable controls and blocked sending preserve the draft and leave unre
           "appearance_snapshot",
           "dictation_snapshot",
           "updates_snapshot",
+          "analytics_preference",
           "plugin:app|version",
           "recovery_register",
           "plugin_recovery_mode",

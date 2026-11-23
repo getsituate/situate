@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "optional-app-usage-analytics",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "optional-app-usage-analytics",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Optional usage analytics",
+          "paragraphs": [
+            "Situate shares pseudonymous daily activity by default. You can turn sharing off in Settings. Workspace contents are not included."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "optional-app-usage-analytics",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Optionale Nutzungsanalyse",
+          "paragraphs": [
+            "Situate teilt standardmäßig pseudonyme Daten zur täglichen Nutzung. Du kannst die Freigabe in den Einstellungen ausschalten. Arbeitsbereichsinhalte werden nicht übertragen."
+          ]
+        }
+      ]
+    }
+  }
+}

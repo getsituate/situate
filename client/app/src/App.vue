@@ -20,6 +20,8 @@ import {
 } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import RecoveryRoot from "./errors/RecoveryRoot.vue";
+import { trackDailyActivity } from "./analytics/runtime";
+import AnalyticsSettings from "./analytics/AnalyticsSettings.vue";
 import { captureIncident, retainIncidentScopes } from "./errors/runtime";
 import { installRecoveryLifecycle, recoveryPreparing } from "./errors/native";
 import { retainedWorkspaces, releaseWorkspace } from "./files/sessions";
@@ -169,9 +171,11 @@ async function resumeAllPlugins() {
 }
 let pendingAction: Promise<void> | undefined;
 const entryVisible = ref(false);
+const entryAnalyticsOpen = ref(false);
 const workspaceScope = computed(() =>
   entryVisible.value ? null : (state.value?.current?.id ?? null),
 );
+trackDailyActivity(() => workspaceScope.value);
 const {
   snapshot: appearanceSnapshot,
   accent,
@@ -995,6 +999,22 @@ onBeforeUnmount(() => {
     </aside>
     <SituateScrollbars />
     <FileLifecycle ref="fileLifecycle" />
+    <SituateDialog
+      v-if="entryAnalyticsOpen"
+      :open="true"
+      aria-labelledby="entry-analytics-title"
+      @cancel.prevent="entryAnalyticsOpen = false"
+    >
+      <template #header>
+        <h2 id="entry-analytics-title">{{ t("settings.analytics.title") }}</h2>
+      </template>
+      <AnalyticsSettings />
+      <template #actions>
+        <SituateButton variant="secondary" @click="entryAnalyticsOpen = false">
+          {{ t("settings.analytics.close") }}
+        </SituateButton>
+      </template>
+    </SituateDialog>
     <UpdateNotice
       v-if="
         updates.supported &&
@@ -1068,6 +1088,7 @@ onBeforeUnmount(() => {
       :error="error"
       @back="backToWorkspace"
       @opened="entryVisible = false"
+      @analytics="entryAnalyticsOpen = true"
     />
     <OnboardingHost
       v-else-if="!celebration && state.onboarding"

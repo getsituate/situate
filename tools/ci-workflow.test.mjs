@@ -498,7 +498,10 @@ test("the Slack changelog only follows a successful promotion of a selected rele
   );
   assert.match(notify, /needs: publish/);
   assert.doesNotMatch(notify, /vars\./);
-  assert.match(notify, /needs\.publish\.outputs\.published_release_id != ''/);
+  assert.match(
+    notify,
+    /^ {4}if: \$\{\{ !cancelled\(\) && needs\.publish\.result == 'success' && needs\.publish\.outputs\.published_release_id != '' \}\}$/m,
+  );
   assert.match(
     notify,
     /release_id: .*needs\.publish\.outputs\.published_release_id/,
@@ -621,6 +624,15 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   );
   assert.match(build, /APPLE_API_PRIVATE_KEY/);
   assert.match(build, /TAURI_SIGNING_PRIVATE_KEY/);
+  assert.match(
+    build,
+    /SITUATE_POSTHOG_TOKEN: \$\{\{ vars\.SITUATE_POSTHOG_TOKEN \}\}/,
+  );
+  assert.match(
+    read("deploy-website"),
+    /SITUATE_POSTHOG_TOKEN: \$\{\{ vars\.SITUATE_POSTHOG_TOKEN \}\}/,
+  );
+  assert.equal((creator.match(/SITUATE_POSTHOG_TOKEN:/g) ?? []).length, 1);
   assert.doesNotMatch(
     creator.split("create-stage --stage qualify")[1],
     /APPLE_|TAURI_SIGNING/,
@@ -705,9 +717,8 @@ test("signing diagnostics use a separate trusted-main job with certificate-only 
   const workflow = read("diagnostics");
   assert.match(
     workflow,
-    /options:\s+\[coverage, design, visual, provider, signing, qualification-route\]/,
+    /options:\s*\[\s*coverage,\s*design,\s*visual,\s*provider,\s*signing,\s*qualification-route,\s*launch-check,?\s*\]/,
   );
-  assert.match(job(workflow, "native"), /inputs\.selection != 'signing'/);
   const signing = job(workflow, "signing");
   for (const guard of [
     "github.repository == 'getsituate/situate'",
@@ -744,6 +755,42 @@ test("signing diagnostics use a separate trusted-main job with certificate-only 
   );
 });
 
+test("launch diagnostics share the release runner without preparing a build or receiving credentials", () => {
+  const workflow = read("diagnostics");
+  const launch = job(workflow, "launch-check");
+  const native = job(workflow, "native");
+  assert.match(
+    native,
+    /&& \(inputs\.selection == 'coverage' \|\| inputs\.selection == 'design' \|\| inputs\.selection == 'provider'\)/,
+  );
+  for (const guard of [
+    "github.repository == 'getsituate/situate'",
+    "github.ref == 'refs/heads/main'",
+    "github.event_name == 'workflow_dispatch'",
+    "inputs.selection == 'launch-check'",
+  ])
+    assert.ok(launch.includes(guard));
+  const creator = job(read("release-macos"), "create");
+  assert.equal(
+    launch.match(/runs-on: (.+)/)?.[1],
+    creator.match(/runs-on: (.+)/)?.[1],
+  );
+  assert.match(launch, /timeout-minutes: 5/);
+  assert.match(launch, /run: node tools\/qualification-launch-check\.mjs\n/);
+  assert.match(
+    launch,
+    /LAUNCH_CHECK_PUBLISHED_DMG: \$\{\{ inputs\.launch_published_dmg \}\}/,
+  );
+  assert.match(
+    workflow,
+    /launch_published_dmg:\s+description:[^\n]+\s+type: boolean\s+default: false/,
+  );
+  assert.doesNotMatch(
+    launch,
+    /environment:|secrets\.|GH_TOKEN|prepare-release|create-stage|publish-run|: write/,
+  );
+});
+
 test("qualification route diagnostics use protected hosted dispatch and only SSH/configuration credentials", () => {
   const workflow = read("diagnostics");
   const route = job(workflow, "qualification-route");
@@ -754,10 +801,6 @@ test("qualification route diagnostics use protected hosted dispatch and only SSH
     "inputs.selection == 'qualification-route'",
   ])
     assert(route.includes(guard));
-  assert.match(
-    job(workflow, "native"),
-    /inputs\.selection != 'qualification-route'/,
-  );
   assert.match(route, /runs-on: macos-latest/);
   assert.match(route, /environment: macos-release/);
   assert.match(route, /timeout-minutes: 10/);

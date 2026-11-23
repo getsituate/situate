@@ -6,6 +6,7 @@ mod ai_executor;
 mod ai_onboarding;
 mod ai_plugin_tools;
 mod ai_protocol;
+mod analytics;
 mod appearance;
 mod change_history;
 
@@ -54,6 +55,9 @@ macro_rules! application_handler {
     ($($extra:path),* $(,)?) => {
         tauri::generate_handler![
             crate::save_text,
+            crate::analytics::analytics_preference,
+            crate::analytics::analytics_set_preference,
+            crate::analytics::analytics_daily_activity,
             crate::updates::updates_snapshot,
             crate::updates::updates_check,
             crate::updates::updates_install,
@@ -207,6 +211,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            analytics::setup(app.handle());
             diagnostics::setup(app.handle());
             dictation::setup(app.handle());
             ai::setup_model_metadata(app.handle());

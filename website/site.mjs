@@ -41,11 +41,11 @@ export const landingContentSecurityPolicy =
   "default-src 'self'; script-src 'self' https://eocampaign1.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://gallery.eo.page; font-src 'self' https://fonts.gstatic.com https://gallery.eo.page; connect-src 'self' https://eocampaign1.com https://www.google.com/recaptcha/ https://eu.i.posthog.com; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; frame-ancestors 'none'; base-uri 'self'; form-action 'none'";
 
 export function analyticsConfiguration(
-  token = process.env.WEBSITE_POSTHOG_TOKEN ?? "",
+  token = process.env.SITUATE_POSTHOG_TOKEN ?? "",
 ) {
   if (token && !/^phc_[A-Za-z0-9]{20,200}$/.test(token))
     throw new Error(
-      "WEBSITE_POSTHOG_TOKEN must be a public PostHog project token.",
+      "SITUATE_POSTHOG_TOKEN must be a public PostHog project token.",
     );
   return `window.situateAnalyticsConfig = Object.freeze(${JSON.stringify({ token })});\n`;
 }
@@ -56,7 +56,7 @@ export async function websiteAnalyticsToken({
   environment = process.env,
   directory = repository,
 } = {}) {
-  const key = "WEBSITE_POSTHOG_TOKEN";
+  const key = "SITUATE_POSTHOG_TOKEN";
   if (Object.hasOwn(environment, key)) return environment[key];
   if (environment.CI) return "";
   try {

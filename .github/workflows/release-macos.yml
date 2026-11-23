@@ -514,6 +514,7 @@ jobs:
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
           SITUATE_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_UPDATER_PUBLIC_KEY }}
           SITUATE_UPDATER_ENDPOINT: ${{ vars.SITUATE_UPDATER_ENDPOINT }}
+          SITUATE_POSTHOG_TOKEN: ${{ vars.SITUATE_POSTHOG_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - id: cache_report
@@ -596,7 +597,7 @@ jobs:
 
   notify-release:
     needs: publish
-    if: needs.publish.outputs.published_release_id != ''
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.publish.outputs.published_release_id != '' }}
     uses: ./.github/workflows/slack-notify.yml
     with:
       kind: release

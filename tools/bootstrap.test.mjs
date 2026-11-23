@@ -166,6 +166,8 @@ function checkWorkflowBootstrap(name, workflow) {
             ["create", "macos-compatibility"].includes(id)
             ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report)|wait-for-hosting\.mjs --(?:probe|check))$/
             : ({
+                "diagnostics.yml: launch-check":
+                  /^node tools\/qualification-launch-check\.mjs$/,
                 "verify-hosting.yml: offline":
                   /^(?:node tools\/hosting-checks\.mjs|terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate))$/,
                 "deploy-hosting.yml: rehearse":

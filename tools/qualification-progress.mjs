@@ -72,6 +72,11 @@ function isUpgradeObservation(code) {
 
 const launchConfirmationStatuses = [
   "confirmation_baseline_blocked",
+  "confirmation_baseline_clear",
+  "confirmation_baseline_dialog_present",
+  "confirmation_baseline_timeout",
+  "confirmation_baseline_cancelled",
+  "confirmation_baseline_query_failed",
   "confirmation_confirmed",
   "confirmation_absent",
   "confirmation_unexpected",

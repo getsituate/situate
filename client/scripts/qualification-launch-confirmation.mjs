@@ -112,9 +112,10 @@ export async function queryLaunchConsent(
   mode,
   { environment = {}, signal, execute = run } = {},
 ) {
-  if (!["baseline", "confirm"].includes(mode) || signal?.aborted)
-    return "unavailable";
-  const budgetMs = mode === "baseline" ? 1500 : 3500;
+  const baseline = mode === "baseline";
+  if (!baseline && mode !== "confirm") return "unavailable";
+  if (signal?.aborted) return baseline ? "query_cancelled" : "unavailable";
+  const budgetMs = baseline ? 1500 : 3500;
   const expiresAt = Date.now() + budgetMs;
   const timeout = AbortSignal.timeout(budgetMs);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -134,18 +135,30 @@ export async function queryLaunchConsent(
       ],
       { env, signal: combined, capture: true, terminationGraceMs: 2000 },
     );
-    if (combined.aborted) return "unavailable";
-    if (
-      [
-        "absent",
-        "unexpected",
-        "unavailable",
-        ...(mode === "confirm" ? ["confirmed", "press-unknown"] : []),
-      ].includes(result)
-    )
-      return result;
+    if (!combined.aborted) {
+      if (result === "absent" || result === "unexpected") return result;
+      if (!baseline && ["confirmed", "press-unknown"].includes(result))
+        return result;
+    }
   } catch {
     // A failed AppleEvent cannot prove that an attempted press had no effect.
   }
-  return "unavailable";
+  if (!baseline) return "unavailable";
+  if (signal?.aborted) return "query_cancelled";
+  return timeout.aborted ? "query_timeout" : "query_failed";
+}
+
+export function launchBaselineStatus(result) {
+  switch (result) {
+    case "absent":
+      return "confirmation_baseline_clear";
+    case "unexpected":
+      return "confirmation_baseline_dialog_present";
+    case "query_timeout":
+      return "confirmation_baseline_timeout";
+    case "query_cancelled":
+      return "confirmation_baseline_cancelled";
+    default:
+      return "confirmation_baseline_query_failed";
+  }
 }
