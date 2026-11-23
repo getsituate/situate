@@ -164,12 +164,14 @@ test("default native controller builds once for creation, reopen, entry closure 
     "line-tables-only",
   );
   assert.equal(builds[0].options.env.CARGO_INCREMENTAL, undefined);
-  assert.equal(phases.length, 10);
+  assert.equal(phases.length, 11);
+  assert.equal(phases[10].upgradeWorkspace, true);
   assert.deepEqual(
     phases.map((phase) => phase.env.SITUATE_ONBOARDING_HANDOFF_PHASE),
     [
       "create",
       "reopen",
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -184,7 +186,7 @@ test("default native controller builds once for creation, reopen, entry closure 
     phases.map((phase) => phase.timeout),
     [
       105000, 105000, 105000, 105000, 105000, 195000, 105000, 105000, 195000,
-      195000,
+      195000, 180000,
     ],
   );
   assert.deepEqual(
@@ -200,6 +202,7 @@ test("default native controller builds once for creation, reopen, entry closure 
       "repaired",
       "repaired",
       "repaired",
+      undefined,
     ],
   );
   assert.equal(phases[5].expectedBlockingStage, "plugin-check-block-armed");
@@ -208,7 +211,7 @@ test("default native controller builds once for creation, reopen, entry closure 
   assert.equal(phases[8].phase, "direct document sources");
   assert.equal(phases[9].phase, "offline process connection");
   assert.deepEqual(
-    phases.map((phase) => phase.env.SITUATE_ENTRY_CLOSE_ONLY),
+    phases.slice(0, 10).map((phase) => phase.env.SITUATE_ENTRY_CLOSE_ONLY),
     [
       undefined,
       undefined,
@@ -292,7 +295,7 @@ test("diagnostics and ordinary profile phases keep their deadlines", async () =>
     ),
     [
       120000, 120000, 120000, 120000, 120000, 195000, 120000, 120000, 195000,
-      195000,
+      195000, 180000,
     ],
   );
   const { phases } = await controller({ diagnosticsOnly: true });

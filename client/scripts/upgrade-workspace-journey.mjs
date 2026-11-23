@@ -9,6 +9,7 @@ const pendingNote = `${upgradeNoteAfter}\nUnsaved cancellation marker\n`;
 export function upgradeWorkspaceJourney({
   actions,
   verify,
+  verifyReopened = verify,
   verifyCancellation,
   writable,
   progress = () => {},
@@ -132,16 +133,22 @@ export function upgradeWorkspaceJourney({
         confirmInstall("Try installation again"),
       );
     },
-    reopen: () =>
+    reopen: (expectedNote = pendingNote) =>
       step("reopen_workspace", async () => {
-        await navigate("Archive follow-up");
-        await expect(text("The field notes are ready to review."));
-        await navigate("Plugins");
-        await expect(text("Archive index"));
-        await expect(button("Disable"));
-        await openNote();
-        await expect({ ...editor, value: pendingNote });
-        await verify(pendingNote);
+        await step("reopen_conversation", async () => {
+          await navigate("Archive follow-up");
+          await expect(text("The field notes are ready to review."));
+        });
+        await step("reopen_plugin", async () => {
+          await navigate("Plugins");
+          await expect(text("Archive index"));
+          await expect(button("Disable"));
+        });
+        await step("reopen_note", openNote);
+        await step("verify_reopened_note", async () => {
+          await expect({ ...editor, value: expectedNote });
+          await verifyReopened(expectedNote);
+        });
       }),
   };
 }

@@ -225,7 +225,23 @@ export const finalNote = "# E2E note\n\nBeta marker\n";
 export const finalMethod =
   "# Working method\n\nReview tasks each Friday. Keep notes and tasks in Markdown with task identities. Preserve task metadata and keep created and due dates distinct. Never change source originals.\n";
 
-export function finalArtifactJourneys({ actions, seed, verifyFiles, phase }) {
+export function finalArtifactJourneys({
+  actions,
+  seed,
+  verifyFiles,
+  phase,
+  progress = () => {},
+}) {
+  async function step(name, run) {
+    progress(`${name}:started`);
+    try {
+      await run();
+      progress(`${name}:completed`);
+    } catch (error) {
+      progress(`${name}:failed`);
+      throw error;
+    }
+  }
   const name = `Qualification ${phase}`;
   const window = `${name} — Situate`;
   const secondary = `Secondary ${phase}`;
@@ -270,107 +286,127 @@ export function finalArtifactJourneys({ actions, seed, verifyFiles, phase }) {
     await click(button("Create workspace"));
   }
   async function reopen(draft = "") {
-    await actions([{ windows: 2 }]);
-    await actions([{ navigation: workspaceMenu }, { assert: workspaceMenu }]);
-    await navigationClick(button("[e2e:final-artifact-plugin-read]", window));
-    await expect({
-      ...area("Message", window),
-      value: draft,
+    await step("restore_conversation", async () => {
+      await actions([{ windows: 2 }]);
+      await actions([{ navigation: workspaceMenu }, { assert: workspaceMenu }]);
+      await navigationClick(button("[e2e:final-artifact-plugin-read]", window));
+      await expect({ ...area("Message", window), value: draft });
+      await expect(text("Final artifact plugin v1 verified.", window));
     });
-    await expect(text("Final artifact plugin v1 verified.", window));
-    await navigationClick(button("Plugins", window));
-    await expect(text("Final artifact plugin", window));
-    await expect(button("Disable", window));
-    await navigationClick(button("Files", window));
-    await click(button("e2e-note.md", window));
-    await click({ role: "AXPopUpButton", name: "File actions", window });
-    await click({ role: "AXMenuItem", name: "Edit source", window });
-    await expect({ ...area("Markdown source", window), value: finalNote });
-    await verifyFiles(name, [
-      ["e2e-note.md", finalNote],
-      [".situate/working-method.md", finalMethod],
-    ]);
-    await expect(button("OpenAI-compatible server", `${secondary} — Situate`));
-  }
-  return {
-    async exercise() {
-      await create(name);
-      await click(button("OpenAI-compatible server", window));
-      await fill(
-        { role: "AXTextField", name: "OpenAI-compatible endpoint" },
-        "{{fixture.baseUrl}}",
-      );
-      await fill(
-        { role: "AXTextField", name: "API key or token (optional)" },
-        "{{fixture.token}}",
-      );
-      await click({
-        role: "AXCheckBox",
-        name: "I understand and want to use this HTTP destination.",
-      });
-      await click(button("Save AI access"));
-      await expect(
-        text(
-          "The saved chat model is unavailable or could not be read. Choose a model again.",
-          window,
-        ),
-      );
-      await click(button("Dismiss", window));
-      const model = { role: "AXComboBox", name: "Model", window };
-      await expect(model);
-      await actions([{ focus: model }]);
-      await key("down");
-      await expect(text(PINNED_AGENT_MODEL, window));
-      await key("return");
-      await click(button("Check and continue"));
-      await click({
-        role: "AXCheckBox",
-        name: "Start without bringing existing content",
-      });
-      await fill(
-        area("Anything else Situate should know?"),
-        "[e2e:onboarding-method] Review tasks each Friday.",
-      );
-      await click(button("Start setting up my workspace"));
-      await click(button("Adopt working method"));
-      await click(button("Finish setup"));
-      await seed(name, "seed.md", "# Synthetic seed\n");
-      await navigationClick(button("New chat", window));
-      await send("[e2e:create] Create e2e-note.md", "Created the note.");
-      await send(
-        "[e2e:edit] Replace only Alpha marker with Beta marker",
-        "Updated the note.",
-      );
+    await step("restore_plugin", async () => {
       await navigationClick(button("Plugins", window));
-      await click(button("Create a plugin", window));
-      await send(
-        "[e2e:final-artifact-plugin] Create and activate the synthetic plugin.",
-        "Final artifact plugin activated.",
-      );
-      await navigationClick(button("New chat", window));
-      await send(
-        "[e2e:final-artifact-plugin-read]",
-        "Final artifact plugin v1 verified.",
-      );
-      await fill(area("Message", window), chatDraft);
-      await navigationClick(workspaceMenu);
-      await click({ role: "AXMenuItem", name: "Open workspace…", window });
-      await create(secondary);
+      await expect(text("Final artifact plugin", window));
+      await expect(button("Disable", window));
+    });
+    await step("restore_note", async () => {
+      await navigationClick(button("Files", window));
+      await click(button("e2e-note.md", window));
+      await click({ role: "AXPopUpButton", name: "File actions", window });
+      await click({ role: "AXMenuItem", name: "Edit source", window });
+      await expect({ ...area("Markdown source", window), value: finalNote });
+      await verifyFiles(name, [
+        ["e2e-note.md", finalNote],
+        [".situate/working-method.md", finalMethod],
+      ]);
       await expect(
         button("OpenAI-compatible server", `${secondary} — Situate`),
       );
-      await actions([{ windows: 2 }]);
+    });
+  }
+  return {
+    async exercise() {
+      await step("create_workspace", () => create(name));
+      await step("configure_provider", async () => {
+        await click(button("OpenAI-compatible server", window));
+        await fill(
+          { role: "AXTextField", name: "OpenAI-compatible endpoint" },
+          "{{fixture.baseUrl}}",
+        );
+        await fill(
+          { role: "AXTextField", name: "API key or token (optional)" },
+          "{{fixture.token}}",
+        );
+        await click({
+          role: "AXCheckBox",
+          name: "I understand and want to use this HTTP destination.",
+        });
+        await click(button("Save AI access"));
+        await expect(
+          text(
+            "The saved chat model is unavailable or could not be read. Choose a model again.",
+            window,
+          ),
+        );
+        await click(button("Dismiss", window));
+        const model = { role: "AXComboBox", name: "Model", window };
+        await expect(model);
+        await actions([{ focus: model }]);
+        await key("down");
+        await expect(text(PINNED_AGENT_MODEL, window));
+        await key("return");
+        await click(button("Check and continue"));
+      });
+      await step("complete_onboarding", async () => {
+        await click({
+          role: "AXCheckBox",
+          name: "Start without bringing existing content",
+        });
+        await fill(
+          area("Anything else Situate should know?"),
+          "[e2e:onboarding-method] Review tasks each Friday.",
+        );
+        await click(button("Start setting up my workspace"));
+        await click(button("Adopt working method"));
+        await click(button("Finish setup"));
+      });
+      await step("edit_note", async () => {
+        await seed(name, "seed.md", "# Synthetic seed\n");
+        await navigationClick(button("New chat", window));
+        await send("[e2e:create] Create e2e-note.md", "Created the note.");
+        await send(
+          "[e2e:edit] Replace only Alpha marker with Beta marker",
+          "Updated the note.",
+        );
+      });
+      await step("open_plugins", () =>
+        navigationClick(button("Plugins", window)),
+      );
+      await step("create_plugin", async () => {
+        await click(button("Create a plugin", window));
+        await send(
+          "[e2e:final-artifact-plugin] Create and activate the synthetic plugin.",
+          "Final artifact plugin activated.",
+        );
+      });
+      await step("use_plugin", async () => {
+        await navigationClick(button("New chat", window));
+        await send(
+          "[e2e:final-artifact-plugin-read]",
+          "Final artifact plugin v1 verified.",
+        );
+      });
+      await step("open_second_workspace", async () => {
+        await fill(area("Message", window), chatDraft);
+        await navigationClick(workspaceMenu);
+        await click({ role: "AXMenuItem", name: "Open workspace…", window });
+        await create(secondary);
+        await expect(
+          button("OpenAI-compatible server", `${secondary} — Situate`),
+        );
+        await actions([{ windows: 2 }]);
+      });
       // Chat drafts remain in memory; saved history must survive relaunch.
       await reopen(chatDraft);
     },
     reopen,
-    async close() {
-      await navigationClick(workspaceMenu);
-      await click({ role: "AXMenuItem", name: "Close workspace", window });
-      await expect(
-        button("OpenAI-compatible server", `${secondary} — Situate`),
-      );
-      await key("w", ["command"]);
-    },
+    close: () =>
+      step("close_workspace", async () => {
+        await navigationClick(workspaceMenu);
+        await click({ role: "AXMenuItem", name: "Close workspace", window });
+        await expect(
+          button("OpenAI-compatible server", `${secondary} — Situate`),
+        );
+        await key("w", ["command"]);
+      }),
   };
 }

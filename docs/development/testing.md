@@ -108,6 +108,8 @@ Device-local formats, including `layout.json`, settings and provider connections
 
 The macOS release upgrade starts the verified predecessor with a fresh copy of the [0.1.6 workspace baseline](../../client/scripts/fixtures/upgrade-016/README.md). The predecessor saves a note through the editor and installs the signed candidate through its updater. The candidate must reopen the saved note, retained conversation and installed plugin before and after a restart. The separate fresh-workspace journey exercises current onboarding and plugin creation.
 
+The macOS native suite also opens a copy of the 0.1.6 workspace in a test build. It saves a note, restarts the app, and checks the conversation, enabled plugin and note through the same native UI actions used by release qualification. To run only this check, use `node client/scripts/test-native.mjs --legacy-workspace`. It does not exercise installation or the updater.
+
 Fresh-workspace tests remain necessary but do not establish upgrade safety. These are verification requirements, not a claim that the current runner already covers every published format. Report missing release fixtures, unavailable old binaries, untested migration boundaries and unavailable native qualification explicitly; do not present them as passed checks.
 
 ### Workspace migration checks

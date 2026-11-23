@@ -118,8 +118,13 @@ export async function runNative(
     sourceServer = startDocumentSourceServer,
   } = {},
 ) {
-  const { diagnosticsOnly, documentSourcesOnly, profile, release } =
-    parseSmokeOptions(args);
+  const {
+    diagnosticsOnly,
+    documentSourcesOnly,
+    legacyWorkspaceOnly,
+    profile,
+    release,
+  } = parseSmokeOptions(args);
   const handoffOnly = environment.SITUATE_ONBOARDING_HANDOFF_ONLY === "1";
   const processOnly = environment.SITUATE_PROCESS_CONNECTION_ONLY === "1";
   if (
@@ -128,6 +133,13 @@ export async function runNative(
   )
     throw new Error(
       "Document source checks require macOS without another selected journey.",
+    );
+  if (
+    legacyWorkspaceOnly &&
+    (process.platform !== "darwin" || processOnly || handoffOnly)
+  )
+    throw new Error(
+      "Legacy workspace checks require macOS without another selected journey.",
     );
   if (processOnly && (process.platform !== "darwin" || diagnosticsOnly))
     throw new Error(
@@ -149,10 +161,19 @@ export async function runNative(
         SITUATE_PUBLIC_REPOSITORY_ONLY: undefined,
         SITUATE_PUBLIC_REPOSITORY_LIVE: undefined,
         SITUATE_ONBOARDING_HANDOFF_PHASE: undefined,
+        SITUATE_UPGRADE_SMOKE_PHASE: undefined,
       },
       signal: signal,
       timeout: profile ? 120000 : 105000,
     };
+    const upgradePhase = () =>
+      phase(executable, {
+        ...options,
+        phase: "legacy workspace reopen",
+        timeout: 180000,
+        upgradeWorkspace: true,
+      });
+    if (legacyWorkspaceOnly) return upgradePhase();
     const processPhase = (mode) =>
       phase(executable, {
         ...options,
@@ -245,6 +266,7 @@ export async function runNative(
       if (process.platform === "darwin") {
         await documentSourcePhase("repaired");
         await processPhase("repaired");
+        await upgradePhase();
       }
     }
   });

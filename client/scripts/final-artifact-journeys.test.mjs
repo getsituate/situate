@@ -255,6 +255,25 @@ test("default journeys retain saved state across restart and keep chat drafts in
   );
 });
 
+test("fresh installation identifies the failed plugin navigation step", async () => {
+  const progress = [];
+  const failure = new Error("Native UI target missing");
+  const journey = finalArtifactJourneys({
+    actions: async (items) => {
+      if (items.some((item) => item.navigation?.name === "Plugins"))
+        throw failure;
+    },
+    seed: async () => {},
+    phase: "candidate",
+    progress: (event) => progress.push(event),
+  });
+  await assert.rejects(journey.exercise(), (error) => error === failure);
+  assert.deepEqual(progress.slice(-2), [
+    "open_plugins:started",
+    "open_plugins:failed",
+  ]);
+});
+
 test("custom fixture server is loopback-only, authenticated, bounded and has no live fallback", async () => {
   let handle;
   let closes = 0;

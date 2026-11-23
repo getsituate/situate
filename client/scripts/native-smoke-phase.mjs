@@ -6,7 +6,10 @@ const interrupt = () => controller.abort();
 const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
 for (const signal of signals) process.on(signal, interrupt);
 try {
-  await runSmokePhase(executable, { ...options, signal: controller.signal });
+  const run = options.upgradeWorkspace
+    ? (await import("./native-smoke-upgrade.mjs")).runUpgradeSmoke
+    : runSmokePhase;
+  await run(executable, { ...options, signal: controller.signal });
 } finally {
   for (const signal of signals) process.off(signal, interrupt);
 }
