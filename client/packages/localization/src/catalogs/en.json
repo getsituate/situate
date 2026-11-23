@@ -63,7 +63,7 @@
   "settings.analytics.close": "Close",
   "settings.analytics.share": "Share usage analytics with Situate",
   "settings.analytics.description": "Situate shares pseudonymous usage data with PostHog to help us understand how the app is used and improve it. Workspace names, paths, and contents are not shared.",
-  "settings.analytics.withdrawal": "You can turn this off at any time. This stops future sharing but does not delete data already received.",
+  "settings.analytics.withdrawal": "You can turn this off at any time.",
   "settings.analytics.error": "Could not save your analytics preference. Please try again.",
   "settings.workspace": "Workspace settings",
   "settings.categories": "Settings categories",
