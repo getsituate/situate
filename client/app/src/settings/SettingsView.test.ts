@@ -291,7 +291,9 @@ it("offers retry without claiming settings were saved", async () => {
 it("keeps the analytics choice when saving fails and applies a successful retry", async () => {
   const wrapper = mount(SettingsView, { props, attachTo: document.body });
   const category = () =>
-    wrapper.findAll("button").find((item) => item.text().startsWith("Usage analytics"));
+    wrapper
+      .findAll("button")
+      .find((item) => item.text().startsWith("Usage analytics"));
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
   };
