@@ -73,7 +73,7 @@ Report vulnerabilities confidentially through the [security policy](SECURITY.md)
 - [Product capabilities](docs/product-capability-catalog/README.md) — workflows, prerequisites and current limits.
 - [Product direction](docs/product-concept.md) — intended scope and business model.
 - [Development and testing](docs/development/README.md) — setup, app commands and optional agent tooling.
-- [Architecture](docs/architecture/README.md) — system structure and technical decisions.
+- [Architecture](https://getsituate.github.io/situate/) — system structure and technical decisions ([source and build instructions](docs/architecture/README.md)).
 - [Goals and requirements](requirements/README.md) — product decisions, acceptance criteria and catalog viewer.
 - [Brand handbook](design/brand/README.md) — visual identity, Bend artwork and voice.
 
