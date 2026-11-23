@@ -31,7 +31,6 @@ const emit = defineEmits<{
   reference: [value: unknown];
   identity: [value: unknown];
   error: [value: unknown];
-  plugins: [id?: string];
 }>();
 const ticket = props.ui.session.capture({
   tabId: props.tab.id,
@@ -258,12 +257,18 @@ const viewProps = computed(() => {
     <SituateButton :disabled="resuming" @click="resume">{{
       t("recovery.resume")
     }}</SituateButton>
-    <SituateButton variant="secondary" @click="emit('plugins')">{{
-      t("recovery.manage")
-    }}</SituateButton>
-    <SituateButton variant="ghost" @click="emit('plugins', suspendedPlugin)">{{
-      t("pluginManagement.inspect")
-    }}</SituateButton>
+    <SituateButton
+      variant="secondary"
+      @click="open({ kind: 'view', viewId: 'plugins' })"
+      >{{ t("recovery.manage") }}</SituateButton
+    >
+    <SituateButton
+      variant="ghost"
+      @click="
+        open({ kind: 'view', viewId: 'plugins', contentId: suspendedPlugin })
+      "
+      >{{ t("pluginManagement.inspect") }}</SituateButton
+    >
   </section>
   <section
     v-else-if="!definition || failed || availability.status === 'unavailable'"
@@ -296,7 +301,16 @@ const viewProps = computed(() => {
     </SituateButton>
   </section>
   <Suspense v-else :key="`${entry.id}:${retry}`">
+    <slot
+      v-if="definition.id === 'settings' || definition.id === 'plugins'"
+      :name="definition.id"
+      :component="definition.component"
+      :entry="entry"
+      :ticket="ticket"
+      :retain="viewProps.onPresentation"
+    />
     <component
+      v-else
       :is="definition.component"
       v-bind="viewProps"
       @navigate="open"

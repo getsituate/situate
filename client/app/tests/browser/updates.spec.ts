@@ -68,6 +68,8 @@ test(
     await expect(page.locator(".update-category-badge")).toHaveAccessibleName(
       "Update available",
     );
+    await page.getByRole("heading", { name: "Ready when you are" }).hover();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
     await visual.capture("updates.settings.ready");
     const install = page.getByRole("button", {
       name: "Install and restart",

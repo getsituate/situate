@@ -304,7 +304,10 @@ for (const width of [1440, 700, 375]) {
       await expect(
         page.getByRole("button", { name: "‹ All settings" }),
       ).toHaveCount(0);
-      await expect(page.locator(".plugin-view h1")).toBeFocused();
+      const activeTab = page
+        .locator('[role="tab"][aria-selected="true"], .mobile-tab-trigger')
+        .filter({ visible: true });
+      await expect(activeTab).toBeFocused();
       await expect(page.getByRole("dialog")).not.toBeVisible();
       const opener = page.getByRole("button", {
         name: "Open navigation",
@@ -348,7 +351,7 @@ for (const width of [1440, 700, 375]) {
         await expect(shortcut).not.toHaveAttribute("aria-current");
       }
       await page.locator('[data-action="manage-plugins"]').press("Enter");
-      await expect(page.locator(".plugin-view h1")).toBeFocused();
+      await expect(activeTab).toBeFocused();
       await expect(page.locator(".settings-view")).toHaveCount(0);
       await page
         .getByRole("button", { name: "View files", exact: true })

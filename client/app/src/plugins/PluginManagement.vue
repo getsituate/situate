@@ -12,6 +12,7 @@ import { t, localizeError } from "@situate/localization";
 import "@situate/localization/plugin-management";
 import { SituateButton, SituateDialogActions } from "@situate/ui";
 import { workspaceUi } from "../layout/runtime";
+import type { NavigationTicket } from "../layout/session";
 import { recoveryMode } from "../recovery";
 import type { PluginRuntime, RuntimePlugin } from "./runtime";
 import { openPluginSettings, pluginManagementGroup } from "./management";
@@ -26,6 +27,7 @@ import "./management/layout.css";
 const props = defineProps<{
   scope: string;
   selectedPlugin?: string;
+  ticket?: NavigationTicket;
   onDevelop: (pluginId?: string) => Promise<void>;
 }>();
 const emit = defineEmits<{ opened: [] }>();
@@ -210,11 +212,7 @@ watch(
       )
         inventoryError.value = cause;
     } finally {
-      if (current === generation) {
-        loading.value = false;
-        await nextTick();
-        heading.value?.focus();
-      }
+      if (current === generation) loading.value = false;
     }
   },
   { immediate: true },
@@ -444,6 +442,7 @@ function settings(id: string) {
     const opened = await openPluginSettings(
       workspaceUi(props.scope),
       plugins.value.find((p) => p.id === id),
+      props.ticket,
     );
     if (opened && current === generation) emit("opened");
   });

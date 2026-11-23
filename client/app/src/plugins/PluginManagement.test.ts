@@ -178,7 +178,6 @@ test("opens a selected plugin directly and returns to its collection without Set
   const wrapper = fixture.render("weekly");
   await flushPromises();
   expect(wrapper.get(".plugin-files-view h1").text()).toBe("Plugin weekly");
-  expect(document.activeElement).toBe(wrapper.get("h1").element);
   expect(filesRequest).toHaveBeenCalledWith({
     workspaceId: "garden",
     pluginId: "weekly",
@@ -320,12 +319,19 @@ test("opens only an available enabled settings contribution using semantic navig
   ]);
   const wrapper = fixture.render();
   await flushPromises();
+  const ticket = {
+    workspaceId: "garden",
+    address: { tabId: "topic", paneId: "management" },
+    generation: 0,
+    paneGeneration: 0,
+  };
+  await wrapper.setProps({ ticket });
   await action(wrapper, "configure").trigger("click");
   await flushPromises();
-  expect(fixture.ui.coordinator.open).toHaveBeenCalledExactlyOnceWith({
-    kind: "view",
-    viewId: "weekly:settings",
-  });
+  expect(fixture.ui.coordinator.open).toHaveBeenCalledExactlyOnceWith(
+    { kind: "view", viewId: "weekly:settings" },
+    ticket,
+  );
   expect(wrapper.emitted("opened")).toEqual([[]]);
   expect(wrapper.get('[data-plugin-id="quiet"]').text()).not.toContain(
     "⟦pluginManagement.configure⟧",

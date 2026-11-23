@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "workspace-settings-views",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "workspace-settings-views",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Open Settings and Plugins alongside your work",
+          "paragraphs": [
+            "Settings and Plugins open in the active pane. Use All views to open them in another pane or tab, and use the pane’s Back button to return to your previous view."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "workspace-settings-views",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Einstellungen und Plugins neben deiner Arbeit öffnen",
+          "paragraphs": [
+            "Einstellungen und Plugins öffnen sich im aktiven Bereich. Über ‚Alle Ansichten‘ kannst du sie in einem anderen Bereich oder Tab öffnen. Mit ‚Zurück‘ im Bereich gelangst du zur vorherigen Ansicht."
+          ]
+        }
+      ]
+    }
+  }
+}

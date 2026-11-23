@@ -94,8 +94,8 @@ for (const width of [375, 1280]) {
         "open",
         "",
       );
-      await chooseSelect(page.locator("#chat-connection"), "work");
-      await expect(page.locator("#chat-connection")).toHaveAttribute(
+      await chooseSelect(page.locator("[id^=chat-connection--]"), "work");
+      await expect(page.locator("[id^=chat-connection--]")).toHaveAttribute(
         "data-value",
         "work",
       );
@@ -126,11 +126,11 @@ for (const width of [375, 1280]) {
       await expect(draft(page)).toHaveValue("Keep the account-specific draft.");
       await visual.capture("model.local.default-restored");
       await settings(page);
-      await chooseSelect(page.locator("#chat-connection"), "personal");
+      await chooseSelect(page.locator("[id^=chat-connection--]"), "personal");
       await chat(page);
       await choose(page, "gpt-4.1");
       await settings(page);
-      await chooseSelect(page.locator("#chat-connection"), "work");
+      await chooseSelect(page.locator("[id^=chat-connection--]"), "work");
       const work = page
         .locator(".connections li")
         .filter({ has: page.getByText("Work", { exact: true }) });
@@ -144,7 +144,7 @@ for (const width of [375, 1280]) {
         .getByRole("dialog")
         .getByRole("button", { name: t("ai.connections.remove"), exact: true })
         .click();
-      await expect(page.locator("#chat-connection")).toHaveAttribute(
+      await expect(page.locator("[id^=chat-connection--]")).toHaveAttribute(
         "data-value",
         "",
       );
@@ -222,8 +222,8 @@ for (const width of [375, 1280]) {
       );
       await settings(page);
       await page.locator(".advanced-settings summary").click();
-      await chooseSelect(page.locator("#settings-thinking"), "high");
-      const defaultThinking = page.locator("#settings-thinking");
+      await chooseSelect(page.locator("[id^='settings-thinking-']"), "high");
+      const defaultThinking = page.locator("[id^='settings-thinking-']");
       await expect(defaultThinking).toHaveAttribute("data-value", "high");
       await expect(defaultThinking).toBeEnabled();
       await defaultThinking.evaluate((element) =>

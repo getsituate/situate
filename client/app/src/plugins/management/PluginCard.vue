@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, type DeepReadonly } from "vue";
+import { computed, useId, type DeepReadonly } from "vue";
 import { t } from "@situate/localization";
 import "@situate/localization/plugin-management";
 import type { RuntimePlugin } from "../runtime";
@@ -12,6 +12,7 @@ const props = defineProps<{
   canEnable: boolean;
   busy: boolean;
 }>();
+const titleId = useId();
 const group = computed(() => pluginManagementGroup(props.plugin));
 const blockedMessage = computed(() => {
   const blocked = props.plugin.blockedBy;
@@ -44,10 +45,10 @@ const emit = defineEmits<{
   <article
     class="plugin-row plugin-card-plain"
     :data-plugin-id="plugin.id"
-    :aria-labelledby="`plugin-title-${plugin.id}`"
+    :aria-labelledby="titleId"
   >
     <div class="plugin-card-top">
-      <h3 :id="`plugin-title-${plugin.id}`" data-localization-content="user">
+      <h3 :id="titleId" data-localization-content="user">
         {{ plugin.manifest?.name || plugin.id }}
       </h3>
       <span

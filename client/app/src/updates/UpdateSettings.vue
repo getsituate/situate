@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { useId, computed, nextTick, ref, watch } from "vue";
 import { SituateButton, SituateDialog, SituateProgress } from "@situate/ui";
 import {
   t,
@@ -19,6 +19,7 @@ import {
 } from "./runtime";
 import UpdateSymbol from "./UpdateSymbol.vue";
 import ReleaseHistoryAccess from "./ReleaseHistoryAccess.vue";
+const id = useId();
 const confirming = ref(false);
 const confirmedTarget = ref<{ artifactId: string } | null>(null);
 const confirmRunning = ref(false);
@@ -209,16 +210,16 @@ async function install(
     </section>
     <SituateDialog
       :open="confirming"
-      aria-labelledby="update-restart-title"
-      aria-describedby="update-restart-description"
+      :aria-labelledby="`update-restart-title-${id}`"
+      :aria-describedby="`update-restart-description-${id}`"
       @cancel.prevent="!updateRequestPending && (confirming = false)"
     >
       <template #header
-        ><h2 id="update-restart-title">
+        ><h2 :id="`update-restart-title-${id}`">
           {{ t(confirmForced ? "updates.forceTitle" : "updates.restartTitle") }}
         </h2></template
       >
-      <p id="update-restart-description">
+      <p :id="`update-restart-description-${id}`">
         {{
           t(
             confirmForced

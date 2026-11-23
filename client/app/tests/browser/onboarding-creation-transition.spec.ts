@@ -70,7 +70,7 @@ for (const stalled of [false, true]) {
       Reflect.set(window, "creationObservations", observations);
       new MutationObserver(() => {
         const panel = document.querySelector<HTMLElement>(".setup-panel");
-        if (panel?.querySelector("#ai-heading")) {
+        if (panel?.querySelector("[id^=ai-heading--]")) {
           observations.push({
             phase: panel.getAttribute("data-transition-phase"),
             opacity: Number(getComputedStyle(panel).opacity),

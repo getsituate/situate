@@ -48,16 +48,15 @@ for (const width of [375, 1280]) {
       const work = page
         .locator(".connections li")
         .filter({ has: page.getByText("Work", { exact: true }) });
-      await chooseSelect(page.locator("#chat-connection"), "work");
+      await chooseSelect(page.locator("[id^=chat-connection--]"), "work");
       await expect(
         work.getByText(t("ai.connections.selected"), { exact: true }),
       ).toBeVisible();
-      await chooseSelect(page.locator("#chat-connection"), "personal");
+      await chooseSelect(page.locator("[id^=chat-connection--]"), "personal");
       await page.locator(".advanced-settings summary").click();
-      await expect(page.locator("#settings-chat-model")).toHaveAttribute(
-        "data-value",
-        "gpt-4.1",
-      );
+      await expect(
+        page.locator("[id^='settings-chat-model-']"),
+      ).toHaveAttribute("data-value", "gpt-4.1");
       await visual.capture("ai.connections.selected");
       await work
         .getByRole("button", { name: t("ai.connections.rename"), exact: true })
@@ -102,7 +101,7 @@ for (const width of [375, 1280]) {
         .locator(".connections li")
         .filter({ has: page.getByText("Studio", { exact: true }) });
       await expect(studio).toBeVisible();
-      await expect(page.locator("#chat-connection")).toHaveAttribute(
+      await expect(page.locator("[id^=chat-connection--]")).toHaveAttribute(
         "data-value",
         "personal",
       );
@@ -213,7 +212,7 @@ for (const width of [375, 1280]) {
         .locator(".ai-choices button")
         .filter({ has: page.getByText(t("ai.apiKeyMethod"), { exact: true }) })
         .click();
-      await page.locator("#ai-key").fill("synthetic-second-key");
+      await page.locator("input[id^=ai-key--]").fill("synthetic-second-key");
       await page
         .getByRole("button", { name: t("ai.saveAIAccess"), exact: true })
         .click();
@@ -221,26 +220,25 @@ for (const width of [375, 1280]) {
       await expect(
         page.locator(".connections li").getByText("Studio", { exact: true }),
       ).toBeVisible();
-      await expect(page.locator("#chat-connection")).toHaveAttribute(
+      await expect(page.locator("[id^=chat-connection--]")).toHaveAttribute(
         "data-value",
         "personal",
       );
       await page.locator(".advanced-settings summary").click();
-      await expect(page.locator("#settings-chat-model")).toHaveAttribute(
-        "data-value",
-        "gpt-4.1",
-      );
+      await expect(
+        page.locator("[id^='settings-chat-model-']"),
+      ).toHaveAttribute("data-value", "gpt-4.1");
       await visual.capture("ai.connections.added-without-selecting");
-      await chooseSelect(page.locator("#chat-connection"), { label: "Studio" });
-      await expect(page.locator("#settings-chat-model")).toHaveAttribute(
-        "data-value",
-        "recommended",
-      );
-      await chooseSelect(page.locator("#chat-connection"), "personal");
-      await expect(page.locator("#settings-chat-model")).toHaveAttribute(
-        "data-value",
-        "gpt-4.1",
-      );
+      await chooseSelect(page.locator("[id^=chat-connection--]"), {
+        label: "Studio",
+      });
+      await expect(
+        page.locator("[id^='settings-chat-model-']"),
+      ).toHaveAttribute("data-value", "recommended");
+      await chooseSelect(page.locator("[id^=chat-connection--]"), "personal");
+      await expect(
+        page.locator("[id^='settings-chat-model-']"),
+      ).toHaveAttribute("data-value", "gpt-4.1");
       const calls = await page.evaluate(
         () =>
           Reflect.get(window, "__ipcCalls") as {

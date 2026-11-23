@@ -36,9 +36,6 @@ const props = {
   loading: false,
   saving: false,
   error: "" as const,
-  showNavigation: false,
-  navigationId: "navigation",
-  navigationOpen: false,
 };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -60,16 +57,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("shows only the settings heading and navigation control in the top bar", async () => {
+it("restores the selected category without adding a navigation entry", async () => {
   const wrapper = mount(SettingsView, {
-    props: { ...props, showNavigation: true },
+    props: { ...props, presentation: { page: "appearance", detail: true } },
   });
-  const header = wrapper.get(".settings-topbar");
-  expect(header.text()).toBe("Workspace settings");
-  expect(header.findAll("button")).toHaveLength(1);
-  expect(header.get("button").attributes("aria-label")).toBe("Open navigation");
-  await header.get("button").trigger("click");
-  expect(wrapper.emitted("navigation")).toHaveLength(1);
+  expect(wrapper.get(".settings-page-heading").text()).toBe("Appearance");
+  await wrapper.get(".settings-categories button").trigger("click");
+  expect(wrapper.emitted("presentation")).toEqual([
+    [{ page: "formats", detail: true }],
+  ]);
   wrapper.unmount();
 });
 
@@ -114,7 +110,7 @@ it("opens AI settings from its decorated category and manages connections inline
     .trigger("click");
   expect(wrapper.get(".settings-page-heading").text()).toBe("AI & models");
   await vi.waitFor(() =>
-    expect(wrapper.find("#settings-inline").exists()).toBe(true),
+    expect(wrapper.find("[id^='settings-inline-']").exists()).toBe(true),
   );
   await vi.waitFor(() =>
     expect(wrapper.find(".connections-heading button").exists()).toBe(true),
@@ -158,20 +154,23 @@ it.each(["formats", "ai"] as const)(
     }
     await ai().trigger("click");
     await addEndpoint();
-    await wrapper.get("#ai-connection-label").setValue("Studio server");
     await wrapper
-      .get("#ai-endpoint")
+      .get("input[id^=ai-connection-label--]")
+      .setValue("Studio server");
+    await wrapper
+      .get("input[id^=ai-endpoint--]")
       .setValue("https://studio.example.invalid/v1");
     const reads = vi.mocked(getStatus).mock.calls.length;
     await formats().trigger("click");
     expect(wrapper.get(".ai-settings").isVisible()).toBe(false);
     await ai().trigger("click");
     expect(
-      wrapper.get<HTMLInputElement>("#ai-connection-label").element.value,
+      wrapper.get<HTMLInputElement>("input[id^=ai-connection-label--]").element
+        .value,
     ).toBe("Studio server");
-    expect(wrapper.get<HTMLInputElement>("#ai-endpoint").element.value).toBe(
-      "https://studio.example.invalid/v1",
-    );
+    expect(
+      wrapper.get<HTMLInputElement>("input[id^=ai-endpoint--]").element.value,
+    ).toBe("https://studio.example.invalid/v1");
     expect(getStatus).toHaveBeenCalledTimes(reads);
     if (category === "formats") await formats().trigger("click");
     await wrapper.setProps({ workspaceScope: `draft-reading-${category}` });
@@ -183,11 +182,12 @@ it.each(["formats", "ai"] as const)(
     }
     await addEndpoint();
     expect(
-      wrapper.get<HTMLInputElement>("#ai-connection-label").element.value,
+      wrapper.get<HTMLInputElement>("input[id^=ai-connection-label--]").element
+        .value,
     ).toBe("");
-    expect(wrapper.get<HTMLInputElement>("#ai-endpoint").element.value).toBe(
-      "",
-    );
+    expect(
+      wrapper.get<HTMLInputElement>("input[id^=ai-endpoint--]").element.value,
+    ).toBe("");
     expect(wrapper.emitted("ai-settings-saved")).toBeUndefined();
     wrapper.unmount();
   },
@@ -199,8 +199,8 @@ it("opens workspace plugin management without replacing ordinary settings", asyn
   });
   await wrapper.get('[data-action="manage-plugins"]').trigger("click");
   expect(wrapper.emitted("plugins")).toEqual([[]]);
-  expect(wrapper.find("#settings-language").exists()).toBe(true);
-  expect(wrapper.find("#settings-date").exists()).toBe(true);
+  expect(wrapper.find("[id^='settings-language-']").exists()).toBe(true);
+  expect(wrapper.find("[id^='settings-date-']").exists()).toBe(true);
   await wrapper.setProps({ workspaceScope: undefined });
   expect(wrapper.find('[data-action="manage-plugins"]').exists()).toBe(false);
   wrapper.unmount();
@@ -208,19 +208,19 @@ it("opens workspace plugin management without replacing ordinary settings", asyn
 
 it("changes each preference without changing the other three", async () => {
   const wrapper = mount(SettingsView, { props });
-  await chooseSelect(wrapper, "#settings-language", "de");
+  await chooseSelect(wrapper, "[id^='settings-language-']", "de");
   expect(wrapper.emitted("change")?.[0]).toEqual([
     { language: "de", formats: snapshot.formats },
   ]);
-  await chooseSelect(wrapper, "#settings-time", "12");
+  await chooseSelect(wrapper, "[id^='settings-time-']", "12");
   expect(wrapper.emitted("change")?.[1]).toEqual([
     { language: "en", formats: { ...snapshot.formats, time: "12" } },
   ]);
-  await chooseSelect(wrapper, "#settings-date", "ymd");
+  await chooseSelect(wrapper, "[id^='settings-date-']", "ymd");
   expect(wrapper.emitted("change")?.[2]).toEqual([
     { language: "en", formats: { ...snapshot.formats, date: "ymd" } },
   ]);
-  await chooseSelect(wrapper, "#settings-number", "dot-apostrophe");
+  await chooseSelect(wrapper, "[id^='settings-number-']", "dot-apostrophe");
   expect(wrapper.emitted("change")?.[3]).toEqual([
     {
       language: "en",
@@ -232,28 +232,28 @@ it("changes each preference without changing the other three", async () => {
 
 it("shows format examples only in the selectors and updates its language in place", async () => {
   const wrapper = mount(SettingsView, { props });
-  expect(wrapper.get("#settings-date + select option:checked").text()).toBe(
-    "31.12.2026",
-  );
-  expect(wrapper.get("#settings-time + select option:checked").text()).toBe(
-    "24-hour · 14:30",
-  );
-  expect(wrapper.get("#settings-number + select option:checked").text()).toBe(
-    "1.234,56",
-  );
+  expect(
+    wrapper.get("[id^='settings-date-'] + select option:checked").text(),
+  ).toBe("31.12.2026");
+  expect(
+    wrapper.get("[id^='settings-time-'] + select option:checked").text(),
+  ).toBe("24-hour · 14:30");
+  expect(
+    wrapper.get("[id^='settings-number-'] + select option:checked").text(),
+  ).toBe("1.234,56");
   expect(
     wrapper
-      .get('[aria-labelledby="formats-heading"]')
+      .get('[aria-labelledby^="formats-heading-"]')
       .findAll("p, .format-preview"),
   ).toHaveLength(0);
   setPreferences({ language: "de", formats: snapshot.formats });
   await wrapper.vm.$nextTick();
-  expect(wrapper.get('label[for="settings-language"]').text()).toBe(
+  expect(wrapper.get('label[for^="settings-language-"]').text()).toBe(
     "Sprache der Oberfläche",
   );
-  expect(wrapper.get("#settings-number + select option:checked").text()).toBe(
-    "1.234,56",
-  );
+  expect(
+    wrapper.get("[id^='settings-number-'] + select option:checked").text(),
+  ).toBe("1.234,56");
   wrapper.unmount();
 });
 

@@ -4,6 +4,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  container: settings / inline-size;
   background: var(--situate-surface);
 }
 .settings-topbar {
@@ -11,8 +13,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  padding: max(12px, var(--app-safe-area-top, 0px)) 24px 12px;
-  min-height: 68px;
+  padding: 12px 24px;
   border-bottom: 1px solid var(--situate-line);
   font-size: 14px;
 }
@@ -148,7 +149,7 @@
     background: var(--situate-paper);
   }
 }
-@media (max-width: 760px) {
+@container settings (max-width: 760px) {
   .settings-layout {
     display: block;
     overflow: hidden;
@@ -200,7 +201,7 @@
     margin-bottom: 28px;
   }
 }
-@media (max-width: 480px) {
+@container settings (max-width: 480px) {
   .setting-row {
     flex-wrap: wrap;
     gap: 12px;

@@ -4,6 +4,7 @@ import {
   nextTick,
   onBeforeUnmount,
   ref,
+  useId,
   useTemplateRef,
   watch,
 } from "vue";
@@ -27,6 +28,7 @@ import {
   type Config,
   type Status,
 } from "./api";
+const id = useId();
 const props = defineProps<{ scope: string; disabled?: boolean }>();
 const emit = defineEmits<{ changed: []; editing: [value: boolean] }>();
 const connections = ref<Status[]>([]);
@@ -223,7 +225,7 @@ const confirmationTitle = computed(() => {
   <section
     class="connections"
     :aria-busy="busy || loading"
-    :aria-labelledby="editing ? 'ai-heading' : 'connections-heading'"
+    :aria-labelledby="editing ? undefined : `connections-heading--${id}`"
   >
     <AiSetup
       v-if="editing"
@@ -241,7 +243,7 @@ const confirmationTitle = computed(() => {
         ><br />{{ t("ai.connections.deviceScope") }}
       </p>
       <div class="connections-heading">
-        <h3 id="connections-heading" ref="title" tabindex="-1">
+        <h3 :id="`connections-heading--${id}`" ref="title" tabindex="-1">
           {{ t("ai.connections.title") }}
         </h3>
         <SituateButton
@@ -335,16 +337,18 @@ const confirmationTitle = computed(() => {
       </div>
       <section
         class="chat-connection"
-        aria-labelledby="chat-connection-heading"
+        :aria-labelledby="`chat-connection-heading--${id}`"
       >
-        <h3 id="chat-connection-heading">{{ t("settings.ai.chat") }}</h3>
+        <h3 :id="`chat-connection-heading--${id}`">
+          {{ t("settings.ai.chat") }}
+        </h3>
         <div class="setting-row">
-          <label for="chat-connection"
+          <label :for="`chat-connection--${id}`"
             >{{ t("ai.connections.chat")
             }}<small>{{ t("ai.connections.nextReplies") }}</small></label
           >
           <SituateSelect
-            id="chat-connection"
+            :id="`chat-connection--${id}`"
             :value="selected ?? ''"
             :disabled="blocked || !connections.length"
             @change="select"
@@ -366,10 +370,10 @@ const confirmationTitle = computed(() => {
     </template>
     <SituateDialog
       ref="dialogControl"
-      aria-labelledby="connection-confirm-title"
+      :aria-labelledby="`connection-confirm-title--${id}`"
       @cancel.prevent="!busy && cancel()"
     >
-      <h3 id="connection-confirm-title">{{ confirmationTitle }}</h3>
+      <h3 :id="`connection-confirm-title--${id}`">{{ confirmationTitle }}</h3>
       <template v-if="confirmation">
         <p data-localization-content="user">{{ label(confirmation.config) }}</p>
         <template v-if="confirmation.action === 'manage'">
@@ -410,19 +414,25 @@ const confirmationTitle = computed(() => {
         </template>
         <form v-else @submit.prevent="apply">
           <template v-if="confirmation.action === 'rename'">
-            <label for="connection-name">{{ t("ai.connections.name") }}</label>
+            <label :for="`connection-name--${id}`">{{
+              t("ai.connections.name")
+            }}</label>
             <SituateInput
-              id="connection-name"
+              :id="`connection-name--${id}`"
               v-model="name"
               maxlength="120"
               :disabled="busy"
               :aria-invalid="nameError || undefined"
               :aria-describedby="
-                nameError ? 'connection-name-error' : undefined
+                nameError ? `connection-name-error--${id}` : undefined
               "
               @input="nameError = false"
             />
-            <p v-if="nameError" id="connection-name-error" role="alert">
+            <p
+              v-if="nameError"
+              :id="`connection-name-error--${id}`"
+              role="alert"
+            >
               {{ t("ai.connections.uniqueName") }}
             </p>
           </template>

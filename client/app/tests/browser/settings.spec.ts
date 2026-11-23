@@ -24,42 +24,46 @@ test("language and each format save independently while the chat draft remains i
     "de",
   );
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
-  await expect(page.locator("#settings-time")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-time-]")).toHaveAttribute(
     "data-value",
     "12",
   );
-  await expect(page.locator("#settings-date")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-date-]")).toHaveAttribute(
     "data-value",
     "mdy",
   );
-  await expect(page.locator("#settings-number")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-number-]")).toHaveAttribute(
     "data-value",
     "dot-comma",
   );
-  await chooseSelect(page.locator("#settings-time"), "24");
-  await chooseSelect(page.locator("#settings-date"), "ymd");
-  await chooseSelect(page.locator("#settings-number"), "dot-apostrophe");
-  await expect(page.locator("#settings-date")).toHaveAttribute(
+  await chooseSelect(page.locator("[id^=settings-time-]"), "24");
+  await chooseSelect(page.locator("[id^=settings-date-]"), "ymd");
+  await chooseSelect(page.locator("[id^=settings-number-]"), "dot-apostrophe");
+  await expect(page.locator("[id^=settings-date-]")).toHaveAttribute(
     "data-value",
     "ymd",
   );
-  await expect(page.locator("#settings-time")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-time-]")).toHaveAttribute(
     "data-value",
     "24",
   );
-  await expect(page.locator("#settings-number")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-number-]")).toHaveAttribute(
     "data-value",
     "dot-apostrophe",
   );
   await expect(
-    page.locator('[aria-labelledby="formats-heading"] p, .format-preview'),
+    page.locator('[aria-labelledby^="formats-heading-"] p, .format-preview'),
   ).toHaveCount(0);
   await page
     .getByRole("button", { name: keyLabel("navigation.files"), exact: true })
     .click();
-  await page
-    .getByRole("button", { name: keyLabel("layoutUi.back"), exact: true })
-    .click();
+  const back = page.getByRole("button", {
+    name: keyLabel("layoutUi.back"),
+    exact: true,
+  });
+  await back.click();
+  await expect(page.locator(".settings-view")).toBeVisible();
+  await back.click();
   await expect(
     page.getByRole("textbox", {
       name: keyLabel("navigation.message"),
@@ -69,19 +73,19 @@ test("language and each format save independently while the chat draft remains i
   await page
     .getByRole("button", { name: keyLabel("navigation.settings"), exact: true })
     .click();
-  await expect(page.locator("#settings-language")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-language-]")).toHaveAttribute(
     "data-value",
     "de",
   );
-  await expect(page.locator("#settings-time")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-time-]")).toHaveAttribute(
     "data-value",
     "24",
   );
-  await expect(page.locator("#settings-date")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-date-]")).toHaveAttribute(
     "data-value",
     "ymd",
   );
-  await expect(page.locator("#settings-number")).toHaveAttribute(
+  await expect(page.locator("[id^=settings-number-]")).toHaveAttribute(
     "data-value",
     "dot-apostrophe",
   );
@@ -106,7 +110,7 @@ test("read-only settings stay visible without issuing writes", async ({
     page.getByText(keyLabel("localization.readOnly"), { exact: true }),
   ).toBeVisible();
   for (const field of ["language", "time", "date", "number"])
-    await expect(page.locator(`#settings-${field}`)).toBeDisabled();
+    await expect(page.locator(`[id^=settings-${field}-]`)).toBeDisabled();
   expect(
     await page.evaluate(() =>
       (Reflect.get(window, "__ipcCalls") as { command: string }[]).filter(
@@ -214,7 +218,7 @@ test.describe("German settings layout", () => {
           "dot-apostrophe",
         );
         await expect(
-          page.locator("#settings-number + select option:checked"),
+          page.locator("[id^=settings-number-] + select option:checked"),
         ).toHaveText("1’234.56");
         expect(
           await page

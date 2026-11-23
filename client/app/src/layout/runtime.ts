@@ -9,6 +9,12 @@ const FileEditor = defineAsyncComponent(
 const ChatPane = defineAsyncComponent(
   () => import("../components/ChatPane.vue"),
 );
+const SettingsView = defineAsyncComponent(
+  () => import("../settings/SettingsView.vue"),
+);
+const PluginManagement = defineAsyncComponent(
+  () => import("../plugins/PluginManagement.vue"),
+);
 import {
   discardUnsentChat,
   workspaceChat,
@@ -21,7 +27,7 @@ import {
   resolveViewTarget,
 } from "./registry";
 import { retainLayouts, workspaceLayout } from "./session";
-import { currentEntry, type ViewTarget } from "./navigation";
+import type { ViewTarget } from "./navigation";
 
 function createWorkspaceUi(workspaceId: string) {
   const session = workspaceLayout(workspaceId);
@@ -31,6 +37,18 @@ function createWorkspaceUi(workspaceId: string) {
     title: () => t("navigation.files"),
     icon: "folder",
     component: FileEditor,
+  });
+  registry.register({
+    id: "settings",
+    title: () => t("navigation.settings"),
+    icon: "settings",
+    component: SettingsView,
+  });
+  registry.register({
+    id: "plugins",
+    title: () => t("navigation.plugins"),
+    icon: "plugins",
+    component: PluginManagement,
   });
   registry.register({
     id: "conversation",
@@ -69,10 +87,17 @@ function createWorkspaceUi(workspaceId: string) {
     const currentIds = new Set(
       layout?.tabs.flatMap((tab) =>
         tab.panes.flatMap((pane) => {
-          const target = currentEntry(pane.navigation).target;
-          return target.kind === "new-conversation"
-            ? [target.conversationId]
-            : [];
+          const { entries, cursor } = pane.navigation;
+          return entries.flatMap(({ target }, index) => {
+            if (target.kind !== "new-conversation") return [];
+            const next = entries[index + 1]?.target;
+            // An unpublished draft remains reachable after a detour into management.
+            return index === cursor ||
+              (next?.kind === "view" &&
+                ["settings", "plugins"].includes(next.viewId))
+              ? [target.conversationId]
+              : [];
+          });
         }),
       ),
     );
