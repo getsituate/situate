@@ -131,10 +131,15 @@ export function validateToolDescriptors(
 function component(value: unknown): value is Component {
   return object(value) || typeof value === "function";
 }
+function hasPluginUi(value: PluginUiContributions): boolean {
+  return !!(value.views?.length || Object.keys(value.components ?? {}).length);
+}
+
 export function validateUiContributions(
   value: unknown,
   pluginId: string,
   requireViewIcons = false,
+  providerOnly = false,
 ): PluginUiContributions {
   if (!object(value)) invalid();
   if (
@@ -177,7 +182,7 @@ export function validateUiContributions(
       throw new Error("plugins.viewIconRequired");
     return { ...view, icon: validIcon ? icon : "plugins" } as ViewDefinition;
   }
-  return {
+  const contributions = {
     ...(value.components === undefined
       ? {}
       : {
@@ -191,4 +196,7 @@ export function validateUiContributions(
       ? {}
       : { dispose: value.dispose as () => void | Promise<void> }),
   };
+  if (providerOnly && hasPluginUi(contributions))
+    throw new Error("plugins.providerContributions");
+  return contributions;
 }

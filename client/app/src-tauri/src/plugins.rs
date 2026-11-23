@@ -235,7 +235,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let code = root.path().join(".situate/plugins/sample/code");
         std::fs::create_dir_all(&code).unwrap();
-        let manifest = json!({"schemaVersion":2,"id":"sample","name":"Sample","description":"A sample plugin","skills":[],"serviceEntry":"entry.js"});
+        let manifest = json!({"schemaVersion":3,"id":"sample","name":"Sample","description":"A sample plugin","skills":[],"serviceEntry":"entry.js"});
         let source = "throw new Error('must not execute');";
         std::fs::write(code.join("plugin.json"), manifest.to_string()).unwrap();
         std::fs::write(code.join("entry.js"), source).unwrap();

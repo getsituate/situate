@@ -8,7 +8,7 @@ const source = (
   modules: Record<string, string> = {},
 ): PluginSource => ({
   manifest: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: "sample",
     name: "Sample",
     description: "Synthetic plugin",

@@ -36,11 +36,11 @@ for (let index = 0; index < ids.length; index++) {
     pluginId,
     "plugin.json",
     JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: pluginId,
       name: pluginId,
       description: "Synthetic read-only document source qualification",
-      kind: "connection",
+      kind: "tool",
       serviceEntry: "service.js",
       platforms: ["macos"],
       exports: exportNames[index],

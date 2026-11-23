@@ -484,6 +484,13 @@ impl Workspace {
                 self.revoke(&generation);
                 return Err(INVALID.into());
             }
+            if let Err(error) =
+                validate_provider_tools(&generation.source["manifest"], &definitions)
+            {
+                generation.fail_initialization(&json!(error))?;
+                self.revoke(&generation);
+                return Ok(());
+            }
             let declared = generation.source["manifest"]["exports"]
                 .as_array()
                 .cloned()
@@ -707,6 +714,7 @@ fn worker_error(value: &Value) -> String {
             | "plugins.checkTypeError"
             | "plugins.checkReferenceError"
             | "plugins.invalidContributions"
+            | "plugins.providerContributions"
             | "plugins.viewIconRequired"
             | "plugins.moduleImportInvalid"
             | "plugins.moduleImportUnsupported"
@@ -964,6 +972,18 @@ fn effectful(request: &Value) -> bool {
         )
     )
 }
+fn validate_provider_tools(
+    manifest: &Value,
+    definitions: &Definitions,
+) -> Result<(), &'static str> {
+    if matches!(manifest["kind"].as_str(), Some("connection" | "source"))
+        && !definitions.tools.is_empty()
+    {
+        return Err("plugins.providerContributions");
+    }
+    Ok(())
+}
+
 fn validate_definitions(definitions: &Definitions) -> Result<(), String> {
     let mut names = HashSet::new();
     if definitions.tools.len() > 128 || definitions.exports.len() > 128 {

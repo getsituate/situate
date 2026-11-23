@@ -14,7 +14,10 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { verifyReleaseInputs } from "./release-inputs.mjs";
+import {
+  verifyMigrationMinimumProgress,
+  verifyReleaseInputs,
+} from "./release-inputs.mjs";
 import { ordinaryEnvironment } from "./pipeline-environment.mjs";
 import {
   verifyQualificationReceipt,
@@ -1041,9 +1044,18 @@ export async function readCompletedReleaseBaseline(
       completed[index - 1].identity.sourceRevision,
       completed[index].identity.sourceRevision,
     );
+  let migrationMinimumVersions = {};
+  for (const release of completed)
+    migrationMinimumVersions = verifyMigrationMinimumProgress(
+      migrationMinimumVersions,
+      JSON.parse(release.files["release-inputs.json"]),
+    );
   const last = completed.at(-1);
   return last
     ? {
+        ...(Object.keys(migrationMinimumVersions).length
+          ? { migrationMinimumVersions }
+          : {}),
         identity: last.identity,
         evidence: last.evidence,
         catalogBytes: last.files["situate-release-history.json"],

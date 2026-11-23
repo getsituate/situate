@@ -141,7 +141,7 @@ export function fixtureTurn(body, kind = "main", pluginEffectsUrl) {
         {
           path: path + "plugin.json",
           text: JSON.stringify({
-            schemaVersion: 2,
+            schemaVersion: 3,
             id,
             name: "Final artifact plugin",
             description: "Synthetic retained capability.",

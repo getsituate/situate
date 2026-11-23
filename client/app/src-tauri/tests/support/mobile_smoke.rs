@@ -293,7 +293,7 @@ fn verify_migration(root: &std::path::Path, storage: &Storage) -> Result<(), Str
         .join(".situate/native-conversation-compatibility.json")
         .exists()
         || regular(&root.join(".situate/opaque-state.json"), 4096)? != RELEASE_OPAQUE
-        || marker(&root.join(".situate/migrations.json"))?["lastAppliedMigration"] != 2
+        || marker(&root.join(".situate/migrations.json"))?["lastAppliedMigration"] != 3
         || marker(&root.join(".situate/migrations.json"))?["minimumAppVersion"] != "0.1.6"
         || !context.entries.iter().any(|entry| {
             entry.kind == "legacy"
@@ -346,7 +346,7 @@ pub(crate) async fn mobile_smoke_prepare(
                 use situate_core::plugins::{publication, runtime, sources};
                 let _access = crate::files::CoordinatedAccess::begin(&app, location)?;
                 sources::create(&root, PLUGIN)?;
-                for (path, text) in [("plugin.json", json!({"schemaVersion":2,"id":PLUGIN,"name":"Native iOS Worker","description":"Synthetic native invocation fixture.","serviceEntry":"service.js","exports":["readEffect","hang","hangClose"]}).to_string()), ("service.js", SERVICE.to_string())] {
+                for (path, text) in [("plugin.json", json!({"schemaVersion":3,"id":PLUGIN,"name":"Native iOS Worker","description":"Synthetic native invocation fixture.","serviceEntry":"service.js","exports":["readEffect","hang","hangClose"]}).to_string()), ("service.js", SERVICE.to_string())] {
                     match sources::write(&root, PLUGIN, path, &text, None)? {
                         situate_core::content::SaveOutcome::Saved { .. } => {},
                         _ => return Err("Native iOS fixture source was not saved".into()),

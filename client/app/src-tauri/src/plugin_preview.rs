@@ -263,7 +263,7 @@ fn reply_result(
 ) -> Result<Result<Value, String>, String> {
     if let Some(error) = error {
         return Ok(Err(match error.as_str() {
-            "plugins.viewIconRequired" => error,
+            "plugins.viewIconRequired" | "plugins.providerContributions" => error,
             _ => UNAVAILABLE.into(),
         }));
     }

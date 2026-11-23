@@ -678,7 +678,7 @@ fn install(root: &std::path::Path, id: &str, dependencies: &[&str]) {
         id,
         "plugin.json",
         &json!({
-            "schemaVersion":2,"id":id,"name":id,"description":"Synthetic",
+            "schemaVersion":3,"id":id,"name":id,"description":"Synthetic",
             "serviceEntry":"entry.js", "dependencies":dependencies
         })
         .to_string(),

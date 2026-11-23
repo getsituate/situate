@@ -62,6 +62,7 @@
   "chat.developmentHandoffFailed": "The development chat was prepared but could not be started. Open it to continue.",
   "chat.developmentUnavailable": "The plugin draft could not be loaded.",
   "plugins.invalidContributions": "The plugin does not provide valid tools or views.",
+  "plugins.providerContributions": "Move chat tools, workspace views and reusable components to a separate plugin. A connection or source can provide access settings and service functions.",
   "plugins.viewIconRequired": "Set the icon field of every plugin view, including the settings view, to a supported icon name such as ‘folder’.",
   "plugins.moduleImportInvalid": "Import JavaScript files using explicit relative .js paths within the same plugin. Package imports, URLs and paths outside the plugin are not supported.",
   "plugins.moduleImportUnsupported": "Use static JavaScript imports and re-exports. Dynamic imports, import.meta and import attributes are not supported.",

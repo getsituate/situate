@@ -23,7 +23,7 @@ for (const [index, id] of ids.entries()) {
     id,
     "plugin.json",
     JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       id,
       name: id,
       description: "Offline process data",

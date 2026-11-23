@@ -65,7 +65,7 @@ fn bootstrap_and_conversion_preserve_opaque_managed_bytes_and_user_files() {
         serde_json::from_slice(&fs::read(managed.join("migrations.json")).unwrap()).unwrap();
     assert_eq!(
         metadata,
-        serde_json::json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":2})
+        serde_json::json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":3})
     );
     let conversation: serde_json::Value = serde_json::from_slice(
         &fs::read(managed.join("conversations/fixture/metadata.json")).unwrap(),

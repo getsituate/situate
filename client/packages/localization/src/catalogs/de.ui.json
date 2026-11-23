@@ -62,6 +62,7 @@
   "chat.developmentHandoffFailed": "Der Entwicklungs-Chat wurde vorbereitet, konnte aber nicht gestartet werden. Öffne ihn, um fortzufahren.",
   "chat.developmentUnavailable": "Der Plugin-Entwurf konnte nicht geladen werden.",
   "plugins.invalidContributions": "Das Plugin stellt keine gültigen Werkzeuge oder Ansichten bereit.",
+  "plugins.providerContributions": "Verschiebe Chat-Werkzeuge, Arbeitsbereichsansichten und wiederverwendbare Komponenten in ein separates Plugin. Eine Verbindung oder Quelle kann Zugangseinstellungen und Dienstfunktionen bereitstellen.",
   "plugins.viewIconRequired": "Gib im Feld icon jeder Plugin-Ansicht, auch der Einstellungsansicht, einen unterstützten Symbolnamen wie ‚folder‘ an.",
   "plugins.moduleImportInvalid": "Importiere JavaScript-Dateien über explizite relative .js-Pfade innerhalb desselben Plugins. Paketimporte, URLs und Pfade außerhalb des Plugins werden nicht unterstützt.",
   "plugins.moduleImportUnsupported": "Verwende statische JavaScript-Imports und Re-Exports. Dynamische Imports, import.meta und Importattribute werden nicht unterstützt.",

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { canonical, catalogDigest, digest } from "./release-catalog.mjs";
 import { createUpdaterSignerFixture } from "../client/scripts/updater-signing-fixture.mjs";
 
-export function qualificationFixture(t) {
+export function qualificationFixture(t, { migrationMinimumVersions } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "situate-final-package-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const version = "2026.11.1";
@@ -33,6 +33,7 @@ export function qualificationFixture(t) {
     tag: `v${version}`,
     fragments: [],
     fragmentDigest: digest(canonical([])),
+    ...(migrationMinimumVersions ? { migrationMinimumVersions } : {}),
     history: {
       file: "situate-release-history.json",
       sha256: digest(catalogBytes),

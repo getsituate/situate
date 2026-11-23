@@ -20,7 +20,7 @@ function supervisor() {
     pluginId: "sample",
     source: {
       manifest: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         id: "sample",
         name: "Sample",
         description: "Fixture",

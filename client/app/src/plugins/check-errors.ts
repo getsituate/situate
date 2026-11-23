@@ -9,6 +9,7 @@ const codes = [
   "plugins.checkTypeError",
   "plugins.checkSyntaxError",
   "plugins.invalidContributions",
+  "plugins.providerContributions",
   "plugins.viewIconRequired",
   "plugins.moduleImportInvalid",
   "plugins.moduleImportUnsupported",

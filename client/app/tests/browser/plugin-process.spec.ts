@@ -4,7 +4,7 @@ import { shellState, workspaceFixture } from "./workspace-fixture";
 import { emptyLayout, reduceLayout } from "../../src/layout/model";
 
 const manifest = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   id: "reading-list",
   name: "Reading list",
   description: "Read the list from a local program.",

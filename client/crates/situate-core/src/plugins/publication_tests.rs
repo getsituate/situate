@@ -23,7 +23,7 @@ fn root() -> tempfile::TempDir {
 }
 fn package(root: &Path, id: &str, dependencies: &[&str]) -> PackageRevision {
     sources::create(root, id).unwrap();
-    sources::write(root, id, "plugin.json", &json!({"schemaVersion":2,"id":id,"name":id,"description":"Synthetic package","serviceEntry":"entry.js","dependencies":dependencies}).to_string(), None).unwrap();
+    sources::write(root, id, "plugin.json", &json!({"schemaVersion":3,"id":id,"name":id,"description":"Synthetic package","serviceEntry":"entry.js","dependencies":dependencies}).to_string(), None).unwrap();
     sources::write(root, id, "entry.js", "export const value = 1;", None).unwrap();
     sources::snapshot(root, id).unwrap()
 }
@@ -335,7 +335,7 @@ fn unavailable_unpinned_legacy_does_not_block_independent_publication_or_become_
         let root = root();
         let code = root.path().join(".situate/plugins/invalidlegacy/code");
         fs::create_dir_all(&code).unwrap();
-        fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":"invalidlegacy","name":"Legacy","description":"Synthetic legacy","serviceEntry":"entry.js"}).to_string()).unwrap();
+        fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":"invalidlegacy","name":"Legacy","description":"Synthetic legacy","serviceEntry":"entry.js"}).to_string()).unwrap();
         fs::write(code.join("entry.js"), "legacy source").unwrap();
         runtime::set_enabled(
             root.path(),

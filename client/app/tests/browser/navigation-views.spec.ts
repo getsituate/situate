@@ -11,7 +11,7 @@ const views = [
   { id: "garden-tools:review", title: "Weekly review", icon: "tasks" },
 ];
 const manifest = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   id: "garden-tools",
   name: "Garden tools",
   description: "Views for a personal garden project.",

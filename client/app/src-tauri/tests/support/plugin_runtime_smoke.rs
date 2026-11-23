@@ -75,7 +75,7 @@ fn prepare_unavailable_service(root: &std::path::Path, hung: bool) -> Result<(),
         id,
         "plugin.json",
         &serde_json::json!({
-            "schemaVersion":2, "id":id, "name":name,
+            "schemaVersion":3, "id":id, "name":name,
             "description":"Synthetic service initialization failure.",
             "serviceEntry":"service.js", "exports":[]
         })
@@ -174,7 +174,7 @@ pub fn smoke_plugin_runtime_source(
             }
             if !root.join(".situate/plugins/native-review").exists() {
                 sources::create(&root, "native-review")?;
-                write_source(&root,"native-review","plugin.json",&serde_json::json!({"schemaVersion":2,"id":"native-review","name":"Native review","description":"Disabled source inspection fixture.","serviceEntry":"service.js","skills":["SKILL.md"]}).to_string())?;
+                write_source(&root,"native-review","plugin.json",&serde_json::json!({"schemaVersion":3,"id":"native-review","name":"Native review","description":"Disabled source inspection fixture.","serviceEntry":"service.js","skills":["SKILL.md"]}).to_string())?;
                 write_source(
                     &root,
                     "native-review",
@@ -192,7 +192,7 @@ pub fn smoke_plugin_runtime_source(
                 sources::create(&root, "native-counter")?;
             }
             write_source(&root,"native-counter","plugin.json",&serde_json::json!({
-            "schemaVersion":2,"id":"native-counter","name":"Native counter","description":"Count synthetic interactions.","serviceEntry":"service.js","uiEntry":"ui.js","skills":["SKILL.md"],"exports":["count","readCount","increment","hold","release","hang"]
+            "schemaVersion":3,"id":"native-counter","name":"Native counter","description":"Count synthetic interactions.","serviceEntry":"service.js","uiEntry":"ui.js","skills":["SKILL.md"],"exports":["count","readCount","increment","hold","release","hang"]
         }).to_string())?;
             write_source(&root, "native-counter", "service.js", service_source())?;
             write_source(

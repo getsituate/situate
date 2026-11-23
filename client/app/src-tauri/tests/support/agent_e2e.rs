@@ -643,7 +643,7 @@ fn seed_plugin_capabilities(root: &Path, scope: &str) -> Result<(), String> {
         r#"export default () => ({tools:[{name:"TOOL",description:"Read the synthetic capability version.",parameters:{type:"object",properties:{},additionalProperties:false},execute:async()=>({content:[{type:"text",text:JSON.stringify({version:"VERSION"})}],details:{version:"VERSION"}})}]});"#.replace("TOOL", name).replace("VERSION", version)
     }
     sources::create(root, ID)?;
-    let mut manifest = json!({"schemaVersion":2,"id":ID,"name":"Capability graph","description":"Synthetic request-local capabilities.","serviceEntry":"service.js","exports":[],"skills":[]});
+    let mut manifest = json!({"schemaVersion":3,"id":ID,"name":"Capability graph","description":"Synthetic request-local capabilities.","serviceEntry":"service.js","exports":[],"skills":[]});
     write(root, "plugin.json", &manifest.to_string())?;
     write(root, "service.js", &service("first", "v1"))?;
     let selected = vec![sources::snapshot(root, ID)?];

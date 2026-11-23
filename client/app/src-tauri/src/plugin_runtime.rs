@@ -447,7 +447,7 @@ mod tests {
         let root = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
         let code = root.path().join(".situate/plugins/sample/code");
         std::fs::create_dir_all(&code).unwrap();
-        std::fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":"sample","name":"Sample","description":"Synthetic plugin","serviceEntry":"entry.js"}).to_string()).unwrap();
+        std::fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":"sample","name":"Sample","description":"Synthetic plugin","serviceEntry":"entry.js"}).to_string()).unwrap();
         std::fs::write(code.join("entry.js"), "export default {};").unwrap();
         let revision = situate_core::plugins::runtime::set_enabled(
             root.path(),

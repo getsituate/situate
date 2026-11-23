@@ -63,6 +63,20 @@ describe("plugin contribution boundaries", () => {
     expect(availability).not.toHaveBeenCalled();
   });
 
+  it("allows access settings but not workspace views or components on strict providers", () => {
+    expect(
+      validateUiContributions({ settings: view }, "demo", true, true).settings,
+    ).toEqual(view);
+    for (const contributions of [
+      { views: [view] },
+      { components: { Card: view.component } },
+    ]) {
+      expect(() =>
+        validateUiContributions(contributions, "demo", true, true),
+      ).toThrow("plugins.providerContributions");
+    }
+  });
+
   it("preserves ordinary views, settings and explicit component exports", () => {
     const component = { render: () => null };
     const dispose = vi.fn();

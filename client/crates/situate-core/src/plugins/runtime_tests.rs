@@ -10,10 +10,136 @@ fn fixture() -> tempfile::TempDir {
     let root = temporary();
     let code = root.path().join(".situate/plugins/sample/code");
     fs::create_dir_all(&code).unwrap();
-    fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":"sample","name":"Sample","description":"Synthetic plugin","serviceEntry":"entry.js","skills":["skill.md"]}).to_string()).unwrap();
+    fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":"sample","name":"Sample","description":"Synthetic plugin","serviceEntry":"entry.js","skills":["skill.md"]}).to_string()).unwrap();
     fs::write(code.join("entry.js"), "throw new Error('never execute');").unwrap();
     fs::write(code.join("skill.md"), "# Sample skill").unwrap();
     root
+}
+
+#[test]
+fn migration_rewrites_the_active_revision_without_activating_editable_code() {
+    use crate::plugins::{
+        sources,
+        storage::{self, Area},
+    };
+
+    let fixture = fixture();
+    let root = fixture.path();
+    let managed = root.join(".situate");
+    let package = managed.join("plugins/sample");
+    let code = package.join("code");
+    let manifest = r#"{"schemaVersion":2,"id":"sample","name":"Sample","description":"Synthetic document source","kind":"connection","serviceEntry":"entry.js","exports":["documentSourceDescribe"]}"#;
+    let service = "export default () => ({exports:{documentSourceDescribe:async()=>({})},tools:[{name:'find',description:'Find a document',parameters:{type:'object'},execute:async()=>({content:[]})}]});";
+    fs::write(code.join("plugin.json"), manifest).unwrap();
+    fs::write(code.join("entry.js"), service).unwrap();
+    let active = sources::snapshot(root, "sample").unwrap();
+    let incarnation = active.incarnation.as_ref().unwrap();
+    let marker = package.join(".runtime/runtime-state.json");
+    fs::write(&marker, json!({
+        "version":1,"generation":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "plugins":[{"id":"sample","enabled":true,"incarnation":incarnation,"revision":active.revision}],
+    }).to_string()).unwrap();
+    fs::write(
+        managed.join("migrations.json"),
+        br#"{"minimumAppVersion":"0.1.6","lastAppliedMigration":2}"#,
+    )
+    .unwrap();
+    storage::write(
+        root,
+        "sample",
+        Area::Config,
+        "account.txt",
+        "fixture-account",
+        None,
+    )
+    .unwrap();
+    fs::write(code.join("entry.js"), "// Edited but not active").unwrap();
+    let draft_head = sources::snapshot(root, "sample").unwrap();
+    fs::write(
+        code.join("plugin.json"),
+        manifest.replace("Sample", "Edited"),
+    )
+    .unwrap();
+
+    let prepare = || {
+        situate_migrations::prepare_with_plugin_history(
+            root,
+            crate::application_version(),
+            sources::migrate_manifest_revision,
+        )
+    };
+    let original_state = fs::read(&marker).unwrap();
+    let error = situate_migrations::prepare_with_plugin_history(
+        root,
+        crate::application_version(),
+        |root, id, revision, convert| {
+            let result = sources::migrate_manifest_revision(root, id, revision, convert)?;
+            if result == revision {
+                return Err(std::io::Error::other("Synthetic validation failure").into());
+            }
+            Ok(result)
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        situate_migrations::MigrationErrorKind::MigrationFailed
+    );
+    assert_eq!(fs::read(&marker).unwrap(), original_state);
+    assert_eq!(
+        fs::read_to_string(code.join("plugin.json")).unwrap(),
+        manifest.replace("Sample", "Edited")
+    );
+    assert!(
+        !package
+            .join(format!(
+                ".situate/history.git/refs/situate/migrations/plugin-manifests/{}",
+                active.revision
+            ))
+            .exists()
+    );
+    assert_eq!(sources::head(root, "sample").unwrap(), draft_head);
+
+    let mut migrated_revision = None;
+    for _ in 0..2 {
+        let _lease = prepare().unwrap();
+        let listing = list(root).unwrap();
+        let row = &listing.plugins[0];
+        assert!(row.enabled);
+        assert_eq!(row.incarnation.as_ref(), Some(incarnation));
+        assert_ne!(row.revision.as_deref(), Some(active.revision.as_str()));
+        if let Some(expected) = migrated_revision {
+            assert_eq!(row.revision.as_ref(), Some(&expected));
+        }
+        migrated_revision = row.revision.clone();
+        let active_source = load(root, "sample").unwrap();
+        assert_eq!(active_source.manifest.name, "Sample");
+        assert_eq!(active_source.manifest.kind, Some(PluginKind::Tool));
+        assert_eq!(active_source.service_entry.as_deref(), Some(service));
+        assert_eq!(
+            active_source.manifest.exports.unwrap(),
+            ["documentSourceDescribe"]
+        );
+        assert_eq!(
+            crate::plugins::validate(root, "sample").unwrap().name,
+            "Edited"
+        );
+        assert_eq!(
+            fs::read_to_string(code.join("entry.js")).unwrap(),
+            "// Edited but not active"
+        );
+        assert_eq!(
+            storage::read(root, "sample", Area::Config, "account.txt")
+                .unwrap()
+                .text,
+            "fixture-account"
+        );
+        assert_eq!(
+            sources::revision(root, "sample", "plugin.json", &active.revision).unwrap(),
+            manifest.as_bytes()
+        );
+    }
+    assert_eq!(sources::head(root, "sample").unwrap(), draft_head);
 }
 
 #[test]
@@ -75,7 +201,7 @@ fn ui_only_and_skills_only_sources_have_no_service_entry() {
     let code = root.path().join(".situate/plugins/sample/code");
     for ui in [true, false] {
         let mut manifest = json!({
-            "schemaVersion": 2, "id": "sample", "name": "Sample",
+            "schemaVersion": 3, "id": "sample", "name": "Sample",
             "description": "Synthetic", "skills": ["skill.md"]
         });
         if ui {
@@ -193,7 +319,7 @@ fn source_observations_do_not_change_retained_state_revision() {
     .unwrap();
     let revision = prepare(root.path()).unwrap().revision;
     let code = root.path().join(".situate/plugins/sample/code");
-    fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":"sample","name":"Sample","description":"Synthetic skill","skills":["skill.md"]}).to_string()).unwrap();
+    fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":"sample","name":"Sample","description":"Synthetic skill","skills":["skill.md"]}).to_string()).unwrap();
     let loaded = load(root.path(), "sample").unwrap();
     assert_eq!(
         loaded.service_entry.as_deref(),
@@ -314,7 +440,7 @@ fn preparation_isolates_failed_legacy_packages_and_leaves_disabled_source_untouc
     for id in ["invalid", "oversized", "disabled"] {
         let code = root.path().join(".situate/plugins").join(id).join("code");
         fs::create_dir_all(&code).unwrap();
-        fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":id,"name":id,"description":"Synthetic package","serviceEntry":"entry.js"}).to_string()).unwrap();
+        fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":id,"name":id,"description":"Synthetic package","serviceEntry":"entry.js"}).to_string()).unwrap();
         fs::write(code.join("entry.js"), "synthetic source").unwrap();
         set_enabled(
             root.path(),
@@ -379,7 +505,7 @@ fn disabling_persists_transitive_consumers_without_reenabling_them_or_observing_
     ] {
         let code = root.path().join(".situate/plugins").join(id).join("code");
         fs::create_dir_all(&code).unwrap();
-        fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":id,"name":id,"description":"Synthetic package","serviceEntry":"entry.js","dependencies":dependencies}).to_string()).unwrap();
+        fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":id,"name":id,"description":"Synthetic package","serviceEntry":"entry.js","dependencies":dependencies}).to_string()).unwrap();
         fs::write(code.join("entry.js"), "synthetic source").unwrap();
     }
     let mut revision = list(root.path()).unwrap().revision;
@@ -400,7 +526,7 @@ fn disabling_persists_transitive_consumers_without_reenabling_them_or_observing_
         "incomplete manifest",
     )
     .unwrap();
-    let edited_manifest = json!({"schemaVersion":2,"id":"consumer","name":"Consumer","description":"Unactivated source","serviceEntry":"entry.js","dependencies":[]}).to_string();
+    let edited_manifest = json!({"schemaVersion":3,"id":"consumer","name":"Consumer","description":"Unactivated source","serviceEntry":"entry.js","dependencies":[]}).to_string();
     fs::write(
         inventory.join("consumer/code/plugin.json"),
         &edited_manifest,

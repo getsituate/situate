@@ -30,7 +30,7 @@ const plugin = (id: string, enabled = true): RuntimePlugin => ({
   status: enabled ? "loaded" : "disabled",
   manifest: {
     id,
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: `Plugin ${id}`,
     description: `Description ${id}`,
     skills: [],

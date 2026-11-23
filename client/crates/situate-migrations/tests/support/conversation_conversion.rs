@@ -258,7 +258,7 @@ fn validation_never_follows_a_valid_id_symlink() {
     std::os::unix::fs::symlink(&target, &link).unwrap();
     let managed = Dir::open_ambient_dir(managed, ambient_authority()).unwrap();
     // Backup rejects links independently; exercise the validator itself here.
-    let error = Migration::validate(&MigrationWorkspace { managed: &managed }).unwrap_err();
+    let error = Migration::validate(&MigrationWorkspace::without_history(&managed)).unwrap_err();
     assert_eq!(error.kind(), MigrationErrorKind::UnsafePath);
     assert_eq!(fs::read_link(link).unwrap(), target);
 }

@@ -17,7 +17,7 @@ vi.mock("./module", () => ({
 vi.mock("@situate/localization", () => ({ t: (key: string) => key }));
 let sequence = 0;
 const source = {
-  manifest: { id: "example", schemaVersion: 2 },
+  manifest: { id: "example", schemaVersion: 3 },
   serviceEntry: "throw 1",
   uiEntry: "ui",
   modules: {},
@@ -144,6 +144,19 @@ it("validates a publication without mounting and permits legacy dependency views
     value: "Go",
   });
   expect(mocks.link).toHaveBeenCalledTimes(2);
+});
+
+it("rejects provider workspace views before publication even without a preview", async () => {
+  const provider = {
+    ...source,
+    manifest: { id: "example", schemaVersion: 3, kind: "connection" },
+  };
+  expect(
+    await send("previewValidate", { source: provider, requireViewIcons: true }),
+  ).toMatchObject({
+    error: "plugins.providerContributions",
+  });
+  expect(mocks.dispose).toHaveBeenCalledOnce();
 });
 
 it("rejects a settings view without an icon before a preview is opened", async () => {

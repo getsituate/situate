@@ -71,7 +71,7 @@ fn duplicate_metadata_fields_are_not_interpreted_as_a_lower_minimum() {
 #[test]
 fn semantic_version_precedence_ignores_build_metadata() {
     let root = workspace(Some(
-        r#"{"minimumAppVersion":"0.1.3+new","lastAppliedMigration":2}"#,
+        r#"{"minimumAppVersion":"0.1.3+new","lastAppliedMigration":3}"#,
     ));
     assert!(prepare(root.path(), "0.1.3+old").is_ok());
     assert_eq!(
@@ -82,7 +82,7 @@ fn semantic_version_precedence_ignores_build_metadata() {
 #[test]
 fn retained_lease_rejects_a_replacement_at_the_original_path() {
     let root = workspace(Some(
-        r#"{"minimumAppVersion":"0.0.0","lastAppliedMigration":2}"#,
+        r#"{"minimumAppVersion":"0.0.0","lastAppliedMigration":3}"#,
     ));
     let lease = prepare(root.path(), "0.1.3").unwrap();
     lease.validate().unwrap();

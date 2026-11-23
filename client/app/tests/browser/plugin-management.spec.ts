@@ -27,7 +27,7 @@ const reading: InstalledPlugin = {
   enabled: false,
   error: null,
   manifest: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: "reading-list",
     name: "Reading list",
     description: "Collect books to read from your notes.",
@@ -41,7 +41,7 @@ const planning: InstalledPlugin = {
   enabled: true,
   error: null,
   manifest: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: "weekly-plan",
     name: "Weekly planning",
     description: "Bring tasks into a plan for the week.",
@@ -401,7 +401,7 @@ test(
           enabled: false,
           error: null,
           manifest: {
-            schemaVersion: 2,
+            schemaVersion: 3,
             id: "calendar",
             name: "Calendar",
             description: "Connect to your calendars.",
@@ -415,12 +415,12 @@ test(
           enabled: false,
           error: null,
           manifest: {
-            schemaVersion: 2,
+            schemaVersion: 3,
             id: "document-archive",
             name: "Document archive",
             description: "Find documents in your archive.",
             skills: [],
-            kind: "connection",
+            kind: "source",
             serviceEntry: "service.js",
             exports: ["documentSourceDescribe", "documentSourceSearch"],
           },

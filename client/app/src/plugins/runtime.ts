@@ -76,6 +76,7 @@ function safeError(error: unknown, fallback: string): string {
     (nativeErrors.has(message) ||
       [
         "plugins.invalidContributions",
+        "plugins.providerContributions",
         "plugins.executionCancelled",
         "plugins.moduleImportInvalid",
         "plugins.moduleImportUnsupported",
@@ -360,6 +361,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
         ...(loaded.has(plugin.id)
           ? { settingsId: previous.get(plugin.id)?.settingsId }
           : {}),
+
         status: loaded.has(plugin.id)
           ? "loaded"
           : plugin.error
@@ -652,7 +654,13 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
             return;
           }
           requireExecutable(plugin.id);
-          const validated = validateUiContributions(contributions, plugin.id);
+          const validated = validateUiContributions(
+            contributions,
+            plugin.id,
+            false,
+            source.manifest.kind === "connection" ||
+              source.manifest.kind === "source",
+          );
           const snapshots = validateToolDescriptors(definition.tools, names);
           const views = [
             ...(validated.views ?? []),

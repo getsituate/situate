@@ -113,6 +113,44 @@ fn open_history(root: &Path, id: &str) -> Result<ContentStore, String> {
 pub fn files(root: &Path, id: &str) -> Result<Vec<PluginFile>, String> {
     drafts::entries(&source_code(root, id)?).map_err(|e| e.to_string())
 }
+pub fn migrate_manifest_revision(
+    root: &Path,
+    id: &str,
+    revision: &str,
+    convert: situate_migrations::ManifestConversion,
+) -> Result<String, situate_migrations::MigrationError> {
+    let invalid = || io::Error::other("Plugin history could not be migrated");
+    if !valid_revision(revision) {
+        return Err(invalid().into());
+    }
+    let store = open_history(root, id).map_err(|_| invalid())?;
+    let bytes = store
+        .read_revision_bounded("plugin.json", revision, MAX_MANIFEST)
+        .map_err(|_| invalid())?;
+    let next = match convert(&bytes)? {
+        Some(bytes) => store
+            .retain_revision_edit(
+                revision,
+                "plugin.json",
+                &bytes,
+                &format!("refs/situate/migrations/plugin-manifests/{revision}"),
+            )
+            .map_err(|_| invalid())?,
+        None => revision.to_owned(),
+    };
+    drop(store);
+    at_revision(
+        root,
+        &PackageRevision {
+            plugin_id: id.into(),
+            revision: next.clone(),
+            incarnation: None,
+        },
+    )
+    .map_err(|_| invalid())?;
+    Ok(next)
+}
+
 pub fn files_at_revision(root: &Path, id: &str, revision: &str) -> Result<Vec<PluginFile>, String> {
     if !valid_revision(revision) {
         return Err(PluginError::InvalidPath.to_string());

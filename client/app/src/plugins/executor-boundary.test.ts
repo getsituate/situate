@@ -133,7 +133,7 @@ function load(serviceEntry: string) {
     pluginId: "synthetic",
     source: {
       manifest: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         id: "synthetic",
         name: "Synthetic",
         description: "Synthetic",
@@ -255,7 +255,7 @@ it("checks immutable captured skill sources without a service entry", async () =
     const command = load("") as unknown as Record<string, unknown>;
     command.source = {
       manifest: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         id: "synthetic",
         name: "Synthetic",
         description: "Synthetic",

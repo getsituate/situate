@@ -175,6 +175,8 @@ export function startCheckRenderer(
                 returned,
                 pluginId,
                 requireViewIcons === true && current === source,
+                current.manifest.kind === "connection" ||
+                  current.manifest.kind === "source",
               );
             }
             loaded.set(pluginId, contributions);
@@ -253,9 +255,11 @@ export function startCheckRenderer(
       try {
         value = await run(request);
       } catch (cause) {
+        const code = checkFailureCode(cause);
         error =
-          checkFailureCode(cause) === "plugins.viewIconRequired"
-            ? "plugins.viewIconRequired"
+          code === "plugins.viewIconRequired" ||
+          code === "plugins.providerContributions"
+            ? code
             : "plugins.previewUnavailable";
       }
       await invoke("plugin_preview_ack", {
