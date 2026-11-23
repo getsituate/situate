@@ -214,6 +214,9 @@ describe("plugin UI runtime", () => {
     expect(runtime.state.plugins[0].status).toBe("loaded");
     expect(registry.definitions.get("demo:main")?.icon).toBe("plugins");
     expect(registry.definitions.get("demo:settings")?.icon).toBe("plugins");
+    expect(registry.browsableViews.map((view) => view.id)).toEqual([
+      "demo:main",
+    ]);
     expect(legacyView).not.toHaveProperty("icon");
   });
 

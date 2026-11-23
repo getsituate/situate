@@ -973,7 +973,7 @@ for (const state of ["paused", "disabled", "missing"] as const) {
   });
 }
 
-test("an enabled settings contribution loads local modules and opens in the workspace rather than behind management", async ({
+test("a settings-only plugin opens from Plugins without offering a workspace view shortcut", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -1013,7 +1013,11 @@ export default ({vue}) => ({
     },
   });
   await page.goto("/");
-  await settings(page);
+  const sidebar = page.getByRole("navigation", {
+    name: "Workspace navigation",
+    exact: true,
+  });
+  await sidebar.getByRole("button", { name: "Plugins", exact: true }).click();
   await page
     .locator(".plugin-card-grid")
     .getByRole("button", { name: "Settings", exact: true })
@@ -1024,4 +1028,32 @@ export default ({vue}) => ({
     page.getByText("Reading list settings", { exact: true }).last(),
   ).toBeVisible();
   await expect(page.getByTestId("open-count")).toHaveText("1");
+
+  await sidebar.getByRole("button", { name: "Plugins", exact: true }).click();
+  await page
+    .locator(".plugin-card-grid")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  await expect(page.locator(".plugin-card-grid")).toHaveCount(0);
+  await expect(page.getByTestId("open-count")).toHaveText("1");
+
+  await expect(
+    sidebar.locator('[data-view-pin="reading-list:settings"]'),
+  ).toHaveCount(0);
+
+  await page
+    .locator(".tab-header")
+    .getByRole("button", { name: "New tab", exact: true })
+    .click();
+  const chooser = page.getByRole("region", {
+    name: "Open a view",
+    exact: true,
+  });
+  await chooser.getByRole("button", { name: "All views", exact: true }).click();
+  await expect(
+    chooser.getByRole("button", { name: "Files", exact: true }),
+  ).toBeVisible();
+  await expect(
+    chooser.getByRole("button", { name: "Reading list settings", exact: true }),
+  ).toHaveCount(0);
 });

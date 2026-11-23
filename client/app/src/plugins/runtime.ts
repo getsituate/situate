@@ -654,21 +654,19 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
           requireExecutable(plugin.id);
           const validated = validateUiContributions(contributions, plugin.id);
           const snapshots = validateToolDescriptors(definition.tools, names);
+          const views = [
+            ...(validated.views ?? []),
+            ...(validated.settings
+              ? [{ ...validated.settings, settingsOnly: true }]
+              : []),
+          ];
           const publish = () => {
-            if (!group && validated.views?.length)
+            if (!group && views.length)
               releases.push(
                 options.registry.registerPlugin({
                   pluginId: plugin.id,
                   enabled: true,
-                  views: validated.views,
-                }),
-              );
-            if (!group && validated.settings)
-              releases.push(
-                options.registry.registerPlugin({
-                  pluginId: plugin.id,
-                  enabled: true,
-                  views: [validated.settings],
+                  views,
                 }),
               );
             registrations.set(plugin.id, releases);
@@ -698,10 +696,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
             groupViews.push({
               pluginId: plugin.id,
               enabled: true,
-              views: [
-                ...(validated.views ?? []),
-                ...(validated.settings ? [validated.settings] : []),
-              ],
+              views,
             });
             publications.push(publish);
           } else publish();

@@ -2,6 +2,9 @@ import type { DeepReadonly } from "vue";
 import type { RuntimePlugin } from "./runtime";
 import type { PluginManifest } from "./types";
 import type { WorkspaceUi } from "../layout/runtime";
+import { guardDictation } from "../dictation/runtime";
+import { selectedTab } from "../layout/model";
+import { currentEntry, sameTarget } from "../layout/navigation";
 
 export function pluginManagementGroup(
   manifest: DeepReadonly<PluginManifest> | null,
@@ -23,6 +26,21 @@ export async function openPluginSettings(
   plugin: DeepReadonly<RuntimePlugin> | undefined,
 ) {
   const viewId = pluginSettingsId(plugin);
-  if (!viewId || !ui.registry.definitions.has(viewId)) return false;
-  return ui.coordinator.open({ kind: "view", viewId });
+  if (!viewId) return false;
+  const definition = ui.registry.definitions.get(viewId);
+  if (!definition) return false;
+  const target = { kind: "view", viewId } as const;
+  const alreadyOpen = () => {
+    const layout = ui.session.state.document?.layout;
+    const tab = layout && selectedTab(layout);
+    const pane = tab?.panes.find((item) => item.id === tab.activePaneId);
+    return !!pane && sameTarget(currentEntry(pane.navigation).target, target);
+  };
+  if (alreadyOpen())
+    return (
+      (await guardDictation(ui.session.workspaceId)) &&
+      ui.registry.definitions.get(viewId) === definition &&
+      alreadyOpen()
+    );
+  return ui.coordinator.open(target);
 }

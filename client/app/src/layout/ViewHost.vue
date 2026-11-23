@@ -90,11 +90,7 @@ async function browseAll(all: boolean) {
     ?.querySelector<HTMLElement>(all ? ".chooser-back" : ".all-views")
     ?.focus({ preventScroll: true });
 }
-const available = computed(() =>
-  [...props.ui.registry.definitions.values()].filter(
-    (view) => !["conversation", "empty"].includes(view.id),
-  ),
-);
+const available = computed(() => props.ui.registry.browsableViews);
 const pins = computed(() => props.ui.session.state.document?.pinnedViews ?? []);
 const choices = computed(() =>
   showAll.value
