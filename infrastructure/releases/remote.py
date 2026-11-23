@@ -84,7 +84,7 @@ def validate_storage(token):
     incoming = ROOT / ('.release-incoming-' + token)
     if entry(incoming) is not None:
         validate_tree(incoming)
-    for name in ['current-release', '.current-release-' + token]:
+    for name in ['current-release', '.current-release-' + token, 'current-windows-release', '.windows-release-activation']:
         pointer = ROOT / name
         metadata = entry(pointer)
         if metadata is not None:

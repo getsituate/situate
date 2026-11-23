@@ -258,6 +258,7 @@ test("publication forwards public verification identity and GitHub reads but no 
     PATH: "/synthetic/bin",
     APPLE_TEAM_ID: "TEAM123456",
     SITUATE_UPDATER_PUBLIC_KEY: "synthetic-public-key",
+    SITUATE_WINDOWS_UPDATER_PUBLIC_KEY: "synthetic-windows-key",
     GH_TOKEN: "synthetic-read-token",
     GH_CONFIG_DIR: "/synthetic/gh",
   };

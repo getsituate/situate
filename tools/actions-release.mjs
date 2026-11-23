@@ -197,7 +197,11 @@ export function stageEnvironment(env, workflow, stage) {
       "WEBSITE_SSH_KNOWN_HOSTS",
     );
   if (workflow === "publish")
-    names.push("SITUATE_UPDATER_PUBLIC_KEY", "APPLE_TEAM_ID");
+    names.push(
+      "SITUATE_UPDATER_PUBLIC_KEY",
+      "SITUATE_WINDOWS_UPDATER_PUBLIC_KEY",
+      "APPLE_TEAM_ID",
+    );
   if (workflow === "create" && stage === "github")
     names.push(
       "SITUATE_WINDOWS_X64",

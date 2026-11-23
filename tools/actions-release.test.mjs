@@ -245,6 +245,7 @@ test("stage credentials exclude signing and GitHub access from private qualifica
     TAURI_SIGNING_PRIVATE_KEY: "synthetic-updater",
     AWS_SECRET_ACCESS_KEY: "synthetic-unrelated",
     SITUATE_RELEASE_CONFIG_JSON: "synthetic-private-config",
+    SITUATE_WINDOWS_UPDATER_PUBLIC_KEY: "synthetic-windows-key",
   };
   assert.deepEqual(stageEnvironment(env, "create", "qualify"), {
     PATH: "/tools",
@@ -265,6 +266,10 @@ test("stage credentials exclude signing and GitHub access from private qualifica
   const publisher = stageEnvironment(env, "publish");
   assert.equal(publisher.GH_TOKEN, "synthetic-gh");
   assert.equal(publisher.APPLE_TEAM_ID, "SYNTHETIC");
+  assert.equal(
+    publisher.SITUATE_WINDOWS_UPDATER_PUBLIC_KEY,
+    "synthetic-windows-key",
+  );
   assert.equal(
     publisher.SITUATE_RELEASE_SSH_KNOWN_HOSTS,
     "synthetic pinned host",

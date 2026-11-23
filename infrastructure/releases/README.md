@@ -88,19 +88,9 @@ Restrict `windows-release` to `main`. It supplies `TAURI_SIGNING_PRIVATE_KEY` an
 
 The release workflow runs the Windows host and core tests on `windows-11-arm`. On the same runner, it installs the exact ARM64 candidate, checks that its workspace chooser opens, exercises NSIS upgrade from a synthetic baseline, and checks uninstall. The runner emits the candidate hash and the results. The publisher requires those results and validates the x64 and ARM64 updater signatures before sealing the shared `vVERSION` GitHub Release. It does not wait for a manual receipt. This does not qualify Windows 10, native x64, or WebView2 bootstrap. The NSIS upgrade test does not exercise update discovery or download.
 
-To reconstruct the Windows candidate for feed activation, download the two Windows build artifacts from that run and attempt, set `SITUATE_UPDATER_PUBLIC_KEY` to the Windows public key, and assemble them:
+The publication job downloads the exact completed GitHub Release, verifies the installer hashes and updater signatures again, and derives the Windows feed from those files. Set `SITUATE_WINDOWS_UPDATER_PUBLIC_KEY` in `macos-publication` to the same Windows public key. If publication needs a new attempt, use **Publish macOS** with the same combined GitHub Release ID. This workflow publishes the signed packages without rebuilding them or using a signing key.
 
-```sh
-node client/scripts/windows-release.mjs CANDIDATE VERSION SOURCE_SHA X64_ARTIFACT ARM64_ARTIFACT
-```
-
-After the release is public, run the feed activator on the distribution host with its exact release ID and a verified copy of the assembled candidate. It compares the GitHub assets with the candidate before atomically replacing `windows-release/update.json`. It refuses older versions and differing bytes under the current version.
-
-```sh
-node infrastructure/releases/windows-feed.mjs CANDIDATE GITHUB_RELEASE_ID DISTRIBUTION_DIRECTORY
-```
-
-The Windows endpoint is `/releases/windows/current/update.json`. It is separate from the macOS update feed and website download metadata. The Windows release does not expose a website download link.
+The publisher stores `metadata/windows-update.json` in the immutable release directory and updates `current-windows-release` under the release lock. The public endpoint `/releases/windows/current/update.json` is checked for the exact version, architecture URLs, signatures and `no-store`. A macOS-only release does not move the Windows pointer. The Windows release does not expose a website download link.
 
 ## Interrupted legacy local publication
 

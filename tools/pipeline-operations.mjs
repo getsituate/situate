@@ -285,6 +285,7 @@ export function publicationEnvironment(environment) {
       "VOLTA_HOME",
       "SSH_AUTH_SOCK",
       "SITUATE_UPDATER_PUBLIC_KEY",
+      "SITUATE_WINDOWS_UPDATER_PUBLIC_KEY",
       "APPLE_TEAM_ID",
       "GH_TOKEN",
       "GITHUB_TOKEN",

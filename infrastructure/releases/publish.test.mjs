@@ -565,7 +565,7 @@ test("SSH has verified host keys, bounded connection attempts and no shell-injec
 
 const remotePath = fileURLToPath(new URL("./remote.py", import.meta.url));
 const promotePath = fileURLToPath(new URL("./promote.py", import.meta.url));
-function remoteHarness(t) {
+function remoteHarness(t, extraFiles = {}) {
   const root = temporary(t);
   const stage = join(root, "stage");
   mkdirSync(stage);
@@ -583,6 +583,7 @@ function remoteHarness(t) {
     "metadata/update.json": "updater",
     "metadata/download.json": "website",
     "metadata/descriptor.json": "descriptor",
+    ...extraFiles,
   }))
     writeFileSync(join(stage, name), value);
   const files = Object.fromEntries(
@@ -592,6 +593,7 @@ function remoteHarness(t) {
       "metadata/update.json",
       "metadata/download.json",
       "metadata/descriptor.json",
+      ...Object.keys(extraFiles),
     ].map((name) => {
       const bytes = readFileSync(join(stage, name));
       return [name, { size: bytes.length, sha256: sha256(bytes) }];
@@ -661,6 +663,69 @@ test("promotion removes interrupted transfer scratch without a recovery journal"
   assert.equal(
     readlinkSync(join(host, "current-release")),
     "releases/1.2.3/metadata",
+  );
+});
+
+test("combined promotion activates an immutable Windows feed and resumes an interrupted pointer switch", (t) => {
+  const feed = JSON.stringify({
+    version: "1.2.3",
+    distribution: "direct",
+    platforms: {},
+  });
+  const { invoke, host, request } = remoteHarness(t, {
+    "metadata/windows-update.json": feed,
+  });
+  const partial = invoke(
+    "promote",
+    request,
+    undefined,
+    "original=module.os.replace\ndef fail(source,target):\n if target.name=='current-windows-release': raise OSError('interrupted Windows activation')\n return original(source,target)\nmodule.os.replace=fail",
+  );
+  assert.notEqual(partial.status, 0);
+  assert.equal(existsSync(join(host, "current-windows-release")), false);
+  assert.equal(
+    readlinkSync(join(host, "current-release")),
+    "releases/1.2.3/metadata",
+  );
+  const result = invoke("promote", request, Buffer.alloc(0));
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    readlinkSync(join(host, "current-windows-release")),
+    "releases/1.2.3/metadata",
+  );
+  assert.equal(
+    readFileSync(
+      join(host, "current-windows-release", "windows-update.json"),
+      "utf8",
+    ),
+    feed,
+  );
+  assert.equal(
+    readFileSync(join(host, "current-release", "download.json"), "utf8"),
+    "website",
+  );
+  assert.equal(
+    readFileSync(join(host, "current-release", "update.json"), "utf8"),
+    "updater",
+  );
+  const invalid = invoke(
+    "promote",
+    {
+      ...request,
+      files: {
+        ...request.files,
+        "metadata/windows-update.json": { size: 8, sha256: "7".repeat(64) },
+      },
+    },
+    Buffer.alloc(0),
+  );
+  assert.notEqual(invalid.status, 0);
+  assert.equal(
+    readFileSync(
+      join(host, "current-windows-release", "windows-update.json"),
+      "utf8",
+    ),
+    feed,
   );
 });
 
