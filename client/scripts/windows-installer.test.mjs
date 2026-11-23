@@ -6,6 +6,7 @@ import { test } from "node:test";
 import {
   installerConfig,
   prepareInstaller,
+  qualificationBaseline,
   runtimeArchives,
 } from "./windows-installer.mjs";
 
@@ -43,6 +44,42 @@ test("the per-user NSIS preview includes only the dictation runtime and its noti
     "dictation/sherpa-onnx-2.0.2/onnxruntime_providers_shared.dll",
     "dictation/sherpa-onnx-2.0.2/sherpa-onnx-c-api.dll",
   ]);
+});
+
+test("the qualification baseline shares the release identity but uses only the isolated feed and public key", () => {
+  const environment = {
+    SITUATE_UPDATER_PUBLIC_KEY: "fixture public key",
+    SITUATE_UPDATER_ENDPOINT:
+      "https://getsituate.com/releases/windows/current/update.json",
+  };
+  assert.deepEqual(qualificationBaseline("2026.11.20", environment), {
+    overlay: {
+      identifier: "com.getsituate.app",
+      productName: "Situate",
+      version: "2026.11.20",
+    },
+    updater: {
+      SITUATE_DISTRIBUTION: "direct",
+      SITUATE_UPDATER_PUBLIC_KEY: "fixture public key",
+      SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
+    },
+  });
+  assert.throws(
+    () => qualificationBaseline("2026.11.20", {}),
+    /public key only/,
+  );
+  assert.throws(
+    () =>
+      qualificationBaseline("2026.11.20", {
+        ...environment,
+        TAURI_SIGNING_PRIVATE_KEY: "synthetic",
+      }),
+    /public key only/,
+  );
+  assert.throws(
+    () => qualificationBaseline("2026.11.20-preview", environment),
+    /stable Windows version/,
+  );
 });
 
 test("a corrupt archive is rejected before staging any resources", (t) => {

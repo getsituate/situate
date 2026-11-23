@@ -165,17 +165,23 @@ async function main(args) {
       target: { type: "string" },
       "update-test": { type: "boolean" },
       "release-version": { type: "string" },
+      "qualification-baseline": { type: "string" },
     },
     allowPositionals: true,
   });
   const target = values.target ?? windowsTarget;
   const version = values["release-version"];
+  const baseline = values["qualification-baseline"];
   if (
     positionals.length !== 3 ||
-    (version !== undefined && values["update-test"])
+    [
+      version !== undefined,
+      baseline !== undefined,
+      values["update-test"],
+    ].filter(Boolean).length > 1
   ) {
     throw new Error(
-      "Usage: node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE [--update-test | --release-version=VERSION] [--target=RUST_TARGET]",
+      "Usage: node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE [--update-test | --release-version=VERSION | --qualification-baseline=VERSION] [--target=RUST_TARGET]",
     );
   }
   if (
@@ -193,6 +199,10 @@ async function main(args) {
     );
   }
   const release = version === undefined ? undefined : releaseInputs(version);
+  const qualification =
+    baseline === undefined
+      ? undefined
+      : qualificationBaseline(baseline, process.env);
   const [output, sherpaArchive, onnxArchive] = positionals;
   const directory = resolve(output);
   const config = prepareInstaller(
@@ -208,7 +218,18 @@ async function main(args) {
   try {
     if (dependencies.failure) throw new Error(dependencies.failure.error);
     if (release) buildRelease(directory, config, target, release);
-    else if (values["update-test"]) buildUpdatePair(directory, config, target);
+    else if (qualification) {
+      const overlay = JSON.parse(readFileSync(config, "utf8"));
+      writeFileSync(
+        config,
+        JSON.stringify({ ...overlay, ...qualification.overlay }),
+      );
+      buildInstaller(directory, config, target, {
+        ...buildEnvironment(),
+        ...qualification.updater,
+      });
+    } else if (values["update-test"])
+      buildUpdatePair(directory, config, target);
     else buildInstaller(directory, config, target, buildEnvironment());
   } finally {
     dependencies.release();
@@ -337,6 +358,32 @@ function buildRelease(directory, config, target, { source, version, updater }) {
     )}\n`,
     { flag: "wx" },
   );
+}
+
+export function qualificationBaseline(version, environment) {
+  const publicKey = environment.SITUATE_UPDATER_PUBLIC_KEY?.trim();
+  if (
+    !publicKey ||
+    Object.keys(environment).some((key) =>
+      /^TAURI_SIGNING_PRIVATE_KEY(?:_PASSWORD)?$/iu.test(key),
+    )
+  ) {
+    throw new Error(
+      "Build the qualification baseline with the updater public key only.",
+    );
+  }
+  return {
+    overlay: {
+      identifier: "com.getsituate.app",
+      productName: "Situate",
+      version: stableWindowsVersion(version),
+    },
+    updater: {
+      SITUATE_DISTRIBUTION: "direct",
+      SITUATE_UPDATER_PUBLIC_KEY: publicKey,
+      SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
+    },
+  };
 }
 
 function buildUpdatePair(directory, config, target) {
