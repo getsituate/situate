@@ -173,33 +173,6 @@ test("Intel macOS compatibility allows 45 minutes per suite in PR and release ve
   }
 });
 
-test("editing the external sign-in page selects Edge on macOS", () => {
-  const edgeLane = (path) =>
-    planPaths([path], { mode: "verify" }).lanes.find(({ suites }) =>
-      suites.includes("client-browser-msedge"),
-    );
-  const lane = edgeLane("client/app/tests/browser/auth-callback.spec.ts");
-  assert.equal(lane?.id, "macos-code");
-  assert.equal(lane.host, "macos");
-  assert.equal(edgeLane("client/app/src/App.vue"), undefined);
-});
-
-test("release-only browser selection still runs both product engines", () => {
-  const paths = ["tools/native-vm.mjs"];
-  const browserJobs = (mode) =>
-    planPaths(paths, { mode }).lanes.filter(({ id }) =>
-      id.startsWith("browser"),
-    );
-  assert.deepEqual(browserJobs("verify"), []);
-  assert.deepEqual(
-    browserJobs("release").map(({ id, suites }) => [id, suites]),
-    [
-      ["browser", ["client-executor-integration", "client-browser-chromium"]],
-      ["browser-webkit", ["client-browser-webkit-smoke"]],
-    ],
-  );
-});
-
 test("Windows checks are selected together for product and Windows CI inputs", () => {
   const lane = (path, mode) =>
     planPaths([path], { mode }).lanes.find(({ id }) => id === "windows-native");
@@ -225,6 +198,33 @@ test("Windows checks are selected together for product and Windows CI inputs", (
   ])
     assert.equal(lane(path, "verify"), undefined, path);
   assert.equal(lane("client/app/src/App.vue", "release"), undefined);
+});
+
+test("editing the external sign-in page selects Edge on macOS", () => {
+  const edgeLane = (path) =>
+    planPaths([path], { mode: "verify" }).lanes.find(({ suites }) =>
+      suites.includes("client-browser-msedge"),
+    );
+  const lane = edgeLane("client/app/tests/browser/auth-callback.spec.ts");
+  assert.equal(lane?.id, "macos-code");
+  assert.equal(lane.host, "macos");
+  assert.equal(edgeLane("client/app/src/App.vue"), undefined);
+});
+
+test("release-only browser selection still runs both product engines", () => {
+  const paths = ["tools/native-vm.mjs"];
+  const browserJobs = (mode) =>
+    planPaths(paths, { mode }).lanes.filter(({ id }) =>
+      id.startsWith("browser"),
+    );
+  assert.deepEqual(browserJobs("verify"), []);
+  assert.deepEqual(
+    browserJobs("release").map(({ id, suites }) => [id, suites]),
+    [
+      ["browser", ["client-executor-integration", "client-browser-chromium"]],
+      ["browser-webkit", ["client-browser-webkit-smoke"]],
+    ],
+  );
 });
 
 test("release source gates are complete, unique and exclude diagnostics and advisory scans", () => {

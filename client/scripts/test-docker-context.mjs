@@ -29,11 +29,6 @@ const included = [
   "client/scripts/ui-boundary.mjs",
   "client/scripts/ui-boundary.d.mts",
   "client/crates/situate-core/src/lib.rs",
-  ...["", "-api", "-macos", "-posix", "-windows"].flatMap((suffix) =>
-    ["Cargo.toml", "src/lib.rs"].map(
-      (file) => `client/crates/situate-host${suffix}/${file}`,
-    ),
-  ),
   "client/packages/ui/src/index.ts",
   "design/brand/tokens.css",
   "client/packages/localization/package.json",

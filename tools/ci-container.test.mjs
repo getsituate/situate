@@ -784,7 +784,9 @@ test("verification delegates selected lanes directly from planning without optio
         "browser",
         "browser-webkit",
         "macos-compatibility",
-        ...(name === "verify" ? ["windows-native"] : []),
+        ...(name === "verify"
+          ? ["windows-native", "windows-arm64-native"]
+          : []),
       ].sort(),
     );
     assert.match(

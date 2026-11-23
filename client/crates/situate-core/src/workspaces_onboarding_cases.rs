@@ -33,7 +33,7 @@ fn publication_includes_initial_progress_without_native_followup() {
         serde_json::from_slice(&fs::read(root.join(".situate/migrations.json")).unwrap()).unwrap();
     assert_eq!(
         compatibility,
-        serde_json::json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":2})
+        serde_json::json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":3})
     );
     #[cfg(unix)]
     assert_eq!(
