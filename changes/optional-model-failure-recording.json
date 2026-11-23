@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "optional-model-failure-recording",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "optional-model-failure-recording",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Optional recording for failed model responses",
+          "paragraphs": [
+            "You can turn on recording in Settings under Model diagnostics. Situate keeps part of the latest failed model response in a separate local file. The file may contain private information and is never sent automatically."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "optional-model-failure-recording",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Optionale Aufzeichnung fehlgeschlagener Modellantworten",
+          "paragraphs": [
+            "Du kannst die Aufzeichnung in den Einstellungen unter Modelldiagnose einschalten. Situate speichert einen Teil der letzten fehlgeschlagenen Modellantwort in einer separaten lokalen Datei. Die Datei kann private Informationen enthalten und wird nie automatisch verschickt."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -200,17 +200,26 @@ async fn execute_admitted(
     )?));
     let callback_assembler = assembler.clone();
     let (partial_send, mut partial_receive) = tokio::sync::watch::channel(None::<Value>);
+    let mut capture = context
+        .app
+        .try_state::<crate::model_failure_capture::ModelFailureCapture>()
+        .and_then(|state| state.start(&context.app));
+    let body_capture = &mut capture;
     let mut transport = Box::pin(send(
         (connection, api, url, body, headers),
         token.clone(),
         move |frame| {
-            if let Frame::Data { bytes } = frame
-                && let Some(partial) = callback_assembler
+            if let Frame::Data { bytes } = frame {
+                if let Some(capture) = body_capture {
+                    capture.push(&bytes);
+                }
+                if let Some(partial) = callback_assembler
                     .lock()
                     .map_err(|_| NETWORK_ERROR)?
                     .push(&bytes)?
-            {
-                partial_send.send_replace(Some(partial));
+                {
+                    partial_send.send_replace(Some(partial));
+                }
             }
             Ok(())
         },
@@ -236,26 +245,41 @@ async fn execute_admitted(
         .map_err(|_| NETWORK_ERROR)?
         .into_inner()
         .map_err(|_| NETWORK_ERROR)?;
-    if let Err(error) = transport_result {
-        if let Some(progress) = progress {
-            let partial = assembler.partial();
-            let _ = progress.send(Progress::PartialMessage(partial)).await;
+    let result = match transport_result {
+        Err(error) => Err(progress_error.unwrap_or(error)),
+        Ok(()) => {
+            context.validate()?;
+            if let Some(error) = progress_error {
+                return Err(error);
+            }
+            assembler.finalize()
         }
-        return Err(progress_error.unwrap_or(error));
-    }
-    context.validate()?;
-    if let Some(error) = progress_error {
-        return Err(error);
-    }
-    let result = assembler.finalize();
-    if result.is_err()
-        && let Some(progress) = progress
-    {
-        let _ = progress
-            .send(Progress::PartialMessage(assembler.partial()))
-            .await;
+    };
+    if let Err(error) = &result {
+        if !token.is_cancelled()
+            && let Some(capture) = capture
+        {
+            capture
+                .failed(context.app.clone(), capture_error(error))
+                .await;
+        }
+        if let Some(progress) = progress {
+            let _ = progress
+                .send(Progress::PartialMessage(assembler.partial()))
+                .await;
+        }
     }
     result
+}
+
+fn capture_error(error: &str) -> &'static str {
+    match error {
+        "native.ai.protocol.providerRejected" => "provider_rejected",
+        "native.ai.protocol.incompleteStream" => "incomplete_stream",
+        "native.ai.protocol.invalidData" => "invalid_response",
+        "native.ai.response.interrupted" => "interrupted",
+        _ => model_error_code(error),
+    }
 }
 
 pub(super) async fn refresh(

@@ -102,7 +102,7 @@ it("opens AI settings from its decorated category and manages connections inline
     "◐",
     "✦",
   ]);
-  expect(symbols).toHaveLength(5);
+  expect(symbols).toHaveLength(6);
   expect(
     wrapper.get(".settings-categories button:last-child").text(),
   ).toContain("About Situate");
@@ -286,6 +286,59 @@ it("offers retry without claiming settings were saved", async () => {
   expect(wrapper.emitted("retry")).toHaveLength(1);
   expect(wrapper.text()).not.toContain("Settings saved.");
   wrapper.unmount();
+});
+
+it("requires confirmation to enable model failure recording but not to disable it", async () => {
+  const wrapper = mount(SettingsView, { props, attachTo: document.body });
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  const dialog = () => wrapper.get("dialog");
+  const click = (label: string) =>
+    dialog()
+      .findAll("button")
+      .find((button) => button.text().trim() === label)!
+      .trigger("click");
+  try {
+    vi.mocked(invoke).mockResolvedValueOnce(false);
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().startsWith("Model diagnostics"))!
+      .trigger("click");
+    await flushPromises();
+    const control = () => wrapper.get<HTMLInputElement>('[role="switch"]');
+    expect(invoke).toHaveBeenLastCalledWith("model_failure_snapshot");
+    expect(control().element.checked).toBe(false);
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("private information");
+
+    await control().setValue(true);
+    expect(control().element.checked).toBe(false);
+    const warning = dialog().get(`#${dialog().attributes("aria-describedby")}`);
+    expect(warning.text()).toContain("separate log file on this device");
+    expect(warning.text()).toContain("private information or secrets");
+    await click("Cancel");
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(invoke).toHaveBeenLastCalledWith("model_failure_snapshot");
+
+    await control().setValue(true);
+    await click("Enable recording");
+    await flushPromises();
+    expect(invoke).toHaveBeenLastCalledWith("model_failure_set", {
+      enabled: true,
+    });
+    expect(control().element.checked).toBe(true);
+
+    await control().setValue(false);
+    await flushPromises();
+    expect(invoke).toHaveBeenLastCalledWith("model_failure_set", {
+      enabled: false,
+    });
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(control().element.checked).toBe(false);
+  } finally {
+    wrapper.unmount();
+  }
 });
 
 it("keeps the analytics choice when saving fails and applies a successful retry", async () => {

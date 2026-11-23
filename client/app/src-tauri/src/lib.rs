@@ -19,6 +19,7 @@ mod files;
 mod layout;
 mod lifecycle;
 mod localization;
+mod model_failure_capture;
 mod onboarding;
 mod openai_oauth;
 mod plugin_actions;
@@ -93,6 +94,8 @@ macro_rules! application_handler {
             crate::diagnostics::diagnostics_register,
             crate::diagnostics::diagnostics_emit,
             crate::diagnostics::diagnostics_release,
+            crate::model_failure_capture::model_failure_snapshot,
+            crate::model_failure_capture::model_failure_set,
             crate::layout::layout_load,
             crate::layout::layout_save,
             crate::lifecycle::lifecycle_status,
@@ -177,6 +180,7 @@ pub fn run() {
         .manage(ai_executor::Executors::default())
         .manage(dictation::Dictation::default())
         .manage(diagnostics::Diagnostics::default())
+        .manage(model_failure_capture::ModelFailureCapture::default())
         .plugin(tauri_plugin_workspace_access::init())
         .plugin(tauri_plugin_provider_platform::init())
         .plugin(tauri_plugin_executor_platform::init())
