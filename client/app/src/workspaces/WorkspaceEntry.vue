@@ -22,6 +22,7 @@ import wordmark from "../../../../design/brand/assets/wordmark.svg";
 import bend from "../../../../design/brand/bend/svg/wave-welcome.svg";
 import WorkspaceCreateForm from "./WorkspaceCreateForm.vue";
 import WorkspaceRow from "./WorkspaceRow.vue";
+import { analyticsPreference } from "../analytics/runtime";
 import {
   displayWorkspaceName,
   type RunAction,
@@ -43,7 +44,12 @@ const props = defineProps<{
   error: unknown;
   inert?: boolean;
 }>();
-const emit = defineEmits<{ back: []; opened: []; accent: [accent: Accent] }>();
+const emit = defineEmits<{
+  back: [];
+  opened: [];
+  accent: [accent: Accent];
+  analytics: [];
+}>();
 const creating = ref(false);
 const welcome = ref(false);
 const motionPaused = ref(false);
@@ -353,6 +359,19 @@ defineExpose({ back });
             :label="t('workspace.applicationActions')"
             @close="closeAppMenu"
           >
+            <SituateButton
+              v-if="analyticsPreference !== null"
+              variant="plain"
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+              @click="
+                closeAppMenu();
+                emit('analytics');
+              "
+            >
+              {{ t("settings.analytics.title") }}
+            </SituateButton>
             <SituateButton
               variant="plain"
               type="button"

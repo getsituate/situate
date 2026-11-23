@@ -1,0 +1,43 @@
+ifndef::architecture-repository-root[]
+:architecture-repository-root: ../../..
+endif::[]
+
+[[product-analytics]]
+=== Product analytics
+
+Situate stores product analytics under pseudonyms to understand how people use the app within and across installations. On configured macOS builds, app analytics is off until the user enables it. The destination is the same PostHog project used by the website, but browser and app identities remain separate unless an attribution mechanism is explicitly adopted.
+
+==== Installation and workspace identities
+
+[cols="1,2,2",options="header"]
+|===
+|Identifier |Lifecycle |What it measures
+
+|Installation ID
+|The app generates a random value and retains it in local application data, outside workspaces and workspace synchronization. It survives restarts and updates while that data is retained. An independent installation gets its own ID.
+|Activity across workspaces in one installation, including how many new workspaces were created there. This does not count distinct people or physical devices.
+
+|Analytics workspace ID
+|The app uses a stable pseudonym for each logical workspace. A complete copy, restore, or synchronization preserves its identity; a newly created independent workspace gets a different one. The native host hashes the random <<glossary-diagnostic-workspace-identifier,Diagnostic Workspace Identifier>> in a separate analytics namespace without sending the diagnostic identifier itself.
+|Use of the same workspace across observed installations. An explicit platform property, when included in the event schema, distinguishes usage by platform.
+|===
+
+App events carry the installation ID. An event carries the workspace ID only when it concerns that workspace and needs workspace-level correlation. Workspace creation is not measured by the daily activity event.
+
+==== Inferring cross-installation use
+
+If two installations report activity for the same workspace, they can be analyzed together as a possible single-user group. That inference fits Situate's link:{architecture-repository-root}/requirements/data/foundations.md#personal-organizational-core[personal organizational core], but the observation only establishes that both installations used the same logical workspace. A workspace shared with another person or passed on as a complete copy can produce the same match. Conversely, two installations used by the same person may never report activity for a common workspace.
+
+Keep installation IDs distinct in PostHog. Treat workspace overlap as evidence for analysis, not as a reason to merge person profiles or to use the result for authentication or access control. Label any person-level estimate as inferred and keep observed installation counts separate. Do not assume that indirect matches establish common ownership: if A and B share one workspace and B and C share another, there is no observed overlap between A and C. Detecting shared workspaces is outside the initial scope.
+
+==== Data boundary and open decisions
+
+Persistent pseudonyms and the activity linked to them are not anonymous. Do not derive analytics IDs from names, email addresses, account IDs, workspace paths, or hardware identifiers. Send only explicitly selected events and properties, without workspace content or local diagnostic records. <<client-diagnostics,Local diagnostics>> remain a separate data flow.
+
+==== Daily activity
+
+The first trusted interaction in a focused app window reserves one `app_daily_active` event per installation and UTC day. This works across midnight without restarting the app; foreground time alone does not count. Events include a UTC timestamp, app version, platform and operating system version. A missing workspace context is represented by a null workspace ID. No local time is transmitted; if a future event needs local-time analysis, it can add an optional `local_hour` (0–23) taken at the time of the interaction.
+
+The native host stores the reservation before attempting delivery. An unsuccessful or interrupted send can undercount activity but does not trigger a resend or block app use. Withdrawal stops further sends and cancels pending requests where possible; it cannot retract data already received by PostHog. The app and website use independent preferences.
+
+External processing remains subject to the link:{architecture-repository-root}/requirements/data/foundations.md#hosting-and-data-processing[hosting and data-processing constraints]. Website-to-app attribution requires a separate design: the current website event records a download click, while the app can observe its first launch, not a completed download or installation.

@@ -92,8 +92,10 @@ Before the first rollout with the receiver, set these GitHub settings:
 | `hosting-production` environment variable | `WEBSITE_CONTENT_PUBLIC_KEY`  | Dedicated Ed25519 public key, without its comment. Enrolled on each replacement; never bake it into the image. |
 | `website-production` environment secret   | `WEBSITE_CONTENT_SSH_KEY`     | Matching private key.                                                                                          |
 | `website-production` environment variable | `WEBSITE_CONTENT_KNOWN_HOSTS` | Independently verified `@cert-authority getsituate.com` entry for the existing host CA.                        |
-| `website-production` environment variable | `WEBSITE_POSTHOG_TOKEN`       | Approved public project token to preserve analytics, or empty to disable it.                                   |
+| Repository variable                       | `SITUATE_POSTHOG_TOKEN`       | Approved public PostHog project token shared by the website and macOS release builds.                          |
 | Repository variable                       | `WEBSITE_DEPLOY_ENABLED`      | Set to `true` after reviewing the first public build and configuring the environment.                          |
+
+Set `SITUATE_POSTHOG_TOKEN` at repository scope to enable analytics in the website and new macOS builds. Leave it unset to disable analytics in both builds.
 
 Restrict `website-production` to `main`. Keep `PR verification` required on
 `main`; no second routine approval is needed for website content. Hosting must

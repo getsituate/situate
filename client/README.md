@@ -501,6 +501,10 @@ Install the **Situate Smoke** bundle/APK, not the regular Situate artifact, and 
 
 For an interactive provider test, finish both ordinary smoke launches first, then create an empty `smoke-use-picker` file in the smoke application's data directory. The next first-phase launch opens the real native folder chooser instead of using application Documents. Select a disposable, writable test folder; the test creates new named children there. It allows five minutes for native selection. Require a passing report before terminating and relaunching to test the persisted grant/bookmark. Remove `smoke-use-picker` to return to application-Documents tests. Cancellation is intentionally a test failure, not evidence of provider access. These tests do not verify every provider, revoked grants, assistive technology, tablet orientation or minimum OS version; exercise those separately.
 
+## App usage analytics
+
+To make Usage analytics available in a macOS build, supply `SITUATE_POSTHOG_TOKEN` in the build environment. Use the public project token for the website's EU PostHog project, not a PostHog personal API key. The GitHub macOS release build reads the shared repository variable `SITUATE_POSTHOG_TOKEN`. Without the token, analytics is unavailable. A configured app still sends nothing until the user enables sharing. Use an isolated test project for live development checks.
+
 ## Local release packages
 
 Local test packages are separate from release creation and are not publishable artifacts. On macOS, run from `client/`:

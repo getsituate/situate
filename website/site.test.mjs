@@ -90,21 +90,21 @@ test("website token configuration reads only private dotenv data with environmen
   const token = "phc_websiteSyntheticProjectToken12345";
   await writeFile(
     join(directory, ".env"),
-    `WEBSITE_POSTHOG_TOKEN="${token}"\nPOSTHOG_CLI_API_KEY=private-api-value\nUNRELATED="$(touch should-not-exist)"\n`,
+    `SITUATE_POSTHOG_TOKEN="${token}"\nPOSTHOG_CLI_API_KEY=private-api-value\nUNRELATED="$(touch should-not-exist)"\n`,
     { mode: 0o600 },
   );
   assert.equal(await websiteAnalyticsToken(options), token);
   assert.equal(
     await websiteAnalyticsToken({
       directory,
-      environment: { WEBSITE_POSTHOG_TOKEN: "" },
+      environment: { SITUATE_POSTHOG_TOKEN: "" },
     }),
     "",
   );
   assert.equal(
     await websiteAnalyticsToken({
       directory,
-      environment: { WEBSITE_POSTHOG_TOKEN: "explicit" },
+      environment: { SITUATE_POSTHOG_TOKEN: "explicit" },
     }),
     "explicit",
   );
@@ -115,7 +115,7 @@ test("website token configuration reads only private dotenv data with environmen
   assert.equal(
     await websiteAnalyticsToken({
       directory,
-      environment: { CI: "true", WEBSITE_POSTHOG_TOKEN: token },
+      environment: { CI: "true", SITUATE_POSTHOG_TOKEN: token },
     }),
     token,
   );
@@ -129,7 +129,7 @@ test("website token configuration reads only private dotenv data with environmen
   await chmod(join(directory, ".env"), 0o600);
   await writeFile(
     join(directory, "private.env"),
-    "WEBSITE_POSTHOG_TOKEN=" + token,
+    "SITUATE_POSTHOG_TOKEN=" + token,
     { mode: 0o600 },
   );
   await rm(join(directory, ".env"));
@@ -405,6 +405,7 @@ test("privacy notice covers production delivery and app processing without a leg
     "app-ai-connections",
     "app-tools-and-remote-content",
     "app-diagnostics",
+    "app-usage-analytics",
     "platform-updates",
     "your-rights",
     "right-to-object",

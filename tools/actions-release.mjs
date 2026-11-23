@@ -210,6 +210,7 @@ export function stageEnvironment(env, workflow, stage) {
       "APPLE_API_PRIVATE_KEY",
       "SITUATE_UPDATER_PUBLIC_KEY",
       "SITUATE_UPDATER_ENDPOINT",
+      "SITUATE_POSTHOG_TOKEN",
       "TAURI_SIGNING_PRIVATE_KEY",
       "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
     );

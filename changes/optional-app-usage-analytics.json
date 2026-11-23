@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "id": "optional-app-usage-analytics",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "optional-app-usage-analytics",
+          "type": "new",
+          "platforms": [
+            "macos"
+          ],
+          "title": "Optional usage analytics",
+          "paragraphs": [
+            "You can choose to share pseudonymous daily activity from Settings. Sharing is off by default and does not include workspace contents."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "optional-app-usage-analytics",
+          "type": "new",
+          "platforms": [
+            "macos"
+          ],
+          "title": "Optionale Nutzungsanalyse",
+          "paragraphs": [
+            "In den Einstellungen kannst du pseudonyme Daten zur täglichen Nutzung teilen. Die Freigabe ist standardmäßig aus und enthält keine Arbeitsbereichsinhalte."
+          ]
+        }
+      ]
+    }
+  }
+}

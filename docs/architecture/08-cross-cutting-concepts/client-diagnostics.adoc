@@ -335,7 +335,7 @@ Continuous delivery would need a separate bounded queue, authorization/participa
 Neither is activated by the mere presence of a replaceable API.
 The current host command is write-only diagnostic data admission; it does not give plugins an installation-wide log-reading or export capability.
 
-Product analytics is not defined by these diagnostic events alone.
+<<product-analytics,Product analytics>> is a separate data flow and must not export local diagnostic records.
 Persistent workspace/device pseudonyms enable cross-launch and cross-device workspace correlation, not person-level association across workspaces. Rotation, overload loss, launch-local plugin aliases and future participation choices still limit completeness and longitudinal analysis.
 A future analytics event contract and lawful data flow require separate decisions; adding a destination cannot retroactively make these records a complete usage dataset.
 

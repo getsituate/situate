@@ -4623,6 +4623,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-workspace-access",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "url",
