@@ -20,8 +20,9 @@ const props = defineProps<{
   scope: string;
   selected: boolean;
   running: boolean;
+  announceArchiveChange?: (scope: string, archived: boolean) => void;
 }>();
-const emit = defineEmits<{ open: []; archiveChanged: [archived: boolean] }>();
+const emit = defineEmits<{ open: [] }>();
 const title = computed(() => props.item.title || t("navigation.newChat"));
 const interruptsWork = computed(
   () => props.running || ownsDictation(props.scope, props.item.id),
@@ -48,6 +49,7 @@ const input = useTemplateRef<InstanceType<typeof SituateInput>>("input");
 async function changeArchive() {
   if (moving.value) return;
   const archived = !props.item.archived;
+  const { scope, announceArchiveChange } = props;
   const button = trigger.value?.element;
   const row = button?.closest(".conversation-row");
   const entry = row?.closest("li");
@@ -59,11 +61,8 @@ async function changeArchive() {
   button?.focus();
   moving.value = true;
   try {
-    await workspaceConversations(props.scope).setArchived(
-      props.item.id,
-      archived,
-    );
-    emit("archiveChanged", archived);
+    await workspaceConversations(scope).setArchived(props.item.id, archived);
+    announceArchiveChange?.(scope, archived);
     await nextTick();
     if (document.activeElement === document.body) {
       const target = neighbor?.querySelector<HTMLElement>(

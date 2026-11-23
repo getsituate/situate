@@ -65,7 +65,8 @@ const activeConversations = computed(() =>
 const archivedConversations = computed(() =>
   (props.conversations ?? []).filter((item) => item.archived),
 );
-function archiveChanged(archived: boolean) {
+function archiveChanged(scope: string, archived: boolean) {
+  if (scope !== props.currentWorkspaceId) return;
   archiveFeedback.value = t(
     archived ? "chat.conversationArchived" : "chat.conversationRestored",
   );
@@ -432,7 +433,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
               :selected="selectedConversation === item.id"
               :running="!!conversationRunning?.(item.id)"
               @open="emit('conversation', item.id)"
-              @archive-changed="archiveChanged"
+              :announce-archive-change="archiveChanged"
             />
           </li>
         </ul>
@@ -460,7 +461,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
                 :selected="selectedConversation === item.id"
                 :running="!!conversationRunning?.(item.id)"
                 @open="emit('conversation', item.id)"
-                @archive-changed="archiveChanged"
+                :announce-archive-change="archiveChanged"
               />
             </li>
           </ul>
