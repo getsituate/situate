@@ -286,6 +286,15 @@
         ]
       },
       {
+        "id": "app-usage-analytics",
+        "headingKey": "privacy.app.analytics.title",
+        "blocks": [
+          { "type": "paragraph", "key": "privacy.app.analytics.collection" },
+          { "type": "paragraph", "key": "privacy.app.analytics.choice" },
+          { "type": "paragraph", "key": "privacy.app.analytics.provider" }
+        ]
+      },
+      {
         "id": "cookies-and-external-content",
         "headingKey": "privacy.browser.title",
         "blocks": [

@@ -149,6 +149,7 @@ export const shellState: Snapshot = {
   error: null,
 };
 interface FixtureOptions {
+  analyticsEnabled?: boolean;
   updates?: Partial<UpdateSnapshot>;
   updateCheckError?: string;
   updateInstallError?: string;
@@ -241,6 +242,7 @@ export async function workspaceFixture(
       };
       Object.defineProperty(window, "isTauri", { value: true });
       const state = structuredClone(initial);
+      let analyticsEnabled = options.analyticsEnabled ?? null;
       const calls: { command: string; args: Record<string, unknown> }[] = [];
       const connections = new Map<string, Config>();
       const records = new Map<string, Map<string, Config>>();
@@ -1418,6 +1420,12 @@ export async function workspaceFixture(
               );
             if (command === "plugin:app|version")
               return updates.installedVersion;
+            if (command === "analytics_preference") return analyticsEnabled;
+            if (command === "analytics_set_preference") {
+              analyticsEnabled = args.enabled === true;
+              return;
+            }
+            if (command === "analytics_daily_activity") return;
             if (command === "updates_snapshot") return structuredClone(updates);
             if (command === "updates_check") {
               if (options.updateCheckError) throw options.updateCheckError;

@@ -241,6 +241,7 @@ test("stage credentials exclude signing and GitHub access from private qualifica
     SITUATE_RELEASE_SSH_PRIVATE_KEY: "synthetic-ssh-key",
     SITUATE_RELEASE_SSH_KNOWN_HOSTS: "synthetic pinned host",
     APPLE_API_PRIVATE_KEY: "synthetic-apple",
+    SITUATE_POSTHOG_TOKEN: "synthetic-public-project-token",
     TAURI_SIGNING_PRIVATE_KEY: "synthetic-updater",
     AWS_SECRET_ACCESS_KEY: "synthetic-unrelated",
     SITUATE_RELEASE_CONFIG_JSON: "synthetic-private-config",
@@ -256,9 +257,11 @@ test("stage credentials exclude signing and GitHub access from private qualifica
   assert.equal(signing.SITUATE_RELEASE_SSH_PRIVATE_KEY, "synthetic-ssh-key");
   assert.equal(signing.APPLE_API_PRIVATE_KEY, "synthetic-apple");
   assert.equal(signing.GH_TOKEN, undefined);
+  assert.equal(signing.SITUATE_POSTHOG_TOKEN, "synthetic-public-project-token");
   const inputs = stageEnvironment(env, "create", "inputs");
   assert.equal(inputs.GH_TOKEN, "synthetic-gh");
   assert.equal(inputs.APPLE_API_PRIVATE_KEY, undefined);
+  assert.equal(inputs.SITUATE_POSTHOG_TOKEN, undefined);
   const publisher = stageEnvironment(env, "publish");
   assert.equal(publisher.GH_TOKEN, "synthetic-gh");
   assert.equal(publisher.APPLE_TEAM_ID, "SYNTHETIC");
@@ -267,6 +270,7 @@ test("stage credentials exclude signing and GitHub access from private qualifica
     "synthetic pinned host",
   );
   assert.equal(publisher.TAURI_SIGNING_PRIVATE_KEY, undefined);
+  assert.equal(publisher.SITUATE_POSTHOG_TOKEN, undefined);
   assert.equal(publisher.AWS_SECRET_ACCESS_KEY, undefined);
 });
 

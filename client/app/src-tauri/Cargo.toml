@@ -26,7 +26,8 @@ cap-primitives = "3"
 cap-fs-ext = "3"
 percent-encoding = "2"
 url = "2"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+time = { version = "0.3", features = ["formatting"] }
 tempfile = "3.23"
 serde = { version = "1", features = ["derive"] }
 tauri-plugin-workspace-access = { path = "../../crates/tauri-plugin-workspace-access" }
@@ -44,7 +45,7 @@ rand = "0.8"
 jsonwebtoken = { version = "=11.1.0", default-features = false, features = ["aws_lc_rs"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSLocale", "NSDateFormatter", "NSNumberFormatter", "NSFormatter"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSString", "NSProcessInfo", "NSLocale", "NSDateFormatter", "NSNumberFormatter", "NSFormatter"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 libc = "0.2"

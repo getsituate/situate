@@ -1,5 +1,16 @@
 fn main() {
     println!("cargo:rerun-if-env-changed=SITUATE_MODELS_DEV_RELEASE_INPUT");
+    println!("cargo:rerun-if-env-changed=SITUATE_POSTHOG_TOKEN");
+    if let Ok(token) = std::env::var("SITUATE_POSTHOG_TOKEN") {
+        assert!(
+            token.is_empty()
+                || token.strip_prefix("phc_").is_some_and(|value| {
+                    (20..=200).contains(&value.len())
+                        && value.bytes().all(|byte| byte.is_ascii_alphanumeric())
+                }),
+            "SITUATE_POSTHOG_TOKEN must be a public PostHog project token"
+        );
+    }
     let snapshot = std::env::var_os("SITUATE_MODELS_DEV_RELEASE_INPUT")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("../src/ai/models-dev.snapshot.json"));

@@ -31,6 +31,8 @@ include::08-cross-cutting-concepts/initial-javascript-budget.adoc[]
 
 include::08-cross-cutting-concepts/client-diagnostics.adoc[]
 
+include::08-cross-cutting-concepts/product-analytics.adoc[]
+
 include::08-cross-cutting-concepts/document-collection.adoc[]
 
 :!architecture-repository-root:

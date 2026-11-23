@@ -33,27 +33,29 @@ vi.mock("./files/api", async (original) => ({
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => true,
   invoke: vi.fn(async (command, args) =>
-    command === "plugin_executor"
-      ? (args?.request as { operation: string })?.operation === "activity"
-        ? { runningActions: 0 }
-        : (args?.request as { operation: string })?.operation === "snapshot"
-          ? { plugins: [], unavailable: [] }
-          : (args?.request as { operation: string })?.operation === "stop"
-            ? undefined
-            : []
-      : command === "plugin_runtime"
-        ? { plugins: [], revision: null }
-        : command === "layout_load"
-          ? { revision: null, data: null }
-          : command === "layout_save"
-            ? { revision: "layout-1", data: args.data }
-            : command === "localization_snapshot"
-              ? {
-                  language: "en",
-                  formats: { time: "12", date: "mdy", number: "dot-comma" },
-                  writable: true,
-                }
-              : undefined,
+    command === "analytics_preference"
+      ? null
+      : command === "plugin_executor"
+        ? (args?.request as { operation: string })?.operation === "activity"
+          ? { runningActions: 0 }
+          : (args?.request as { operation: string })?.operation === "snapshot"
+            ? { plugins: [], unavailable: [] }
+            : (args?.request as { operation: string })?.operation === "stop"
+              ? undefined
+              : []
+        : command === "plugin_runtime"
+          ? { plugins: [], revision: null }
+          : command === "layout_load"
+            ? { revision: null, data: null }
+            : command === "layout_save"
+              ? { revision: "layout-1", data: args.data }
+              : command === "localization_snapshot"
+                ? {
+                    language: "en",
+                    formats: { time: "12", date: "mdy", number: "dot-comma" },
+                    writable: true,
+                  }
+                : undefined,
   ),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
@@ -148,6 +150,71 @@ async function openEntry(wrapper: ReturnType<typeof mount>): Promise<void> {
   await settleViews();
   expect(wrapper.find(".workspace-entry").exists()).toBe(true);
 }
+
+it.each([null, true])(
+  "offers usage analytics in the workspace chooser only when configured (%s)",
+  async (preference) => {
+    const native = vi.mocked(invoke);
+    const original = native.getMockImplementation()!;
+    native.mockImplementation((command, args) =>
+      command === "analytics_preference"
+        ? Promise.resolve(preference)
+        : original(command, args),
+    );
+    try {
+      vi.mocked(snapshot).mockResolvedValue({
+        ready: true,
+        mobile: false,
+        known: [],
+        open: [],
+        current: null,
+        failures: [],
+        error: null,
+      });
+      const wrapper = mount(App, { attachTo: document.body });
+      await settleViews();
+      await wrapper.get(".entry-app-menu").trigger("click");
+      const menu = openMenu(wrapper);
+      const analytics = menu
+        .findAll('[role="menuitem"]')
+        .find((item) => item.text() === "⟦settings.analytics.title⟧");
+      if (preference === null) {
+        expect(analytics).toBeUndefined();
+        return;
+      }
+      expect(analytics).toBeDefined();
+      await analytics!.trigger("click");
+      const dialog = wrapper.get(
+        'dialog[aria-labelledby="entry-analytics-title"]',
+      );
+      expect(
+        (dialog.get('[role="switch"]').element as HTMLInputElement).checked,
+      ).toBe(true);
+      await dialog.trigger("cancel");
+      expect(
+        wrapper
+          .find('dialog[aria-labelledby="entry-analytics-title"]')
+          .exists(),
+      ).toBe(false);
+      await wrapper.get(".entry-app-menu").trigger("click");
+      await openMenu(wrapper)
+        .findAll('[role="menuitem"]')
+        .find((item) => item.text() === "⟦settings.analytics.title⟧")!
+        .trigger("click");
+      const reopened = wrapper.get(
+        'dialog[aria-labelledby="entry-analytics-title"]',
+      );
+      await reopened.get("button").trigger("click");
+      expect(
+        wrapper
+          .find('dialog[aria-labelledby="entry-analytics-title"]')
+          .exists(),
+      ).toBe(false);
+    } finally {
+      native.mockImplementation(original);
+    }
+  },
+);
 
 it.each([false, true])(
   "shows failed workspace opening in a dismissible, retryable dialog (mobile: %s)",

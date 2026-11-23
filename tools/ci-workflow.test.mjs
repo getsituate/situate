@@ -621,6 +621,15 @@ test("creator and publisher have gated execution paths with signing scoped to bu
   );
   assert.match(build, /APPLE_API_PRIVATE_KEY/);
   assert.match(build, /TAURI_SIGNING_PRIVATE_KEY/);
+  assert.match(
+    build,
+    /SITUATE_POSTHOG_TOKEN: \$\{\{ vars\.SITUATE_POSTHOG_TOKEN \}\}/,
+  );
+  assert.match(
+    read("deploy-website"),
+    /SITUATE_POSTHOG_TOKEN: \$\{\{ vars\.SITUATE_POSTHOG_TOKEN \}\}/,
+  );
+  assert.equal((creator.match(/SITUATE_POSTHOG_TOKEN:/g) ?? []).length, 1);
   assert.doesNotMatch(
     creator.split("create-stage --stage qualify")[1],
     /APPLE_|TAURI_SIGNING/,
