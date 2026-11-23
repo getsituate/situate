@@ -14,13 +14,15 @@ import { requireNativeDesktop } from "./native-desktop-session.mjs";
 
 export function parseSmokeOptions(input) {
   const usage =
-    "Usage: test-native.mjs [--release] [--document-sources | --diagnostics | --diagnostics-profile disabled|healthy|slow|blocked]";
+    "Usage: test-native.mjs [--release] [--legacy-workspace | --document-sources | --diagnostics | --diagnostics-profile disabled|healthy|slow|blocked]";
   if (input.filter((arg) => arg === "--release").length > 1)
     throw new Error(usage);
   const release = input.includes("--release");
   const args = input.filter((arg) => arg !== "--release");
   if (args.length === 0)
     return { diagnosticsOnly: false, profile: undefined, release };
+  if (args.length === 1 && args[0] === "--legacy-workspace")
+    return { diagnosticsOnly: false, legacyWorkspaceOnly: true, release };
   if (args.length === 1 && args[0] === "--document-sources")
     return {
       diagnosticsOnly: false,

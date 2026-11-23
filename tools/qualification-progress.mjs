@@ -44,6 +44,7 @@ const commands = new Set([
   "terminate",
   "updater",
   "upgrade_step",
+  "journey_step",
 ]);
 const upgradeSteps = new Set([
   "open_workspace",
@@ -59,13 +60,31 @@ const upgradeSteps = new Set([
   "verify_cancellation",
   "retry_install",
   "reopen_workspace",
+  "reopen_conversation",
+  "reopen_plugin",
+  "reopen_note",
+  "verify_reopened_note",
+]);
+const journeySteps = new Set([
+  "create_workspace",
+  "configure_provider",
+  "complete_onboarding",
+  "edit_note",
+  "open_second_workspace",
+  "close_workspace",
+  "open_plugins",
+  "create_plugin",
+  "use_plugin",
+  "restore_conversation",
+  "restore_plugin",
+  "restore_note",
 ]);
 
-function isUpgradeObservation(code) {
+function isStepObservation(code, steps) {
   const [step, status, extra] = code.split(":");
   return (
     extra === undefined &&
-    upgradeSteps.has(step) &&
+    steps.has(step) &&
     ["started", "completed", "failed"].includes(status)
   );
 }
@@ -154,8 +173,12 @@ export function validateQualificationProgress(event) {
           typeof event.status === "string" &&
           (event.command === "updater"
             ? isUpdaterObservation(event.status)
-            : isUpgradeObservation(event.status))
-        : statuses.has(event.status)) &&
+            : isStepObservation(event.status, upgradeSteps))
+        : event.command === "journey_step"
+          ? ["journeys", "update"].includes(event.phase) &&
+            typeof event.status === "string" &&
+            isStepObservation(event.status, journeySteps)
+          : statuses.has(event.status)) &&
       Number.isSafeInteger(event.elapsedMs) &&
       event.elapsedMs >= 0 &&
       event.elapsedMs <= 24 * 60 * 60 * 1000,
@@ -174,7 +197,8 @@ export function validateQualificationProgress(event) {
   );
   assert(
     !accessibilityObservations.has(event.status) ||
-      (event.command === "accessibility" && event.phase === "update"),
+      (event.command === "accessibility" &&
+        ["journeys", "update"].includes(event.phase)),
     "Invalid accessibility observation",
   );
   return event;
@@ -311,8 +335,9 @@ export function observeQualificationProgress(
           lastPhase = event;
         if (event.command !== "none") lastCommand = event;
         if (
-          (event.command === "upgrade_step" &&
-            event.status.endsWith(":failed")) ||
+          (["journey_step", "upgrade_step"].includes(event.command) &&
+            event.status.endsWith(":failed") &&
+            !["journey_step", "upgrade_step"].includes(failure?.command)) ||
           (["timeout", "cancelled", "nonzero", "failed"].includes(
             event.status,
           ) &&

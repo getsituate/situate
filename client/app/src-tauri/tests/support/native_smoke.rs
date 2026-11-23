@@ -348,7 +348,10 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                 fs::remove_file(report)?;
             }
             #[cfg(desktop)]
-            if !directory.join("smoke-restart.json").exists() {
+            if std::env::var("SITUATE_UPGRADE_SMOKE_PHASE").as_deref() == Ok("open")
+                || (std::env::var("SITUATE_UPGRADE_SMOKE_PHASE").as_deref() != Ok("reopen")
+                    && !directory.join("smoke-restart.json").exists())
+            {
                 let registry = directory.join("workspaces-v1.json");
                 if registry.exists() {
                     fs::remove_file(registry)?;
@@ -367,6 +370,10 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
             super::workspaces::setup(app.handle())?;
             crate::updates::setup(app.handle());
             progress("", "workspaces-configured", serde_json::Value::Null);
+            #[cfg(target_os = "macos")]
+            if std::env::var_os("SITUATE_UPGRADE_SMOKE_PHASE").is_some() {
+                return Ok(());
+            }
             let handle = app.handle().clone();
             thread::spawn(move || {
                 let interactive = handle
@@ -406,6 +413,10 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
             Ok(())
         })
         .on_page_load(|webview, payload| {
+            #[cfg(target_os = "macos")]
+            if std::env::var_os("SITUATE_UPGRADE_SMOKE_PHASE").is_some() {
+                return;
+            }
             if !smoke_application_window(webview.label()) {
                 return;
             }

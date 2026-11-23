@@ -172,6 +172,30 @@ test("upgrade step failures replace earlier transient polling errors without exp
   observer.close();
 });
 
+test("fresh and post-upgrade UI failures report the most specific step", (t) => {
+  for (const [phase, command, step, outer] of [
+    ["journeys", "journey_step", "open_plugins"],
+    ["update", "upgrade_step", "reopen_plugin", "reopen_workspace"],
+  ]) {
+    const path = fixture(t);
+    const emit = qualificationProgressWriter(path);
+    const lines = [];
+    const observer = observeQualificationProgress(path, {
+      output: { write: (line) => lines.push(line) },
+    });
+    emit(phase, "nonzero", "accessibility");
+    emit(phase, "ax_target_missing", "accessibility");
+    emit(phase, `${step}:failed`, command);
+    if (outer) emit(phase, `${outer}:failed`, command);
+    assert.throws(() => emit("install", `${step}:failed`, command));
+    assert.throws(() => emit(phase, "private UI text:failed", command));
+    assert.equal(observer.summary("failed").failure.status, `${step}:failed`);
+    assert.match(lines.join(""), /ax_target_missing/);
+    assert.doesNotMatch(lines.join(""), /private UI text/);
+    observer.close();
+  }
+});
+
 test("unknown fields, codes, linked files, permissions and excessive records fail closed without echoing input", (t) => {
   const path = fixture(t);
   const emit = qualificationProgressWriter(path);

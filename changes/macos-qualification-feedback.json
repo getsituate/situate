@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "macos-qualification-feedback",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Internal release diagnostics and native verification only."
+}

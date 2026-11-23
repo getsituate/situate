@@ -342,6 +342,18 @@ test("plugins journey follows native execution sources without selecting ordinar
   );
 });
 
+test("legacy workspace smoke inputs select the macOS native suite", () => {
+  for (const file of [
+    "client/scripts/native-smoke-upgrade.mjs",
+    "client/scripts/upgrade-workspace-journey.mjs",
+    "client/scripts/qualification-accessibility.mjs",
+    "client/scripts/qualification-ax-text.swift",
+    "client/scripts/fixtures/upgrade-016/workspace.mjs",
+  ]) {
+    assert.deepEqual(affected("client-native", file), [file]);
+  }
+});
+
 test("embedded callback assets retain native response and policy checks", () => {
   const files = [
     "client/app/src/ai/browser-callback/page.html",

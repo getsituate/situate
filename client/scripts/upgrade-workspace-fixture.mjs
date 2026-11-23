@@ -25,13 +25,13 @@ const histories = [
   ".situate/conversations/21111111-1111-4111-8111-111111111111/history.jsonl",
   ".situate/conversations/22222222-2222-4222-8222-222222222222/history.jsonl",
 ];
-const pluginState =
-  ".situate/plugins/upgrade-fixture/.runtime/runtime-state.json";
+const pluginPackage = ".situate/plugins/upgrade-fixture";
+const pluginState = `${pluginPackage}/.runtime/runtime-state.json`;
+const pluginManifest = `${pluginPackage}/code/plugin.json`;
 const retained = [
   "Checklist.md",
   ".situate/working-method.md",
   ...histories,
-  ".situate/plugins/upgrade-fixture/code/plugin.json",
   ".situate/plugins/upgrade-fixture/code/service.js",
   ...Object.keys(workspace).filter((relative) =>
     relative.includes("/history.git/objects/"),
@@ -123,7 +123,11 @@ export function verifyUpgradeDraft(root, expectedDraft) {
   );
 }
 
-export function verifyUpgradeWorkspace(root, expectedNote) {
+export function verifyUpgradeWorkspace(
+  root,
+  expectedNote,
+  { allowManifestMigration = false } = {},
+) {
   assert(
     retainedBytes(root, upgradeNote).equals(Buffer.from(expectedNote)),
     "Upgrade note differs from the expected saved content",
@@ -131,14 +135,41 @@ export function verifyUpgradeWorkspace(root, expectedNote) {
   for (const relative of retained) {
     assert(
       retainedBytes(root, relative).equals(bytes(relative)),
-      "Upgrade fixture lost retained state",
+      `Upgrade fixture lost retained state: ${relative}`,
     );
   }
-  const [plugin] = JSON.parse(retainedBytes(root, pluginState)).plugins;
-  assert(
-    plugin?.id === "upgrade-fixture" &&
-      plugin.enabled === true &&
-      plugin.revision === JSON.parse(bytes(pluginState)).plugins[0].revision,
+  const state = JSON.parse(retainedBytes(root, pluginState));
+  const baseline = JSON.parse(bytes(pluginState));
+  const [plugin] = state.plugins;
+  const [original] = baseline.plugins;
+  const manifest = retainedBytes(root, pluginManifest);
+  if (allowManifestMigration && !manifest.equals(bytes(pluginManifest))) {
+    assert.deepEqual(
+      JSON.parse(manifest),
+      {
+        ...JSON.parse(bytes(pluginManifest)),
+        schemaVersion: 3,
+        kind: "tool",
+      },
+      "Unexpected plugin manifest migration",
+    );
+    const migratedRef = `${pluginPackage}/.situate/history.git/refs/situate/migrations/plugin-manifests/${original.revision}`;
+    assert(
+      /^[a-f0-9]{40}$/.test(plugin?.revision) &&
+        plugin.revision !== original.revision &&
+        retainedBytes(root, migratedRef).toString().trim() === plugin.revision,
+      "Enabled plugin revision does not match the retained migration revision",
+    );
+    original.revision = plugin.revision;
+  } else {
+    assert(
+      manifest.equals(bytes(pluginManifest)),
+      "Upgrade plugin manifest changed",
+    );
+  }
+  assert.deepEqual(
+    state,
+    baseline,
     "Upgrade fixture lost the enabled source revision",
   );
 }

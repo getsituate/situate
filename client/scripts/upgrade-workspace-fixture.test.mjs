@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -163,6 +164,70 @@ test("the retained document source returns bounded synthetic data for its own re
       })
     ).status,
     "error",
+  );
+});
+
+test("only the expected manifest and matching migrated revision may differ after the upgrade", (t) => {
+  const { root } = materialized(t);
+  const plugin = join(root, ".situate/plugins/upgrade-fixture");
+  const manifest = join(plugin, "code/plugin.json");
+  const stateFile = join(plugin, ".runtime/runtime-state.json");
+  const state = JSON.parse(readFileSync(stateFile));
+  const [row] = state.plugins;
+  const refDir = join(
+    plugin,
+    ".situate/history.git/refs/situate/migrations/plugin-manifests",
+  );
+  mkdirSync(refDir, { recursive: true });
+  const ref = join(refDir, row.revision);
+  row.revision = "a".repeat(40);
+  const migrated = {
+    ...JSON.parse(readFileSync(manifest)),
+    schemaVersion: 3,
+    kind: "tool",
+  };
+  writeFileSync(manifest, JSON.stringify(migrated));
+  writeFileSync(stateFile, JSON.stringify(state));
+  writeFileSync(ref, `${row.revision}\n`);
+  assert.throws(
+    () => verifyUpgradeWorkspace(root, upgradeNoteBefore),
+    /manifest changed/,
+  );
+  const verify = () =>
+    verifyUpgradeWorkspace(root, upgradeNoteBefore, {
+      allowManifestMigration: true,
+    });
+  verify();
+  row.enabled = false;
+  writeFileSync(stateFile, JSON.stringify(state));
+  assert.throws(verify, /lost the enabled source revision/);
+  row.enabled = true;
+  writeFileSync(stateFile, JSON.stringify(state));
+  writeFileSync(ref, "bad revision\n");
+  assert.throws(verify, /does not match the retained migration revision/);
+  writeFileSync(ref, `${row.revision}\n`);
+  writeFileSync(manifest, JSON.stringify({ ...migrated, exports: [] }));
+  assert.throws(verify, /Unexpected plugin manifest migration/);
+});
+
+test("the native reopen checks a saved note without exercising the updater", async () => {
+  const actions = [];
+  const notes = [];
+  const journey = upgradeWorkspaceJourney({
+    actions: async (items) => actions.push(...items),
+    verify: async (note) => notes.push(note),
+  });
+  await journey.reopen(upgradeNoteAfter);
+  assert.deepEqual(notes, [upgradeNoteAfter]);
+  assert.deepEqual(
+    actions.flatMap(({ navigation }) => (navigation ? [navigation.name] : [])),
+    ["Archive follow-up", "Plugins", "Files"],
+  );
+  assert.ok(
+    actions.some(
+      ({ assert: target }) =>
+        target?.name === "Markdown source" && target.value === upgradeNoteAfter,
+    ),
   );
 });
 
