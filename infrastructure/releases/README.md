@@ -80,6 +80,30 @@ All URLs are restricted to `https://getsituate.com/releases/`. Metadata must be 
 
 The app's history was sealed before signing from approved declarations and retained finalized catalogs. Publication neither edits that history nor requires a separate note-writing step.
 
+## Windows direct releases
+
+Dispatch **Build Windows release candidates** on protected `main` with a reserved stable version. The `windows-release` environment supplies the Tauri signing key and password as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. The build creates separate x64 and ARM64 NSIS installers and Tauri signatures. It neither signs them with Authenticode nor publishes them.
+
+```sh
+node client/scripts/windows-release.mjs CANDIDATE VERSION SOURCE_SHA X64_ARTIFACT ARM64_ARTIFACT
+```
+
+Before publishing, qualify the installer for each architecture on Windows: install as a standard user, exercise the update through the application with a workspace and stored draft, confirm restart and data preservation, and uninstall. Record only successful checks in the qualification JSON. Its `kind` is `windows-exact-artifact-qualification`, `manifestSha256` is the hash of the assembled `manifest.json`, and `architectures` lists x64 then ARM64, with each manifest `target` and installer `sha256` plus `install`, `update`, and `uninstall` set to `passed`. Keep the qualification evidence with the candidate; do not substitute a result from another build or an emulated x64 run for an ARM64 run.
+
+The annotated `windows-vVERSION` tag must point to the qualified source commit. The Windows publisher uses that existing tag, stages the verified assets in a draft, verifies GitHub's copies, and makes it a stable release without changing the repository's latest-release selection. It does not replace published assets. Set `SITUATE_UPDATER_PUBLIC_KEY` in the publication environment; the private key is not needed.
+
+```sh
+node infrastructure/releases/publish-windows.mjs CANDIDATE QUALIFICATION_JSON
+```
+
+After the release is public, run the feed activator on the distribution host with its exact release ID and a verified copy of the assembled candidate. It compares the GitHub assets with the candidate before atomically replacing `windows-release/update.json`. It refuses older versions and differing bytes under the current version.
+
+```sh
+node infrastructure/releases/windows-feed.mjs CANDIDATE GITHUB_RELEASE_ID DISTRIBUTION_DIRECTORY
+```
+
+The Windows endpoint is `/releases/windows/current/update.json`. It is separate from the macOS update feed and website download metadata. The Windows release does not expose a website download link.
+
 ## Interrupted legacy local publication
 
 For operations started with the legacy local publisher, do not repeat `publish`, remove pending markers or assume a disconnected SSH client cancelled the host operation. Preserve the local journal, stage, transport archive and remote incoming directory.

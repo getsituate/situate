@@ -3,6 +3,7 @@ name: Notify Slack of workflow failures
 on:
   workflow_run:
     workflows:
+      - Build Windows release candidates
       - Dependency monitoring
       - Deploy architecture
       - Deploy hosting

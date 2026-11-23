@@ -34,7 +34,7 @@ function fixture(t) {
     id: 42,
     draft: false,
     prerelease: false,
-    tag_name: `v${version}`,
+    tag_name: `windows-v${version}`,
     assets: [],
   };
   const feed = { version, distribution: "direct", platforms: {} };
@@ -57,7 +57,7 @@ function fixture(t) {
       release.assets.push({ id, name, size: data.length, state: "uploaded" });
     }
     feed.platforms[update] = {
-      url: `https://github.com/getsituate/situate/releases/download/v${version}/${file}`,
+      url: `https://github.com/getsituate/situate/releases/download/windows-v${version}/${file}`,
       signature: sig,
     };
     artifacts.push({
@@ -80,7 +80,7 @@ function fixture(t) {
     },
     getTag(repo, tag) {
       assert.equal(repo, "getsituate/situate");
-      assert.equal(tag, `v${version}`);
+      assert.equal(tag, `windows-v${version}`);
       return { sourceRevision: source };
     },
     downloadAsset(repo, id, asset) {

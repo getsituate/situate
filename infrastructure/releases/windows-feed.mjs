@@ -16,6 +16,7 @@ import { pathToFileURL } from "node:url";
 import {
   readWindowsInstaller,
   stableWindowsVersion,
+  windowsReleaseTag,
 } from "../../client/scripts/windows-release.mjs";
 import { githubAdapter, RELEASE_REPOSITORY } from "./github.mjs";
 
@@ -31,7 +32,7 @@ export async function verifiedWindowsFeed(candidate, publicKey, id, github) {
   );
   const version = stableWindowsVersion(manifest.version);
   assert.match(manifest.source, /^[0-9a-f]{40}$/u);
-  const tag = `v${version}`;
+  const tag = windowsReleaseTag(version);
   const release = await github.getRelease(RELEASE_REPOSITORY, id);
   assert.equal(release.id, id);
   assert.equal(release.tag_name, tag);

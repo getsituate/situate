@@ -40,6 +40,10 @@ export function stableWindowsVersion(version) {
   return version;
 }
 
+export function windowsReleaseTag(version) {
+  return `windows-v${stableWindowsVersion(version)}`;
+}
+
 export function windowsReleaseFilename(version, target) {
   stableWindowsVersion(version);
   if (!Object.hasOwn(architectures, target))
@@ -122,7 +126,7 @@ export function windowsReleaseMetadata(
     }
     artifacts.push({ target, file, size, sha256 });
     platforms[updater] = {
-      url: `https://github.com/getsituate/situate/releases/download/v${version}/${file}`,
+      url: `https://github.com/getsituate/situate/releases/download/${windowsReleaseTag(version)}/${file}`,
       signature,
     };
   }
