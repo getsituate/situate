@@ -921,6 +921,17 @@ async function buildResolvedAppleRelease({
     execute,
     signal,
   });
+  const buildEnv = {
+    ...env,
+    SITUATE_POSTHOG_TOKEN: environment.SITUATE_POSTHOG_TOKEN ?? "",
+  };
+  if (
+    environment.GITHUB_ACTIONS === "true" &&
+    !buildEnv.SITUATE_POSTHOG_TOKEN.trim()
+  )
+    throw new Error(
+      "GitHub macOS releases require SITUATE_POSTHOG_TOKEN. Set the public PostHog project token in the repository's Actions variables.",
+    );
   if (check) return undefined;
   const cache = join(root, "target/apple-release");
   const locks = join(root, "target/local-release");
@@ -1148,7 +1159,7 @@ async function buildResolvedAppleRelease({
     const options = {
       cwd: root,
       env: {
-        ...env,
+        ...buildEnv,
         SITUATE_RELEASE_VERSION: config.version,
         SITUATE_MODELS_DEV_RELEASE_INPUT: modelsSnapshot,
         SITUATE_RELEASE_HISTORY_FILE: historyFile,

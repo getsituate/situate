@@ -409,6 +409,7 @@ test("hosted builds register their isolated Keychain only for the build lifetime
         CI: "true",
         GITHUB_ACTIONS: "true",
         RUNNER_ENVIRONMENT: "github-hosted",
+        SITUATE_POSTHOG_TOKEN: "phc_SyntheticReleaseBuildToken000",
         APPLE_API_KEY: "EXAMPLE1234",
         APPLE_API_ISSUER: "11111111-2222-3333-4444-555555555555",
         APPLE_API_PRIVATE_KEY: privateKey,
@@ -442,6 +443,10 @@ test("hosted builds register their isolated Keychain only for the build lifetime
             options.env.SITUATE_RELEASE_CARGO,
             "/synthetic/bin/cargo",
           );
+          assert.equal(
+            options.env.SITUATE_POSTHOG_TOKEN,
+            "phc_SyntheticReleaseBuildToken000",
+          );
           assert.ok(
             searchList.some(
               (path) => realpathSync(path) === realpathSync(keychain),
@@ -457,6 +462,22 @@ test("hosted builds register their isolated Keychain only for the build lifetime
   assert.equal(reachedBuild, true);
   assert.deepEqual(searchList, [other]);
   assert.equal(existsSync(keychain), false);
+});
+
+test("GitHub releases stop before compilation when the PostHog token is missing", async (t) => {
+  const fixture = buildFixture(t);
+  await assert.rejects(
+    buildAppleRelease({
+      ...fixture,
+      environment: {
+        ...fixture.environment,
+        GITHUB_ACTIONS: "true",
+        SITUATE_POSTHOG_TOKEN: "",
+      },
+    }),
+    /GitHub macOS releases require SITUATE_POSTHOG_TOKEN/,
+  );
+  assert.ok(!existsSync(join(fixture.root, "artifacts")));
 });
 
 test("generated version replaces committed version without source edits and migration ancestry remains mandatory", async (t) => {

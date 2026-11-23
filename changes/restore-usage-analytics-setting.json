@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "restore-usage-analytics-setting",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "restore-usage-analytics-setting",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Usage analytics in Settings",
+          "paragraphs": [
+            "You can now turn off sharing of pseudonymous daily usage data under Settings → Usage analytics."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "restore-usage-analytics-setting",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Nutzungsanalyse in den Einstellungen",
+          "paragraphs": [
+            "Unter Einstellungen → Nutzungsanalyse kannst du die Freigabe pseudonymer Daten zur täglichen Nutzung jetzt ausschalten."
+          ]
+        }
+      ]
+    }
+  }
+}
