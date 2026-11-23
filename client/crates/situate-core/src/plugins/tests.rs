@@ -177,6 +177,35 @@ fn malformed_packages_remain_attributable_and_source_is_inspectable() {
 }
 
 #[test]
+fn provider_manifest_accepts_service_exports_but_not_plugin_contributions() {
+    let root = tempfile::tempdir().unwrap();
+    let code = package(root.path(), "demo");
+    let provider = json!({"schemaVersion":3,"id":"demo","name":"Provider","description":"Synthetic","kind":"connection","serviceEntry":"index.js","exports":["documentSourceDescribe"]});
+    manifest(&code, provider.clone());
+    assert!(validate(root.path(), "demo").is_ok());
+    for (field, value) in [
+        ("skills", json!(["SKILL.md"])),
+        ("components", json!(["Card"])),
+        ("kind", json!("tool")),
+    ] {
+        let mut invalid = provider.clone();
+        invalid[field] = value;
+        manifest(&code, invalid);
+        assert_eq!(
+            validate(root.path(), "demo"),
+            Err(PluginError::InvalidManifest),
+            "{field}"
+        );
+    }
+    let mut legacy = provider;
+    legacy["schemaVersion"] = json!(2);
+    legacy["skills"] = json!(["SKILL.md"]);
+    legacy["components"] = json!(["Card"]);
+    manifest(&code, legacy);
+    assert!(validate(root.path(), "demo").is_ok());
+}
+
+#[test]
 fn manifest_rejects_unknown_fields_versions_types_and_invalid_declarations() {
     let root = tempfile::tempdir().unwrap();
     let code = package(root.path(), "demo");

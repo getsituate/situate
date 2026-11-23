@@ -23,8 +23,9 @@ See the link:{strategy-requirements-root}/data/foundations.md#plugin-trust-and-s
 [[strategy-plugin-contracts]]
 === Reusable integrations and individual workflows
 
-Integration plugins own external connections and account configuration within their workspace and expose reusable capabilities.
-Workflow plugins compose those capabilities into individual workflows and views; their internal functions are not automatically public interfaces. Integration and workflow are roles that can coexist in one plugin; a purely visual extension need not be a workflow plugin.
+Connections own external access and account configuration within their workspace and expose reusable service functions. Document sources are connections that implement a document service convention.
+Separate plugins compose those functions into workflows, chat tools, skills and workspace views. Connections can contribute access settings, but not those plugin contributions or reusable UI components.
+Existing mixed packages retain their identity, settings, contributions and exports. Situate lists them as plugins once it knows their contributions, without rewriting their source or active revision.
 Each consuming plugin selects the accounts relevant to its purpose, rather than inheriting every newly connected account.
 This avoids duplicate connection setup without imposing the same account selection on unrelated workflows.
 

@@ -94,7 +94,7 @@ const pluginGroups = computed(() => {
     source: { label: t("pluginManagement.sources"), plugins: [] },
   };
   for (const plugin of plugins.value)
-    groups[pluginManagementGroup(plugin.manifest)].plugins.push(plugin);
+    groups[pluginManagementGroup(plugin)].plugins.push(plugin);
   return Object.entries(groups).filter(([, group]) => group.plugins.length);
 });
 const inspected = computed(() =>

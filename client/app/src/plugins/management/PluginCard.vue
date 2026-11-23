@@ -12,7 +12,7 @@ const props = defineProps<{
   canEnable: boolean;
   busy: boolean;
 }>();
-const group = computed(() => pluginManagementGroup(props.plugin.manifest));
+const group = computed(() => pluginManagementGroup(props.plugin));
 const blockedMessage = computed(() => {
   const blocked = props.plugin.blockedBy;
   if (!blocked) return undefined;
@@ -65,7 +65,14 @@ const emit = defineEmits<{
       >
     </div>
     <div class="plugin-row-content">
-      <p v-if="group === 'source' || plugin.manifest?.kind" class="plugin-kind">
+      <p
+        v-if="
+          group !== 'tool' ||
+          plugin.manifest?.kind ||
+          plugin.legacyProviderWithPluginContributions
+        "
+        class="plugin-kind"
+      >
         {{
           group === "source"
             ? t("pluginManagement.sourceKind")
@@ -78,7 +85,7 @@ const emit = defineEmits<{
         {{ plugin.manifest.description }}
       </p>
       <p v-if="blockedMessage" class="plugin-blocked">{{ blockedMessage }}</p>
-      <p v-if="plugin.manifest?.kind === 'connection'">
+      <p v-if="group !== 'tool' && plugin.manifest?.kind === 'connection'">
         {{ t("pluginManagement.accessUnverified") }}
       </p>
       <template v-if="consumers.length">
@@ -93,7 +100,7 @@ const emit = defineEmits<{
           </li>
         </ul>
       </template>
-      <p v-else-if="plugin.manifest?.kind === 'connection'">
+      <p v-else-if="group !== 'tool' && plugin.manifest?.kind === 'connection'">
         {{ t("pluginManagement.noDeclaredConsumers") }}
       </p>
     </div>

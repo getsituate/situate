@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createViewRegistry, type UiCoordinator } from "../layout/registry";
+import { pluginManagementGroup } from "./management";
 import { createPluginRuntime } from "./runtime";
-import type { PluginUiHost } from "./types";
+import type { NativeServiceEntry, PluginUiHost } from "./types";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -58,7 +59,10 @@ const descriptor = {
   description: "Run",
   parameters: { type: "object", properties: {} },
 };
-function definition(id = "demo", dependencies: string[] = []) {
+function definition(
+  id = "demo",
+  dependencies: string[] = [],
+): NativeServiceEntry {
   return {
     pluginId: id,
     revision: "r1",
@@ -150,6 +154,76 @@ afterEach(() => {
 });
 
 describe("plugin UI runtime", () => {
+  it.each([false, true])(
+    "reclassifies a reopened schema 2 provider without losing tools or exports (source: %s)",
+    async (source) => {
+      const provider = definition();
+      const consumer = definition("consumer", ["demo"]);
+      const conforming = definition("conforming");
+      const manifest = {
+        ...provider.source.manifest,
+        kind: "connection" as const,
+        exports: source ? ["run", "documentSourceDescribe"] : ["run"],
+      };
+      const legacy = {
+        ...provider,
+        exports: manifest.exports,
+        source: { ...provider.source, manifest },
+      };
+      definitions = [
+        legacy,
+        consumer,
+        {
+          ...conforming,
+          source: {
+            ...conforming.source,
+            manifest: { ...conforming.source.manifest, kind: "connection" },
+          },
+        },
+      ];
+      const before = structuredClone(definitions);
+      mocks.importModule.mockImplementation(async (url: string) => ({
+        default: (host: PluginUiHost) => {
+          const id = url.split(":")[0];
+          hosts.set(id, host);
+          return { settings: view(`${id}:settings`) };
+        },
+      }));
+      for (let opening = 0; opening < 2; opening++) {
+        const { runtime } = setup();
+        await runtime.ready;
+        const plugins = runtime.state.plugins;
+        expect(plugins.map(pluginManagementGroup)).toEqual([
+          "tool",
+          "tool",
+          "connection",
+        ]);
+        expect(plugins[0]).toMatchObject({
+          id: "demo",
+          revision: "r1",
+          incarnation: "inc-demo",
+          settingsId: "demo:settings",
+        });
+        expect(runtime.getToolDescriptors()).toEqual([descriptor]);
+        await expect(
+          hosts
+            .get("consumer")!
+            .dependencies.invoke("demo", "run", { fixture: 42 }),
+        ).resolves.toEqual({ done: { fixture: 42 } });
+        if (source)
+          await expect(
+            hosts
+              .get("consumer")!
+              .dependencies.invoke("demo", "documentSourceDescribe", {}),
+          ).resolves.toEqual({ done: {} });
+        runtime.dispose();
+      }
+      expect(definitions).toEqual(before);
+      expect(
+        mocks.invoke.mock.calls.map(([, { request }]) => request.operation),
+      ).not.toContain("setEnabled");
+    },
+  );
   it("keeps healthy capabilities available and exposes native initialization failures", async () => {
     definitions = [definition("broken"), definition()];
     const native = mocks.invoke.getMockImplementation()!;
@@ -428,7 +502,7 @@ describe("plugin UI runtime", () => {
   });
 
   it("supports service-only plugins without loading Vue modules", async () => {
-    definitions[0].source.uiEntry = null as unknown as string;
+    definitions[0].source.uiEntry = null;
     const { runtime } = setup();
     await runtime.ready;
     expect(runtime.getToolDescriptors()).toEqual([descriptor]);

@@ -17,6 +17,57 @@ fn fixture() -> tempfile::TempDir {
 }
 
 #[test]
+fn opening_a_published_schema_two_provider_retains_its_active_revision_and_settings() {
+    use crate::plugins::storage::{self, Area};
+
+    let root = fixture();
+    let root = root.path();
+    let code = root.join(".situate/plugins/sample/code");
+    // Schema 2 manifest as supported by v2026.11.14.
+    let manifest = r#"{"schemaVersion":2,"id":"sample","name":"Sample","description":"Synthetic document source","kind":"connection","serviceEntry":"entry.js","exports":["documentSourceDescribe"]}"#;
+    let service = "export default () => ({exports:{documentSourceDescribe:async()=>({})},tools:[{name:'find',description:'Find a document',parameters:{type:'object'},execute:async()=>({content:[]})}]});";
+    fs::write(code.join("plugin.json"), manifest).unwrap();
+    fs::write(code.join("entry.js"), service).unwrap();
+    let listing = list(root).unwrap();
+    set_enabled(root, "sample", true, listing.revision.as_deref()).unwrap();
+    let active = prepare(root).unwrap();
+    storage::write(
+        root,
+        "sample",
+        Area::Config,
+        "account.txt",
+        "fixture-account",
+        None,
+    )
+    .unwrap();
+
+    assert!(active.plugins[0].revision.is_some());
+    for _ in 0..2 {
+        let reopened = prepare(root).unwrap();
+        assert_eq!(reopened.plugins.len(), 1);
+        let package = &reopened.plugins[0];
+        assert!(package.enabled);
+        assert_eq!(package.revision, active.plugins[0].revision);
+        assert_eq!(package.incarnation, active.plugins[0].incarnation);
+        assert_eq!(reopened.revision, active.revision);
+        assert_eq!(
+            load(root, "sample").unwrap().service_entry.as_deref(),
+            Some(service)
+        );
+        assert_eq!(
+            storage::read(root, "sample", Area::Config, "account.txt")
+                .unwrap()
+                .text,
+            "fixture-account"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(code.join("plugin.json")).unwrap(),
+        manifest
+    );
+}
+
+#[test]
 fn runtime_modules_and_both_entries_are_pinned_not_reread_from_editable_source() {
     let root = fixture();
     let code = root.path().join(".situate/plugins/sample/code");

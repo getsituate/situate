@@ -6,7 +6,7 @@ Inspect existing packages, exports and consumers before changing shared behavior
 
 Before writing or changing plugin code, read `read_plugin_development` with `resource: "package"`. Load `service-host` when using host APIs and `document-sources` when building or consuming a document source.
 
-If a workflow or view uses an external source, put access in a `connection` and the workflow in a `tool` that calls declared service exports. Reuse an existing connection when it fits. A connection may expose chat tools directly; a workspace-only plugin needs no connection.
+For external access, reuse a suitable connection or create one. Put chat tools, skills, and workspace views in a separate plugin that calls declared exports. If the request needs both a new connection and a chat tool, create and check both packages in this conversation. A workspace-only plugin needs no connection.
 
 ## Design the interface
 

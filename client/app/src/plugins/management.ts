@@ -1,14 +1,18 @@
 import type { DeepReadonly } from "vue";
 import type { RuntimePlugin } from "./runtime";
-import type { PluginManifest } from "./types";
 import type { WorkspaceUi } from "../layout/runtime";
 import { guardDictation } from "../dictation/runtime";
 import { selectedTab } from "../layout/model";
 import { currentEntry, sameTarget } from "../layout/navigation";
 
-export function pluginManagementGroup(
-  manifest: DeepReadonly<PluginManifest> | null,
-) {
+export function pluginManagementGroup(plugin: DeepReadonly<RuntimePlugin>) {
+  const { manifest, legacyProviderWithPluginContributions } = plugin;
+  if (
+    legacyProviderWithPluginContributions ||
+    manifest?.skills?.length ||
+    manifest?.components?.length
+  )
+    return "tool";
   if (manifest?.exports?.includes("documentSourceDescribe")) return "source";
   return manifest?.kind ?? "tool";
 }

@@ -1,6 +1,6 @@
 # Document source authoring (version 1)
 
-Use existing connection plugins, explicit service exports and optional thin chat tools. This is a plugin-owned convention, not a manifest discriminator, native registration gate or core document type. Non-source plugins are unchanged. No connector catalog, collection, OCR pipeline, background mirror or new host API is implied.
+A new document source is a connection (`schemaVersion: 3`, `kind: "connection"`) that exposes the document service exports below. The document contract is a plugin convention, not a core document type. If chat needs access, register the chat tools in a separate plugin.
 
 Read `read_plugin_development({resource:"document-source-contract"})` for the dependency-free ES module. Copy it into the authored plugin as `document-source-contract.js`; import it with a relative `.js` path. Never import application source. This reference is available through `read_plugin_development({resource:"document-sources"})`.
 
@@ -19,7 +19,7 @@ Read `read_plugin_development({resource:"document-source-contract"})` for the de
 
 Declare `documentSourceDescribe` and each implemented capability export in `plugin.json`'s existing `exports` list and the service factory's `exports` object. Other ordinary exports are allowed. Missing capabilities have no corresponding convention export. The descriptor is returned directly from `documentSourceDescribe({}, context)`; it is not a result envelope. One connection describes one configured source/account instance. Multiple connections can use identical document IDs without merging documents.
 
-Consumers inspect explicit exports, declare the connection in `dependencies`, call `context.dependencies.invoke(pluginId, exportName, args)`, and validate the descriptor and every result they use. Do not duplicate access code or introduce a source loader. A connection may expose direct chat tools without an empty consumer plugin. Follow the general plugin authoring instructions when a separate workflow/view is needed.
+Consumers inspect explicit exports, declare the connection in `dependencies`, call `context.dependencies.invoke(pluginId, exportName, args)`, and validate the descriptor and every result they use. Do not duplicate access code or introduce a source loader. The consumer plugin can use `toToolResult` to turn validated source results into chat-tool results.
 
 ## Descriptor
 
@@ -144,15 +144,8 @@ const result = assertResult(
   await plugin.invokeExport("documentSourceList", args),
 );
 assert.equal(result.items[0].ref.id, "42");
-const tool = assertToolResult(
-  descriptor,
-  "list",
-  args,
-  await plugin.invokeTool("list_documents", args),
-);
-assert.equal(tool.items.length, 1);
 ```
 
-Pass this script through `check_plugin_changes` with exact synthetic HTTP/process/config fixtures on the package that performs access. Include at least one successful check API assertion against independently expected behavior. Check unavailable/denied/unsupported/empty/partial states, continuation mismatch, same IDs in different sources, malicious document text, secret locators, bounds and cancellation. Runtime fixtures do not prove real LLM authoring, live Paperless compatibility, installed folder access or iOS support. Do not access private archives or paid providers for conformance checks.
+Pass this script through `check_plugin_changes` with exact synthetic HTTP/process/config fixtures on the package that performs access. If publishing a chat-tool plugin alongside the source, check both packages together. In the consumer's check script, call `plugin.invokeTool` and verify the validated result against the source fixture. Include at least one successful check API assertion against independently expected behavior. Check unavailable/denied/unsupported/empty/partial states, continuation mismatch, same IDs in different sources, malicious document text, secret locators, bounds and cancellation. Runtime fixtures do not prove real LLM authoring, live Paperless compatibility, installed folder access or iOS support. Do not access private archives or paid providers for conformance checks.
 
 External folders require an actually available, authorized process/host route, scope checks and platform qualification; `context.files` only queries workspace content. Do not install programs or change permissions automatically. Consult the general plugin resource for exact file/process limits. Direct access neither grants new permissions nor removes separately authorized source write operations; this read convention adds no universal write API.

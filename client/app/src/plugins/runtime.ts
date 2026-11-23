@@ -13,6 +13,7 @@ import { importPluginModule, loadHostModules } from "./module";
 import { observeManualPersistence } from "./manual-persistence";
 import { createPluginModule, type PluginModule } from "./module-source";
 import {
+  hasPluginUi,
   validateUiContributions,
   validateToolDescriptors,
 } from "./contributions";
@@ -35,6 +36,7 @@ export type PluginStatus = "disabled" | "suppressed" | "loaded" | "failed";
 export interface RuntimePlugin extends InstalledPlugin {
   status: PluginStatus;
   settingsId?: string;
+  legacyProviderWithPluginContributions?: true;
   blockedBy?: {
     reason: "missing" | "cyclic" | "disabled" | "platform" | "dependency";
     pluginId: string;
@@ -76,6 +78,7 @@ function safeError(error: unknown, fallback: string): string {
     (nativeErrors.has(message) ||
       [
         "plugins.invalidContributions",
+        "plugins.providerContributions",
         "plugins.executionCancelled",
         "plugins.moduleImportInvalid",
         "plugins.moduleImportUnsupported",
@@ -359,6 +362,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
             : safeError(plugin.error, "plugins.loadFailed"),
         ...(loaded.has(plugin.id)
           ? { settingsId: previous.get(plugin.id)?.settingsId }
+          : {}),
+        ...(previous.get(plugin.id)?.legacyProviderWithPluginContributions &&
+        previous.get(plugin.id)?.revision === plugin.revision &&
+        previous.get(plugin.id)?.incarnation === plugin.incarnation
+          ? { legacyProviderWithPluginContributions: true as const }
           : {}),
         status: loaded.has(plugin.id)
           ? "loaded"
@@ -652,7 +660,12 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
             return;
           }
           requireExecutable(plugin.id);
-          const validated = validateUiContributions(contributions, plugin.id);
+          const validated = validateUiContributions(
+            contributions,
+            plugin.id,
+            false,
+            source.manifest.schemaVersion === 3,
+          );
           const snapshots = validateToolDescriptors(definition.tools, names);
           const views = [
             ...(validated.views ?? []),
@@ -702,6 +715,14 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
           } else publish();
           snapshots.forEach((tool) => names.add(tool.name));
           plugin.status = "loaded";
+          if (
+            source.manifest.schemaVersion === 2 &&
+            (source.manifest.kind === "connection" ||
+              source.manifest.exports?.includes("documentSourceDescribe")) &&
+            (snapshots.length || hasPluginUi(validated))
+          )
+            plugin.legacyProviderWithPluginContributions = true;
+          else delete plugin.legacyProviderWithPluginContributions;
           if (validated.settings) plugin.settingsId = validated.settings.id;
         } catch (error) {
           factoryAvailable = false;

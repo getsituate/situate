@@ -17,6 +17,7 @@ export interface PluginManifest {
   kind?: "connection" | "tool";
   dependencies?: string[];
   exports?: string[];
+  components?: string[];
   platforms?: ("macos" | "ios")[];
 }
 export interface InstalledPlugin {

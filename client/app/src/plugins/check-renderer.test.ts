@@ -146,6 +146,19 @@ it("validates a publication without mounting and permits legacy dependency views
   expect(mocks.link).toHaveBeenCalledTimes(2);
 });
 
+it("rejects provider workspace views before publication even without a preview", async () => {
+  const provider = {
+    ...source,
+    manifest: { id: "example", schemaVersion: 3, kind: "connection" },
+  };
+  expect(
+    await send("previewValidate", { source: provider, requireViewIcons: true }),
+  ).toMatchObject({
+    error: "plugins.providerContributions",
+  });
+  expect(mocks.dispose).toHaveBeenCalledOnce();
+});
+
 it("rejects a settings view without an icon before a preview is opened", async () => {
   mocks.imported.mockResolvedValue({
     default: () => ({

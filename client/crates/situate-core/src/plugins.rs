@@ -485,7 +485,16 @@ fn validate_sources(
     let text = read("plugin.json", MAX_MANIFEST)?;
     let manifest: PluginManifest =
         serde_json::from_str(&text).map_err(|_| PluginError::InvalidManifest)?;
-    if manifest.schema_version != 2
+    let valid_contract = match manifest.schema_version {
+        2 => true,
+        3 => {
+            manifest.kind == Some(PluginKind::Connection)
+                && manifest.skills.is_empty()
+                && manifest.components.as_ref().is_none_or(Vec::is_empty)
+        }
+        _ => false,
+    };
+    if !valid_contract
         || manifest.id != id
         || !valid_id(&manifest.id)
         || manifest.name.trim().is_empty()

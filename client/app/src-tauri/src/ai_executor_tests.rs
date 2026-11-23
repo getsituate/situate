@@ -2,6 +2,34 @@ use super::*;
 use tokio::sync::oneshot;
 
 #[test]
+fn only_strict_providers_reject_chat_tool_registration() {
+    let service = Definitions {
+        tools: vec![
+            json!({"name":"read","description":"Read the fixture","parameters":{"type":"object"}}),
+        ],
+        exports: vec!["read".into()],
+    };
+    assert!(
+        validate_provider_tools(&json!({"schemaVersion":2,"kind":"connection"}), &service).is_ok()
+    );
+    let strict = json!({"schemaVersion":3,"kind":"connection"});
+    assert_eq!(
+        validate_provider_tools(&strict, &service),
+        Err("plugins.providerContributions")
+    );
+    assert!(
+        validate_provider_tools(
+            &strict,
+            &Definitions {
+                tools: vec![],
+                ..service
+            }
+        )
+        .is_ok()
+    );
+}
+
+#[test]
 fn check_failures_are_negative_evidence_while_authorization_errors_remain_errors() {
     let failed = check_result(Err(ToolOutcome::Completed(ToolResult::json(
         json!({"isError":true,"error":"plugins.checkAssertionFailed"}),

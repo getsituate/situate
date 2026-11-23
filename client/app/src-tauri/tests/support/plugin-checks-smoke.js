@@ -126,7 +126,7 @@ window.runPluginChecksSmoke = async () => {
         id,
         "plugin.json",
         JSON.stringify({
-          schemaVersion: 2,
+          schemaVersion: id === connection ? 3 : 2,
           id,
           name: id,
           description: "Synthetic reusable connection checks",
@@ -596,6 +596,26 @@ window.runPluginChecksSmoke = async () => {
   ).version.text ===
     originalSource.version
       .text, "Rejected source mutation changed retained code");
+  await sourceWrite(
+    assignment,
+    connection,
+    "service.js",
+    `export default () => ({
+      exports: {read: async () => ({version:'first'})},
+      tools: [{name:'direct', description:'Synthetic direct tool', parameters:{type:'object'}, execute:async()=>({content:[]})}]
+    });`,
+  );
+  await denied(
+    () => grouped(assignment, "first", "first"),
+    "A connection with a chat tool passed checks",
+    "plugins.providerContributions",
+  );
+  await sourceWrite(
+    assignment,
+    connection,
+    "service.js",
+    fixture.connectionFirst,
+  );
   const failedChecks = groupChecks("first", "first");
   failedChecks[1].script += "\nassert.ok(false);";
   const failed = await checkChanges(assignment, {
