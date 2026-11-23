@@ -63,26 +63,40 @@ async fn powershell_preserves_unicode_cwd_and_drains_both_pipes_past_limit() {
     );
 }
 
+#[test]
+fn windows_job_child_fixture() {
+    if std::env::var_os("SITUATE_TEST_JOB_CHILD").is_none() {
+        return;
+    }
+    std::fs::write("child.txt", std::process::id().to_string()).unwrap();
+    std::thread::sleep(Duration::from_secs(120));
+}
+
 #[tokio::test]
 async fn windows_job_drains_live_children_on_cancel_timeout_and_leader_exit() {
     async fn check(expected: CommandOutcome) {
         let root = TempDir::new().unwrap();
-        let mut command = request(
-            root.path(),
+        let exe = std::env::current_exe().unwrap();
+        let exe = dunce::simplified(&exe)
+            .to_str()
+            .unwrap()
+            .replace('\'', "''");
+        let script = format!(
             r#"
-            $childScript = '[IO.File]::WriteAllText((Join-Path $PWD "child.txt"), [string]$PID); Start-Sleep -Seconds 60';
-            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript));
+            $ErrorActionPreference = 'Stop';
             $info = [Diagnostics.ProcessStartInfo]::new();
-            $info.FileName = Join-Path $PSHOME 'powershell.exe';
+            $info.FileName = '{exe}';
             $info.WorkingDirectory = $PWD.Path;
             $info.UseShellExecute = $false;
             $info.CreateNoWindow = $true;
-            $info.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + $encoded;
+            $info.Arguments = '--exact process::tests::windows_job_child_fixture';
+            $info.EnvironmentVariables['SITUATE_TEST_JOB_CHILD'] = '1';
             $child = [Diagnostics.Process]::Start($info);
-            while (!(Test-Path -LiteralPath 'release')) { Start-Sleep -Milliseconds 25 };
+            while (!(Test-Path -LiteralPath 'release')) {{ Start-Sleep -Milliseconds 25 }};
             exit 19
-        "#,
+        "#
         );
+        let mut command = request(root.path(), &script);
         if expected == CommandOutcome::TimedOut {
             command.timeout_ms = 45_000;
         }
@@ -131,7 +145,6 @@ async fn windows_job_drains_live_children_on_cancel_timeout_and_leader_exit() {
         );
         assert!(!result.stdout.incomplete && !result.stderr.incomplete);
     }
-    // Each case waits for its own PowerShell child to start on a cold runner.
     check(CommandOutcome::Cancelled).await;
     check(CommandOutcome::Exited).await;
     check(CommandOutcome::TimedOut).await;
