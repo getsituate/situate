@@ -70,6 +70,14 @@ test("analytics configuration exports only a public project token and defaults t
       "posthog-LICENSE.txt",
       "d3fb92ac01f0bef4078f89aac9f20f76da3383ad45becf6204abdf5495f43f8f",
     ],
+    [
+      "posthog-web-vitals-1.447.4.min.js",
+      "3c6ab8a4e21f4d7c63d523109e480930845952e816dd27d4a0bbf215865f107e",
+    ],
+    [
+      "web-vitals-LICENSE.txt",
+      "bfdeded4040e05da31ca9b6239dc83bd23fa26ac8db87342a7ca4363f68916ff",
+    ],
   ])
     assert.equal(
       createHash("sha256")
@@ -208,7 +216,9 @@ test("preview serves the landing page at the root and only public assets", async
   for (const asset of [
     "analytics.js",
     "vendor/posthog-1.447.4.min.js",
+    "vendor/posthog-web-vitals-1.447.4.min.js",
     "vendor/posthog-LICENSE.txt",
+    "vendor/web-vitals-LICENSE.txt",
   ])
     assert.equal((await fetch(`${origin}/${asset}`)).status, 200);
   assert.equal((await fetch(`${origin}/vendor/README.md`)).status, 404);

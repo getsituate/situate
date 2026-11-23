@@ -68,6 +68,11 @@ function checkWorkflowBootstrap(name, workflow) {
       continue;
     }
     assert.ok(steps, context);
+    if (name === "deploy-architecture.yml" && id === "deploy") {
+      assert.match(steps, /^ {8}uses: actions\/deploy-pages@[a-f0-9]{40}$/m);
+      assert.doesNotMatch(steps, /run:|actions\/checkout/);
+      continue;
+    }
     if (name === "slack-notify.yml" && id === "send") {
       // The notifier uses runner-provided tools and must not execute repository code.
       assert.doesNotMatch(
@@ -96,7 +101,19 @@ function checkWorkflowBootstrap(name, workflow) {
     const metadata =
       (name === "release-macos.yml" && id === "plan") ||
       (name === "verify.yml" && id === "required");
-    if (name === "deploy-website.yml" && id === "website") {
+    if (
+      (name === "verify.yml" && id === "architecture") ||
+      (name === "deploy-architecture.yml" && id === "build")
+    ) {
+      assert.deepEqual(
+        commands,
+        [
+          'gem install asciidoctor --version 2.0.26 --no-document --user-install --bindir "$RUNNER_TEMP/bin"',
+          'python3 tools/build-architecture.py "$RUNNER_TEMP/architecture"',
+        ],
+        context,
+      );
+    } else if (name === "deploy-website.yml" && id === "website") {
       assert.match(block, /^ {4}runs-on: ubuntu-24\.04$/m, context);
       assert.deepEqual(commands, websiteDeliveryCommands, context);
     } else if (name === "release-macos.yml" && id === "hosting-ready") {
@@ -116,6 +133,7 @@ function checkWorkflowBootstrap(name, workflow) {
           bootstrapped = true;
           continue;
         }
+        if (name === "verify.yml" && command === "exit 1") continue;
         if (command.startsWith("python3 tools/pipeline-container.py actions "))
           assert.match(
             command,

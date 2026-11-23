@@ -89,8 +89,19 @@ export function upgradeWorkspaceJourney({
       await writable(false);
       try {
         await step("create_unsaved_draft", async () => {
-          await fill(pendingNote);
+          await actions([
+            { focus: editor },
+            { replaceText: { ...editor, value: pendingNote } },
+          ]);
+        });
+        await step("dismiss_draft_save_error", async () => {
+          await expect(text("Action could not be completed"));
+          await click(button("Dismiss"));
+        });
+        await step("verify_unsaved_editor", async () => {
+          await expect({ ...editor, value: pendingNote });
           await expect(text("Not saved"));
+          await verify(upgradeNoteAfter);
         });
         await step("open_update", async () => {
           await click(button("Update available"));

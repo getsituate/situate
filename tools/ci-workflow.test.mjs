@@ -12,6 +12,7 @@ const read = (name) =>
 const pipelineWorkflows = [
   "verify",
   "deploy-website",
+  "deploy-architecture",
   "release-macos",
   "publish-macos",
   "dependency-monitoring",
@@ -56,6 +57,12 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       ...(["deploy-hosting", "verify-hosting"].includes(name)
         ? ["hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd"]
         : []),
+      ...(name === "deploy-architecture"
+        ? [
+            "actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
+            "actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
+          ]
+        : []),
       ...(name === "deploy-website"
         ? ["actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"]
         : []),
@@ -78,7 +85,16 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       if (step.includes("continue-on-error: true"))
         assert.match(step, /release-build-cache\.mjs|actions\/cache\//);
     assert.doesNotMatch(workflow, /run: \||run: >|pull_request_target/);
-    for (const match of workflow.matchAll(/run: ([^\n]+)/g))
+    for (const match of workflow.matchAll(/run: ([^\n]+)/g)) {
+      if (
+        ["verify", "deploy-architecture"].includes(name) &&
+        [
+          'gem install asciidoctor --version 2.0.26 --no-document --user-install --bindir "$RUNNER_TEMP/bin"',
+          'python3 tools/build-architecture.py "$RUNNER_TEMP/architecture"',
+        ].includes(match[1])
+      )
+        continue;
+      if (name === "verify" && match[1] === "exit 1") continue;
       assert.match(
         match[1],
         name === "deploy-hosting" &&
@@ -90,6 +106,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
               : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
       );
+    }
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
       .split(/\n {2}[a-z][a-z-]*:\n/)
@@ -108,6 +125,13 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
           body,
           /HOSTING_(?:OPERATOR|PUBLISHER|HOST_CA)_KEY|secrets\.HCLOUD_TOKEN|TF_TOKEN/,
         );
+      } else if (
+        ["verify", "deploy-architecture"].includes(name) &&
+        body.includes("run: gem install asciidoctor")
+      ) {
+        assert.match(body, /run: python3 tools\/build-architecture\.py/);
+      } else if (name === "deploy-architecture" && !body.includes("run: ")) {
+        assert.match(body, /uses: actions\/deploy-pages@/);
       } else if (body.includes("run: node ")) {
         assert.ok(body.includes("run: python3 tools/pipeline-bootstrap.py"));
         assert.ok(
@@ -124,6 +148,41 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     assert.doesNotMatch(otherJobs, /runs-on: macos-1[0-9]/);
     assert.doesNotMatch(workflow, /runs-on: windows|--target.*(?:ios|android)/);
   }
+});
+
+test("PR verification requires the static architecture build", () => {
+  const workflow = read("verify");
+  const architecture = job(workflow, "architecture");
+  assert.match(architecture, /python3 tools\/build-architecture\.py/);
+  assert.doesNotMatch(architecture, /permissions:|secrets\./);
+  const required = job(workflow, "required");
+  assert.match(required, /needs:[\s\S]*architecture,/);
+  assert.match(
+    required,
+    /if: needs\.architecture\.result != 'success'\n\s+run: exit 1/,
+  );
+});
+
+test("Pages publishes only the validated artifact from the canonical main branch", () => {
+  const workflow = read("deploy-architecture");
+  const build = job(workflow, "build");
+  const deploy = job(workflow, "deploy");
+  assert.match(workflow, /push:\n {4}branches: \[main\]/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /pull_request|secrets\.|contents: write/);
+  assert.match(build, /github.repository == 'getsituate\/situate'/);
+  assert.match(build, /github.ref == 'refs\/heads\/main'/);
+  assert.match(build, /vars.ARCHITECTURE_PAGES_ENABLED == 'true'/);
+  assert.doesNotMatch(build, /pages: write|id-token: write/);
+  assert.ok(
+    build.indexOf("tools/build-architecture.py") <
+      build.indexOf("actions/upload-pages-artifact@"),
+  );
+  assert.match(build, /path: .*runner.temp.*\/architecture/);
+  assert.match(deploy, /needs: build/);
+  assert.match(deploy, /pages: write\n {6}id-token: write/);
+  assert.match(deploy, /name: github-pages/);
+  assert.match(deploy, /uses: actions\/deploy-pages@/);
 });
 
 test("macOS delivery has no hosted checkpoint recovery workflow", () => {

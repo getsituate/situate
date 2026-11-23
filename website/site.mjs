@@ -161,7 +161,9 @@ function location(pathname, parts) {
       "/navigation.js",
       "/analytics.js",
       "/vendor/posthog-1.447.4.min.js",
+      "/vendor/posthog-web-vitals-1.447.4.min.js",
       "/vendor/posthog-LICENSE.txt",
+      "/vendor/web-vitals-LICENSE.txt",
       "/legal/styles.css",
     ].includes(pathname)
   )
@@ -328,6 +330,7 @@ export function createBuildServer(directory) {
           ![
             "media/provider-icons-license.txt",
             "vendor/posthog-LICENSE.txt",
+            "vendor/web-vitals-LICENSE.txt",
           ].includes(file))
       ) {
         response.writeHead(404).end();
@@ -468,7 +471,9 @@ async function renderBuild(destination, analyticsToken) {
     "navigation.js",
     "analytics.js",
     "vendor/posthog-1.447.4.min.js",
+    "vendor/posthog-web-vitals-1.447.4.min.js",
     "vendor/posthog-LICENSE.txt",
+    "vendor/web-vitals-LICENSE.txt",
     "legal/styles.css",
   ])
     await emit(resolve(website, file), resolve(destination, file));

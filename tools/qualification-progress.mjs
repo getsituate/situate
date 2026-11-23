@@ -49,6 +49,8 @@ const upgradeSteps = new Set([
   "open_workspace",
   "save_predecessor_note",
   "create_unsaved_draft",
+  "dismiss_draft_save_error",
+  "verify_unsaved_editor",
   "open_update",
   "confirm_first_install",
   "observe_unsaved_dialog",
