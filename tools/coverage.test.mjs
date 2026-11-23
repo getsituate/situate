@@ -428,7 +428,7 @@ test("coverage is a read-only explicit diagnostic, separate from required verifi
   assert.match(diagnostics, /workflow_dispatch:/);
   assert.match(
     diagnostics,
-    /options:\s+\[coverage, design, visual, provider, signing, qualification-route\]/,
+    /options:\s*\[\s*coverage,\s*design,\s*visual,\s*provider,\s*signing,\s*qualification-route,\s*launch-check,?\s*\]/,
   );
   assert.match(diagnostics, /github.repository == 'getsituate\/situate'/);
   assert.match(diagnostics, /github.ref == 'refs\/heads\/main'/);

@@ -714,9 +714,8 @@ test("signing diagnostics use a separate trusted-main job with certificate-only 
   const workflow = read("diagnostics");
   assert.match(
     workflow,
-    /options:\s+\[coverage, design, visual, provider, signing, qualification-route\]/,
+    /options:\s*\[\s*coverage,\s*design,\s*visual,\s*provider,\s*signing,\s*qualification-route,\s*launch-check,?\s*\]/,
   );
-  assert.match(job(workflow, "native"), /inputs\.selection != 'signing'/);
   const signing = job(workflow, "signing");
   for (const guard of [
     "github.repository == 'getsituate/situate'",
@@ -753,6 +752,42 @@ test("signing diagnostics use a separate trusted-main job with certificate-only 
   );
 });
 
+test("launch diagnostics share the release runner without preparing a build or receiving credentials", () => {
+  const workflow = read("diagnostics");
+  const launch = job(workflow, "launch-check");
+  const native = job(workflow, "native");
+  assert.match(
+    native,
+    /&& \(inputs\.selection == 'coverage' \|\| inputs\.selection == 'design' \|\| inputs\.selection == 'provider'\)/,
+  );
+  for (const guard of [
+    "github.repository == 'getsituate/situate'",
+    "github.ref == 'refs/heads/main'",
+    "github.event_name == 'workflow_dispatch'",
+    "inputs.selection == 'launch-check'",
+  ])
+    assert.ok(launch.includes(guard));
+  const creator = job(read("release-macos"), "create");
+  assert.equal(
+    launch.match(/runs-on: (.+)/)?.[1],
+    creator.match(/runs-on: (.+)/)?.[1],
+  );
+  assert.match(launch, /timeout-minutes: 5/);
+  assert.match(launch, /run: node tools\/qualification-launch-check\.mjs\n/);
+  assert.match(
+    launch,
+    /LAUNCH_CHECK_PUBLISHED_DMG: \$\{\{ inputs\.launch_published_dmg \}\}/,
+  );
+  assert.match(
+    workflow,
+    /launch_published_dmg:\s+description:[^\n]+\s+type: boolean\s+default: false/,
+  );
+  assert.doesNotMatch(
+    launch,
+    /environment:|secrets\.|GH_TOKEN|prepare-release|create-stage|publish-run|: write/,
+  );
+});
+
 test("qualification route diagnostics use protected hosted dispatch and only SSH/configuration credentials", () => {
   const workflow = read("diagnostics");
   const route = job(workflow, "qualification-route");
@@ -763,10 +798,6 @@ test("qualification route diagnostics use protected hosted dispatch and only SSH
     "inputs.selection == 'qualification-route'",
   ])
     assert(route.includes(guard));
-  assert.match(
-    job(workflow, "native"),
-    /inputs\.selection != 'qualification-route'/,
-  );
   assert.match(route, /runs-on: macos-latest/);
   assert.match(route, /environment: macos-release/);
   assert.match(route, /timeout-minutes: 10/);
