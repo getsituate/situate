@@ -69,7 +69,7 @@ These remain longer-term goals, not current release gates.
 
 ## Open questions
 
-- Which Windows versions should the initial release support? Which installer format and native qualification environments should it use?
+- Which Windows versions should the initial release support, and which native environments will qualify them?
 - When should iOS, Linux desktop or Android enter active scope, and what native qualification is required before claiming support?
 - Which other operating system versions, Linux distributions and device classes are supported?
 - Which platform capabilities limit otherwise equivalent functionality, particularly local plugin execution and testing under mobile store rules?

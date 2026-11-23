@@ -61,6 +61,15 @@ export async function publishWindows(
     };
   }
   assert.deepEqual(qualification.architectures, checks);
+  const bootstrap = qualification.webview2Bootstrap;
+  assert(
+    bootstrap?.result === "passed" &&
+      packages.some(
+        ({ target, sha256 }) =>
+          target === bootstrap.target && sha256 === bootstrap.sha256,
+      ),
+    "WebView2 bootstrap qualification must identify an exact Windows installer.",
+  );
   assert.deepEqual(manifest.artifacts, packages);
   assert.deepEqual(
     JSON.parse(readFileSync(join(candidate, "update.json"), "utf8")),

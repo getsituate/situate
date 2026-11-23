@@ -88,7 +88,13 @@ Dispatch **Build Windows release candidates** on protected `main` with a reserve
 node client/scripts/windows-release.mjs CANDIDATE VERSION SOURCE_SHA X64_ARTIFACT ARM64_ARTIFACT
 ```
 
-Before publishing, qualify the installer for each architecture on Windows: install as a standard user, exercise the update through the application with a workspace and stored draft, confirm restart and data preservation, and uninstall. Record only successful checks in the qualification JSON. Its `kind` is `windows-exact-artifact-qualification`, `manifestSha256` is the hash of the assembled `manifest.json`, and `architectures` lists x64 then ARM64, with each manifest `target` and installer `sha256` plus `install`, `update`, and `uninstall` set to `passed`. Keep the qualification evidence with the candidate; do not substitute a result from another build or an emulated x64 run for an ARM64 run.
+Before publishing, qualify the exact installers on native x64 and ARM64 Windows:
+
+1. Install as a standard user in a disposable profile. Confirm the workspace chooser opens, create a synthetic workspace, and check that the app uninstalls without removing the workspace.
+2. Use a private HTTPS feed to deliver the candidate as an update to an earlier test build. Configure the earlier build to trust the candidate's public key and private feed; do not rebuild or re-sign the candidate. Confirm restart into the candidate and preservation of the workspace and a stored draft.
+3. On a separate disposable image without WebView2, confirm the embedded bootstrapper can install the runtime and the same candidate opens the workspace chooser. A new app profile on a machine with WebView2 does not exercise this path.
+
+Record only successful checks in the qualification JSON. Its `kind` is `windows-exact-artifact-qualification`, `manifestSha256` is the hash of the assembled `manifest.json`, and `architectures` lists x64 then ARM64, with each manifest `target` and installer `sha256` plus `install`, `update`, and `uninstall` set to `passed`. `webview2Bootstrap` records the `target` and `sha256` of the installer tested without WebView2, with `result` set to `passed`. Keep the qualification evidence with the candidate; do not substitute a result from another build or an emulated x64 run for an ARM64 run.
 
 The annotated `windows-vVERSION` tag must point to the qualified source commit. The Windows publisher uses that existing tag, stages the verified assets in a draft, verifies GitHub's copies, and makes it a stable release without changing the repository's latest-release selection. It does not replace published assets. Set `SITUATE_UPDATER_PUBLIC_KEY` in the publication environment; the private key is not needed.
 

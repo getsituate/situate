@@ -48,6 +48,11 @@ function setup(t) {
   const qualification = {
     kind: "windows-exact-artifact-qualification",
     manifestSha256: hash(manifest),
+    webview2Bootstrap: {
+      target: artifacts[0].target,
+      sha256: artifacts[0].sha256,
+      result: "passed",
+    },
     architectures: artifacts.map(({ target, sha256 }) => ({
       target,
       sha256,
@@ -166,6 +171,20 @@ test("does not write to GitHub without both exact qualification records and the 
       f.github,
     ),
   );
+  for (const bootstrap of [
+    undefined,
+    { ...f.qualification.webview2Bootstrap, sha256: "0".repeat(64) },
+  ]) {
+    await assert.rejects(
+      publishWindows(
+        f.folder,
+        { ...f.qualification, webview2Bootstrap: bootstrap },
+        f.signer.publicKey,
+        f.github,
+      ),
+      /WebView2 bootstrap qualification must identify an exact Windows installer/,
+    );
+  }
   f.setRevision("0".repeat(40));
   await assert.rejects(
     publishWindows(f.folder, f.qualification, f.signer.publicKey, f.github),
