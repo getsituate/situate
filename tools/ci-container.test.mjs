@@ -765,6 +765,7 @@ test("verification delegates selected lanes directly from planning without optio
         .filter(Boolean)
         .sort(),
       [
+        ...(name === "verify" ? ["architecture"] : []),
         "plan",
         "policy",
         "tooling",

@@ -1,0 +1,49 @@
+name: Deploy architecture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/architecture/**
+      - tools/build-architecture.py
+      - .github/workflows/deploy-architecture.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: architecture-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'getsituate/situate' && github.ref == 'refs/heads/main' && vars.ARCHITECTURE_PAGES_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: gem install asciidoctor --version 2.0.26 --no-document --user-install --bindir "$RUNNER_TEMP/bin"
+      - run: python3 tools/build-architecture.py "$RUNNER_TEMP/architecture"
+        env:
+          ASCIIDOCTOR: ${{ runner.temp }}/bin/asciidoctor
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: ${{ runner.temp }}/architecture
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

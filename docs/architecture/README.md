@@ -14,6 +14,28 @@ asciidoctor --failure-level WARN -o docs/architecture/index.html docs/architectu
 
 Open `docs/architecture/index.html` in a browser. The generated file is ignored by Git. Render at this location to preserve relative links to repository sources; linked Markdown files remain source documents, not generated HTML pages. No diagram extension is required.
 
+## Build the static site
+
+With Python 3.10 or later and Asciidoctor 2.0.26 installed, run:
+
+```sh
+python3 tools/build-architecture.py /path/to/new/output-directory
+```
+
+Serve the output directory or open its `index.html` in a browser. The build checks section anchors and referenced SVGs. Links to repository files point to the checked-out commit on GitHub; build from a clean checkout of a published commit to preview those links.
+
+## Publish to GitHub Pages
+
+The [Deploy architecture workflow](../../.github/workflows/deploy-architecture.yml) publishes the built site from `main` after changes to the architecture or its build. It can also be started manually on `main`. It does not use a publishing branch.
+
+To enable publishing in `getsituate/situate`:
+
+1. In **Settings → Pages**, select **GitHub Actions** as the source.
+2. In **Settings → Environments**, restrict the `github-pages` environment to deployments from `main`.
+3. Set the repository Actions variable `ARCHITECTURE_PAGES_ENABLED` to `true` and run **Deploy architecture** on `main`.
+
+Open the URL shown by the deployment. Check the table of contents, a section link, a diagram and a link to a repository file.
+
 ## Update diagrams
 
 Diagram sources (`.dot`) and rendered SVGs are kept together in `diagrams/`. With [Graphviz](https://graphviz.org/) installed, regenerate them locally from the repository root:

@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - Dependency monitoring
+      - Deploy architecture
       - Deploy hosting
       - Deploy website
       - Diagnostics

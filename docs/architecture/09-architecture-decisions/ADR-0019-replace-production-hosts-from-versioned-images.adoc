@@ -9,7 +9,7 @@ ifndef::architecture-diagrams-root[]
 :architecture-diagrams-root: ../diagrams
 endif::[]
 
-Status:: accepted; automated recovery revised by link:ADR-0020-stop-failed-hosting-deployments.adoc[ADR-0020]
+Status:: accepted; automated recovery revised by link:{architecture-repository-root}/docs/architecture/09-architecture-decisions/ADR-0020-stop-failed-hosting-deployments.adoc[ADR-0020]
 Date:: 2026-11-19
 Implementation:: The normal Terraform root targets only immutable generations. GitHub Actions qualifies the merged revision with synthetic publication data before staging a replacement. The branch rehearsal uses a separate Hetzner project. Production qualification uses isolated temporary resources in the production project so the resulting snapshot can boot there.
 
