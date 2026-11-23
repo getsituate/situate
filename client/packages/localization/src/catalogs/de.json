@@ -62,7 +62,7 @@
   "settings.analytics.title": "Nutzungsanalyse",
   "settings.analytics.close": "Schließen",
   "settings.analytics.share": "Nutzungsdaten mit Situate teilen",
-  "settings.analytics.description": "Wenn du Situate nutzt, sendet die App pro UTC-Tag ein Aktivitätsereignis an PostHog. Es enthält pseudonyme Kennungen für diese Installation und, sofern verfügbar, den Arbeitsbereich, außerdem den Zeitpunkt sowie die Versionen von Situate und macOS. Namen, Pfade und Inhalte von Arbeitsbereichen werden nicht übertragen.",
+  "settings.analytics.description": "Situate teilt pseudonyme Nutzungsdaten mit PostHog. So können wir besser verstehen, wie die App genutzt wird, und sie verbessern. Namen, Pfade und Inhalte von Arbeitsbereichen werden nicht übertragen.",
   "settings.analytics.withdrawal": "Du kannst die Freigabe jederzeit beenden. Es werden dann keine weiteren Daten geteilt. Bereits empfangene Daten werden dadurch nicht gelöscht.",
   "settings.analytics.error": "Deine Einstellung zur Nutzungsanalyse konnte nicht gespeichert werden. Versuche es bitte erneut.",
   "settings.workspace": "Einstellungen des Arbeitsbereichs",
