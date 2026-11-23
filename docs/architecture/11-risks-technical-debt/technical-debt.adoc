@@ -1,8 +1,12 @@
 === Technical debt
 
-No assessed technical-debt inventory is recorded in this chapter; this does not establish that the implementation has no debt.
-The risk entries above describe possible consequences and accepted design trade-offs, not evidence of current implementation defects.
-Deferred requirements are not automatically technical debt.
+This register records known implementation and verification gaps that affect maintenance, reliability, or delivery. Deferred requirements are not automatically technical debt.
 
-The CTO owns the open inventory question: which existing implementation compromises have observable consequences for maintenance, reliability or delivery?
-When such a compromise is established, its record should identify the evidence, affected behavior, originating decision where known, owner, mitigation options and review trigger.
+[[debt-windows-webview2-first-install]]
+==== Windows installation without WebView2
+
+*Status:* Open. The Windows installer includes Microsoft's bootstrapper, not the WebView2 Runtime. If the runtime is missing, the bootstrapper downloads and installs it before Situate can open. This path has not been verified end to end and matters especially on Windows 10.
+
+*Evidence:* Both GitHub-hosted Windows images tested already had WebView2 installed. The runtime also remained installed in the Windows 11 test VM clone because Microsoft's installer blocked its removal. Tests on those images do not show whether Situate can install on a system without the runtime.
+
+*Owner and follow-up:* The Windows release owner should run the link:{architecture-repository-root}/infrastructure/releases/README.md#windows-direct-releases[Windows release qualification] on a disposable Windows image without WebView2. Verify that the exact release installer can install the runtime as part of a standard-user installation and that Situate opens the workspace chooser. Revisit this gap when qualifying a Windows release or changing how the installer supplies WebView2.
