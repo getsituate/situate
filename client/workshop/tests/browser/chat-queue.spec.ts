@@ -57,6 +57,9 @@ test("pending messages start compact and expand on demand without losing the dra
   ).toBeVisible();
   const rows = preview.locator(".pending-message > summary");
   await expect(rows).toHaveCount(4);
+  await preview.getByRole("button", { name: "Edit all pending" }).focus();
+  await preview.keyboard.press("Tab");
+  await expect(rows.first()).toBeFocused();
   const listBox = await preview.locator(".pending-list").boundingBox();
   for (const row of await rows.all()) {
     await expect(row).toBeVisible();
