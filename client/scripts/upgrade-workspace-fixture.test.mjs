@@ -209,6 +209,6 @@ test("the upgrade launches the installed updater and verifies cancellation befor
   );
   assert.deepEqual(
     steps.filter((step) => "saved" in step).map((step) => step.saved),
-    [upgradeNoteBefore, upgradeNoteAfter, unsaved],
+    [upgradeNoteBefore, upgradeNoteAfter, upgradeNoteAfter, unsaved],
   );
 });
