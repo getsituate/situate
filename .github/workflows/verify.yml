@@ -311,7 +311,6 @@ jobs:
       contents: read
     env:
       CARGO_PROFILE_TEST_DEBUG: "0"
-      CARGO_TARGET_DIR: ${{ runner.temp }}/situate-arm64-target
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -320,6 +319,8 @@ jobs:
           persist-credentials: false
       - shell: pwsh
         run: ./tools/test-windows-arm64.ps1
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/situate-arm64-target
 
   windows-smoke-build:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
