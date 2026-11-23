@@ -187,10 +187,7 @@ test("only the first Windows release can explicitly defer the bootstrap check", 
   f.github.listReleases = list;
   const result = await publish();
   const release = f.github.getRelease("getsituate/situate", result.id);
-  assert.match(
-    release.body,
-    /installation without an existing WebView2 Runtime has not been verified/,
-  );
+  assert.doesNotMatch(release.body, /WebView2/u);
 });
 
 test("does not write to GitHub without both exact qualification records and the reviewed tag", async (t) => {

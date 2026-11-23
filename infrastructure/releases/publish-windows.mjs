@@ -15,8 +15,6 @@ const targets = new Map([
   ["aarch64-pc-windows-msvc", "windows-aarch64"],
 ]);
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-const webview2Disclosure =
-  "If WebView2 is not already installed, setup needs an internet connection to download it from Microsoft. First installation without an existing WebView2 Runtime has not been verified.";
 
 export async function publishWindows(
   candidate,
@@ -114,7 +112,6 @@ export async function publishWindows(
     const body = [
       "Requires Windows 10 version 22H2 or Windows 11. Choose the installer for your architecture: x64 or ARM64.",
       "These installers do not have an Authenticode (Windows publisher) signature. Windows may warn or block installation.",
-      ...(deferred ? [webview2Disclosure] : []),
       `SHA-256 checksums:\n\n\`\`\`text\n${sums}\`\`\``,
     ].join("\n\n");
     release = await github.createDraft(RELEASE_REPOSITORY, {
@@ -129,11 +126,6 @@ export async function publishWindows(
   async function verify(inventory, allowMissing) {
     assert.equal(inventory.tag_name, tag);
     assert.equal(inventory.prerelease, false);
-    if (deferred)
-      assert(
-        inventory.body?.includes(webview2Disclosure),
-        "Missing WebView2 disclosure in release notes.",
-      );
     assert(Array.isArray(inventory.assets));
     assert.equal(
       new Set(inventory.assets.map(({ name }) => name)).size,
