@@ -716,20 +716,6 @@ export async function productionStages(
           publicKey,
           request.identity,
         );
-        if (windows.deferred) {
-          assert(
-            (await github.listReleases(request.identity.repository)).every(
-              (release) =>
-                release.tag_name === request.identity.tag ||
-                !release.assets?.some(
-                  ({ name }) =>
-                    name === "windows-release.json" ||
-                    /-windows-(?:x64|arm64)-setup\.exe$/u.test(name),
-                ),
-            ),
-            "Only the first Windows release may defer the WebView2 bootstrap check.",
-          );
-        }
         request.windowsFiles = windows.files;
         windowsNotes = windows.notes;
       }

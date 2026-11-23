@@ -106,7 +106,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
               : ["verify", "release-macos"].includes(name) &&
                   match[1].endsWith(".ps1")
-                ? /^\.\/tools\/(?:build-windows-installer-preview|probe-windows-webview2|test-windows-arm64)\.ps1$/
+                ? /^\.\/tools\/(?:build-windows-installer-preview|probe-windows-webview2|test-windows(?:-release)?-arm64)\.ps1$/
                 : /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
       );
     }
@@ -149,6 +149,12 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
         body.includes("runs-on: windows-11-arm")
       ) {
         assert.match(body, /run: \.\/tools\/test-windows-arm64\.ps1/);
+      } else if (
+        name === "release-macos" &&
+        body.includes("test-windows-release-arm64.ps1")
+      ) {
+        assert.match(body, /runs-on: windows-11-arm/);
+        assert.doesNotMatch(body, /environment:|secrets\./);
       } else if (body.includes("run: node ")) {
         const python = body.includes("runs-on: windows-2025")
           ? "python"
@@ -329,9 +335,18 @@ test("the desktop CD builds Windows for the reserved version before creating the
     /TAURI_SIGNING_PRIVATE_KEY:.*secrets\.TAURI_SIGNING_PRIVATE_KEY/,
   );
   assert.doesNotMatch(build, /contents: write|SSH/);
+  const qualification = job(workflow, "windows-qualification");
   assert.match(
-    job(workflow, "windows-qualification"),
-    /needs: windows-build[\s\S]*environment: windows-qualification/,
+    qualification,
+    /needs: windows-build[\s\S]*runs-on: windows-11-arm/,
+  );
+  assert.match(
+    qualification,
+    /test-windows-arm64\.ps1[\s\S]*test-windows-release-arm64\.ps1[\s\S]*upload-artifact/,
+  );
+  assert.doesNotMatch(
+    qualification,
+    /environment:|secrets\.|continue-on-error/,
   );
   assert.match(
     creator,

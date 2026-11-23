@@ -84,25 +84,15 @@ The app's history was sealed before signing from approved declarations and retai
 
 The protected-main release workflow builds the macOS packages and the x64 and ARM64 Windows NSIS installers for the same reserved version and checkout. Windows builds start automatically as part of the same run.
 
-Restrict `windows-release` and `windows-qualification` to `main`. `windows-release` supplies `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. Set `SITUATE_WINDOWS_UPDATER_PUBLIC_KEY` in `macos-release` to the same public key so the shared publisher can verify Windows signatures without access to the Windows private key. Do not assign the private key to the qualification environment.
+Restrict `windows-release` to `main`. It supplies `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. Set `SITUATE_WINDOWS_UPDATER_PUBLIC_KEY` in `macos-release` to the same public key so the shared publisher can verify Windows signatures without access to the Windows private key.
 
-Download the two Windows artifacts from the same workflow run and attempt. Assemble the candidate with `SITUATE_UPDATER_PUBLIC_KEY` set to the Windows public key:
+The release workflow runs the Windows host and core tests on `windows-11-arm`. On the same runner, it installs the exact ARM64 candidate, checks that its workspace chooser opens, exercises NSIS upgrade from a synthetic baseline, and checks uninstall. The runner emits the candidate hash and the results. The publisher requires those results and validates the x64 and ARM64 updater signatures before sealing the shared `vVERSION` GitHub Release. It does not wait for a manual receipt. This does not qualify Windows 10, native x64, or WebView2 bootstrap. The NSIS upgrade test does not exercise update discovery or download.
+
+To reconstruct the Windows candidate for feed activation, download the two Windows build artifacts from that run and attempt, set `SITUATE_UPDATER_PUBLIC_KEY` to the Windows public key, and assemble them:
 
 ```sh
 node client/scripts/windows-release.mjs CANDIDATE VERSION SOURCE_SHA X64_ARTIFACT ARM64_ARTIFACT
 ```
-
-Before publishing, qualify the exact installers on native x64 and ARM64 systems running Windows 10 22H2 and Windows 11. Hosted Windows Server checks do not substitute for client qualification.
-
-1. Install as a standard user in a disposable profile. Confirm the workspace chooser opens, create a synthetic workspace, and check that the app uninstalls without removing the workspace.
-2. Build a test baseline with a version lower than the candidate and the same updater public key. On the Windows build host, run `node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE --target=RUST_TARGET --qualification-baseline=BASELINE_VERSION`. This installer uses the production app identity and a private feed at `https://example.invalid/update.json`; install it only in a disposable profile without a production installation. From the baseline, install the unchanged candidate through the app's updater. Confirm restart into the candidate and preservation of the workspace and a stored draft.
-3. On a separate disposable image without WebView2, confirm the embedded bootstrapper can install the runtime and the same candidate opens the workspace chooser. A new app profile on a machine with WebView2 does not exercise this path. On the Windows support PR, the `windows-webview-probe` job reports whether the hosted images already have the runtime registered.
-
-For the first Windows release only, the publisher accepts `{ "result": "deferred", "debt": "debt-windows-webview2-first-install" }` as `webview2Bootstrap` instead of a passing result. The [technical-debt register](../../docs/architecture/11-risks-technical-debt/technical-debt.adoc#debt-windows-webview2-first-install) tracks the missing check. The exception does not waive the other installer checks.
-
-Record successful checks in the qualification JSON. Its `kind` is `windows-exact-artifact-qualification`, `manifestSha256` is the hash of the assembled `manifest.json`, and `architectures` lists x64 then ARM64, with each manifest `target` and installer `sha256`. Under `systems`, record `install`, `update`, and `uninstall` as `passed` for both `windows-10-22h2` and `windows-11`. `webview2Bootstrap` records the `target` and `sha256` of the installer tested without WebView2, with `result` set to `passed`. Keep the qualification evidence with the candidate; do not substitute a result from another build or an emulated x64 run for an ARM64 run.
-
-Set the `SITUATE_WINDOWS_RELEASE_QUALIFICATION` environment variable in `windows-qualification` to the qualification JSON and approve the **Record Windows qualification** job in the same run. Require a reviewer for this environment. The release job verifies that the receipt describes its exact candidate before sealing the Windows installers, signatures and checksums alongside the macOS packages in the single `vVERSION` GitHub Release. A missing or invalid receipt prevents release creation. A build or review that misses the workflow deadline cannot publish its candidate in a later run.
 
 After the release is public, run the feed activator on the distribution host with its exact release ID and a verified copy of the assembled candidate. It compares the GitHub assets with the candidate before atomically replacing `windows-release/update.json`. It refuses older versions and differing bytes under the current version.
 

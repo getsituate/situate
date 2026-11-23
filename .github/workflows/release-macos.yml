@@ -462,23 +462,28 @@ jobs:
           retention-days: 7
 
   windows-qualification:
-    name: Record Windows qualification
+    name: Qualify Windows on native ARM64
     needs: windows-build
     if: github.ref_protected
-    runs-on: ubuntu-24.04
-    environment: windows-qualification
-    timeout-minutes: 5
+    runs-on: windows-11-arm
+    timeout-minutes: 55
     permissions:
+      actions: read
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - run: python3 tools/pipeline-bootstrap.py
-      - run: node tools/actions-windows-release.mjs receipt
+      - shell: pwsh
+        run: ./tools/test-windows-arm64.ps1
         env:
-          SITUATE_WINDOWS_RELEASE_QUALIFICATION: ${{ vars.SITUATE_WINDOWS_RELEASE_QUALIFICATION }}
+          CARGO_PROFILE_TEST_DEBUG: "0"
+          CARGO_TARGET_DIR: ${{ runner.temp }}/situate-arm64-target
+      - shell: pwsh
+        run: ./tools/test-windows-release-arm64.ps1
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows-qualification-${{ github.run_attempt }}

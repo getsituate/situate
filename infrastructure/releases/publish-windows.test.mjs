@@ -46,31 +46,16 @@ function setup(t) {
     `${artifacts.map(({ file, sha256 }) => `${sha256}  ${file}`).join("\n")}\n`,
   );
   const qualification = {
-    kind: "windows-exact-artifact-qualification",
-    manifestSha256: hash(manifest),
-    webview2Bootstrap: {
-      target: artifacts[0].target,
-      sha256: artifacts[0].sha256,
-      result: "passed",
-    },
-    architectures: artifacts.map(({ target, sha256 }) => ({
-      target,
-      sha256,
-      systems: {
-        "windows-10-22h2": {
-          install: "passed",
-          update: "passed",
-          uninstall: "passed",
-        },
-        "windows-11": {
-          install: "passed",
-          update: "passed",
-          uninstall: "passed",
-        },
-      },
-    })),
+    kind: "windows-arm64-exact-installer",
+    source,
+    version,
+    sha256: artifacts[1].sha256,
+    osBuild: "26200",
+    install: "passed",
+    launch: "passed",
+    installerUpgrade: "passed",
+    uninstall: "passed",
   };
-
   return { folder, qualification, signer, artifacts };
 }
 
@@ -90,21 +75,7 @@ test("validates and stages both signed Windows installers for the common release
     "windows-release.json",
   ]);
   assert.match(result.notes, /Windows may warn or block installation/);
-  assert.equal(result.deferred, false);
-  const deferred = qualifiedWindowsAssets(
-    folder,
-    {
-      ...qualification,
-      webview2Bootstrap: {
-        result: "deferred",
-        debt: "debt-windows-webview2-first-install",
-      },
-    },
-    signer.publicKey,
-    identity,
-  );
-  assert.equal(deferred.deferred, true);
-  assert.doesNotMatch(deferred.notes, /WebView2/u);
+  assert.doesNotMatch(result.notes, /WebView2/u);
 });
 
 test("rejects a wrong source, incomplete qualification, or altered installer", (t) => {
@@ -114,12 +85,17 @@ test("rejects a wrong source, incomplete qualification, or altered installer", (
   assert.throws(() =>
     stage(qualification, { ...identity, sourceRevision: "4".repeat(40) }),
   );
-  const incomplete = structuredClone(qualification);
-  delete incomplete.architectures[1].systems["windows-10-22h2"];
-  assert.throws(() => stage(incomplete));
   assert.throws(
-    () => stage({ ...qualification, webview2Bootstrap: undefined }),
-    /WebView2 bootstrap qualification/,
+    () => stage({ ...qualification, launch: undefined }),
+    /Missing ARM64 installer check/,
+  );
+  assert.throws(
+    () => stage({ ...qualification, osBuild: "19045" }),
+    /Expected a Windows 11/,
+  );
+  assert.throws(
+    () => stage({ ...qualification, sha256: artifacts[0].sha256 }),
+    /different installer/,
   );
   writeFileSync(join(folder, artifacts[0].file), "altered");
   assert.throws(() => stage(qualification));

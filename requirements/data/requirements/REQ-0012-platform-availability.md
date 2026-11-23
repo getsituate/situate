@@ -54,9 +54,9 @@ Subsequent platform prioritization: Windows is the next delivery target, with fe
 
 - A supported Windows installation can run every feature available on macOS, including local agent-driven plugin creation, modification and testing. Native verification covers the Windows-specific paths for these features.
 - GitHub Releases offers a stable x64 and ARM64 installer. If the installers lack Authenticode signatures, the release notes identify them as unsigned, provide their SHA-256 checksums, and explain that Windows may warn or block installation.
-- CI builds and tests both Windows architectures. The desktop release pipeline builds both Windows installers for the reserved macOS release version, qualifies the exact bytes, and verifies their version-bound updater signatures. It publishes the shared GitHub Release only after the macOS and Windows packages have qualified. The Windows update feed serves the matching installer and signature for each architecture independently of the website download link.
+- The desktop release pipeline builds both Windows installers for the reserved macOS release version and verifies their version-bound updater signatures. For Windows release qualification, it runs the native host and core tests and exercises the exact ARM64 installer on the GitHub-hosted Windows 11 ARM64 runner. Successful Windows and macOS checks allow the shared GitHub Release to publish automatically. The Windows update feed serves the matching installer and signature for each architecture independently of the website download link.
 - The Windows download link on Situate's website can be enabled separately for an already published Authenticode-signed release. The link points to the same published installer for the selected architecture.
-- Windows 10, version 22H2, is the minimum Windows version for the first release on x64 and ARM64. Before publication, qualify the exact installers natively on that version and on Windows 11. Document the supported versions and architectures. Physical-device checks may follow initial publication and precede enabling the website download link.
+- Windows 10, version 22H2, is the minimum Windows version for the first release on x64 and ARM64. Document the supported versions and architectures separately from the release test coverage. Native x64 and Windows 10 release qualification, WebView2 bootstrap, and physical-device checks do not block GitHub publication. Complete physical-device checks before enabling the website download link.
 
 ### Deferred platform criteria
 
@@ -69,7 +69,7 @@ These remain longer-term goals, not current release gates.
 
 ## Open questions
 
-- Which native environments will qualify the supported Windows versions?
+- Which native environments can extend Windows qualification beyond hosted Windows 11 ARM64?
 - When should iOS, Linux desktop or Android enter active scope, and what native qualification is required before claiming support?
 - Which other operating system versions, Linux distributions and device classes are supported?
 - Which platform capabilities limit otherwise equivalent functionality, particularly local plugin execution and testing under mobile store rules?

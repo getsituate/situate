@@ -28,12 +28,23 @@ export function qualifiedWindowsAssets(
   assert.equal(manifest.source, identity.sourceRevision);
   assert.equal(version, identity.version);
   assert.equal(tag, identity.tag);
-  assert.equal(qualification.kind, "windows-exact-artifact-qualification");
-  assert.equal(qualification.manifestSha256, hash(manifestBytes));
+  assert.equal(qualification.kind, "windows-arm64-exact-installer");
+  assert.equal(qualification.source, manifest.source);
+  assert.equal(qualification.version, version);
+  assert.match(qualification.osBuild, /^[0-9]{5}$/u);
+  assert(
+    Number(qualification.osBuild) >= 22000,
+    "Expected a Windows 11 qualification build",
+  );
+  for (const check of ["install", "launch", "installerUpgrade", "uninstall"])
+    assert.equal(
+      qualification[check],
+      "passed",
+      `Missing ARM64 installer check: ${check}`,
+    );
   const packages = [];
   const platforms = {};
   const local = new Map();
-  const checks = [];
   for (const [target, updateKey] of targets) {
     const { file, size, sha256, signature } = readWindowsInstaller(
       candidate,
@@ -42,22 +53,12 @@ export function qualifiedWindowsAssets(
       publicKey,
     );
     packages.push({ target, file, size, sha256 });
-    checks.push({
-      target,
-      sha256,
-      systems: {
-        "windows-10-22h2": {
-          install: "passed",
-          update: "passed",
-          uninstall: "passed",
-        },
-        "windows-11": {
-          install: "passed",
-          update: "passed",
-          uninstall: "passed",
-        },
-      },
-    });
+    if (target === "aarch64-pc-windows-msvc")
+      assert.equal(
+        qualification.sha256,
+        sha256,
+        "ARM64 qualification belongs to a different installer",
+      );
     const sidecar = readFileSync(join(candidate, `${file}.sig`));
     assert.equal(sidecar.toString("utf8").trim(), signature);
     const bytes = readFileSync(join(candidate, file));
@@ -70,24 +71,6 @@ export function qualifiedWindowsAssets(
       signature,
     };
   }
-  assert.deepEqual(qualification.architectures, checks);
-  const bootstrap = qualification.webview2Bootstrap;
-  const deferred = bootstrap?.result === "deferred";
-  if (deferred) {
-    assert.deepEqual(bootstrap, {
-      result: "deferred",
-      debt: "debt-windows-webview2-first-install",
-    });
-  } else {
-    assert(
-      bootstrap?.result === "passed" &&
-        packages.some(
-          ({ target, sha256 }) =>
-            target === bootstrap.target && sha256 === bootstrap.sha256,
-        ),
-      "WebView2 bootstrap qualification must identify an exact Windows installer.",
-    );
-  }
   assert.deepEqual(manifest.artifacts, packages);
   assert.deepEqual(
     JSON.parse(readFileSync(join(candidate, "update.json"), "utf8")),
@@ -99,7 +82,6 @@ export function qualifiedWindowsAssets(
   local.set("windows-release.json", manifestBytes);
   return {
     files: Object.fromEntries(local),
-    deferred,
     notes: [
       "## Windows",
       "Requires Windows 10 version 22H2 or Windows 11. Choose the installer for your architecture: x64 or ARM64.",

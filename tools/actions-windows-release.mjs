@@ -96,18 +96,6 @@ switch (process.argv[2]) {
     );
     break;
   }
-  case "receipt": {
-    const receipt = JSON.parse(env.SITUATE_WINDOWS_RELEASE_QUALIFICATION);
-    assert.equal(receipt.kind, "windows-exact-artifact-qualification");
-    assert.match(receipt.manifestSha256, /^[a-f0-9]{64}$/u);
-    mkdirSync(staging, { recursive: true });
-    writeFileSync(
-      join(staging, "qualification.json"),
-      JSON.stringify(receipt),
-      { flag: "wx" },
-    );
-    break;
-  }
   case "collect": {
     const [x64, arm64, receipt] = await Promise.all(
       ["windows-x64", "windows-arm64", "windows-qualification"].map(download),

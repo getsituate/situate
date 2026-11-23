@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  constants,
   copyFileSync,
   mkdtempSync,
   mkdirSync,
@@ -294,6 +295,8 @@ function releaseInputs(version) {
   };
 }
 
+const windowsQualificationBaselineVersion = "0.1.6";
+
 function buildRelease(directory, config, target, { source, version, updater }) {
   const overlay = JSON.parse(readFileSync(config, "utf8"));
   overlay.identifier = "com.getsituate.app";
@@ -359,6 +362,28 @@ function buildRelease(directory, config, target, { source, version, updater }) {
     )}\n`,
     { flag: "wx" },
   );
+  if (target === "aarch64-pc-windows-msvc") {
+    const baseline = qualificationBaseline(
+      windowsQualificationBaselineVersion,
+      environment,
+    );
+    rmSync(bundle, { recursive: true });
+    writeFileSync(config, JSON.stringify({ ...overlay, ...baseline.overlay }));
+    buildInstaller(directory, config, target, {
+      ...environment,
+      ...baseline.updater,
+    });
+    const baselineFiles = readdirSync(bundle).filter((file) =>
+      file.endsWith(".exe"),
+    );
+    if (baselineFiles.length !== 1)
+      throw new Error("Expected one qualification baseline installer");
+    copyFileSync(
+      join(bundle, baselineFiles[0]),
+      join(artifact, "qualification-baseline.exe"),
+      constants.COPYFILE_EXCL,
+    );
+  }
 }
 
 export function qualificationBaseline(version, environment) {
