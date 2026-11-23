@@ -1057,7 +1057,7 @@ mod tests {
 
     fn package(root: &Path, id: &str, dependencies: &[&str]) -> PackageRevision {
         sources::create(root, id).unwrap();
-        sources::write(root,id,"plugin.json",&json!({"schemaVersion":2,"id":id,"name":id,"description":"Synthetic","serviceEntry":"entry.js","dependencies":dependencies}).to_string(),None).unwrap();
+        sources::write(root,id,"plugin.json",&json!({"schemaVersion":3,"id":id,"name":id,"description":"Synthetic","serviceEntry":"entry.js","dependencies":dependencies}).to_string(),None).unwrap();
         sources::write(
             root,
             id,

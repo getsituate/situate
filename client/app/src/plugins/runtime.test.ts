@@ -72,7 +72,7 @@ function definition(
     exports: ["run"],
     source: {
       manifest: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         id,
         name: id,
         description: "Synthetic",
@@ -155,14 +155,14 @@ afterEach(() => {
 
 describe("plugin UI runtime", () => {
   it.each([false, true])(
-    "reclassifies a reopened schema 2 provider without losing tools or exports (source: %s)",
+    "loads a general plugin with retained tools and exports (source: %s)",
     async (source) => {
       const provider = definition();
       const consumer = definition("consumer", ["demo"]);
       const conforming = definition("conforming");
       const manifest = {
         ...provider.source.manifest,
-        kind: "connection" as const,
+        kind: "tool" as const,
         exports: source ? ["run", "documentSourceDescribe"] : ["run"],
       };
       const legacy = {

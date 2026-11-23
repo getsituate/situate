@@ -24,7 +24,7 @@ pub(super) fn seed(root: &Path) -> Result<(), String> {
             "garden-archive",
             "Garden archive",
             "Provides a sample document from the garden archive.",
-            json!({"kind":"connection","serviceEntry":"service.js","exports":["documentSourceDescribe","documentSourceList"]}),
+            json!({"kind":"source","serviceEntry":"service.js","exports":["documentSourceDescribe","documentSourceList"]}),
             "service.js",
             include_str!("archive.js"),
         ),
@@ -61,7 +61,7 @@ fn install(
     file: (&str, &str),
 ) -> std::io::Result<()> {
     let mut manifest = json!({
-        "schemaVersion": 2, "id": id, "name": name, "description": description,
+        "schemaVersion": 3, "id": id, "name": name, "description": description,
     });
     manifest
         .as_object_mut()

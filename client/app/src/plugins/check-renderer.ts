@@ -175,7 +175,8 @@ export function startCheckRenderer(
                 returned,
                 pluginId,
                 requireViewIcons === true && current === source,
-                current.manifest.schemaVersion === 3,
+                current.manifest.kind === "connection" ||
+                  current.manifest.kind === "source",
               );
             }
             loaded.set(pluginId, contributions);

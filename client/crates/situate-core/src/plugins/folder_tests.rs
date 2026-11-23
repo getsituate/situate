@@ -11,7 +11,7 @@ fn root() -> tempfile::TempDir {
 fn install(root: &Path, id: &str, dependencies: &[&str]) -> sources::PackageRevision {
     sources::create(root, id).unwrap();
     let code = root.join(".situate/plugins").join(id).join("code");
-    fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":id,"name":id,"description":"Synthetic fixture","serviceEntry":"entry.js","dependencies":dependencies}).to_string()).unwrap();
+    fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":id,"name":id,"description":"Synthetic fixture","serviceEntry":"entry.js","dependencies":dependencies}).to_string()).unwrap();
     fs::write(code.join("entry.js"), "export default {};").unwrap();
     sources::snapshot(root, id).unwrap()
 }
@@ -344,7 +344,7 @@ fn raw_replacement_before_first_migration_cannot_inherit_unproven_state() {
         let owner = root.path().join(".situate/plugins/sample");
         fs::remove_dir_all(&owner).unwrap();
         fs::create_dir_all(owner.join("code")).unwrap();
-        fs::write(owner.join("code/plugin.json"), json!({"schemaVersion":2,"id":"sample","name":"Fresh","description":"Synthetic","serviceEntry":"entry.js"}).to_string()).unwrap();
+        fs::write(owner.join("code/plugin.json"), json!({"schemaVersion":3,"id":"sample","name":"Fresh","description":"Synthetic","serviceEntry":"entry.js"}).to_string()).unwrap();
         fs::write(owner.join("code/entry.js"), "export default {};").unwrap();
         assert!(!owner.join(".runtime").exists());
         let listing = runtime::prepare(root.path()).unwrap();

@@ -173,7 +173,7 @@ fn legacy_credentials_migrate_durably_and_fresh_installations_do_not_inherit_the
     drop(old);
     let code = root.path().join(".situate/plugins/demo/code");
     std::fs::create_dir(&code).unwrap();
-    std::fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":"demo","name":"Demo","description":"Synthetic","serviceEntry":"entry.js"}).to_string()).unwrap();
+    std::fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":"demo","name":"Demo","description":"Synthetic","serviceEntry":"entry.js"}).to_string()).unwrap();
     std::fs::write(code.join("entry.js"), "export default {};").unwrap();
     let package = situate_core::plugins::sources::snapshot(root.path(), "demo").unwrap();
     std::fs::write(

@@ -14,7 +14,7 @@ export interface PluginManifest {
   skills: string[];
   serviceEntry?: string;
   uiEntry?: string;
-  kind?: "connection" | "tool";
+  kind?: "connection" | "source" | "tool";
   dependencies?: string[];
   exports?: string[];
   components?: string[];

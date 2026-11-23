@@ -23,6 +23,7 @@ pub struct MigrationId(pub u64);
 pub trait Migration {
     const VERSION: MigrationId;
     const MINIMUM_APP_VERSION: Option<&'static str>;
+    const RELEASE_ASSIGNED_MINIMUM: bool = false;
     fn apply(workspace: &MigrationWorkspace<'_>) -> Result<()>;
     fn validate(workspace: &MigrationWorkspace<'_>) -> Result<()>;
 }
@@ -31,6 +32,7 @@ pub trait Migration {
 pub struct MigrationDescriptor {
     pub version: MigrationId,
     pub minimum_app_version: Option<&'static str>,
+    pub(crate) release_assigned_minimum: bool,
     pub(crate) apply: fn(&MigrationWorkspace<'_>) -> Result<()>,
     pub(crate) validate: fn(&MigrationWorkspace<'_>) -> Result<()>,
 }
@@ -39,17 +41,31 @@ impl MigrationDescriptor {
         Self {
             version: M::VERSION,
             minimum_app_version: M::MINIMUM_APP_VERSION,
+            release_assigned_minimum: M::RELEASE_ASSIGNED_MINIMUM,
             apply: M::apply,
             validate: M::validate,
         }
     }
 }
 
+pub type PluginHistoryMigration =
+    fn(&Path, &str, &str, fn(&[u8]) -> Result<Option<Vec<u8>>>) -> Result<String>;
+
 /// A held capability for managed data only. Paths never include the workspace root.
 pub struct MigrationWorkspace<'a> {
     pub(crate) managed: &'a Dir,
+    pub(crate) root: &'a Path,
+    pub(crate) plugin_history: Option<PluginHistoryMigration>,
 }
 impl MigrationWorkspace<'_> {
+    #[cfg(test)]
+    pub(crate) fn without_history(managed: &Dir) -> MigrationWorkspace<'_> {
+        MigrationWorkspace {
+            managed,
+            root: Path::new(""),
+            plugin_history: None,
+        }
+    }
     fn parent(&self, path: &Path) -> Result<(Dir, String)> {
         let mut components: Vec<_> = path.components().collect();
         if components.is_empty()

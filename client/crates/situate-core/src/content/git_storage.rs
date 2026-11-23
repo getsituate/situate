@@ -117,6 +117,18 @@ pub(super) fn commit_fact(
     summary: &str,
     fact: super::history_records::Fact,
 ) -> Result<Oid> {
+    commit_to_ref(repo, directory, tree, parents, summary, fact, None)
+}
+
+pub(super) fn commit_to_ref(
+    repo: &Repository,
+    directory: &Dir,
+    tree: &Tree<'_>,
+    parents: &[&git2::Commit<'_>],
+    summary: &str,
+    fact: super::history_records::Fact,
+    destination: Option<&str>,
+) -> Result<Oid> {
     if parents.len() > 1 {
         return Err(super::history_records::invalid());
     }
@@ -131,16 +143,20 @@ pub(super) fn commit_fact(
     let bytes = repo.commit_create_buffer(&author, &author, &message, tree, parents)?;
     let oid = write_object(repo, ObjectType::Commit, &bytes)?;
     sync_objects(directory)?;
-    let name = match repo.head() {
-        Ok(head) => head.name()?.to_owned(),
-        Err(error) if error.code() == git2::ErrorCode::UnbornBranch => repo
-            .find_reference("HEAD")?
-            .symbolic_target()?
-            .ok_or(ContentError::InvalidPath)?
-            .to_owned(),
-        Err(error) => return Err(error.into()),
+    let name = if let Some(destination) = destination {
+        destination.to_owned()
+    } else {
+        match repo.head() {
+            Ok(head) => head.name()?.to_owned(),
+            Err(error) if error.code() == git2::ErrorCode::UnbornBranch => repo
+                .find_reference("HEAD")?
+                .symbolic_target()?
+                .ok_or(ContentError::InvalidPath)?
+                .to_owned(),
+            Err(error) => return Err(error.into()),
+        }
     };
-    repo.reference(&name, oid, true, &message)?;
+    repo.reference(&name, oid, destination.is_none(), &message)?;
     #[cfg(test)]
     if FAIL_REF_SYNC.with(|failure| match failure.get() {
         Some(0) => {

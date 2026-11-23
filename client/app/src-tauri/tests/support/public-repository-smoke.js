@@ -20,7 +20,7 @@ const responses = Object.fromEntries(
   ]),
 );
 const manifests = ids.map((id, index) => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   id,
   name: id,
   description: "Public read-only repository brief",
@@ -28,7 +28,7 @@ const manifests = ids.map((id, index) => ({
   platforms: ["macos"],
   ...(index < 2
     ? {
-        kind: "connection",
+        kind: "tool",
         exports: index === 0 ? ["read", "configure"] : ["read", "write"],
       }
     : {

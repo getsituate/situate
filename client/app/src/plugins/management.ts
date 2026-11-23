@@ -6,15 +6,7 @@ import { selectedTab } from "../layout/model";
 import { currentEntry, sameTarget } from "../layout/navigation";
 
 export function pluginManagementGroup(plugin: DeepReadonly<RuntimePlugin>) {
-  const { manifest, legacyProviderWithPluginContributions } = plugin;
-  if (
-    legacyProviderWithPluginContributions ||
-    manifest?.skills?.length ||
-    manifest?.components?.length
-  )
-    return "tool";
-  if (manifest?.exports?.includes("documentSourceDescribe")) return "source";
-  return manifest?.kind ?? "tool";
+  return plugin.manifest?.kind ?? "tool";
 }
 
 export function pluginSettingsId(

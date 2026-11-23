@@ -82,7 +82,7 @@ fn selected_draft_symlink_is_not_followed() {
 fn active(root: &Path) -> PathBuf {
     let code = root.join(".situate/plugins/demo/code");
     fs::create_dir_all(code.join("nested")).unwrap();
-    fs::write(code.join("plugin.json"), r#"{"schemaVersion":2,"id":"demo","name":"Demo","description":"Synthetic plugin","skills":["nested/SKILL.md"]}"#).unwrap();
+    fs::write(code.join("plugin.json"), r#"{"schemaVersion":3,"id":"demo","name":"Demo","description":"Synthetic plugin","skills":["nested/SKILL.md"]}"#).unwrap();
     fs::write(code.join("nested/SKILL.md"), "# Skill\n").unwrap();
     fs::write(code.join("image.bin"), [0, 255, 128, 1]).unwrap();
     code

@@ -8,6 +8,7 @@ import test from "node:test";
 import { canonical, digest } from "./release-catalog.mjs";
 import {
   assembleReleaseInputs,
+  verifyMigrationMinimumProgress,
   verifyReleaseInputs,
   writeReleaseInputs,
   validateGeneratedCatalog,
@@ -72,6 +73,88 @@ const candidate = (source, baseline, version = "2026.11.1") => ({
   version,
   build: "2026.11.1",
   tag: `v${version}`,
+});
+
+test("migration minimums are assigned by the first completed release and carried forward", (t) => {
+  const repo = repository(t);
+  repo.write(
+    "client/crates/situate-migrations/release-minimum-versions.json",
+    "[3]",
+  );
+  const source = repo.add("plugin-packages");
+  const draft = assembleReleaseInputs(repo.root, candidate(source, repo.base));
+  const first = assembleReleaseInputs(
+    repo.root,
+    candidate(source, repo.base, "2026.11.2"),
+  );
+  assert.deepEqual(draft.manifest.migrationMinimumVersions, { 3: "2026.11.1" });
+  assert.deepEqual(verifyMigrationMinimumProgress({}, first.manifest), {
+    3: "2026.11.2",
+  });
+  const completed = {
+    source,
+    catalogSha256: first.manifest.history.sha256,
+    catalogBytes: first.catalogBytes,
+    migrationMinimumVersions: first.manifest.migrationMinimumVersions,
+  };
+  repo.write(
+    "client/crates/situate-migrations/release-minimum-versions.json",
+    "[3,4]",
+  );
+  const next = repo.add("another-migration");
+  const later = assembleReleaseInputs(repo.root, {
+    ...candidate(next, source, "2026.11.3"),
+    previous: completed,
+  });
+  assert.deepEqual(
+    verifyMigrationMinimumProgress(
+      completed.migrationMinimumVersions,
+      later.manifest,
+    ),
+    { 3: "2026.11.2", 4: "2026.11.3" },
+  );
+  assert.throws(
+    () =>
+      verifyMigrationMinimumProgress(
+        completed.migrationMinimumVersions,
+        draft.manifest,
+      ),
+    /published migration version assignment changed/i,
+  );
+  assert.throws(
+    () => verifyMigrationMinimumProgress({}, later.manifest),
+    /first published release/i,
+  );
+  assert.throws(
+    () =>
+      verifyReleaseInputs(
+        { ...later.manifest, migrationMinimumVersions: { 3: "2026.11.2" } },
+        later.catalogBytes,
+        { repoRoot: repo.root },
+      ),
+    /do not cover the source's migrations/i,
+  );
+  assert.throws(
+    () =>
+      verifyReleaseInputs(
+        { ...later.manifest, migrationMinimumVersions: { 3: "2026.11.4" } },
+        later.catalogBytes,
+      ),
+    /minimum exceeds/i,
+  );
+  repo.write(
+    "client/crates/situate-migrations/release-minimum-versions.json",
+    "[4]",
+  );
+  const missing = repo.add("removed-migration");
+  assert.throws(
+    () =>
+      assembleReleaseInputs(repo.root, {
+        ...candidate(missing, source, "2026.11.3"),
+        previous: completed,
+      }),
+    /published migration version assignment removed/i,
+  );
 });
 
 test("assembly aggregates committed fragments without dates or private reasons and seals exact files outside source", (t) => {

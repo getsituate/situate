@@ -17,7 +17,7 @@ vi.mock("./module", () => ({
 vi.mock("@situate/localization", () => ({ t: (key: string) => key }));
 let sequence = 0;
 const source = {
-  manifest: { id: "example", schemaVersion: 2 },
+  manifest: { id: "example", schemaVersion: 3 },
   serviceEntry: "throw 1",
   uiEntry: "ui",
   modules: {},

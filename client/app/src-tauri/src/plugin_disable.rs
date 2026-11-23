@@ -899,7 +899,7 @@ mod tests {
     fn install(root: &std::path::Path, id: &str, dependencies: Vec<&str>) {
         let code = root.join(format!(".situate/plugins/{id}/code"));
         std::fs::create_dir_all(&code).unwrap();
-        std::fs::write(code.join("plugin.json"), json!({"schemaVersion":2,"id":id,"name":id,"description":"Synthetic plugin","serviceEntry":"entry.js","dependencies":dependencies}).to_string()).unwrap();
+        std::fs::write(code.join("plugin.json"), json!({"schemaVersion":3,"id":id,"name":id,"description":"Synthetic plugin","serviceEntry":"entry.js","dependencies":dependencies}).to_string()).unwrap();
         std::fs::write(code.join("entry.js"), "export default {};").unwrap();
     }
 

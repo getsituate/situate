@@ -976,7 +976,9 @@ fn validate_provider_tools(
     manifest: &Value,
     definitions: &Definitions,
 ) -> Result<(), &'static str> {
-    if manifest["schemaVersion"] == 3 && !definitions.tools.is_empty() {
+    if matches!(manifest["kind"].as_str(), Some("connection" | "source"))
+        && !definitions.tools.is_empty()
+    {
         return Err("plugins.providerContributions");
     }
     Ok(())

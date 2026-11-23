@@ -1,6 +1,6 @@
 use crate::{
-    MigrationDescriptor, MigrationError, MigrationErrorKind, MigrationWorkspace, Result, backup,
-    filesystem as fs, metadata, registry,
+    MigrationDescriptor, MigrationError, MigrationErrorKind, MigrationWorkspace,
+    PluginHistoryMigration, Result, backup, filesystem as fs, metadata, registry,
 };
 use cap_std::{ambient_authority, fs::Dir};
 use semver::Version;
@@ -79,19 +79,37 @@ fn current(
 /// Lock contention fails busy; this call never waits for another workspace owner.
 /// Existing metadata-free markers are legacy input, not empty workspaces.
 pub fn prepare(root: &Path, app_version: &str) -> Result<WorkspaceLease> {
-    prepare_with(root, app_version, registry::MIGRATIONS)
+    admit(root, app_version, registry::MIGRATIONS, false, None)
 }
+
+/// Prepare a workspace with a history adapter for pinned plugin revisions.
+/// The adapter runs inside the migration's exclusive lease and managed-data backup.
+pub fn prepare_with_plugin_history(
+    root: &Path,
+    app_version: &str,
+    migrate: PluginHistoryMigration,
+) -> Result<WorkspaceLease> {
+    admit(
+        root,
+        app_version,
+        registry::MIGRATIONS,
+        false,
+        Some(migrate),
+    )
+}
+
+#[cfg(test)]
 pub(crate) fn prepare_with(
     root: &Path,
     app_version: &str,
     migrations: &[MigrationDescriptor],
 ) -> Result<WorkspaceLease> {
-    admit(root, app_version, migrations, false)
+    admit(root, app_version, migrations, false, None)
 }
 
 /// Admit a closed, already-current workspace without migrating it.
 pub fn lock_current_exclusively(root: &Path, app_version: &str) -> Result<WorkspaceLease> {
-    admit(root, app_version, registry::MIGRATIONS, true)
+    admit(root, app_version, registry::MIGRATIONS, true, None)
 }
 
 fn admit(
@@ -99,6 +117,7 @@ fn admit(
     app_version: &str,
     migrations: &[MigrationDescriptor],
     exclusive: bool,
+    plugin_history: Option<PluginHistoryMigration>,
 ) -> Result<WorkspaceLease> {
     registry::validate(migrations)?;
     let app = Version::parse(app_version)
@@ -156,7 +175,12 @@ fn admit(
         .try_lock()
         .map_err(|_| MigrationError::new(MigrationErrorKind::Busy))?;
     if !current(&managed, &control, &app, migrations)? {
-        run(&managed, &control, &app, migrations)?;
+        let workspace = MigrationWorkspace {
+            managed: &managed,
+            root: &lease.path,
+            plugin_history,
+        };
+        run(&workspace, &control, &app, migrations)?;
     }
     lease
         .lock
@@ -168,11 +192,12 @@ fn admit(
     Ok(lease)
 }
 fn run(
-    managed: &Dir,
+    workspace: &MigrationWorkspace<'_>,
     control: &Dir,
     app: &Version,
     migrations: &[MigrationDescriptor],
 ) -> Result<()> {
+    let managed = workspace.managed;
     let recoverable = fs::exists(control, backup::RECOVERABLE)?;
     if recoverable && fs::exists(control, backup::RETIRED)? {
         return Err(MigrationError::new(MigrationErrorKind::RestorationFailed));
@@ -201,29 +226,26 @@ fn run(
         }
         return Ok(());
     }
-    for migration in &pending {
-        if let Some(minimum) = migration.minimum_app_version {
-            let minimum = Version::parse(minimum)
-                .map_err(|_| MigrationError::new(MigrationErrorKind::InvalidRegistry))?;
-            if app.cmp_precedence(&minimum).is_lt() {
-                return Err(MigrationError::update(&minimum.to_string()));
-            }
+    let minimums = pending
+        .iter()
+        .map(|migration| registry::minimum_version(migration))
+        .collect::<Result<Vec<_>>>()?;
+    for minimum in minimums.iter().flatten() {
+        if app.cmp_precedence(minimum).is_lt() {
+            return Err(MigrationError::update(&minimum.to_string()));
         }
     }
     if !recoverable {
         backup::create(managed, control)?;
     }
-    let workspace = MigrationWorkspace { managed };
     let converted = (|| {
-        for migration in pending {
+        for (migration, minimum) in pending.into_iter().zip(minimums) {
             fs::checkpoint("step-before")?;
-            (migration.apply)(&workspace)?;
+            (migration.apply)(workspace)?;
             fs::checkpoint("step-applied")?;
-            (migration.validate)(&workspace)?;
+            (migration.validate)(workspace)?;
             fs::checkpoint("step-validated")?;
-            if let Some(minimum) = migration.minimum_app_version {
-                let minimum = Version::parse(minimum)
-                    .map_err(|_| MigrationError::new(MigrationErrorKind::InvalidRegistry))?;
+            if let Some(minimum) = minimum {
                 let (existing, _) = metadata::parse(&value)?;
                 if minimum.cmp_precedence(&existing).is_gt() {
                     value["minimumAppVersion"] = minimum.to_string().into();
@@ -255,9 +277,7 @@ pub fn initialize_fresh(managed: &Dir, app_version: &str) -> Result<()> {
     }
     let mut value = metadata::initial();
     for migration in registry::MIGRATIONS {
-        if let Some(minimum) = migration.minimum_app_version {
-            let minimum = Version::parse(minimum)
-                .map_err(|_| MigrationError::new(MigrationErrorKind::InvalidRegistry))?;
+        if let Some(minimum) = registry::minimum_version(migration)? {
             if minimum.cmp_precedence(&metadata::parse(&value)?.0).is_gt() {
                 value["minimumAppVersion"] = minimum.to_string().into();
             }

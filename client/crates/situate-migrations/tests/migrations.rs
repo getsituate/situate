@@ -2,3 +2,5 @@
 mod m0001_workspace_metadata;
 #[path = "migrations/m0002_conversation_history.rs"]
 mod m0002_conversation_history;
+#[path = "migrations/m0003_plugin_manifests.rs"]
+mod m0003_plugin_manifests;

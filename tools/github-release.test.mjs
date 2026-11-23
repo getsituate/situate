@@ -20,13 +20,13 @@ import {
 } from "../infrastructure/releases/github.mjs";
 
 const json = (value) => Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
-function fixture(t) {
+function fixture(t, options) {
   const {
     directory,
     manifest,
     artifact,
     receipt: qualification,
-  } = qualificationFixture(t);
+  } = qualificationFixture(t, options);
   writeFileSync(
     join(directory, "release-qualification.json"),
     json(qualification),
@@ -560,7 +560,7 @@ test("completed baseline and compatibility history fail closed on unavailable or
 });
 
 test("planning and migration history fetch sealed metadata but never historical packages", async (t) => {
-  const f = fixture(t);
+  const f = fixture(t, { migrationMinimumVersions: { 3: "2026.11.1" } });
   const result = await f.create();
   const download = f.github.downloadAsset;
   f.github.downloadAsset = async (repo, releaseId, assetId) => {
@@ -580,6 +580,9 @@ test("planning and migration history fetch sealed metadata but never historical 
     execute: () => f.identity.sourceRevision,
   });
   assert.equal(baseline.source, f.identity.sourceRevision);
+  assert.deepEqual(baseline.migrationMinimumVersions, {
+    3: f.identity.version,
+  });
   const history = await readGitHubMigrationHistory(f.directory, {
     github: f.github,
     includeBuilds: true,

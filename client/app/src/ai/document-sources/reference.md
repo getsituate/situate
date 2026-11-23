@@ -1,6 +1,6 @@
 # Document source authoring (version 1)
 
-A new document source is a connection (`schemaVersion: 3`, `kind: "connection"`) that exposes the document service exports below. The document contract is a plugin convention, not a core document type. If chat needs access, register the chat tools in a separate plugin.
+A document source (`schemaVersion: 3`, `kind: "source"`) exposes the document service exports below. The document contract is a plugin convention, not a core document type. If chat needs access, register the chat tools in a separate plugin.
 
 Read `read_plugin_development({resource:"document-source-contract"})` for the dependency-free ES module. Copy it into the authored plugin as `document-source-contract.js`; import it with a relative `.js` path. Never import application source. This reference is available through `read_plugin_development({resource:"document-sources"})`.
 

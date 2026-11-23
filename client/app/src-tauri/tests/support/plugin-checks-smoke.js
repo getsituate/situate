@@ -126,7 +126,7 @@ window.runPluginChecksSmoke = async () => {
         id,
         "plugin.json",
         JSON.stringify({
-          schemaVersion: id === connection ? 3 : 2,
+          schemaVersion: 3,
           id,
           name: id,
           description: "Synthetic reusable connection checks",

@@ -18,6 +18,81 @@ import { collectFragments, localesAt } from "./change-fragments.mjs";
 export const releaseInputsFile = "release-inputs.json";
 export const releaseCatalogFile = "situate-release-history.json";
 const sha = /^[a-f0-9]{64}$/u;
+const migrationDeclarations =
+  "client/crates/situate-migrations/release-minimum-versions.json";
+
+function validateMigrationMinimums(minimums, version) {
+  assert(
+    minimums && typeof minimums === "object" && !Array.isArray(minimums),
+    "Invalid migration version assignments",
+  );
+  for (const [id, minimum] of Object.entries(minimums)) {
+    assert(/^[1-9][0-9]{0,8}$/u.test(id), "Invalid migration ID");
+    productVersion(minimum);
+    assert(
+      compareVersions(minimum, version) <= 0,
+      "Migration minimum exceeds the release version",
+    );
+  }
+}
+
+function migrationIds(root, source) {
+  const listed = git(root, [
+    "ls-tree",
+    "--name-only",
+    source,
+    "--",
+    migrationDeclarations,
+  ]).trim();
+  return parseMigrationIds(
+    listed ? git(root, ["show", `${source}:${migrationDeclarations}`]) : "[]",
+  );
+}
+
+function parseMigrationIds(text) {
+  const declared = JSON.parse(text);
+  assert(
+    Array.isArray(declared) &&
+      declared.every(
+        (id, i) =>
+          Number.isSafeInteger(id) &&
+          id >= 1 &&
+          id <= 999_999_999 &&
+          (i === 0 || id > declared[i - 1]),
+      ),
+    "Migration IDs requiring a release version must be positive and increasing",
+  );
+  return declared;
+}
+
+function assignMigrationMinimums(root, source, version, previous) {
+  const published = previous?.migrationMinimumVersions ?? {};
+  validateMigrationMinimums(published, version);
+  const declared = migrationIds(root, source);
+  assert(
+    Object.keys(published).every((id) => declared.includes(Number(id))),
+    "Published migration version assignment removed",
+  );
+  return Object.fromEntries(
+    declared.map((id) => [id, published[id] ?? version]),
+  );
+}
+
+export function verifyMigrationMinimumProgress(previous, manifest) {
+  const current = manifest.migrationMinimumVersions ?? {};
+  for (const [id, version] of Object.entries(previous))
+    assert(
+      current[id] === version,
+      "Published migration version assignment changed",
+    );
+  for (const [id, version] of Object.entries(current))
+    if (!Object.hasOwn(previous, id))
+      assert(
+        version === manifest.version,
+        "Migration minimum must be bound to its first published release",
+      );
+  return current;
+}
 function exactFields(value, keys) {
   assert(
     value &&
@@ -71,7 +146,7 @@ export function validateGeneratedCatalog(catalog, { version, locales } = {}) {
   }
   return catalog;
 }
-export function verifyReleaseInputs(manifest, catalogBytes) {
+export function verifyReleaseInputs(manifest, catalogBytes, { repoRoot } = {}) {
   exactFields(manifest, [
     "schemaVersion",
     "kind",
@@ -84,6 +159,9 @@ export function verifyReleaseInputs(manifest, catalogBytes) {
     "fragmentDigest",
     "history",
     "previous",
+    ...(Object.hasOwn(manifest ?? {}, "migrationMinimumVersions")
+      ? ["migrationMinimumVersions"]
+      : []),
   ]);
   assert(
     manifest.schemaVersion === 1 &&
@@ -93,6 +171,32 @@ export function verifyReleaseInputs(manifest, catalogBytes) {
     "Invalid release input source identity",
   );
   productVersion(manifest.version);
+  if (Object.hasOwn(manifest, "migrationMinimumVersions"))
+    validateMigrationMinimums(
+      manifest.migrationMinimumVersions,
+      manifest.version,
+    );
+  if (repoRoot) {
+    const assigned = Object.keys(manifest.migrationMinimumVersions ?? {}).map(
+      Number,
+    );
+    let declarations;
+    try {
+      declarations = fs.readFileSync(
+        path.join(repoRoot, migrationDeclarations),
+        "utf8",
+      );
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      declarations = "[]";
+    }
+    const declared = parseMigrationIds(declarations);
+    assert(
+      assigned.length === declared.length &&
+        declared.every((id) => assigned.includes(id)),
+      "Sealed release inputs do not cover the source's migrations",
+    );
+  }
   const [year, month, sequence] = manifest.version.split(".").map(Number);
   assert(
     year >= 1000 && year <= 9999 && month >= 1 && month <= 12 && sequence > 0,
@@ -250,6 +354,12 @@ export function assembleReleaseInputs(
     sha256,
   }));
   const fragmentDigest = digest(canonical(fragments));
+  const migrationMinimumVersions = assignMigrationMinimums(
+    root,
+    source,
+    version,
+    previous,
+  );
   const manifest = {
     schemaVersion: 1,
     kind: "situate-release-inputs",
@@ -260,6 +370,9 @@ export function assembleReleaseInputs(
     tag,
     fragments,
     fragmentDigest,
+    ...(Object.keys(migrationMinimumVersions).length
+      ? { migrationMinimumVersions }
+      : {}),
     history: {
       file: releaseCatalogFile,
       sha256: digest(catalogBytes),
@@ -314,6 +427,9 @@ export function writeReleaseInputs(
       SITUATE_RELEASE_VERSION: inputs.manifest.version,
       SITUATE_RELEASE_HISTORY_FILE: catalogFile,
       SITUATE_RELEASE_HISTORY_SHA256: inputs.manifest.history.contentSha256,
+      SITUATE_MIGRATION_MINIMUM_VERSIONS: canonical(
+        inputs.manifest.migrationMinimumVersions ?? {},
+      ),
     },
   };
 }

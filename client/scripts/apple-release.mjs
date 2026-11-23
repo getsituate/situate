@@ -981,6 +981,7 @@ async function buildResolvedAppleRelease({
     const catalog = verifyReleaseInputs(
       releaseInputs.manifest,
       releaseInputs.catalogBytes,
+      { repoRoot: resolve(root, "..") },
     );
     manifest.migrationQualification = await qualifyMigrations(
       resolve(root, ".."),
@@ -1152,6 +1153,9 @@ async function buildResolvedAppleRelease({
         SITUATE_MODELS_DEV_RELEASE_INPUT: modelsSnapshot,
         SITUATE_RELEASE_HISTORY_FILE: historyFile,
         SITUATE_RELEASE_HISTORY_SHA256: historyBinding.sha256,
+        SITUATE_MIGRATION_MINIMUM_VERSIONS: canonical(
+          releaseInputs.manifest.migrationMinimumVersions ?? {},
+        ),
       },
       signal,
     };

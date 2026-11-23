@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "connection-source-chat-tools",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "connection-source-chat-tools",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Use separate plugins for chat tools",
+          "paragraphs": [
+            "New connections and document sources provide data access. A separate plugin provides the tools that use that access in chat. Existing connections and sources move to Plugins and keep their tools. Once you open a workspace in this release, older versions need an update to open it."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "connection-source-chat-tools",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Chat-Werkzeuge in separaten Plugins",
+          "paragraphs": [
+            "Neue Verbindungen und Dokumentquellen stellen den Datenzugriff bereit. Ein separates Plugin bietet die Werkzeuge an, die diesen Zugriff im Chat nutzen. Bestehende Verbindungen und Quellen erscheinen unter „Plugins“ und behalten ihre Werkzeuge. Sobald du einen Arbeitsbereich in dieser Version öffnest, benötigen ältere Versionen ein Update, um ihn zu öffnen."
+          ]
+        }
+      ]
+    }
+  }
+}

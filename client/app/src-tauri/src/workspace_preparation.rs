@@ -47,7 +47,12 @@ pub(crate) fn prepare_local(root: &std::path::Path) -> Result<PreparedWorkspace,
 }
 
 fn prepare_root(root: &std::path::Path) -> Result<WorkspaceLease, String> {
-    situate_migrations::prepare(root, situate_core::application_version()).map_err(localized_error)
+    situate_migrations::prepare_with_plugin_history(
+        root,
+        situate_core::application_version(),
+        situate_core::plugins::sources::migrate_manifest_revision,
+    )
+    .map_err(localized_error)
 }
 
 fn error_key(kind: MigrationErrorKind) -> &'static str {

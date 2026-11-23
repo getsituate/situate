@@ -6,9 +6,14 @@ mod migrations;
 mod registry;
 mod runner;
 
-pub use migration::{Migration, MigrationDescriptor, MigrationId, MigrationWorkspace};
+pub use migration::{
+    Migration, MigrationDescriptor, MigrationId, MigrationWorkspace, PluginHistoryMigration,
+};
 pub use registry::MIGRATIONS;
-pub use runner::{WorkspaceLease, initialize_fresh, lock_current_exclusively, prepare};
+pub use runner::{
+    WorkspaceLease, initialize_fresh, lock_current_exclusively, prepare,
+    prepare_with_plugin_history,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MigrationErrorKind {

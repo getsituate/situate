@@ -341,7 +341,7 @@ pub fn smoke_plugin_check_prepare(
             if !root.join(".situate/plugins").join(PLUGIN).exists() {
                 sources::create(&root, PLUGIN)?;
             }
-            write_source(&root, PLUGIN, "plugin.json", &json!({"schemaVersion":2,"id":PLUGIN,"name":"Native check","description":"Synthetic check fixture","serviceEntry":"service.js","uiEntry":"ui.js","exports":["count","readCount","increment","hold","release","hang"],"skills":["SKILL.md"]}).to_string())?;
+            write_source(&root, PLUGIN, "plugin.json", &json!({"schemaVersion":3,"id":PLUGIN,"name":"Native check","description":"Synthetic check fixture","serviceEntry":"service.js","uiEntry":"ui.js","exports":["count","readCount","increment","hold","release","hang"],"skills":["SKILL.md"]}).to_string())?;
             write_source(&root, PLUGIN, "service.js", &source("original"))?;
             let ui = if mode == "block" {
                 fixture()["blockingSource"].as_str().unwrap().to_owned()

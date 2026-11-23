@@ -131,6 +131,73 @@ fn skipped_steps_are_ordered_and_failure_restores_the_whole_starting_state() {
     drop(lease);
 }
 #[test]
+fn plugin_manifest_upgrade_rolls_back_and_reopens_after_a_failed_write() {
+    let temp = tempfile::tempdir().unwrap();
+    let managed = temp.path().join(".situate");
+    let package = managed.join("plugins/archive");
+    let source = package.join("code/plugin.json");
+    let draft = package.join("drafts/fixture/code/plugin.json");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::create_dir_all(draft.parent().unwrap()).unwrap();
+    let metadata = br#"{"minimumAppVersion":"0.1.6","lastAppliedMigration":2}"#;
+    fs::write(managed.join("migrations.json"), metadata).unwrap();
+    let original = br#"{"schemaVersion":2,"id":"archive","kind":"connection","exports":["documentSourceDescribe"]}"#;
+    fs::write(&source, original).unwrap();
+    fs::write(&draft, original).unwrap();
+    fail("replace-rename", 2);
+    assert_eq!(
+        crate::prepare(temp.path(), env!("CARGO_PKG_VERSION"))
+            .unwrap_err()
+            .kind(),
+        MigrationErrorKind::MigrationFailed
+    );
+    assert_eq!(fs::read(&source).unwrap(), original);
+    assert_eq!(fs::read(&draft).unwrap(), original);
+    assert_eq!(fs::read(managed.join("migrations.json")).unwrap(), metadata);
+    let status = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "runner_cases::crash_child"])
+        .env("SITUATE_MIGRATION_TEST_ROOT", temp.path())
+        .env("SITUATE_MIGRATION_TEST_USE_REGISTRY", "1")
+        .env("SITUATE_MIGRATION_TEST_CRASH", "step-applied")
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(73));
+    assert_ne!(fs::read(&source).unwrap(), original);
+    assert_eq!(fs::read(managed.join("migrations.json")).unwrap(), metadata);
+    for _ in 0..2 {
+        let lease = crate::prepare(temp.path(), env!("CARGO_PKG_VERSION")).unwrap();
+        for path in [&source, &draft] {
+            let value: serde_json::Value =
+                serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            assert_eq!(
+                value,
+                serde_json::json!({"schemaVersion":3,"id":"archive","kind":"tool","exports":["documentSourceDescribe"]})
+            );
+        }
+        drop(lease);
+    }
+}
+
+#[test]
+fn reopening_a_migrated_workspace_requires_the_first_supported_release() {
+    let temp = root();
+    let mut chain = registry::MIGRATIONS.to_vec();
+    chain[2].release_assigned_minimum = false;
+    chain[2].minimum_app_version = Some("2026.12.3");
+    drop(runner::prepare_with(temp.path(), "2026.12.8", &chain).unwrap());
+    let managed = temp.path().join(".situate");
+    let migrated = fs::read(managed.join("migrations.json")).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&migrated).unwrap();
+    assert_eq!(value["minimumAppVersion"], "2026.12.3");
+    let error =
+        runner::prepare_with(temp.path(), "2026.11.14", &registry::MIGRATIONS[..2]).unwrap_err();
+    assert_eq!(error.kind(), MigrationErrorKind::UpdateRequired);
+    assert_eq!(error.required_app_version(), Some("2026.12.3"));
+    drop(runner::prepare_with(temp.path(), "2026.12.3", &chain).unwrap());
+    assert_eq!(fs::read(managed.join("migrations.json")).unwrap(), migrated);
+}
+
+#[test]
 fn registry_rejects_duplicate_missing_reordered_and_invalid_version_entries() {
     for entries in [
         vec![CHAIN[0], CHAIN[0]],
@@ -298,7 +365,7 @@ fn fresh_private_marker_initializes_latest_without_legacy_conversion() {
     runner::initialize_fresh(&managed, "0.1.6").unwrap();
     assert_eq!(
         metadata::load(&managed).unwrap().unwrap()["lastAppliedMigration"],
-        2
+        3
     );
     assert!(runner::initialize_fresh(&managed, "0.1.6").is_err());
 }
@@ -306,7 +373,7 @@ fn fresh_private_marker_initializes_latest_without_legacy_conversion() {
 fn restricted_migration_access_rejects_escapes_and_runner_owned_paths() {
     let root = root();
     let dir = Dir::open_ambient_dir(root.path().join(".situate"), ambient_authority()).unwrap();
-    let w = MigrationWorkspace { managed: &dir };
+    let w = MigrationWorkspace::without_history(&dir);
     for path in [
         "../user.md",
         "/tmp/outside",
@@ -338,7 +405,7 @@ fn filesystem_alias_of_runner_metadata_is_not_a_conversion_target() {
     let managed = root.path().join(".situate");
     fs::hard_link(managed.join("migrations.json"), managed.join("alias.json")).unwrap();
     let dir = Dir::open_ambient_dir(&managed, ambient_authority()).unwrap();
-    let w = MigrationWorkspace { managed: &dir };
+    let w = MigrationWorkspace::without_history(&dir);
     assert_eq!(
         w.write("alias.json", b"bad").unwrap_err().kind(),
         MigrationErrorKind::UnsafePath
@@ -687,7 +754,11 @@ fn crash_child() {
     let Ok(root) = std::env::var("SITUATE_MIGRATION_TEST_ROOT") else {
         return;
     };
-    let _lease = runner::prepare_with(Path::new(&root), "0.1.3", CHAIN).unwrap();
+    let _lease = if std::env::var_os("SITUATE_MIGRATION_TEST_USE_REGISTRY").is_some() {
+        crate::prepare(Path::new(&root), env!("CARGO_PKG_VERSION")).unwrap()
+    } else {
+        runner::prepare_with(Path::new(&root), "0.1.3", CHAIN).unwrap()
+    };
 }
 #[test]
 fn process_exit_at_each_publication_boundary_recovers_without_duplicate_conversion() {

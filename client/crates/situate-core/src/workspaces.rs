@@ -356,7 +356,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 metadata,
-                serde_json::json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":2})
+                serde_json::json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":3})
             );
         }
     }

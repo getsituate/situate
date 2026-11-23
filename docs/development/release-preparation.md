@@ -62,6 +62,10 @@ The creator writes `release-inputs.json` and `situate-release-history.json` outs
 
 The app bundles the current candidate, even with no public entries, and finalized earlier versions in descending numeric order. It excludes internal reasons, drafts and newer uninstalled versions. History works offline and never opens automatically. GitHub release notes group the current release's English entries under Important, Features, Changes, and Fixes, in that order. Empty sections are omitted. You can edit the visible notes after publication. Leave the hidden release identity comment and all assets unchanged. Publication copies the exact sealed assets; it does not regenerate history.
 
+### Release-assigned workspace requirements
+
+A migration can take its minimum app version from the first completed release that contains it. The migration declares that choice in Rust and lists its numeric ID in `client/crates/situate-migrations/release-minimum-versions.json`. Release preparation seals the candidate's assignment in `release-inputs.json` and embeds it in the app. Later candidates reuse assignments from verified completed releases; drafts and failed candidates do not set the minimum for future releases. Once a migration succeeds, the workspace records its minimum in `.situate/migrations.json`.
+
 ## Published migration checkpoint
 
 Content assignment, compatibility and host availability have different baselines. Completed public GitHub Releases count as published app versions for compatibility, even without host promotion. The host inventory remains authoritative for website/update availability and the installed predecessor used in updater qualification.

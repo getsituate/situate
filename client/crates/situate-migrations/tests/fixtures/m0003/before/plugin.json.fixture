@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "id": "archive",
+  "kind": "connection",
+  "name": "Document archive",
+  "description": "Synthetic document provider",
+  "serviceEntry": "service.js",
+  "exports": ["documentSourceDescribe"]
+}

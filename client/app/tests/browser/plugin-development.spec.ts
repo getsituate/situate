@@ -423,7 +423,7 @@ test("plugin UI checks keep the development chat unobscured until they finish", 
     viewId: "counter:main",
     source: {
       manifest: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         id: "counter",
         name: "Counter",
         description: "Synthetic counter",

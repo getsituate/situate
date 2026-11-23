@@ -82,7 +82,7 @@ const OTHER: &str = "be33fbf1-b47d-4f92-a249-a6f020bc4e4f";
 fn setup(root: &Path) -> PathBuf {
     let code = root.join(".situate/plugins/demo/code");
     fs::create_dir_all(&code).unwrap();
-    fs::write(code.join("plugin.json"), r#"{"schemaVersion":2,"id":"demo","name":"Demo","description":"Synthetic","serviceEntry":"main.js"}"#).unwrap();
+    fs::write(code.join("plugin.json"), r#"{"schemaVersion":3,"id":"demo","name":"Demo","description":"Synthetic","serviceEntry":"main.js"}"#).unwrap();
     fs::write(code.join("main.js"), "export default {};").unwrap();
     fs::write(code.join("asset.bin"), [0, 255, 128]).unwrap();
     for name in ["config", "data"] {
@@ -378,7 +378,7 @@ fn invalid_and_missing_manifests_preserve_active_code_config_and_data() {
     for invalid in [
         Some("{"),
         Some(
-            r#"{"schemaVersion":2,"id":"demo","name":"Demo","description":"Synthetic","serviceEntry":"../escape.js"}"#,
+            r#"{"schemaVersion":3,"id":"demo","name":"Demo","description":"Synthetic","serviceEntry":"../escape.js"}"#,
         ),
         None,
     ] {

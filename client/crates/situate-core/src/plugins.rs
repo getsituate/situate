@@ -94,6 +94,7 @@ pub struct PluginManifest {
 #[serde(rename_all = "lowercase")]
 pub enum PluginKind {
     Connection,
+    Source,
     Tool,
 }
 
@@ -485,16 +486,23 @@ fn validate_sources(
     let text = read("plugin.json", MAX_MANIFEST)?;
     let manifest: PluginManifest =
         serde_json::from_str(&text).map_err(|_| PluginError::InvalidManifest)?;
-    let valid_contract = match manifest.schema_version {
-        2 => true,
-        3 => {
-            manifest.kind == Some(PluginKind::Connection)
-                && manifest.skills.is_empty()
-                && manifest.components.as_ref().is_none_or(Vec::is_empty)
-        }
-        _ => false,
-    };
-    if !valid_contract
+    let provider = matches!(
+        manifest.kind,
+        Some(PluginKind::Connection | PluginKind::Source)
+    );
+    if manifest.schema_version != 3
+        || (provider
+            && (!manifest.skills.is_empty()
+                || manifest
+                    .components
+                    .as_ref()
+                    .is_some_and(|names| !names.is_empty())))
+        || (manifest.kind == Some(PluginKind::Source)
+            && !manifest
+                .exports
+                .iter()
+                .flatten()
+                .any(|name| name == "documentSourceDescribe"))
         || manifest.id != id
         || !valid_id(&manifest.id)
         || manifest.name.trim().is_empty()

@@ -131,7 +131,7 @@ export function validateToolDescriptors(
 function component(value: unknown): value is Component {
   return object(value) || typeof value === "function";
 }
-export function hasPluginUi(value: PluginUiContributions): boolean {
+function hasPluginUi(value: PluginUiContributions): boolean {
   return !!(value.views?.length || Object.keys(value.components ?? {}).length);
 }
 

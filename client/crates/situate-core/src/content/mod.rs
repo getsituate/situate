@@ -688,6 +688,48 @@ impl ContentStore {
         Ok(id.to_string())
     }
 
+    pub(crate) fn retain_revision_edit(
+        &self,
+        revision: &str,
+        path: &str,
+        bytes: &[u8],
+        reference: &str,
+    ) -> Result<String> {
+        let parent = self.validated_revision(revision)?;
+        let tree_id = replace_tree_entry(
+            &self.repo,
+            &parent.tree()?,
+            &validate_path(path)?,
+            git_storage::write_object(&self.repo, git2::ObjectType::Blob, bytes)?,
+        )?;
+        let tree = self.repo.find_tree(tree_id)?;
+        match self.repo.find_reference(reference) {
+            Ok(existing) => {
+                let commit =
+                    self.validated_revision(&existing.peel_to_commit()?.id().to_string())?;
+                if commit.parent_count() != 1
+                    || commit.parent_id(0)? != parent.id()
+                    || commit.tree_id() != tree_id
+                {
+                    return Err(history_records::invalid());
+                }
+                return Ok(commit.id().to_string());
+            }
+            Err(error) if error.code() == git2::ErrorCode::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        Ok(git_storage::commit_to_ref(
+            &self.repo,
+            &self.history_dir,
+            &tree,
+            &[&parent],
+            "native.history.editFile",
+            history_records::Fact::Change,
+            Some(reference),
+        )?
+        .to_string())
+    }
+
     fn record_snapshot(&mut self, message: &str) -> Result<String> {
         let mut blobs = HashMap::new();
         let tree_id = snapshot_tree_cached(

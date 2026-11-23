@@ -13,7 +13,7 @@ fn package(root: &Path, id: &str) -> std::path::PathBuf {
     .unwrap();
     manifest(
         &code,
-        json!({"schemaVersion":2,"id":id,"name":"Example","description":"Synthetic package","skills":["SKILL.md"],"serviceEntry":"index.js"}),
+        json!({"schemaVersion":3,"id":id,"name":"Example","description":"Synthetic package","skills":["SKILL.md"],"serviceEntry":"index.js"}),
     );
     code
 }
@@ -58,7 +58,7 @@ fn valid_package_inspection_is_read_only_and_serializes_contract() {
     assert_eq!(result.service_entry.as_deref(), Some("index.js"));
     let inventory = serde_json::to_value(list(root.path()).unwrap()).unwrap();
     assert_eq!(inventory[0]["id"], "demo");
-    assert_eq!(inventory[0]["manifest"]["schemaVersion"], 2);
+    assert_eq!(inventory[0]["manifest"]["schemaVersion"], 3);
     assert!(inventory[0]["error"].is_null());
     let entries = files(root.path(), "demo").unwrap();
     assert_eq!(
@@ -117,14 +117,14 @@ fn manifest_optional_metadata_preserves_shapes_and_rejects_invalid_graph_declara
         assert!(validate(root.path(), "demo").is_err(), "accepted {field}");
     }
     let mut extended = base;
-    extended["kind"] = json!("connection");
+    extended["kind"] = json!("tool");
     extended["dependencies"] = json!(["other"]);
     extended["exports"] = json!(["connect", "$account", "_state2"]);
     extended["components"] = json!(["connect", "AccountPanel", "$view", "_view2"]);
     extended["platforms"] = json!(["macos", "ios"]);
     manifest(&code, extended.clone());
     let parsed = validate(root.path(), "demo").unwrap();
-    assert_eq!(parsed.kind, Some(PluginKind::Connection));
+    assert_eq!(parsed.kind, Some(PluginKind::Tool));
     assert_eq!(serde_json::to_value(parsed).unwrap(), extended);
 }
 
@@ -180,13 +180,13 @@ fn malformed_packages_remain_attributable_and_source_is_inspectable() {
 fn provider_manifest_accepts_service_exports_but_not_plugin_contributions() {
     let root = tempfile::tempdir().unwrap();
     let code = package(root.path(), "demo");
-    let provider = json!({"schemaVersion":3,"id":"demo","name":"Provider","description":"Synthetic","kind":"connection","serviceEntry":"index.js","exports":["documentSourceDescribe"]});
+    let provider = json!({"schemaVersion":3,"id":"demo","name":"Provider","description":"Synthetic","kind":"source","serviceEntry":"index.js","exports":["documentSourceDescribe"]});
     manifest(&code, provider.clone());
     assert!(validate(root.path(), "demo").is_ok());
     for (field, value) in [
         ("skills", json!(["SKILL.md"])),
         ("components", json!(["Card"])),
-        ("kind", json!("tool")),
+        ("exports", json!([])),
     ] {
         let mut invalid = provider.clone();
         invalid[field] = value;
@@ -198,7 +198,7 @@ fn provider_manifest_accepts_service_exports_but_not_plugin_contributions() {
         );
     }
     let mut legacy = provider;
-    legacy["schemaVersion"] = json!(2);
+    legacy["kind"] = json!("tool");
     legacy["skills"] = json!(["SKILL.md"]);
     legacy["components"] = json!(["Card"]);
     manifest(&code, legacy);
@@ -212,6 +212,7 @@ fn manifest_rejects_unknown_fields_versions_types_and_invalid_declarations() {
     let base: Value = serde_json::from_slice(&fs::read(code.join("plugin.json")).unwrap()).unwrap();
     for (field, value) in [
         ("schemaVersion", json!(1)),
+        ("schemaVersion", json!(2)),
         ("schemaVersion", json!(1.0)),
         ("unexpected", json!(true)),
         ("id", json!("other")),
@@ -240,13 +241,13 @@ fn manifest_rejects_unknown_fields_versions_types_and_invalid_declarations() {
     }
     manifest(
         &code,
-        json!({"schemaVersion":2,"id":"demo","name":"Example","description":"Synthetic"}),
+        json!({"schemaVersion":3,"id":"demo","name":"Example","description":"Synthetic"}),
     );
     assert_eq!(
         validate(root.path(), "demo"),
         Err(PluginError::InvalidManifest)
     );
-    fs::write(code.join("plugin.json"), r#"{"schemaVersion":2,"schemaVersion":2,"id":"demo","name":"Example","description":"Synthetic","serviceEntry":"index.js"}"#).unwrap();
+    fs::write(code.join("plugin.json"), r#"{"schemaVersion":3,"schemaVersion":3,"id":"demo","name":"Example","description":"Synthetic","serviceEntry":"index.js"}"#).unwrap();
     assert_eq!(
         validate(root.path(), "demo"),
         Err(PluginError::InvalidManifest)
@@ -270,7 +271,7 @@ fn entry_roles_are_optional_individually_and_serialize_as_distinct_paths() {
         (false, false, true),
     ] {
         let mut value = json!({
-            "schemaVersion": 2, "id": "demo", "name": "Example", "description": "Synthetic"
+            "schemaVersion": 3, "id": "demo", "name": "Example", "description": "Synthetic"
         });
         if service {
             value["serviceEntry"] = json!("index.js");
@@ -346,7 +347,7 @@ fn paths_and_ids_reject_traversal_and_nonportable_aliases() {
         );
         manifest(
             &code,
-            json!({"schemaVersion":2,"id":"demo","name":"Example","description":"Synthetic","skills":[path]}),
+            json!({"schemaVersion":3,"id":"demo","name":"Example","description":"Synthetic","skills":[path]}),
         );
         assert_eq!(
             validate(root.path(), "demo"),
@@ -414,13 +415,13 @@ fn validation_bounds_total_declared_source_bytes() {
     }
     manifest(
         &code,
-        json!({"schemaVersion":2,"id":"demo","name":"Example","description":"Synthetic","skills":skills}),
+        json!({"schemaVersion":3,"id":"demo","name":"Example","description":"Synthetic","skills":skills}),
     );
     assert!(validate(root.path(), "demo").is_ok());
     skills.push("SKILL.md".into());
     manifest(
         &code,
-        json!({"schemaVersion":2,"id":"demo","name":"Example","description":"Synthetic","skills":skills}),
+        json!({"schemaVersion":3,"id":"demo","name":"Example","description":"Synthetic","skills":skills}),
     );
     assert_eq!(validate(root.path(), "demo"), Err(PluginError::TooLarge));
 }

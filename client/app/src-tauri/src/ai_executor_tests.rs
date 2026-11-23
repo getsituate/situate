@@ -9,9 +9,7 @@ fn only_strict_providers_reject_chat_tool_registration() {
         ],
         exports: vec!["read".into()],
     };
-    assert!(
-        validate_provider_tools(&json!({"schemaVersion":2,"kind":"connection"}), &service).is_ok()
-    );
+    assert!(validate_provider_tools(&json!({"schemaVersion":3,"kind":"tool"}), &service).is_ok());
     let strict = json!({"schemaVersion":3,"kind":"connection"});
     assert_eq!(
         validate_provider_tools(&strict, &service),
@@ -717,7 +715,7 @@ fn native_tool_capture_respects_platforms_and_complete_acyclic_dependencies() {
         ("disabled", vec![], false),
         ("disabled-consumer", vec!["disabled"], true),
     ] {
-        let manifest=serde_json::from_value(json!({"schemaVersion":2,"id":id,"name":id,"description":"Fixture","serviceEntry":"service.js","dependencies":dependencies})).unwrap();
+        let manifest=serde_json::from_value(json!({"schemaVersion":3,"id":id,"name":id,"description":"Fixture","serviceEntry":"service.js","dependencies":dependencies})).unwrap();
         entries.push(Summary {
             id: id.into(),
             enabled,
@@ -732,8 +730,8 @@ fn native_tool_capture_respects_platforms_and_complete_acyclic_dependencies() {
     } else {
         "ios"
     };
-    entries.push(Summary{id:"other-platform".into(),enabled:true,manifest:Some(serde_json::from_value(json!({"schemaVersion":2,"id":"other-platform","name":"Other","description":"Fixture","serviceEntry":"service.js","platforms":[excluded]})).unwrap()),error:None,revision:None,incarnation:None});
-    let manifest=serde_json::from_value(json!({"schemaVersion":2,"id":"platform-consumer","name":"Consumer","description":"Fixture","serviceEntry":"service.js","dependencies":["other-platform"]})).unwrap();
+    entries.push(Summary{id:"other-platform".into(),enabled:true,manifest:Some(serde_json::from_value(json!({"schemaVersion":3,"id":"other-platform","name":"Other","description":"Fixture","serviceEntry":"service.js","platforms":[excluded]})).unwrap()),error:None,revision:None,incarnation:None});
+    let manifest=serde_json::from_value(json!({"schemaVersion":3,"id":"platform-consumer","name":"Consumer","description":"Fixture","serviceEntry":"service.js","dependencies":["other-platform"]})).unwrap();
     entries.push(Summary {
         id: "platform-consumer".into(),
         enabled: true,
