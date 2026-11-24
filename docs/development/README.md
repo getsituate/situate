@@ -152,6 +152,15 @@ To use the SonarQube MCP tools, [create a personal access token](https://docs.so
 
 Start Pi and run `/mcp` to check the connection. Changing issue status requires the **Administer Issues** permission on the SonarQube Cloud project. Without a token, Pi does not register the server. You can still view the [public Situate analysis](https://sonarcloud.io/project/overview?id=getsituate_situate) without a token.
 
+### Check the SonarCloud gate before opening a PR
+
+Install [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/scanners/sonarscanner-cli) on `PATH`, and set `SONAR_TOKEN` in the environment or the worktree root’s private `.env`. Use a token with **Execute Analysis** permission on the Situate project. The workspace must be clean, with the feature branch committed on top of current `origin/main`.
+
+- `/pr-check` generates the CI Vue coverage report and sends an analysis of the committed branch to the public SonarCloud project as `preflight/<branch>`. It does not push to GitHub or open a PR.
+- `/pr-open` runs the same check, then pushes the checked commit and opens a PR against `main` only if the gate passes. It also requires an authenticated GitHub CLI with permission to push and open the PR.
+
+The preflight uses SonarCloud’s project gate for a short-lived branch. SonarCloud can classify new code differently in a PR analysis; the required PR gate and GitHub verification still run independently. Only use these commands for code that can be public.
+
 ## Herdr operational skill
 
 The repository's `delegate-with-herdr` skill uses your user-level Herdr skill at:
