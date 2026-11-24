@@ -12,7 +12,9 @@ import { getStatus } from "../ai/api";
 import { invoke } from "@tauri-apps/api/core";
 import { setAnalyticsPreference } from "../analytics/runtime";
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(async () => defaultAiSettings()),
+  invoke: vi.fn(async (command: string) =>
+    command === "model_failure_snapshot" ? false : defaultAiSettings(),
+  ),
 }));
 vi.mock("../ai/api", async (original) => ({
   ...(await original<typeof import("../ai/api")>()),
@@ -69,7 +71,43 @@ it("restores the selected category without adding a navigation entry", async () 
   wrapper.unmount();
 });
 
-it("does not restore the analytics category before its preference is available", () => {
+it("restores the former diagnostics category in AI & models without adding a navigation entry", async () => {
+  const wrapper = mount(SettingsView, {
+    props: { ...props, presentation: { page: "diagnostics", detail: true } },
+  });
+  try {
+    expect(wrapper.get(".settings-page-heading").text()).toBe("AI & models");
+    await vi.waitFor(() =>
+      expect(wrapper.get(".model-diagnostics h3").text()).toBe(
+        "Troubleshooting",
+      ),
+    );
+    expect(wrapper.emitted("presentation")).toBeUndefined();
+  } finally {
+    wrapper.unmount();
+  }
+});
+
+it("does not load model diagnostics on mobile", async () => {
+  const wrapper = mount(SettingsView, {
+    props: {
+      ...props,
+      mobile: true,
+      presentation: { page: "ai", detail: true },
+    },
+  });
+  try {
+    await vi.waitFor(() =>
+      expect(wrapper.find(".ai-settings").exists()).toBe(true),
+    );
+    expect(wrapper.find(".model-diagnostics").exists()).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("model_failure_snapshot");
+  } finally {
+    wrapper.unmount();
+  }
+});
+
+it("does not restore privacy before the analytics preference is available", () => {
   const wrapper = mount(SettingsView, {
     props: { ...props, presentation: { page: "analytics", detail: true } },
   });
@@ -109,7 +147,7 @@ it("opens AI settings from its decorated category and manages connections inline
     "◐",
     "✦",
   ]);
-  expect(symbols).toHaveLength(6);
+  expect(symbols).toHaveLength(5);
   expect(
     wrapper.get(".settings-categories button:last-child").text(),
   ).toContain("About Situate");
@@ -311,13 +349,19 @@ it("requires confirmation to enable model failure recording but not to disable i
       .find((button) => button.text().trim() === label)!
       .trigger("click");
   try {
-    vi.mocked(invoke).mockResolvedValueOnce(false);
+    expect(invoke).not.toHaveBeenCalledWith("model_failure_snapshot");
+    expect(wrapper.get(".settings-categories").text()).not.toContain(
+      "Model diagnostics",
+    );
     await wrapper
-      .findAll("button")
-      .find((button) => button.text().startsWith("Model diagnostics"))!
+      .findAll(".settings-categories button")
+      .find((button) => button.text().endsWith("AI & models"))!
       .trigger("click");
-    await flushPromises();
-    const control = () => wrapper.get<HTMLInputElement>('[role="switch"]');
+    const control = () =>
+      wrapper.get<HTMLInputElement>('.model-diagnostics [role="switch"]');
+    await vi.waitFor(() => expect(control().element.disabled).toBe(false));
+    const scope = control().attributes("aria-describedby");
+    expect(wrapper.get(`#${scope}`).text()).toBe("On this device");
     expect(invoke).toHaveBeenLastCalledWith("model_failure_snapshot");
     expect(control().element.checked).toBe(false);
     expect(wrapper.find("dialog").exists()).toBe(false);
@@ -355,9 +399,7 @@ it("requires confirmation to enable model failure recording but not to disable i
 it("keeps the analytics choice when saving fails and applies a successful retry", async () => {
   const wrapper = mount(SettingsView, { props, attachTo: document.body });
   const category = () =>
-    wrapper
-      .findAll("button")
-      .find((item) => item.text().startsWith("Usage analytics"));
+    wrapper.findAll("button").find((item) => item.text().startsWith("Privacy"));
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
   };
@@ -365,7 +407,8 @@ it("keeps the analytics choice when saving fails and applies a successful retry"
     expect(category()).toBeUndefined();
     await setAnalyticsPreference(true);
     await category()!.trigger("click");
-    expect(wrapper.get("h2").text()).toBe("Usage analytics");
+    expect(wrapper.get("h2").text()).toBe("Privacy");
+    expect(wrapper.get(".privacy-analytics h3").text()).toBe("Usage analytics");
     const control = wrapper.get<HTMLInputElement>('[role="switch"]');
     expect(control.element.checked).toBe(true);
     vi.mocked(invoke).mockRejectedValueOnce(new Error("unwritable"));

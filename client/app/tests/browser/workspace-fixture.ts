@@ -244,6 +244,7 @@ export async function workspaceFixture(
       Object.defineProperty(window, "isTauri", { value: true });
       const state = structuredClone(initial);
       let analyticsEnabled = options.analyticsEnabled ?? null;
+      let modelFailureCapture = false;
       const calls: { command: string; args: Record<string, unknown> }[] = [];
       const connections = new Map<string, Config>();
       const records = new Map<string, Map<string, Config>>();
@@ -1431,6 +1432,12 @@ export async function workspaceFixture(
               return;
             }
             if (command === "analytics_daily_activity") return;
+            if (command === "model_failure_snapshot")
+              return modelFailureCapture;
+            if (command === "model_failure_set") {
+              modelFailureCapture = args.enabled === true;
+              return;
+            }
             if (command === "updates_snapshot") return structuredClone(updates);
             if (command === "updates_check") {
               if (options.updateCheckError) throw options.updateCheckError;

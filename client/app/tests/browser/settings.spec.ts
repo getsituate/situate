@@ -116,7 +116,7 @@ test("read-only settings stay visible without issuing writes", async ({
   ).toEqual([]);
 });
 
-test.describe("Usage analytics settings", () => {
+test.describe("Privacy and troubleshooting settings", () => {
   test.use({ localizationMode: "real" });
 
   test(
@@ -136,9 +136,10 @@ test.describe("Usage analytics settings", () => {
       await expect(settings.or(navigation).first()).toBeVisible();
       if (!(await settings.isVisible())) await navigation.click();
       await settings.click();
-      await page
-        .getByRole("button", { name: "Usage analytics", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Privacy", exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Privacy", exact: true }),
+      ).toBeVisible();
       await expect(
         page.getByRole("heading", { name: "Usage analytics", exact: true }),
       ).toBeVisible();
@@ -151,6 +152,58 @@ test.describe("Usage analytics settings", () => {
       await expect(sharing).not.toBeChecked();
       await expect(sharing).toBeEnabled();
       await visual.capture("settings.analytics-disabled");
+    },
+  );
+
+  test(
+    "can record failed model responses from AI troubleshooting",
+    { tag: "@visual-desktop" },
+    async ({ page, visual }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await workspaceFixture(page, shellState, { analyticsEnabled: true });
+      await page.goto("/");
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Model diagnostics", exact: true }),
+      ).toHaveCount(0);
+      await page
+        .getByRole("button", { name: "AI & models", exact: true })
+        .click();
+      const troubleshooting = page.getByRole("region", {
+        name: "Troubleshooting",
+      });
+      const recording = troubleshooting.getByRole("switch", {
+        name: "Record failed model responses",
+      });
+      await expect(recording).toBeEnabled();
+      await expect(recording).not.toBeChecked();
+      await expect(recording).toHaveAccessibleDescription("On this device");
+      await visual.capture("settings.ai-troubleshooting");
+
+      await recording.focus();
+      await recording.press("Space");
+      const confirmation = page.getByRole("dialog", {
+        name: "Enable recording?",
+      });
+      await expect(confirmation).toContainText(
+        "Situate does not send it automatically.",
+      );
+      await expect(recording).not.toBeChecked();
+      await visual.capture("settings.ai-troubleshooting-confirmation");
+      await confirmation.getByRole("button", { name: "Cancel" }).click();
+      await expect(confirmation).not.toBeVisible();
+      await expect(recording).not.toBeChecked();
+      await expect(recording).toBeFocused();
+
+      await recording.click();
+      await confirmation
+        .getByRole("button", { name: "Enable recording" })
+        .click();
+      await expect(confirmation).not.toBeVisible();
+      await expect(recording).toBeChecked();
+      await recording.click();
+      await expect(recording).not.toBeChecked();
+      await expect(confirmation).not.toBeVisible();
     },
   );
 });
