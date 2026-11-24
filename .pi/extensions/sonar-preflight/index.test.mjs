@@ -18,11 +18,17 @@ function fixture(node) {
   const commands = new Map();
   const events = new Map();
   const prompts = [];
-  const git = new Map([["status --porcelain --untracked-files=all", ""]]);
+  const followUps = [];
+  const git = new Map([
+    ["status --porcelain --untracked-files=all", ""],
+    ["branch --show-current", "feature"],
+    ["rev-parse HEAD", "original-head"],
+  ]);
   sonarPreflight({
     registerCommand: (name, { handler }) => commands.set(name, handler),
     on: (name, handler) => events.set(name, handler),
     sendUserMessage: (...args) => prompts.push(args),
+    sendMessage: (...args) => followUps.push(args),
     async exec(command, args) {
       if (command === "git") {
         assert.ok(git.has(args.join(" ")), args.join(" "));
@@ -33,7 +39,7 @@ function fixture(node) {
       return { code: 0, stdout: node };
     },
   });
-  return { commands, events, prompts, git };
+  return { commands, events, prompts, git, followUps };
 }
 
 test("Pi requires confirmation before starting either preflight command", async () => {
@@ -113,6 +119,101 @@ for (const outcome of [
     }
     assert.equal(scans, outcome === "committed" ? 1 : 0);
     assert.equal(confirmations, 1);
+  });
+}
+
+for (const outcome of ["passes", "still red", "aborted"]) {
+  test(`/pr-open repair ${outcome} without another confirmation`, async () => {
+    const { commands, events, prompts, git, followUps } = fixture(
+      process.execPath,
+    );
+    const report =
+      "https://sonarcloud.io/dashboard?id=getsituate_situate&branch=preflight%2Ffeature";
+    let confirmations = 0;
+    let scans = 0;
+    const ctx = {
+      cwd: "/synthetic-worktree",
+      mode: "tui",
+      model: {},
+      isIdle: () => true,
+      ui: {
+        confirm: async () => {
+          confirmations++;
+          return true;
+        },
+        notify() {},
+        custom: async () => {
+          scans++;
+          return scans === 1 || outcome === "still red"
+            ? { message: "Gate failed", level: "error", failedGate: { report } }
+            : { message: "Pull request opened", level: "info" };
+        },
+      },
+    };
+    await commands.get("pr-open")("", ctx);
+    assert.equal(scans, 1);
+    assert.equal(prompts.length, 1);
+    assert.ok(prompts[0][0].includes(report));
+    assert.match(prompts[0][0], /Fix the findings/);
+    events.get("before_agent_start")(
+      { messageType: "user", prompt: prompts[0][0] },
+      ctx,
+    );
+    git.set("log -1 --format=%P", "original-head");
+    git.set("rev-parse HEAD", "repair-head");
+    events.get("agent_settled")({ aborted: outcome === "aborted" }, ctx);
+    if (outcome !== "aborted") {
+      assert.deepEqual(prompts[1], [
+        "/pr-open",
+        { expandPromptTemplates: true },
+      ]);
+      await commands.get("pr-open")("", ctx);
+    }
+    assert.equal(prompts.length, outcome === "aborted" ? 1 : 2);
+    assert.equal(scans, outcome === "aborted" ? 1 : 2);
+    assert.equal(confirmations, 1);
+    assert.equal(followUps.length, outcome === "still red" ? 1 : 0);
+  });
+}
+
+for (const outcome of ["failed gate", "runner error", "passed"]) {
+  test(`report handoff: ${outcome}`, async (t) => {
+    const cwd = mkdtempSync(join(tmpdir(), "sonar-preflight-report-"));
+    t.after(() => rmSync(cwd, { recursive: true, force: true }));
+    const node = join(cwd, "node");
+    const report =
+      "https://sonarcloud.io/dashboard?id=getsituate_situate&branch=preflight%2Ffeature";
+    const script =
+      outcome === "failed gate"
+        ? `echo 'ERROR QUALITY GATE STATUS: FAILED - View details on ${report}&resolved=false' >&2\nexit 1`
+        : outcome === "runner error"
+          ? "echo 'Scanner unavailable' >&2\nexit 1"
+          : "exit 0";
+    writeFileSync(node, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+    const { commands, followUps } = fixture(node);
+    const notifications = [];
+    const ctx = {
+      cwd,
+      mode: "tui",
+      model: {},
+      ui: {
+        confirm: async () => true,
+        notify: (...args) => notifications.push(args),
+        custom: (mount) =>
+          new Promise((done) => {
+            mount({ requestRender() {} }, {}, {}, done);
+          }),
+      },
+    };
+    await commands.get("pr-check")("", ctx);
+    assert.equal(notifications.length, 1);
+    if (outcome === "failed gate") {
+      assert.equal(followUps.length, 1);
+      const [[message, options]] = followUps;
+      assert.ok(message.content.includes(report));
+      assert.match(message.content, /which conditions failed/);
+      assert.deepEqual(options, { deliverAs: "followUp", triggerTurn: true });
+    } else assert.deepEqual(followUps, []);
   });
 }
 
