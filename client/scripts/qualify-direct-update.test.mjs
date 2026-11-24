@@ -9,6 +9,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -336,6 +337,30 @@ test("observations require receipts and all selected inputs inside their qualifi
   assert.throws(() => statSync(`${options.receipt}.after.json`), {
     code: "ENOENT",
   });
+});
+
+test("observations resolve nested app and workspace directories before verification", async (t) => {
+  const options = releases(t);
+  const nested = join(options.root, "run with spaces");
+  mkdirSync(nested);
+  const app = join(nested, "Situate.app");
+  const workspace = join(nested, "workspace");
+  renameSync(options.app, app);
+  renameSync(options.workspace, workspace);
+  const dependencies = { pair: syntheticPair, bundle: () => "3".repeat(64) };
+  await observeUpdate("begin", { ...options, app, workspace }, dependencies);
+  const receipt = JSON.parse(readFileSync(options.receipt));
+  assert.equal(receipt.inputs.app, app);
+  assert.equal(receipt.inputs.workspace, workspace);
+
+  renameSync(nested, join(options.root, "moved"));
+  symlinkSync(join(options.root, "moved"), nested);
+  await assert.rejects(
+    observeUpdate("finish", options, {
+      pair: () => assert.fail("A symlink reached release verification"),
+    }),
+    /symbolic link/,
+  );
 });
 
 test("fixtures have a readable legacy workspace marker and allow production initialization", (t) => {
