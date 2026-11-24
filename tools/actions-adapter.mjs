@@ -32,6 +32,8 @@ export const laneHosts = {
   "macos-native": "macos",
   "macos-compatibility": "macos",
 };
+export const verifyMacosJob = "macos-arm64";
+export const verifyMacosLanes = ["tooling-macos", "macos-code", "macos-native"];
 export const repository = "getsituate/situate";
 export function digest(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -80,6 +82,25 @@ export function matrices(plan) {
     ]),
   );
 }
+export function verificationNeeds(plan, jobs) {
+  const shared = jobs[verifyMacosJob];
+  if (!shared) return jobs;
+  const selected = plan.lanes.some(({ id }) => verifyMacosLanes.includes(id));
+  if (shared.result !== (selected ? "success" : "skipped"))
+    throw new Error(`Unexpected ${verifyMacosJob} job result.`);
+  const needs = { ...jobs };
+  for (const id of verifyMacosLanes) {
+    needs[id] = {
+      result: selected ? shared.outputs?.[`${id}-result`] : "skipped",
+      outputs: {
+        receipt: shared.outputs?.[`${id}-receipt`],
+        evidence: shared.outputs?.[`${id}-evidence`],
+      },
+    };
+  }
+  return needs;
+}
+
 export function aggregate(plan, receipts, needs) {
   validatePlan(plan);
   if (needs.plan?.result !== "success")
@@ -676,7 +697,7 @@ export async function main(
   if (command === "source-evidence") {
     const { publishSourceVerificationEvidence, createSourceVerificationApi } =
       await import("./source-verification-actions.mjs");
-    const needs = JSON.parse(env.PIPELINE_NEEDS);
+    const needs = verificationNeeds(plan, JSON.parse(env.PIPELINE_NEEDS));
     const receipts = plan.lanes.map(({ id }) =>
       decodeActionsReceipt(needs[id]?.outputs?.receipt || "null"),
     );
@@ -840,7 +861,9 @@ export async function main(
       return result;
     }
     if (command === "aggregate") {
-      const needs = JSON.parse(env.PIPELINE_NEEDS);
+      const jobs = JSON.parse(env.PIPELINE_NEEDS);
+      const needs =
+        workflow === "verify" ? verificationNeeds(plan, jobs) : jobs;
       const receipts = plan.lanes.map(({ id }) =>
         decodeActionsReceipt(needs[id]?.outputs?.receipt || "null"),
       );

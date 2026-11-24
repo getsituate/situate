@@ -20,6 +20,7 @@ import {
   resolveMergeGroupHeads,
   resolvePullRequestBase,
   validatePlan,
+  verificationNeeds,
   diagnosticPlan,
   sonarLcov,
 } from "./actions-adapter.mjs";
@@ -443,6 +444,75 @@ test("matrices contain only fixed lane IDs; unknown hosts and duplicate suites f
   assert.throws(() =>
     validatePlan({ ...plan, authorizationDigest: undefined }),
   );
+});
+
+test("Verify requires the shared ARM64 job and only the selected lane receipts", () => {
+  const otherJobs = statuses();
+  for (const id of ["tooling-macos", "macos-code", "macos-native"])
+    delete otherJobs[id];
+  const needsFor = (job) => ({ ...otherJobs, "macos-arm64": job });
+  const skipped = needsFor({ result: "skipped" });
+  assert.equal(
+    aggregate(plan, [receipt], verificationNeeds(plan, skipped)).status,
+    "passed",
+  );
+
+  const selected = {
+    ...plan,
+    lanes: [
+      ...plan.lanes,
+      {
+        id: "macos-native",
+        host: "macos",
+        suites: ["client-native"],
+        reasons: [],
+      },
+    ],
+  };
+  const receipts = [
+    receipt,
+    { ...receipt, lane: "macos-native", host: "macos" },
+  ];
+  const outputs = {
+    "tooling-macos-result": "skipped",
+    "macos-code-result": "skipped",
+    "macos-native-result": "success",
+    "macos-native-receipt": "native-receipt",
+    "macos-native-evidence": "native-evidence",
+  };
+  const success = needsFor({ result: "success", outputs });
+  const needs = verificationNeeds(selected, success);
+  assert.deepEqual(needs["macos-native"].outputs, {
+    receipt: "native-receipt",
+    evidence: "native-evidence",
+  });
+  assert.deepEqual(aggregate(selected, receipts, needs).lanes, [
+    "policy",
+    "macos-native",
+  ]);
+  assert.throws(() => aggregate(selected, [receipt], needs), /lane receipts/);
+  for (const result of ["failure", "cancelled", "skipped"])
+    assert.throws(
+      () => verificationNeeds(selected, needsFor({ result, outputs })),
+      /macos-arm64 job result/,
+    );
+  assert.throws(
+    () => verificationNeeds(plan, success),
+    /macos-arm64 job result/,
+  );
+  for (const [lane, result] of [
+    ["macos-native", "skipped"],
+    ["macos-code", "success"],
+  ]) {
+    const invalid = needsFor({
+      result: "success",
+      outputs: { ...outputs, [`${lane}-result`]: result },
+    });
+    assert.throws(
+      () => aggregate(selected, receipts, verificationNeeds(selected, invalid)),
+      new RegExp(`Unexpected ${lane}`),
+    );
+  }
 });
 
 test("aggregate distinguishes deliberate unselection from failure, cancellation, absent or duplicate receipts", () => {

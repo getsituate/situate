@@ -23,7 +23,7 @@ const pipelineWorkflows = [
 ];
 function job(workflow, id) {
   const body = workflow.match(
-    new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z-]*:|$)`),
+    new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z0-9-]*:|$)`),
   )?.[1];
   assert.ok(body, `Missing job ${id}`);
   return body;
@@ -109,7 +109,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     }
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
-      .split(/\n {2}[a-z][a-z-]*:\n/)
+      .split(/\n {2}[a-z][a-z0-9-]*:\n/)
       .slice(1)
       .filter((body) => body.includes("    steps:"))) {
       if (name === "deploy-hosting" && body.includes("github-rehearsal.py")) {
@@ -195,7 +195,7 @@ test("macOS delivery has no hosted checkpoint recovery workflow", () => {
     );
 });
 
-test("fixed independent families depend on planning and aggregate every selected receipt", () => {
+test("verification jobs depend on planning and aggregate every selected receipt", () => {
   for (const name of ["verify", "release-macos"]) {
     const workflow = read(name);
     assert.doesNotMatch(
@@ -206,7 +206,11 @@ test("fixed independent families depend on planning and aggregate every selected
       job(workflow, "plan"),
       /outputs:[\s\S]*plan:.*steps\.plan\.outputs\.plan[\s\S]*digest:/,
     );
-    for (const [id, host] of Object.entries(laneHosts)) {
+    const shared = ["tooling-macos", "macos-code", "macos-native"];
+    const independent = Object.entries(laneHosts).filter(
+      ([id]) => name !== "verify" || !shared.includes(id),
+    );
+    for (const [id, host] of independent) {
       const lane = job(workflow, id);
       assert.match(lane, /needs: plan\n/);
       const runner =
@@ -256,7 +260,9 @@ test("fixed independent families depend on planning and aggregate every selected
       aggregate,
       ...(name === "release-macos" ? [job(workflow, "create")] : []),
     ]) {
-      for (const id of Object.keys(laneHosts)) {
+      const jobs = independent.map(([id]) => id);
+      if (name === "verify") jobs.push("macos-arm64");
+      for (const id of jobs) {
         assert.ok(consumer.split("    if:")[0].includes(`        ${id},\n`));
         for (const line of consumer.match(/PIPELINE_NEEDS:.*$/gm) ?? [])
           assert.ok(line.includes(`toJSON(needs.${id})`));
@@ -269,10 +275,60 @@ test("fixed independent families depend on planning and aggregate every selected
   }
 });
 
-test("native source jobs declare one build slot in both PR and release verification", () => {
-  for (const workflow of ["verify", "release-macos"])
-    for (const id of ["macos-native", "macos-compatibility"])
-      assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
+test("Verify runs selected ARM64 lanes on one runner with independent step results", () => {
+  const workflow = read("verify");
+  const shared = job(workflow, "macos-arm64");
+  assert.equal(workflow.match(/^ {4}runs-on: macos-latest$/gm)?.length, 1);
+  assert.match(shared, /needs: plan\n/);
+  assert.match(shared, /runs-on: macos-latest\n/);
+  assert.match(shared, /ref:.*github\.sha/);
+  assert.match(shared, /PIPELINE_PLAN_DIGEST:.*needs\.plan\.outputs\.digest/);
+  assert.match(shared, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
+  assert.equal(shared.match(/pipeline-bootstrap\.py/g)?.length, 1);
+  const [jobHeader, steps] = shared.split("    steps:\n");
+  for (const id of ["tooling-macos", "macos-code", "macos-native"]) {
+    assert.doesNotMatch(workflow, new RegExp(`^  ${id}:`, "m"));
+    assert.ok(jobHeader.includes(`.lanes.*.id, '${id}')`));
+    assert.ok(jobHeader.includes(`${id}-result: \${{ steps.${id}.outcome }}`));
+    assert.ok(
+      jobHeader.includes(`${id}-receipt: \${{ steps.${id}.outputs.receipt }}`),
+    );
+    if (id !== "tooling-macos")
+      assert.ok(
+        jobHeader.includes(
+          `${id}-evidence: \${{ steps.${id}.outputs.evidence }}`,
+        ),
+      );
+    const setup = steps.split(`- id: setup-${id}\n`)[1]?.split("      - ")[0];
+    assert.ok(setup?.includes(`.lanes.*.id, '${id}')`));
+    assert.ok(
+      setup.includes("!cancelled() && steps.bootstrap.outcome == 'success'"),
+    );
+    assert.ok(setup.includes(`setup --workflow verify --lane ${id}`));
+    const execution = steps.split(`- id: ${id}\n`)[1]?.split("      - ")[0];
+    assert.ok(execution?.includes(`name: ${id}\n`));
+    assert.ok(
+      execution.includes(
+        `!cancelled() && steps.setup-${id}.outcome == 'success'`,
+      ),
+    );
+    assert.ok(execution.includes(`lane --workflow verify --lane ${id}`));
+    assert.doesNotMatch(execution, /continue-on-error/);
+  }
+  assert.match(
+    shared,
+    /tools\/actions-adapter\.mjs desktop\n[\s\S]*?steps\.desktop\.outcome == 'success'/,
+  );
+});
+
+test("native source verification declares one build slot on ARM64 and Intel", () => {
+  for (const [workflow, id] of [
+    ["verify", "macos-arm64"],
+    ["verify", "macos-compatibility"],
+    ["release-macos", "macos-native"],
+    ["release-macos", "macos-compatibility"],
+  ])
+    assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
 });
 
 test("the Intel release job has more time for cold compilation than PR verification", () => {
