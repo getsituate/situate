@@ -51,9 +51,6 @@ export const attentionCopy: Record<
   },
 };
 export const deviceAiCopy = {
-  scope: "This device",
-  scopeDetail:
-    "Provider connections and model choices apply only to this workspace on this device. Your notes and chats can still sync.",
   emptyTitle: "Set up AI on this device",
   emptyDetail:
     "Choose a provider to start chatting here. Your notes, tasks and conversations are ready to use without AI.",
@@ -71,8 +68,7 @@ export const deviceAiCopy = {
     "Situate AI is unavailable. Choose a connected provider or wait until access is available again. Your selection has not changed.",
   managedModel:
     "Situate chooses the model. Your own provider and model preferences are kept for when you switch back.",
-  providerHelp:
-    "Used for the next replies on this device. Choosing a connection does not change other devices.",
+  providerHelp: "Used for future replies.",
   modelHelp:
     "Changes apply to the next message on this device, not to earlier replies or other devices.",
   disconnect: (provider: string, workspace: string) =>
@@ -80,7 +76,10 @@ export const deviceAiCopy = {
 } as const;
 export const connectionCopy = {
   heading: "Connections",
-  add: "+ Add connection",
+  add: "Add connection",
+  info: "About connections",
+  deviceScope:
+    "Connections stay on this device and don’t sync to other devices.",
   selection: "Chat connection",
   choose: "Choose a connection",
   selectBeforeChat: "Choose a connection before sending a message.",

@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineComponent, h, nextTick } from "vue";
+import { defineComponent, h, nextTick, type Component } from "vue";
 import SituateProgress from "./SituateProgress.vue";
 import SituateTooltip from "./SituateTooltip.vue";
 import SituateIconButton from "./SituateIconButton.vue";
@@ -56,7 +56,8 @@ describe("progress", () => {
 describe("tooltip", () => {
   beforeEach(() => vi.useFakeTimers());
   it("keeps caller-scoped styles on native button roots", async () => {
-    for (const component of [SituateButton, SituateIconButton]) {
+    const components: Component[] = [SituateButton, SituateIconButton];
+    for (const component of components) {
       const wrapper = keep(
         mount(
           defineComponent({

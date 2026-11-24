@@ -21,6 +21,7 @@
       "icon": "Optional host icon name.",
       "label": "Required accessible action name.",
       "title": "Optional supplementary hover/focus help.",
+      "showTooltip": "Optional boolean; set to false if the button opens its own help surface.",
       "disabled": "Optional boolean.",
       "unavailableReason": "Optional explanation for a disabled action.",
       "variant": "quiet (default), primary or plain."
@@ -294,6 +295,16 @@
       "default": "Scope: {triggerAttrs}; bind to the trigger."
     },
     "usage": "The trigger still needs an accessible name. Button title and IconButton label/title already provide shared help; do not nest redundant tooltips."
+  },
+  "SituateInfoButton": {
+    "purpose": "A compact info button that opens a short explanation.",
+    "props": {
+      "label": "Required accessible name.",
+      "text": "Required explanatory text."
+    },
+    "events": {},
+    "slots": {},
+    "usage": "Place beside a heading or label. Keep essential instructions visible and use Popover for links or actions."
   },
   "SituateProgress": {
     "purpose": "Measured or indeterminate progress.",

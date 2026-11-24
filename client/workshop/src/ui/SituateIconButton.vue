@@ -15,11 +15,13 @@ const props = withDefaults(
     title?: string;
     disabled?: boolean;
     unavailableReason?: string;
+    showTooltip?: boolean;
     variant?: "quiet" | "primary" | "plain";
   }>(),
   {
     disabled: false,
     variant: "quiet",
+    showTooltip: true,
   },
 );
 const tooltip = computed(() =>
@@ -63,6 +65,7 @@ defineExpose({
   >
     <slot><SituateIcon v-if="icon" :name="icon" /></slot>
     <SituateTooltip
+      v-if="showTooltip"
       :text="tooltip"
       :anchor="element"
       @describe="tooltipDescription = $event"

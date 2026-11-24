@@ -61,6 +61,58 @@ test("formats change independently and sidebar navigation retains preferences", 
   ).toHaveAttribute("data-value", "24");
 });
 
+for (const width of [1440, 768]) {
+  test(`connection help and advanced settings stay accessible at ${width}px`, async ({
+    page,
+  }, info) => {
+    const preview = await open(page, "settings-ai");
+    await preview.setViewportSize({ width, height: 900 });
+    const connections = preview.getByRole("region", { name: "Connections" });
+    const add = connections.getByRole("button", { name: "Add connection" });
+    const help = connections.getByRole("button", { name: "About connections" });
+    const popup = preview.getByRole("dialog", { name: "About connections" });
+    const advanced = preview
+      .locator("summary")
+      .filter({ hasText: "Advanced settings" });
+    await expect(add).toBeVisible();
+    await expect(help).toHaveAttribute("aria-expanded", "false");
+    await expect(popup).toBeHidden();
+    await expect(help).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await preview.screenshot({ path: info.outputPath("connections.png") });
+    await help.hover();
+    await expect(help).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(popup).toBeHidden();
+
+    await help.press("Enter");
+    await expect(popup).toBeFocused();
+    await expect(popup).toHaveAccessibleDescription(
+      "Connections stay on this device and don’t sync to other devices.",
+    );
+    await expect(help).toHaveAttribute("aria-expanded", "true");
+    await expect(help).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    const bounds = (await popup.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    await preview.screenshot({ path: info.outputPath("connection-help.png") });
+    await preview.keyboard.press("Escape");
+    await expect(popup).toBeHidden();
+    await expect(help).toBeFocused();
+
+    await help.click();
+    await expect(popup).toBeVisible();
+    await help.click();
+    await expect(popup).toBeHidden();
+    await help.click();
+    await connections.getByRole("heading").click();
+    await expect(popup).toBeHidden();
+
+    await advanced.click();
+    await expect(
+      preview.getByLabel("Chat model", { exact: true }),
+    ).toBeVisible();
+  });
+}
+
 test("provider logos load locally in settings and the responsive provider chooser", async ({
   page,
 }, testInfo) => {

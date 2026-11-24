@@ -124,10 +124,10 @@ it("opens AI settings from its decorated category and manages connections inline
     expect(wrapper.find("[id^='settings-inline-']").exists()).toBe(true),
   );
   await vi.waitFor(() =>
-    expect(wrapper.find(".connections-heading button").exists()).toBe(true),
+    expect(wrapper.find(".add-connection").exists()).toBe(true),
   );
   await flushPromises();
-  await wrapper.get(".connections-heading button").trigger("click");
+  await wrapper.get(".add-connection").trigger("click");
   await flushPromises();
   expect(wrapper.get(".ai-embedded h1").text()).toBe("Choose a provider");
   expect(wrapper.get(".settings-categories").isVisible()).toBe(true);
@@ -148,10 +148,10 @@ it.each(["formats", "ai"] as const)(
       wrapper.get(".settings-categories button:first-of-type");
     async function addEndpoint() {
       await vi.waitFor(() =>
-        expect(wrapper.find(".connections-heading button").exists()).toBe(true),
+        expect(wrapper.find(".add-connection").exists()).toBe(true),
       );
       await flushPromises();
-      await wrapper.get(".connections-heading button").trigger("click");
+      await wrapper.get(".add-connection").trigger("click");
       await vi.waitFor(() =>
         expect(wrapper.find(".ai-provider-grid").exists()).toBe(true),
       );

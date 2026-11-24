@@ -64,6 +64,30 @@ test("without an open workspace settings stay disabled and do not read storage",
   expect(invoke).not.toHaveBeenCalled();
   expect(getStatus).not.toHaveBeenCalled();
 });
+test("without a selected connection, model settings are disabled without a read or retry error", async () => {
+  vi.mocked(getStatus).mockResolvedValue({
+    config: null,
+    available: false,
+    reason: null,
+    selectedModel: null,
+    modelError: null,
+  });
+  vi.mocked(invoke).mockRejectedValue("native.ai.access.required");
+  const wrapper = mount(AiSettings, {
+    props: { workspaceScope: "no-selected-connection" },
+  });
+  await flushPromises();
+  expect(invoke).not.toHaveBeenCalledWith(
+    "ai_settings_load",
+    expect.anything(),
+  );
+  expect(loadModelCatalog).not.toHaveBeenCalled();
+  expect(wrapper.find(".settings-error").exists()).toBe(false);
+  const thinking = wrapper.get("[id^='settings-thinking-']");
+  expect(thinking.attributes("disabled")).toBeDefined();
+  expect(thinking.attributes("aria-describedby")).toBeUndefined();
+  expect(wrapper.find(".thinking-explanation").exists()).toBe(false);
+});
 test("inline selection defaults hidden while comments stay enabled", async () => {
   const wrapper = mount(AiSettings, {
     props: { workspaceScope: "ui-defaults" },
@@ -866,7 +890,7 @@ test("a discovered GPT-6.2 Sol offers verified efforts and displays a legacy Off
   ).toBe("max");
 });
 
-test.each(["unsupported", "unknown", "noAccess"] as const)(
+test.each(["unsupported", "unknown"] as const)(
   "thinking remains visible and explains %s controls",
   async (state) => {
     vi.mocked(getStatus).mockResolvedValue({
@@ -875,7 +899,7 @@ test.each(["unsupported", "unknown", "noAccess"] as const)(
         endpoint:
           state === "unknown" ? "https://local.example.invalid/v1" : null,
       },
-      available: state !== "noAccess",
+      available: true,
       reason: null,
       selectedModel: "gpt-4o-mini",
       modelError: null,

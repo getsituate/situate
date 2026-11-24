@@ -7,6 +7,7 @@ const props = defineProps<{
   label: string;
   anchor?: HTMLElement | null;
   point?: { x: number; y: number };
+  align?: "start";
   staticSurface?: boolean;
 }>();
 const emit = defineEmits<{ close: [] }>();
@@ -55,7 +56,12 @@ function position() {
   popup.style.maxHeight = `${Math.max(0, bottom - top)}px`;
   const y = props.point?.y ?? (anchor?.bottom ?? top) + 4;
   const above = (anchor?.top ?? top) - popup.offsetHeight - 4;
-  popup.style.left = `${Math.max(left, Math.min(right - popup.offsetWidth, props.point?.x ?? (anchor?.right ?? left + popup.offsetWidth) - popup.offsetWidth))}px`;
+  const x =
+    props.point?.x ??
+    (props.align === "start"
+      ? (anchor?.left ?? left)
+      : (anchor?.right ?? left + popup.offsetWidth) - popup.offsetWidth);
+  popup.style.left = `${Math.max(left, Math.min(right - popup.offsetWidth, x))}px`;
   const height = popup.offsetHeight;
   const placement = Math.max(
     top,

@@ -1,6 +1,7 @@
 export { default as SituateButton } from "./SituateButton.vue";
 export { default as SituateIcon } from "./SituateIcon.vue";
 export { default as SituateIconButton } from "./SituateIconButton.vue";
+export { default as SituateInfoButton } from "./SituateInfoButton.vue";
 export { default as SituateSelect } from "./SituateSelect.vue";
 export { selectEnvironment } from "./select-context";
 export { default as SituateInput } from "./SituateInput.vue";

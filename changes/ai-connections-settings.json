@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "ai-connections-settings",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "ai-connections-settings",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Clearer AI settings",
+          "paragraphs": [
+            "Add connection is easier to find. The info button next to Connections explains that your connections stay on this device. When no connection is selected, Settings no longer shows a model loading error."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "ai-connections-settings",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Übersichtlichere KI-Einstellungen",
+          "paragraphs": [
+            "„Verbindung hinzufügen“ ist leichter zu finden. Über das Info-Symbol neben „Verbindungen“ erfährst du, dass deine Verbindungen auf diesem Gerät bleiben. Wenn keine Verbindung ausgewählt ist, zeigen die Einstellungen keinen Fehler beim Laden der Modelle mehr an."
+          ]
+        }
+      ]
+    }
+  }
+}

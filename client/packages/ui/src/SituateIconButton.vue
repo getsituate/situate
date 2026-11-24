@@ -17,12 +17,14 @@ withDefaults(
     icon?: IconName;
     label: string;
     title?: string;
+    showTooltip?: boolean;
     disabled?: boolean;
     unavailableReason?: string;
     variant?: "quiet" | "primary" | "plain";
   }>(),
   {
     disabled: false,
+    showTooltip: true,
     unavailableReason: undefined,
     variant: "quiet",
   },
@@ -56,6 +58,7 @@ withDefaults(
   >
     <slot><SituateIcon v-if="icon" :name="icon" /></slot>
     <SituateTooltip
+      v-if="showTooltip"
       :text="
         disabled
           ? (unavailableReason ?? t('control.thisActionIsUnavailable'))

@@ -32,9 +32,15 @@ for (const width of [1280, 390, 320]) {
         name: /Try again|Reconnect|Forget sign-in/,
       }),
     ).toHaveCount(0);
-    await expect(preview.locator("[data-ai-scope]")).toContainText(
-      "only to this workspace on this device",
+    const scope = preview.getByText(
+      "Connections stay on this device and don’t sync to other devices.",
+      { exact: true },
     );
+    await expect(scope).toBeHidden();
+    await preview.getByRole("button", { name: "About connections" }).click();
+    await expect(scope).toBeVisible();
+    await preview.keyboard.press("Escape");
+    await expect(scope).toBeHidden();
     await preview.screenshot({
       path: info.outputPath(`device-setup-${width}.png`),
     });

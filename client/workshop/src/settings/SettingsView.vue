@@ -18,6 +18,7 @@ import SituateSelect from "../ui/SituateSelect.vue";
 import {
   SituateIcon,
   SituateIconButton,
+  SituateInfoButton,
   SituateButton,
   SituateInput,
 } from "../ui";
@@ -211,7 +212,7 @@ async function confirmDisconnect() {
   await nextTick();
   document
     .querySelector<HTMLElement>(
-      "#chat-provider:not(:disabled), .settings-section-title button",
+      "#chat-provider:not(:disabled), .settings-add-connection",
     )
     ?.focus();
 }
@@ -398,15 +399,6 @@ function record(event: KeyboardEvent) {
               >
             </div>
           </header>
-          <p
-            v-if="state.page === 'ai'"
-            class="settings-section-help"
-            data-ai-scope
-          >
-            <strong>{{ deviceAiCopy.scope }}</strong
-            ><br />
-            {{ deviceAiCopy.scopeDetail }}
-          </p>
           <p v-if="state.notice" class="settings-notice" role="status">
             {{ state.notice }}
           </p>
@@ -545,14 +537,19 @@ function record(event: KeyboardEvent) {
           <template v-else-if="state.page === 'ai'">
             <section class="settings-group" aria-labelledby="providers-heading">
               <div class="settings-section-title">
-                <h3 id="providers-heading">{{ connectionCopy.heading }}</h3>
+                <div class="settings-connections-title">
+                  <h3 id="providers-heading">{{ connectionCopy.heading }}</h3>
+                  <SituateInfoButton
+                    :label="connectionCopy.info"
+                    :text="connectionCopy.deviceScope"
+                  />
+                </div>
                 <SituateButton
-                  variant="ghost"
                   size="small"
-                  class="settings-text-button"
-                  type="button"
+                  class="settings-add-connection"
                   @click="connect()"
                 >
+                  <SituateIcon name="plus" />
                   {{ connectionCopy.add }}
                 </SituateButton>
               </div>
@@ -673,7 +670,7 @@ function record(event: KeyboardEvent) {
                 </SituateButton>
               </template>
             </section>
-            <section class="settings-group" aria-labelledby="chat-heading">
+            <section aria-labelledby="chat-heading">
               <h3 id="chat-heading">Chat</h3>
               <div class="setting-row">
                 <div>

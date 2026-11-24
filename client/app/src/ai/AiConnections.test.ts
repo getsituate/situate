@@ -77,7 +77,6 @@ test("same-provider connections have distinct rows and a separate chat connectio
     "Work",
   ]);
   expect(wrapper.findAll("li select")).toHaveLength(0);
-  expect(wrapper.text()).toContain("⟦ai.connections.deviceScope⟧");
   await wrapper.get("select").setValue("work");
   await flushPromises();
   expect(selectConnection).toHaveBeenCalledWith("garden", "work");

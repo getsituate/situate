@@ -1,6 +1,7 @@
 import SituateButton from "@situate/ui/components/SituateButton";
 import SituateIcon from "@situate/ui/components/SituateIcon";
 import SituateIconButton from "@situate/ui/components/SituateIconButton";
+import SituateInfoButton from "@situate/ui/components/SituateInfoButton";
 import SituateSelect from "@situate/ui/components/SituateSelect";
 import SituateInput from "@situate/ui/components/SituateInput";
 import SituateTextarea from "@situate/ui/components/SituateTextarea";
@@ -27,6 +28,7 @@ export const ui = {
   SituateButton,
   SituateIcon,
   SituateIconButton,
+  SituateInfoButton,
   SituateSelect,
   SituateInput,
   SituateTextarea,
