@@ -1,10 +1,10 @@
-# App updates and version history
+# App updates and release notes
 
 ## Review paths
 
-Select **Update the app** for direct-install checks, download progress and user-confirmed restart. Select **Browse release history** to begin in **About Situate**, with website, package-managed, App Store and skipped-release starting states. Existing `release-notes-*` links remain valid.
+Select **Update the app** for direct-install checks, download progress and user-confirmed restart. Under **Browse what’s new**, choose **About · skipped releases** and select **What’s new** in About Situate. The installed version is newer than the latest written notes. Choose **About · no release notes yet** to review an installation with nothing to list.
 
-From Updates or About Situate, choose **Browse version history**. Both open the same list of the installed version and earlier releases. A downloaded newer version does not appear in the reader, search results or adjacent-release navigation. Find a release by version number or words in its notes, open an entry, move to an older or newer release, or return to All releases. Returning preserves the filter, list position and focus on the selected release. Close history and Escape return to the invoking control.
+Updates and About Situate open the same list. Read changes directly in the list. The list omits empty releases and newer uninstalled versions, even if a download has completed. **Close** and Escape return to the invoking control.
 
 - **Update ready in the workspace** places a small icon in the lower-right corner without adding a header or reserving layout space. Hover or keyboard focus reveals “Update available” to its left. It remains available with the sidebar collapsed. Selecting the icon or revealed label opens **Settings → Updates**, never immediate installation.
 - **Download in progress** shows transferred bytes, percentage and a progress bar in Settings. The download is already running; there is no additional mandatory download confirmation or cancel feature.
@@ -17,7 +17,7 @@ About Situate remains available on every channel. Store- and package-managed ins
 
 All release numbers, dates and notes are synthetic examples, not announcements of shipped capabilities. The fixture catalog includes every release in the example series; the reader applies the simulated installed-version ceiling while retaining earlier releases skipped by that installation. Patch entries describe concrete corrections; minor entries describe capabilities and workflow changes, with necessary steps and platform limitations.
 
-Search and scrolling keep longer histories browsable without adding a release picker to each article. The index and article each have one scrolling region; navigation and Close history remain outside it. The same list-to-detail flow works in narrow iOS and desktop previews. Native dialog behavior contains keyboard focus; entry controls explicitly receive focus before opening for consistent focus restoration.
+The list scrolls independently of Close. In narrow previews, the release date and version move above the entries. The dialog contains keyboard focus and returns it to the entry control on close.
 
 Simulation controls remain in the controls window. No network, installation, restart, workspace writes, release-source format or production history cache is implemented. Browser profile geometry does not qualify native macOS or iOS behavior. Production uses the bundled catalog described in the [release preparation guide](../../../../docs/development/release-preparation.md); native resource delivery and failure handling require separate production verification.
 

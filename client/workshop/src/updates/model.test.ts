@@ -20,7 +20,7 @@ describe("update workflow", () => {
     state = reduceSimulation(state, { type: "reset" });
     expect(state.updates.previousVersion).toBe("0.7.0");
     expect(state.updates.dialog).toBeNull();
-    expect(state.updates.installed).toBe("0.8.1");
+    expect(state.updates.installed).toBe("0.8.2");
   });
   it("registers each starting state once and opens an actual workspace", () => {
     for (const preset of updateScenarios) {

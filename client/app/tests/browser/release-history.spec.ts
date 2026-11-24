@@ -28,6 +28,10 @@ const catalog: ReleaseCatalog = {
       locales: { en: notes("Future-only change", "Not installed yet") },
     },
     {
+      version: "0.9.1",
+      locales: { en: { title: "Changes", entries: [] } },
+    },
+    {
       version: "0.9.0",
       date: "2026-10-20",
       locales: {
@@ -48,7 +52,7 @@ const catalog: ReleaseCatalog = {
 
 for (const mobile of [false, true]) {
   test(
-    `optional history caps list, search and adjacent navigation on ${mobile ? "mobile store" : "direct desktop"}`,
+    `What's new shows installed changes inline on ${mobile ? "mobile store" : "direct desktop"}`,
     { tag: mobile ? "@visual-mobile" : "@visual-desktop" },
     async ({ page, visual }) => {
       if (mobile) await page.setViewportSize({ width: 390, height: 844 });
@@ -61,7 +65,7 @@ for (const mobile of [false, true]) {
         {
           updates: {
             supported: !mobile,
-            installedVersion: "0.9.0",
+            installedVersion: "0.9.1",
             phase: "ready",
             artifactId: "next",
             availableVersion: "0.10.0",
@@ -81,74 +85,46 @@ for (const mobile of [false, true]) {
           .getByRole("button", { name: "Updates", exact: false })
           .click();
         await page
-          .getByRole("button", { name: "Browse version history", exact: true })
+          .getByRole("button", { name: "What’s new", exact: true })
           .click();
         const firstHistory = page.getByRole("dialog", {
-          name: "Version history",
+          name: "What’s new",
           exact: true,
         });
         await expect(firstHistory.locator("[data-version]")).toHaveCount(3);
         await expect(firstHistory).not.toContainText("Future-only");
         await firstHistory
-          .getByRole("button", { name: "Close history", exact: true })
+          .getByRole("button", { name: "Close", exact: true })
           .click();
       }
       await page
         .getByRole("button", { name: "About Situate", exact: true })
         .click();
       await expect(page.locator(".about-situate")).toContainText(
-        "Version 0.9.0",
+        "Version 0.9.1",
       );
       const entry = page.getByRole("button", {
-        name: "Browse version history",
+        name: "What’s new",
         exact: true,
       });
       await entry.click();
       const dialog = page.getByRole("dialog", {
-        name: "Version history",
+        name: "What’s new",
         exact: true,
       });
-      await expect(dialog.locator("[data-version]")).toHaveCount(3);
+      const releases = dialog.locator("[data-version]");
+      await expect(releases).toHaveCount(3);
+      await expect(releases.first()).toHaveAttribute("data-version", "0.9.0");
       await expect(dialog).not.toContainText("0.10.0");
+      await expect(dialog).not.toContainText("0.9.1");
+      await expect(dialog.getByRole("searchbox")).toHaveCount(0);
+      await expect(
+        dialog.getByText("Search keeps your filters."),
+      ).toBeInViewport();
+      await expect(
+        dialog.getByText("Drafts remain available."),
+      ).toBeInViewport();
       await visual.capture("release-history.list");
-      const search = dialog.getByRole("searchbox", { name: "Find a release" });
-      await search.fill("Future-only");
-      await expect(dialog.getByRole("status")).toHaveText(
-        "No matching releases",
-      );
-      await visual.capture("release-history.search.empty");
-      await dialog
-        .getByRole("button", { name: "Clear search", exact: true })
-        .click();
-      await expect(search).toBeFocused();
-      await search.fill("Draft");
-      const row = dialog.locator('[data-version="0.8.0"]');
-      await row.focus();
-      await row.press("Enter");
-      await expect(
-        dialog.getByRole("heading", { name: "Version 0.8.0", exact: true }),
-      ).toBeFocused();
-      await expect(
-        dialog.getByText("Drafts remain available.", { exact: true }),
-      ).toBeVisible();
-      await visual.capture("release-history.detail");
-      await dialog.getByRole("button", { name: "Newer", exact: true }).click();
-      await expect(
-        dialog.getByRole("heading", { name: "Version 0.9.0", exact: true }),
-      ).toBeFocused();
-      await expect(
-        dialog.getByRole("button", { name: "Newer", exact: true }),
-      ).toBeDisabled();
-      await dialog.getByRole("button", { name: "Older", exact: true }).click();
-      await dialog.getByRole("button", { name: "Older", exact: true }).click();
-      await expect(
-        dialog.getByRole("button", { name: "Older", exact: true }),
-      ).toBeDisabled();
-      await dialog
-        .getByRole("button", { name: "All releases", exact: true })
-        .click();
-      await expect(search).toHaveValue("Draft");
-      await expect(row).toBeFocused();
       await dialog.press("Escape");
       await expect(entry).toBeFocused();
       if (!mobile) {
@@ -158,7 +134,7 @@ for (const mobile of [false, true]) {
         await entry.click();
         await expect(dialog.locator("[data-version]")).toHaveCount(3);
         await dialog
-          .getByRole("button", { name: "Close history", exact: true })
+          .getByRole("button", { name: "Close", exact: true })
           .click();
         await expect(entry).toBeFocused();
       } else {
@@ -195,7 +171,7 @@ test("German controls and notes use English fallback for unavailable release tra
     Reflect.set(window, "__releaseHistoryFixture", value);
   }, catalog);
   await workspaceFixture(page, shellState, {
-    updates: { installedVersion: "0.9.0" },
+    updates: { installedVersion: "0.9.1" },
     localization: {
       language: "de",
       formats: initialFormats("de"),
@@ -205,52 +181,51 @@ test("German controls and notes use English fallback for unavailable release tra
   await page.goto("/");
   await page.locator(".settings-action").click();
   await page.getByRole("button", { name: "Über Situate", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Versionsverlauf ansehen", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Was ist neu?", exact: true }).click();
   const dialog = page.getByRole("dialog", {
-    name: "Versionsverlauf",
+    name: "Was ist neu?",
     exact: true,
   });
   await expect(dialog).toContainText("Verbesserte Suche");
-  await dialog.locator('[data-version="0.8.0"]').click();
   await expect(dialog).toContainText("Drafts remain available.");
-  await expect(
-    dialog.getByRole("button", { name: "Neuer", exact: true }),
-  ).toBeEnabled();
 });
 
-test("missing and malformed history stay empty without blocking the workspace", async ({
-  page,
-}) => {
-  await page.addInitScript(() => {
-    Reflect.set(window, "__releaseHistoryFixture", {
-      schemaVersion: 99,
-      releases: "invalid",
-    });
-  });
-  await workspaceFixture(page, shellState);
-  await page.goto("/");
-  await page.locator(".settings-action").click();
-  await page
-    .getByRole("button", { name: "About Situate", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Browse version history", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", {
-    name: "Version history",
-    exact: true,
-  });
-  await expect(dialog.getByRole("status")).toHaveText(
-    "No version history is available for this installation.",
+for (const [name, fixture] of Object.entries({
+  malformed: { schemaVersion: 99, releases: "invalid" },
+  "empty releases only": { ...catalog, releases: [catalog.releases[1]] },
+})) {
+  const emptyCatalog = name === "empty releases only";
+  test(
+    `What's new handles ${name} without blocking the workspace`,
+    { tag: emptyCatalog ? "@visual-desktop" : [] },
+    async ({ page, visual }) => {
+      await page.addInitScript((value) => {
+        Reflect.set(window, "__releaseHistoryFixture", value);
+      }, fixture);
+      await workspaceFixture(page, shellState);
+      await page.goto("/");
+      await page.locator(".settings-action").click();
+      await page
+        .getByRole("button", { name: "About Situate", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "What’s new", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: "What’s new",
+        exact: true,
+      });
+      await expect(dialog.getByRole("status")).toHaveText(
+        "There are no release notes for this installation yet.",
+      );
+      await expect(dialog.locator("[data-version]")).toHaveCount(0);
+      if (emptyCatalog) await visual.capture("release-history.empty");
+      await dialog.getByRole("button", { name: "Close", exact: true }).click();
+      await page.getByRole("button", { name: "Files", exact: true }).click();
+      await expect(page.locator(".settings-view")).toHaveCount(0);
+    },
   );
-  await dialog
-    .getByRole("button", { name: "Close history", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Files", exact: true }).click();
-  await expect(page.locator(".settings-view")).toHaveCount(0);
-});
+}
 
 const licenseText = `Situate licenses and notices
 

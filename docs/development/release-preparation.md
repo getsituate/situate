@@ -60,7 +60,11 @@ Assembly selects committed declarations since the preceding completed GitHub Rel
 
 The creator writes `release-inputs.json` and `situate-release-history.json` outside tracked source. The input manifest binds source, baseline, version, build, tag, fragment identities and catalog hashes. Its catalog file SHA-256 includes the final newline; the existing signed `releaseContent` digest hashes the canonical catalog without that newline. Both frontend and native packaging consume the same generated catalog bytes before signing. Newly assembled candidates omit the optional display date; historical dates are preserved.
 
-The app bundles the current candidate, even with no public entries, and finalized earlier versions in descending numeric order. It excludes internal reasons, drafts and newer uninstalled versions. History works offline and never opens automatically. GitHub release notes group the current release's English entries under Important, Features, Changes, and Fixes, in that order. Empty sections are omitted. You can edit the visible notes after publication. Leave the hidden release identity comment and all assets unchanged. Publication copies the exact sealed assets; it does not regenerate history.
+The app bundles the current candidate and finalized earlier versions. **What’s new** lists only releases with public entries at or below the installed version, newest first. It works offline and never opens automatically.
+
+GitHub release notes group the current release’s English entries under Important, Features, Changes, and Fixes, in that order. A release without public entries gets a generic technical-changes note. You can edit the visible notes after publication. Leave the hidden release identity comment and all assets unchanged. Publication copies the exact sealed assets; it does not regenerate history.
+
+After successful macOS publication, the Slack release notification includes reasons from the declarations assigned to that release. The notifier reads those declarations from the release’s source revision and checks them against the sealed inputs. If the reasons cannot be verified, it sends the release notification without them. Slack’s text limit may truncate long lists of reasons. The reasons are not copied into public release notes or assets.
 
 ### Release-assigned workspace requirements
 

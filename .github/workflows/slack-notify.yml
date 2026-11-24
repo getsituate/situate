@@ -69,8 +69,44 @@ jobs:
               ;;
             release)
               [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
-              gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" |
-                jq -e --arg id "$RELEASE_ID" --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/" '
+              release="$RUNNER_TEMP/slack-release.json"
+              reasons="$RUNNER_TEMP/slack-release-reasons.jsonl"
+              gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$release"
+              collect_reasons() {
+                local metadata asset source input_sha tag inputs fragments file sha blob
+                metadata=$(jq -er --arg repo "$GITHUB_REPOSITORY" --arg id "$RELEASE_ID" '
+                  select((.id | tostring) == $id and .draft == false and (.published_at | type) == "string")
+                  | .tag_name as $tag
+                  | [.assets[] | select(.name == "release-inputs.json") | .id | tostring] as $assets
+                  | select(($assets | length) == 1 and ($assets[0] | test("^[1-9][0-9]*$")))
+                  | [(.body // "" | scan("<!-- situate-release:([A-Za-z0-9+/=]+) -->") | .[0])] as $markers
+                  | select(($markers | length) == 1)
+                  | ($markers[0] | @base64d | fromjson | .identity)
+                  | select(.repository == $repo and .tag == $tag and ("v" + .version) == $tag
+                      and (.sourceRevision | test("^[a-f0-9]{40}$")) and (.inputSha256 | test("^[a-f0-9]{64}$")))
+                  | [$assets[0], .sourceRevision, .inputSha256, $tag] | @tsv' "$release") || return 1
+                IFS=$'\t' read -r asset source input_sha tag <<< "$metadata"
+                inputs="$RUNNER_TEMP/slack-release-inputs.json"
+                gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset" > "$inputs" || return 1
+                printf '%s  %s\n' "$input_sha" "$inputs" | sha256sum --check --status || return 1
+                fragments=$(jq -er --arg source "$source" --arg tag "$tag" '
+                  select(.schemaVersion == 1 and .kind == "situate-release-inputs" and .source == $source and .tag == $tag)
+                  | select((.fragments | type) == "array" and all(.fragments[];
+                      (.path | test("^changes/[a-z][a-z0-9-]{0,79}\\.json$")) and (.sha256 | test("^[a-f0-9]{64}$"))))
+                  | [.fragments[] | [.path, .sha256] | @tsv] | join("\n")' "$inputs") || return 1
+                [[ -n "$fragments" ]] || return 0
+                blob="$RUNNER_TEMP/slack-release-fragment.json"
+                while IFS=$'\t' read -r file sha; do
+                  gh api -H 'Accept: application/vnd.github.raw+json' "repos/$GITHUB_REPOSITORY/contents/$file?ref=$source" > "$blob" || return 1
+                  printf '%s  %s\n' "$sha" "$blob" | sha256sum --check --status || return 1
+                  jq -c 'if has("emptyReason") then .emptyReason else empty end' "$blob" || return 1
+                done <<< "$fragments"
+              }
+              if ! collect_reasons 2>/dev/null > "$reasons"; then
+                : > "$reasons"
+                echo '::warning::Internal changelog reasons could not be read.'
+              fi
+              jq -e --arg id "$RELEASE_ID" --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/" --slurpfile reasons "$reasons" '
                 def release_notes:
                   gsub("<!-- situate-release:[A-Za-z0-9+/=]+ -->"; "")
                   | gsub("\r\n"; "\n")
@@ -102,11 +138,16 @@ jobs:
                           type: "mrkdwn", text: "\($notice) <\($release_url)|Read the full changelog on GitHub>"
                         }}] else [] end)
                       + (if $preview == "" then [] else [$preview | notes_block] end)
+                      + (if ($reasons | length) == 0 then [] else
+                           ("Internal changes without public notes\n" + ($reasons | map("• " + .) | join("\n"))) as $internal
+                           | [{type: "section", text: {type: "plain_text", text:
+                               (if ($internal | length) > 3000 then $internal[:2999] + "…" else $internal end)}}]
+                         end)
                       + (if $shortened then [] else [{type: "section", text: {
                           type: "mrkdwn", text: "<\($release_url)|View release on GitHub>"
                         }}] end)
                     )
-                  }' > "$payload"
+                  }' "$release" > "$payload"
               ;;
             *) exit 1 ;;
           esac

@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { laneHosts } from "./actions-adapter.mjs";
 
@@ -584,7 +594,7 @@ test("Slack notifications skip message composition and delivery without a webhoo
 test("Slack release notes preserve formatting and flag shortened messages", (t) => {
   const notifier = read("slack-notify");
   const filter = notifier.match(
-    /jq -e --arg id .*? '\n([\s\S]*?)' > "\$payload"/,
+    /jq -e --arg id .*? '\n([\s\S]*?)' "\$release" > "\$payload"/,
   )?.[1];
   assert.ok(filter);
   const marker = `<!-- situate-release:${"A".repeat(1500)}= -->`;
@@ -606,6 +616,9 @@ test("Slack release notes preserve formatting and flag shortened messages", (t) 
       "--arg",
       "url",
       "https://github.com/example/app/releases/tag/",
+      "--slurpfile",
+      "reasons",
+      "/dev/null",
       filter,
     ],
     {
@@ -663,6 +676,123 @@ test("Slack release notes preserve formatting and flag shortened messages", (t) 
     shortened.text,
     "Situate v2026.11.10 published. Release notes shortened. Full changelog: https://github.com/example/app/releases/tag/v2026.11.10",
   );
+});
+
+test("Slack reads only verified change fragments for the published release", (t) => {
+  for (const tool of ["jq", "sha256sum"]) {
+    if (spawnSync(tool, ["--version"]).error?.code === "ENOENT")
+      return t.skip(`${tool} is not installed`);
+  }
+  const script = read("slack-notify").match(
+    / {10}(payload="\$RUNNER_TEMP\/slack-message\.json"\n[\s\S]*?^ {10}esac$)/m,
+  )?.[1];
+  assert.ok(script);
+  const root = mkdtempSync(join(tmpdir(), "situate-slack-test-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
+  const repository = "example/app";
+  const source = "a".repeat(40);
+  const tag = "v2026.11.10";
+  const reason = "Refactor <@U123> & *literal*";
+  const internal = JSON.stringify({ emptyReason: reason });
+  const another = JSON.stringify({ emptyReason: "Test the packaging tools." });
+  const visible = JSON.stringify({
+    locales: { en: { entries: [{ title: "Public change" }] } },
+  });
+  const inputs = JSON.stringify({
+    schemaVersion: 1,
+    kind: "situate-release-inputs",
+    source,
+    tag,
+    fragments: [
+      { path: "changes/internal.json", sha256: sha(internal) },
+      { path: "changes/another.json", sha256: sha(another) },
+      { path: "changes/public.json", sha256: sha(visible) },
+    ],
+  });
+  const marker = Buffer.from(
+    JSON.stringify({
+      identity: {
+        repository,
+        sourceRevision: source,
+        tag,
+        version: "2026.11.10",
+        inputSha256: sha(inputs),
+      },
+    }),
+  ).toString("base64");
+  const gh = `gh() {
+    case "\${@: -1}" in
+      "repos/example/app/releases/12") cat "$RUNNER_TEMP/release";;
+      "repos/example/app/releases/assets/13") cat "$RUNNER_TEMP/inputs";;
+      "repos/example/app/contents/changes/internal.json?ref=${source}") cat "$RUNNER_TEMP/internal";;
+      "repos/example/app/contents/changes/another.json?ref=${source}") cat "$RUNNER_TEMP/another";;
+      "repos/example/app/contents/changes/public.json?ref=${source}") cat "$RUNNER_TEMP/public";;
+      *) return 1;;
+    esac
+  }`;
+  writeFileSync(
+    join(root, "release"),
+    JSON.stringify({
+      id: 12,
+      draft: false,
+      published_at: "2026-11-10T00:00:00Z",
+      tag_name: tag,
+      assets: [{ id: 13, name: "release-inputs.json" }],
+      body: `## Changes\n\n### Public change\n\n<!-- situate-release:${marker} -->`,
+    }),
+  );
+  for (const [file, bytes] of Object.entries({
+    inputs,
+    internal,
+    another,
+    public: visible,
+  }))
+    writeFileSync(join(root, file), bytes);
+  const compose = () => {
+    const result = spawnSync(
+      "bash",
+      ["-eo", "pipefail", "-c", `${gh}\n${script}`],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          KIND: "release",
+          RELEASE_ID: "12",
+          RUNNER_TEMP: root,
+          GITHUB_REPOSITORY: repository,
+          GITHUB_SERVER_URL: "https://github.com",
+        },
+      },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /Refactor|packaging tools/,
+    );
+    return {
+      payload: JSON.parse(
+        readFileSync(join(root, "slack-message.json"), "utf8"),
+      ),
+      log: result.stdout,
+    };
+  };
+  const { payload, log } = compose();
+  assert.equal(log, "");
+  assert.match(JSON.stringify(payload.blocks[1]), /Public change/);
+  assert.deepEqual(payload.blocks[2].text, {
+    type: "plain_text",
+    text: `Internal changes without public notes\n• ${reason}\n• Test the packaging tools.`,
+  });
+  writeFileSync(
+    join(root, "another"),
+    JSON.stringify({ emptyReason: "Unverified" }),
+  );
+  const fallback = compose();
+  assert.match(fallback.log, /reasons could not be read/);
+  assert.equal(fallback.payload.blocks.length, 3);
+  assert.doesNotMatch(JSON.stringify(fallback.payload), /Refactor|Unverified/);
 });
 
 test("macOS release checks verified hosting before starting release effects", () => {

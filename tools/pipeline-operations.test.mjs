@@ -355,9 +355,13 @@ test("GitHub notes group current English entries by category and keep their orde
       "Resume drafts.",
     ].join("\n\n"),
   );
+});
+
+test("GitHub notes give a generic message for a release without public entries", () => {
   assert.equal(
     notesForCatalog({
       installedVersion: "2026.11.1",
+      emptyReason: "Internal synthetic reason",
       releases: [
         {
           version: "2026.11.1",
@@ -371,7 +375,7 @@ test("GitHub notes group current English entries by category and keep their orde
         },
       ],
     }),
-    "",
+    "This release contains only technical changes.",
   );
 });
 

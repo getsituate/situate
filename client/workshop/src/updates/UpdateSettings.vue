@@ -150,19 +150,14 @@ const detail = computed(
         <span role="status" class="sr-only">{{ visibleTitle }}</span>
       </div>
     </section>
-    <section class="update-release">
-      <div class="release-heading">
-        <h3>{{ copy.history }}</h3>
-      </div>
-      <SituateButton
-        variant="secondary"
-        @click="
-          ($event.currentTarget as HTMLElement).focus();
-          emit('action', { type: 'show-notes' });
-        "
-        >{{ copy.readNotes }}</SituateButton
-      >
-    </section>
+    <SituateButton
+      variant="secondary"
+      @click="
+        ($event.currentTarget as HTMLElement).focus();
+        emit('action', { type: 'show-notes' });
+      "
+      >{{ copy.readNotes }}</SituateButton
+    >
   </div>
 </template>
 <style scoped>
@@ -258,20 +253,6 @@ h3 {
 .progress-meta strong {
   color: var(--situate-ink);
   font-weight: 500;
-}
-.release-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.release-heading h3 {
-  font-size: 16px;
-}
-.release-heading > span {
-  font-size: 12px;
-  color: var(--situate-muted);
 }
 .sr-only {
   position: absolute;
