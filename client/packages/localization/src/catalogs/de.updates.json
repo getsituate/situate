@@ -13,7 +13,6 @@
   "updates.megabytes": "{megabytes} MB heruntergeladen",
   "updates.megabytesTotal": "{done} von {total} MB",
   "updates.lastCheck": "Zuletzt geprüft: {time}",
-  "updates.background": "Updates werden im Hintergrund heruntergeladen. Du entscheidest, wann die App neu startet.",
   "updates.readyDetail": "Das Update ist geprüft und bereit zur Installation.",
   "updates.restartTitle": "Situate für das Update neu starten?",
   "updates.restartIdle": "Situate speichert deine Arbeit, installiert das Update und startet neu.",

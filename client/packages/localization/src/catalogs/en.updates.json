@@ -13,7 +13,6 @@
   "updates.megabytes": "{megabytes} MB downloaded",
   "updates.megabytesTotal": "{done} of {total} MB",
   "updates.lastCheck": "Last checked: {time}",
-  "updates.background": "Updates download in the background. You choose when to restart.",
   "updates.readyDetail": "The update is verified and ready to install.",
   "updates.restartTitle": "Restart to update Situate?",
   "updates.restartIdle": "Situate will save your work, install the update and restart.",

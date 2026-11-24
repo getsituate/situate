@@ -133,9 +133,7 @@ async function install(
         <p v-if="updates.availableVersion" class="target-version">
           {{ t("updates.version", { version: updates.availableVersion }) }}
         </p>
-        <p v-if="updates.phase !== 'recovery-required'">
-          {{ t(updateReady() ? "updates.readyDetail" : "updates.background") }}
-        </p>
+        <p v-if="canInstall">{{ t("updates.readyDetail") }}</p>
         <div v-if="updates.phase === 'downloading'" class="download-progress">
           <SituateProgress :value="progress" :label="t('updates.progress')" />
           <p class="progress-meta">
