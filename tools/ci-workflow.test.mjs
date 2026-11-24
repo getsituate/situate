@@ -525,17 +525,20 @@ test("Slack notifications skip message composition and delivery without a webhoo
   assert.match(notifier, /id: post\s+if: steps\.message\.outcome == 'success'/);
 });
 
-test("Slack release notes show headings without exposing release metadata", (t) => {
+test("Slack release notes preserve formatting and flag shortened messages", (t) => {
   const notifier = read("slack-notify");
   const filter = notifier.match(
     /jq -e --arg id .*? '\n([\s\S]*?)' > "\$payload"/,
   )?.[1];
   assert.ok(filter);
   const marker = `<!-- situate-release:${"A".repeat(1500)}= -->`;
+  const limit = 8000;
+  const exact = "x".repeat(limit);
   const bodies = [
     `## Features\n\n### Chat dictation\n\nTranscribe on your Mac.\n\n## Changes\n\n### Plugins\n\nKeep <@U123> & *text* literal.\n\n${marker}`,
     `\r\n${marker}\r\n`,
-    `## Fixes\n\n${"x".repeat(1500)}\n\n${marker}`,
+    `${exact}\n\n${marker}`,
+    `${exact}y\n\n${marker}`,
   ];
   const result = spawnSync(
     "jq",
@@ -568,7 +571,7 @@ test("Slack release notes show headings without exposing release metadata", (t) 
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /situate-release:/);
-  const [formatted, empty, long] = result.stdout
+  const [formatted, empty, complete, shortened] = result.stdout
     .trim()
     .split("\n")
     .map(JSON.parse);
@@ -586,7 +589,24 @@ test("Slack release notes show headings without exposing release metadata", (t) 
     formatted.blocks.at(-1).text.text,
     "<https://github.com/example/app/releases/tag/v2026.11.10|View release on GitHub>",
   );
-  assert.match(long.blocks[1].elements[0].elements.at(-1).text, /^x+…$/);
+  assert.equal(complete.blocks[1].elements[0].elements[0].text, exact);
+  assert.equal(
+    complete.blocks.at(-1).text.text,
+    formatted.blocks.at(-1).text.text,
+  );
+  assert.equal(complete.text, formatted.text);
+  assert.equal(
+    shortened.blocks[1].text.text,
+    "Release notes shortened. <https://github.com/example/app/releases/tag/v2026.11.10|Read the full changelog on GitHub>",
+  );
+  assert.equal(
+    shortened.blocks[2].elements[0].elements[0].text,
+    `${exact.slice(0, -1)}…`,
+  );
+  assert.equal(
+    shortened.text,
+    "Situate v2026.11.10 published. Release notes shortened. Full changelog: https://github.com/example/app/releases/tag/v2026.11.10",
+  );
 });
 
 test("macOS release checks verified hosting before starting release effects", () => {
