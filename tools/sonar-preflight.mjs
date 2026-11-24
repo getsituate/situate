@@ -65,12 +65,17 @@ export async function preflight({
         detached: true,
       });
       let killTimer;
-      function killGroup(name) {
+      function killGroup(name, childClosed = false) {
         if (!child.pid) return;
         try {
           process.kill(-child.pid, name);
         } catch (error) {
-          if (error.code !== "ESRCH") throw error;
+          // macOS can return EPERM for a process group with only exiting members.
+          if (
+            error.code !== "ESRCH" &&
+            !(childClosed && error.code === "EPERM")
+          )
+            throw error;
         }
       }
       function cancel() {
@@ -83,7 +88,7 @@ export async function preflight({
         signal?.removeEventListener("abort", cancel);
         clearTimeout(killTimer);
         if (signal?.aborted) {
-          killGroup("SIGKILL");
+          killGroup("SIGKILL", true);
           reject(signal.reason);
         } else if (code === 0) resolve();
         else

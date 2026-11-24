@@ -154,8 +154,20 @@ test("rejects a branch missing changes from main before invoking the scanner", a
   assert.equal(existsSync(log), false);
 });
 
-test("aborting a running scan cleans the checkout and never pushes", async (t) => {
+test("aborting a running scan cleans the checkout and never pushes even if its exiting group returns EPERM", async (t) => {
   const { env, git, log, runPreflight } = fixture(t);
+  const kill = process.kill.bind(process);
+  let sawFinalSignal = false;
+  t.mock.method(process, "kill", (pid, signal) => {
+    if (pid >= 0 || signal !== "SIGKILL") return kill(pid, signal);
+    try {
+      kill(pid, signal);
+    } catch (error) {
+      if (error.code !== "EPERM" && error.code !== "ESRCH") throw error;
+    }
+    sawFinalSignal = true;
+    throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+  });
   const controller = new AbortController();
   const deadline = AbortSignal.timeout(5000);
   const signal = AbortSignal.any([controller.signal, deadline]);
@@ -172,6 +184,7 @@ test("aborting a running scan cleans the checkout and never pushes", async (t) =
   }
   controller.abort();
   await result;
+  assert.equal(sawFinalSignal, true);
   assert.doesNotMatch(readFileSync(log, "utf8"), /push |pr create/);
   assert.equal(
     git("worktree", "list", "--porcelain").match(/^worktree /gm).length,
