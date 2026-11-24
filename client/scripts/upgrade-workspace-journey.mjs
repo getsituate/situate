@@ -9,7 +9,6 @@ const pendingNote = `${upgradeNoteAfter}\nUnsaved cancellation marker\n`;
 export function upgradeWorkspaceJourney({
   actions,
   verify,
-  verifyReopened = verify,
   verifyCancellation,
   writable,
   progress = () => {},
@@ -147,7 +146,7 @@ export function upgradeWorkspaceJourney({
         await step("reopen_note", openNote);
         await step("verify_reopened_note", async () => {
           await expect({ ...editor, value: expectedNote });
-          await verifyReopened(expectedNote);
+          await verify(expectedNote);
         });
       }),
   };

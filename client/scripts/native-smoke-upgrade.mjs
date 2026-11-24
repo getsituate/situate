@@ -101,10 +101,7 @@ export async function runUpgradeSmoke(executable, { signal, timeout }) {
       await run(
         upgradeWorkspaceJourney({
           actions,
-          verify: (note) =>
-            verifyUpgradeWorkspace(workspace, note, {
-              allowManifestMigration: true,
-            }),
+          verify: (note) => verifyUpgradeWorkspace(workspace, note),
           progress: (step) => console.log(`Legacy workspace ${mode}: ${step}`),
         }),
       );

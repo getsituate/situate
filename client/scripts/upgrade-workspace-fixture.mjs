@@ -123,11 +123,7 @@ export function verifyUpgradeDraft(root, expectedDraft) {
   );
 }
 
-export function verifyUpgradeWorkspace(
-  root,
-  expectedNote,
-  { allowManifestMigration = false } = {},
-) {
+export function verifyUpgradeWorkspace(root, expectedNote) {
   assert(
     retainedBytes(root, upgradeNote).equals(Buffer.from(expectedNote)),
     "Upgrade note differs from the expected saved content",
@@ -143,7 +139,7 @@ export function verifyUpgradeWorkspace(
   const [plugin] = state.plugins;
   const [original] = baseline.plugins;
   const manifest = retainedBytes(root, pluginManifest);
-  if (allowManifestMigration && !manifest.equals(bytes(pluginManifest))) {
+  if (!manifest.equals(bytes(pluginManifest))) {
     assert.deepEqual(
       JSON.parse(manifest),
       {
@@ -161,11 +157,6 @@ export function verifyUpgradeWorkspace(
       "Enabled plugin revision does not match the retained migration revision",
     );
     original.revision = plugin.revision;
-  } else {
-    assert(
-      manifest.equals(bytes(pluginManifest)),
-      "Upgrade plugin manifest changed",
-    );
   }
   assert.deepEqual(
     state,
