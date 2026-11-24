@@ -295,15 +295,13 @@ onBeforeUnmount(() => {
           error=""
           @select="accent = $event"
         />
-        <slot name="operation-error">
-          <div
-            v-if="message && !destinationError"
-            class="creation-error"
-            role="alert"
-          >
-            <p>{{ localizeError(message) }}</p>
-          </div>
-        </slot>
+        <div
+          v-if="message && !destinationError"
+          class="creation-error"
+          role="alert"
+        >
+          <p>{{ localizeError(message) }}</p>
+        </div>
       </form>
     </section>
   </div>

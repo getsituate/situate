@@ -66,11 +66,14 @@ for (const mobile of [false, true]) {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
-    await page
-      .getByRole("button", { name: keyLabel("workspace.reviewError") })
-      .click();
-    await expect(dialog).toBeVisible();
-    await retry.click();
+    await expect(
+      page.getByRole("button", {
+        name: "⟦workspace.reviewError⟧",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await expect(page.locator(".entry-error")).toHaveCount(0);
+    await trigger.click();
     await expect(dialog).toBeVisible();
     await expect(close).toBeFocused();
     await retry.click();

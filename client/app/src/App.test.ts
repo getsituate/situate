@@ -255,20 +255,14 @@ it.each([false, true])(
     await settleViews();
     expect(dialog.element.open).toBe(false);
     expect(document.activeElement).toBe(trigger.element);
-    const review = wrapper
-      .findAll("button")
-      .find((button) => button.text() === "⟦workspace.reviewError⟧")!;
-    await review.trigger("click");
-    expect(dialog.element.open).toBe(true);
+    expect(wrapper.text()).not.toContain("⟦workspace.reviewError⟧");
+    expect(wrapper.find(".entry-error").exists()).toBe(false);
     expect(action).toHaveBeenCalledTimes(1);
-    let retry = dialog
-      .findAll("button")
-      .find((button) => button.text() === "⟦navigation.retry⟧")!;
-    await retry.trigger("click");
+    await trigger.trigger("click");
     await settleViews();
     expect(action).toHaveBeenCalledTimes(2);
     dialog = openingDialog();
-    retry = dialog
+    const retry = dialog
       .findAll("button")
       .find((button) => button.text() === "⟦navigation.retry⟧")!;
     expect(dialog.element.open).toBe(true);

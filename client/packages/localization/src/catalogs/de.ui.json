@@ -147,7 +147,6 @@
   "workspace.makeAnExistingSyncedWorkspaceAvailableHere": "Mache einen bereits synchronisierten Arbeitsbereich hier verfügbar.",
   "workspace.syncIsUnavailable": "Synchronisierung ist nicht verfügbar.",
   "workspace.couldntOpenTheWorkspace": "Der Arbeitsbereich konnte nicht geöffnet werden.",
-  "workspace.reviewError": "Fehler ansehen",
   "workspace.close": "Schließen",
   "workspace.workspacesThatNeedAttention": "Arbeitsbereiche mit Handlungsbedarf",
   "workspace.grantAccess": "Zugriff erlauben…",

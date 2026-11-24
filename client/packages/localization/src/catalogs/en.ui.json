@@ -147,7 +147,6 @@
   "workspace.makeAnExistingSyncedWorkspaceAvailableHere": "Make an existing synced workspace available here.",
   "workspace.syncIsUnavailable": "Sync is unavailable.",
   "workspace.couldntOpenTheWorkspace": "Couldn’t open the workspace.",
-  "workspace.reviewError": "Review error",
   "workspace.close": "Close",
   "workspace.workspacesThatNeedAttention": "Workspaces that need attention",
   "workspace.grantAccess": "Grant access…",
