@@ -23,7 +23,7 @@ const pipelineWorkflows = [
 ];
 function job(workflow, id) {
   const body = workflow.match(
-    new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z-]*:|$)`),
+    new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][a-z0-9-]*:|$)`),
   )?.[1];
   assert.ok(body, `Missing job ${id}`);
   return body;
@@ -112,7 +112,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
     }
     assert.match(workflow, /persist-credentials: false/);
     for (const body of workflow
-      .split(/\n {2}[a-z][a-z-]*:\n/)
+      .split(/\n {2}[a-z][a-z0-9-]*:\n/)
       .slice(1)
       .filter((body) => body.includes("    steps:"))) {
       if (name === "deploy-hosting" && body.includes("github-rehearsal.py")) {
@@ -155,6 +155,11 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       ) {
         assert.match(body, /runs-on: windows-11-arm/);
         assert.doesNotMatch(body, /environment:|secrets\./);
+      } else if (
+        name === "verify" &&
+        body.includes("Build unsigned ARM64 installer preview")
+      ) {
+        assert.match(body, /run: python tools\/pipeline-bootstrap\.py/);
       } else if (body.includes("run: node ")) {
         const python = body.includes("runs-on: windows-2025")
           ? "python"
@@ -222,7 +227,7 @@ test("macOS delivery has no hosted checkpoint recovery workflow", () => {
     );
 });
 
-test("fixed independent families depend on planning and aggregate every selected receipt", () => {
+test("verification jobs depend on planning and aggregate every selected receipt", () => {
   for (const name of ["verify", "release-macos"]) {
     const workflow = read(name);
     assert.doesNotMatch(
@@ -233,10 +238,11 @@ test("fixed independent families depend on planning and aggregate every selected
       job(workflow, "plan"),
       /outputs:[\s\S]*plan:.*steps\.plan\.outputs\.plan[\s\S]*digest:/,
     );
-    const lanes = Object.entries(laneHosts).filter(
-      ([, host]) => name === "verify" || host !== "windows",
+    const shared = ["tooling-macos", "macos-code", "macos-native"];
+    const independent = Object.entries(laneHosts).filter(([id, host]) =>
+      name === "verify" ? !shared.includes(id) : host !== "windows",
     );
-    for (const [id, host] of lanes) {
+    for (const [id, host] of independent) {
       const lane = job(workflow, id);
       assert.match(lane, /needs: plan\n/);
       const runner =
@@ -296,7 +302,9 @@ test("fixed independent families depend on planning and aggregate every selected
       aggregate,
       ...(name === "release-macos" ? [job(workflow, "create")] : []),
     ]) {
-      for (const [id] of lanes) {
+      const jobs = independent.map(([id]) => id);
+      if (name === "verify") jobs.push("macos-arm64");
+      for (const id of jobs) {
         assert.ok(consumer.split("    if:")[0].includes(`        ${id},\n`));
         for (const line of consumer.match(/PIPELINE_NEEDS:.*$/gm) ?? [])
           assert.ok(line.includes(`toJSON(needs.${id})`));
@@ -412,7 +420,7 @@ test("Windows verify requires a native receipt and uploads the CI build after it
   assert.match(required.split("    if:")[0], /windows-native/);
   assert.equal(
     (required.match(/toJSON\(needs\.windows-native\)/g) ?? []).length,
-    2,
+    1,
   );
 });
 
@@ -436,10 +444,60 @@ test("the Windows VM artifact is separate from required verification and release
   );
 });
 
-test("native source jobs declare one build slot in both PR and release verification", () => {
-  for (const workflow of ["verify", "release-macos"])
-    for (const id of ["macos-native", "macos-compatibility"])
-      assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
+test("Verify runs selected ARM64 lanes on one runner with independent step results", () => {
+  const workflow = read("verify");
+  const shared = job(workflow, "macos-arm64");
+  assert.equal(workflow.match(/^ {4}runs-on: macos-latest$/gm)?.length, 1);
+  assert.match(shared, /needs: plan\n/);
+  assert.match(shared, /runs-on: macos-latest\n/);
+  assert.match(shared, /ref:.*github\.sha/);
+  assert.match(shared, /PIPELINE_PLAN_DIGEST:.*needs\.plan\.outputs\.digest/);
+  assert.match(shared, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
+  assert.equal(shared.match(/pipeline-bootstrap\.py/g)?.length, 1);
+  const [jobHeader, steps] = shared.split("    steps:\n");
+  for (const id of ["tooling-macos", "macos-code", "macos-native"]) {
+    assert.doesNotMatch(workflow, new RegExp(`^  ${id}:`, "m"));
+    assert.ok(jobHeader.includes(`.outputs.lanes), '${id}')`));
+    assert.ok(jobHeader.includes(`${id}-result: \${{ steps.${id}.outcome }}`));
+    assert.ok(
+      jobHeader.includes(`${id}-receipt: \${{ steps.${id}.outputs.receipt }}`),
+    );
+    if (id !== "tooling-macos")
+      assert.ok(
+        jobHeader.includes(
+          `${id}-evidence: \${{ steps.${id}.outputs.evidence }}`,
+        ),
+      );
+    const setup = steps.split(`- id: setup-${id}\n`)[1]?.split("      - ")[0];
+    assert.ok(setup?.includes(`.outputs.lanes), '${id}')`));
+    assert.ok(
+      setup.includes("!cancelled() && steps.bootstrap.outcome == 'success'"),
+    );
+    assert.ok(setup.includes(`setup --workflow verify --lane ${id}`));
+    const execution = steps.split(`- id: ${id}\n`)[1]?.split("      - ")[0];
+    assert.ok(execution?.includes(`name: ${id}\n`));
+    assert.ok(
+      execution.includes(
+        `!cancelled() && steps.setup-${id}.outcome == 'success'`,
+      ),
+    );
+    assert.ok(execution.includes(`lane --workflow verify --lane ${id}`));
+    assert.doesNotMatch(execution, /continue-on-error/);
+  }
+  assert.match(
+    shared,
+    /tools\/actions-adapter\.mjs desktop\n[\s\S]*?steps\.desktop\.outcome == 'success'/,
+  );
+});
+
+test("native source verification declares one build slot on ARM64 and Intel", () => {
+  for (const [workflow, id] of [
+    ["verify", "macos-arm64"],
+    ["verify", "macos-compatibility"],
+    ["release-macos", "macos-native"],
+    ["release-macos", "macos-compatibility"],
+  ])
+    assert.match(job(read(workflow), id), /SITUATE_TOOL_BUILD_SLOTS: "1"/);
 });
 
 test("the Intel release job has more time for cold compilation than PR verification", () => {
@@ -710,17 +768,20 @@ test("Slack notifications skip message composition and delivery without a webhoo
   assert.match(notifier, /id: post\s+if: steps\.message\.outcome == 'success'/);
 });
 
-test("Slack release notes show headings without exposing release metadata", (t) => {
+test("Slack release notes preserve formatting and flag shortened messages", (t) => {
   const notifier = read("slack-notify");
   const filter = notifier.match(
     /jq -e --arg id .*? '\n([\s\S]*?)' > "\$payload"/,
   )?.[1];
   assert.ok(filter);
   const marker = `<!-- situate-release:${"A".repeat(1500)}= -->`;
+  const limit = 8000;
+  const exact = "x".repeat(limit);
   const bodies = [
     `## Features\n\n### Chat dictation\n\nTranscribe on your Mac.\n\n## Changes\n\n### Plugins\n\nKeep <@U123> & *text* literal.\n\n${marker}`,
     `\r\n${marker}\r\n`,
-    `## Fixes\n\n${"x".repeat(1500)}\n\n${marker}`,
+    `${exact}\n\n${marker}`,
+    `${exact}y\n\n${marker}`,
   ];
   const result = spawnSync(
     "jq",
@@ -753,7 +814,7 @@ test("Slack release notes show headings without exposing release metadata", (t) 
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /situate-release:/);
-  const [formatted, empty, long] = result.stdout
+  const [formatted, empty, complete, shortened] = result.stdout
     .trim()
     .split("\n")
     .map(JSON.parse);
@@ -771,7 +832,24 @@ test("Slack release notes show headings without exposing release metadata", (t) 
     formatted.blocks.at(-1).text.text,
     "<https://github.com/example/app/releases/tag/v2026.11.10|View release on GitHub>",
   );
-  assert.match(long.blocks[1].elements[0].elements.at(-1).text, /^x+…$/);
+  assert.equal(complete.blocks[1].elements[0].elements[0].text, exact);
+  assert.equal(
+    complete.blocks.at(-1).text.text,
+    formatted.blocks.at(-1).text.text,
+  );
+  assert.equal(complete.text, formatted.text);
+  assert.equal(
+    shortened.blocks[1].text.text,
+    "Release notes shortened. <https://github.com/example/app/releases/tag/v2026.11.10|Read the full changelog on GitHub>",
+  );
+  assert.equal(
+    shortened.blocks[2].elements[0].elements[0].text,
+    `${exact.slice(0, -1)}…`,
+  );
+  assert.equal(
+    shortened.text,
+    "Situate v2026.11.10 published. Release notes shortened. Full changelog: https://github.com/example/app/releases/tag/v2026.11.10",
+  );
 });
 
 test("macOS release checks verified hosting before starting release effects", () => {

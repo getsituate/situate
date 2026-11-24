@@ -61,7 +61,12 @@ const workshopInput = (file) =>
 const nativeHarness =
   /^(tools\/native-vm[^/]*\.(mjs|py)|client\/scripts\/(test-native[^/]*|test-agent-e2e|native-vm[^/]*|native-smoke[^/]*|native-desktop-session|coordinated-native[^/]*|agent-e2e-runtime|document-source-fixtures)\.mjs)$/;
 const native = (file) =>
-  product(file) || /^client\/app\//.test(file) || nativeHarness.test(file);
+  product(file) ||
+  /^client\/app\//.test(file) ||
+  nativeHarness.test(file) ||
+  /^client\/scripts\/(?:qualification-accessibility\.mjs|qualification-ax-text\.swift|upgrade-workspace-(?:fixture|journey)\.mjs|fixtures\/upgrade-016\/workspace\.mjs)$/.test(
+    file,
+  );
 const windowsNative = (file) =>
   !isPlainDocumentation(file) &&
   (native(file) ||

@@ -293,16 +293,7 @@ defineExpose({ back });
             "
             @open="open('pick', undefined, $event.currentTarget)"
             @accent="selectAccent"
-          >
-            <template v-if="openingFailure" #operation-error>
-              <SituateButton
-                variant="secondary"
-                @click="openingErrorOpen = true"
-              >
-                {{ t("workspace.reviewError") }}
-              </SituateButton>
-            </template>
-          </WorkspaceCreateForm>
+          />
         </div>
       </SetupFrame>
     </Transition>
@@ -514,14 +505,7 @@ defineExpose({ back });
               <span aria-hidden="true">→</span>
             </SituateButton>
           </div>
-          <SituateButton
-            v-if="openingFailure"
-            variant="secondary"
-            @click="openingErrorOpen = true"
-          >
-            {{ t("workspace.reviewError") }}
-          </SituateButton>
-          <p v-else-if="error" role="alert" class="entry-error">
+          <p v-if="error && !openingFailure" role="alert" class="entry-error">
             {{ localizeError(error) }}
           </p>
           <section

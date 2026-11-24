@@ -108,6 +108,8 @@ Device-local formats, including `layout.json`, settings and provider connections
 
 The macOS release upgrade starts the verified predecessor with a fresh copy of the [0.1.6 workspace baseline](../../client/scripts/fixtures/upgrade-016/README.md). The predecessor saves a note through the editor and installs the signed candidate through its updater. The candidate must reopen the saved note, retained conversation and installed plugin before and after a restart. The separate fresh-workspace journey exercises current onboarding and plugin creation.
 
+The macOS native suite also opens a copy of the 0.1.6 workspace in a test build. It saves a note, restarts the app, and checks the conversation, enabled plugin and note through the same native UI actions used by release qualification. To run only this check, use `node client/scripts/test-native.mjs --legacy-workspace`. It does not exercise installation or the updater.
+
 Fresh-workspace tests remain necessary but do not establish upgrade safety. These are verification requirements, not a claim that the current runner already covers every published format. Report missing release fixtures, unavailable old binaries, untested migration boundaries and unavailable native qualification explicitly; do not present them as passed checks.
 
 ### Workspace migration checks
@@ -470,7 +472,7 @@ For relevant client changes, Verify requires two Windows jobs. `windows-native` 
 
 The short-lived `windows-ci-x64-…` artifact records the checkout SHA, target, runner and toolchain versions, and executable hash. Neither job exercises WebView2 rendering or qualifies a release installer. A local Verify invocation cannot substitute for the hosted jobs.
 
-GitHub Actions runs the broad Rust, Swift, and desktop suites on Apple Silicon (`macos-code` and `macos-native`). The `macos-compatibility` job runs on macOS 15 Intel. Client changes run the short launch and workspace-reopen test. Dictation changes also run a synthetic speech sample through the real recognizer with the pinned model. That test downloads and verifies the model in a temporary directory; a download or recognition failure fails the job. App releases require both checks. To run either locally on the current Mac, use `node tools/test.mjs --suite client-native-compatibility` or `node tools/test.mjs --suite client-dictation-recognition`.
+GitHub Actions runs the broad Rust, Swift, and desktop suites on Apple Silicon (`macos-code` and `macos-native`). In Verify, those lanes and `tooling-macos` share one ARM64 runner and run in sequence when selected. The `macos-compatibility` job runs on macOS 15 Intel. Client changes run the short launch and workspace-reopen test. Dictation changes also run a synthetic speech sample through the real recognizer with the pinned model. That test downloads and verifies the model in a temporary directory; a download or recognition failure fails the job. App releases require both checks. To run either locally on the current Mac, use `node tools/test.mjs --suite client-native-compatibility` or `node tools/test.mjs --suite client-dictation-recognition`.
 
 Before publishing, use an isolated Intel Mac with macOS 14 Sonoma to install and launch the exact signed candidate DMG. On the same system, exercise the update from the released predecessor with an existing test workspace and check that it reopens intact. Check dictation with a real microphone. The hosted job does not establish this coverage: GitHub [retired its macOS 14 images](https://github.com/actions/runner-images/issues/13518).
 
