@@ -207,6 +207,42 @@ describe("creation", () => {
     expect(wrapper.text()).toContain("⟦native.workspace.create.partial⟧");
     expect(destination.attributes("aria-invalid")).toBe("false");
   });
+  it("keeps the form editable after dismissing a path length error", async () => {
+    const run = vi.fn().mockResolvedValue(false);
+    const wrapper = mount(WorkspaceCreateForm, {
+      attachTo: document.body,
+      props: { run, busy: false },
+    });
+    await flushPromises();
+    const input = wrapper.get<HTMLInputElement>("#workspace-name");
+    await input.setValue("Field notes");
+    await flushPromises();
+    run.mockImplementationOnce(async () => {
+      await wrapper.setProps({
+        operationError: "native.workspace.create.pathTooLong",
+      });
+      return false;
+    });
+
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    const dialog = wrapper.get("dialog");
+    expect(dialog.element.open).toBe(true);
+    expect(dialog.get('[role="alert"]').text()).toBe(
+      "⟦native.workspace.create.pathTooLong⟧",
+    );
+    expect(wrapper.find("#folder-error").exists()).toBe(false);
+    expect(wrapper.emitted("opened")).toBeUndefined();
+
+    await dialog.get("button").trigger("click");
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(input.element.value).toBe("Field notes");
+    await input.setValue("Notes");
+    await flushPromises();
+    expect(preflight).toHaveBeenLastCalledWith("parent", "Notes");
+  });
+
   it("checks collisions again on edits and submits only a checked destination", async () => {
     const run = vi.fn().mockResolvedValue(true);
     const wrapper = mount(WorkspaceCreateForm, { props: { run, busy: false } });

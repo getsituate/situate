@@ -369,7 +369,11 @@ export function createEvidenceFromDirectory({
   });
   if (windowsFiles) {
     const expected = windowsAssetNames(identity.version);
-    assert.deepEqual(Object.keys(windowsFiles).sort(), [...expected].sort());
+    assert(
+      Object.keys(windowsFiles).length === expected.length &&
+        expected.every((name) => Object.hasOwn(windowsFiles, name)),
+      "Unexpected Windows release assets",
+    );
     for (const name of expected) {
       const bytes = windowsFiles[name];
       assert(Buffer.isBuffer(bytes));

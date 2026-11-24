@@ -10,9 +10,13 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  pipelineGitPath,
+  windowsInstallationPath,
+} from "../../tools/pipeline-environment.mjs";
 import { windowsTarget } from "../../tools/test-windows.mjs";
 import { prepareDependencies } from "../../tools/test.mjs";
 import { updaterSigningConfiguration } from "./updater-signing.mjs";
@@ -75,8 +79,12 @@ function verifiedArchive(path, expected) {
     throw new Error(`Archive checksum mismatch: ${path}`);
   }
   // Feed tar the verified bytes rather than asking it to reopen the archive.
+  const tar =
+    process.platform === "win32"
+      ? windowsInstallationPath(process.env.SystemRoot, "System32", "tar.exe")
+      : "/usr/bin/tar";
   return (member) =>
-    execFileSync("tar", ["-xOf", "-", member], {
+    execFileSync(tar, ["-xOf", "-", member], {
       input: archive,
       env: buildEnvironment(),
       maxBuffer: 32 * 1024 * 1024,
@@ -160,30 +168,18 @@ async function main(args) {
     console.log(JSON.stringify(runtimeArchives(args[1])));
     return;
   }
-  const { values, positionals } = parseArgs({
+  const { values } = parseArgs({
     args,
     options: {
       target: { type: "string" },
       "update-test": { type: "boolean" },
       "release-version": { type: "string" },
-      "qualification-baseline": { type: "string" },
     },
-    allowPositionals: true,
   });
   const target = values.target ?? windowsTarget;
   const version = values["release-version"];
-  const baseline = values["qualification-baseline"];
-  if (
-    positionals.length !== 3 ||
-    [
-      version !== undefined,
-      baseline !== undefined,
-      values["update-test"],
-    ].filter(Boolean).length > 1
-  ) {
-    throw new Error(
-      "Usage: node client/scripts/windows-installer.mjs NEW_DIRECTORY SHERPA_ARCHIVE ONNX_ARCHIVE [--update-test | --release-version=VERSION | --qualification-baseline=VERSION] [--target=RUST_TARGET]",
-    );
+  if (version !== undefined && values["update-test"]) {
+    throw new Error("Choose either --release-version or --update-test.");
   }
   if (
     process.platform !== "win32" ||
@@ -199,17 +195,14 @@ async function main(args) {
       "Unset TAURI_CONFIG and SITUATE_DISTRIBUTION before building the installer.",
     );
   }
+  const temporary = process.env.RUNNER_TEMP ?? "";
+  if (!isAbsolute(temporary)) throw new Error("RUNNER_TEMP must be absolute.");
   const release = version === undefined ? undefined : releaseInputs(version);
-  const qualification =
-    baseline === undefined
-      ? undefined
-      : qualificationBaseline(baseline, process.env);
-  const [output, sherpaArchive, onnxArchive] = positionals;
-  const directory = resolve(output);
+  const directory = join(temporary, values["update-test"] ? "swu" : "swp");
   const config = prepareInstaller(
     directory,
-    sherpaArchive,
-    onnxArchive,
+    join(temporary, "sherpa.tar.bz2"),
+    join(temporary, "onnx.tar.bz2"),
     target,
   );
   const dependencies = await prepareDependencies("client", {
@@ -219,18 +212,7 @@ async function main(args) {
   try {
     if (dependencies.failure) throw new Error(dependencies.failure.error);
     if (release) buildRelease(directory, config, target, release);
-    else if (qualification) {
-      const overlay = JSON.parse(readFileSync(config, "utf8"));
-      writeFileSync(
-        config,
-        JSON.stringify({ ...overlay, ...qualification.overlay }),
-      );
-      buildInstaller(directory, config, target, {
-        ...buildEnvironment(),
-        ...qualification.updater,
-      });
-    } else if (values["update-test"])
-      buildUpdatePair(directory, config, target);
+    else if (values["update-test"]) buildUpdatePair(directory, config, target);
     else buildInstaller(directory, config, target, buildEnvironment());
   } finally {
     dependencies.release();
@@ -273,7 +255,7 @@ function releaseInputs(version) {
   stableWindowsVersion(version);
   const root = resolve(client, "..");
   const git = (...args) =>
-    execFileSync("git", args, {
+    execFileSync(pipelineGitPath(), args, {
       cwd: root,
       env: buildEnvironment(),
       encoding: "utf8",

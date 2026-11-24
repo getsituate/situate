@@ -849,6 +849,7 @@ test(
         "test-budget.mjs",
         "quick-source.mjs",
         "test-inputs.mjs",
+        "pipeline-environment.mjs",
         "quality-cache.mjs",
         "cargo-environment.mjs",
         "compiler-cache.mjs",

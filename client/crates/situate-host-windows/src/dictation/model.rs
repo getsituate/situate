@@ -213,12 +213,15 @@ pub async fn provision(
     mut progress: impl FnMut(u8),
 ) -> Result<(), ProvisionError> {
     tokio::fs::create_dir_all(directory).await?;
-    let lock = std::fs::OpenOptions::new()
+    let lock = tokio::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(directory.join("provision.lock"))?;
+        .open(directory.join("provision.lock"))
+        .await?
+        .into_std()
+        .await;
     lock.try_lock().map_err(|_| ProvisionError::Waiting)?;
     let client = Client::builder()
         .https_only(true)

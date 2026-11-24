@@ -32,8 +32,8 @@ test("lane source verification locates Git outside the checkout on Windows", () 
     "D:\\Program Files\\Git\\bin\\git.exe",
   );
   assert.throws(
-    () => pipelineGitPath("win32", { ProgramFiles: "relative" }),
-    /Windows Program Files/,
+    () => pipelineGitPath("win32", { ProgramFiles: "\\Program Files" }),
+    /absolute Windows installation directory/,
   );
   assert.equal(pipelineGitPath("linux", {}), "/usr/bin/git");
 });

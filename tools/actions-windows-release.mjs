@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { stableWindowsVersion } from "../client/scripts/windows-release.mjs";
 import { readOperation } from "./pipeline-state.mjs";
+import { windowsInstallationPath } from "./pipeline-environment.mjs";
 
 const env = process.env;
 assert.equal(env.GITHUB_REPOSITORY, "getsituate/situate");
@@ -33,10 +34,16 @@ async function download(name) {
   const artifact = `${name}-${env.GITHUB_RUN_ATTEMPT}`;
   const minutes = name === "windows-reservation" ? 75 : 240;
   const end = Date.now() + minutes * 60_000;
+  const gh =
+    process.platform === "win32"
+      ? windowsInstallationPath(env.ProgramFiles, "GitHub CLI", "gh.exe")
+      : process.platform === "darwin"
+        ? "/opt/homebrew/bin/gh"
+        : "/usr/bin/gh";
   do {
     const path = mkdtempSync(join(staging, `${name}-`));
     const result = spawnSync(
-      "gh",
+      gh,
       [
         "run",
         "download",

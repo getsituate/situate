@@ -35,6 +35,7 @@ import {
 } from "./test-budget.mjs";
 export { isFeedbackSuite } from "./test-budget.mjs";
 import { suiteAffectedFiles, suiteSelectionReasons } from "./test-inputs.mjs";
+import { windowsInstallationPath } from "./pipeline-environment.mjs";
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const projects = [
@@ -1055,7 +1056,13 @@ export function dependencyOwnerBirth(pid) {
   assert(Number.isInteger(pid) && pid > 0);
   if (process.platform !== "win32") return processSnapshot().get(pid)?.born;
   const birth = execFileSync(
-    "powershell.exe",
+    windowsInstallationPath(
+      process.env.SystemRoot,
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    ),
     [
       "-NoLogo",
       "-NoProfile",

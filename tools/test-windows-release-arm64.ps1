@@ -33,7 +33,7 @@ $uninstaller = Join-Path $install 'uninstall.exe'
 $workspace = Join-Path $root 'synthetic-workspace'
 $appData = Join-Path $env:APPDATA 'com.getsituate.app'
 $localData = Join-Path $env:LOCALAPPDATA 'com.getsituate.app'
-$profile = Join-Path $root 'webview2'
+$webviewProfile = Join-Path $root 'webview2'
 if (@($install, $appData, $localData) | Where-Object { Test-Path -LiteralPath $_ }) { throw 'Expected a fresh Situate profile.' }
 
 function Get-SituateRegistration([Microsoft.Win32.RegistryHive]$hive) {
@@ -79,7 +79,7 @@ function Assert-Chooser([string]$exe) {
     $launch.UseShellExecute = $false
     $launch.EnvironmentVariables.Remove('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS') | Out-Null
     $launch.EnvironmentVariables.Remove('WEBVIEW2_BROWSER_EXECUTABLE_FOLDER') | Out-Null
-    $launch.EnvironmentVariables['WEBVIEW2_USER_DATA_FOLDER'] = $profile
+    $launch.EnvironmentVariables['WEBVIEW2_USER_DATA_FOLDER'] = $webviewProfile
     $app = [Diagnostics.Process]::Start($launch)
     try {
         Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes

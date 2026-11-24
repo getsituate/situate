@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { windowsCommands, windowsTarget } from "./test-windows.mjs";
 import { prepareDependencies } from "./test.mjs";
+import { pipelineGitPath } from "./pipeline-environment.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const client = join(root, "client");
@@ -23,7 +24,7 @@ assert(
 );
 const output = resolve(destination);
 const git = (...args) =>
-  execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  execFileSync(pipelineGitPath(), args, { cwd: root, encoding: "utf8" }).trim();
 assert.equal(
   git("status", "--porcelain", "--", "client"),
   "",

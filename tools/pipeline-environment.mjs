@@ -1,3 +1,23 @@
+import assert from "node:assert/strict";
+import { win32 } from "node:path";
+
+export function windowsInstallationPath(directory, ...segments) {
+  assert(
+    directory && /^[a-z]:[\\/]/iu.test(directory),
+    "Expected an absolute Windows installation directory",
+  );
+  return win32.join(directory, ...segments);
+}
+
+export function pipelineGitPath(
+  platform = process.platform,
+  environment = process.env,
+) {
+  return platform === "win32"
+    ? windowsInstallationPath(environment.ProgramFiles, "Git", "bin", "git.exe")
+    : "/usr/bin/git";
+}
+
 export function ordinaryEnvironment(
   environment = process.env,
   platform = process.platform,

@@ -151,7 +151,7 @@ async function hash(file) {
 async function runPhase(phase, { directory, image, imageVersion }, workspace) {
   const rust = (
     await readFile(join(client, "rust-toolchain.toml"), "utf8")
-  ).match(/^\s*channel\s*=\s*"(\d+\.\d+\.\d+)"\s*$/m)?.[1];
+  ).match(/^[ \t]*channel[ \t]*=[ \t]*"(\d+\.\d+\.\d+)"[ \t]*\r?$/m)?.[1];
   assert(rust, "Missing exact Rust pin");
   if (phase === "setup") {
     const probe = join(workspace, "probe.ps1");

@@ -23,13 +23,13 @@ Invoke-WebRequest -Uri $archives.onnx.url -OutFile $onnx
 if ($null -ne $version) {
     try {
         foreach ($name in $signer.Keys) { [Environment]::SetEnvironmentVariable($name, $signer[$name]) }
-        node client/scripts/windows-installer.mjs $build $sherpa $onnx "--target=$Target" "--release-version=$version"
+        node client/scripts/windows-installer.mjs "--target=$Target" "--release-version=$version"
     } finally {
         foreach ($name in $signer.Keys) { [Environment]::SetEnvironmentVariable($name, $null) }
     }
     return
 }
-node client/scripts/windows-installer.mjs $build $sherpa $onnx "--target=$Target"
+node client/scripts/windows-installer.mjs "--target=$Target"
 $files = @(Get-ChildItem -LiteralPath (Join-Path $build "target/$Target/release/bundle/nsis") -File -Filter '*.exe')
 if ($files.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
 $artifact = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'installer-preview')
@@ -40,4 +40,4 @@ Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path $artifact.Full
     source = $env:GITHUB_SHA
     sha256 = (Get-FileHash -LiteralPath (Join-Path $artifact.FullName 'setup.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifact.FullName 'manifest.json')
-node client/scripts/windows-installer.mjs (Join-Path $env:RUNNER_TEMP swu) $sherpa $onnx --update-test "--target=$Target"
+node client/scripts/windows-installer.mjs --update-test "--target=$Target"
