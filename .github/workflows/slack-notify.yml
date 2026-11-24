@@ -87,16 +87,24 @@ jobs:
                   and (.published_at | type) == "string" and (.tag_name | type) == "string" and .tag_name != "")
                 | (.body // "" | release_notes) as $notes
                 | ("Situate " + .tag_name + " published") as $title
+                | ($url + (.tag_name | @uri)) as $release_url
+                # Slack does not document a rich_text limit. Leave room for block overhead.
+                | 8000 as $notes_limit
+                | (($notes | length) > $notes_limit) as $shortened
+                | "Release notes shortened." as $notice
+                | (if $shortened then $notes[:($notes_limit - 1)] + "…" else $notes end) as $preview
                 | {
-                    text: $title, mrkdwn: false, unfurl_links: false, unfurl_media: false,
+                    text: (if $shortened then "\($title). \($notice) Full changelog: \($release_url)" else $title end),
+                    mrkdwn: false, unfurl_links: false, unfurl_media: false,
                     blocks: (
                       [{type: "header", text: {type: "plain_text", text: $title[:120]}}]
-                      + (if $notes == "" then []
-                         elif ($notes | length) > 1400 then [($notes[:1400] + "…" | notes_block)]
-                         else [$notes | notes_block] end)
-                      + [{type: "section", text: {
-                          type: "mrkdwn", text: "<\($url)\(.tag_name | @uri)|View release on GitHub>"
-                        }}]
+                      + (if $shortened then [{type: "section", text: {
+                          type: "mrkdwn", text: "\($notice) <\($release_url)|Read the full changelog on GitHub>"
+                        }}] else [] end)
+                      + (if $preview == "" then [] else [$preview | notes_block] end)
+                      + (if $shortened then [] else [{type: "section", text: {
+                          type: "mrkdwn", text: "<\($release_url)|View release on GitHub>"
+                        }}] end)
                     )
                   }' > "$payload"
               ;;
