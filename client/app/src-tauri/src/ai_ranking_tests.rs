@@ -296,7 +296,7 @@ fn same_provider_connections_keep_independent_explicit_settings() {
 #[test]
 fn qualified_provider_defaults_persist_independent_function_choices() {
     for (provider, expected_chat, expected_comment, comment_effort) in [
-        ("anthropic", "claude-sonnet-5-5", "claude-haiku-5-5", "low"),
+        ("anthropic", "claude-sonnet-5-5", "claude-haiku-5-5", "off"),
         (
             "openrouter",
             "openai/gpt-6.1-sol",
@@ -323,6 +323,49 @@ fn qualified_provider_defaults_persist_independent_function_choices() {
         assert_eq!(comment.model, expected_comment);
         assert_eq!(comment.thinking, comment_effort);
     }
+}
+#[test]
+fn discovered_haiku_comment_explicitly_disables_thinking() {
+    let config: Config =
+        serde_json::from_value(json!({"provider": "anthropic", "auth": "api_key"})).unwrap();
+    let observed = discovery::Catalog {
+        source: discovery::Source::Provider,
+        models: vec!["claude-haiku-5-5".into()],
+        checked_at: None,
+        selectable: vec![discovery::DiscoveredModel {
+            id: "claude-haiku-5-5".into(),
+            name: None,
+            thinking_levels: vec!["low".into(), "medium".into()],
+            reasoning_none: false,
+            context_window: 1_000_000,
+            max_tokens: 128_000,
+            image_input: true,
+        }],
+    };
+    let choice = resolve_choice(
+        ModelChoice {
+            model: "recommended".into(),
+            thinking: "recommended".into(),
+            catalog_revision: None,
+        }
+        .snapshot(&config),
+        &observed,
+        "comment",
+    )
+    .unwrap();
+    assert_eq!(choice.model, "claude-haiku-5-5");
+    assert_eq!(choice.thinking, "off");
+    let request = crate::ai_protocol::build_request(
+        "anthropic-messages",
+        &crate::ai::native_model::descriptor(&choice).unwrap(),
+        &choice.thinking,
+        &[json!({"role": "user", "content": "Write a title."})],
+        &[],
+        Some(96),
+    )
+    .unwrap();
+    assert_eq!(request.body["thinking"], json!({"type": "disabled"}));
+    assert!(request.body.get("output_config").is_none());
 }
 #[test]
 fn a_custom_chat_choice_does_not_need_a_recommended_comment_model() {

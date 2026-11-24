@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "revision": "2026-11-24.1",
+  "revision": "2026-11-24.2",
   "rankedCandidates": [
     {
       "provider": "openai",
@@ -29,12 +29,12 @@
       "access": "api_key",
       "modelId": "claude-haiku-5-5",
       "api": "anthropic-messages",
-      "thinking": "low",
+      "thinking": "off",
       "priority": { "comment": 1 },
       "eligibility": "supported",
-      "rationale": "Low-latency tier for short, high-volume requests.",
+      "rationale": "Low-latency tier with thinking disabled for short requests.",
       "sources": [
-        "https://platform.claude.com/docs/en/models/haiku-5-5/overview"
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
       ]
     },
     {
@@ -276,7 +276,7 @@
       "provider": "anthropic",
       "modelId": "claude-haiku-5-5",
       "api": "anthropic-messages",
-      "levels": ["low", "medium", "high"],
+      "levels": ["off", "low", "medium", "high"],
       "default": "medium",
       "sources": [
         "https://platform.claude.com/docs/en/models/haiku-5-5/overview"

@@ -240,7 +240,7 @@ test("qualified defaults use the real ranked data for each implemented method", 
   expect(recommendedChoice(anthropic)?.model).toBe("claude-sonnet-5-5");
   expect(recommendedChoice(anthropic, "comment")).toMatchObject({
     model: "claude-haiku-5-5",
-    thinking: "low",
+    thinking: "off",
   });
   expect(recommendedChoice(router)?.model).toBe("openai/gpt-6.1-sol");
   expect(recommendedChoice(router, "comment")).toMatchObject({

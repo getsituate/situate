@@ -304,7 +304,9 @@ pub(crate) fn build_request(
         body["max_tokens"] = json!(limit);
         headers.insert("anthropic-version".into(), "2023-06-01".into());
         let mut betas = Vec::new();
-        if flag(model, "supportsMidConvoEffort", false) {
+        if model["id"] == "claude-haiku-5-5" && thinking == "off" {
+            body["thinking"] = json!({"type":"disabled"});
+        } else if flag(model, "supportsMidConvoEffort", false) {
             body["thinking"] = json!({"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}});
             body["output_config"] = json!({"effort":"high"});
             body["messages"].as_array_mut().unwrap().push(json!({"role":"system","content":[],"output_config":{"effort":effort.as_deref().unwrap_or("high")}}));

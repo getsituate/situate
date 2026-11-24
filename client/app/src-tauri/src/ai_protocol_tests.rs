@@ -1168,7 +1168,11 @@ fn verified_native_thinking_levels_use_their_protocol_specific_control_fields() 
             )
             .unwrap();
             assert!(request.body.get("reasoning_effort").is_none());
-            if api == "anthropic-messages" {
+            if entry["modelId"] == "claude-haiku-5-5" && thinking == "off" {
+                assert_eq!(request.body["thinking"], json!({"type":"disabled"}));
+                assert!(request.body.get("output_config").is_none());
+                assert!(request.body.get("reasoning").is_none());
+            } else if api == "anthropic-messages" {
                 assert_eq!(
                     request.body["thinking"],
                     json!({"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}})
@@ -1180,7 +1184,12 @@ fn verified_native_thinking_levels_use_their_protocol_specific_control_fields() 
                 );
                 assert!(request.body.get("reasoning").is_none());
             } else {
-                assert_eq!(request.body["reasoning"]["effort"], *thinking);
+                let expected = if thinking == "off" {
+                    "none"
+                } else {
+                    thinking.as_str().unwrap()
+                };
+                assert_eq!(request.body["reasoning"]["effort"], expected);
                 assert!(request.body.get("thinking").is_none());
                 assert!(request.body.get("output_config").is_none());
             }
