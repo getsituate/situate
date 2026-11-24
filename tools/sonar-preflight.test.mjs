@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -23,7 +23,7 @@ function fixture(t) {
   mkdirSync(cwd);
   mkdirSync(bin);
   const git = (...args) =>
-    execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+    execFileSync("/usr/bin/git", args, { cwd, encoding: "utf8" }).trim();
   git("init", "--initial-branch=main");
   git("config", "user.name", "Test");
   git("config", "user.email", "test@example.invalid");
@@ -44,7 +44,7 @@ function fixture(t) {
   const env = {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
-    REAL_GIT: execFileSync("which", ["git"], { encoding: "utf8" }).trim(),
+    REAL_GIT: "/usr/bin/git",
     CALLS: log,
     SONAR_TOKEN: "test-token",
     SONARQUBE_MCP_TOKEN: "test-mcp-token",
@@ -56,13 +56,14 @@ function fixture(t) {
       mode: 0o755,
     });
   }
+  executable("git", 'echo "Unexpected Git from PATH" >&2; exit 99');
   executable(
-    "git",
+    "git-network",
     `
     [ -z "\${SONAR_TOKEN+x}\${SONARQUBE_MCP_TOKEN+x}" ]
     if [ "$1" = 'fetch' ]; then exit 0; fi
     if [ "$1" = 'push' ]; then printf '%s\\n' "$*" >> "$CALLS"; exit 0; fi
-    exec "$REAL_GIT" "$@"
+    exit 98
   `,
   );
   executable(
@@ -94,12 +95,25 @@ function fixture(t) {
   `,
   );
   executable("gh", 'printf "%s\\n" "$*" >> "$CALLS"');
-  return { cwd, env, git, log };
+  const runPreflight = (options) =>
+    preflight({
+      cwd,
+      env,
+      ...options,
+      spawnCommand(command, args, options) {
+        if (["fetch", "push"].includes(args[0])) {
+          assert.equal(command, "/usr/bin/git");
+          return spawn(join(bin, "git-network"), args, options);
+        }
+        return spawn(command, args, options);
+      },
+    });
+  return { cwd, env, git, log, runPreflight };
 }
 
-test("checks the entire committed branch with the CI report and does not push", async (t) => {
-  const { cwd, env, git, log } = fixture(t);
-  await preflight({ cwd, env });
+test("checks the entire committed branch without using Git from PATH or pushing", async (t) => {
+  const { git, log, runPreflight } = fixture(t);
+  await runPreflight();
   const calls = readFileSync(log, "utf8").trim().split("\n");
   assert.equal(calls.length, 2);
   assert.equal(calls[0], "coverage");
@@ -114,17 +128,17 @@ test("checks the entire committed branch with the CI report and does not push", 
 });
 
 test("does not push or open a PR if the scanner exits unsuccessfully", async (t) => {
-  const { cwd, env, log } = fixture(t);
+  const { env, log, runPreflight } = fixture(t);
   await assert.rejects(
-    () => preflight({ cwd, env: { ...env, FAKE_GATE: "1" }, publish: true }),
+    () => runPreflight({ env: { ...env, FAKE_GATE: "1" }, publish: true }),
     /sonar-scanner/,
   );
   assert.equal(readFileSync(log, "utf8").trim().split("\n").length, 2);
 });
 
 test("pushes the scanned commit before opening a PR only after a successful scan", async (t) => {
-  const { cwd, env, log } = fixture(t);
-  await preflight({ cwd, env, publish: true });
+  const { env, log, runPreflight } = fixture(t);
+  await runPreflight({ publish: true });
   assert.deepEqual(readFileSync(log, "utf8").trim().split("\n").slice(2), [
     `push --no-follow-tags https://github.com/getsituate/situate.git ${env.EXPECTED_HEAD}:refs/heads/feature`,
     "pr create --repo github.com/getsituate/situate --base main --head feature --fill",
@@ -132,28 +146,24 @@ test("pushes the scanned commit before opening a PR only after a successful scan
 });
 
 test("rejects a branch missing changes from main before invoking the scanner", async (t) => {
-  const { cwd, env, git, log } = fixture(t);
+  const { cwd, git, log, runPreflight } = fixture(t);
   git("switch", "main");
   writeFileSync(join(cwd, "main-only.txt"), "new base");
   git("add", "main-only.txt");
   git("commit", "-m", "Advance main");
   git("update-ref", "refs/remotes/origin/main", "HEAD");
   git("switch", "feature");
-  await assert.rejects(
-    () => preflight({ cwd, env }),
-    /Integrate current origin\/main/,
-  );
+  await assert.rejects(() => runPreflight(), /Integrate current origin\/main/);
   assert.equal(existsSync(log), false);
 });
 
 test("aborting a running scan cleans the checkout and never pushes", async (t) => {
-  const { cwd, env, git, log } = fixture(t);
+  const { env, git, log, runPreflight } = fixture(t);
   const controller = new AbortController();
   const deadline = AbortSignal.timeout(5000);
   const signal = AbortSignal.any([controller.signal, deadline]);
   const result = assert.rejects(
-    preflight({
-      cwd,
+    runPreflight({
       env: { ...env, FAKE_GATE: "wait" },
       publish: true,
       signal,

@@ -30,7 +30,7 @@ function fixture(node) {
     sendUserMessage: (...args) => prompts.push(args),
     sendMessage: (...args) => followUps.push(args),
     async exec(command, args) {
-      if (command === "git") {
+      if (command === "/usr/bin/git") {
         assert.ok(git.has(args.join(" ")), args.join(" "));
         return { code: 0, stdout: git.get(args.join(" ")) };
       }
