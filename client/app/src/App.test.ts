@@ -187,9 +187,12 @@ it.each([null, true])(
       const dialog = wrapper.get(
         'dialog[aria-labelledby="entry-analytics-title"]',
       );
-      expect(
-        (dialog.get('[role="switch"]').element as HTMLInputElement).checked,
-      ).toBe(true);
+      const analyticsSwitch = dialog.get<HTMLInputElement>('[role="switch"]');
+      const label = dialog.get("label").element;
+      expect(label.htmlFor).not.toBe("");
+      expect(label.control).toBe(analyticsSwitch.element);
+      expect(label.textContent?.trim()).toBe("⟦settings.analytics.share⟧");
+      expect(analyticsSwitch.element.checked).toBe(true);
       await dialog.trigger("cancel");
       expect(
         wrapper

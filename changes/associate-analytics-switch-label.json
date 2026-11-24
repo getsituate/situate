@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "associate-analytics-switch-label",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "The existing analytics label is associated explicitly with its switch. The setting and its behavior are unchanged."
+}

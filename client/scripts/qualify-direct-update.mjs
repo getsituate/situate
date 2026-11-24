@@ -48,6 +48,22 @@ function canonicalDirectory(path) {
   return absolute;
 }
 
+function qualificationDirectory(root, path) {
+  const selected = resolveLocalChild(root, path);
+  let directory = root;
+  for (const part of selected.slice(root.length + 1).split(sep)) {
+    const entry = readdirSync(directory, { withFileTypes: true }).find(
+      (entry) => entry.name === part && entry.isDirectory(),
+    );
+    if (!entry)
+      throw new Error(
+        "Select an existing directory inside the qualification directory.",
+      );
+    directory = join(directory, entry.name);
+  }
+  return canonicalDirectory(directory);
+}
+
 export function createReleaseFixture(path) {
   const directory = resolve(path);
   canonicalDirectory(resolve(directory, ".."));
@@ -137,11 +153,17 @@ export async function observeUpdate(
     (previous.schemaVersion !== 1 || previous.observation !== "before")
   )
     throw new Error("Expected a before-update receipt.");
-  const inputs = previous
-    ? { ...previous.inputs, publicKey: options.publicKey }
-    : { ...options };
-  for (const name of ["from", "to", "app", "workspace"])
-    inputs[name] = canonicalDirectory(resolveLocalChild(root, inputs[name]));
+  const selected = previous ? previous.inputs : options;
+  const inputs = {
+    from: qualificationDirectory(root, selected.from),
+    to: qualificationDirectory(root, selected.to),
+    app: qualificationDirectory(root, selected.app),
+    workspace: qualificationDirectory(root, selected.workspace),
+    fromRevision: selected.fromRevision,
+    toRevision: selected.toRevision,
+    teamId: selected.teamId,
+    publicKey: options.publicKey,
+  };
   if (!inputs.app.endsWith("/Situate.app"))
     throw new Error("Select the installed Situate.app.");
   const output =
