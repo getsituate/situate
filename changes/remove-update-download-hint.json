@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "remove-update-download-hint",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "remove-update-download-hint",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Clearer update progress",
+          "paragraphs": [
+            "The progress bar shows the update download without a separate background download note."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "remove-update-download-hint",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Übersichtlichere Update-Anzeige",
+          "paragraphs": [
+            "Beim Herunterladen eines Updates zeigt der Fortschrittsbalken den Stand an. Der zusätzliche Hinweis zum Hintergrunddownload entfällt."
+          ]
+        }
+      ]
+    }
+  }
+}

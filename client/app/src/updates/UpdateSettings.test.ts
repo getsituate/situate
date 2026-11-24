@@ -34,6 +34,7 @@ it("shows megabytes with an indeterminate bar until the total is known", async (
     wrapper.get('[role="progressbar"]').attributes("aria-valuenow"),
   ).toBeUndefined();
   expect(wrapper.text()).toContain("25.6 MB downloaded");
+  expect(wrapper.text()).not.toContain("Updates download in the background.");
   updates.totalBytes = 102_400_000;
   await flushPromises();
   expect(wrapper.get('[role="progressbar"]').attributes("aria-valuenow")).toBe(
