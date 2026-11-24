@@ -167,7 +167,7 @@ test("the retained document source returns bounded synthetic data for its own re
   );
 });
 
-test("only the expected manifest and matching migrated revision may differ after the upgrade", (t) => {
+test("opening an upgrade fixture accepts only the expected manifest migration and matching revision", async (t) => {
   const { root } = materialized(t);
   const plugin = join(root, ".situate/plugins/upgrade-fixture");
   const manifest = join(plugin, "code/plugin.json");
@@ -189,15 +189,12 @@ test("only the expected manifest and matching migrated revision may differ after
   writeFileSync(manifest, JSON.stringify(migrated));
   writeFileSync(stateFile, JSON.stringify(state));
   writeFileSync(ref, `${row.revision}\n`);
-  assert.throws(
-    () => verifyUpgradeWorkspace(root, upgradeNoteBefore),
-    /manifest changed/,
-  );
-  const verify = () =>
-    verifyUpgradeWorkspace(root, upgradeNoteBefore, {
-      allowManifestMigration: true,
-    });
-  verify();
+  const journey = upgradeWorkspaceJourney({
+    actions: async () => {},
+    verify: (note) => verifyUpgradeWorkspace(root, note),
+  });
+  await journey.open();
+  const verify = () => verifyUpgradeWorkspace(root, upgradeNoteBefore);
   row.enabled = false;
   writeFileSync(stateFile, JSON.stringify(state));
   assert.throws(verify, /lost the enabled source revision/);
