@@ -22,6 +22,7 @@ import {
   join,
   resolve,
 } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
 import { assertLocalPath } from "./ios-project-lock.mjs";
@@ -509,6 +510,14 @@ async function buildMac({
   );
   assertLocalPath(root, source);
   rmSync(source, { recursive: true, force: true });
+  let phaseStarted = performance.now();
+  const finishPhase = (phase) => {
+    const now = performance.now();
+    console.log(
+      JSON.stringify({ phase, elapsedMs: Math.round(now - phaseStarted) }),
+    );
+    phaseStarted = now;
+  };
   await execute(
     process.execPath,
     [
@@ -547,6 +556,7 @@ async function buildMac({
     ],
     { ...options, cwd: join(root, "app") },
   );
+  finishPhase("release-tauri-build");
   const staging = join(scratch, "dmg");
   mkdirSync(staging);
   const app = join(staging, "Situate.app");
@@ -554,6 +564,7 @@ async function buildMac({
     recursive: true,
     verbatimSymlinks: true,
   });
+  finishPhase("release-app-staging");
   await execute(
     "codesign",
     [
@@ -572,6 +583,7 @@ async function buildMac({
     ],
     options,
   );
+  finishPhase("release-app-signing");
   await verifyApp(
     app,
     {
@@ -595,12 +607,14 @@ async function buildMac({
       "Signed macOS build configuration does not match the build input.",
     );
   await assertNoDictationTtsResources(app);
+  finishPhase("release-app-verification");
   const zip = join(scratch, "Situate.zip");
   await execute("ditto", ["-c", "-k", "--keepParent", app, zip], options);
   await notarize(zip, settings, execute, options, report);
   await execute("xcrun", ["stapler", "staple", app], options);
   await execute("xcrun", ["stapler", "validate", app], options);
   await execute("spctl", ["--assess", "--type", "execute", app], options);
+  finishPhase("release-app-notarization");
   symlinkSync("/Applications", join(staging, "Applications"));
   const dmg = join(
     output,
@@ -620,6 +634,7 @@ async function buildMac({
     ],
     options,
   );
+  finishPhase("release-dmg-creation");
   await execute(
     "codesign",
     [
@@ -632,6 +647,7 @@ async function buildMac({
     ],
     options,
   );
+  finishPhase("release-dmg-signing");
   await notarize(dmg, settings, execute, options, report);
   await execute("xcrun", ["stapler", "staple", dmg], options);
   await execute("xcrun", ["stapler", "validate", dmg], options);
@@ -648,6 +664,7 @@ async function buildMac({
     ],
     options,
   );
+  finishPhase("release-dmg-notarization");
   const artifact = {
     platform: "macos",
     distribution: plan.distribution,
@@ -729,6 +746,7 @@ async function buildMac({
       env: options.env,
       signal: options.signal,
     });
+    finishPhase("release-updater-packaging");
   }
   return artifact;
 }

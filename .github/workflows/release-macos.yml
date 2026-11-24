@@ -500,6 +500,17 @@ jobs:
         if: steps.cache_plan.outputs.enabled == 'true'
         continue-on-error: true
         run: node tools/release-build-cache.mjs start
+      - id: swift_cache_plan
+        continue-on-error: true
+        run: node tools/release-build-cache.mjs swift-plan
+      - id: swift_cache_restore
+        if: steps.swift_cache_plan.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ steps.swift_cache_plan.outputs.paths }}
+          key: ${{ steps.swift_cache_plan.outputs.key }}
+          restore-keys: ${{ steps.swift_cache_plan.outputs.restore-key }}
       - id: build
         run: node tools/actions-adapter.mjs create-stage --stage build
         env:
@@ -527,6 +538,12 @@ jobs:
         with:
           path: ${{ steps.cache_plan.outputs.paths }}
           key: ${{ steps.cache_plan.outputs.key }}
+      - if: steps.build.outcome == 'success' && steps.swift_cache_plan.outputs.enabled == 'true' && steps.swift_cache_restore.outcome == 'success' && steps.swift_cache_restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ steps.swift_cache_plan.outputs.paths }}
+          key: ${{ steps.swift_cache_plan.outputs.key }}
       - run: node tools/wait-for-hosting.mjs --probe
         env:
           GH_TOKEN: ${{ github.token }}

@@ -644,6 +644,7 @@ export async function publishSourceVerificationEvidence(
     execute = executeDefault,
   },
 ) {
+  let reason = "publisher-context";
   try {
     controller(environment);
     assert(
@@ -651,14 +652,17 @@ export async function publishSourceVerificationEvidence(
         environment.GITHUB_JOB === "required",
     );
     assert.equal(environment.GITHUB_SHA, plan.source);
+    reason = "receipt-validation";
     const sanitized = sanitizeSourceVerificationReceipts(plan, receipts);
     assert.equal(needs.plan?.result, "success");
+    reason = "producer-metadata";
     const metadata = await producerMetadata(
       api,
       environment.GITHUB_RUN_ID,
       environment.GITHUB_RUN_ATTEMPT,
       false,
     );
+    reason = "producer-checkout";
     const checked = checkout(root, plan.source, execute);
     assert.deepEqual(
       checked.parents,
@@ -668,10 +672,12 @@ export async function publishSourceVerificationEvidence(
     );
     const lanes = [];
     for (const lane of plan.lanes) {
+      reason = "lane-job-provenance";
       assert.equal(needs[lane.id]?.result, "success");
       const jobId = laneJob(metadata.jobs, lane.id);
       const raw = needs[lane.id]?.outputs?.evidence;
       if (!raw) continue;
+      reason = "lane-capture-invalid";
       assert(
         typeof raw === "string" &&
           Buffer.byteLength(raw) <= MAX_SOURCE_EVIDENCE_BYTES,
@@ -683,11 +689,12 @@ export async function publishSourceVerificationEvidence(
       );
       lanes.push({ lane: lane.id, jobId, ...capture });
     }
+    if (!lanes.length) return { reason: "lane-capture-absent" };
+    reason = "workflow-definition-unavailable";
+    const workflowDigest = await definition(root, plan.source, api, execute);
+    reason = "evidence-validation";
     const evidence = createSourceVerificationEvidence({
-      origin: origin(
-        metadata,
-        await definition(root, plan.source, api, execute),
-      ),
+      origin: origin(metadata, workflowDigest),
       testedSHA: plan.source,
       tree: checked.tree,
       plan,
@@ -695,6 +702,7 @@ export async function publishSourceVerificationEvidence(
       receipts: sanitized,
       lanes,
     });
+    reason = "evidence-storage";
     const temporary = environment.RUNNER_TEMP;
     assert(
       isAbsolute(temporary) && realpathSync(temporary) === resolve(temporary),
@@ -709,9 +717,9 @@ export async function publishSourceVerificationEvidence(
     mkdirSync(directory, { mode: 0o700 });
     const path = join(directory, "evidence.json");
     writeFileSync(path, JSON.stringify(evidence), { mode: 0o600, flag: "wx" });
-    return path;
+    return { path, capturedLanes: lanes.length };
   } catch {
-    return null;
+    return { reason };
   }
 }
 
@@ -727,7 +735,12 @@ export async function selectActionsSourceEvidence(
     verifyAttestation = verifySourceVerificationAttestation,
   },
 ) {
-  const miss = (reason) => ({ action: "execute", reason });
+  const diagnostics = { candidates: 0, rejected: {} };
+  const reject = (reason) => {
+    diagnostics.rejected[reason] = (diagnostics.rejected[reason] ?? 0) + 1;
+  };
+  const miss = (reason) => ({ action: "execute", reason, diagnostics });
+  let stage = "consumer-context";
   try {
     controller(environment);
     assert(
@@ -748,14 +761,17 @@ export async function selectActionsSourceEvidence(
     assert.equal(environment.GITHUB_SHA, plan.source);
     const measured = capture(root, { plan, lane, environment, execute });
     if (!measured) return miss("unresolved-target");
+    stage = "consumer-checkout";
     const checked = checkout(root, plan.source, execute);
     const source = { sha: plan.source, tree: checked.tree, clean: true };
+    stage = "workflow-definition-unavailable";
     const reviewedWorkflowDigest = await definition(
       root,
       plan.source,
       api,
       execute,
     );
+    stage = "candidate-list-unavailable";
     const response = await api(
       `/actions/workflows/${workflowId}/runs?event=pull_request&status=completed&per_page=${MAX_SOURCE_EVIDENCE_CANDIDATES}`,
     );
@@ -765,14 +781,20 @@ export async function selectActionsSourceEvidence(
     );
     let reason;
     for (const listed of response.workflow_runs) {
+      diagnostics.candidates++;
+      stage = "producer-metadata";
       try {
-        if (listed.conclusion !== "success") continue;
+        if (listed.conclusion !== "success") {
+          reject("producer-unsuccessful");
+          continue;
+        }
         const metadata = await producerMetadata(
           api,
           positiveId(listed.id),
           positiveId(listed.run_attempt),
           true,
         );
+        stage = "artifact-list-unavailable";
         const response = await api(
           `/actions/runs/${metadata.run.id}/artifacts?per_page=100`,
         );
@@ -784,8 +806,17 @@ export async function selectActionsSourceEvidence(
         const matches = response.artifacts.filter(
           ({ name }) => name === artifactName(metadata.run.run_attempt),
         );
+        if (!matches.length) {
+          reject("artifact-missing");
+          continue;
+        }
+        stage = "artifact-invalid";
         assert.equal(matches.length, 1);
         const artifact = matches[0];
+        if (artifact.expired === true) {
+          reject("artifact-expired");
+          continue;
+        }
         assert(
           artifact.expired === false &&
             Number.isInteger(artifact.size_in_bytes) &&
@@ -808,6 +839,7 @@ export async function selectActionsSourceEvidence(
           assert.equal(artifact.digest, `sha256:${digest(bytes)}`);
         const { evidence, jsonBytes } =
           readSourceVerificationArchiveMember(bytes);
+        stage = "attestation-rejected";
         const proof = await verifyAttestation(jsonBytes, {
           runId: metadata.run.id,
           runAttempt: metadata.run.run_attempt,
@@ -824,6 +856,7 @@ export async function selectActionsSourceEvidence(
         assert.equal(proof.subjectDigest, digest(jsonBytes));
         assert.equal(evidence.testedSHA, proof.checkedSHA);
         assert.notEqual(proof.checkedSHA, metadata.pull.head.sha);
+        stage = "producer-checkout";
         const checkedProducer = await commit(
           root,
           proof.checkedSHA,
@@ -834,6 +867,7 @@ export async function selectActionsSourceEvidence(
           metadata.pull.base.sha,
           metadata.pull.head.sha,
         ]);
+        stage = "workflow-definition-rejected";
         const executedWorkflowDigest = await definition(
           root,
           proof.workflowSHA,
@@ -842,6 +876,7 @@ export async function selectActionsSourceEvidence(
         );
         assert.equal(executedWorkflowDigest, reviewedWorkflowDigest);
         const observedOrigin = origin(metadata, executedWorkflowDigest);
+        stage = "lane-job-provenance";
         const observation = {
           origin: observedOrigin,
           trusted: true,
@@ -853,12 +888,13 @@ export async function selectActionsSourceEvidence(
           checkedSHA: proof.checkedSHA,
           checkedParents: checkedProducer.parents,
           tree: checkedProducer.tree,
-          jobs: evidence.lanes.map(({ lane }) => ({
-            lane,
-            jobId: laneJob(metadata.jobs, lane),
-            conclusion: "success",
-          })),
+          jobs: evidence.lanes.map(({ lane, jobId }) => {
+            const provenJobId = laneJob(metadata.jobs, lane);
+            assert.equal(provenJobId, jobId);
+            return { lane, jobId: provenJobId, conclusion: "success" };
+          }),
         };
+        stage = "candidate-validation";
         const result = selectSourceVerificationEvidence({
           candidates: [{ evidence, observation }],
           plan,
@@ -869,9 +905,11 @@ export async function selectActionsSourceEvidence(
           reviewedWorkflowDigest,
         });
         if (result.action === "reuse") {
+          stage = "consumer-checkout";
           assert.deepEqual(checkout(root, plan.source, execute), checked);
           return {
             ...result,
+            diagnostics,
             observation,
             host: measured.host,
             contract: measured.contract,
@@ -879,13 +917,18 @@ export async function selectActionsSourceEvidence(
             reviewedWorkflowDigest,
           };
         }
-        if (result.reason !== "no-matching-evidence") reason ??= result.reason;
+        if (result.reason === "no-matching-evidence") {
+          reject(stage);
+        } else {
+          reject(result.reason);
+          reason ??= result.reason;
+        }
       } catch {
-        // A rejected candidate is not coverage; another bounded candidate may match.
+        reject(stage);
       }
     }
     return miss(reason ?? "no-matching-evidence");
   } catch {
-    return miss("evidence-unavailable");
+    return { ...miss("evidence-unavailable"), stage };
   }
 }

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "release-build-phase-timings",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Build timing diagnostics for release packaging; no change to application behavior."
+}

@@ -644,7 +644,7 @@ test("split browser reuse binds only the suites requested in its own lane", () =
   );
 });
 
-test("only authenticated evidence for the same tree supplies a mismatch reason", () => {
+test("only authenticated evidence supplies equivalence mismatch reasons", () => {
   const input = fixture();
   const differentHost = {
     ...input,
@@ -653,7 +653,7 @@ test("only authenticated evidence for the same tree supplies a mismatch reason",
   execute(differentHost, "host-differs");
   execute(
     { ...differentHost, source: { ...input.source, tree: "0".repeat(40) } },
-    "no-matching-evidence",
+    "tree-differs",
   );
   execute(
     { ...input, contract: { ...input.contract, toolsDigest: "0".repeat(64) } },

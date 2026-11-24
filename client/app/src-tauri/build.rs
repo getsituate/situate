@@ -1,3 +1,15 @@
+use std::time::Instant;
+
+fn report_native_phase(release: bool, phase: &str, arch: &str, started: Instant) {
+    // Cargo hides ordinary build-script output on success.
+    if release {
+        println!(
+            "cargo:warning={{\"phase\":\"{phase}\",\"arch\":\"{arch}\",\"elapsedMs\":{}}}",
+            started.elapsed().as_millis()
+        );
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-env-changed=SITUATE_MODELS_DEV_RELEASE_INPUT");
     println!("cargo:rerun-if-env-changed=SITUATE_POSTHOG_TOKEN");
@@ -44,10 +56,10 @@ fn main() {
             "SITUATE_DICTATION_MODEL_SOURCE must be valid UTF-8 without NUL bytes"
         );
     }
-    if std::env::var("SITUATE_DISTRIBUTION").as_deref() == Ok("direct")
+    let direct_macos_release = std::env::var("SITUATE_DISTRIBUTION").as_deref() == Ok("direct")
         && std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos")
-        && std::env::var("PROFILE").as_deref() == Ok("release")
-    {
+        && std::env::var("PROFILE").as_deref() == Ok("release");
+    if direct_macos_release {
         assert!(
             std::env::var("SITUATE_UPDATER_PUBLIC_KEY").is_ok_and(|v| !v.trim().is_empty()),
             "Direct releases require SITUATE_UPDATER_PUBLIC_KEY"
@@ -71,9 +83,10 @@ fn main() {
         Ok("x86_64-apple-darwin") => Some("x86_64"),
         _ => None,
     };
-    if dictation_arch.is_some() {
+    if let Some(arch) = dictation_arch {
         println!("cargo:rerun-if-changed=dictation/Media");
         std::fs::create_dir_all("dictation/.build/media").unwrap();
+        let started = Instant::now();
         let status = std::process::Command::new("clang")
             .args([
                 "-dynamiclib",
@@ -93,6 +106,7 @@ fn main() {
             .status()
             .expect("Clang is required for system media integration");
         assert!(status.success(), "Could not build system media integration");
+        report_native_phase(direct_macos_release, "release-media-clang", arch, started);
     }
     tauri_build::build();
     if let Some(arch) = dictation_arch {
@@ -115,17 +129,26 @@ fn main() {
             "--product",
             "SituateDictation",
         ];
+        let started = Instant::now();
         let status = std::process::Command::new("swift")
             .args(args)
             .status()
             .expect("Swift 6.2 or later is required");
         assert!(status.success(), "Could not build the dictation runtime");
+        report_native_phase(direct_macos_release, "release-swift-build", arch, started);
+        let started = Instant::now();
         let output = std::process::Command::new("swift")
             .args(args)
             .arg("--show-bin-path")
             .output()
             .expect("Could not locate the dictation runtime");
         assert!(output.status.success());
+        report_native_phase(
+            direct_macos_release,
+            "release-swift-bin-path",
+            arch,
+            started,
+        );
         println!(
             "cargo:rustc-link-search=native={}",
             String::from_utf8(output.stdout).unwrap().trim()

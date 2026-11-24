@@ -164,7 +164,7 @@ function checkWorkflowBootstrap(name, workflow) {
           command,
           name === "release-macos.yml" &&
             ["create", "macos-compatibility"].includes(id)
-            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|start|report)|wait-for-hosting\.mjs --(?:probe|check))$/
+            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|swift-plan|start|report)|wait-for-hosting\.mjs --(?:probe|check))$/
             : ({
                 "diagnostics.yml: launch-check":
                   /^node tools\/qualification-launch-check\.mjs$/,

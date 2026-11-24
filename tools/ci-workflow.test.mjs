@@ -342,6 +342,23 @@ test("the Intel release job has more time for cold compilation than PR verificat
   );
 });
 
+test("only release creation restores Swift build state and saves it after a successful build", () => {
+  const verify = read("verify");
+  const release = read("release-macos");
+  const create = job(release, "create");
+  assert.doesNotMatch(verify, /swift_cache|swift-plan/);
+  assert.doesNotMatch(release.replace(create, ""), /swift_cache|swift-plan/);
+  assert.match(create, /release-build-cache\.mjs swift-plan/);
+  assert.match(
+    create,
+    /id: swift_cache_restore[\s\S]*?actions\/cache\/restore@[a-f0-9]+[\s\S]*?restore-keys: .*steps\.swift_cache_plan\.outputs\.restore-key[\s\S]*?id: build/,
+  );
+  assert.match(
+    create,
+    /if: steps\.build\.outcome == 'success'[^\n]*steps\.swift_cache_restore\.outputs\.cache-hit != 'true'\n +continue-on-error: true\n +uses: actions\/cache\/save@/,
+  );
+});
+
 test("only the release Intel lane persists its compiler cache after success and flush", () => {
   const intel = job(read("release-macos"), "macos-compatibility");
   assert.match(intel, /SITUATE_RELEASE_CACHE_SCOPE: intel-compatibility/);

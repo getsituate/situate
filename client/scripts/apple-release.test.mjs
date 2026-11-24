@@ -464,6 +464,61 @@ test("hosted builds register their isolated Keychain only for the build lifetime
   assert.equal(existsSync(keychain), false);
 });
 
+test("release timings log only completed phases and durations", async (t) => {
+  const logs = t.mock.method(console, "log", () => {});
+  const model = {
+    id: "synthetic",
+    tool_call: true,
+    modalities: { input: ["text"], output: ["text"] },
+    limit: { context: 1024, output: 128 },
+  };
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json(
+      Object.fromEntries(
+        ["openai", "anthropic", "openrouter"].map((provider) => [
+          provider,
+          { models: { [model.id]: model } },
+        ]),
+      ),
+    ),
+  );
+  const fixture = buildFixture(t);
+  await assert.rejects(
+    buildAppleRelease({
+      ...fixture,
+      qualifyMigrations: async () => fixture.evidence.migrationQualification,
+      execute: async (command, args, options) => {
+        if (command === process.execPath && args[1] === "build") {
+          mkdirSync(
+            join(
+              options.env.CARGO_TARGET_DIR,
+              "universal-apple-darwin/release/bundle/macos/Situate.app",
+            ),
+            { recursive: true },
+          );
+          return "";
+        }
+        if (command === "plutil")
+          throw new Error("synthetic verification stop");
+        return fixture.execute(command, args, options);
+      },
+    }),
+    /synthetic verification stop/,
+  );
+  const timings = logs.mock.calls
+    .map(({ arguments: [line] }) => line)
+    .filter((line) => line.startsWith('{"phase":"release-'))
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    timings.map(({ phase }) => phase),
+    ["release-tauri-build", "release-app-staging", "release-app-signing"],
+  );
+  for (const timing of timings) {
+    assert.deepEqual(Object.keys(timing).sort(), ["elapsedMs", "phase"]);
+    assert.ok(Number.isSafeInteger(timing.elapsedMs) && timing.elapsedMs >= 0);
+  }
+});
+
 test("GitHub releases stop before compilation when the PostHog token is missing", async (t) => {
   const fixture = buildFixture(t);
   await assert.rejects(

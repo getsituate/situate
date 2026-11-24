@@ -675,9 +675,15 @@ export async function main(
       environment: env,
       api: createSourceVerificationApi({ token: env.GH_TOKEN }),
     });
+    const diagnostics = selection.diagnostics;
     if (selection.action !== "reuse") {
       output({ reused: "false" }, env);
-      return { reused: false, reason: selection.reason };
+      return {
+        reused: false,
+        reason: selection.reason,
+        ...(selection.stage ? { stage: selection.stage } : {}),
+        diagnostics,
+      };
     }
     const { createSourceVerificationReuseReceipt } =
       await import("./source-verification-evidence.mjs");
@@ -689,10 +695,14 @@ export async function main(
       encoded = encodeActionsReceipt(receipt);
     } catch {
       output({ reused: "false" }, env);
-      return { reused: false, reason: "receipt-output-limit" };
+      return { reused: false, reason: "receipt-output-limit", diagnostics };
     }
     output({ reused: "true", receipt: encoded }, env);
-    return { reused: true, testedSHA: selection.evidence.testedSHA };
+    return {
+      reused: true,
+      testedSHA: selection.evidence.testedSHA,
+      diagnostics,
+    };
   }
   if (command === "source-evidence") {
     const { publishSourceVerificationEvidence, createSourceVerificationApi } =
@@ -702,20 +712,26 @@ export async function main(
       decodeActionsReceipt(needs[id]?.outputs?.receipt || "null"),
     );
     aggregate(plan, receipts.filter(Boolean), needs);
-    for (const { id } of plan.lanes) {
-      const metadata = needs[id]?.outputs?.evidence;
-      if (metadata)
-        needs[id].outputs.evidence = JSON.stringify(
-          decodeActionsReceipt(metadata),
-        );
+    try {
+      for (const { id } of plan.lanes) {
+        const metadata = needs[id]?.outputs?.evidence;
+        if (metadata)
+          needs[id].outputs.evidence = JSON.stringify(
+            decodeActionsReceipt(metadata),
+          );
+      }
+    } catch {
+      output({ created: "false" }, env);
+      return { created: false, reason: "lane-capture-invalid" };
     }
-    const path = await publishSourceVerificationEvidence(root, {
-      plan,
-      receipts,
-      needs,
-      environment: env,
-      api: createSourceVerificationApi({ token: env.GH_TOKEN }),
-    });
+    const { path, reason, capturedLanes } =
+      await publishSourceVerificationEvidence(root, {
+        plan,
+        receipts,
+        needs,
+        environment: env,
+        api: createSourceVerificationApi({ token: env.GH_TOKEN }),
+      });
     output(
       {
         created: String(Boolean(path)),
@@ -730,7 +746,7 @@ export async function main(
       },
       env,
     );
-    return { created: Boolean(path) };
+    return path ? { created: true, capturedLanes } : { created: false, reason };
   }
   if (command === "source-evidence-check") {
     if (

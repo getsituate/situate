@@ -19,6 +19,7 @@ import { join } from "node:path";
 import {
   cargoCacheSampler,
   releaseBuildCachePlan,
+  releaseSwiftCachePlan,
   releaseCacheEndpoint,
   compatibilityCacheEnvironment,
   releaseCompilerCacheEnvironment,
@@ -59,6 +60,7 @@ function execute(command, args) {
     "rustup which cargo": "/toolchain/bin/cargo",
     "/toolchain/bin/rustc -vV": `rustc 1.98.1 (synthetic)\ncommit-hash: ${"a".repeat(40)}\nhost: aarch64-apple-darwin`,
     "/toolchain/bin/cargo --version": "cargo 1.98.1 (synthetic)",
+    "swift --version": "Apple Swift version 6.2 (synthetic)",
     "xcodebuild -version": "Xcode 26.1\nBuild version 17B55",
     "xcrun --sdk macosx --show-sdk-version": "26.1",
     "xcrun --sdk macosx --show-sdk-build-version": "25B55",
@@ -78,6 +80,47 @@ const fixture = (overrides = {}) => ({
   read: (path) => `synthetic ${path}`,
   compilerOptions,
   ...overrides,
+});
+
+test("Swift cache reuses only compatible release scratch state across commits", () => {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const plan = releaseSwiftCachePlan(fixture({ root }));
+  assert.equal(plan.enabled, true);
+  assert.match(plan.key, /^release-swift-v1-[a-f0-9]{64}-a{40}$/);
+  assert.deepEqual(plan.paths, [
+    "client/app/src-tauri/dictation/.build/arm64/*",
+    "!client/app/src-tauri/dictation/.build/arm64/repositories",
+    "client/app/src-tauri/dictation/.build/x86_64/*",
+    "!client/app/src-tauri/dictation/.build/x86_64/repositories",
+  ]);
+  const next = releaseSwiftCachePlan(
+    fixture({ root, env: { ...env, GITHUB_SHA: "b".repeat(40) } }),
+  );
+  assert.equal(next.restoreKey, plan.restoreKey);
+  assert.notEqual(next.key, plan.key);
+  for (const options of [
+    { root: tmpdir() },
+    { read: (path) => `${path}: changed` },
+    { execute: (...args) => `new ${execute(...args)}` },
+  ]) {
+    const changed = releaseSwiftCachePlan(fixture({ root, ...options }));
+    assert.equal(changed.enabled, true);
+    assert.notEqual(changed.restoreKey, plan.restoreKey);
+  }
+  for (const overrides of [
+    { GITHUB_REF: "refs/pull/138/merge" },
+    { GITHUB_REF_PROTECTED: "false" },
+    { RUNNER_ARCH: "X64", SITUATE_RELEASE_CACHE_SCOPE: "intel-compatibility" },
+    {
+      GITHUB_WORKFLOW_REF:
+        "getsituate/situate/.github/workflows/verify.yml@refs/heads/main",
+    },
+  ]) {
+    assert.deepEqual(
+      releaseSwiftCachePlan(fixture({ root, env: { ...env, ...overrides } })),
+      { enabled: false },
+    );
+  }
 });
 
 test("cache plan contains only bounded compiler and public Cargo download paths", () => {
