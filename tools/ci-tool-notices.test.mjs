@@ -375,6 +375,14 @@ test("committed inventory covers pflag and pins the source-free verifier inputs"
     );
   }
   python(`
-n.check_manifest(json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("../client/docker/ci-tool-notices.json", import.meta.url)))}).read_text()), json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("./toolchain.quality.json", import.meta.url)))}).read_text()))
+manifest = json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("../client/docker/ci-tool-notices.json", import.meta.url)))}).read_text())
+quality = json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("./toolchain.quality.json", import.meta.url)))}).read_text())
+n.check_manifest(manifest, quality)
+for field, message in [('binaryPath', 'Unexpected source build binary path'), ('receiptPath', 'Unexpected build receipt path')]:
+    build = manifest['tools']['cargo-llvm-cov']['sourceBuild']
+    original = build[field]
+    build[field] = 'unexpected-output'
+    rejects(lambda: n.check_manifest(manifest, quality), message)
+    build[field] = original
 `);
 });
