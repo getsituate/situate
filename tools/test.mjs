@@ -35,7 +35,6 @@ import {
 } from "./test-budget.mjs";
 export { isFeedbackSuite } from "./test-budget.mjs";
 import { suiteAffectedFiles, suiteSelectionReasons } from "./test-inputs.mjs";
-import { windowsInstallationPath } from "./pipeline-environment.mjs";
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const projects = [
@@ -1055,14 +1054,13 @@ export function suiteEnvironment(
 export function dependencyOwnerBirth(pid) {
   assert(Number.isInteger(pid) && pid > 0);
   if (process.platform !== "win32") return processSnapshot().get(pid)?.born;
+  const systemRoot = process.env.SystemRoot;
+  assert(
+    systemRoot && /^[a-z]:[\\/]/iu.test(systemRoot),
+    "Expected an absolute Windows system directory",
+  );
   const birth = execFileSync(
-    windowsInstallationPath(
-      process.env.SystemRoot,
-      "System32",
-      "WindowsPowerShell",
-      "v1.0",
-      "powershell.exe",
-    ),
+    join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
     [
       "-NoLogo",
       "-NoProfile",

@@ -1344,7 +1344,6 @@ test("CLI enforces required selections and lists changed-suite reasons", (t) => 
     "test-budget.mjs",
     "quick-source.mjs",
     "test-inputs.mjs",
-    "pipeline-environment.mjs",
     "quality-cache.mjs",
     "cargo-environment.mjs",
     "compiler-cache.mjs",
