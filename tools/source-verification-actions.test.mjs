@@ -977,12 +977,40 @@ test("only a newly uploaded archive retries 404 and stops after six retries", as
   assert.deepEqual(statuses, []);
 });
 
+test("source reuse requires the named lane step to pass on the shared ARM64 runner", async () => {
+  const f = fixture();
+  const job = f.data.jobs[1];
+  job.name = "macos-arm64";
+  job.steps = [
+    { name: "macos-code", status: "completed", conclusion: "success" },
+    { name: "macos-native", status: "completed", conclusion: "success" },
+  ];
+  assert.equal(
+    (await selectActionsSourceEvidence(root, f.options)).action,
+    "reuse",
+  );
+  job.steps[1].conclusion = "skipped";
+  assert.equal(
+    (await selectActionsSourceEvidence(root, f.options)).action,
+    "execute",
+  );
+  job.steps.pop();
+  assert.equal(
+    (await selectActionsSourceEvidence(root, f.options)).action,
+    "execute",
+  );
+});
+
 test("publisher writes only a bounded owned artifact after independent job and merge checks", async (t) => {
   const f = fixture();
   f.data.run.status = "in_progress";
   f.data.run.conclusion = null;
   f.data.jobs[0].status = "in_progress";
   f.data.jobs[0].conclusion = null;
+  f.data.jobs[1].name = "macos-arm64";
+  f.data.jobs[1].steps = [
+    { name: "macos-native", status: "completed", conclusion: "success" },
+  ];
   const temporary = realpathSync(
     mkdtempSync(join(tmpdir(), "source-evidence-")),
   );

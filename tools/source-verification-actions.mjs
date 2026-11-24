@@ -11,6 +11,7 @@ import { availableParallelism, homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { inflateRawSync } from "node:zlib";
+import { verifyMacosJob, verifyMacosLanes } from "./actions-adapter.mjs";
 import { ordinaryEnvironment } from "./pipeline-environment.mjs";
 import { aggregateReceipts, digest, validatePlan } from "./pipeline-state.mjs";
 import { suiteInventory } from "./test.mjs";
@@ -560,10 +561,21 @@ async function producerMetadata(api, runId, attempt, completed) {
 }
 
 function laneJob(jobs, lane) {
-  const matches = jobs.filter(({ name }) => name === lane);
+  const matches = jobs.filter(
+    ({ name }) =>
+      name === lane ||
+      (name === verifyMacosJob && verifyMacosLanes.includes(lane)),
+  );
   assert.equal(matches.length, 1);
   const job = matches[0];
   assert(job.status === "completed" && job.conclusion === "success");
+  if (job.name === verifyMacosJob) {
+    const steps = (job.steps ?? []).filter(({ name }) => name === lane);
+    assert.equal(steps.length, 1);
+    assert(
+      steps[0].status === "completed" && steps[0].conclusion === "success",
+    );
+  }
   return String(positiveId(job.id));
 }
 
