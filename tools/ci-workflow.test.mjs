@@ -278,7 +278,7 @@ test("verification jobs depend on planning and aggregate every selected receipt"
 test("Verify runs selected ARM64 lanes on one runner with independent step results", () => {
   const workflow = read("verify");
   const shared = job(workflow, "macos-arm64");
-  assert.equal(workflow.match(/^    runs-on: macos-latest$/gm)?.length, 1);
+  assert.equal(workflow.match(/^ {4}runs-on: macos-latest$/gm)?.length, 1);
   assert.match(shared, /needs: plan\n/);
   assert.match(shared, /runs-on: macos-latest\n/);
   assert.match(shared, /ref:.*github\.sha/);
