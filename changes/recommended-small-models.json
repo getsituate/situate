@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "recommended-small-models",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "recommended-small-models",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "New recommended models for short comments",
+          "paragraphs": [
+            "Situate prefers GPT‑6 Luna on OpenAI and OpenRouter, and Claude Haiku 5.5 on Anthropic, when your connection offers them. OpenRouter also prefers GPT‑6.2 Sol for chat when available. Models you selected explicitly stay the same."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "recommended-small-models",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Neue Modellempfehlungen für kurze Kommentare",
+          "paragraphs": [
+            "Situate bevorzugt GPT‑6 Luna bei OpenAI und OpenRouter sowie Claude Haiku 5.5 bei Anthropic, sofern deine Verbindung das jeweilige Modell anbietet. Für Chats über OpenRouter empfiehlt Situate jetzt GPT‑6.2 Sol, wenn es verfügbar ist. Manuell gewählte Modelle bleiben unverändert."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -183,6 +183,10 @@ fn openai_recommends_sol_62_only_with_qualified_discovery_and_only_for_chat() {
             comment
         );
 
+        observed.models.push("gpt-6-luna".into());
+        let small = resolve_choice(recommended(), &observed, "comment").unwrap();
+        assert_eq!(small.model, "gpt-6-luna");
+        assert_eq!(small.thinking, "off");
         observed.models.retain(|id| id != "gpt-6.2-sol");
         assert_eq!(
             resolve_choice(recommended(), &observed, "chat").unwrap().model,
@@ -292,11 +296,11 @@ fn same_provider_connections_keep_independent_explicit_settings() {
 #[test]
 fn qualified_provider_defaults_persist_independent_function_choices() {
     for (provider, expected_chat, expected_comment, comment_effort) in [
-        ("anthropic", "claude-sonnet-5-5", "claude-sonnet-5-5", "low"),
+        ("anthropic", "claude-sonnet-5-5", "claude-haiku-5-5", "low"),
         (
             "openrouter",
             "openai/gpt-6.1-sol",
-            "openai/gpt-4o-mini",
+            "openai/gpt-6-luna",
             "off",
         ),
     ] {

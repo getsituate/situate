@@ -1,7 +1,65 @@
 {
   "schemaVersion": 2,
-  "revision": "2026-11-22.1",
+  "revision": "2026-11-24.1",
   "rankedCandidates": [
+    {
+      "provider": "openai",
+      "access": "api_key",
+      "modelId": "gpt-6-luna",
+      "api": "openai-responses",
+      "thinking": "off",
+      "priority": { "comment": 1 },
+      "eligibility": "supported",
+      "rationale": "Low token rates and optional reasoning suit short comments.",
+      "sources": ["https://developers.openai.com/api/docs/models/gpt-6-luna"]
+    },
+    {
+      "provider": "openai",
+      "access": "oauth",
+      "modelId": "gpt-6-luna",
+      "api": "openai-responses",
+      "thinking": "off",
+      "priority": { "comment": 1 },
+      "eligibility": "supported",
+      "rationale": "Efficient for short comments when the ChatGPT account lists it.",
+      "sources": ["https://developers.openai.com/api/docs/models/gpt-6-luna"]
+    },
+    {
+      "provider": "anthropic",
+      "access": "api_key",
+      "modelId": "claude-haiku-5-5",
+      "api": "anthropic-messages",
+      "thinking": "low",
+      "priority": { "comment": 1 },
+      "eligibility": "supported",
+      "rationale": "Low-latency tier for short, high-volume requests.",
+      "sources": [
+        "https://platform.claude.com/docs/en/models/haiku-5-5/overview"
+      ]
+    },
+    {
+      "provider": "openrouter",
+      "access": "api_key",
+      "modelId": "openai/gpt-6-luna",
+      "api": "openai-completions",
+      "thinking": "off",
+      "priority": { "comment": 1 },
+      "eligibility": "supported",
+      "rationale": "Lower listed gateway rates for short comments without reasoning.",
+      "sources": ["https://openrouter.ai/openai/gpt-6-luna"]
+    },
+    {
+      "provider": "openrouter",
+      "access": "api_key",
+      "modelId": "openai/gpt-6.2-sol",
+      "api": "openai-completions",
+      "thinking": "medium",
+      "priority": { "chat": 5 },
+      "discoveryOnly": true,
+      "eligibility": "supported",
+      "rationale": "Preferred for chat when the account offers a compatible tool-capable route.",
+      "sources": ["https://openrouter.ai/openai/gpt-6.2-sol"]
+    },
     {
       "provider": "openai",
       "access": "api_key",
@@ -13,7 +71,7 @@
         "comment": 10
       },
       "eligibility": "supported",
-      "rationale": "Reviewed balanced conversational tier; comments independently prefer the lower-rate Mini candidate when available and otherwise use Sol at its lowest verified effort.",
+      "rationale": "Balanced conversational tier; short comments prefer Luna or Mini when available.",
       "sources": ["https://developers.openai.com/api/docs/models/gpt-6.1-sol"]
     },
     {
@@ -133,6 +191,33 @@
   ],
   "staticModels": [
     {
+      "id": "gpt-6-luna",
+      "provider": "openai",
+      "api": "openai-responses",
+      "baseUrl": "https://api.openai.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "provider": "anthropic",
+      "api": "anthropic-messages",
+      "baseUrl": "https://api.anthropic.com",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
+      "id": "openai/gpt-6-luna",
+      "provider": "openrouter",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "type": "chat"
+    },
+    {
       "id": "gpt-6.1-sol",
       "provider": "openai",
       "api": "openai-responses",
@@ -179,6 +264,35 @@
     }
   ],
   "verifiedThinking": [
+    {
+      "provider": "openai",
+      "modelId": "gpt-6-luna",
+      "api": "openai-responses",
+      "levels": ["off", "low", "medium", "high", "xhigh"],
+      "default": "medium",
+      "sources": ["https://developers.openai.com/api/docs/models/gpt-6-luna"]
+    },
+    {
+      "provider": "anthropic",
+      "modelId": "claude-haiku-5-5",
+      "api": "anthropic-messages",
+      "levels": ["low", "medium", "high"],
+      "default": "medium",
+      "sources": [
+        "https://platform.claude.com/docs/en/models/haiku-5-5/overview"
+      ]
+    },
+    {
+      "provider": "openrouter",
+      "modelId": "openai/gpt-6-luna",
+      "api": "openai-completions",
+      "levels": ["off", "low", "medium", "high"],
+      "default": "off",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-6-luna",
+        "https://openrouter.ai/docs/guides/best-practices/reasoning-tokens"
+      ]
+    },
     {
       "provider": "openai",
       "modelId": "gpt-6.1-sol",

@@ -230,9 +230,14 @@ export function validateRecommendations(
       )
     )
       throw new Error(`Incomplete ranked candidate: ${identity}`);
+    if (
+      entry.priority?.chat === undefined &&
+      entry.priority?.comment === undefined
+    )
+      throw new Error(`Missing recommendation priority: ${identity}`);
     for (const kind of ["chat", "comment"]) {
-      if (entry.discoveryOnly === true && kind === "comment") continue;
       const priority = entry.priority?.[kind];
+      if (priority === undefined) continue;
       const key = `${entry.provider}/${entry.access}/${kind}/${priority}`;
       if (
         !Number.isSafeInteger(priority) ||
@@ -260,14 +265,19 @@ export function validateRecommendations(
       );
     if (entry.discoveryOnly === true) {
       if (
-        entry.provider !== "openai" ||
-        entry.api !== "openai-responses" ||
+        !(
+          (entry.provider === "openai" &&
+            entry.api === "openai-responses" &&
+            /^gpt-[a-z0-9.-]+$/u.test(entry.modelId)) ||
+          (entry.provider === "openrouter" &&
+            entry.api === "openai-completions" &&
+            /^openai\/gpt-[a-z0-9.-]+$/u.test(entry.modelId))
+        ) ||
         !transports.apis[entry.api] ||
         !["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(
           entry.thinking,
         ) ||
         entry.priority.comment !== undefined ||
-        !/^gpt-[a-z0-9.-]+$/u.test(entry.modelId) ||
         provider.models.some((model) => model.id === entry.modelId)
       )
         throw new Error(`Invalid discovery-only recommendation: ${identity}`);
@@ -309,7 +319,10 @@ export function validateRecommendations(
     for (const access of Object.keys(definition.methods)) {
       if (
         !recommendations.rankedCandidates.some(
-          (entry) => entry.provider === provider && entry.access === access,
+          (entry) =>
+            entry.provider === provider &&
+            entry.access === access &&
+            entry.priority.chat !== undefined,
         )
       )
         throw new Error(

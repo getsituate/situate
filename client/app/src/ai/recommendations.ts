@@ -48,7 +48,7 @@ export interface RankedCandidate {
   modelId: string;
   api: string;
   thinking: string;
-  priority: { chat: number; comment?: number };
+  priority: { chat?: number; comment?: number };
   discoveryOnly?: boolean;
   eligibility: string;
 }
