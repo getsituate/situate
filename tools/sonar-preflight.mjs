@@ -177,28 +177,7 @@ export async function preflight({
     throw new Error(
       "The branch or main changed during analysis. Run the preflight again.",
     );
-  console.log("Pushing the checked commit…");
-  await run(
-    gitExecutable,
-    ["push", "--no-follow-tags", pushUrl, `${head}:refs/heads/${branch}`],
-    root,
-  );
-  console.log("Opening the pull request…");
-  await run(
-    "gh",
-    [
-      "pr",
-      "create",
-      "--repo",
-      `github.com/${repository}`,
-      "--base",
-      "main",
-      "--head",
-      branch,
-      "--fill",
-    ],
-    root,
-  );
+  console.log(`Checked commit: ${head}`);
 }
 
 if (

@@ -136,13 +136,10 @@ test("does not push or open a PR if the scanner exits unsuccessfully", async (t)
   assert.equal(readFileSync(log, "utf8").trim().split("\n").length, 2);
 });
 
-test("pushes the scanned commit before opening a PR only after a successful scan", async (t) => {
-  const { env, log, runPreflight } = fixture(t);
+test("returns from an open preflight without pushing or creating a PR", async (t) => {
+  const { log, runPreflight } = fixture(t);
   await runPreflight({ publish: true });
-  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n").slice(2), [
-    `push --no-follow-tags https://github.com/getsituate/situate.git ${env.EXPECTED_HEAD}:refs/heads/feature`,
-    "pr create --repo github.com/getsituate/situate --base main --head feature --fill",
-  ]);
+  assert.equal(readFileSync(log, "utf8").trim().split("\n").length, 2);
 });
 
 test("rejects a branch missing changes from main before invoking the scanner", async (t) => {

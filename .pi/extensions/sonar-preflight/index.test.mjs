@@ -46,6 +46,8 @@ test("Pi requires confirmation before starting either preflight command", async 
   const { commands } = fixture();
   const ctx = {
     mode: "tui",
+    model: {},
+    isIdle: () => true,
     ui: {
       confirm: async () => false,
       custom: () => assert.fail("should not start"),
@@ -122,7 +124,7 @@ for (const outcome of [
   });
 }
 
-for (const outcome of ["passes", "still red", "aborted"]) {
+for (const outcome of ["passes", "wrong commit", "still red", "aborted"]) {
   test(`/pr-open repair ${outcome} without another confirmation`, async () => {
     const { commands, events, prompts, git, followUps } = fixture(
       process.execPath,
@@ -146,7 +148,13 @@ for (const outcome of ["passes", "still red", "aborted"]) {
           scans++;
           return scans === 1 || outcome === "still red"
             ? { message: "Gate failed", level: "error", failedGate: { report } }
-            : { message: "Pull request opened", level: "info" };
+            : {
+                message: "Quality gate passed",
+                level: "info",
+                checkedCommit: (outcome === "wrong commit" ? "b" : "a").repeat(
+                  40,
+                ),
+              };
         },
       },
     };
@@ -160,7 +168,7 @@ for (const outcome of ["passes", "still red", "aborted"]) {
       ctx,
     );
     git.set("log -1 --format=%P", "original-head");
-    git.set("rev-parse HEAD", "repair-head");
+    git.set("rev-parse HEAD", "a".repeat(40));
     events.get("agent_settled")({ aborted: outcome === "aborted" }, ctx);
     if (outcome !== "aborted") {
       assert.deepEqual(prompts[1], [
@@ -169,7 +177,17 @@ for (const outcome of ["passes", "still red", "aborted"]) {
       ]);
       await commands.get("pr-open")("", ctx);
     }
-    assert.equal(prompts.length, outcome === "aborted" ? 1 : 2);
+    assert.equal(
+      prompts.length,
+      outcome === "aborted" ? 1 : outcome === "passes" ? 3 : 2,
+    );
+    if (outcome === "passes") {
+      assert.match(
+        prompts[2][0],
+        /Open a pull request in getsituate\/situate against main/,
+      );
+      assert.ok(prompts[2][0].includes("a".repeat(40)));
+    }
     assert.equal(scans, outcome === "aborted" ? 1 : 2);
     assert.equal(confirmations, 1);
     assert.equal(followUps.length, outcome === "still red" ? 1 : 0);

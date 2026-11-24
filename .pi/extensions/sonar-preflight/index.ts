@@ -28,10 +28,11 @@ function showPreflight(
     message: string;
     level: "info" | "warning" | "error";
     failedGate?: { report: string | undefined };
+    checkedCommit?: string;
   }>((tui, theme, keybindings, done) => {
     const lines: string[] = [];
     let gate: string | undefined;
-    let pr: string | undefined;
+    let checkedCommit: string | undefined;
     let cancelled = false;
     let failure: string | undefined;
     const child = spawn(node, ["tools/sonar-preflight.mjs", mode], {
@@ -45,10 +46,8 @@ function showPreflight(
         ).trim();
         if (!line) return;
         gate = line.match(/QUALITY GATE STATUS: FAILED.*/)?.[0] ?? gate;
-        pr =
-          line.match(
-            /^https:\/\/github\.com\/getsituate\/situate\/pull\/\d+$/,
-          )?.[0] ?? pr;
+        checkedCommit =
+          line.match(/^Checked commit: ([a-f0-9]{40})$/)?.[1] ?? checkedCommit;
         lines.push(line.slice(0, 2000));
         if (lines.length > 10) lines.shift();
         tui.requestRender();
@@ -61,17 +60,14 @@ function showPreflight(
       if (cancelled) {
         done({
           message:
-            mode === "open"
-              ? "Preflight stopped. Check GitHub if a push or PR was already in progress."
-              : "SonarCloud preflight cancelled. A submitted analysis may still finish on SonarCloud.",
+            "SonarCloud preflight cancelled. A submitted analysis may still finish on SonarCloud.",
           level: "warning",
         });
       } else if (code === 0) {
         done({
-          message: pr
-            ? `Pull request: ${pr}`
-            : "SonarCloud quality gate passed.",
+          message: "SonarCloud quality gate passed.",
           level: "info",
+          checkedCommit,
         });
       } else {
         done({
@@ -155,7 +151,7 @@ export default function sonarPreflight(pi: ExtensionAPI) {
     const publish = mode === "open";
     pi.registerCommand(`pr-${mode}`, {
       description: publish
-        ? "Run SonarCloud preflight, then push and open a PR against main"
+        ? "Run SonarCloud preflight, then ask Pi to open a PR against main"
         : "Check this branch against main in SonarCloud without pushing",
       handler: async (args, ctx) => {
         if (args.trim()) {
@@ -177,6 +173,14 @@ export default function sonarPreflight(pi: ExtensionAPI) {
         ) {
           ctx.ui.notify(
             "A commit request for SonarCloud is already pending.",
+            "warning",
+          );
+          return;
+        }
+        if (publish && (!ctx.isIdle() || !ctx.model)) {
+          pending = undefined;
+          ctx.ui.notify(
+            "Select a model and wait for Pi to finish before opening a PR.",
             "warning",
           );
           return;
@@ -287,12 +291,26 @@ export default function sonarPreflight(pi: ExtensionAPI) {
           );
           return;
         }
-        const { message, level, failedGate } = await showPreflight(
-          ctx,
-          node,
-          mode,
-        );
+        const { message, level, failedGate, checkedCommit } =
+          await showPreflight(ctx, node, mode);
         ctx.ui.notify(message, level);
+        if (publish && level === "info") {
+          if (!candidate || checkedCommit !== candidate.head) {
+            ctx.ui.notify(
+              "No PR was requested because the checked commit could not be verified.",
+              "warning",
+            );
+            return;
+          }
+          pi.sendUserMessage(
+            [
+              `SonarCloud preflight passed for commit ${checkedCommit}. Open a pull request in getsituate/situate against main for the current feature branch (${JSON.stringify(candidate.branch)}).`,
+              "Follow the repository PR guidelines. Verify the exact repository, checked commit, branch, and clean worktree before publishing. Review the full diff and history being published, and run any other required PR checks. Do not change the checked commit, push unrelated refs, or rerun /pr-open. If the branch or commit no longer matches, or publication is unsafe, stop and explain why.",
+              "Push only the checked commit to the feature branch and use the GitHub CLI to create the PR. Report the PR URL, or report the existing PR if one is already open for this branch.",
+            ].join("\n\n"),
+          );
+          return;
+        }
         if (failedGate && ctx.model) {
           const report = failedGate.report;
           if (
