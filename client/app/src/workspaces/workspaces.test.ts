@@ -377,8 +377,7 @@ describe("entry and actions", () => {
     expect(wrapper.get<HTMLInputElement>("#workspace-name").element.value).toBe(
       "Existing",
     );
-    await button(wrapper, "⟦workspace.reviewError⟧").trigger("click");
-    expect(dialog.element.open).toBe(true);
+    expect(wrapper.text()).not.toContain("⟦workspace.reviewError⟧");
     expect(run).toHaveBeenCalledTimes(1);
   });
   it("does not show an error when workspace selection is cancelled", async () => {

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "dismiss-workspace-opening-errors",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "dismiss-workspace-opening-errors",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Simpler workspace opening errors",
+          "paragraphs": [
+            "Close a workspace opening error to return to workspace selection without an extra button. You can still retry from the error dialog."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "dismiss-workspace-opening-errors",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Fehler beim Öffnen von Arbeitsbereichen",
+          "paragraphs": [
+            "Wenn du den Fehlerdialog schließt, kehrst du ohne zusätzlichen Button zur Arbeitsbereichsauswahl zurück. Im Dialog kannst du das Öffnen weiterhin erneut versuchen."
+          ]
+        }
+      ]
+    }
+  }
+}
