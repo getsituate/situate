@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "constrain-tooling-paths",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Limits filesystem access in developer and release tooling; no app behavior changes."
+}

@@ -16,11 +16,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
 import { validateManifest } from "../../infrastructure/releases/publish.mjs";
 import { appleEnvironment } from "./apple-release.mjs";
+import { assertLocalPath, resolveLocalChild } from "./ios-project-lock.mjs";
 import {
   bundleDigest,
   verifyDirectPayloads,
 } from "./direct-release-verification.mjs";
 
+const client = fileURLToPath(new URL("..", import.meta.url));
+const qualificationRoot = join(client, "target/direct-update");
 const identifier = JSON.parse(
   readFileSync(new URL("../app/src-tauri/tauri.conf.json", import.meta.url)),
 ).identifier;
@@ -124,8 +127,10 @@ export async function observeUpdate(
 ) {
   if (!["begin", "finish"].includes(action))
     throw new Error("Use begin or finish.");
+  const root = canonicalDirectory(options.root);
+  const receiptPath = resolveLocalChild(root, options.receipt);
   const previousBytes =
-    action === "finish" ? regularFile(options.receipt) : undefined;
+    action === "finish" ? regularFile(receiptPath) : undefined;
   const previous = previousBytes ? JSON.parse(previousBytes) : undefined;
   if (
     previous &&
@@ -134,14 +139,15 @@ export async function observeUpdate(
     throw new Error("Expected a before-update receipt.");
   const inputs = previous
     ? { ...previous.inputs, publicKey: options.publicKey }
-    : options;
+    : { ...options };
   for (const name of ["from", "to", "app", "workspace"])
-    inputs[name] = canonicalDirectory(inputs[name]);
+    inputs[name] = canonicalDirectory(resolveLocalChild(root, inputs[name]));
   if (!inputs.app.endsWith("/Situate.app"))
     throw new Error("Select the installed Situate.app.");
-  const output = resolve(
-    action === "begin" ? options.receipt : `${options.receipt}.after.json`,
-  );
+  const output =
+    action === "begin"
+      ? receiptPath
+      : resolveLocalChild(root, `${receiptPath}.after.json`);
   canonicalDirectory(dirname(output));
   if (
     [inputs.from, inputs.to, inputs.app, inputs.workspace].some(
@@ -176,7 +182,7 @@ export async function observeUpdate(
     app,
     workspace: workspacePath,
   } = inputs;
-  if (previousBytes && !regularFile(options.receipt).equals(previousBytes))
+  if (previousBytes && !regularFile(receiptPath).equals(previousBytes))
     throw new Error("Before-update receipt changed during observation.");
   const receipt = {
     schemaVersion: 1,
@@ -223,7 +229,7 @@ export async function main(args = process.argv.slice(2)) {
   });
   if (values.help) {
     console.log(
-      "Usage: node client/scripts/qualify-direct-update.mjs fixture --workspace NEW_DIR | begin --from DIR --to DIR --from-revision SHA --to-revision SHA --team-id TEAM --app PATH/Situate.app --workspace DIR --receipt NEW_FILE | finish --receipt FILE\nBegin/finish require macOS and environment-only SITUATE_UPDATER_PUBLIC_KEY. Does not launch, install or publish an app.",
+      "Usage: node client/scripts/qualify-direct-update.mjs fixture --workspace NEW_DIR | begin --from DIR --to DIR --from-revision SHA --to-revision SHA --team-id TEAM --app PATH/Situate.app --workspace DIR --receipt NEW_FILE | finish --receipt FILE\nUse paths under client/target/direct-update. Begin/finish require macOS and environment-only SITUATE_UPDATER_PUBLIC_KEY. Does not launch, install or publish an app.",
     );
     return;
   }
@@ -236,7 +242,10 @@ export async function main(args = process.argv.slice(2)) {
   if (action === "fixture") {
     if (!values.workspace)
       throw new Error("Provide a new --workspace directory.");
-    createReleaseFixture(values.workspace);
+    assertLocalPath(client, qualificationRoot);
+    createReleaseFixture(
+      resolveLocalChild(qualificationRoot, values.workspace),
+    );
     return;
   }
   if (process.platform !== "darwin")
@@ -260,9 +269,11 @@ export async function main(args = process.argv.slice(2)) {
     throw new Error(
       "Begin requires both releases/revisions, team, installed app and synthetic workspace.",
     );
+  assertLocalPath(client, qualificationRoot);
   console.log(
     await observeUpdate(action, {
       ...values,
+      root: qualificationRoot,
       fromRevision: values["from-revision"],
       toRevision: values["to-revision"],
       teamId: values["team-id"],

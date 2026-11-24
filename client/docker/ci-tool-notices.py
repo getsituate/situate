@@ -105,6 +105,10 @@ def dependency_ids(files, manifest):
     return dependencies
 
 
+SOURCE_BUILD_BINARY = "cargo-llvm-cov/cargo-llvm-cov"
+SOURCE_BUILD_RECEIPT = "cargo-llvm-cov/source-build.json"
+
+
 def check_manifest(manifest, quality):
     require(manifest["version"] == 1, "Unsupported tool notice inventory")
     require(set(manifest["tools"]) == {"cargo-deny", "cargo-llvm-cov", "gitleaks", "ktlint", "gh"}, "Incomplete tool set")
@@ -116,8 +120,8 @@ def check_manifest(manifest, quality):
         if name == "cargo-llvm-cov":
             build = tool["sourceBuild"]
             require(build["method"] == "cargo-install-locked", "Unsupported source build method")
-            require(build["binaryPath"] == f"{name}/{name}", "Unexpected source build binary path")
-            require(build["receiptPath"] == f"{name}/source-build.json", "Unexpected build receipt path")
+            require(build["binaryPath"] == SOURCE_BUILD_BINARY, "Unexpected source build binary path")
+            require(build["receiptPath"] == SOURCE_BUILD_RECEIPT, "Unexpected build receipt path")
             require(re.fullmatch(r"\d+\.\d+\.\d+", build["rustVersion"]), "Unpinned build toolchain")
             require("binaries" not in tool, "Source build must not use upstream binary hashes")
         else:
@@ -329,7 +333,7 @@ def build_source_tool(manifest, root, name, arch):
         require(digest(archive_path.read_bytes()) == artifact["sha256"], "Build changed retained source archive")
         output = work / "install/bin" / name
         binary_hash = digest(output.read_bytes())
-        destination = root / build["binaryPath"]
+        destination = root / SOURCE_BUILD_BINARY
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(output, destination)
         destination.chmod(0o755)
@@ -338,18 +342,18 @@ def build_source_tool(manifest, root, name, arch):
             "compiler": compiler,
             "binarySha256": binary_hash,
         }
-        (root / build["receiptPath"]).write_text(json.dumps(receipt, indent=2) + "\n")
+        (root / SOURCE_BUILD_RECEIPT).write_text(json.dumps(receipt, indent=2) + "\n")
 
 
 def verify_source_build(manifest, root, name, arch):
     tool = manifest["tools"][name]
     build = tool["sourceBuild"]
-    receipt = json.loads((root / build["receiptPath"]).read_text())
+    receipt = json.loads((root / SOURCE_BUILD_RECEIPT).read_text())
     for key, value in source_build_binding(manifest, name, arch).items():
         require(receipt.get(key) == value, f"Source build receipt mismatch: {key}")
     require(receipt["compiler"] == compiler_identity(), "Source build compiler identity mismatch")
     require(receipt["compiler"]["rustc"].startswith("rustc " + build["rustVersion"] + " "), "Source build compiler version mismatch")
-    require(digest((root / build["binaryPath"]).read_bytes()) == receipt["binarySha256"], "Source build binary checksum mismatch")
+    require(digest((root / SOURCE_BUILD_BINARY).read_bytes()) == receipt["binarySha256"], "Source build binary checksum mismatch")
 
 
 def verify_binaries(manifest, root, arch):
@@ -372,26 +376,25 @@ def verify_binaries(manifest, root, arch):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["collect", "verify"])
-    parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path("/opt/ci-tools"))
-    parser.add_argument("--manifest", type=pathlib.Path)
-    parser.add_argument("--cache", type=pathlib.Path, default=pathlib.Path("/var/cache/situate-ci-tool-notices"))
     args = parser.parse_args()
-    manifest = json.loads((args.manifest or args.root / "tool-notices/manifest.json").read_text())
-    quality = json.loads((args.root / "toolchain.quality.json").read_text())
+    root = pathlib.Path("/opt/ci-tools")
+    installed_manifest = root / "tool-notices/manifest.json"
+    source_manifest = pathlib.Path("/ci-input/client/docker/ci-tool-notices.json")
+    collecting = args.action == "collect"
+    manifest = json.loads((source_manifest if collecting else installed_manifest).read_text())
+    quality = json.loads((root / "toolchain.quality.json").read_text())
     check_manifest(manifest, quality)
     arch = {"x86_64": "amd64", "aarch64": "arm64"}[platform.machine()]
-    if args.action == "collect":
-        collect(manifest, args.root, args.cache)
-        build_source_tool(manifest, args.root, "cargo-llvm-cov", arch)
-        verify_binaries(manifest, args.root, arch)
-        if args.manifest:
-            (args.root / "tool-notices/manifest.json").write_bytes(args.manifest.read_bytes())
-        (args.root / "tool-notices/retained-notices.json").write_text(json.dumps(retained_notices(args.root), indent=2) + "\n")
+    if collecting:
+        collect(manifest, root, pathlib.Path("/var/cache/situate-ci-tool-notices"))
+        build_source_tool(manifest, root, "cargo-llvm-cov", arch)
+        verify_binaries(manifest, root, arch)
+        (root / "tool-notices/retained-notices.json").write_text(json.dumps(retained_notices(root), indent=2) + "\n")
     else:
-        verify_binaries(manifest, args.root, arch)
-        verify_archives(manifest, args.root)
-        expected = json.loads((args.root / "tool-notices/retained-notices.json").read_text())
-        require(expected == retained_notices(args.root), "Distribution notice inventory/hash mismatch")
+        verify_binaries(manifest, root, arch)
+        verify_archives(manifest, root)
+        expected = json.loads((root / "tool-notices/retained-notices.json").read_text())
+        require(expected == retained_notices(root), "Distribution notice inventory/hash mismatch")
     print(f"{len(manifest['artifacts'])} tool archives and retained distribution notices verified.")
 
 

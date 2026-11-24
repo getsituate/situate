@@ -89,7 +89,8 @@ RUN --mount=type=bind,from=ci-inputs,target=/ci-input,readonly \
     --mount=type=cache,id=situate-ci-tool-notices,target=/var/cache/situate-ci-tool-notices,sharing=locked \
     node /ci-input/client/docker/ci-sources.mjs \
     && cp /ci-input/client/docker/ci-tool-notices.py /opt/ci-tools/ci-tool-notices.py \
-    && python3 -B /opt/ci-tools/ci-tool-notices.py collect --manifest /ci-input/client/docker/ci-tool-notices.json \
+    && python3 -B /opt/ci-tools/ci-tool-notices.py collect \
+    && cp /ci-input/client/docker/ci-tool-notices.json /opt/ci-tools/tool-notices/manifest.json \
     && chmod -R a+rX /opt/ci-tools/sources /opt/ci-tools/tool-notices \
     && rm -rf /var/lib/apt/lists/*
 USER builder

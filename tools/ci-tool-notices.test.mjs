@@ -36,6 +36,24 @@ function python(code) {
   assert.equal(result.status, 0, result.stderr || result.error?.message);
 }
 
+test("the image notice commands do not accept path overrides", () => {
+  for (const [action, option] of [
+    ["collect", "--manifest"],
+    ["collect", "--cache"],
+    ["verify", "--root"],
+  ]) {
+    const result = spawnSync(
+      "python3",
+      ["-B", helper, action, option, "notices"],
+      {
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 2, result.stderr || result.error?.message);
+    assert.match(result.stderr, /unrecognized arguments/);
+  }
+});
+
 test("notice selection preserves nested copied-code terms and source-header notices", () => {
   python(`
 files = {'pkg/LICENSE': b'MIT text', 'pkg/vendor/COPYING.txt': b'BSD copyright', 'pkg/legal/third-party.md': b'Apache notices', 'pkg/src/lib.rs': b'code'}
@@ -357,6 +375,14 @@ test("committed inventory covers pflag and pins the source-free verifier inputs"
     );
   }
   python(`
-n.check_manifest(json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("../client/docker/ci-tool-notices.json", import.meta.url)))}).read_text()), json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("./toolchain.quality.json", import.meta.url)))}).read_text()))
+manifest = json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("../client/docker/ci-tool-notices.json", import.meta.url)))}).read_text())
+quality = json.loads(pathlib.Path(${JSON.stringify(fileURLToPath(new URL("./toolchain.quality.json", import.meta.url)))}).read_text())
+n.check_manifest(manifest, quality)
+for field, message in [('binaryPath', 'Unexpected source build binary path'), ('receiptPath', 'Unexpected build receipt path')]:
+    build = manifest['tools']['cargo-llvm-cov']['sourceBuild']
+    original = build[field]
+    build[field] = 'unexpected-output'
+    rejects(lambda: n.check_manifest(manifest, quality), message)
+    build[field] = original
 `);
 });

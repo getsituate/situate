@@ -1,6 +1,4 @@
 import { writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
 const maxBytes = 16 * 1024 * 1024;
 const providers = ["openai", "anthropic", "openrouter"];
@@ -115,13 +113,4 @@ export async function writeModelsDevSnapshot(
   await writeFile(path, `${JSON.stringify(snapshot, null, 2)}\n`, {
     flag: "wx",
   });
-}
-
-if (
-  process.argv[1] &&
-  pathToFileURL(resolve(process.argv[1])).href === import.meta.url
-) {
-  if (process.argv.length !== 3)
-    throw new Error("Usage: node models-dev-snapshot.mjs OUTPUT.json");
-  await writeModelsDevSnapshot(process.argv[2]);
 }
