@@ -154,10 +154,12 @@ Start Pi and run `/mcp` to check the connection. Changing issue status requires 
 
 ### Check the SonarCloud gate before opening a PR
 
-Install [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/scanners/sonarscanner-cli) on `PATH`, and set `SONAR_TOKEN` in the environment or the worktree root’s private `.env`. Use a token with **Execute Analysis** permission on the Situate project. The workspace must be clean, with the feature branch committed on top of current `origin/main`.
+Install [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/scanners/sonarscanner-cli) on `PATH`, and set `SONAR_TOKEN` in the environment or the worktree root’s private `.env`. Use a token with **Execute Analysis** permission on the Situate project. The scan requires a clean worktree on a feature branch that includes current `origin/main`.
 
-- `/pr-check` generates the CI Vue coverage report and sends an analysis of the committed branch to the public SonarCloud project as `preflight/<branch>`. It does not push to GitHub or open a PR.
+- `/pr-check` generates the CI Vue coverage report and sends an analysis of the committed branch to the public SonarCloud project as `preflight/<branch>`. If there are uncommitted changes, Pi asks whether it should create a local commit first. It starts the scan only after that commit leaves a clean worktree. It does not push to GitHub or open a PR.
 - `/pr-open` runs the same check, then pushes the checked commit and opens a PR against `main` only if the gate passes. It also requires an authenticated GitHub CLI with permission to push and open the PR.
+
+Pi shows live output while the preflight runs. Press **Esc** to stop the local command and return to the editor. SonarCloud may finish an analysis that was already submitted.
 
 The preflight uses SonarCloud’s project gate for a short-lived branch. SonarCloud can classify new code differently in a PR analysis; the required PR gate and GitHub verification still run independently. Only use these commands for code that can be public.
 

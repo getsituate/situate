@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,10 +14,11 @@ const originUrls = [
   `https://github.com/${repository}`,
 ];
 
-export function preflight({
+export async function preflight({
   publish = false,
   env = process.env,
   cwd = process.cwd(),
+  signal,
 } = {}) {
   const {
     SONAR_TOKEN: exportedToken,
@@ -48,12 +49,58 @@ export function preflight({
     return { branch, head: atRoot("rev-parse", "HEAD") };
   }
 
+  const run = async (command, args, cwd, childEnv = localEnv) => {
+    signal?.throwIfAborted();
+    await new Promise((resolve, reject) => {
+      const child = spawn(command, args, {
+        cwd,
+        env: childEnv,
+        stdio: ["ignore", "inherit", "inherit"],
+        detached: true,
+      });
+      let killTimer;
+      function killGroup(name) {
+        if (!child.pid) return;
+        try {
+          process.kill(-child.pid, name);
+        } catch (error) {
+          if (error.code !== "ESRCH") throw error;
+        }
+      }
+      function cancel() {
+        killGroup("SIGTERM");
+        killTimer = setTimeout(() => killGroup("SIGKILL"), 5000);
+      }
+      signal?.addEventListener("abort", cancel, { once: true });
+      child.once("error", reject);
+      child.once("close", (code) => {
+        signal?.removeEventListener("abort", cancel);
+        clearTimeout(killTimer);
+        if (signal?.aborted) {
+          killGroup("SIGKILL");
+          reject(signal.reason);
+        } else if (code === 0) resolve();
+        else
+          reject(
+            new Error(
+              `${command} failed${code === null ? "." : ` (exit ${code}).`}`,
+            ),
+          );
+      });
+    });
+  };
+
   const { branch, head } = candidate();
-  const fetchBase = () => {
-    atRoot("fetch", "--no-tags", "origin", `refs/heads/main:${base}`);
+  const fetchBase = async () => {
+    await run(
+      "git",
+      ["fetch", "--no-tags", "origin", `refs/heads/main:${base}`],
+      root,
+    );
     return atRoot("rev-parse", base);
   };
-  const target = fetchBase();
+  console.log("Fetching main from GitHub…");
+  const target = await fetchBase();
   if (head === target)
     throw new Error("The branch has no commits ahead of main.");
   if (atRoot("merge-base", target, head) !== target)
@@ -71,16 +118,15 @@ export function preflight({
       "Set SONAR_TOKEN with Execute Analysis permission on the SonarCloud project.",
     );
 
-  const run = (command, args, cwd, childEnv = localEnv) =>
-    execFileSync(command, args, { cwd, env: childEnv, stdio: "inherit" });
-  run("sonar-scanner", ["--version"], root);
+  await run("sonar-scanner", ["--version"], root);
   const scratch = mkdtempSync(join(tmpdir(), "situate-sonar-"));
   const checkout = join(scratch, "checkout");
   let added = false;
   try {
     atRoot("worktree", "add", "--detach", checkout, head);
     added = true;
-    run(
+    console.log("Measuring Vue coverage…");
+    await run(
       "volta",
       ["run", "node", "tools/actions-adapter.mjs", "sonar-coverage"],
       checkout,
@@ -89,7 +135,10 @@ export function preflight({
         RUNNER_TEMP: scratch,
       },
     );
-    run(
+    console.log(
+      "Scanning the branch and waiting for the SonarCloud quality gate…",
+    );
+    await run(
       "sonar-scanner",
       [
         "-Dsonar.organization=getsituate",
@@ -117,17 +166,19 @@ export function preflight({
   if (
     current.branch !== branch ||
     current.head !== head ||
-    fetchBase() !== target
+    (await fetchBase()) !== target
   )
     throw new Error(
       "The branch or main changed during analysis. Run the preflight again.",
     );
-  run(
+  console.log("Pushing the checked commit…");
+  await run(
     "git",
     ["push", "--no-follow-tags", pushUrl, `${head}:refs/heads/${branch}`],
     root,
   );
-  run(
+  console.log("Opening the pull request…");
+  await run(
     "gh",
     [
       "pr",
@@ -148,15 +199,22 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  for (const name of ["SIGTERM", "SIGINT"]) process.on(name, stop);
   try {
     const [mode, ...extra] = process.argv.slice(2);
     if (extra.length || !["check", "open"].includes(mode))
       throw new Error("Usage: node tools/sonar-preflight.mjs check|open");
-    preflight({ publish: mode === "open" });
+    await preflight({ publish: mode === "open", signal: controller.signal });
   } catch (error) {
-    if (error.code === "ENOENT" && error.path === "sonar-scanner")
+    if (controller.signal.aborted)
+      console.error("SonarCloud preflight cancelled.");
+    else if (error.code === "ENOENT" && error.path === "sonar-scanner")
       console.error("Install SonarScanner CLI and add sonar-scanner to PATH.");
     else console.error(error.message);
-    process.exitCode = 1;
+    process.exitCode = controller.signal.aborted ? 130 : 1;
+  } finally {
+    for (const name of ["SIGTERM", "SIGINT"]) process.off(name, stop);
   }
 }
