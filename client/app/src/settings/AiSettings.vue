@@ -639,6 +639,7 @@ function thinking(event: Event): void {
           </div>
         </section>
       </SituateDisclosure>
+      <slot />
     </div>
     <ErrorDialog
       v-if="refreshError"

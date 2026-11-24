@@ -79,6 +79,9 @@
 .settings-group {
   margin-bottom: 36px;
 }
+.privacy-analytics h3 {
+  margin-bottom: 16px;
+}
 .setting-row {
   display: flex;
   align-items: center;

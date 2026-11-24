@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "privacy-and-model-troubleshooting",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "privacy-and-model-troubleshooting",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Privacy and model troubleshooting",
+          "paragraphs": [
+            "Manage usage analytics under Settings → Privacy. To record failed model responses on this device, go to Settings → AI & models → Troubleshooting."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "privacy-and-model-troubleshooting",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Datenschutz und Fehlerbehebung für Modelle",
+          "paragraphs": [
+            "Die Nutzungsanalyse findest du unter Einstellungen → Datenschutz. Fehlgeschlagene Modellantworten kannst du unter Einstellungen → KI & Modelle → Fehlerbehebung auf diesem Gerät aufzeichnen."
+          ]
+        }
+      ]
+    }
+  }
+}

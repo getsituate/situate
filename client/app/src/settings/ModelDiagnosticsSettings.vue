@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "@situate/localization";
-import { SituateButton, SituateDialog, SituateSwitch } from "@situate/ui";
+import {
+  SituateButton,
+  SituateDialog,
+  SituateIcon,
+  SituateSwitch,
+} from "@situate/ui";
 import { onMounted, ref, useId } from "vue";
 import ErrorDialog from "../errors/ErrorDialog.vue";
 
@@ -50,17 +55,30 @@ function change(event: Event): void {
 </script>
 
 <template>
-  <div class="setting-row">
-    <label :for="`${id}-capture`">{{
-      t("settings.modelDiagnostics.capture")
-    }}</label>
-    <SituateSwitch
-      :id="`${id}-capture`"
-      :checked="enabled === true"
-      :disabled="busy || enabled === undefined"
-      @change="change"
-    />
-  </div>
+  <section
+    class="settings-group model-diagnostics"
+    :aria-labelledby="`${id}-troubleshooting`"
+  >
+    <h3 :id="`${id}-troubleshooting`">
+      <SituateIcon name="activity" />
+      {{ t("settings.modelDiagnostics.troubleshooting") }}
+    </h3>
+    <div class="setting-row">
+      <div>
+        <label :for="`${id}-capture`">{{
+          t("settings.modelDiagnostics.capture")
+        }}</label>
+        <p :id="`${id}-scope`">{{ t("settings.modelDiagnostics.scope") }}</p>
+      </div>
+      <SituateSwitch
+        :id="`${id}-capture`"
+        :aria-describedby="`${id}-scope`"
+        :checked="enabled === true"
+        :disabled="busy || enabled === undefined"
+        @change="change"
+      />
+    </div>
+  </section>
   <SituateDialog
     v-if="confirming"
     :open="true"
@@ -96,3 +114,15 @@ function change(event: Event): void {
     </template>
   </ErrorDialog>
 </template>
+
+<style scoped>
+.model-diagnostics {
+  border-top: 1px solid var(--situate-line);
+  padding-top: 20px;
+}
+.model-diagnostics h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+</style>
