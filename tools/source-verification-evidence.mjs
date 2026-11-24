@@ -420,7 +420,10 @@ export function selectSourceVerificationEvidence({
         },
         "Untrusted producer",
       );
-      assert.equal(evidence.tree, source.tree);
+      if (evidence.tree !== source.tree) {
+        reason ??= "tree-differs";
+        continue;
+      }
       const previousLane = evidence.plan.lanes.find(({ id }) => id === laneId);
       const entry = evidence.lanes.find(({ lane }) => lane === laneId);
       if (!previousLane || !entry) {

@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   unlinkSync,
@@ -260,6 +261,66 @@ const probe = (command, args, options) =>
     maxBuffer: 16384,
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
+
+export function releaseSwiftCachePlan({
+  env = process.env,
+  root = resolve(fileURLToPath(new URL("..", import.meta.url))),
+  execute = probe,
+  read = readFileSync,
+  platform = process.platform,
+} = {}) {
+  const disabled = { enabled: false };
+  if (
+    platform !== "darwin" ||
+    !trustedReleaseCacheHost(env) ||
+    env.RUNNER_ARCH !== "ARM64" ||
+    env.SITUATE_RELEASE_CACHE_SCOPE !== undefined
+  )
+    return disabled;
+  try {
+    const options = {
+      cwd: root,
+      env: Object.fromEntries(
+        ["PATH", "HOME", "DEVELOPER_DIR", "TMPDIR"]
+          .filter((name) => env[name] !== undefined)
+          .map((name) => [name, env[name]]),
+      ),
+    };
+    const runtime = [
+      execute("swift", ["--version"], options),
+      execute("xcodebuild", ["-version"], options),
+      execute(
+        "xcrun",
+        ["--sdk", "macosx", "--show-sdk-build-version"],
+        options,
+      ),
+      execute("sw_vers", ["-buildVersion"], options),
+      env.ImageOS,
+    ];
+    if (runtime.some((value) => typeof value !== "string" || !value.trim()))
+      return disabled;
+    const dictation = "client/app/src-tauri/dictation";
+    const inputs = [
+      `${dictation}/Package.swift`,
+      `${dictation}/Package.resolved`,
+      "client/app/src-tauri/build.rs",
+    ].map((file) => hash(read(join(root, file))));
+    // SwiftPM build records use absolute checkout paths.
+    const prefix = `release-swift-v1-${hash(JSON.stringify({ root: realpathSync(root), runtime, inputs }))}-`;
+    const paths = ["arm64", "x86_64"].flatMap((arch) => {
+      const scratch = `${dictation}/.build/${arch}`;
+      return [`${scratch}/*`, `!${scratch}/repositories`];
+    });
+    return {
+      enabled: true,
+      key: `${prefix}${env.GITHUB_SHA}`,
+      restoreKey: prefix,
+      paths,
+    };
+  } catch {
+    return disabled;
+  }
+}
 
 export function releaseBuildCachePlan({
   env = process.env,
@@ -624,12 +685,13 @@ function emitPlan(plan) {
         process.env.GITHUB_OUTPUT,
         `key=${plan.key}\nrestore-key=${plan.restoreKey}\npaths<<SITUATE_CACHE_PATHS\n${plan.paths.map((path) => path.replace(`${process.env.HOME}/`, "~/")).join("\n")}\nSITUATE_CACHE_PATHS\n`,
       );
-      appendFileSync(
-        process.env.GITHUB_ENV,
-        Object.entries(plan.environment)
-          .map(([key, value]) => `${key}=${value}\n`)
-          .join(""),
-      );
+      if (plan.environment)
+        appendFileSync(
+          process.env.GITHUB_ENV,
+          Object.entries(plan.environment)
+            .map(([key, value]) => `${key}=${value}\n`)
+            .join(""),
+        );
     }
   } else {
     console.log(JSON.stringify(plan));
@@ -651,6 +713,8 @@ if (
       );
     } else if (command === "plan") {
       emitPlan(releaseBuildCachePlan());
+    } else if (command === "swift-plan") {
+      emitPlan(releaseSwiftCachePlan());
     } else if (["start", "report"].includes(command)) {
       const measurement = releaseCacheMeasurement(command);
       if (

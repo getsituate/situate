@@ -24,6 +24,7 @@ import {
   diagnosticPlan,
   sonarLcov,
 } from "./actions-adapter.mjs";
+import { encodeActionsReceipt } from "./actions-receipts.mjs";
 
 test("desktop preflight uses the shared adapter without production credentials", async () => {
   const evidence = { desktopUnlocked: true, accessibilityTrusted: true };
@@ -537,6 +538,35 @@ test("aggregate distinguishes deliberate unselection from failure, cancellation,
     assert.throws(() => aggregate(plan, receipts, statuses()));
   assert.throws(() =>
     aggregate(plan, [receipt], { ...statuses(), plan: { result: "failure" } }),
+  );
+});
+
+test("malformed optional evidence is sanitized without waiving the mandatory receipt", async () => {
+  const env = (encodedReceipt) => ({
+    PIPELINE_PLAN: JSON.stringify(plan),
+    PIPELINE_PLAN_DIGEST: digest(plan),
+    PIPELINE_NEEDS: JSON.stringify({
+      ...statuses(),
+      policy: {
+        result: "success",
+        outputs: {
+          receipt: encodedReceipt,
+          evidence: "synthetic private value",
+        },
+      },
+    }),
+  });
+  const args = ["source-evidence", "--workflow", "verify"];
+  assert.deepEqual(
+    await main(args, env(JSON.stringify(encodeActionsReceipt(receipt)))),
+    {
+      created: false,
+      reason: "lane-capture-invalid",
+    },
+  );
+  await assert.rejects(
+    main(args, env("")),
+    /Missing or unexpected lane receipts/,
   );
 });
 

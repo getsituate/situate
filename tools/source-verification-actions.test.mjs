@@ -398,11 +398,15 @@ test("consumer reports a host mismatch only after verifying candidate provenance
   assert.deepEqual(await selectActionsSourceEvidence(root, f.options), {
     action: "execute",
     reason: "host-differs",
+    diagnostics: { candidates: 1, rejected: { "host-differs": 1 } },
   });
-  f.options.verifyAttestation = async () => null;
+  f.options.verifyAttestation = async () => {
+    throw new Error("synthetic private value");
+  };
   assert.deepEqual(await selectActionsSourceEvidence(root, f.options), {
     action: "execute",
     reason: "no-matching-evidence",
+    diagnostics: { candidates: 1, rejected: { "attestation-rejected": 1 } },
   });
 });
 
@@ -827,20 +831,25 @@ test("consumer never trusts failed, forked, raced, altered or incomplete produce
 test("missing artifacts, unavailable APIs and optional digests never invent coverage", async () => {
   const f = fixture();
   f.data.artifacts = [];
-  assert.equal(
-    (await selectActionsSourceEvidence(root, f.options)).action,
-    "execute",
-  );
-  assert.equal(
-    (
-      await selectActionsSourceEvidence(root, {
-        ...f.options,
-        api: async () => {
-          throw new Error("Network unavailable");
-        },
-      })
-    ).action,
-    "execute",
+  f.data.listed = Array(20).fill(f.data.run);
+  assert.deepEqual(await selectActionsSourceEvidence(root, f.options), {
+    action: "execute",
+    reason: "no-matching-evidence",
+    diagnostics: { candidates: 20, rejected: { "artifact-missing": 20 } },
+  });
+  assert.deepEqual(
+    await selectActionsSourceEvidence(root, {
+      ...f.options,
+      api: async () => {
+        throw new Error("synthetic private value");
+      },
+    }),
+    {
+      action: "execute",
+      reason: "evidence-unavailable",
+      stage: "candidate-list-unavailable",
+      diagnostics: { candidates: 0, rejected: {} },
+    },
   );
   const fresh = fixture();
   delete fresh.data.artifacts[0].digest;
@@ -1001,7 +1010,7 @@ test("source reuse requires the named lane step to pass on the shared ARM64 runn
   );
 });
 
-test("publisher writes only a bounded owned artifact after independent job and merge checks", async (t) => {
+function publisherFixture(t) {
   const f = fixture();
   f.data.run.status = "in_progress";
   f.data.run.conclusion = null;
@@ -1039,14 +1048,23 @@ test("publisher writes only a bounded owned artifact after independent job and m
       outputs: { evidence: JSON.stringify(f.measured) },
     },
   };
-  const options = {
-    plan: f.plan,
-    receipts: f.receipts,
-    needs,
-    environment,
-    execute,
-    api: f.api,
+  return {
+    f,
+    temporary,
+    options: {
+      plan: f.plan,
+      receipts: f.receipts,
+      needs,
+      environment,
+      execute,
+      api: f.api,
+    },
   };
+}
+
+test("publisher writes only a bounded owned artifact after independent job and merge checks", async (t) => {
+  const { f, options, temporary } = publisherFixture(t);
+  const { needs, environment, execute } = options;
   for (const rejected of [
     { ...options, environment: { ...environment, GITHUB_JOB: "unrecognized" } },
     { ...options, receipts: [{ ...f.receipts[0], status: "cancelled" }] },
@@ -1073,16 +1091,34 @@ test("publisher writes only a bounded owned artifact after independent job and m
           : execute(command, args, config),
     },
   ]) {
-    assert.equal(await publishSourceVerificationEvidence(root, rejected), null);
+    assert.match(
+      (await publishSourceVerificationEvidence(root, rejected)).reason,
+      /^(publisher-context|receipt-validation|lane-capture-invalid|producer-checkout)$/,
+    );
     assert(!existsSync(join(temporary, "source-verification-2")));
   }
-  const path = await publishSourceVerificationEvidence(root, options);
+  assert.deepEqual(
+    await publishSourceVerificationEvidence(root, {
+      ...options,
+      needs: { ...needs, "macos-native": { result: "success" } },
+    }),
+    { reason: "lane-capture-absent" },
+  );
+  const { path, capturedLanes } = await publishSourceVerificationEvidence(
+    root,
+    options,
+  );
+  assert.equal(capturedLanes, 1);
   assert.equal(path, join(temporary, "source-verification-2/evidence.json"));
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), f.evidence);
-  assert.equal(await publishSourceVerificationEvidence(root, options), null);
+  assert.deepEqual(await publishSourceVerificationEvidence(root, options), {
+    reason: "evidence-storage",
+  });
   needs["macos-native"].result = "failure";
-  assert.equal(await publishSourceVerificationEvidence(root, options), null);
+  assert.deepEqual(await publishSourceVerificationEvidence(root, options), {
+    reason: "lane-job-provenance",
+  });
 });
 
 test("capture measures actual process identity and excludes tokens and ephemeral locations", () => {
