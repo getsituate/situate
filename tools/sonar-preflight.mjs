@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { readPrivateDotenv } from "../client/scripts/private-dotenv.mjs";
 
 const repository = "getsituate/situate";
+const gitExecutable = "/usr/bin/git";
 const base = "refs/remotes/origin/main";
 const originUrls = [
   `git@github.com:${repository}.git`,
@@ -19,6 +20,7 @@ export async function preflight({
   env = process.env,
   cwd = process.cwd(),
   signal,
+  spawnCommand = spawn,
 } = {}) {
   const {
     SONAR_TOKEN: exportedToken,
@@ -26,7 +28,11 @@ export async function preflight({
     ...localEnv
   } = env;
   const git = (...args) =>
-    execFileSync("git", args, { cwd, env: localEnv, encoding: "utf8" }).trim();
+    execFileSync(gitExecutable, args, {
+      cwd,
+      env: localEnv,
+      encoding: "utf8",
+    }).trim();
   const root = git("rev-parse", "--show-toplevel");
   const atRoot = (...args) => git("-C", root, ...args);
   if (!originUrls.includes(atRoot("remote", "get-url", "origin")))
@@ -52,7 +58,7 @@ export async function preflight({
   const run = async (command, args, cwd, childEnv = localEnv) => {
     signal?.throwIfAborted();
     await new Promise((resolve, reject) => {
-      const child = spawn(command, args, {
+      const child = spawnCommand(command, args, {
         cwd,
         env: childEnv,
         stdio: ["ignore", "inherit", "inherit"],
@@ -93,7 +99,7 @@ export async function preflight({
   const { branch, head } = candidate();
   const fetchBase = async () => {
     await run(
-      "git",
+      gitExecutable,
       ["fetch", "--no-tags", "origin", `refs/heads/main:${base}`],
       root,
     );
@@ -173,7 +179,7 @@ export async function preflight({
     );
   console.log("Pushing the checked commit…");
   await run(
-    "git",
+    gitExecutable,
     ["push", "--no-follow-tags", pushUrl, `${head}:refs/heads/${branch}`],
     root,
   );

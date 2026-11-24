@@ -184,7 +184,7 @@ export default function sonarPreflight(pi: ExtensionAPI) {
         const resume = pending;
         pending = undefined;
         async function git(...args: string[]) {
-          const result = await pi.exec("git", args, {
+          const result = await pi.exec("/usr/bin/git", args, {
             cwd: ctx.cwd,
             timeout: 5000,
           });
