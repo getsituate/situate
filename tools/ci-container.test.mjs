@@ -694,6 +694,7 @@ test("verification delegates selected lanes directly from planning without optio
       source,
       /ci-shard|ci-required|apt-get|cargo install|--coverage|--extended|--visual|packages: write/,
     );
+    const arm64Lanes = ["tooling-macos", "macos-code", "macos-native"];
     for (const lane of [
       "policy",
       "tooling",
@@ -707,9 +708,11 @@ test("verification delegates selected lanes directly from planning without optio
       "macos-native",
       "macos-compatibility",
     ]) {
+      const job =
+        name === "verify" && arm64Lanes.includes(lane) ? "macos-arm64" : lane;
       const block = source
-        .split(`  ${lane}:\n`)[1]
-        ?.split(/\n {2}[a-z][a-z-]*:\n/)[0];
+        .split(`  ${job}:\n`)[1]
+        ?.split(/\n {2}[a-z][a-z0-9-]*:\n/)[0];
       assert.ok(block, `${name}: ${lane}`);
       assert.match(block, /needs: plan\n/);
       assert.ok(
@@ -765,18 +768,15 @@ test("verification delegates selected lanes directly from planning without optio
         .filter(Boolean)
         .sort(),
       [
-        ...(name === "verify" ? ["architecture"] : []),
+        ...(name === "verify" ? ["architecture", "macos-arm64"] : arm64Lanes),
         "plan",
         "policy",
         "tooling",
-        "tooling-macos",
         "docker-integration",
         "frontend",
         "rust",
-        "macos-code",
         "browser",
         "browser-webkit",
-        "macos-native",
         "macos-compatibility",
       ].sort(),
     );
