@@ -10,6 +10,7 @@ import { spawn } from "node:child_process";
 import { isAbsolute } from "node:path";
 import { createInterface } from "node:readline";
 import { stripVTControlCharacters } from "node:util";
+import { Type } from "typebox";
 
 function reportUrl(gate: string) {
   const link = gate.match(/https:\/\/sonarcloud\.io\/dashboard\?[^\s]+/)?.[0];
@@ -122,10 +123,66 @@ export default function sonarPreflight(pi: ExtensionAPI) {
         phase: "requested" | "committing" | "ready";
       }
     | undefined;
+  let handoff:
+    | {
+        cwd: string;
+        branch: string;
+        head: string;
+        prompt: string;
+        started: boolean;
+      }
+    | undefined;
   pi.on("session_shutdown", () => {
     pending = undefined;
+    handoff = undefined;
+  });
+  pi.registerTool({
+    name: "retry_pr_preflight",
+    label: "Retry PR preflight",
+    description:
+      "After a local PR check fails, request a fresh SonarCloud preflight for the single local fix commit. Only available during an authorized /pr-open handoff, before publishing.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      if (!handoff?.started || handoff.cwd !== ctx.cwd || pending) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "There is no PR preflight eligible for a retry.",
+            },
+          ],
+          details: {},
+        };
+      }
+      pending = {
+        cwd: handoff.cwd,
+        branch: handoff.branch,
+        head: handoff.head,
+        mode: "open",
+        prompt: handoff.prompt,
+        repairing: true,
+        phase: "committing",
+      };
+      handoff = undefined;
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Pi will verify the fix commit and rerun the preflight before requesting publication.",
+          },
+        ],
+        details: {},
+        terminate: true,
+      };
+    },
   });
   pi.on("before_agent_start", (event, ctx) => {
+    if (
+      handoff?.cwd === ctx.cwd &&
+      event.messageType === "user" &&
+      event.prompt === handoff.prompt
+    )
+      handoff.started = true;
     if (
       pending?.phase === "requested" &&
       pending.cwd === ctx.cwd &&
@@ -135,6 +192,7 @@ export default function sonarPreflight(pi: ExtensionAPI) {
       pending.phase = "committing";
   });
   pi.on("agent_settled", (event, ctx) => {
+    if (handoff?.cwd === ctx.cwd) handoff = undefined;
     if (pending?.phase !== "committing" || pending.cwd !== ctx.cwd) return;
     if (event.aborted) {
       pending = undefined;
@@ -302,13 +360,17 @@ export default function sonarPreflight(pi: ExtensionAPI) {
             );
             return;
           }
-          pi.sendUserMessage(
-            [
-              `SonarCloud preflight passed for commit ${checkedCommit}. Open a pull request in getsituate/situate against main for the current feature branch (${JSON.stringify(candidate.branch)}).`,
-              "Follow the repository PR guidelines. Verify the exact repository, checked commit, branch, and clean worktree before publishing. Review the full diff and history being published, and run any other required PR checks. Do not change the checked commit, push unrelated refs, or rerun /pr-open. If the branch or commit no longer matches, or publication is unsafe, stop and explain why.",
-              "Push only the checked commit to the feature branch and use the GitHub CLI to create the PR. Report the PR URL, or report the existing PR if one is already open for this branch.",
-            ].join("\n\n"),
-          );
+          const prompt = [
+            `SonarCloud preflight passed for commit ${checkedCommit}. Open a pull request in getsituate/situate against main for the current feature branch (${JSON.stringify(candidate.branch)}).`,
+            "Follow the repository PR guidelines. Verify the exact repository, checked commit, branch, and clean worktree. Review the full diff and history and run all required local PR checks before publishing. If the branch or commit no longer matches, or publication is unsafe, stop and explain why. Do not rewrite history, push unrelated refs, or rerun /pr-open yourself.",
+            resume?.repairing
+              ? "If a required local check fails, stop and report it. The automatic repair attempt has already been used."
+              : "If a required local check fails because of a defect in this branch, fix the defect without weakening the check, rerun the failed check, and create exactly one new local commit. Then call retry_pr_preflight before doing anything on GitHub. Do not publish the fix yourself; Pi must scan it first. If the failure cannot be fixed safely, stop and explain why.",
+            "Push only the checked commit to the feature branch and use the GitHub CLI to create the PR. Report the PR URL, or report the existing PR if one is already open for this branch.",
+          ].join("\n\n");
+          if (!resume?.repairing)
+            handoff = { ...candidate, cwd: ctx.cwd, prompt, started: false };
+          pi.sendUserMessage(prompt);
           return;
         }
         if (failedGate && ctx.model) {

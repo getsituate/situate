@@ -17,6 +17,7 @@ const { default: sonarPreflight } = await createJiti(import.meta.url).import(
 function fixture(node) {
   const commands = new Map();
   const events = new Map();
+  const tools = new Map();
   const prompts = [];
   const followUps = [];
   const git = new Map([
@@ -27,6 +28,7 @@ function fixture(node) {
   sonarPreflight({
     registerCommand: (name, { handler }) => commands.set(name, handler),
     on: (name, handler) => events.set(name, handler),
+    registerTool: (tool) => tools.set(tool.name, tool),
     sendUserMessage: (...args) => prompts.push(args),
     sendMessage: (...args) => followUps.push(args),
     async exec(command, args) {
@@ -39,7 +41,7 @@ function fixture(node) {
       return { code: 0, stdout: node };
     },
   });
-  return { commands, events, prompts, git, followUps };
+  return { commands, events, prompts, git, followUps, tools };
 }
 
 test("Pi requires confirmation before starting either preflight command", async () => {
@@ -191,6 +193,76 @@ for (const outcome of ["passes", "wrong commit", "still red", "aborted"]) {
     assert.equal(scans, outcome === "aborted" ? 1 : 2);
     assert.equal(confirmations, 1);
     assert.equal(followUps.length, outcome === "still red" ? 1 : 0);
+  });
+}
+
+for (const outcome of ["fix committed", "unchanged", "aborted"]) {
+  test(`/pr-open rechecks a local PR fix: ${outcome}`, async () => {
+    const { commands, events, prompts, git, tools } = fixture(process.execPath);
+    const original = "a".repeat(40);
+    const fixed = "b".repeat(40);
+    git.set("rev-parse HEAD", original);
+    git.set("log -1 --format=%P", "older-head");
+    let confirmations = 0;
+    let scans = 0;
+    const ctx = {
+      cwd: "/synthetic-worktree",
+      mode: "tui",
+      model: {},
+      isIdle: () => true,
+      ui: {
+        confirm: async () => {
+          confirmations++;
+          return true;
+        },
+        notify() {},
+        custom: async () => ({
+          message: "Gate passed",
+          level: "info",
+          checkedCommit: scans++ === 0 ? original : fixed,
+        }),
+      },
+    };
+    const retry = () =>
+      tools
+        .get("retry_pr_preflight")
+        .execute("id", {}, undefined, undefined, ctx);
+    assert.equal((await retry()).terminate, undefined);
+    await commands.get("pr-open")("", ctx);
+    assert.match(prompts[0][0], /rerun the failed check/);
+    assert.equal((await retry()).terminate, undefined);
+    events.get("before_agent_start")(
+      { messageType: "user", prompt: prompts[0][0] },
+      ctx,
+    );
+    if (outcome !== "unchanged") {
+      git.set("rev-parse HEAD", fixed);
+      git.set("log -1 --format=%P", original);
+    }
+    assert.equal((await retry()).terminate, true);
+    events.get("agent_settled")({ aborted: outcome === "aborted" }, ctx);
+    if (outcome !== "aborted") {
+      assert.deepEqual(prompts[1], [
+        "/pr-open",
+        { expandPromptTemplates: true },
+      ]);
+      await commands.get("pr-open")("", ctx);
+    }
+    assert.equal(confirmations, 1);
+    assert.equal(scans, outcome === "fix committed" ? 2 : 1);
+    assert.equal(
+      prompts.length,
+      outcome === "fix committed" ? 3 : outcome === "aborted" ? 1 : 2,
+    );
+    if (outcome === "fix committed") {
+      assert.ok(prompts[2][0].includes(fixed));
+      assert.match(prompts[2][0], /repair attempt has already been used/);
+      events.get("before_agent_start")(
+        { messageType: "user", prompt: prompts[2][0] },
+        ctx,
+      );
+      assert.equal((await retry()).terminate, undefined);
+    }
   });
 }
 
