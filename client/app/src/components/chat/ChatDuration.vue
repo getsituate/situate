@@ -4,7 +4,7 @@ import type { WorkBlock } from "../../ai/work-blocks";
 
 defineProps<{
   durationMs?: number;
-  outcome: WorkBlock["outcome"];
+  outcome: WorkBlock["outcome"] | "active";
   inline?: boolean;
 }>();
 function duration(milliseconds: number) {
@@ -26,14 +26,18 @@ function duration(milliseconds: number) {
       durationMs !== undefined && Number.isFinite(durationMs) && durationMs >= 0
     "
     class="duration"
+    :role="outcome === 'active' ? 'timer' : undefined"
+    :aria-live="outcome === 'active' ? 'off' : undefined"
   >
     {{
       t(
-        outcome === "cancelled"
-          ? "chat.workStopped"
-          : outcome === "error" || outcome === "interrupted"
-            ? "chat.workFailed"
-            : "chat.workDuration",
+        outcome === "active"
+          ? "chat.workInProgress"
+          : outcome === "cancelled"
+            ? "chat.workStopped"
+            : outcome === "error" || outcome === "interrupted"
+              ? "chat.workFailed"
+              : "chat.workDuration",
         { duration: duration(durationMs) },
       )
     }}
@@ -46,5 +50,8 @@ function duration(milliseconds: number) {
   color: var(--situate-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.duration[role="timer"] {
+  font-variant-numeric: tabular-nums;
 }
 </style>

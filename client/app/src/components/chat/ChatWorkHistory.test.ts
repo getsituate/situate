@@ -119,15 +119,16 @@ test("retains deliberate inspection and timer across updates, then freezes at re
       },
     },
   });
-  expect(view.get('[role="timer"]').text()).toBe("0:00");
-  expect(view.get('[role="timer"]').attributes("aria-live")).toBe("off");
+  const timer = view.get('.work-history-toggle [role="timer"]');
+  expect(timer.text()).toContain("chat.durationLessThanSecond");
+  expect(timer.attributes("aria-live")).toBe("off");
   expect(
     view
       .findAll<HTMLElement>(".history-segment")
       .map((segment) => segment.element.hidden),
   ).toEqual([true, false]);
   await vi.advanceTimersByTimeAsync(3000);
-  expect(view.get('[role="timer"]').text()).toBe("0:03");
+  expect(timer.text()).toContain("chat.durationSeconds");
   await view.get(".work-history-toggle").trigger("click");
   await view.setProps({
     running: false,
@@ -185,7 +186,7 @@ test("unknown interruption durations render an outcome without an invented time"
     },
   });
   expect(view.get(".duration").text()).toBe("⟦chat.interrupted⟧");
-  expect(view.find(".work-history-clock, .work-history-toggle").exists()).toBe(
+  expect(view.find('[role="timer"], .work-history-toggle').exists()).toBe(
     false,
   );
 });

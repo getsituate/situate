@@ -723,23 +723,15 @@ test("the session clock survives navigation and stops without an extra interrupt
   await page
     .getByRole("button", { name: t("navigation.sendMessage"), exact: true })
     .click();
-  const timer = page.getByRole("timer", { name: t("chat.elapsedWorkTime") });
-  await expect(timer).toBeVisible();
-  const before = await timer.innerText();
+  const timer = page.getByRole("timer");
+  await expect(timer).toHaveText(/^Working for (?:less than 1 sec|\d+ sec)$/u);
   await page
     .getByRole("button", { name: t("navigation.files"), exact: true })
     .click();
   await expect(timer).toHaveCount(0);
-  await page.clock.fastForward(3000);
+  await page.clock.fastForward(63000);
   await page.locator(".conversation-title").first().click();
-  await expect(timer).toBeVisible();
-  await expect
-    .poll(async () => {
-      const time = (await timer.innerText()).split(":").map(Number);
-      const previous = before.split(":").map(Number);
-      return time[0] * 60 + time[1] - previous[0] * 60 - previous[1];
-    })
-    .toBeGreaterThanOrEqual(3);
+  await expect(timer).toHaveText(/^Working for 1 min \d+ sec$/u);
   await message.fill("Keep my draft");
   await page
     .getByRole("button", { name: t("navigation.stopResponse"), exact: true })

@@ -7,7 +7,6 @@ import type { ContentReference } from "../../files/content-reference";
 import {
   historySections,
   isHistoryDetail,
-  elapsedClock,
   type HistoryPeriod,
 } from "./work-history";
 import ChatDuration from "./ChatDuration.vue";
@@ -31,11 +30,11 @@ const targets = computed(() =>
 const now = ref(performance.now());
 let timer: ReturnType<typeof setInterval> | undefined;
 watch(
-  () => props.period.active?.startedAt,
-  (startedAt) => {
+  () => props.period.active?.id,
+  (id) => {
     clearInterval(timer);
     now.value = performance.now();
-    if (startedAt !== undefined)
+    if (id !== undefined)
       timer = setInterval(() => {
         now.value = performance.now();
       }, 1000);
@@ -44,10 +43,12 @@ watch(
 );
 onBeforeUnmount(() => clearInterval(timer));
 const elapsed = computed(() =>
-  elapsedClock(
-    Math.max(now.value, performance.now()) -
-      (props.period.active?.startedAt ?? now.value),
-  ),
+  props.period.active
+    ? Math.max(
+        0,
+        Math.max(now.value, performance.now()) - props.period.active.startedAt,
+      )
+    : undefined,
 );
 </script>
 <template>
@@ -65,14 +66,17 @@ const elapsed = computed(() =>
         :data-chat-disclosure="targets.length ? '' : undefined"
         :aria-expanded="targets.length ? expanded : undefined"
         :aria-controls="targets.length ? targets.join(' ') : undefined"
+        :aria-labelledby="
+          targets.length && period.active ? `${id}-elapsed` : undefined
+        "
         @click="expanded = !expanded"
       >
-        <span v-if="period.active">{{ t("chat.workingLabel") }}</span>
         <ChatDuration
-          v-else-if="period.durationMs !== undefined"
+          v-if="elapsed !== undefined || period.durationMs !== undefined"
+          :id="period.active ? `${id}-elapsed` : undefined"
           inline
-          :duration-ms="period.durationMs"
-          :outcome="period.outcome ?? 'complete'"
+          :duration-ms="elapsed ?? period.durationMs"
+          :outcome="period.active ? 'active' : (period.outcome ?? 'complete')"
         />
         <span v-else>{{
           period.outcome === "cancelled"
@@ -87,15 +91,6 @@ const elapsed = computed(() =>
           :class="{ expanded }"
         />
       </component>
-      <span
-        v-if="period.active"
-        class="work-history-clock"
-        role="timer"
-        aria-live="off"
-        :aria-label="t('chat.elapsedWorkTime')"
-        data-localization-content="formatted"
-        >{{ elapsed }}</span
-      >
     </div>
     <div
       v-for="segment in sections.segments"
@@ -125,10 +120,6 @@ const elapsed = computed(() =>
   margin: 0 0 6px;
 }
 .work-history-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 16px;
   border-bottom: 1px solid var(--situate-line);
 }
 .work-history-toggle,
@@ -166,13 +157,6 @@ const elapsed = computed(() =>
 .work-history-toggle:focus-visible {
   outline: var(--situate-stroke-focus) solid var(--situate-cobalt);
   outline-offset: var(--situate-focus-offset);
-}
-.work-history-clock {
-  flex-basis: 100%;
-  margin: -2px 0 10px;
-  color: var(--situate-muted);
-  font: 13px/20px var(--situate-font-body);
-  font-variant-numeric: tabular-nums;
 }
 .history-segment {
   min-width: 0;

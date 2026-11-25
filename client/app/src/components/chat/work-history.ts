@@ -294,10 +294,3 @@ export function conversationHistory(
   );
   return output;
 }
-export function elapsedClock(milliseconds: number): string {
-  const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
-  const minutes = Math.floor(seconds / 60);
-  return minutes < 60
-    ? `${minutes}:${String(seconds % 60).padStart(2, "0")}`
-    : `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}

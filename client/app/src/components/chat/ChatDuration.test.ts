@@ -6,6 +6,10 @@ import ChatDuration from "./ChatDuration.vue";
 
 enableAutoUnmount(afterEach);
 test.each([
+  ["en", 0, "active", "Working for less than 1 sec"],
+  ["en", 59999, "active", "Working for 59 sec"],
+  ["en", 60000, "active", "Working for 1 min 0 sec"],
+  ["de", 84000, "active", "Seit 1 Min. 24 Sek. in Arbeit"],
   ["en", 0, "complete", "Worked for less than 1 sec"],
   ["en", 999, "complete", "Worked for less than 1 sec"],
   ["en", 59999, "complete", "Worked for 59 sec"],
