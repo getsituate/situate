@@ -5,6 +5,9 @@ import ChatSystemAnnouncement from "./ChatSystemAnnouncement.vue";
 import type { PluginNotice } from "../../ai/plugin-notices";
 import type { AssistantMessage } from "../../ai/contracts";
 
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+
 function response(text: string): AssistantMessage {
   return {
     role: "assistant",
@@ -142,6 +145,74 @@ test("imported files open their original references and stay outside activity", 
   expect(openReference).toHaveBeenCalledExactlyOnceWith(files.at(-1));
   await wrapper.setProps({ scope: "unrelated" });
   expect(wrapper.find(".imported-files").exists()).toBe(false);
+});
+
+test("opens only activated web links and reports a failed handoff", async () => {
+  const wrapper = transcript();
+  const userUrl = "https://example.org/wiki/Page_(web)";
+  const assistantUrl = "http://example.org/docs?q=chat#links";
+  const userText = `**See** (${userUrl}). Invalid: https://[bad]`;
+  await wrapper.setProps({
+    messages: [
+      { role: "user", content: userText, timestamp: 1 },
+      response(
+        `[Reference](${assistantUrl}) [Local](file:///tmp/report.pdf) [Private](https://user:pass@example.org)`,
+      ),
+    ],
+  });
+  const user = wrapper.get(".message.user p");
+  const assistant = wrapper.get(".message.assistant");
+  expect(user.text()).toBe(userText);
+  expect(user.findAll("a").map((link) => link.attributes("href"))).toEqual([
+    userUrl,
+  ]);
+  expect(assistant.text()).toContain("Local");
+  expect(assistant.findAll("a").map((link) => link.attributes("href"))).toEqual(
+    [assistantUrl],
+  );
+  expect(invoke).not.toHaveBeenCalled();
+
+  await user.get("span").trigger("click");
+  await user.get("a").trigger("auxclick", { button: 2 });
+  expect(invoke).not.toHaveBeenCalled();
+
+  invoke
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new Error("open failed"));
+  const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+  user.get("a").element.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(true);
+  expect(invoke).toHaveBeenCalledExactlyOnceWith("open_web_link", {
+    href: userUrl,
+  });
+
+  const showModal = vi
+    .spyOn(HTMLDialogElement.prototype, "showModal")
+    .mockImplementation(function (this: HTMLDialogElement) {
+      this.open = true;
+    });
+  const close = vi
+    .spyOn(HTMLDialogElement.prototype, "close")
+    .mockImplementation(function (this: HTMLDialogElement) {
+      this.open = false;
+    });
+  try {
+    await assistant.get("a").trigger("click");
+    await flushPromises();
+    expect(invoke).toHaveBeenLastCalledWith("open_web_link", {
+      href: assistantUrl,
+    });
+    const dialog = wrapper.get("dialog");
+    expect(dialog.get('[role="alert"]').text()).toBe(
+      "⟦native.files.external.openFailed⟧",
+    );
+    await dialog.get("button").trigger("click");
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(user.get("a").attributes("href")).toBe(userUrl);
+  } finally {
+    showModal.mockRestore();
+    close.mockRestore();
+  }
 });
 
 test("an empty conversation retains only its silent live region", () => {
