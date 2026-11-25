@@ -23,12 +23,17 @@ import childProcess from "node:child_process";
 import { copyFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { isAbsolute, join } from "node:path";
+import timers from "node:timers/promises";
+let calls = 0;
+timers.setTimeout = async () => {};
 childProcess.spawnSync = (command, args) => {
   assert(isAbsolute(command));
   assert.deepEqual(args.slice(0, -1), [
     "run", "download", "123", "--repo", "getsituate/situate",
     "--name", "windows-reservation-2", "--dir",
   ]);
+  if (++calls === 1)
+    return { status: 1, stderr: "no artifact matches any of the names or patterns provided" };
   for (const name of ["reservation.json", "release-inputs.json", "situate-release-history.json"])
     copyFileSync(join(process.env.MOCK_INPUTS, name), join(args.at(-1), name));
   return { status: 0 };

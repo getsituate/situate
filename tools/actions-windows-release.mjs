@@ -67,7 +67,9 @@ async function download(name) {
     if (result.status === 0) return path;
     rmSync(path, { recursive: true, force: true });
     if (
-      !/no artifacts found|no valid artifacts found/iu.test(result.stderr ?? "")
+      !/no (?:valid )?artifacts? (?:found|matches any of the names or patterns provided)/iu.test(
+        result.stderr ?? "",
+      )
     )
       throw new Error(`Could not download ${artifact}.`);
     await setTimeout(15_000);
