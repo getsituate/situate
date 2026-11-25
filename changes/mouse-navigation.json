@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "mouse-navigation",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "mouse-navigation",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Navigate with your mouse",
+          "paragraphs": [
+            "Use your mouse’s Back and Forward buttons to move through the focused pane’s history. Middle-click a conversation to open it in a new tab and switch to it, or right-click it to open its menu. Middle-click a tab to close it."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "mouse-navigation",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Mit der Maus navigieren",
+          "paragraphs": [
+            "Mit den Maustasten für Zurück und Vorwärts wechselst du zwischen den letzten Ansichten im aktiven Bereich. Ein Mittelklick auf ein Gespräch öffnet es in einem neuen Tab und wechselt dorthin. Ein Rechtsklick öffnet das Gesprächsmenü. Mit einem Mittelklick auf einen Tab schließt du ihn."
+          ]
+        }
+      ]
+    }
+  }
+}

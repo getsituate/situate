@@ -356,6 +356,15 @@ describe("workspace layout rendering", () => {
       "false",
     );
   });
+  it("keeps the current pane selected when a history button is pressed over another pane", async () => {
+    const wrapper = render();
+    const other = wrapper.get('[aria-label="Body C"]');
+    await pointer(other.element, "pointerdown", { button: 3 });
+    expect(wrapper.props("state").tabs[0]!.activePaneId).toBe("A");
+    await pointer(other.element, "pointerdown", { button: 0 });
+    expect(wrapper.props("state").tabs[0]!.activePaneId).toBe("C");
+  });
+
   it("shows the tab overview only when the strip overflows, not when a title is clipped", async () => {
     const wrapper = render();
     await flushPromises();
@@ -587,6 +596,33 @@ describe("workspace layout rendering", () => {
     await flushPromises();
     expect(document.activeElement).toBe(wrapper.get('[role="tab"]').element);
   });
+  it.each([false, true])(
+    "middle-click closes the addressed tab and retains its history (compact: %s)",
+    async (compact) => {
+      const state = fixture(false);
+      const other = { ...state.tabs[0]!, id: "other", name: "Other" };
+      const wrapper = render(
+        {
+          ...state,
+          tabs: [...state.tabs, other],
+          activeTabId: compact ? "other" : "topic",
+        },
+        compact,
+      );
+      const target = wrapper.get(
+        compact
+          ? ".mobile-tab-trigger"
+          : ".topic-tab:not(.selected) [role=tab]",
+      );
+      await target.trigger("mousedown", { button: 1 });
+      await flushPromises();
+      const updated = wrapper.props("state");
+      expect(updated.tabs.map(({ id }) => id)).toEqual(["topic"]);
+      expect(updated.activeTabId).toBe("topic");
+      expect(updated.closedTabs).toEqual([{ tab: other, index: 1 }]);
+    },
+  );
+
   it("offers bulk closing and skips unavailable actions in menu keyboard navigation", async () => {
     const state = fixture(false);
     const wrapper = render({

@@ -73,6 +73,11 @@ test("archives and restores a conversation without closing the other entries", a
   ).toBe("Garden");
   expect(archive.find(".quick-archive").exists()).toBe(false);
   archive.element.open = true;
+  await archive
+    .get(".conversation-destination")
+    .trigger("mousedown", { button: 1 });
+  expect(wrapper.emitted("conversationInNewTab")).toEqual([["garden"]]);
+  expect(wrapper.emitted("conversation")).toBeUndefined();
   await archive.get(".conversation-actions").trigger("click");
   await flushPromises();
   const restore = [
@@ -92,6 +97,38 @@ test("archives and restores a conversation without closing the other entries", a
   ).toBe("Garden");
 });
 
+test.each([
+  { clientX: 0, clientY: 0, popover: "auto" },
+  { clientX: 24, clientY: 36, popover: "manual" },
+  { clientX: 0, clientY: 36, popover: "manual" },
+])(
+  "opens and dismisses the conversation context menu at ($clientX, $clientY)",
+  async ({ clientX, clientY, popover }) => {
+    const wrapper = render();
+    const actions = wrapper.get(".conversation-actions").element;
+    vi.spyOn(actions, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(40, 40, 44, 44),
+    );
+    const item = wrapper.get(".conversation-destination");
+    await item.trigger("contextmenu", { clientX, clientY });
+    await flushPromises();
+
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+    expect(menu.getAttribute("popover")).toBe(popover);
+    expect(menu.matches(":popover-open")).toBe(true);
+    expect(document.activeElement?.textContent?.trim()).toBe(
+      "⟦chat.renameConversation⟧",
+    );
+    expect(wrapper.emitted("open")).toBeUndefined();
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await flushPromises();
+    expect(menu.matches(":popover-open")).toBe(false);
+    expect(document.activeElement).toBe(actions);
+  },
+);
+
 test("keeps the row in place on archive failure and allows retry", async () => {
   let reject!: (error: Error) => void;
   setArchived.mockImplementationOnce(
@@ -106,6 +143,12 @@ test("keeps the row in place on archive failure and allows retry", async () => {
   const shortcut = wrapper.get(".quick-archive");
   await shortcut.trigger("click");
   await shortcut.trigger("click");
+  await wrapper
+    .get(".conversation-destination")
+    .trigger("contextmenu", { clientX: 24 });
+  expect(wrapper.get(".conversation-actions").attributes("aria-expanded")).toBe(
+    "false",
+  );
   expect(setArchived).toHaveBeenCalledTimes(1);
   expect(announceArchiveChange).not.toHaveBeenCalled();
   reject(new Error("Storage unavailable"));
@@ -265,6 +308,17 @@ test("edits one line with no visible label and saves with Enter", async () => {
     wrapper.get(".conversation-actions").element,
   );
 });
+test("does not open the conversation menu while editing the title", async () => {
+  const wrapper = render();
+  await edit(wrapper);
+  const field = wrapper.get<HTMLInputElement>("input");
+  await field.setValue("New title");
+  await field.trigger("contextmenu", { clientX: 24 });
+  expect(field.element.value).toBe("New title");
+  expect(document.activeElement).toBe(field.element);
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+});
+
 test("Escape cancels without saving and empty titles cannot be submitted", async () => {
   const wrapper = render();
   await edit(wrapper);

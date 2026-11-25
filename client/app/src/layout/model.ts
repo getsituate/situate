@@ -128,7 +128,7 @@ export interface PaneAddress {
 }
 
 export type LayoutIntent =
-  | { readonly type: "new-tab" }
+  | { readonly type: "new-tab"; readonly conversationId?: string }
   | { readonly type: "select-tab"; readonly tabId: string }
   | {
       readonly type: "rename-tab";
@@ -398,7 +398,13 @@ export function reduceLayout(
   if (layoutLimit(state, intent)) return state;
   switch (intent.type) {
     case "new-tab":
-      return addTab(state, { kind: "empty" }, nextId);
+      return addTab(
+        state,
+        intent.conversationId === undefined
+          ? { kind: "empty" }
+          : { kind: "conversation", conversationId: intent.conversationId },
+        nextId,
+      );
     case "select-tab":
       return state.tabs.some((tab) => tab.id === intent.tabId) &&
         state.activeTabId !== intent.tabId

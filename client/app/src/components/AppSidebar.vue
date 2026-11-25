@@ -52,6 +52,7 @@ const emit = defineEmits<{
   connect: [];
   plugins: [];
   conversation: [id: string];
+  conversationInNewTab: [id: string];
   newConversation: [];
   view: [id: string];
   pin: [id: string];
@@ -433,6 +434,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
               :selected="selectedConversation === item.id"
               :running="!!conversationRunning?.(item.id)"
               @open="emit('conversation', item.id)"
+              @open-in-new-tab="emit('conversationInNewTab', item.id)"
               :announce-archive-change="archiveChanged"
             />
           </li>
@@ -461,6 +463,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
                 :selected="selectedConversation === item.id"
                 :running="!!conversationRunning?.(item.id)"
                 @open="emit('conversation', item.id)"
+                @open-in-new-tab="emit('conversationInNewTab', item.id)"
                 :announce-archive-change="archiveChanged"
               />
             </li>

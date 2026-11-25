@@ -60,7 +60,7 @@ function activate() {
     :data-pane="pane.id"
     :aria-label="t('layoutUi.namedPane', { title })"
     @focusin="activate"
-    @pointerdown="activate"
+    @pointerdown="$event.button < 3 && activate()"
   >
     <header v-if="!compact" class="pane-toolbar">
       <SituateButton

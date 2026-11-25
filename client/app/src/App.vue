@@ -872,6 +872,13 @@ onMounted(async () => {
     unlistenQuit = stopQuit;
     for (const [name, callback, subscribe = listenInWindow] of [
       [
+        "mouse-history",
+        (direction: string) => {
+          if (direction === "back" || direction === "forward")
+            appShell.value?.mouseHistory(direction === "back" ? -1 : 1);
+        },
+      ],
+      [
         "ai-models-changed",
         (scope: string) => {
           const active = state.value?.current?.id;

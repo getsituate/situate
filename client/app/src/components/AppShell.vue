@@ -426,14 +426,31 @@ function back(): boolean {
     showWorkspaces();
     return true;
   }
+  return stepHistory(-1);
+}
+function stepHistory(delta: -1 | 1): boolean {
   const tab = activeTab.value;
   const pane = tab?.panes.find((item) => item.id === tab.activePaneId);
-  if (tab && pane && pane.navigation.cursor > 0) {
-    intent({ type: "history", tabId: tab.id, paneId: pane.id, delta: -1 });
-    void focusView();
-    return true;
-  }
-  return false;
+  if (!tab || !pane) return false;
+  const { cursor, entries } = pane.navigation;
+  if (!entries[cursor + delta]) return false;
+  intent({ type: "history", tabId: tab.id, paneId: pane.id, delta });
+  void focusView();
+  return true;
+}
+function hasOpenOverlay(): boolean {
+  return !!window.document.querySelector(
+    'dialog[open], [popover]:popover-open:not([role="tooltip"])',
+  );
+}
+function mouseHistory(delta: -1 | 1) {
+  if (layout.value && !hasOpenOverlay()) stepHistory(delta);
+}
+function handleMouseHistory(event: MouseEvent) {
+  if (event.defaultPrevented || (event.button !== 3 && event.button !== 4))
+    return;
+  event.preventDefault();
+  mouseHistory(event.button === 3 ? -1 : 1);
 }
 let navigationFocusPending = false;
 function focusNavigation(): void {
@@ -471,6 +488,7 @@ async function revealConversation(conversationId: string): Promise<void> {
 }
 defineExpose({
   back,
+  mouseHistory,
   focusNavigation,
   showPlugins,
   showUpdates,
@@ -506,12 +524,7 @@ function handleShortcut(event: KeyboardEvent) {
     (item) => item.keys === keys,
   );
   if (!entry || event.target instanceof HTMLSelectElement) return;
-  if (
-    window.document.querySelector(
-      'dialog[open], [popover]:popover-open:not([role="tooltip"])',
-    )
-  )
-    return;
+  if (hasOpenOverlay()) return;
   event.preventDefault();
   if (event.repeat) return;
   if (typeof entry.action === "function") {
@@ -524,11 +537,13 @@ function handleShortcut(event: KeyboardEvent) {
 onMounted(() => {
   media.addEventListener("change", updateLayout);
   window.addEventListener("keydown", handleShortcut);
+  window.addEventListener("mouseup", handleMouseHistory);
 });
 onBeforeUnmount(() => {
   ++workspaceGeneration;
   media.removeEventListener("change", updateLayout);
   window.removeEventListener("keydown", handleShortcut);
+  window.removeEventListener("mouseup", handleMouseHistory);
   closeNavigation();
 });
 const sidebar = computed(() => ({
@@ -559,9 +574,22 @@ const sidebar = computed(() => ({
   activeView:
     activeTarget.value?.kind === "view" ? activeTarget.value.viewId : undefined,
 }));
+async function conversationInNewTab(id: string) {
+  const surface = layout.value;
+  const result = await surface?.openConversationInTab(id);
+  if (
+    surface === layout.value &&
+    result?.status === "applied" &&
+    navigationOpen.value
+  ) {
+    closeNavigation();
+    await focusView();
+  }
+}
 const sidebarActions = {
   conversation: (id: string) =>
     open({ kind: "conversation", conversationId: id }),
+  conversationInNewTab,
   newConversation: () => newConversation(),
   files: () => open({ kind: "view", viewId: "files" }),
   view: (id: string) => open({ kind: "view", viewId: id }),

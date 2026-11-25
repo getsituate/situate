@@ -97,6 +97,7 @@ describe("layout limits and Files memory", () => {
     expect(app.state.tabs).toHaveLength(20);
     const full = app.state;
     expect(app.send({ type: "new-tab" })).toBe(full);
+    expect(app.send({ type: "new-tab", conversationId: "chat-1" })).toBe(full);
     expect(app.send({ type: "reopen-tab" })).toBe(full);
     expect(app.state.closedTabs[0]?.tab.id).toBe(closedId);
     app.send({ type: "close-tab", tabId: app.active.id });

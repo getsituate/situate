@@ -1040,6 +1040,32 @@ describe("visual viewport", () => {
   });
 });
 
+it("routes native mouse history signals to the displayed workspace", async () => {
+  const wrapper = mount(App, { attachTo: document.body });
+  await settleViews();
+  await wrapper.get(".open-navigation").trigger("click");
+  await wrapper.get(".settings-action").trigger("click");
+  await settleViews();
+  expect(wrapper.find(".settings-view").exists()).toBe(true);
+
+  const subscription = vi
+    .mocked(listen)
+    .mock.calls.find(([event]) => event === "mouse-history");
+  expect(subscription?.[2]?.target).toBe("workspace-test");
+  async function signal(payload: string) {
+    subscription![1]({ event: "mouse-history", id: 1, payload });
+    await settleViews();
+  }
+
+  await signal("unknown");
+  expect(wrapper.find(".settings-view").exists()).toBe(true);
+  await signal("back");
+  expect(wrapper.find(".view-chooser").exists()).toBe(true);
+  await signal("forward");
+  expect(wrapper.find(".settings-view").exists()).toBe(true);
+  expect(action).not.toHaveBeenCalled();
+});
+
 describe("Android Back", () => {
   it("dismisses supplementary popovers and ignores their retained closed surfaces", async () => {
     mount(App, { attachTo: document.body });

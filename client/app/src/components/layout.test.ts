@@ -265,6 +265,74 @@ describe("workspace view host", () => {
     await settleViews();
     return wrapper.getComponent(managementStub);
   }
+  it("handles side buttons only when another control is not handling the input", async () => {
+    const wrapper = await mountHost();
+    await openNavigation(wrapper);
+    await wrapper.get(".settings-action").trigger("click");
+    await settleViews();
+    const shell = wrapper.get(".app-shell").element;
+    async function release(button: number, prevented = false) {
+      const event = new MouseEvent("mouseup", {
+        button,
+        bubbles: true,
+        cancelable: true,
+      });
+      if (prevented) event.preventDefault();
+      shell.dispatchEvent(event);
+      await settleViews();
+      return event.defaultPrevented;
+    }
+    const inSettings = () => wrapper.find(".settings-view").exists();
+    expect(inSettings()).toBe(true);
+    expect(await release(1)).toBe(false);
+    await release(3, true);
+    expect(inSettings()).toBe(true);
+
+    await openNavigation(wrapper);
+    expect(await release(3)).toBe(true);
+    expect(inSettings()).toBe(true);
+    expect(
+      wrapper.get<HTMLDialogElement>(".navigation-drawer").element.open,
+    ).toBe(true);
+    await wrapper.get(".navigation-drawer").trigger("cancel");
+    await release(3);
+    expect(wrapper.get(".document-location h3").text()).toBe("Garden.md");
+    await release(4);
+    expect(inSettings()).toBe(true);
+  });
+
+  it.each([true, false])(
+    "middle-click selects the new conversation tab and gives it focus (wide: %s)",
+    async (wide) => {
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn(() => ({
+          matches: wide,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        })),
+      );
+      const wrapper = await mountHost();
+      if (!wide) await openNavigation(wrapper);
+      const conversation = wrapper.get(".conversation-destination");
+      expect(conversation.text()).toContain("Garden chat");
+      await conversation.trigger("mousedown", { button: 1 });
+      await settleViews();
+      const tabs = wrapper.findAll('[role="tab"]');
+      expect(tabs).toHaveLength(2);
+      expect(tabs[0]!.attributes("aria-selected")).toBe("false");
+      expect(tabs[1]!.attributes("aria-selected")).toBe("true");
+      expect(document.activeElement).toBe(tabs[1]!.element);
+      expect(wrapper.getComponent(ChatPane).props("conversationId")).toBe(
+        "legacy",
+      );
+      if (!wide)
+        expect(
+          wrapper.get<HTMLDialogElement>(".navigation-drawer").element.open,
+        ).toBe(false);
+    },
+  );
+
   it("dispatches desktop shortcuts once and keeps native form controls and modal dialogs in charge of their keys", async () => {
     const agent = vi
       .spyOn(navigator, "userAgent", "get")

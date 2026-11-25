@@ -561,6 +561,8 @@ watch(
 defineExpose({
   back,
   focusPaneHeader,
+  openConversationInTab: (conversationId: string) =>
+    runLayoutAction({ type: "create-tab", conversationId }, "sidebar"),
   runShortcut: (action: LayoutAction) => runLayoutAction(action, "keyboard"),
   runPluginAction: (action: LayoutAction, isCurrent: () => boolean) =>
     runLayoutAction(action, "plugin", isCurrent),
@@ -599,6 +601,7 @@ defineExpose({
             role="presentation"
             class="topic-tab"
             :class="{ selected: state.activeTabId === item.id }"
+            @mousedown.middle.prevent="closeTab(item.id)"
           >
             <SituateButton
               variant="plain"
@@ -668,6 +671,7 @@ defineExpose({
           :aria-haspopup="multipleTabs ? 'dialog' : undefined"
           :title="t('layoutUi.title', { title: tabName(tab) })"
           @click="multipleTabs ? open('all', $event) : selectTab(tab.id)"
+          @mousedown.middle.prevent="closeTab(tab.id)"
         >
           <span
             :id="`${instanceId}-mobile-active-tab`"
