@@ -1,0 +1,4 @@
+# Weekend plans
+
+- [ ] Pick up bread
+- [x] Reserve the picnic spot

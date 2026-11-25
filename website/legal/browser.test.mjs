@@ -106,9 +106,15 @@ export function checkLegal(directory = process.argv[2]) {
               .locator('.header nav:visible a[href="/product.html"]')
               .isVisible(),
           );
+          assert.ok(
+            await page
+              .locator('.header nav:visible a[href="/principles.html"]')
+              .isVisible(),
+          );
           assert.equal(
             await page
-              .getByRole("link", { name: "GitHub", exact: true })
+              .locator(".site-footer")
+              .getByRole("link", { name: "Source code", exact: true })
               .getAttribute("href"),
             "https://github.com/getsituate/situate",
           );

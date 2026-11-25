@@ -3,10 +3,11 @@ export const repositoryUrl = "https://github.com/getsituate/situate";
 export const menuLinks = [
   { href: "/", key: "nav.index" },
   { href: "/product.html", key: "nav.product" },
-  { href: repositoryUrl, key: "nav.github" },
+  { href: "/principles.html", key: "nav.principles" },
 ];
 
 const projectLinks = [
+  { href: "/principles.html", key: "nav.principles" },
   { href: repositoryUrl, key: "footer.source" },
   { href: `${repositoryUrl}/issues`, key: "footer.issue" },
   { href: `${repositoryUrl}#contributing`, key: "footer.contribute" },
@@ -75,7 +76,7 @@ export function renderFooter(messages, { pathname = "/" } = {}) {
   <div><a class="wordmark" href="/" aria-label="${text("nav.home")}"><img src="/design/brand/assets/wordmark.svg" width="140" height="44" alt="${text("brand")}"></a><p>${text("footer.line")}</p></div>
   <nav aria-labelledby="footer-project">
     <h2 id="footer-project">${text("footer.project")}</h2>
-    ${projectLinks.map(({ href, key }) => `<a href="${href}">${text(key)}</a>`).join("\n    ")}
+    ${projectLinks.map(({ href, key }) => `<a href="${href}"${pathname === href ? ' aria-current="page"' : ""}>${text(key)}</a>`).join("\n    ")}
   </nav>
   <nav aria-labelledby="footer-legal">
     <h2 id="footer-legal">${text("footer.navigation")}</h2>

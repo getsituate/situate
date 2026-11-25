@@ -530,11 +530,13 @@
   max-width: 610px;
   font-size: 18px;
 }
-.open-copy p + h3 {
-  margin-top: 32px;
-}
 .open-copy .subtle-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   margin-top: 8px;
+  font-size: 15px;
+  text-decoration: underline;
 }
 .open-art {
   position: relative;

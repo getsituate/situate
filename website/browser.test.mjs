@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { createBuildServer, createPreviewServer } from "./site.mjs";
 import { checkWaitlist } from "./waitlist.browser.test.mjs";
 import { checkProduct } from "./product.browser.test.mjs";
+import { checkPrinciples } from "./principles.browser.test.mjs";
 import { checkDownload } from "./download.browser.test.mjs";
 import { checkAnalytics } from "./analytics.browser.mjs";
 import { checkLegal } from "./legal/browser.test.mjs";
@@ -148,19 +149,17 @@ test("Website layout, navigation and interactions", async () => {
       [
         "Your files. On your device.",
         "Tools that work your way.",
-        "Open formats. No lock-in.",
+        "Your work stays yours.",
       ],
     );
     assert.match(await overview.innerText(), /without internet or AI/);
     assert.match(await overview.innerText(), /Ask Situate to adapt/);
-    assert.match(await overview.innerText(), /not tied to Situate/);
-    assert.match(
-      await overview.innerText(),
-      /take your files to another app whenever you want/,
-    );
+    assert.match(await overview.innerText(), /No export needed/);
     assert.equal(
-      await overview.getByRole("link").getAttribute("href"),
-      "/product.html",
+      await overview
+        .getByRole("link", { name: "Read our principles" })
+        .getAttribute("href"),
+      "/principles.html",
     );
     checks += 1;
   }
@@ -247,12 +246,12 @@ test("Website layout, navigation and interactions", async () => {
     assert.deepEqual(await page.locator(".desktop-nav a").allTextContents(), [
       "Home",
       "Product",
-      "GitHub",
+      "Principles",
     ]);
     assert.deepEqual(await links.locator("a").allTextContents(), [
       "Home",
       "Product",
-      "GitHub",
+      "Principles",
     ]);
     assert.equal(
       await page
@@ -275,6 +274,12 @@ test("Website layout, navigation and interactions", async () => {
           .getAttribute("aria-current"),
         "page",
       );
+      const principles = page.locator(
+        '.desktop-nav a[href="/principles.html"]',
+      );
+      await principles.click();
+      await page.waitForURL(origin + "/principles.html");
+      assert.equal(await principles.getAttribute("aria-current"), "page");
       checks += 1;
       return;
     }
@@ -367,19 +372,22 @@ test("Website layout, navigation and interactions", async () => {
     }
     assert.equal(await page.locator(":focus").getAttribute("href"), "/");
     await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    const principles = menu.locator('a[href="/principles.html"]');
     assert.ok(
-      await menu
-        .locator('a[href="/product.html"]')
-        .evaluate((element) => element === document.activeElement),
+      await principles.evaluate(
+        (element) => element === document.activeElement,
+      ),
     );
     await page.keyboard.press("Enter");
-    await page.waitForURL(origin + "/product.html");
+    await page.waitForURL(origin + "/principles.html");
+    assert.equal(await principles.getAttribute("aria-current"), "page");
     assert.ok(!(await menu.evaluate((element) => element.open)));
     checks += 1;
   }
 
   async function inspectNavigationGrowth() {
-    const labels = ["Home", "Product", "GitHub", "Guides", "About"];
+    const labels = ["Home", "Product", "Principles", "Guides", "About"];
     for (const size of [
       { width: 1440, height: 900 },
       { width: 1024, height: 768 },
@@ -759,7 +767,7 @@ test("Website layout, navigation and interactions", async () => {
           ),
       );
       await page.keyboard.press("Enter");
-      await page.waitForURL(`${origin}/product.html`);
+      await page.waitForURL(`${origin}/principles.html`);
       await page.goBack();
       await page.waitForURL(`${origin}/`);
       await page.locator(".hero-actions .button").focus();
@@ -1095,6 +1103,7 @@ test("Website layout, navigation and interactions", async () => {
     }
     await inspectNavigationGrowth();
     await checkProduct(browser, origin, proofs, inspect);
+    await checkPrinciples(browser, origin, inspect);
     await checkWaitlist(browser, origin, proofs);
     await checkDownload(browser, origin, proofs);
     await checkAnalytics(browser, origin, proofs);
