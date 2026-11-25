@@ -356,7 +356,7 @@ test("the desktop CD builds Windows for the reserved version before creating the
   const qualification = job(workflow, "windows-qualification");
   assert.match(
     qualification,
-    /needs: windows-build\n    if: \$\{\{ !cancelled\(\) && github\.ref_protected && needs\.windows-build\.result == 'success' \}\}\n    runs-on: windows-11-arm/,
+    /needs: windows-build\n {4}if: \$\{\{ !cancelled\(\) && github\.ref_protected && needs\.windows-build\.result == 'success' \}\}\n {4}runs-on: windows-11-arm/,
   );
   assert.match(
     qualification,
