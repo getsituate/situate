@@ -701,6 +701,7 @@ export function suiteInventory(files, host = process.platform) {
       "website/browser.test.mjs",
       "website/legal/browser.test.mjs",
       "website/product.browser.test.mjs",
+      "website/principles.browser.test.mjs",
       "website/waitlist.browser.test.mjs",
       "website/download.browser.test.mjs",
       "website/visual/pages.spec.mjs",

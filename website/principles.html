@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="{{principles.description}}" />
+    <title>{{principles.pageTitle}}</title>
+    <link
+      rel="icon"
+      href="/design/brand/assets/app-icon.svg"
+      type="image/svg+xml"
+    />
+    <link rel="stylesheet" href="/design/brand/tokens.css" />
+    <link rel="stylesheet" href="/principles.css" />
+    <link rel="stylesheet" href="/components.css" />
+    <script src="/navigation.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip" href="#main">{{skip}}</a>
+    {{site.header}}
+    <main id="main" class="principles" tabindex="-1">
+      <header class="principles-intro">
+        <div class="principles-heading">
+          <h1>{{principles.title}}</h1>
+          <p>{{principles.intro}}</p>
+        </div>
+        <nav class="principles-nav" aria-label="{{legal.contents}}">
+          <ul role="list">
+            <li>
+              <a href="#your-files"
+                >{{principles.files.summary}}
+                <span aria-hidden="true">↓</span></a
+              >
+            </li>
+            <li>
+              <a href="#data-access"
+                >{{principles.data.summary}}
+                <span aria-hidden="true">↓</span></a
+              >
+            </li>
+            <li>
+              <a href="#make-it-yours"
+                >{{principles.tools.summary}}
+                <span aria-hidden="true">↓</span></a
+              >
+            </li>
+            <li>
+              <a href="#open-development"
+                >{{principles.open.summary}}
+                <span aria-hidden="true">↓</span></a
+              >
+            </li>
+          </ul>
+        </nav>
+        <div class="principles-art" aria-hidden="true">
+          <img
+            class="principles-discs"
+            src="/design/brand/assets/background-offset-discs.svg"
+            width="560"
+            height="370"
+            alt=""
+          />
+          <img
+            class="principles-page"
+            src="/design/brand/assets/page.svg"
+            width="160"
+            height="190"
+            alt=""
+          />
+          <img
+            class="principles-bend"
+            src="/design/brand/bend/svg/carry-pleased.svg"
+            width="320"
+            height="320"
+            alt=""
+          />
+          <img
+            class="principles-book"
+            src="/design/brand/assets/open-book.svg"
+            width="280"
+            height="210"
+            alt=""
+          />
+        </div>
+      </header>
+
+      <section
+        class="principle"
+        aria-labelledby="your-files-title"
+        id="your-files"
+        tabindex="-1"
+      >
+        <div class="principle-copy">
+          <h2 id="your-files-title">{{principles.files.title}}</h2>
+          <p>{{principles.files.body}}</p>
+          <p>{{principles.studio}}</p>
+        </div>
+        <div class="principles-note-stage">
+          <figure class="principles-note">
+            <figcaption><code>weekend-plans.md</code></figcaption>
+            <pre><code>{{principles.note.markdown}}</code></pre>
+            <a href="/examples/weekend-plans.txt" download="weekend-plans.md"
+              >{{principles.note.download}} <span aria-hidden="true">↓</span></a
+            >
+          </figure>
+        </div>
+        <div class="principles-sync">
+          <h3>{{principles.sync.title}}</h3>
+          <div>
+            <p>{{principles.sync.body}}</p>
+            <p>{{principles.sync.hosting}}</p>
+            <ul class="principle-links" role="list">
+              <li>
+                <a
+                  href="{{site.repositoryUrl}}/blob/main/requirements/data/requirements/REQ-0013-synchronization-service.md"
+                  >{{principles.sync.link}}</a
+                >
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="principle"
+        aria-labelledby="data-access-title"
+        id="data-access"
+        tabindex="-1"
+      >
+        <div class="principle-copy">
+          <h2 id="data-access-title">{{principles.data.title}}</h2>
+          <p>{{principles.data.ai}}</p>
+          <p>{{principles.data.processing}}</p>
+          <ul class="principle-links" role="list">
+            <li>
+              <a href="/privacy.html#app-ai-connections">{{footer.privacy}}</a>
+            </li>
+          </ul>
+        </div>
+        <div class="principles-ai-choices" aria-hidden="true">
+          <div class="principles-ai-option">
+            <svg
+              viewBox="0 0 32 32"
+              width="32"
+              height="32"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="5" y="6" width="22" height="15" rx="2" />
+              <path d="M3 26h26M13 17l-3-3 3-3m6 0 3 3-3 3" />
+            </svg>
+            <span>{{principles.data.local}}</span>
+          </div>
+          <span>{{principles.data.or}}</span>
+          <div class="principles-ai-option">
+            <svg
+              viewBox="0 0 32 32"
+              width="32"
+              height="32"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M9 23a5 5 0 0 1-.6-10A8 8 0 0 1 23.7 14a4.5 4.5 0 1 1 .8 9Z"
+              />
+            </svg>
+            <span>{{principles.data.cloud}}</span>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="principle"
+        aria-labelledby="make-it-yours-title"
+        id="make-it-yours"
+        tabindex="-1"
+      >
+        <div class="principle-copy">
+          <h2 id="make-it-yours-title">{{principles.tools.title}}</h2>
+          <p>{{principles.tools.body}}</p>
+        </div>
+        <div class="principles-tools-graphic" aria-hidden="true">
+          <div class="principles-projects">
+            <div>
+              <strong>{{product.example.birthday}}</strong
+              ><span>{{product.example.music}}</span>
+            </div>
+            <div>
+              <strong>{{product.example.club}}</strong
+              ><span>{{product.example.book}}</span>
+            </div>
+          </div>
+          <span class="principles-tools-arrow">→</span>
+          <div class="principles-task-list">
+            <strong>{{product.example.overview}}</strong>
+            <span>{{product.example.music}}</span>
+            <span>{{product.example.book}}</span>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="principles-open"
+        aria-labelledby="open-development-title"
+        id="open-development"
+        tabindex="-1"
+      >
+        <div class="principle-copy">
+          <h2 id="open-development-title">{{principles.open.title}}</h2>
+          <p>{{principles.open.body}}</p>
+        </div>
+        <div class="principles-open-sources">
+          <img
+            src="/design/brand/assets/search-lens.svg"
+            width="150"
+            height="150"
+            alt=""
+          />
+          <ul class="principle-links" role="list">
+            <li><a href="{{site.repositoryUrl}}">{{footer.source}}</a></li>
+            <li>
+              <a href="{{site.repositoryUrl}}/blob/main/docs/product-concept.md"
+                >{{principles.open.plans}}</a
+              >
+            </li>
+            <li>
+              <a href="{{site.repositoryUrl}}/blob/main/design/brand/README.md"
+                >{{principles.open.design}}</a
+              >
+            </li>
+            <li>
+              <a
+                href="{{site.repositoryUrl}}/tree/main/docs/architecture/09-architecture-decisions"
+                >{{principles.open.decisions}}</a
+              >
+            </li>
+            <li>
+              <a href="https://sonarcloud.io/dashboard?id=getsituate_situate"
+                >{{principles.open.checks}}</a
+              >
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+    {{site.footer}}
+  </body>
+</html>

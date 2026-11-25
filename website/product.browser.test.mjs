@@ -216,11 +216,6 @@ export function checkProduct(browser, origin, proofs, inspect) {
         await page.waitForURL(`${origin}/product.html#choices`);
         await page.locator(".header .wordmark").click();
         await page.waitForURL(`${origin}/`);
-        await page.locator(".overview a").focus();
-        await page.keyboard.press("Enter");
-        await page.waitForURL(`${origin}/product.html`);
-        await page.goBack();
-        await page.waitForURL(`${origin}/`);
         if (width <= 900) await page.locator(".mobile-menu summary").click();
         await page
           .locator('.header nav:visible a[href="/product.html"]')

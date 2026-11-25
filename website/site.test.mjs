@@ -313,6 +313,7 @@ test("all pages share navigation and footer in preview and static output", async
   for (const route of [
     "/",
     "/product.html",
+    "/principles.html",
     ...pages.map((page) => page.path),
   ]) {
     const response = await fetch(origin + route);
@@ -336,6 +337,11 @@ test("all pages share navigation and footer in preview and static output", async
     );
     const footer = renderFooter(messages, { pathname: route });
     assert.ok(content.includes(footer));
+    assert.ok(
+      footer.includes(
+        `href="/principles.html"${route === "/principles.html" ? ' aria-current="page"' : ""}>Principles</a>`,
+      ),
+    );
     for (const [path, label] of [
       ["", "Source code"],
       ["/issues", "Report an issue"],
@@ -368,7 +374,12 @@ test("all pages share navigation and footer in preview and static output", async
       assert.match(content, /aria-current="page"/);
     }
   }
-  for (const path of ["/components.css", "/product.css", "/legal/styles.css"]) {
+  for (const path of [
+    "/components.css",
+    "/product.css",
+    "/principles.css",
+    "/legal/styles.css",
+  ]) {
     const response = await fetch(origin + path);
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type"), /^text\/css/);
@@ -377,6 +388,15 @@ test("all pages share navigation and footer in preview and static output", async
       await readFile(join(destination, path.slice(1)), "utf8"),
     );
   }
+  const notePath = "/examples/weekend-plans.txt";
+  const note = await fetch(origin + notePath);
+  assert.equal(note.status, 200);
+  assert.match(note.headers.get("content-type"), /^text\/plain/);
+  const markdown = await note.text();
+  assert.equal(markdown, await readFile(join(destination, notePath), "utf8"));
+  assert.equal(markdown, messages["principles.note.markdown"] + "\n");
+  assert.equal((await fetch(origin + "/examples/draft.txt")).status, 404);
+
   const navigation = await fetch(origin + "/navigation.js");
   assert.equal(navigation.status, 200);
   assert.match(navigation.headers.get("content-type"), /^text\/javascript/);
@@ -707,12 +727,11 @@ test("landing introduces AI help, an example, setup and costs", async () => {
         ),
       );
   assert.equal([...overview.matchAll(/<h2>/g)].length, 3);
-  assert.match(overview, /href="\/product\.html"/);
+  assert.match(overview, /href="\/principles\.html"\s*>Read our principles/);
   assert.match(overview, /without internet or AI/);
   assert.match(overview, /Ask Situate to adapt/);
-  assert.match(overview, /Markdown/);
-  assert.match(overview, /not tied to Situate/);
-  assert.match(overview, /take your files to another app whenever you want/);
+  assert.match(overview, /Markdown files/);
+  assert.match(overview, /Open them in another editor\. No export needed\./);
   assert.ok(html.indexOf('class="overview"') < html.indexOf('id="story"'));
   assert.ok(html.indexOf('id="story"') < html.indexOf('id="questions"'));
   assert.ok(html.indexOf('id="questions"') < html.indexOf('id="download"'));
@@ -751,9 +770,14 @@ test("header separates page navigation from the download action", async () => {
   assert.deepEqual(menuLinks, [
     { href: "/", key: "nav.index" },
     { href: "/product.html", key: "nav.product" },
-    { href: "https://github.com/getsituate/situate", key: "nav.github" },
+    { href: "/principles.html", key: "nav.principles" },
   ]);
-  for (const pathname of ["/", "/product.html", "/privacy.html"]) {
+  for (const pathname of [
+    "/",
+    "/product.html",
+    "/principles.html",
+    "/privacy.html",
+  ]) {
     const header = renderHeader(messages, { home: pathname === "/", pathname });
     const navs = [...header.matchAll(/<nav\b[\s\S]*?<\/nav>/g)].map(
       (match) => match[0],
@@ -762,11 +786,11 @@ test("header separates page navigation from the download action", async () => {
     for (const nav of navs) {
       assert.match(nav, /<ul class="site-links"><li><a href="\/"/);
       assert.match(nav, />Home<\/a><\/li><li><a href="\/product.html"/);
-      assert.ok(
-        nav.includes(
-          '<a href="https://github.com/getsituate/situate">GitHub</a>',
-        ),
+      assert.match(
+        nav,
+        /<a href="\/principles\.html"(?: aria-current="page")?>Principles<\/a>/,
       );
+      assert.doesNotMatch(nav, /href="https?:\/\//);
       for (const { href } of menuLinks) {
         assert.equal(
           nav.includes(`href="${href}" aria-current="page"`),
@@ -852,11 +876,11 @@ test("product chapters explain adaptation, help, independence and getting starte
   )?.[0];
   assert.ok(independence);
   for (const copy of [
+    "models.body",
     "models.providerBody",
     "models.localBody",
     "models.processing",
     "open.body",
-    "open.code",
   ])
     assert.ok(
       independence.includes(render("{{copy}}", { copy: messages[copy] })),
@@ -865,10 +889,9 @@ test("product chapters explain adaptation, help, independence and getting starte
   assert.match(independence, /Markdown files/);
   assert.match(independence, /without exporting anything/);
   assert.match(independence, /<h3>Open your notes/);
-  assert.match(independence, /<h3>See how Situate works\./);
   assert.match(
     independence,
-    /href="https:\/\/github\.com\/getsituate\/situate"\s*>View source on GitHub/,
+    /href="\/principles\.html"\s*>Read our principles/,
   );
   assert.match(html, /Start with the built-in tools/);
   assert.match(html, /The entire app is free/);
@@ -1109,6 +1132,9 @@ test("built preview serves the generated files and excludes sources and escaping
     "product.html",
     "tour.html",
     "product.css",
+    "principles.html",
+    "principles.css",
+    "examples/weekend-plans.txt",
     "legal-notice.html",
     "privacy.html",
     "components.css",

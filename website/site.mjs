@@ -89,7 +89,7 @@ export function render(template, messages, { pathname = "/" } = {}) {
     if (key === "site.header")
       return renderHeader(messages, {
         home: pathname === "/",
-        progress: true,
+        progress: pathname === "/" || pathname === "/product.html",
         pathname,
       });
     if (key === "site.footer") return renderFooter(messages, { pathname });
@@ -142,8 +142,8 @@ const publicSegment = (part) => /^[a-z\d_-][a-z\d_.-]*$/i.test(part);
 function location(pathname, parts) {
   if (pathname === "/")
     return { file: "index.html", base: website, page: true };
-  if (pathname === "/product.html")
-    return { file: "product.html", base: website, page: true };
+  if (pathname === "/product.html" || pathname === "/principles.html")
+    return { file: parts[0], base: website, page: true };
   if (
     ["/system", "/system/", "/system/index.html", "/index.html"].includes(
       pathname,
@@ -154,6 +154,8 @@ function location(pathname, parts) {
     [
       "/styles.css",
       "/product.css",
+      "/principles.css",
+      "/examples/weekend-plans.txt",
       "/script.js",
       "/platform-waitlist.js",
       "/download.js",
@@ -328,6 +330,7 @@ export function createBuildServer(directory) {
         !parts.every(publicSegment) ||
         (!mime[extension] &&
           ![
+            "examples/weekend-plans.txt",
             "media/provider-icons-license.txt",
             "vendor/posthog-LICENSE.txt",
             "vendor/web-vitals-LICENSE.txt",
@@ -462,8 +465,11 @@ async function renderBuild(destination, analyticsToken) {
   for (const file of [
     "index.html",
     "product.html",
+    "principles.html",
     "styles.css",
     "product.css",
+    "principles.css",
+    "examples/weekend-plans.txt",
     "script.js",
     "platform-waitlist.js",
     "download.js",
