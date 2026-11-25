@@ -205,6 +205,7 @@ pub(crate) fn allowed(role: Option<&str>, name: &str) -> bool {
         Some("import") => !matches!(
             name,
             "start_plugin_development"
+                | "enter_plugin_development"
                 | "mutate_plugin_draft"
                 | "activate_plugin"
                 | "load_copy_import_skill"
@@ -347,5 +348,8 @@ mod tests {
         }
         assert!(allowed(Some("inspect"), "shell"));
         assert!(allowed(Some("support"), "start_plugin_development"));
+        for role in ["inspect", "method", "import", "support"] {
+            assert!(!allowed(Some(role), "enter_plugin_development"));
+        }
     }
 }

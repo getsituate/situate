@@ -7,7 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { action, snapshot } from "./workspaces/api";
 import App from "./App.vue";
 import { retainWorkspaceUi, workspaceUi } from "./layout/runtime";
-import { closeChats, workspaceChat } from "./ai/chat";
+import { closeChats, workspaceChat, workspaceConversations } from "./ai/chat";
 import { filesRequest } from "./files/api";
 import { releaseWorkspace, retainedWorkspaces } from "./files/sessions";
 
@@ -164,6 +164,7 @@ test("window requests use the local target and ignore close requests for another
     "files-close-requested",
     "dictation-close-requested",
     "ai-models-changed",
+    "ai-conversations-changed",
     "updates-prepare-requested",
     "files-quit-requested",
     "recovery-prepare",
@@ -195,6 +196,36 @@ test("window requests use the local target and ignore close requests for another
   expect(action).not.toHaveBeenCalled();
   expect(cancelLogin).not.toHaveBeenCalled();
   expect(wrapper.find("dialog[open]").exists()).toBe(false);
+});
+
+test("a native plugin development start refreshes the current conversation list", async () => {
+  const implementation = vi.mocked(invoke).getMockImplementation()!;
+  const list = vi.fn().mockReturnValue([]);
+  vi.mocked(invoke).mockImplementation(async (command, args) =>
+    command === "ai_conversations" ? list(args) : implementation(command, args),
+  );
+  mountSetup();
+  await flushPromises();
+  const inventory = workspaceConversations("garden");
+  await inventory.refresh();
+  expect(inventory.state.conversations).toEqual([]);
+  list.mockClear().mockReturnValue([
+    {
+      id: "a8cbbca0-51d9-4f5b-89c6-2144e0ee2bbf",
+      title: "Build a greenhouse plugin",
+      revision: 1,
+      development: { version: 2, originConversationId: "chat" },
+    },
+  ]);
+  const changed = events.get("ai-conversations-changed")!;
+  changed({ payload: "reading" });
+  await flushPromises();
+  expect(list).not.toHaveBeenCalled();
+  changed({ payload: "garden" });
+  await flushPromises();
+  expect(inventory.state.conversations.map((item) => item.title)).toEqual([
+    "Build a greenhouse plugin",
+  ]);
 });
 
 test.each(["files-close-requested", "ai-close-requested"])(

@@ -2,6 +2,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use situate_agent::{ProgressSink, ToolOutcome, ToolRequest, ToolResult};
 use situate_core::conversation_store::Development;
+use tauri::Emitter;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
@@ -203,7 +204,7 @@ pub fn instructions(development: &Development) -> String {
     )
 }
 
-pub fn definitions(development: Option<&Development>) -> Vec<Value> {
+pub fn definitions(development: Option<&Development>, conversation: &str) -> Vec<Value> {
     let mut tools = vec![
         definition(
             "inspect_plugin",
@@ -228,7 +229,14 @@ pub fn definitions(development: Option<&Development>) -> Vec<Value> {
         ),
     ));
     if development.is_none() {
-        tools.push(definition("start_plugin_development", "Prepare a separate retained development conversation and start its assignment once. The host assigns its identity. A failed handoff retains the child; never retry creation to resume it.", object(json!({"pluginId":text(64),"assignment":text(16384),"context":{"type":"string","maxLength":65536}}), &["assignment"])));
+        if Development::supports_conversation_id(conversation) {
+            tools.push(definition(
+                "enter_plugin_development",
+                "When the user asks you to build or change a plugin, reusable function, or reusable workflow, switch this conversation into plugin development and continue here. The mode persists for follow-up work. Do not switch for questions, suggestions, or edits to personal working instructions. If the user wants a separate chat, use start_plugin_development.",
+                object(json!({}), &[]),
+            ));
+        }
+        tools.push(definition("start_plugin_development", "Start a plugin assignment in a separate retained conversation when the user wants separate work, the setup workflow requires it, or this chat cannot enter development. If enter_plugin_development is offered, prefer it for a development request in the current chat. A failed handoff retains the new chat; never retry creation to resume it.", object(json!({"pluginId":text(64),"assignment":text(16384),"context":{"type":"string","maxLength":65536}}), &["assignment"])));
     } else {
         let inspect = &mut tools[0];
         inspect["description"] = json!(
@@ -354,13 +362,19 @@ pub async fn tool(
     if cancel.is_cancelled() {
         return ToolOutcome::Failed("native.ai.response.stopped".into());
     }
-    if !definitions(context.development.as_ref())
+    if !definitions(context.development.as_ref(), &context.conversation)
         .iter()
         .any(|definition| definition["name"].as_str() == Some(request.definition.name.as_str()))
     {
         return ToolOutcome::Failed("native.plugins.developmentToolDenied".into());
     }
     match request.definition.name.as_str() {
+        "enter_plugin_development" => {
+            if request.arguments != json!({}) {
+                return ToolOutcome::Failed("native.ai.tool.unavailable".into());
+            }
+            ToolOutcome::EnterPluginDevelopment
+        }
         "read_plugin_design" => match design(request.arguments) {
             Ok(result) => ToolOutcome::Completed(result),
             Err(error) => ToolOutcome::Failed(error),
@@ -406,6 +420,13 @@ pub async fn tool(
                 })
             }).await {
                 Ok(Ok(mut value)) => {
+                    if request_name == "start_plugin_development" {
+                        let _ = handoff.app.emit_to(
+                            &handoff.window,
+                            "ai-conversations-changed",
+                            &handoff.scope,
+                        );
+                    }
                     if request_name == "start_plugin_development" && value["ready"] == true {
                         let record = serde_json::from_value(value["conversation"].clone());
                         let started = match record {

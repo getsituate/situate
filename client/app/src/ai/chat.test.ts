@@ -1039,6 +1039,28 @@ test("new chats remain temporary until the first submission", async () => {
   expect(mock.invoke).not.toHaveBeenCalled();
   expect(discardUnsentChat("scope", id!)).toBe(true);
 });
+test("a running conversation adopts development mode without opening another chat", async () => {
+  const id = "00000000-0000-4000-8000-000000000001";
+  const chat = await ready("scope", id);
+  const inventory = workspaceConversations("scope");
+  await inventory.refresh();
+  chat.state.draft = "Build a garden plugin";
+  const send = chat.send();
+  await started(send);
+  const snapshot = ensure("scope", id);
+  expect(chat.state.development).toBeUndefined();
+  snapshot.record.development = { version: 2 };
+  publish(snapshot);
+  expect(chat.state.development).toEqual({ version: 2 });
+  expect(chat.state.running).toBe(true);
+  expect(inventory.state.conversations).toMatchObject([
+    { id, development: { version: 2 } },
+  ]);
+  finish("scope", id);
+  await send;
+  expect(chat.state.development).toEqual({ version: 2 });
+});
+
 test.each([undefined, "sample"])(
   "temporary development chats preserve their starting context (%s)",
   async (pluginId) => {

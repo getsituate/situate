@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "id": "show-started-plugin-development",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "develop-plugins-in-current-conversation",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Develop plugins in the current chat",
+          "paragraphs": [
+            "Ask Situate to build or change a plugin in an ordinary chat. The chat switches to plugin development and stays in that mode for follow-up work. You can still ask to start in a separate chat."
+          ]
+        },
+        {
+          "id": "show-started-plugin-development",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Find new plugin development conversations",
+          "paragraphs": [
+            "When Situate starts plugin development in a separate conversation, it appears in the conversation list without reopening the workspace."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "develop-plugins-in-current-conversation",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Plugins im aktuellen Chat entwickeln",
+          "paragraphs": [
+            "Bitte Situate in einem normalen Chat, ein Plugin zu erstellen oder zu ändern. Der Chat wechselt in den Entwicklungsmodus und bleibt für Folgeaufträge darin. Wenn du möchtest, kannst du die Entwicklung weiterhin in einem separaten Chat starten."
+          ]
+        },
+        {
+          "id": "show-started-plugin-development",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Neue Unterhaltungen zur Plugin-Entwicklung finden",
+          "paragraphs": [
+            "Wenn Situate die Plugin-Entwicklung in einer separaten Unterhaltung startet, erscheint sie in der Liste, ohne dass du den Arbeitsbereich erneut öffnen musst."
+          ]
+        }
+      ]
+    }
+  }
+}

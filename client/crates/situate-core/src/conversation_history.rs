@@ -537,9 +537,17 @@ impl Storage {
             metadata_references(&mut desired, &self.scope, false)?;
             return Ok(desired);
         }
+        let entering_development = old.development.is_none()
+            && old.message_count > 0
+            && Development::supports_conversation_id(&value.id)
+            && value.development.as_ref().is_some_and(|development| {
+                development.version == Some(2)
+                    && development.plugin_id.is_empty()
+                    && development.origin_conversation_id.is_none()
+            });
         if old.revision != expected_revision
             || value.revision != expected_revision
-            || old.development != value.development
+            || (old.development != value.development && !entering_development)
             || old.selected_entry_id != value.selected_entry_id
             || old.message_count != value.message_count
             || old.event_count != value.event_count

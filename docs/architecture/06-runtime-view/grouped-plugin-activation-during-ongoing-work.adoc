@@ -7,7 +7,7 @@ endif::[]
 
 === Grouped plugin activation during ongoing work
 
-During normal operation, the Plugins destination can start development of a new or existing plugin; an agent tool can also open a separate development conversation with the task and context. The same native Conversation Owner handles normal and development conversations.
+The Plugins destination can start development of a new or existing plugin. In ordinary chat, the agent can switch the current conversation to development or start a separate one with the task and context. The same native Conversation Owner handles both modes.
 Specialized instructions, a development background and header label distinguish it from a normal conversation; message, Activity and tool-call rendering remain shared.
 Agent Integration works in the same workspace with ordinary capabilities and task-scope rules, discovers affected packages and prepares their source changes.
 A <<glossary-check-receipt,check receipt>> records the code and dependency revisions covered by the checks; it does not impose a workspace-copy or single-package access boundary.

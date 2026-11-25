@@ -502,8 +502,9 @@ impl<H: Host> Owner<H> {
                         return Err("native.ai.response.stopped".into());
                     }
                     let mut prepared = config.clone();
+                    let development = self.state.lock().await.metadata.development.clone();
                     self.host
-                        .prepare_model(&mut prepared, cancel.clone())
+                        .prepare_model(&mut prepared, development, cancel.clone())
                         .await?;
                     if cancel.is_cancelled() {
                         return Err("native.ai.response.stopped".into());
@@ -641,7 +642,14 @@ impl<H: Host> Owner<H> {
                                 None,
                             )
                         };
+                        let enter_development =
+                            matches!(outcome, ToolOutcome::EnterPluginDevelopment);
                         let (output, is_error, disconnected) = match outcome {
+                            ToolOutcome::EnterPluginDevelopment => (
+                                ToolResult::json(json!({"mode":"pluginDevelopment"})),
+                                false,
+                                false,
+                            ),
                             ToolOutcome::Completed(value) => {
                                 let error = value.is_error;
                                 (value, error, false)
@@ -697,6 +705,13 @@ impl<H: Host> Owner<H> {
                         let mut presentation = Ok(());
                         let duration = self.host.now_ms().saturating_sub(started);
                         self.retain_outcome(action,|record| {
+                            if enter_development && record.development.is_none() {
+                                record.development = Some(situate_core::conversation_store::Development {
+                                    version: Some(2),
+                                    plugin_id: String::new(),
+                                    origin_conversation_id: None,
+                                });
+                            }
                             let mut message = json!({"role":"toolResult","toolCallId":id,"toolName":name,"content":output.content,"details":output.details,"isError":is_error,"timestamp":self.host.now_ms(),"durationMs":duration});
                             if let Some(structured) = &output.structured_content { message["structuredContent"] = structured.clone(); }
                             record.messages.as_array_mut().unwrap().push(message);

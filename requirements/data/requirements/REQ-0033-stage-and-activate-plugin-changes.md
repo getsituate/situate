@@ -42,7 +42,7 @@ acceptanceCriteria:
     text: "A requested change-set rollback preserves later independent changes and records compensating changes; conflicting reversals are shown for a user decision instead of silently overwriting newer work."
     status: open
   - id: AC-10
-    text: "Starting development opens a separate, visibly distinct conversation with the prepared task and development instructions; the original chat remains accessible."
+    text: "Starting development in an ordinary chat normally switches it to a visibly distinct development mode and retains that mode after completion. A separate conversation can start with a prepared assignment and leaves the original chat accessible."
     milestone: Plugin Launchpad
     status: implemented
   - id: AC-11
@@ -53,7 +53,7 @@ acceptanceCriteria:
     text: "Extended migration preparation and user clarification do not hold affected actions or writes paused throughout an agent conversation."
     status: open
   - id: AC-13
-    text: "The agent has a tool for opening that development conversation with context, without a fixed trigger phrase or mandatory extra entry approval."
+    text: "The agent can switch the current conversation to development or start a separate one with context, without a fixed trigger phrase or mandatory extra entry approval."
     milestone: Plugin Launchpad
     status: implemented
   - id: AC-14
@@ -264,7 +264,7 @@ acceptanceCriteria:
 
 ### First iteration: Plugin Launchpad
 
-Plugin Launchpad delivers a separate development conversation with the prepared assignment and context. The agent creates or edits a plugin draft separately from the active installation, checks it and activates the checked result. The originating chat remains usable and receives the availability notice defined in REQ-0001. Mutating tests use temporary test data; a complete workspace copy and its independent lifecycle are not required. A mandatory read-only agent verification after activation is not part of this iteration.
+The agent creates or edits a plugin draft separately from the active installation, checks it and activates the checked result. When the assignment starts in a separate development conversation, the originating chat remains usable and receives the availability notice defined in REQ-0001. Mutating tests use temporary test data; a complete workspace copy and its independent lifecycle are not required. A mandatory read-only agent verification after activation is not part of this iteration.
 
 Plugin Launchpad supports plugin-owned skills, chat tools, custom Vue views and plugin settings. These capabilities follow the existing contribution descriptions in [REQ-0001](REQ-0001-create-integrations.md), [REQ-0029](REQ-0029-use-integration-tools-in-chat.md), [REQ-0026](REQ-0026-provide-plugin-defined-views.md) and [REQ-0032](REQ-0032-manage-plugin-status-and-disabling.md). Dependencies between plugins, automation and extensions to arbitrary host interface regions are outside this iteration. This milestone targets macOS only, including development, checks, activation, plugin use, management and plugin-free recovery. Windows, Linux, iOS and Android delivery and qualification are deferred. This is a delivery boundary, not a rejection of the longer-term cross-platform requirements in [REQ-0014](REQ-0014-plugin-platform-compatibility.md).
 
@@ -300,7 +300,7 @@ Recovery temporarily suspends installed plugins at startup rather than changing 
 
 Ordinary development does not require a universal data schema, versioned data/configuration declarations for every plugin, or exclusive ownership of the notes it uses. The agent inspects existing behavior and known dependencies, reuses applicable tests and adds focused checks for the requested change. Absence of a general format declaration is not itself an adoption blocker; failed or unavailable required checks and identified unresolved incompatibilities remain blocking. Passing checks establish their observed coverage, not compatibility with every possible note structure.
 
-Development uses a separate native-owned conversation with specialized system instructions and a prominent visual distinction from ordinary chat. An agent tool opens that conversation with a prepared task and context, leaving the original conversation available. The agent decides when to offer or start this workflow; no fixed user-phrase trigger or additional entry-confirmation rule is prescribed. Users can start new development or further development of an existing plugin from [plugin management](REQ-0032-manage-plugin-status-and-disabling.md). A read-only Changes panel exposes [assignment-wide source diffs](REQ-0017-inspect-plugin-instructions.md), separate from standalone complete-plugin inspection; direct file editing there is not required. Messages, Activity, tools and content changes use the ordinary chat components; only the background and header label distinguish development.
+Development uses a native-owned conversation with specialized system instructions and a prominent visual distinction from ordinary chat. An explicit development request in ordinary chat normally changes that conversation's mode without replacing the conversation or requiring another submission. The mode persists for follow-up work. When separate work is requested, an agent tool starts a new conversation with the assignment and context. Guided setup continues to start development separately without replacing the setup chat. No fixed trigger phrase or additional entry confirmation is required. Users can start new development or further development of an existing plugin from [plugin management](REQ-0032-manage-plugin-status-and-disabling.md). A read-only Changes panel exposes [assignment-wide source diffs](REQ-0017-inspect-plugin-instructions.md), separate from standalone complete-plugin inspection; direct file editing there is not required. Messages, Activity, tools and content changes use the ordinary chat components; only the background and header label distinguish development.
 
 Errors also provide a [direct repair entry point](REQ-0063-start-assisted-repair-from-errors.md) that opens development with the failure and relevant context. It uses the same staging, checking and activation rules; starting repair does not resolve a conflict or repeat the failed operation.
 

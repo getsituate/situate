@@ -44,6 +44,7 @@ impl ToolResult {
 #[derive(Clone, Debug)]
 pub enum ToolOutcome {
     Completed(ToolResult),
+    EnterPluginDevelopment,
     Failed(String),
     /// The host has revoked this executor generation and settled native cleanup.
     /// The effect may have happened; neither the owner nor a new executor may replay it.

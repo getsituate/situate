@@ -14,22 +14,22 @@ acceptanceCriteria:
     text: "Situate creates an integration that can actually perform the agreed function; users do not have to write code."
     status: open
   - id: AC-03
-    text: "Requesting plugin creation or modification from a normal chat opens and focuses a separate, visibly labeled development conversation with the assignment and necessary context; work starts without a repeated prompt or submission."
+    text: "An explicit request to create or modify a plugin in a normal chat switches that chat to visibly labeled plugin development and starts work without resubmission; a request for a separate conversation starts the assignment there instead."
     milestone: Plugin Launchpad
     status: implemented
   - id: AC-04
-    text: "On sufficiently large displays, the new conversation opens in an additional pane beside the originating chat; narrow displays follow responsive view switching."
+    text: "When development starts separately, on sufficiently large displays the new conversation opens in an additional pane beside the originating chat; narrow displays follow responsive view switching."
     status: open
   - id: AC-05
     text: "Neither conversation switches its type during or after the development assignment."
     milestone: Plugin Launchpad
     status: implemented
   - id: AC-06
-    text: "The originating chat accepts further user work while development proceeds independently."
+    text: "When development starts separately, the originating chat accepts further user work while development proceeds independently."
     milestone: Plugin Launchpad
     status: implemented
   - id: AC-07
-    text: "Successful activation produces a workspace-scoped availability notice in the originating chat without resuming or executing its previous request, even if that chat has since moved to another topic."
+    text: "Successful activation in a separate development conversation produces a workspace-scoped availability notice in the originating chat without resuming or executing its previous request, even if that chat has since moved to another topic."
     milestone: Plugin Launchpad
     status: implemented
   - id: AC-08
@@ -37,7 +37,7 @@ acceptanceCriteria:
     milestone: Plugin Launchpad
     status: implemented
   - id: AC-09
-    text: "A request to remember or correct personal working instructions stays in the normal chat and exposes persistent changes there; a request to develop a reusable workflow opens a development conversation regardless of whether it produces code or Markdown."
+    text: "A request to remember or correct personal working instructions stays in the normal chat and exposes persistent changes there; a request to develop a reusable workflow uses plugin development regardless of whether it produces code or Markdown."
     status: open
   - id: AC-10
     text: "A discussion about plugins without a development request does not itself start development."
@@ -129,7 +129,7 @@ acceptanceCriteria:
     milestone: Workspace-wide development with reusable connections
     status: implemented
   - id: AC-36
-    text: "Successful activation of an assignment's checked targets notifies the originating chat of actual availability without resuming its prior request; pending checks, failed activation and missing access are not reported as ready."
+    text: "If the assignment started in a separate conversation, successful activation of its checked targets notifies the originating chat of actual availability without resuming its prior request; pending checks, failed activation and missing access are not reported as ready."
     milestone: Workspace-wide development with reusable connections
     status: implemented
   - id: AC-37
@@ -170,11 +170,11 @@ A skill supplements the mode's host-owned instructions without replacing them or
 
 Development is assignment-based within the same workspace and with the same tools and task-scope rules as ordinary chat. An assignment may create or adapt several connections, workflow plugins, views and ordinary workspace files. Selecting an existing plugin supplies context, not an access boundary; no package or type selection is required to start. The agent discovers existing connections and declared consumers, reuses suitable functionality and can include newly identified affected packages without a new conversation or a confirmation solely to expand that set. Development instructions guide restrained changes, not unrelated edits or automatic child-conversation fan-out.
 
-The first delivery followed [Plugin Launchpad](REQ-0033-stage-and-activate-plugin-changes.md#first-iteration-plugin-launchpad): separate development conversations operate on plugin drafts without complete workspace copies. Concurrent conversations, including work on the same plugin, are permitted without conflict-prevention gates; they may overwrite or interfere with one another.
+The first delivery followed [Plugin Launchpad](REQ-0033-stage-and-activate-plugin-changes.md#first-iteration-plugin-launchpad): it introduced development on plugin drafts without complete workspace copies. Concurrent conversations, including work on the same plugin, are permitted without conflict-prevention gates; they may overwrite or interfere with one another.
 
-An explicit request to create or modify a plugin, function or reusable workflow from a normal conversation opens a separate development conversation. Situate transfers the assignment and necessary context and starts work without requiring the user to repeat or resubmit it. The new conversation receives focus in an additional pane beside the originating chat where screen space permits, following the [responsive workspace layout](REQ-0026-provide-plugin-defined-views.md). Its development purpose is distinguished by its background and header label; messages, Activity, tools and content changes use the ordinary chat presentation.
+An explicit request to create or modify a plugin, function, or reusable workflow in a normal conversation switches that conversation to plugin development. The chat keeps its history and continues the request there without resubmission. The development mode remains after completion and reopening so the user can iterate. Its background and header label distinguish it from ordinary chat; messages, Activity, tools, and content changes use the same presentation.
 
-Conversation type is fixed: the originating conversation does not become a development conversation, and the development conversation does not switch back to a normal one on completion. The originating chat stays usable throughout; development neither blocks it nor reserves its next action. Once the plugin has successfully activated, the originating chat receives a notice that it is available to chats in the same workspace. Activation does not automatically resume or execute any originating request. Development completion alone is not activation under [REQ-0033](REQ-0033-stage-and-activate-plugin-changes.md).
+If the user wants a separate conversation, Situate starts the assignment there with the necessary context and leaves the originating chat usable. Once the plugin has successfully activated, the originating chat receives a notice that it is available to chats in the same workspace. Activation does not automatically resume or execute any originating request. Development completion alone is not activation under [REQ-0033](REQ-0033-stage-and-activate-plugin-changes.md).
 
 Remembering or correcting the person's working instructions remains in the normal conversation, with persistent changes visibly presented under [REQ-0040](REQ-0040-reveal-tool-details-and-content-changes.md). A request to develop a reusable workflow belongs in a development conversation even if its implementation consists only of Markdown. Routing depends on the user's intent, not file type or estimated change size. Merely discussing plugins does not start development.
 

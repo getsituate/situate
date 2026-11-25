@@ -339,6 +339,11 @@ mod tests {
         assert_eq!(metadata.origin_conversation_id.as_deref(), Some("origin"));
         assert_eq!(metadata.plugin_id, "sample");
         assert!(outcome.conversation.messages.as_array().unwrap().is_empty());
+        let summaries = Storage::open(root.path(), "scope")
+            .unwrap()
+            .list_conversations_for_navigation()
+            .unwrap();
+        assert!(summaries.iter().any(|item| item.id == ID));
         let retained = status(root.path(), "scope", ID).unwrap();
         assert_eq!(retained.conversation, outcome.conversation);
         assert!(

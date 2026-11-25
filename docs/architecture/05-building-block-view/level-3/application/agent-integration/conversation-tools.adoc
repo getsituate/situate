@@ -73,8 +73,11 @@ The matrix assumes a writable native macOS workspace with history and conversati
 |`read_plugin_design`
 |Read bundled interface guidance without network access or workspace mutation.
 |Yes |Yes
+|`enter_plugin_development`
+|Persist development mode on the current conversation. The next model request uses development instructions and tools.
+|Yes |No
 |`start_plugin_development`
-|Prepare a separate retained development conversation and start its assignment once. A failed handoff retains the child; do not retry creation to resume it.
+|Start an assignment in a separate retained development conversation. A failed handoff retains that conversation; do not retry creation to resume it.
 |Yes |No
 |`inspect_plugin_changes`
 |Inspect a retained plugin activation publication outcome without retrying or resuming work.
@@ -90,7 +93,7 @@ The matrix assumes a writable native macOS workspace with history and conversati
 |Conditional |Conditional
 |===
 
-Normal chat hands development work to a development conversation; development does not register another `start_plugin_development` handoff.
+Ordinary chat normally enters development in place. The separate-conversation tool remains available for requested handoffs and guided setup. Neither entry tool is available once a conversation is in development mode.
 
 .Availability and execution conditions
 [cols="2,7",options="header"]

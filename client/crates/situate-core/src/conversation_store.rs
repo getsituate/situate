@@ -55,6 +55,12 @@ pub struct Development {
     )]
     pub origin_conversation_id: Option<String>,
 }
+impl Development {
+    pub fn supports_conversation_id(id: &str) -> bool {
+        uuid::Uuid::parse_str(id).is_ok_and(|value| value.to_string() == id)
+    }
+}
+
 fn present_origin<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<String>, D::Error> {
@@ -397,7 +403,7 @@ impl Storage {
         if let Some(d) = &development {
             if d.version != Some(2)
                 || (!d.plugin_id.is_empty() && !crate::plugins::valid_id(&d.plugin_id))
-                || !uuid::Uuid::parse_str(id).is_ok_and(|value| value.to_string() == id)
+                || !Development::supports_conversation_id(id)
                 || d.origin_conversation_id.as_deref() == Some(id)
             {
                 return Err(INVALID.into());
@@ -644,6 +650,50 @@ mod tests {
             record.development,
             storage.read_conversation(id).unwrap().unwrap().development
         );
+    }
+    #[test]
+    fn entering_development_preserves_history_and_rejects_stale_metadata_writes() {
+        let (_temp, storage) = workspace();
+        let id = "00000000-0000-4000-8000-000000000001";
+        storage.create_conversation(id, "Garden").unwrap();
+        let metadata = storage.read_conversation_metadata(id).unwrap().unwrap();
+        let mut entering = metadata.clone();
+        entering.development = Some(Development {
+            version: Some(2),
+            plugin_id: String::new(),
+            origin_conversation_id: None,
+        });
+        assert_eq!(
+            storage.update_conversation_metadata(&entering, metadata.revision),
+            Err(CONFLICT.into())
+        );
+        let entry = HistoryEntry::new(
+            "input",
+            None,
+            "message",
+            json!({"message":{"role":"user","content":"Build it","timestamp":1}}),
+        );
+        let mut stale = storage
+            .append_conversation_entries(id, metadata.revision, &[entry], Some("input"))
+            .unwrap();
+        let mut entering = stale.clone();
+        entering.development = Some(Development {
+            version: Some(2),
+            plugin_id: String::new(),
+            origin_conversation_id: None,
+        });
+        storage
+            .update_conversation_metadata(&entering, entering.revision)
+            .unwrap();
+        stale.title = "A stale title".into();
+        assert_eq!(
+            storage.update_conversation_metadata(&stale, stale.revision),
+            Err(CONFLICT.into())
+        );
+        let record = storage.read_conversation(id).unwrap().unwrap();
+        assert_eq!(record.title, "Garden");
+        assert_eq!(record.development, entering.development);
+        assert_eq!(record.messages[0]["content"], "Build it");
     }
     #[test]
     fn invalid_ids_and_development_metadata_do_not_create_paths() {

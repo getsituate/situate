@@ -164,6 +164,7 @@ pub trait Host: Send + Sync + 'static {
     fn prepare_model(
         &self,
         _config: &mut RunConfig,
+        _development: Option<situate_core::conversation_store::Development>,
         _cancel: CancellationToken,
     ) -> impl Future<Output = Result<(), String>> + Send {
         std::future::ready(Ok(()))
