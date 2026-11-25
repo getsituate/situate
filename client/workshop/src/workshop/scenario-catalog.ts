@@ -355,6 +355,11 @@ const definitions = [
   },
   { name: "formats", topic: "Settings", states: ["settings-formats"] },
   {
+    name: "gmailExperiment",
+    topic: "Settings",
+    states: ["settings-gmail-off", "settings-gmail-accounts"],
+  },
+  {
     name: "models",
     topic: "Settings",
     states: [

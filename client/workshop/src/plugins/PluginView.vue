@@ -20,6 +20,8 @@ import {
 import PluginCard from "./PluginCard.vue";
 import PluginUninstallDialog from "./PluginUninstallDialog.vue";
 import PluginAccountSettings from "./PluginAccountSettings.vue";
+import GmailConnection from "./GmailConnection.vue";
+import { gmailCopy, openGmailAccount } from "./gmail-experiment";
 import bend from "../brand/bend/svg/wave-welcome.svg";
 import curiousBend from "../brand/bend/svg/point-curious.svg";
 import { filesFor, codeFolderPaths } from "./fixtures";
@@ -56,6 +58,7 @@ const emit = defineEmits<{
   "update:state": [state: PluginState];
   openNavigation: [event: MouseEvent];
   settings: [];
+  gmailSettings: [];
   documents: [];
   "update:documents": [state: DocumentsState];
   abort: [id: string];
@@ -107,11 +110,19 @@ async function navigate(screen: PluginState["screen"]) {
   await nextTick();
   const invoker = returnId
     ? root.value?.querySelector<HTMLElement>(
-        `[data-plugin-id="${returnId}"] [data-action="view-files"]`,
+        `[data-plugin-id="${returnId}"] :is([data-action="view-files"], [data-action="more"])`,
       )
     : null;
   if (invoker) invoker.focus();
   else focusList();
+}
+function backFromSettings() {
+  if (state.value.gmailExperiment?.selection) {
+    update((s) => {
+      s.gmailExperiment!.selection = null;
+    });
+  } else if (state.value.returnToDevelopment) void returnToAssignment();
+  else void navigate("list");
 }
 async function inspect(id: string) {
   update((s) => openPluginFiles(s, id));
@@ -121,6 +132,11 @@ async function inspect(id: string) {
 const tools = computed(() =>
   state.value.plugins.filter((p) => p.kind === "tool"),
 );
+function visibleDependencies(ids: string[]) {
+  return ids.filter(
+    (id) => id !== "gmail" || state.value.gmailExperiment?.enabled !== false,
+  );
+}
 async function setupAccess(id: string) {
   update((s) => {
     s.returnToDevelopment = s.developmentId;
@@ -152,6 +168,10 @@ async function detail(id: string) {
     s.connectionError = "";
   });
   await navigate("detail");
+}
+async function gmailAccount(id: string) {
+  await detail("gmail");
+  update((s) => openGmailAccount(s, id));
 }
 async function develop(id = "") {
   update((s) => {
@@ -271,6 +291,7 @@ function value(e: Event) {
       'plugin-mobile': mobile,
       'plugin-collection-view': state.screen === 'list',
       'plugin-files-view': state.screen === 'files',
+      'plugin-settings-view': state.screen === 'detail',
       'plugin-development-view': state.screen === 'development',
     }"
   >
@@ -313,7 +334,39 @@ function value(e: Event) {
           ‹ {{ state.returnToDocuments ? c.backDocuments : c.settings }}
         </SituateButton>
       </div>
-      <div class="plugin-heading">
+      <header
+        v-if="state.screen === 'detail' && plugin"
+        class="plugin-settings-header"
+      >
+        <div class="plugin-settings-toolbar">
+          <SituateIconButton
+            v-if="showNavigation"
+            icon="menu"
+            :label="c.openNavigation"
+            :aria-controls="navigationId"
+            :aria-expanded="navigationOpen"
+            @click="emit('openNavigation', $event)"
+          />
+          <SituateButton variant="ghost" size="small" @click="backFromSettings">
+            <span aria-hidden="true">‹</span>
+            {{
+              state.gmailExperiment?.selection
+                ? gmailCopy.back
+                : state.returnToDevelopment
+                  ? c.assignment.backAssignment
+                  : c.back
+            }}
+          </SituateButton>
+          <span class="plugin-settings-workspace">{{ workspaceName }}</span>
+        </div>
+        <div
+          v-if="!state.gmailExperiment?.selection"
+          class="plugin-settings-title"
+        >
+          <h1 ref="heading" tabindex="-1">{{ plugin.name }}</h1>
+        </div>
+      </header>
+      <div v-else class="plugin-heading">
         <SituateButton
           variant="ghost"
           size="small"
@@ -439,12 +492,15 @@ function value(e: Event) {
             "
           >
             <template #artwork><PluginArtwork :kind="p.id" /></template>
-            <div v-if="p.dependencies.length" class="plugin-dependency-links">
+            <div
+              v-if="visibleDependencies(p.dependencies).length"
+              class="plugin-dependency-links"
+            >
               <span>{{ c.usesLabel }}</span>
               <SituateButton
                 variant="ghost"
                 size="small"
-                v-for="id in p.dependencies"
+                v-for="id in visibleDependencies(p.dependencies)"
                 :key="id"
                 class="plugin-text"
                 @click="detail(id)"
@@ -520,32 +576,42 @@ function value(e: Event) {
         "
       />
       <template v-else-if="state.screen === 'detail' && plugin">
-        <section class="plugin-card">
+        <section class="plugin-settings-content">
           <p
-            v-if="plugin.enabled && consumerAccessReason(state, plugin)"
+            v-if="
+              plugin.enabled &&
+              !(
+                state.gmailExperiment && plugin.dependencies.includes('gmail')
+              ) &&
+              consumerAccessReason(state, plugin)
+            "
             class="plugin-muted"
           >
             {{ consumerAccessReason(state, plugin) }}
           </p>
           <template v-if="plugin.enabled">
             <template v-if="plugin.id === 'weekly'"
-              ><h2>{{ c.summary }}</h2>
-              <div class="plugin-setting">
-                <label for="plugin-day">{{ c.planningDay }}</label
-                ><SituateSelect
-                  id="plugin-day"
-                  :value="plugin.day"
-                  @change="
-                    update((s) => {
-                      s.plugins.find((p) => p.id === s.selected)!.day =
-                        value($event);
-                      s.notice = c.saved;
-                    })
-                  "
-                  ><option value="monday">{{ c.monday }}</option>
-                  <option value="friday">{{ c.friday }}</option></SituateSelect
-                >
-              </div></template
+              ><section class="plugin-settings-section">
+                <h2>{{ c.summary }}</h2>
+                <div class="plugin-setting">
+                  <label for="plugin-day">{{ c.planningDay }}</label
+                  ><SituateSelect
+                    id="plugin-day"
+                    :value="plugin.day"
+                    @change="
+                      update((s) => {
+                        s.plugins.find((p) => p.id === s.selected)!.day =
+                          value($event);
+                        s.notice = c.saved;
+                      })
+                    "
+                    ><option value="monday">{{ c.monday }}</option>
+                    <option value="friday">
+                      {{ c.friday }}
+                    </option></SituateSelect
+                  >
+                </div>
+              </section></template
             >
             <PluginSourceDetails
               v-if="plugin.kind === 'source' && source"
@@ -558,11 +624,19 @@ function value(e: Event) {
               @documents="emit('documents')"
               @develop="develop"
             />
+            <GmailConnection
+              v-else-if="plugin.id === 'gmail' && state.gmailExperiment"
+              :state="state"
+              @update:state="(next) => update((s) => Object.assign(s, next))"
+              @settings="emit('gmailSettings')"
+              @detail="detail"
+            />
             <PluginAccountSettings
               v-else
               :state="state"
               :plugin="plugin"
               @detail="detail"
+              @gmail-account="gmailAccount"
               @connect="
                 (id, accountId) =>
                   update((s) => startConnectionAttempt(s, id, accountId))

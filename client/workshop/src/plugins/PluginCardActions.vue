@@ -6,6 +6,7 @@ withDefaults(
   defineProps<{
     enabled: boolean;
     name: string;
+    compact?: boolean;
     canEnable?: boolean;
     settingsLabel?: string;
     unavailableHelp?: string;
@@ -22,18 +23,27 @@ const emit = defineEmits<{
 const menuOpen = ref(false);
 const menuId = useId();
 const more = ref<InstanceType<typeof SituateIconButton>>();
-async function uninstall() {
+async function chooseAction(
+  action: "uninstall" | "develop" | "inspect",
+  event: MouseEvent,
+) {
   menuOpen.value = false;
   await nextTick();
   more.value?.focus();
-  emit("uninstall");
+  if (action === "inspect") emit("inspect", event);
+  else if (action === "develop") emit("develop");
+  else emit("uninstall");
 }
 </script>
 
 <template>
-  <div class="plugin-card-actions">
+  <div
+    class="plugin-card-actions"
+    :class="{ 'plugin-card-actions-compact': compact }"
+  >
     <div class="plugin-row-links">
       <SituateButton
+        v-if="!compact"
         variant="secondary"
         size="small"
         class="plugin-adapt"
@@ -42,7 +52,7 @@ async function uninstall() {
         {{ c.develop }} <span aria-hidden="true">↗</span>
       </SituateButton>
       <SituateButton
-        variant="ghost"
+        :variant="compact ? 'secondary' : 'ghost'"
         size="small"
         v-if="settingsLabel"
         class="plugin-text"
@@ -57,6 +67,7 @@ async function uninstall() {
     </p>
     <div class="plugin-card-footer">
       <SituateButton
+        v-if="!compact"
         variant="ghost"
         size="small"
         class="plugin-text"
@@ -95,11 +106,25 @@ async function uninstall() {
           :close-on-select="false"
           @close="menuOpen = false"
         >
+          <template v-if="compact">
+            <SituateButton
+              variant="plain"
+              role="menuitem"
+              @click="chooseAction('develop', $event)"
+              >{{ c.develop }}</SituateButton
+            >
+            <SituateButton
+              variant="plain"
+              role="menuitem"
+              @click="chooseAction('inspect', $event)"
+              >{{ c.inspect }}</SituateButton
+            >
+          </template>
           <SituateButton
             variant="plain"
             role="menuitem"
             class="plugin-uninstall-action"
-            @click="uninstall"
+            @click="chooseAction('uninstall', $event)"
           >
             {{ c.uninstall.uninstall }}
           </SituateButton>

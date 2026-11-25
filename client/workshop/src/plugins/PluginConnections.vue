@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { SituateIcon, SituateButton } from "../ui";
 import PluginCard from "./PluginCard.vue";
 import { c } from "./content";
+import { gmailCopy } from "./gmail-experiment";
 import {
   connectionAvailability,
   hasConnectedAccess,
@@ -17,12 +18,23 @@ const emit = defineEmits<{
   disable: [id: string, event: MouseEvent];
   enable: [id: string];
 }>();
+function isExperimental(id: string) {
+  return id === "gmail" && !!props.state.gmailExperiment;
+}
 const connections = computed(() =>
-  props.state.plugins.filter((p) => p.kind === "connector"),
+  props.state.plugins.filter(
+    (plugin) =>
+      plugin.kind === "connector" &&
+      (plugin.id !== "gmail" || props.state.gmailExperiment?.enabled !== false),
+  ),
 );
 </script>
 <template>
-  <section class="plugin-connections" :aria-label="c.connections">
+  <section
+    v-if="connections.length || !state.gmailExperiment"
+    class="plugin-connections"
+    :aria-label="c.connections"
+  >
     <header class="plugin-connections-heading">
       <h2 class="plugin-collection-label">
         {{ c.connections }} <span>{{ connections.length }}</span>
@@ -34,7 +46,12 @@ const connections = computed(() =>
         v-for="connection in connections"
         :key="connection.id"
         class="plugin-connector-row"
+        :class="{ 'plugin-connector-compact': isExperimental(connection.id) }"
         :plugin="connection"
+        :title-note="
+          isExperimental(connection.id) ? gmailCopy.badge : undefined
+        "
+        :compact-actions="isExperimental(connection.id)"
         :illustrated="state.cardStyle === 'illustrated'"
         :settings-label="c.configure"
         :unavailable-help="c.connectionDisabled"
@@ -56,8 +73,10 @@ const connections = computed(() =>
           </div>
         </template>
         <div class="plugin-connection-status">
-          <span>{{ c.assignment.codeAvailable }}</span>
-          <span>{{
+          <span v-if="!isExperimental(connection.id)">{{
+            c.assignment.codeAvailable
+          }}</span>
+          <span v-if="!isExperimental(connection.id)">{{
             connectionAvailability(state, connection.id) !== "ready"
               ? c.assignment.readiness[
                   connectionAvailability(state, connection.id)
@@ -81,7 +100,10 @@ const connections = computed(() =>
           >
         </div>
         <div
-          v-if="connectionConsumers(state, connection.id).length"
+          v-if="
+            !isExperimental(connection.id) &&
+            connectionConsumers(state, connection.id).length
+          "
           class="plugin-dependency-links"
         >
           <span>{{ c.usedBy }}</span>
@@ -96,7 +118,9 @@ const connections = computed(() =>
             {{ consumer.name }}
           </SituateButton>
         </div>
-        <p v-else class="plugin-muted">{{ c.noConsumers }}</p>
+        <p v-else-if="!isExperimental(connection.id)" class="plugin-muted">
+          {{ c.noConsumers }}
+        </p>
       </PluginCard>
     </div>
   </section>
@@ -112,6 +136,9 @@ const connections = computed(() =>
   max-width: 52ch;
   font-size: 14px;
   color: var(--situate-muted);
+}
+.plugin-connector-compact {
+  align-self: start;
 }
 .plugin-connection-mark {
   width: 64px;
@@ -129,9 +156,10 @@ const connections = computed(() =>
 .plugin-connection-status {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 12px;
-  font-size: 13px;
+  align-items: center;
+  gap: var(--situate-space-1) var(--situate-space-3);
+  margin-block-start: var(--situate-space-2);
+  font-size: var(--situate-text-small);
   color: var(--situate-muted);
 }
 </style>
