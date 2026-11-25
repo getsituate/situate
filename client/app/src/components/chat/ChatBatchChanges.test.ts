@@ -46,7 +46,11 @@ test("closing a pending file preview ignores its late response and another file 
     props: { scope: "workspace", batch },
   });
   await wrapper.get(".batch-file").trigger("click");
-  expect(wrapper.get('[role="status"]').text()).toBe("⟦files.loadingDocument⟧");
+  await vi.waitFor(() =>
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      "⟦files.loadingDocument⟧",
+    ),
+  );
   await wrapper.get("dialog").trigger("cancel");
   expect(wrapper.find("dialog").exists()).toBe(false);
   await wrapper.findAll(".batch-file")[1]!.trigger("click");

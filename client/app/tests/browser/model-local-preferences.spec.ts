@@ -52,10 +52,10 @@ async function settings(page: Page) {
   await page
     .getByRole("button", { name: t("settings.ai.title"), exact: true })
     .click();
-  await expect(page.locator(".ai-settings .connections")).toHaveAttribute(
-    "aria-busy",
-    "false",
-  );
+  await expect(page.locator(".ai-settings .add-connection")).toBeEnabled();
+  await expect(
+    page.locator(".ai-settings [role='switch']").first(),
+  ).toHaveAttribute("aria-busy", "false");
 }
 async function chat(page: Page) {
   await navigation(page);

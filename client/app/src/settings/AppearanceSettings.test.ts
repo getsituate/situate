@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { initialFormats, setPreferences } from "@situate/localization";
 import AppearanceSettings from "./AppearanceSettings.vue";
@@ -44,7 +44,9 @@ it("does not show a false editable default when loading fails and offers reload"
   const wrapper = mount(AppearanceSettings, {
     props: { ...props, available: false, loading: true },
   });
-  expect(wrapper.get('[role="status"]').text()).toBe("Loading appearance…");
+  await vi.waitFor(() =>
+    expect(wrapper.get('[role="status"]').text()).toBe("Loading appearance…"),
+  );
   expect(wrapper.find("fieldset").exists()).toBe(false);
   await wrapper.setProps({
     loading: false,

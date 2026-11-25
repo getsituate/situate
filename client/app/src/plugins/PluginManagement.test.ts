@@ -141,20 +141,23 @@ beforeEach(() => {
   };
 });
 test("waits for lazy runtime initialization then renders icon-free cards including disabled and malformed plugins", async () => {
-  const fixture = setup([
-    plugin("weekly"),
-    plugin("quiet", false),
-    { ...plugin("broken"), manifest: null, status: "failed" },
-  ]);
+  const fixture = setup([]);
   let finish!: () => void;
   fixture.runtime.ready = new Promise<void>((resolve) => {
     finish = resolve;
   });
   const wrapper = fixture.render();
   await flushPromises();
-  expect(wrapper.get('[role="status"]').text()).toContain(
-    "⟦pluginManagement.loading⟧",
+  await vi.waitFor(() =>
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      "⟦pluginManagement.loading⟧",
+    ),
   );
+  fixture.runtime.state.plugins = [
+    plugin("weekly"),
+    plugin("quiet", false),
+    { ...plugin("broken"), manifest: null, status: "failed" },
+  ];
   finish();
   await flushPromises();
   expect(wrapper.findAll(".plugin-card-grid .plugin-card-plain")).toHaveLength(

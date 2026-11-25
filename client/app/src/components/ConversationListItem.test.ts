@@ -52,6 +52,7 @@ test("archives and restores a conversation without closing the other entries", a
       currentWorkspaceId: "workspace",
       conversations,
       selectedConversation: "garden",
+      conversationsLoaded: true,
       conversationRunning: (id: string) => id === "garden",
     },
   });

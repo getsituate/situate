@@ -299,8 +299,10 @@ test("keeps retrieval status separate from empty results and emits retry without
   const wrapper = panel([]);
   expect(wrapper.text()).toContain("⟦assignmentChanges.emptyChanges⟧");
   await wrapper.setProps({ state: { status: "loading", changes: [] } });
-  expect(wrapper.get('[role="status"]').text()).toBe(
-    "⟦assignmentChanges.loading⟧",
+  await vi.waitFor(() =>
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      "⟦assignmentChanges.loading⟧",
+    ),
   );
   await wrapper.setProps({ state: { status: "error", changes: [] } });
   expect(wrapper.get('[role="alert"]').text()).toBe(

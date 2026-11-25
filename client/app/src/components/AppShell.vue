@@ -57,11 +57,9 @@ import {
 } from "../layout/navigation";
 import ViewHost from "../layout/ViewHost.vue";
 import WorkspaceLoading from "../layout/components/WorkspaceLoading.vue";
-const WorkspaceLayout = defineAsyncComponent({
-  loader: () => import("../layout/components/WorkspaceLayout.vue"),
-  loadingComponent: WorkspaceLoading,
-  delay: 0,
-});
+const WorkspaceLayout = defineAsyncComponent(
+  () => import("../layout/components/WorkspaceLayout.vue"),
+);
 import {
   safeFileTarget,
   type FilePaneReference,
@@ -642,8 +640,8 @@ const sidebarActions = {
         </template>
       </SituateErrorScreen>
       <WorkspaceLoading
-        v-else-if="!document"
-        :pending="ui.session.state.loading"
+        v-if="!layout && (!layoutError || document)"
+        :pending="ui.session.state.loading || !!document"
       />
       <div v-if="layoutError && document" class="layout-notice">
         <SituateButton variant="secondary" @click="errorDismissed = false">

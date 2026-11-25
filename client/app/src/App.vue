@@ -39,12 +39,9 @@ import {
   initializeDictation,
   stopDictationListeners,
 } from "./dictation/runtime";
-import WorkspaceLoading from "./layout/components/WorkspaceLoading.vue";
-const AppShell = defineAsyncComponent({
-  loader: () => import("./components/AppShell.vue"),
-  loadingComponent: WorkspaceLoading,
-  delay: 0,
-});
+const AppShell = defineAsyncComponent(
+  () => import("./components/AppShell.vue"),
+);
 const flushLayouts = async (scope?: string) =>
   (await import("./layout/session")).flushLayouts(scope);
 let layoutRuntime: typeof import("./layout/runtime") | undefined;
