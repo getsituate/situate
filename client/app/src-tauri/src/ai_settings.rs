@@ -355,10 +355,10 @@ fn ranked_choice(
             entry["provider"] == config.provider
                 && entry["access"] == access
                 && entry["eligibility"] == "supported"
-                && (entry["discoveryOnly"] != true || kind == "chat")
+                && entry["priority"][kind].is_u64()
         })
         .collect();
-    candidates.sort_by_key(|entry| entry["priority"][kind].as_u64().unwrap_or(u64::MAX));
+    candidates.sort_by_key(|entry| entry["priority"][kind].as_u64());
     for entry in candidates {
         let model = entry["modelId"].as_str().ok_or(MODEL_ERROR)?;
         let Some(available_model) = available.iter().find(|item| {

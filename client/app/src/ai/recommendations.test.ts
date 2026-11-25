@@ -148,9 +148,10 @@ test("static recommendations identify compatibility, not confirmed account entit
       thinking: "medium",
       catalogRevision: catalog.revision,
     });
-    expect(recommendedChoice({ ...openai, auth }, "comment")?.thinking).toBe(
-      auth === "api_key" ? "off" : "low",
-    );
+    expect(recommendedChoice({ ...openai, auth }, "comment")).toMatchObject({
+      model: "gpt-6-luna",
+      thinking: "off",
+    });
   }
   expect(recommendedChoice(openai, "chat", { source: "unknown" })).toBeNull();
   expect(
@@ -237,17 +238,61 @@ test("qualified defaults use the real ranked data for each implemented method", 
   const anthropic = { provider: "anthropic", endpoint: null };
   const router = { provider: "openrouter", endpoint: null };
   expect(recommendedChoice(anthropic)?.model).toBe("claude-sonnet-5-5");
-  expect(recommendedChoice(anthropic, "comment")?.thinking).toBe("low");
+  expect(recommendedChoice(anthropic, "comment")).toMatchObject({
+    model: "claude-haiku-5-5",
+    thinking: "off",
+  });
   expect(recommendedChoice(router)?.model).toBe("openai/gpt-6.1-sol");
-  expect(recommendedChoice(router, "comment")?.model).toBe(
-    "openai/gpt-4o-mini",
+  expect(recommendedChoice(router, "comment")).toMatchObject({
+    model: "openai/gpt-6-luna",
+    thinking: "off",
+  });
+  const qualified: ModelCatalog = {
+    source: "account",
+    models: ["openai/gpt-6.2-sol", "openai/gpt-6.1-sol", "openai/gpt-6-luna"],
+    selectable: [
+      {
+        id: "openai/gpt-6.2-sol",
+        contextWindow: 1_050_000,
+        maxTokens: 128_000,
+        thinkingLevels: ["low", "medium", "max"],
+      },
+    ],
+  };
+  const availability = modelAvailability(
+    qualified,
+    availableChatModels(router, qualified),
   );
+  expect(recommendedChoice(router, "chat", availability)).toMatchObject({
+    model: "openai/gpt-6.2-sol",
+    thinking: "medium",
+  });
+  expect(recommendedChoice(router, "comment", availability)?.model).toBe(
+    "openai/gpt-6-luna",
+  );
+  const lunaOnly: ModelCatalog = {
+    source: "account",
+    models: ["openai/gpt-6-luna"],
+  };
+  expect(
+    recommendedChoice(
+      router,
+      "chat",
+      modelAvailability(lunaOnly, availableChatModels(router, lunaOnly)),
+    ),
+  ).toBeNull();
   const restricted = availableChatModels(router).filter(
     (model) => model.id === "openai/gpt-4o-mini",
   );
   expect(
     recommendedChoice(router, "chat", { source: "account", models: restricted })
       ?.model,
+  ).toBe("openai/gpt-4o-mini");
+  expect(
+    recommendedChoice(router, "comment", {
+      source: "account",
+      models: restricted,
+    })?.model,
   ).toBe("openai/gpt-4o-mini");
   const pending = catalog.rankedCandidates.map((entry) => ({
     ...entry,

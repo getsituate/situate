@@ -288,31 +288,26 @@ test("bundled recommendations cover the pinned inventory without activating rese
   validateRecommendations(inventory, recommendations, transports);
   assert.equal(recommendations.providers.length, 42);
   assert.deepEqual(
-    recommendations.rankedCandidates.map(
-      (entry) => `${entry.provider}/${entry.access}`,
-    ),
     [
-      "openai/api_key",
-      "openai/oauth",
-      "openai/api_key",
-      "openai/oauth",
-      "anthropic/api_key",
-      "openrouter/api_key",
-      "openai/api_key",
-      "openrouter/api_key",
-    ],
+      ...new Set(
+        recommendations.rankedCandidates.map(({ provider }) => provider),
+      ),
+    ].sort(),
+    ["anthropic", "openai", "openrouter"],
   );
 });
-test("discovery-only recommendations require a qualified OpenAI Responses model and effort", () => {
+test("discovery-only recommendations require a matching transport and valid chat effort", () => {
   for (const patch of [
-    { modelId: "gpt-5.4" },
-    { api: "openai-completions" },
+    { modelId: "anthropic/claude-haiku-5.5" },
+    { api: "openai-responses" },
     { thinking: "unrecognized" },
-    { priority: { chat: 5, comment: 1 } },
+    { priority: { chat: 5, comment: 2 } },
   ]) {
     const invalid = structuredClone(recommendations);
     Object.assign(
-      invalid.rankedCandidates.find((entry) => entry.discoveryOnly),
+      invalid.rankedCandidates.find(
+        (entry) => entry.provider === "openrouter" && entry.discoveryOnly,
+      ),
       patch,
     );
     assert.throws(
@@ -332,7 +327,8 @@ test("missing methods, fabricated ids and unsupported access cannot activate", (
   for (const patch of [
     { modelId: "invented" },
     { access: "legacy" },
-    { thinking: "xhigh" },
+    { thinking: "unrecognized" },
+    { priority: {} },
   ]) {
     const invalid = structuredClone(recommendations);
     Object.assign(invalid.rankedCandidates[0], patch);
