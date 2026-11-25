@@ -75,6 +75,7 @@ test("validates and stages both signed Windows installers for the common release
     "windows-release.json",
   ]);
   assert.match(result.notes, /Windows may warn or block installation/);
+  assert.doesNotMatch(result.notes, /SHA-?256|\b[a-f0-9]{64}\b/iu);
   assert.doesNotMatch(result.notes, /WebView2/u);
 });
 

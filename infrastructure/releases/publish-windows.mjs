@@ -86,7 +86,6 @@ export function qualifiedWindowsAssets(
       "## Windows",
       "Requires Windows 10 version 22H2 or Windows 11. Choose the installer for your architecture: x64 or ARM64.",
       "These installers do not have an Authenticode (Windows publisher) signature. Windows may warn or block installation.",
-      `SHA-256 checksums:\n\n\`\`\`text\n${sums}\`\`\``,
     ].join("\n\n"),
   };
 }
