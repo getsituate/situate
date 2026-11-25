@@ -718,7 +718,8 @@ function deviceStateFixture(t) {
 
 test("candidate device state archives only initially absent app namespaces without changing bytes or modes", (t) => {
   const fixture = deviceStateFixture(t);
-  const archive = captureQualificationDeviceState(fixture);
+  const { archiveCandidateDeviceState: archive } =
+    captureQualificationDeviceState(fixture);
   const note = join(fixture.application, "nested", "registry.bin");
   fs.mkdirSync(join(fixture.application, "nested"), { recursive: true });
   const bytes = Buffer.from([0, 255, 1, 13, 10]);
@@ -775,6 +776,33 @@ test("candidate device state archives only initially absent app namespaces witho
   );
 });
 
+test("qualification disables analytics independently for the candidate and predecessor", (t) => {
+  const fixture = deviceStateFixture(t);
+  const state = captureQualificationDeviceState(fixture);
+  const analytics = join(fixture.application, "analytics-v1.json");
+  assert.throws(() => state.verifyAnalyticsDisabled(), { code: "ENOENT" });
+  state.disableAnalytics();
+  state.verifyAnalyticsDisabled();
+  assert.deepEqual(JSON.parse(fs.readFileSync(analytics, "utf8")), {
+    enabled: false,
+    installation_id: null,
+    last_day: null,
+  });
+  assert.throws(() => state.disableAnalytics(), { code: "EEXIST" });
+  state.archiveCandidateDeviceState(fixture.owned);
+  assert.throws(() => state.verifyAnalyticsDisabled(), { code: "ENOENT" });
+  state.disableAnalytics();
+  state.verifyAnalyticsDisabled();
+  fs.writeFileSync(
+    analytics,
+    JSON.stringify({ enabled: false, installation_id: null, last_day: 42 }),
+  );
+  assert.throws(
+    () => state.verifyAnalyticsDisabled(),
+    /reserved an activity event/,
+  );
+});
+
 test("pre-existing app data and dangling links cannot obtain an absent-before proof", (t) => {
   const fixture = deviceStateFixture(t);
   fs.mkdirSync(fixture.application, { recursive: true });
@@ -792,7 +820,8 @@ test("pre-existing app data and dangling links cannot obtain an absent-before pr
 
 test("archive refuses generated links and hard links before moving any app data", (t) => {
   const fixture = deviceStateFixture(t);
-  const archive = captureQualificationDeviceState(fixture);
+  const { archiveCandidateDeviceState: archive } =
+    captureQualificationDeviceState(fixture);
   fs.mkdirSync(fixture.application, { recursive: true });
   fs.mkdirSync(join(fixture.home, "Library", "Preferences"), {
     recursive: true,
@@ -815,7 +844,8 @@ test("archive refuses generated links and hard links before moving any app data"
 
 test("archive rejects foreign ownership and swapped namespace parents before moving files", (t) => {
   const fixture = deviceStateFixture(t);
-  const archive = captureQualificationDeviceState(fixture);
+  const { archiveCandidateDeviceState: archive, disableAnalytics } =
+    captureQualificationDeviceState(fixture);
   fs.mkdirSync(fixture.application, { recursive: true });
   const foreign = join(fixture.application, "foreign");
   fs.writeFileSync(foreign, "synthetic foreign owner");
@@ -842,6 +872,7 @@ test("archive rejects foreign ownership and swapped namespace parents before mov
     join(fixture.home, "moved-library"),
     join(fixture.home, "Library"),
   );
+  assert.throws(() => disableAnalytics(), /Unsafe application data parent/);
   assert.throws(() => archive(fixture.owned), /Unsafe application data parent/);
   assert.equal(
     fs.existsSync(join(fixture.owned, "candidate-device-state")),

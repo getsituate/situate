@@ -107,8 +107,38 @@ export function captureQualificationDeviceState({ home, identifier, uid }) {
       "Qualification account retains prior app data; inspect it before using a fresh disposable account",
     );
   }
+  const application = paths[0];
+  const analytics = join(home, application, "analytics-v1.json");
+  function disableAnalytics() {
+    parents(application);
+    mkdirSync(join(home, dirname(application)), {
+      recursive: true,
+      mode: 0o700,
+    });
+    mkdirSync(join(home, application), { mode: 0o700 });
+    writeFileSync(
+      analytics,
+      JSON.stringify({ enabled: false, installation_id: null, last_day: null }),
+      { flag: "wx", mode: 0o600 },
+    );
+  }
+  function verifyAnalyticsDisabled() {
+    parents(join(application, "analytics-v1.json"));
+    const stat = lstatSync(analytics);
+    assert(
+      stat.isFile() && stat.uid === uid && stat.nlink === 1,
+      "Unsafe qualification analytics preferences",
+    );
+    const state = JSON.parse(readFileSync(analytics, "utf8"));
+    assert(
+      state.enabled === false &&
+        state.installation_id === null &&
+        state.last_day === null,
+      "Qualification analytics was enabled or reserved an activity event",
+    );
+  }
   let archived = false;
-  return function archiveCandidateDeviceState(owned) {
+  function archiveCandidateDeviceState(owned) {
     assert(!archived, "Candidate device state was already archived");
     const owner = lstatSync(owned);
     assert(
@@ -161,6 +191,11 @@ export function captureQualificationDeviceState({ home, identifier, uid }) {
       );
     archived = true;
     return destination;
+  }
+  return {
+    archiveCandidateDeviceState,
+    disableAnalytics,
+    verifyAnalyticsDisabled,
   };
 }
 
@@ -447,7 +482,7 @@ function createNativeQualificationHost(
   let provider;
   let stateRoot;
   let productJourneys;
-  let archiveCandidateDeviceState;
+  let deviceState;
   let deviceStateIsolationPending = false;
   let mountUncertain = false;
   let placementUncertain = false;
@@ -511,6 +546,7 @@ function createNativeQualificationHost(
     throw new Error(`Native qualification timed out: ${description}`);
   }
   async function launch(start = true, previousPid, confirmFirstLaunch = false) {
+    if (start) deviceState.verifyAnalyticsDisabled();
     launchPending = true;
     if (start) {
       try {
@@ -538,6 +574,7 @@ function createNativeQualificationHost(
       launchPending = false;
       return true;
     }, "signed app launch");
+    deviceState.verifyAnalyticsDisabled();
     await execute(
       "osascript",
       [
@@ -570,6 +607,11 @@ function createNativeQualificationHost(
     pid = undefined;
   }
   async function installDmg(directory, artifact, { updater = false } = {}) {
+    assert.equal(
+      artifact.identifier,
+      identifier,
+      "Qualification app identifier changed",
+    );
     assert(
       !existsSync(app),
       "Qualification application destination already exists",
@@ -663,6 +705,7 @@ function createNativeQualificationHost(
     }
     await execute("spctl", ["--assess", "--type", "execute", app], options);
     await execute("xcrun", ["stapler", "validate", app], options);
+    deviceState.disableAnalytics();
     await launch(
       true,
       undefined,
@@ -758,7 +801,7 @@ function createNativeQualificationHost(
       /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(identifier),
       "Invalid signed application identifier",
     );
-    archiveCandidateDeviceState = captureQualificationDeviceState({
+    deviceState = captureQualificationDeviceState({
       home: configuration.account.home,
       identifier,
       uid: configuration.account.uid,
@@ -802,7 +845,7 @@ function createNativeQualificationHost(
       "Finder placement outcome is unknown; retain isolated storage for inspection",
     );
     if (owned) {
-      if (launchDiagnostic) archiveCandidateDeviceState(owned);
+      if (launchDiagnostic) deviceState.archiveCandidateDeviceState(owned);
       rmSync(owned, { recursive: true });
     }
   }
@@ -928,7 +971,8 @@ function createNativeQualificationHost(
       await qualifyPredecessorUpdate({
         install: async () => {
           deviceStateIsolationPending = true;
-          archiveCandidateDeviceState(owned);
+          deviceState.verifyAnalyticsDisabled();
+          deviceState.archiveCandidateDeviceState(owned);
           deviceStateIsolationPending = false;
           await startProviderPhase();
           rmSync(app, { recursive: true });
