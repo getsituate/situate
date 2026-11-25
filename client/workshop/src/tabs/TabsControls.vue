@@ -61,8 +61,9 @@ function modelOutcome(id: string) {
       add views from the separated More views group. Compare the starting states
       with all or no pins, then try pinning and unpinning in the navigation.
     </p>
-    <label>
+    <label for="conversation-list-loading">
       <SituateCheckbox
+        id="conversation-list-loading"
         :checked="state.conversationsLoading"
         @change="
           emit('action', {

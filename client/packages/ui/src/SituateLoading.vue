@@ -51,7 +51,9 @@ watch(mark, (element, _, onCleanup) => {
   >
     <template v-if="shown">
       <div class="loading-art" aria-hidden="true">
-        <slot v-if="placement !== 'inline'" name="backdrop" />
+        <div v-if="placement !== 'inline' && $slots.backdrop">
+          <slot name="backdrop" />
+        </div>
         <svg
           ref="mark"
           class="loading-symbol"
@@ -97,8 +99,7 @@ watch(mark, (element, _, onCleanup) => {
   flex: none;
   place-items: center;
 }
-.loading-art > *,
-.loading-art :slotted(*) {
+.loading-art > * {
   grid-area: 1 / 1;
 }
 .loading-symbol {

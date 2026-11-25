@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watchEffect } from "vue";
 
 defineProps<{
   label: string;
@@ -8,24 +8,24 @@ defineProps<{
 }>();
 
 const mark = ref<SVGSVGElement>();
-const visible = ref(false);
-const onScreen = ref(false);
+const animated = ref(false);
 
-function updateVisibility() {
-  visible.value = !document.hidden;
-}
-watch(mark, (element, _, onCleanup) => {
-  onScreen.value = false;
+watchEffect((onCleanup) => {
+  const element = mark.value;
   if (!element || typeof IntersectionObserver === "undefined") return;
-  updateVisibility();
-  document.addEventListener("visibilitychange", updateVisibility);
+
+  let inView = false;
+  const update = () => (animated.value = inView && !document.hidden);
   const observer = new IntersectionObserver(([entry]) => {
-    onScreen.value = entry?.isIntersecting ?? false;
+    inView = !!entry?.isIntersecting;
+    update();
   });
   observer.observe(element);
+  document.addEventListener("visibilitychange", update);
   onCleanup(() => {
     observer.disconnect();
-    document.removeEventListener("visibilitychange", updateVisibility);
+    document.removeEventListener("visibilitychange", update);
+    animated.value = false;
   });
 });
 </script>
@@ -39,11 +39,13 @@ watch(mark, (element, _, onCleanup) => {
   >
     <template v-if="pending">
       <div class="loading-art" aria-hidden="true">
-        <slot v-if="placement !== 'inline'" name="backdrop" />
+        <div v-if="placement !== 'inline' && $slots.backdrop">
+          <slot name="backdrop" />
+        </div>
         <svg
           ref="mark"
           class="loading-symbol"
-          :class="{ animated: visible && onScreen }"
+          :class="{ animated }"
           viewBox="0 0 32 32"
           width="32"
           height="32"
@@ -85,8 +87,7 @@ watch(mark, (element, _, onCleanup) => {
   flex: none;
   place-items: center;
 }
-.loading-art > *,
-.loading-art :slotted(*) {
+.loading-art > * {
   grid-area: 1 / 1;
 }
 .loading-symbol {
