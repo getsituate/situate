@@ -363,6 +363,7 @@ fn invocation() -> Invocation {
         id: uuid::Uuid::new_v4().to_string(),
         run_id: "manual-action".into(),
         cancel: CancellationToken::new(),
+        original: None,
         progress: None,
         caller: None,
         interactive: false,
@@ -527,6 +528,7 @@ fn manual_invocation() -> (tempfile::TempDir, Invocation) {
         id,
         run_id: "manual-action".into(),
         cancel: CancellationToken::new(),
+        original: None,
         progress: None,
         caller: None,
         interactive: false,
@@ -1080,6 +1082,7 @@ fn executor_controls_remain_authorized_while_lifecycle_admission_is_held() {
                 args: Value::Null,
                 generation: 1,
                 dependency: None,
+                read_id: None,
             },
             Request::PendingPersistences,
         ] {

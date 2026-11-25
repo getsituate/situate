@@ -197,6 +197,21 @@ fn provider_manifest_accepts_service_exports_but_not_plugin_contributions() {
             "{field}"
         );
     }
+    let mut library = provider.clone();
+    library["exports"] = json!([
+        "documentLibraryDescribe",
+        "documentLibraryList",
+        "documentLibrarySearch",
+        "documentLibraryReadOriginal"
+    ]);
+    manifest(&code, library.clone());
+    assert!(validate(root.path(), "demo").is_ok());
+    library["exports"].as_array_mut().unwrap().pop();
+    manifest(&code, library);
+    assert_eq!(
+        validate(root.path(), "demo"),
+        Err(PluginError::InvalidManifest)
+    );
     let mut legacy = provider;
     legacy["kind"] = json!("tool");
     legacy["skills"] = json!(["SKILL.md"]);

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
 import contractSource from "./contract.js?raw";
+import {
+  validateLibraryDescriptor,
+  validateLibraryResult,
+} from "./contract.js";
 
 // Check scripts embed this same plain JavaScript without an import loader.
 const {
@@ -90,6 +94,119 @@ const cursor = (operation = "list", query: string | null = null) => ({
 });
 const invalid = (run: () => unknown) =>
   expect(run).toThrow("Invalid document source contract");
+
+describe("library profile", () => {
+  const library = validateLibraryDescriptor({
+    version: 2,
+    source,
+    scope: descriptor.scope,
+    label: descriptor.label,
+    searchCoverage: ["filename"],
+    limits: { maxItems: 2 },
+  });
+  const entry = { ref, title: "Invoice", mimeType: "application/pdf" };
+
+  test("requires the complete profile and a filename search", () => {
+    invalid(() =>
+      validateLibraryDescriptor(library, source.pluginId, [
+        "documentLibraryDescribe",
+      ]),
+    );
+    invalid(() =>
+      validateLibraryDescriptor({ ...library, searchCoverage: ["text"] }),
+    );
+    expect(
+      validateLibraryDescriptor(library, source.pluginId, [
+        "documentLibraryDescribe",
+        "documentLibraryList",
+        "documentLibrarySearch",
+        "documentLibraryReadOriginal",
+        "documentSourceDescribe",
+      ]),
+    ).toBe(library);
+  });
+
+  test("accepts an original handle for the exact requested revision", () => {
+    const result = {
+      ...envelope("readOriginal"),
+      version: 2,
+      document: entry,
+      original: {
+        id: "01111111-1111-4111-8111-111111111111",
+        size: 3 * 1024 * 1024,
+      },
+    };
+    expect(
+      validateLibraryResult(library, "readOriginal", { ref }, result),
+    ).toBe(result);
+    invalid(() =>
+      validateLibraryResult(
+        library,
+        "readOriginal",
+        { ref: { ...ref, revision: "r2" } },
+        result,
+      ),
+    );
+    invalid(() =>
+      validateLibraryResult(
+        library,
+        "readOriginal",
+        { ref },
+        {
+          ...result,
+          original: { ...result.original, id: "https://example.invalid/a" },
+        },
+      ),
+    );
+    invalid(() =>
+      validateLibraryResult(
+        library,
+        "readOriginal",
+        { ref },
+        {
+          ...result,
+          original: { ...result.original, size: 32 * 1024 * 1024 + 1 },
+        },
+      ),
+    );
+  });
+
+  test("binds a search page to its query and rejects unadvertised excerpts", () => {
+    const response = {
+      ...envelope("search"),
+      version: 2,
+      items: [entry],
+      status: "partial",
+      truncated: true,
+      reason: "limit",
+      next: cursor("search", "invoice"),
+    };
+    expect(
+      validateLibraryResult(
+        library,
+        "search",
+        { query: "invoice", limit: 2 },
+        response,
+      ),
+    ).toBe(response);
+    invalid(() =>
+      validateLibraryResult(
+        library,
+        "search",
+        { query: "receipt", limit: 2 },
+        response,
+      ),
+    );
+    invalid(() =>
+      validateLibraryResult(
+        library,
+        "search",
+        { query: "invoice", limit: 2 },
+        { ...response, items: [{ ...entry, excerpt: "Document text" }] },
+      ),
+    );
+  });
+});
 
 describe("descriptor declarations", () => {
   test("accepts a minimal optional-capability source and explicit exports", () => {

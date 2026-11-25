@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { AssistantMessage, ToolResultMessage } from "../../ai/contracts";
-import { transcriptBlocks, verifiedChange } from "./transcript";
+import { documentLinks, transcriptBlocks, verifiedChange } from "./transcript";
 
 function assistant(content: AssistantMessage["content"]): AssistantMessage {
   return {
@@ -34,6 +34,33 @@ function result(
     details,
   };
 }
+test("offers preview links only for source-bound document references", () => {
+  const source = { pluginId: "sample", instanceId: "archive" };
+  const ref = { source, id: "42", identity: "stable", revision: "r1" };
+  const structuredContent: ToolResultMessage["structuredContent"] = {
+    version: 1,
+    operation: "search",
+    status: "ok",
+    source,
+    items: [
+      { ref, title: "Receipt" },
+      { ref: { ...ref, source: { ...source, instanceId: "different" } } },
+      { ref: { source, id: "scan.pdf", identity: "path" } },
+    ],
+  };
+  const call = {
+    key: "one",
+    id: "one",
+    name: "find",
+    state: "completed",
+    result: { ...result("one", "find"), structuredContent },
+  };
+  expect(documentLinks(call)).toEqual([{ ref, title: "Receipt" }]);
+  expect(
+    documentLinks({ ...call, result: { ...call.result, isError: true } }),
+  ).toEqual([]);
+});
+
 test("only presents valid live references from a successful import receipt", () => {
   const file = {
     kind: "live",

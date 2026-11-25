@@ -6,6 +6,9 @@ import type { PluginRuntime } from "../plugins/runtime";
 const FileEditor = defineAsyncComponent(
   () => import("../files/FileEditor.vue"),
 );
+const Documents = defineAsyncComponent(
+  () => import("../documents/DocumentsView.vue"),
+);
 const ChatPane = defineAsyncComponent(
   () => import("../components/ChatPane.vue"),
 );
@@ -39,6 +42,12 @@ function createWorkspaceUi(workspaceId: string) {
     title: () => t("navigation.files"),
     icon: "folder",
     component: FileEditor,
+  });
+  registry.register({
+    id: "documents",
+    title: () => t("documents.title"),
+    icon: "notes",
+    component: Documents,
   });
   registry.register({
     id: "settings",

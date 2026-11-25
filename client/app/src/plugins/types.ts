@@ -225,12 +225,29 @@ export interface PluginHostServices {
     capability(): Promise<PluginProcessCapability>;
     run(request: PluginProcessRequest): Promise<PluginProcessReply>;
   };
+  readonly documents: {
+    fromFile(path: string): Promise<PluginDocumentOriginal>;
+    fromHttp(
+      request: Pick<PluginHttpRequest, "url" | "headers">,
+    ): Promise<PluginDocumentOriginal>;
+  };
   readonly network: {
     request(
       request: PluginHttpRequest,
     ): Promise<{ status: number; body: string }>;
   };
 }
+export type PluginDocumentOriginal = {
+  status?: number;
+  original?: { id: string; size: number };
+  error?:
+    | "unsupported"
+    | "permission"
+    | "not-found"
+    | "unavailable"
+    | "cancelled"
+    | "too-large";
+};
 export interface PluginUiHost {
   readonly localization: {
     text: typeof import("@situate/localization").t;

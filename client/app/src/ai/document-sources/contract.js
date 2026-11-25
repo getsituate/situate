@@ -372,6 +372,157 @@ export function toToolResult(descriptor, operation, args, envelope) {
   };
 }
 
+export const LIBRARY_VERSION = 2;
+export const LIBRARY_EXPORTS = Object.freeze({
+  describe: "documentLibraryDescribe",
+  list: "documentLibraryList",
+  search: "documentLibrarySearch",
+  readOriginal: "documentLibraryReadOriginal",
+});
+export const MAX_ORIGINAL_BYTES = 32 * 1024 * 1024;
+export const ORIGINAL_CHUNK_BYTES = 1024 * 1024;
+
+export function validateLibraryDescriptor(value, pluginId, exports) {
+  record(value, [
+    "version",
+    "source",
+    "label",
+    "scope",
+    "limits",
+    "searchCoverage",
+  ]);
+  requireValid(value.version === LIBRARY_VERSION);
+  if (exports !== undefined)
+    requireValid(
+      Object.values(LIBRARY_EXPORTS).every((name) => exports.includes(name)),
+    );
+  array(
+    value.searchCoverage,
+    2,
+    (entry) => requireValid(["filename", "text"].includes(entry)),
+    1,
+  );
+  requireValid(
+    value.searchCoverage.includes("filename") &&
+      new Set(value.searchCoverage).size === value.searchCoverage.length,
+  );
+  record(value.limits, ["maxItems"]);
+  assertDescriptor(
+    {
+      version: CONTRACT_VERSION,
+      source: value.source,
+      label: value.label,
+      scope: value.scope,
+      capabilities: { list: {} },
+      limits: { maxItems: value.limits.maxItems, maxTextChars: 1 },
+    },
+    pluginId === undefined ? {} : { pluginId },
+  );
+  return value;
+}
+
+export function validateLibraryReference(value) {
+  reference(value);
+  return value;
+}
+
+export function validateLibraryRequest(descriptor, operation, args) {
+  validateLibraryDescriptor(descriptor);
+  requireValid(["list", "search", "readOriginal"].includes(operation));
+  if (operation === "readOriginal") {
+    record(args, ["ref"]);
+    reference(args.ref, descriptor.source);
+    requireValid(
+      args.ref.identity !== "path" || Object.hasOwn(args.ref, "revision"),
+    );
+  } else {
+    record(args, operation === "search" ? ["limit", "query"] : ["limit"], [
+      "continuation",
+    ]);
+    integer(args.limit, 1, descriptor.limits.maxItems);
+    if (operation === "search") string(args.query, 4096);
+    if (Object.hasOwn(args, "continuation"))
+      continuation(descriptor, operation, args, args.continuation);
+  }
+  return args;
+}
+
+function libraryFile(value, descriptor, operation, expectedRef) {
+  record(
+    value,
+    ["ref", "title", "mimeType"],
+    operation === "search" ? ["excerpt"] : [],
+  );
+  reference(value.ref, descriptor.source, expectedRef);
+  requireValid(
+    value.ref.identity !== "path" || Object.hasOwn(value.ref, "revision"),
+  );
+  string(value.title, 2048);
+  string(value.mimeType, 127);
+  requireValid(
+    /^[a-z0-9][a-z0-9.+_-]*\/[a-z0-9][a-z0-9.+_-]*$/.test(value.mimeType),
+  );
+  if (Object.hasOwn(value, "excerpt")) {
+    requireValid(descriptor.searchCoverage.includes("text"));
+    string(value.excerpt, 1024);
+  }
+}
+
+export function validateLibraryResult(descriptor, operation, args, value) {
+  validateLibraryRequest(descriptor, operation, args);
+  const base = ["version", "source", "scopeId", "operation", "status"];
+  record(value, base, [
+    "error",
+    "items",
+    "truncated",
+    "next",
+    "reason",
+    "document",
+    "original",
+  ]);
+  requireValid(
+    value.version === LIBRARY_VERSION &&
+      value.scopeId === descriptor.scope.id &&
+      value.operation === operation,
+  );
+  source(value.source, descriptor.source);
+  if (value.status === "error") {
+    record(value, [...base, "error"]);
+    record(value.error, ["code"]);
+    requireValid(
+      [
+        "unsupported",
+        "permission",
+        "authentication",
+        "not-found",
+        "unavailable",
+        "cancelled",
+        "too-large",
+      ].includes(value.error.code),
+    );
+  } else if (operation === "readOriginal") {
+    record(value, [...base, "document", "original"]);
+    requireValid(value.status === "ok");
+    libraryFile(value.document, descriptor, operation, args.ref);
+    record(value.original, ["id", "size"]);
+    string(value.original.id, 36);
+    requireValid(
+      /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value.original.id),
+    );
+    integer(value.original.size, 1, MAX_ORIGINAL_BYTES);
+  } else {
+    record(value, [...base, "items", "truncated"], ["next", "reason"]);
+    array(value.items, args.limit, (entry) =>
+      libraryFile(entry, descriptor, operation),
+    );
+    requireValid(
+      new Set(value.items.map(({ ref }) => ref.id)).size === value.items.length,
+    );
+    boundedResult(descriptor, operation, args, value);
+  }
+  return value;
+}
+
 export function throwIfCancelled(signal) {
   if (signal.aborted) {
     const error = new Error("Document source invocation cancelled");

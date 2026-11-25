@@ -35,6 +35,7 @@ const props = defineProps<{
   ui: PluginManagementUi;
   scope: string;
   selectedPlugin?: string;
+  focusSources?: boolean;
   ticket?: NavigationTicket;
   onDevelop: (pluginId?: string) => Promise<void>;
 }>();
@@ -91,6 +92,14 @@ const statusMessage = computed(() => {
 });
 const heading = ref<HTMLElement>();
 const root = ref<HTMLElement>();
+watch(
+  [loading, () => props.focusSources],
+  ([pending, focus]) => {
+    if (!pending && focus)
+      root.value?.querySelector<HTMLElement>("[data-source-heading]")?.focus();
+  },
+  { flush: "post" },
+);
 let generation = 0;
 let invoker: HTMLElement | null = null;
 const plugins = computed(() => runtime.value?.state.plugins ?? []);
@@ -566,7 +575,11 @@ function settings(id: string) {
           class="plugin-collection-group"
           :aria-label="group.label"
         >
-          <h2 class="plugin-collection-label">
+          <h2
+            class="plugin-collection-label"
+            :data-source-heading="kind === 'source' ? '' : undefined"
+            :tabindex="kind === 'source' ? -1 : undefined"
+          >
             {{ group.label }} <span>{{ group.plugins.length }}</span>
           </h2>
           <div class="plugin-list plugin-card-grid">

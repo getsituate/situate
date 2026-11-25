@@ -20,6 +20,10 @@ Deliver a plugin-defined source export convention with authoring guidance and co
 
 Reuse source-provided search and existing OCR/text without a Situate index or mandatory local extraction. A folder source can support metadata/text access without PDF OCR. The source declares its capabilities and device limitations. No common collection, automatic preparation/categorization, background refresh, Situate tags, saved searches, preview/Library UI or prepared-content synchronization is required for this iteration. Existing plugin configuration, credentials and conversation persistence remain applicable; do not create a hidden full-source mirror.
 
+### Library source profile
+
+Sources can opt in to the [Library](REQ-0058-browse-document-collection.md#library-access-before-persistent-preparation) through a versioned profile with mandatory source description, bounded listing, search and original retrieval. It uses the existing plugin registration and execution boundaries. The profile is not a prerequisite for direct access through chat. Situate renders the original, and the source remains responsible for enforcing its agreed scope.
+
 ### Later collection contract and identity
 
 Collection qualification uses a local folder and Paperless contributing to the same collection through plugin-developed sources. It extends direct source access with persistent metadata, reusable processing and the Library UI. Contract-conformant synthetic sources support development but do not replace end-to-end verification. Originals remain in their sources. A device may admit a source only if it can access and locally prepare its supported content. Unsupported mobile-only sources are rejected with an explanation rather than silently transferred elsewhere. Per-document failures in an otherwise supported source remain visible and retryable.

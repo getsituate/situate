@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isMessageKey } from "@situate/localization";
 import { createFailureReporter } from "../diagnostics/failures";
+import {
+  LIBRARY_EXPORTS,
+  MAX_ORIGINAL_BYTES,
+  ORIGINAL_CHUNK_BYTES,
+  type OriginalHandle,
+} from "../ai/document-sources/contract.js";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { readonly, shallowReactive, watch } from "vue";
 import type { Component } from "vue";
@@ -1243,6 +1249,120 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
     )
       void refresh(undefined, true).catch(() => undefined);
   }
+  function releaseDocument(id: string) {
+    return invoke("plugin_executor", {
+      scope: options.scope,
+      request: { operation: "cancelDocumentRead", readId: id },
+    }).catch(() => undefined);
+  }
+  async function readDocumentBytes(
+    original: OriginalHandle,
+    signal: AbortSignal,
+  ) {
+    signal.throwIfAborted();
+    if (
+      !Number.isSafeInteger(original.size) ||
+      original.size < 1 ||
+      original.size > MAX_ORIGINAL_BYTES
+    )
+      throw new Error("native.plugins.tooLarge");
+    const bytes = new Uint8Array(original.size);
+    for (
+      let offset = 0;
+      offset < bytes.length;
+      offset += ORIGINAL_CHUNK_BYTES
+    ) {
+      signal.throwIfAborted();
+      const reply = await invoke<ArrayBuffer | number[]>(
+        "plugin_document_chunk",
+        {
+          scope: options.scope,
+          id: original.id,
+          offset,
+        },
+      );
+      const chunk =
+        reply instanceof ArrayBuffer
+          ? new Uint8Array(reply)
+          : Uint8Array.from(reply);
+      signal.throwIfAborted();
+      if (
+        chunk.length !== Math.min(ORIGINAL_CHUNK_BYTES, bytes.length - offset)
+      )
+        throw new Error("native.plugins.unavailable");
+      bytes.set(chunk, offset);
+    }
+    return bytes;
+  }
+  async function invokeDocumentSource(
+    id: string,
+    name: string,
+    args: unknown,
+    signal?: AbortSignal,
+  ) {
+    signal?.throwIfAborted();
+    if (name === LIBRARY_EXPORTS.readOriginal && !signal)
+      throw new Error("native.plugins.unavailable");
+    requireExecutable(id);
+    const provider = loaded.get(id);
+    const plugin = state.plugins.find((candidate) => candidate.id === id);
+    if (
+      plugin?.manifest?.kind !== "source" ||
+      !Object.values(LIBRARY_EXPORTS).some((operation) => operation === name) ||
+      !provider?.isAvailable() ||
+      !provider.exports.includes(name) ||
+      gates.has(id)
+    )
+      throw new Error("native.plugins.unavailable");
+    const ids = Object.keys(provider.revisions);
+    for (const owner of ids)
+      activeActions.set(owner, (activeActions.get(owner) ?? 0) + 1);
+    let readId: string | undefined;
+    let handedOff = false;
+    const cancel = () => {
+      if (readId) void releaseDocument(readId);
+    };
+    try {
+      if (signal && name === LIBRARY_EXPORTS.readOriginal) {
+        readId = await invoke<string>("plugin_executor", {
+          scope: options.scope,
+          request: { operation: "reserveDocumentRead" },
+        });
+        if (signal.aborted || !provider.isAvailable())
+          throw new Error("native.plugins.unavailable");
+        signal.addEventListener("abort", cancel, { once: true });
+      }
+      const reply = await invoke("plugin_executor", {
+        scope: options.scope,
+        request: {
+          operation: "invoke",
+          pluginId: id,
+          exportName: name,
+          args,
+          generation: provider.executorGeneration,
+          ...(readId ? { readId } : {}),
+        },
+      });
+      signal?.throwIfAborted();
+      const value = await persistence.unwrap(reply, id);
+      if (!provider.isAvailable())
+        throw new Error("native.plugins.unavailable");
+      handedOff = readId !== undefined;
+      return value;
+    } catch (error) {
+      throw sanitizedError(error, "plugins.executionFailed");
+    } finally {
+      if (!handedOff) {
+        signal?.removeEventListener("abort", cancel);
+        cancel();
+      }
+      for (const owner of ids)
+        activeActions.set(owner, (activeActions.get(owner) ?? 1) - 1);
+      for (const [instance, pluginId] of retiring)
+        closeWhenIdle(pluginId, instance);
+      for (const check of drainListeners) check();
+    }
+  }
   const stopRecovery = watch(recoveryRevision, () => {
     for (const id of loaded.keys()) if (!executable(id)) block(id);
     recoveryRefreshPending = true;
@@ -1300,6 +1420,8 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
     },
     dispose,
     getToolDescriptors,
+    invokeDocumentSource,
+    readDocumentBytes,
   };
 }
 export type PluginRuntime = ReturnType<typeof createPluginRuntime>;

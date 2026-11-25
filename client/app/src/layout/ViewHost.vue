@@ -340,7 +340,11 @@ const viewProps = computed(() => {
     @resolve="awaitingView = false"
   >
     <slot
-      v-if="definition.id === 'settings' || definition.id === 'plugins'"
+      v-if="
+        definition.id === 'settings' ||
+        definition.id === 'plugins' ||
+        definition.id === 'documents'
+      "
       :name="definition.id"
       :component="definition.component"
       :entry="entry"

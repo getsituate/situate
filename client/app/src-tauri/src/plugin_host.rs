@@ -1,3 +1,5 @@
+use crate::document_original::{self, Original, OriginalSlot, OriginalWriter};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -303,6 +305,14 @@ pub enum Request {
         headers: BTreeMap<String, String>,
         body: Option<String>,
     },
+    DocumentFromHttp {
+        url: String,
+        #[serde(default)]
+        headers: BTreeMap<String, String>,
+    },
+    DocumentFromFile {
+        path: String,
+    },
 }
 pub(crate) async fn request_native(
     app: tauri::AppHandle,
@@ -311,13 +321,14 @@ pub(crate) async fn request_native(
     request_id: String,
     request: Request,
     cancel: CancellationToken,
+    original: Option<Arc<OriginalSlot>>,
 ) -> Result<Value, String> {
     identifier(&request_id)?;
     let host = owned(&app, window, host_id)?;
     if cancel.is_cancelled() {
         return Err(CANCELLED.into());
     }
-    let operation = execute_request(app, host.clone(), request_id, request);
+    let operation = execute_request(app, host.clone(), request_id, request, original);
     tokio::pin!(operation);
     tokio::select! {
         result = &mut operation => result,
@@ -527,6 +538,7 @@ async fn execute_request(
     host: Arc<Host>,
     request_id: String,
     request: Request,
+    original: Option<Arc<OriginalSlot>>,
 ) -> Result<Value, String> {
     let token = begin_request(&host, &request_id)?;
     let cleanup = RequestCleanup {
@@ -560,6 +572,7 @@ async fn execute_request(
                         (location, host.test_files.clone()),
                         request,
                         &token,
+                        original.as_deref(),
                     )
                 },
             );
@@ -572,6 +585,8 @@ async fn execute_request(
                 | Request::FilesList { .. }
                 | Request::FilesSearch { .. }
                 | Request::FilesReadMany { .. }
+                | Request::DocumentFromHttp { .. }
+                | Request::DocumentFromFile { .. }
                 | Request::Process { .. }
         ) {
             let is_process = matches!(request, Request::Process { .. });
@@ -618,6 +633,7 @@ async fn execute_request(
                         (location.clone(), files.clone()),
                         request,
                         &token,
+                        original.as_deref(),
                     )
                 },
             );
@@ -651,6 +667,7 @@ async fn execute_request(
                     (location.clone(), files),
                     request,
                     &token,
+                    original.as_deref(),
                 )
             },
         )
@@ -713,6 +730,7 @@ fn dispatch(
     (location, files): (Location, Arc<crate::files::Session>),
     request: Request,
     token: &CancellationToken,
+    original: Option<&OriginalSlot>,
 ) -> Result<Value, String> {
     active(host, token)?;
     if let Some(expected) = host.incarnations.get(&host.plugin)
@@ -854,6 +872,48 @@ fn dispatch(
                 return serde_json::to_value(response).map_err(|_| ERROR.into());
             }
             tauri::async_runtime::block_on(http(url, method, headers, body, token))
+        }
+        Request::DocumentFromFile { path } => {
+            let slot = original.ok_or(ERROR)?;
+            if host.test_id.is_some()
+                || !process_capability(false, location.kind == "path").available
+            {
+                return Ok(json!({"error":"unsupported"}));
+            }
+            Ok(
+                match slot.stage(|| Original::local(Path::new(&path), token), token) {
+                    Ok(original) => json!({"original":original}),
+                    Err(error) => json!({"error":document_original::outcome(&error)}),
+                },
+            )
+        }
+        Request::DocumentFromHttp { url, headers } => {
+            let slot = original.ok_or(ERROR)?;
+            let download = if host.test_id.is_some() {
+                let response = host
+                    .responses
+                    .get(&format!("GET {url}"))
+                    .ok_or("native.plugins.testNetworkBlocked")?;
+                if response.status != 200 {
+                    return Ok(json!({"status":response.status}));
+                }
+                let mut writer = OriginalWriter::new()?;
+                let bytes = STANDARD.decode(&response.body).map_err(|_| ERROR)?;
+                writer
+                    .append(&bytes)
+                    .and_then(|()| writer.finish())
+                    .map(|original| (200, Some(original)))
+            } else {
+                tauri::async_runtime::block_on(http_original(url, headers, token))
+            };
+            Ok(match download {
+                Ok((status, Some(original))) => match slot.stage(|| Ok(original), token) {
+                    Ok(original) => json!({"status":status,"original":original}),
+                    Err(error) => json!({"error":document_original::outcome(&error)}),
+                },
+                Ok((status, None)) => json!({"status":status}),
+                Err(error) => json!({"error":document_original::outcome(&error)}),
+            })
         }
         request => {
             let base = if host.test_id.is_some() {
@@ -1179,6 +1239,57 @@ async fn http(
     body: Option<String>,
     token: &CancellationToken,
 ) -> Result<Value, String> {
+    let operation = async {
+        let response = send_http(url, method, headers, body).await?;
+        let status = response.status().as_u16();
+        let mut stream = response.bytes_stream();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_| ERROR)?;
+            if bytes.len() + chunk.len() > LIMIT {
+                return Err("native.plugins.tooLarge".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let body = String::from_utf8(bytes).map_err(|_| ERROR)?;
+        Ok(json!({"status":status,"body":body}))
+    };
+    tokio::select! {biased; _=token.cancelled()=>Err(CANCELLED.into()),result=operation=>result}
+}
+
+async fn http_original(
+    url: String,
+    headers: BTreeMap<String, String>,
+    token: &CancellationToken,
+) -> Result<(u16, Option<Original>), String> {
+    let operation = async {
+        let response = send_http(url, None, headers, None).await?;
+        let status = response.status().as_u16();
+        if status != 200 {
+            return Ok((status, None));
+        }
+        if response
+            .content_length()
+            .is_some_and(|len| len > document_original::MAX_BYTES)
+        {
+            return Err("native.plugins.tooLarge".into());
+        }
+        let mut output = OriginalWriter::new()?;
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            output.append(&chunk.map_err(|_| ERROR)?)?;
+        }
+        Ok((status, Some(output.finish()?)))
+    };
+    tokio::select! {biased; _=token.cancelled()=>Err(CANCELLED.into()),result=operation=>result}
+}
+
+async fn send_http(
+    url: String,
+    method: Option<String>,
+    headers: BTreeMap<String, String>,
+    body: Option<String>,
+) -> Result<reqwest::Response, String> {
     if url.len() > 8192 {
         return Err(ERROR.into());
     }
@@ -1204,36 +1315,21 @@ async fn http(
         return Err(ERROR.into());
     }
     let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| ERROR)?;
-    let operation = async {
-        let client = reqwest::Client::builder()
-            .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
-            .retry(reqwest::retry::never())
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|_| ERROR)?;
-        let mut request = client.request(method, url);
-        for (name, value) in headers {
-            request = request.header(name, value);
-        }
-        if let Some(body) = body {
-            request = request.body(body);
-        }
-        let response = request.send().await.map_err(|_| ERROR)?;
-        let status = response.status().as_u16();
-        let mut stream = response.bytes_stream();
-        let mut bytes = Vec::new();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|_| ERROR)?;
-            if bytes.len() + chunk.len() > LIMIT {
-                return Err("native.plugins.tooLarge".into());
-            }
-            bytes.extend_from_slice(&chunk);
-        }
-        let body = String::from_utf8(bytes).map_err(|_| ERROR)?;
-        Ok(json!({"status":status,"body":body}))
-    };
-    tokio::select! {biased; _=token.cancelled()=>Err(CANCELLED.into()),result=operation=>result}
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .retry(reqwest::retry::never())
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|_| ERROR)?;
+    let mut request = client.request(method, url);
+    for (name, value) in headers {
+        request = request.header(name, value);
+    }
+    if let Some(body) = body {
+        request = request.body(body);
+    }
+    request.send().await.map_err(|_| ERROR.into())
 }
 
 #[cfg(test)]

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "document-library",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "document-library",
+          "type": "added",
+          "platforms": ["macos", "windows"],
+          "title": "Open documents in Situate",
+          "paragraphs": [
+            "Browse and search compatible document sources. Open PDFs, PNGs and JPEGs up to 32 MiB in the Documents view without moving the originals."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "document-library",
+          "type": "added",
+          "platforms": ["macos", "windows"],
+          "title": "Dokumente in Situate öffnen",
+          "paragraphs": [
+            "Durchsuche kompatible Dokumentquellen und öffne PDFs, PNGs und JPEGs bis 32 MiB in der Dokumentansicht. Die Originale bleiben in ihren Quellen."
+          ]
+        }
+      ]
+    }
+  }
+}

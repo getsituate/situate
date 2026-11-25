@@ -81,6 +81,17 @@ export async function startDocumentSourceServer() {
             : docs.slice(page - 1, page),
       });
     }
+    if (url.pathname === "/api/documents/1/download/") {
+      const bytes = Buffer.concat([
+        Buffer.alloc(1024 * 1024, 42),
+        Buffer.from([0, 255, 7]),
+      ]);
+      response.writeHead(200, {
+        "content-type": "application/pdf",
+        "content-length": bytes.length,
+      });
+      return response.end(bytes);
+    }
     const match = /^\/api\/documents\/([1-9][0-9]*)\/$/.exec(url.pathname);
     if (!match) return reply(404, {});
     const id = Number(match[1]);

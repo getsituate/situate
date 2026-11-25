@@ -172,6 +172,7 @@ interface FixtureOptions {
   installedPlugins?: InstalledPlugin[];
   pluginSources?: Record<string, PluginSource>;
   pluginExportResults?: Record<string, Record<string, unknown>>;
+  documentOriginals?: Record<string, string>;
   pluginSourceFiles?: Record<string, Record<string, string>>;
   pluginListError?: string;
   pluginDisablePhase?: "waiting" | "failed" | "uncertain";
@@ -379,6 +380,10 @@ export async function workspaceFixture(
           });
         return pluginStates.get(scope)!;
       }
+      const documentReads = new Map<
+        string,
+        { scope: string; base64?: string }
+      >();
       const modelErrors = new Map<string, string>();
       const conversations = new Map<string, ConversationRecord>(
         (options.aiConversations ?? []).map((record) => [
@@ -1700,6 +1705,18 @@ export async function workspaceFixture(
               preferences.set(String(args.scope), value);
               return structuredClone(value);
             }
+            if (command === "plugin_document_chunk") {
+              const read = documentReads.get(String(args.id));
+              if (!read?.base64 || read.scope !== args.scope)
+                throw "native.plugins.unavailable";
+              const bytes = atob(read.base64).slice(
+                Number(args.offset),
+                Number(args.offset) + 1024 * 1024,
+              );
+              return Uint8Array.from(bytes, (character) =>
+                character.charCodeAt(0),
+              ).buffer;
+            }
             if (command === "plugin_executor") {
               const request = args.request as {
                 operation: string;
@@ -1708,8 +1725,22 @@ export async function workspaceFixture(
                 generation?: number;
                 dependency?: string;
                 args?: { accountId?: string | null };
+                readId?: string;
               };
               if (request.operation === "pendingPersistences") return [];
+              if (request.operation === "reserveDocumentRead") {
+                const id = crypto.randomUUID();
+                documentReads.set(id, { scope: String(args.scope) });
+                return id;
+              }
+              if (request.operation === "cancelDocumentRead") {
+                if (
+                  documentReads.get(String(request.readId))?.scope ===
+                  args.scope
+                )
+                  documentReads.delete(String(request.readId));
+                return null;
+              }
               if (
                 request.operation === "activity" ||
                 request.operation === "stop"
@@ -1802,10 +1833,22 @@ export async function workspaceFixture(
                 const values = options.pluginExportResults?.[target.pluginId];
                 if (!values || !Object.hasOwn(values, name))
                   throw "native.plugins.unavailable";
-                return {
-                  outcome: "completed",
-                  value: structuredClone(values[name]),
-                };
+                const value = structuredClone(values[name]);
+                if (
+                  request.exportName === "documentLibraryReadOriginal" &&
+                  request.readId
+                ) {
+                  const read = documentReads.get(request.readId);
+                  const result = value as { original?: { id: string } };
+                  if (result.original) {
+                    if (!read || read.scope !== args.scope)
+                      throw "native.plugins.unavailable";
+                    read.base64 =
+                      options.documentOriginals?.[result.original.id];
+                    result.original.id = request.readId;
+                  }
+                }
+                return { outcome: "completed", value };
               }
               throw "native.plugins.unavailable";
             }

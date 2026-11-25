@@ -68,6 +68,15 @@ export function createInvocationContext(
             : { timeoutMs: input.timeoutMs }),
         }),
     }),
+    documents: Object.freeze({
+      fromFile: (path: string) => call({ operation: "documentFromFile", path }),
+      fromHttp: (input: Pick<PluginHttpRequest, "url" | "headers">) =>
+        call({
+          operation: "documentFromHttp",
+          url: input.url,
+          headers: input.headers ?? {},
+        }),
+    }),
     network: Object.freeze({
       request: (input: PluginHttpRequest) =>
         call({
