@@ -51,15 +51,18 @@ test("the qualification baseline shares the release identity but uses only the i
     SITUATE_UPDATER_PUBLIC_KEY: "fixture public key",
     SITUATE_UPDATER_ENDPOINT:
       "https://getsituate.com/releases/windows/current/update.json",
+    SITUATE_RELEASE_VERSION: "2026.11.20",
+    SITUATE_RELEASE_HISTORY_FILE: "test-history.json",
+    SITUATE_RELEASE_HISTORY_SHA256: "a".repeat(64),
+    SITUATE_MIGRATION_MINIMUM_VERSIONS: '{"3":"2026.11.10"}',
   };
-  assert.deepEqual(qualificationBaseline("2026.11.20", environment), {
+  assert.deepEqual(qualificationBaseline("0.1.6", environment), {
     overlay: {
       identifier: "com.getsituate.app",
       productName: "Situate",
-      version: "2026.11.20",
+      version: "0.1.6",
     },
-    updater: {
-      SITUATE_RELEASE_VERSION: "2026.11.20",
+    environment: {
       SITUATE_DISTRIBUTION: "direct",
       SITUATE_UPDATER_PUBLIC_KEY: "fixture public key",
       SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
@@ -80,6 +83,10 @@ test("the qualification baseline shares the release identity but uses only the i
   assert.throws(
     () => qualificationBaseline("2026.11.20-preview", environment),
     /stable Windows version/,
+  );
+  assert.throws(
+    () => qualificationBaseline("2026.11.20", environment),
+    /checked-in version/,
   );
 });
 

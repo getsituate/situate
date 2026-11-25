@@ -5,12 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
+import { releaseHistoryPlugin } from "../client/scripts/release-history.mjs";
+import { canonical, catalogDigest, digest } from "./release-catalog.mjs";
 
 const script = fileURLToPath(
   new URL("./actions-windows-release.mjs", import.meta.url),
 );
 
-test("the Windows build accepts the reserved version only from its own checkout and attempt", (t) => {
+test("the Windows build receives the history and migration inputs bound to its reserved version", async (t) => {
   const temp = mkdtempSync(join(tmpdir(), "windows-release-actions-"));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
   const mock = join(temp, "mock-download.mjs");
@@ -27,7 +29,8 @@ childProcess.spawnSync = (command, args) => {
     "run", "download", "123", "--repo", "getsituate/situate",
     "--name", "windows-reservation-2", "--dir",
   ]);
-  copyFileSync(process.env.MOCK_RESERVATION, join(args.at(-1), "reservation.json"));
+  for (const name of ["reservation.json", "release-inputs.json", "situate-release-history.json"])
+    copyFileSync(join(process.env.MOCK_INPUTS, name), join(args.at(-1), name));
   return { status: 0 };
 };
 syncBuiltinESMExports();
@@ -35,7 +38,50 @@ syncBuiltinESMExports();
   );
   const source = "e".repeat(40);
   const output = join(temp, "github-output");
-  const reservation = join(temp, "test-reservation.json");
+  const environmentFile = join(temp, "github-env");
+  const reservation = join(temp, "reservation.json");
+  const version = "2026.11.23";
+  const catalog = {
+    schemaVersion: 1,
+    installedVersion: version,
+    releases: [
+      {
+        version,
+        locales: {
+          en: { title: "Changes", entries: [] },
+          de: { title: "Änderungen", entries: [] },
+        },
+      },
+    ],
+  };
+  const catalogBytes = `${canonical(catalog)}\n`;
+  const history = join(temp, "situate-release-history.json");
+  writeFileSync(history, catalogBytes);
+  const manifestBytes = `${canonical({
+    schemaVersion: 1,
+    kind: "situate-release-inputs",
+    source,
+    baseline: "d".repeat(40),
+    version,
+    build: "2026.11.23",
+    tag: `v${version}`,
+    fragments: [],
+    fragmentDigest: digest("[]"),
+    migrationMinimumVersions: { 3: "2026.11.10" },
+    history: {
+      file: "situate-release-history.json",
+      sha256: digest(catalogBytes),
+      contentSha256: catalogDigest(catalog),
+    },
+    previous: null,
+  })}\n`;
+  writeFileSync(join(temp, "release-inputs.json"), manifestBytes);
+  const identity = {
+    source,
+    version,
+    operationId: "actions-123-2",
+    generatedInputDigest: digest(manifestBytes),
+  };
   const env = {
     ProgramFiles: process.env.ProgramFiles,
     GITHUB_REPOSITORY: "getsituate/situate",
@@ -48,7 +94,8 @@ syncBuiltinESMExports();
     GITHUB_RUN_ATTEMPT: "2",
     GITHUB_SHA: source,
     GITHUB_OUTPUT: output,
-    MOCK_RESERVATION: reservation,
+    GITHUB_ENV: environmentFile,
+    MOCK_INPUTS: temp,
     RUNNER_TEMP: temp,
   };
   const run = (overrides) =>
@@ -61,26 +108,38 @@ syncBuiltinESMExports();
         timeout: 10_000,
       },
     );
-  writeFileSync(
-    reservation,
-    JSON.stringify({
-      source,
-      version: "2026.11.23",
-      operationId: "actions-123-2",
-    }),
-  );
+  writeFileSync(reservation, JSON.stringify(identity));
   const result = run();
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(output, "utf8"), "version=2026.11.23\n");
+  assert.equal(readFileSync(output, "utf8"), `version=${version}\n`);
+  const selected = readFileSync(environmentFile, "utf8");
+  const inputs = Object.fromEntries(
+    selected
+      .trim()
+      .split("\n")
+      .map((line) => line.split("=")),
+  );
+  assert.equal(inputs.SITUATE_MIGRATION_MINIMUM_VERSIONS, '{"3":"2026.11.10"}');
+  const frontend = await releaseHistoryPlugin({
+    version,
+    environment: { ...inputs, SITUATE_RELEASE_VERSION: version },
+  }).config();
+  assert.deepEqual(
+    JSON.parse(frontend.define.__SITUATE_RELEASE_HISTORY__),
+    catalog,
+  );
+
   assert.notEqual(run({ GITHUB_SHA: "f".repeat(40) }).status, 0);
   writeFileSync(
     reservation,
-    JSON.stringify({
-      source,
-      version: "2026.11.23",
-      operationId: "actions-123-1",
-    }),
+    JSON.stringify({ ...identity, operationId: "actions-123-1" }),
   );
   assert.notEqual(run().status, 0);
-  assert.equal(readFileSync(output, "utf8"), "version=2026.11.23\n");
+  writeFileSync(reservation, JSON.stringify(identity));
+  writeFileSync(history, `${catalogBytes} \n`);
+  const tampered = run();
+  assert.notEqual(tampered.status, 0);
+  assert.match(tampered.stderr, /Sealed catalog bytes differ/);
+  assert.equal(readFileSync(environmentFile, "utf8"), selected);
+  assert.equal(readFileSync(output, "utf8"), `version=${version}\n`);
 });

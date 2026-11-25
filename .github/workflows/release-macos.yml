@@ -575,7 +575,10 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows-reservation-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/windows-release-inputs/reservation.json
+          path: |
+            ${{ runner.temp }}/windows-release-inputs/reservation.json
+            ${{ runner.temp }}/windows-release-inputs/release-inputs.json
+            ${{ runner.temp }}/windows-release-inputs/situate-release-history.json
           if-no-files-found: error
           retention-days: 7
       - id: cache_start

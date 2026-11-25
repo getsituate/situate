@@ -351,10 +351,7 @@ function buildRelease(directory, config, target, { source, version, updater }) {
     );
     rmSync(bundle, { recursive: true });
     writeFileSync(config, JSON.stringify({ ...overlay, ...baseline.overlay }));
-    buildInstaller(directory, config, target, {
-      ...environment,
-      ...baseline.updater,
-    });
+    buildInstaller(directory, config, target, baseline.environment);
     const baselineFiles = readdirSync(bundle).filter((file) =>
       file.endsWith(".exe"),
     );
@@ -380,14 +377,30 @@ export function qualificationBaseline(version, environment) {
       "Build the qualification baseline with the updater public key only.",
     );
   }
+  const project = JSON.parse(
+    readFileSync(join(app, "src-tauri/tauri.conf.json"), "utf8"),
+  );
+  if (stableWindowsVersion(version) !== project.version) {
+    throw new Error(
+      "The qualification baseline must use the checked-in version.",
+    );
+  }
+  const baseline = { ...environment };
+  for (const name of [
+    "SITUATE_RELEASE_VERSION",
+    "SITUATE_RELEASE_HISTORY_FILE",
+    "SITUATE_RELEASE_HISTORY_SHA256",
+    "SITUATE_MIGRATION_MINIMUM_VERSIONS",
+  ])
+    delete baseline[name];
   return {
     overlay: {
       identifier: "com.getsituate.app",
       productName: "Situate",
-      version: stableWindowsVersion(version),
+      version,
     },
-    updater: {
-      SITUATE_RELEASE_VERSION: version,
+    environment: {
+      ...baseline,
       SITUATE_DISTRIBUTION: "direct",
       SITUATE_UPDATER_PUBLIC_KEY: publicKey,
       SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
