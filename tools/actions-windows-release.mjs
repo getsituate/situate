@@ -36,6 +36,31 @@ assert.match(env.GITHUB_SHA, /^[a-f0-9]{40}$/u);
 const staging = join(env.RUNNER_TEMP, "windows-release-inputs");
 const operationId = `actions-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`;
 
+const producer = {
+  "windows-reservation": "Create GitHub Release",
+  "windows-x64": "Build Windows (x64)",
+  "windows-arm64": "Build Windows (arm64)",
+  "windows-qualification": "Qualify Windows on native ARM64",
+};
+
+function assertProducerCanUpload(gh, name) {
+  const result = spawnSync(
+    gh,
+    [
+      "api",
+      `repos/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}/attempts/${env.GITHUB_RUN_ATTEMPT}/jobs?per_page=100`,
+    ],
+    { timeout: 30_000, encoding: "utf8" },
+  );
+  if (result.status !== 0) throw new Error("Could not check release jobs.");
+  const { jobs } = JSON.parse(result.stdout);
+  const job = jobs.find(({ name: title }) => title === producer[name]);
+  if (job?.status === "completed" && job.conclusion !== "success")
+    throw new Error(
+      `${producer[name]} did not succeed; ${name} is unavailable.`,
+    );
+}
+
 async function download(name) {
   mkdirSync(staging, { recursive: true });
   const artifact = `${name}-${env.GITHUB_RUN_ATTEMPT}`;
@@ -72,6 +97,7 @@ async function download(name) {
       )
     )
       throw new Error(`Could not download ${artifact}.`);
+    assertProducerCanUpload(gh, name);
     await setTimeout(15_000);
   } while (Date.now() < end);
   throw new Error(`Timed out waiting for ${artifact}.`);

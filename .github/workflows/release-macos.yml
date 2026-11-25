@@ -420,7 +420,7 @@ jobs:
   windows-build:
     name: Build Windows (${{ matrix.arch }})
     needs: [plan, required, hosting-ready]
-    if: github.ref_protected && needs.plan.outputs.enabled == 'true' && needs.plan.outputs.app_impact == 'true'
+    if: ${{ !cancelled() && github.ref_protected && needs.plan.outputs.enabled == 'true' && needs.required.result == 'success' && needs.hosting-ready.result == 'success' && needs.plan.outputs.app_impact == 'true' }}
     runs-on: windows-2025
     environment: windows-release
     timeout-minutes: 150
@@ -464,7 +464,7 @@ jobs:
   windows-qualification:
     name: Qualify Windows on native ARM64
     needs: windows-build
-    if: github.ref_protected
+    if: ${{ !cancelled() && github.ref_protected && needs.windows-build.result == 'success' }}
     runs-on: windows-11-arm
     timeout-minutes: 55
     permissions:

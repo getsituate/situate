@@ -28,6 +28,15 @@ let calls = 0;
 timers.setTimeout = async () => {};
 childProcess.spawnSync = (command, args) => {
   assert(isAbsolute(command));
+  if (args[0] === "api") {
+    assert.deepEqual(args, ["api", "repos/getsituate/situate/actions/runs/123/attempts/2/jobs?per_page=100"]);
+    const job = {
+      name: "Create GitHub Release",
+      status: process.env.MOCK_JOB_FAILED ? "completed" : "in_progress",
+      conclusion: process.env.MOCK_JOB_FAILED ? "failure" : null,
+    };
+    return { status: 0, stdout: JSON.stringify({ jobs: [job] }) };
+  }
   assert.deepEqual(args.slice(0, -1), [
     "run", "download", "123", "--repo", "getsituate/situate",
     "--name", "windows-reservation-2", "--dir",
@@ -134,6 +143,9 @@ syncBuiltinESMExports();
     catalog,
   );
 
+  const failedProducer = run({ MOCK_JOB_FAILED: "1" });
+  assert.notEqual(failedProducer.status, 0);
+  assert.match(failedProducer.stderr, /Create GitHub Release did not succeed/);
   assert.notEqual(run({ GITHUB_SHA: "f".repeat(40) }).status, 0);
   writeFileSync(
     reservation,

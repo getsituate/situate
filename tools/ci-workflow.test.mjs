@@ -334,7 +334,7 @@ test("the desktop CD builds Windows for the reserved version before creating the
   assert.match(build, /environment: windows-release/);
   assert.match(
     build,
-    /github\.ref_protected && needs\.plan\.outputs\.enabled == 'true' && needs\.plan\.outputs\.app_impact == 'true'/,
+    /if: \$\{\{ !cancelled\(\) && github\.ref_protected && needs\.plan\.outputs\.enabled == 'true' && needs\.required\.result == 'success' && needs\.hosting-ready\.result == 'success' && needs\.plan\.outputs\.app_impact == 'true' \}\}/,
   );
   assert.doesNotMatch(
     workflow,
@@ -356,7 +356,7 @@ test("the desktop CD builds Windows for the reserved version before creating the
   const qualification = job(workflow, "windows-qualification");
   assert.match(
     qualification,
-    /needs: windows-build[\s\S]*runs-on: windows-11-arm/,
+    /needs: windows-build\n    if: \$\{\{ !cancelled\(\) && github\.ref_protected && needs\.windows-build\.result == 'success' \}\}\n    runs-on: windows-11-arm/,
   );
   assert.match(
     qualification,
