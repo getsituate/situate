@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { t, isMessageKey, localizeError } from "@situate/localization";
+import { gmailRequestError } from "../../plugins/gmail-errors";
 import ChatImage from "./ChatImage.vue";
 import { pretty, type ToolView } from "./transcript";
 const props = defineProps<{ call: ToolView; scope: string }>();
 function resultText(text: string): string {
-  return props.call.result?.isError && isMessageKey(text)
+  return props.call.result?.isError &&
+    (isMessageKey(text) || gmailRequestError(text))
     ? localizeError(text)
     : text;
 }

@@ -59,6 +59,29 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("does not enable Gmail when the test notice is dismissed", async () => {
+  vi.mocked(invoke).mockResolvedValueOnce(false);
+  const wrapper = mount(SettingsView, { props });
+  try {
+    await wrapper
+      .findAll("nav button")
+      .find((button) => button.text().includes("Experimental features"))!
+      .trigger("click");
+    await flushPromises();
+    const toggle = wrapper.get<HTMLInputElement>('input[role="switch"]');
+    expect(toggle.element.checked).toBe(false);
+    await toggle.setValue(true);
+    const notice = wrapper.get("dialog");
+    expect(notice.text()).toContain("every seven days");
+    expect(toggle.element.checked).toBe(false);
+    await notice.get("button").trigger("click");
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("gmail_experiment");
+  } finally {
+    wrapper.unmount();
+  }
+});
+
 it("restores the selected category without adding a navigation entry", async () => {
   const wrapper = mount(SettingsView, {
     props: { ...props, presentation: { page: "appearance", detail: true } },
@@ -149,7 +172,7 @@ it("opens AI settings from its decorated category and manages connections inline
     "◐",
     "✦",
   ]);
-  expect(symbols).toHaveLength(5);
+  expect(symbols).toHaveLength(6);
   expect(
     wrapper.get(".settings-categories button:last-child").text(),
   ).toContain("About Situate");

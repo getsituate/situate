@@ -1,7 +1,169 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
 use situate_core::{localization::Language, messages};
-use std::sync::OnceLock;
+use std::{sync::OnceLock, time::Duration};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+};
+
+type Page = fn(Language, bool) -> &'static str;
+
+pub(super) struct Loopback {
+    pub origin: &'static str,
+    pub page: Page,
+    pub invalid: &'static str,
+    pub failure: &'static str,
+}
+
+pub(super) struct BrowserResponse {
+    socket: Option<tokio::net::TcpStream>,
+    language: Language,
+    page: Page,
+}
+
+impl BrowserResponse {
+    pub(super) async fn complete(mut self, connected: bool) {
+        if let Some(mut socket) = self.socket.take() {
+            write_browser_response(&mut socket, self.page, self.language, connected).await;
+        }
+    }
+}
+
+impl Drop for BrowserResponse {
+    fn drop(&mut self) {
+        if let Some(mut socket) = self.socket.take() {
+            let language = self.language;
+            let page = self.page;
+            // Failed, cancelled, or interrupted setup must never leave a success page.
+            tokio::spawn(async move {
+                write_browser_response(&mut socket, page, language, false).await;
+            });
+        }
+    }
+}
+
+async fn write_browser_response(
+    socket: &mut tokio::net::TcpStream,
+    page: Page,
+    language: Language,
+    connected: bool,
+) {
+    // Browser delivery is best-effort and cannot change the saved connection result.
+    let _ = tokio::time::timeout(
+        Duration::from_secs(1),
+        socket.write_all(page(language, connected).as_bytes()),
+    )
+    .await;
+}
+pub(super) async fn listen<T>(
+    listener: TcpListener,
+    language: Language,
+    policy: Loopback,
+    callback: impl Fn(&str, u16) -> Result<T, String>,
+) -> Result<(T, BrowserResponse), String> {
+    let Loopback {
+        origin,
+        page,
+        invalid,
+        failure,
+    } = policy;
+    let address = listener.local_addr().map_err(|_| failure)?;
+    let authority = format!("127.0.0.1:{}", address.port());
+    loop {
+        let (mut socket, peer) = listener.accept().await.map_err(|_| failure)?;
+        if !peer.ip().is_loopback() {
+            continue;
+        }
+        let read = async {
+            let mut bytes = Vec::new();
+            while bytes.len() < 12_288 {
+                let byte = socket.read_u8().await.map_err(|_| invalid)?;
+                bytes.push(byte);
+                if bytes.ends_with(b"\r\n\r\n") {
+                    break;
+                }
+            }
+            if !bytes.ends_with(b"\r\n\r\n") {
+                return Err(invalid.to_owned());
+            }
+            let request = std::str::from_utf8(&bytes).map_err(|_| invalid)?;
+            let mut lines = request.split("\r\n");
+            let mut first = lines.next().ok_or(invalid)?.split(' ');
+            if first.next() != Some("GET") {
+                return Err(invalid.to_owned());
+            }
+            let path = first.next().ok_or(invalid)?;
+            if !path.starts_with("/auth/callback?")
+                || first.next() != Some("HTTP/1.1")
+                || first.next().is_some()
+            {
+                return Err(invalid.into());
+            }
+            let mut host = false;
+            for line in lines.filter(|line| !line.is_empty()) {
+                let (name, value) = line.split_once(':').ok_or(invalid)?;
+                if name.eq_ignore_ascii_case("host") {
+                    if host || value.trim() != authority {
+                        return Err(invalid.into());
+                    }
+                    host = true;
+                }
+                if name.eq_ignore_ascii_case("origin") && value.trim() != origin {
+                    return Err(invalid.into());
+                }
+                if name.eq_ignore_ascii_case("transfer-encoding")
+                    || name.eq_ignore_ascii_case("content-length")
+                {
+                    return Err(invalid.into());
+                }
+            }
+            if !host {
+                return Err(invalid.into());
+            }
+            callback(&format!("http://{authority}{path}"), address.port())
+        };
+        let result = tokio::time::timeout(Duration::from_secs(2), read).await;
+        match result {
+            Ok(Ok(value)) => {
+                return Ok((
+                    value,
+                    BrowserResponse {
+                        socket: Some(socket),
+                        language,
+                        page,
+                    },
+                ));
+            }
+            rejected => {
+                write_browser_response(&mut socket, page, language, false).await;
+                if let Ok(Err(error)) = rejected
+                    && error != invalid
+                {
+                    return Err(error);
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn gmail_response(language: Language, accepted: bool) -> &'static str {
+    if !accepted {
+        return response(language, false);
+    }
+    static ACCEPTED: OnceLock<[String; 2]> = OnceLock::new();
+    &ACCEPTED.get_or_init(|| {
+        [Language::En, Language::De].map(|language| {
+            render_response_for(
+                language,
+                true,
+                &format!("{TOKENS}\n{CSS}"),
+                &format!("{PERFORMANCE}\n{SCORE}\n{RUNTIME}"),
+                true,
+            )
+        })
+    })[usize::from(language == Language::De)]
+}
 
 const TEMPLATE: &str = include_str!("../../src/ai/browser-callback/page.html");
 const CSS: &str = include_str!("../../src/ai/browser-callback/page.css");
@@ -36,6 +198,16 @@ fn build_response(language: Language, accepted: bool) -> String {
 }
 
 fn render_response(language: Language, accepted: bool, style: &str, script: &str) -> String {
+    render_response_for(language, accepted, style, script, false)
+}
+
+fn render_response_for(
+    language: Language,
+    accepted: bool,
+    style: &str,
+    script: &str,
+    gmail: bool,
+) -> String {
     // CSP hashes apply to the inline text after HTML newline normalization.
     let normalize = |text: &str| text.replace("\r\n", "\n").replace('\r', "\n");
     let style = normalize(style);
@@ -68,6 +240,9 @@ fn render_response(language: Language, accepted: bool, style: &str, script: &str
         "wordmark" => wordmark.clone(),
         "card" => card.clone(),
         "bend" => bend.clone(),
+        "native.ai.login.browser.accepted.title" if gmail => {
+            escape_html(&messages::text(language, "native.gmail.browser.connected"))
+        }
         key if key.starts_with("native.ai.login.browser.") => {
             escape_html(&messages::text(language, key))
         }

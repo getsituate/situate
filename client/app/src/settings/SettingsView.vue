@@ -26,6 +26,7 @@ import {
 } from "@situate/localization";
 import { SituateSelect } from "@situate/ui";
 import AppearanceSettings from "./AppearanceSettings.vue";
+import ExperimentalSettings from "./ExperimentalSettings.vue";
 import DictationSettings from "../dictation/DictationSettings.vue";
 import { dictation } from "../dictation/runtime";
 import { updates, updateReady } from "../updates/runtime";
@@ -74,6 +75,7 @@ const pages = [
   "dictation",
   "updates",
   "analytics",
+  "experimental",
   "about",
 ] as const;
 type SettingsPage = (typeof pages)[number];
@@ -161,6 +163,12 @@ const analyticsCategoryControl = useTemplateRef<
 const analyticsCategory = computed(
   () => analyticsCategoryControl.value?.element,
 );
+const experimentalCategoryControl = useTemplateRef<
+  InstanceType<typeof SituateButton>
+>("experimentalCategoryControl");
+const experimentalCategory = computed(
+  () => experimentalCategoryControl.value?.element,
+);
 const aboutCategoryControl = useTemplateRef<InstanceType<typeof SituateButton>>(
   "aboutCategoryControl",
 );
@@ -190,6 +198,7 @@ async function back(): Promise<void> {
     ai: aiCategory,
     dictation: dictationCategory,
     updates: updatesCategory,
+    experimental: experimentalCategory,
     about: aboutCategory,
     analytics: analyticsCategory,
   };
@@ -348,6 +357,17 @@ function change(field: "language" | keyof Formats, event: Event): void {
         </SituateButton>
         <SituateButton
           variant="plain"
+          ref="experimentalCategoryControl"
+          type="button"
+          :aria-current="page === 'experimental' ? 'page' : undefined"
+          @click="openPage('experimental')"
+        >
+          <SituateIcon name="settings" class="category-symbol" />
+          <span>{{ t("settings.experimental.title") }}</span>
+          <span class="category-arrow" aria-hidden="true">›</span>
+        </SituateButton>
+        <SituateButton
+          variant="plain"
           ref="aboutCategoryControl"
           type="button"
           :aria-current="page === 'about' ? 'page' : undefined"
@@ -388,7 +408,9 @@ function change(field: "language" | keyof Formats, event: Event): void {
                             ? t("settings.appearance.title")
                             : page === "ai"
                               ? t("settings.ai.title")
-                              : t("settings.formats.title")
+                              : page === "experimental"
+                                ? t("settings.experimental.title")
+                                : t("settings.formats.title")
               }}
             </h2>
             <SituateInfoButton
@@ -425,6 +447,11 @@ function change(field: "language" | keyof Formats, event: Event): void {
             </h3>
             <AnalyticsSettings />
           </section>
+          <ExperimentalSettings
+            v-if="page === 'experimental'"
+            :key="workspaceScope"
+            :workspace-scope="workspaceScope"
+          />
           <DictationSettings v-if="page === 'dictation'" />
           <AppearanceSettings
             v-if="page === 'appearance'"

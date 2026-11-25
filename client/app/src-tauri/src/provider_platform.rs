@@ -120,6 +120,7 @@ fn browser_url(raw: &str) -> Result<url::Url, String> {
             Some("auth.openai.com"),
             "/api/accounts/authorize" | "/oauth/authorize"
         ) | (Some("openrouter.ai"), "/auth")
+            | (Some("accounts.google.com"), "/o/oauth2/v2/auth")
     );
     if url.scheme() != "https"
         || url.port().is_some()
@@ -386,10 +387,18 @@ mod tests {
         for url in [
             "https://auth.openai.com/api/accounts/authorize?state=synthetic",
             "https://openrouter.ai/auth?code_challenge=synthetic",
+            "https://accounts.google.com/o/oauth2/v2/auth?state=synthetic",
         ] {
             assert!(browser_url(url).is_ok());
         }
-        for url in ["file:///tmp/test", "https://auth.openai.com/logout"] {
+        for url in [
+            "file:///tmp/test",
+            "https://auth.openai.com/logout",
+            "https://accounts.google.com/o/oauth2/token",
+            "https://accounts.google.com.example/o/oauth2/v2/auth",
+            "http://accounts.google.com/o/oauth2/v2/auth",
+            "https://accounts.google.com:8443/o/oauth2/v2/auth",
+        ] {
             assert!(browser_url(url).is_err(), "{url}");
         }
     }

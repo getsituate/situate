@@ -84,6 +84,9 @@ struct Invocation {
     run_id: String,
     cancel: CancellationToken,
     progress: Option<ProgressSink>,
+    caller: Option<(String, String)>,
+    interactive: bool,
+    check_owner: String,
     operation_gate: tokio::sync::Mutex<()>,
     ledger: tokio::sync::Mutex<Option<ManualLedger>>,
     action: Mutex<Option<crate::plugin_actions::ActionLease>>,
@@ -141,12 +144,36 @@ impl InvocationState {
             self.terminal = Some(Terminal::Disconnected);
         }
     }
-    fn host_error_prevents_result(&self, test_id: Option<&str>) -> bool {
-        test_id.is_none()
-            && self
+    fn observed_gmail_error(&self) -> Option<String> {
+        self.observations
+            .iter()
+            .find_map(|receipt| match receipt["operation"].as_str() {
+                Some("gmailInvoke" | "dependenciesInvoke") => gmail_error(&receipt["error"]),
+                _ => None,
+            })
+    }
+    fn host_error_preventing_result(&self, test_id: Option<&str>) -> Option<String> {
+        if test_id.is_some()
+            || !self
                 .observations
                 .iter()
                 .any(|receipt| !receipt["error"].is_null())
+        {
+            return None;
+        }
+        Some(
+            self.observed_gmail_error()
+                .unwrap_or_else(|| UNAVAILABLE.into()),
+        )
+    }
+    fn failed_result(&self, error: &str) -> ToolResult {
+        let mut result = ToolResult::json(
+            json!({"error":error,"observations":self.observations,"isError":true}),
+        );
+        if gmail_error(&json!(error)).is_some() {
+            result.content = vec![json!({"type":"text","text":error})];
+        }
+        result
     }
     fn complete(&mut self, terminal: Terminal) -> Result<(), String> {
         if self.terminal.is_some() {
@@ -607,10 +634,7 @@ impl Workspace {
         let operation = request["operation"].as_str().ok_or(INVALID)?;
         if operation == "dependenciesInvoke" {
             let target = request["pluginId"].as_str().ok_or(INVALID)?;
-            if !generation.source["manifest"]["dependencies"]
-                .as_array()
-                .is_some_and(|deps| deps.iter().any(|dep| dep.as_str() == Some(target)))
-            {
+            if !declares_dependency(generation, target) {
                 return Err(INVALID.into());
             }
             let target_generation = lock(&self.generations)?
@@ -637,7 +661,7 @@ impl Workspace {
                 generation: target_generation,
                 definitions,
             };
-            return Box::pin(plugin.execute(
+            return Box::pin(plugin.execute_for(
                 InvocationRequest {
                     run_id: &invocation.run_id,
                     kind: "export",
@@ -647,9 +671,49 @@ impl Workspace {
                 },
                 invocation.progress.clone(),
                 invocation.cancel.child_token(),
+                Some((&generation.plugin_id, &generation.incarnation)),
+                false,
+                &invocation.check_owner,
             ))
             .await
-            .map_err(|_| UNAVAILABLE.into());
+            .map_err(invocation_error);
+        }
+        if operation == "gmailInvoke" {
+            if generation.plugin_id != crate::gmail::ID {
+                return Err(INVALID.into());
+            }
+            let name = request["name"].as_str().ok_or(INVALID)?;
+            if !generation.source["manifest"]["exports"]
+                .as_array()
+                .is_some_and(|exports| exports.iter().any(|export| export.as_str() == Some(name)))
+            {
+                return Err(INVALID.into());
+            }
+            if let Some(id) = generation.test_id.as_deref() {
+                return crate::gmail::fixture(
+                    &self.context,
+                    id,
+                    &invocation.check_owner,
+                    name,
+                    request["args"].clone(),
+                );
+            }
+            if !crate::gmail::is_bundled(&generation.source) {
+                return Err(UNAVAILABLE.into());
+            }
+            return Box::pin(crate::gmail::invoke(
+                &self.context,
+                &generation.incarnation,
+                invocation
+                    .caller
+                    .as_ref()
+                    .map(|(id, incarnation)| (id.as_str(), incarnation.as_str())),
+                name,
+                request["args"].clone(),
+                invocation.interactive,
+                invocation.cancel.child_token(),
+            ))
+            .await;
         }
         if operation.starts_with("preview") {
             return preview_request(self, generation, invocation, request).await;
@@ -699,6 +763,34 @@ impl Workspace {
         }
         Ok(())
     }
+}
+
+fn declares_dependency(generation: &Generation, target: &str) -> bool {
+    generation.source["manifest"]["dependencies"]
+        .as_array()
+        .is_some_and(|deps| deps.iter().any(|dep| dep.as_str() == Some(target)))
+}
+
+fn invocation_error(outcome: ToolOutcome) -> String {
+    match outcome {
+        ToolOutcome::Failed(error) => error,
+        ToolOutcome::Completed(result) if result.is_error => {
+            gmail_error(&result.details["error"]).unwrap_or_else(|| UNAVAILABLE.into())
+        }
+        _ => UNAVAILABLE.into(),
+    }
+}
+
+fn gmail_error(value: &Value) -> Option<String> {
+    let error = value.as_str()?;
+    if crate::gmail::failure::Failure::decode(error).is_some() {
+        return Some(error.into());
+    }
+    if error.starts_with("native.gmail.") {
+        let key = worker_error(value);
+        return (key != UNAVAILABLE).then_some(key);
+    }
+    None
 }
 
 fn worker_error(value: &Value) -> String {
@@ -897,8 +989,7 @@ async fn finalize_manual(invocation: &Invocation) -> Result<(), String> {
     .await
 }
 fn ledger_receipt(request: &Value, outcome: &Result<Value, String>) -> Value {
-    let mut receipt =
-        json!({"success":outcome.is_ok(),"uncertain":outcome.is_err() && effectful(request)});
+    let mut receipt = json!({"success":outcome.is_ok(),"uncertain":uncertain(request, outcome)});
     match outcome {
         Ok(value) => {
             if let Some(value) = value.get("revision").filter(|v| v.is_string()) {
@@ -915,6 +1006,13 @@ fn ledger_receipt(request: &Value, outcome: &Result<Value, String>) -> Value {
             }
         }
         Err(error) => {
+            if let Some(failure) = crate::gmail::failure::Failure::decode(error) {
+                receipt["code"] = json!(failure.code());
+                if let Some(status) = failure.status() {
+                    receipt["statusCode"] = json!(status);
+                }
+                return receipt;
+            }
             receipt["code"] = json!(if error.starts_with("native.")
                 && error.len() <= 128
                 && error
@@ -956,7 +1054,18 @@ fn observation(request_id: &str, request: &Value, outcome: &Result<Value, String
         }
         summary
     });
-    json!({"requestId":request_id,"operation":request["operation"],"result":observed,"error":outcome.as_ref().err(),"uncertain":outcome.is_err() && effectful(request)})
+    json!({"requestId":request_id,"operation":request["operation"],"result":observed,"error":outcome.as_ref().err(),"uncertain":uncertain(request, outcome)})
+}
+
+fn uncertain(request: &Value, outcome: &Result<Value, String>) -> bool {
+    if request["operation"] == "gmailInvoke"
+        || (request["operation"] == "dependenciesInvoke" && request["pluginId"] == crate::gmail::ID)
+    {
+        use crate::gmail::failure::{Failure, Kind};
+        return matches!(outcome, Err(error) if error == "native.gmail.outcomeUnknown"
+            || Failure::decode(error).is_some_and(|failure| failure.key == Kind::ApiOutcomeUnknown));
+    }
+    outcome.is_err() && effectful(request)
 }
 
 fn effectful(request: &Value) -> bool {
@@ -1026,6 +1135,26 @@ impl CapturedPlugin {
         progress: Option<ProgressSink>,
         cancel: CancellationToken,
     ) -> Result<Value, ToolOutcome> {
+        self.execute_for(
+            request,
+            progress,
+            cancel,
+            None,
+            false,
+            &self.generation.plugin_id,
+        )
+        .await
+    }
+
+    async fn execute_for(
+        &self,
+        request: InvocationRequest<'_>,
+        progress: Option<ProgressSink>,
+        cancel: CancellationToken,
+        caller: Option<(&str, &str)>,
+        interactive: bool,
+        check_owner: &str,
+    ) -> Result<Value, ToolOutcome> {
         let InvocationRequest {
             run_id,
             kind,
@@ -1051,6 +1180,9 @@ impl CapturedPlugin {
             id: uuid::Uuid::new_v4().to_string(),
             run_id: run_id.into(),
             cancel: cancel.child_token(),
+            interactive,
+            caller: caller.map(|(id, incarnation)| (id.into(), incarnation.into())),
+            check_owner: check_owner.into(),
             progress,
             operation_gate: tokio::sync::Mutex::new(()),
             ledger: tokio::sync::Mutex::new(None),
@@ -1150,10 +1282,10 @@ impl CapturedPlugin {
                 {
                     break match terminal {
                         Terminal::Result(result) => {
-                            if state.host_error_prevents_result(generation.test_id.as_deref()) {
-                                Err(ToolOutcome::Completed(ToolResult::json(
-                                    json!({"isError":true,"error":UNAVAILABLE,"observations":state.observations}),
-                                )))
+                            if let Some(error) =
+                                state.host_error_preventing_result(generation.test_id.as_deref())
+                            {
+                                Err(ToolOutcome::Completed(state.failed_result(&error)))
                             } else {
                                 let mut result = result.clone();
                                 let images = lock(&invocation.images)
@@ -1172,11 +1304,10 @@ impl CapturedPlugin {
                             }
                         }
                         Terminal::Error(error) => {
-                            let mut result = ToolResult::json(
-                                json!({"error":error,"observations":state.observations,"isError":true}),
-                            );
-                            result.is_error = true;
-                            Err(ToolOutcome::Completed(result))
+                            let error = state
+                                .observed_gmail_error()
+                                .unwrap_or_else(|| error.clone());
+                            Err(ToolOutcome::Completed(state.failed_result(&error)))
                         }
                         Terminal::Disconnected => {
                             Err(disconnected(generation.id, state.observations.clone()))
@@ -2026,6 +2157,7 @@ pub enum Request {
         export_name: String,
         args: Value,
         generation: u64,
+        dependency: Option<String>,
     },
 }
 impl Request {
@@ -2132,19 +2264,49 @@ pub async fn plugin_executor(
             export_name,
             args,
             generation,
+            dependency,
         } => {
-            let plugin = tools
+            let origin = tools
                 .plugins
                 .iter()
-                .find(|p| {
-                    p.generation.plugin_id == plugin_id
-                        && p.generation.id == generation
-                        && p.definitions.exports.contains(&export_name)
-                })
+                .find(|p| p.generation.plugin_id == plugin_id && p.generation.id == generation)
                 .ok_or(UNAVAILABLE)?;
+            let plugin = if let Some(id) = &dependency {
+                if !declares_dependency(&origin.generation, id) {
+                    return Err(INVALID.into());
+                }
+                tools
+                    .plugins
+                    .iter()
+                    .find(|p| {
+                        p.generation.plugin_id == *id
+                            && origin.generation.revisions.get(id) == Some(&p.generation.revision)
+                            && origin.generation.incarnations.get(id)
+                                == Some(&p.generation.incarnation)
+                    })
+                    .ok_or(UNAVAILABLE)?
+            } else {
+                origin
+            };
+            if !plugin.definitions.exports.contains(&export_name) {
+                return Err(UNAVAILABLE.into());
+            }
+            let _origin_action = if dependency.is_some() {
+                Some(crate::plugin_actions::begin_native(
+                    &context.app,
+                    &context.window,
+                    &context.scope,
+                    context.authorization.clone(),
+                    &origin.generation.plugin_id,
+                    &origin.generation.revisions,
+                    &origin.generation.incarnations,
+                )?)
+            } else {
+                None
+            };
             let run_id = uuid::Uuid::new_v4().to_string();
             let result = plugin
-                .execute(
+                .execute_for(
                     InvocationRequest {
                         run_id: &run_id,
                         kind: "export",
@@ -2154,6 +2316,14 @@ pub async fn plugin_executor(
                     },
                     None,
                     CancellationToken::new(),
+                    dependency.as_ref().map(|_| {
+                        (
+                            origin.generation.plugin_id.as_str(),
+                            origin.generation.incarnation.as_str(),
+                        )
+                    }),
+                    true,
+                    &origin.generation.plugin_id,
                 )
                 .await;
             match result {
@@ -2171,10 +2341,7 @@ pub async fn plugin_executor(
                             json!({"outcome":"pendingPersistence","invocationId":invocation.id,"error":error}),
                         );
                     }
-                    Err(match outcome {
-                        ToolOutcome::Failed(error) => error,
-                        _ => UNAVAILABLE.into(),
-                    })
+                    Err(invocation_error(outcome))
                 }
             }
         }

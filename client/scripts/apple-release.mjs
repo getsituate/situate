@@ -57,6 +57,10 @@ import { releaseCompilerCacheEnvironment } from "../../tools/release-build-cache
 import { validateSourceVerification } from "../../tools/source-verification.mjs";
 import { canonical } from "../../tools/release-catalog.mjs";
 import { assertNoDictationTtsResources } from "./dictation-resources.mjs";
+import {
+  gmailBuildInputs,
+  withGmailBuildInputs,
+} from "./gmail-build-inputs.mjs";
 
 const macTargets = {
   arm64: "aarch64-apple-darwin",
@@ -483,6 +487,7 @@ async function buildMac({
   provenance,
   historyFile,
   historyBinding,
+  gmailInputs,
 }) {
   const buildConfiguration = updater
     ? { ...updater.public, ...provenance }
@@ -518,43 +523,49 @@ async function buildMac({
     );
     phaseStarted = now;
   };
-  await execute(
-    process.execPath,
-    [
-      cli,
-      "build",
-      "--ci",
-      "--target",
-      plan.macosTarget,
-      "--runner",
-      fileURLToPath(
-        new URL("../../tools/release-build-cache-cargo.mjs", import.meta.url),
-      ),
-      "--bundles",
-      "app",
-      "--config",
-      JSON.stringify({
-        version: config.version,
-        bundle: {
-          resources: {
-            [identityFile]: "situate-distribution.json",
-            [historyFile]: releaseHistoryAsset,
-            [join(output, "release-inputs.json")]: "release-inputs.json",
-            [join(root, "app/public/situate-licenses.txt")]:
-              "licenses/situate-licenses.txt",
-            [join(root, "app/public/licenses")]: "licenses/",
+  await withGmailBuildInputs(scratch, gmailInputs, (gmailEnv) =>
+    execute(
+      process.execPath,
+      [
+        cli,
+        "build",
+        "--ci",
+        "--target",
+        plan.macosTarget,
+        "--runner",
+        fileURLToPath(
+          new URL("../../tools/release-build-cache-cargo.mjs", import.meta.url),
+        ),
+        "--bundles",
+        "app",
+        "--config",
+        JSON.stringify({
+          version: config.version,
+          bundle: {
+            resources: {
+              [identityFile]: "situate-distribution.json",
+              [historyFile]: releaseHistoryAsset,
+              [join(output, "release-inputs.json")]: "release-inputs.json",
+              [join(root, "app/public/situate-licenses.txt")]:
+                "licenses/situate-licenses.txt",
+              [join(root, "app/public/licenses")]: "licenses/",
+            },
+            macOS: {
+              bundleVersion: plan.buildNumber,
+              signingIdentity: "-",
+              hardenedRuntime: true,
+            },
           },
-          macOS: {
-            bundleVersion: plan.buildNumber,
-            signingIdentity: "-",
-            hardenedRuntime: true,
-          },
-        },
-      }),
-      "--",
-      "--locked",
-    ],
-    { ...options, cwd: join(root, "app") },
+        }),
+        "--",
+        "--locked",
+      ],
+      {
+        ...options,
+        cwd: join(root, "app"),
+        env: { ...options.env, ...gmailEnv },
+      },
+    ),
   );
   finishPhase("release-tauri-build");
   const staging = join(scratch, "dmg");
@@ -951,6 +962,7 @@ async function buildResolvedAppleRelease({
       "GitHub macOS releases require SITUATE_POSTHOG_TOKEN. Set the public PostHog project token in the repository's Actions variables.",
     );
   if (check) return undefined;
+  const gmailInputs = gmailBuildInputs(resolve(root, ".."), environment);
   const cache = join(root, "target/apple-release");
   const locks = join(root, "target/local-release");
   const artifacts = join(root, "artifacts");
@@ -1215,6 +1227,7 @@ async function buildResolvedAppleRelease({
           scratch,
           historyFile,
           historyBinding,
+          gmailInputs,
           plan,
           settings,
           config,

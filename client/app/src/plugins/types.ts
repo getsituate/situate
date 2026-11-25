@@ -1,5 +1,4 @@
 import type * as Vue from "vue";
-import type * as Ui from "@situate/ui";
 import type { PluginLayout, PluginShortcutDefinition } from "./layout-actions";
 import type { WorkspaceShortcuts } from "../layout/workspace-shortcuts";
 import type {
@@ -233,11 +232,16 @@ export interface PluginHostServices {
   };
 }
 export interface PluginUiHost {
+  readonly localization: {
+    text: typeof import("@situate/localization").t;
+    error: typeof import("@situate/localization").localizeError;
+  };
   readonly vue: Pick<
     typeof Vue,
     | "defineComponent"
     | "h"
     | "ref"
+    | "useId"
     | "shallowRef"
     | "reactive"
     | "computed"
@@ -250,10 +254,7 @@ export interface PluginUiHost {
     | "nextTick"
     | "compile"
   >;
-  readonly ui: Pick<
-    typeof Ui,
-    Exclude<Extract<keyof typeof Ui, `Situate${string}`>, "SituateLoading">
-  >;
+  readonly ui: typeof import("./ui").ui;
   readonly navigation: Pick<UiCoordinator, "open" | "reveal">;
   readonly layout: PluginLayout;
   readonly service: {

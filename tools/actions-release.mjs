@@ -224,6 +224,8 @@ export function stageEnvironment(env, workflow, stage) {
       "SITUATE_POSTHOG_TOKEN",
       "TAURI_SIGNING_PRIVATE_KEY",
       "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+      "SITUATE_GMAIL_TEST_CLIENT_ID",
+      "SITUATE_GMAIL_TEST_CLIENT_SECRET",
     );
   const cacheEnabled =
     workflow === "create" &&

@@ -8,6 +8,7 @@ mod ai_plugin_tools;
 mod ai_protocol;
 mod analytics;
 mod appearance;
+mod auth_callback;
 mod change_history;
 mod keyboard_shortcuts;
 
@@ -15,9 +16,11 @@ mod conversation_projection;
 mod device_locale;
 mod diagnostics;
 mod dictation;
+mod experimental;
 mod external_links;
 mod file_tool;
 mod files;
+mod gmail;
 mod layout;
 mod lifecycle;
 mod localization;
@@ -88,6 +91,8 @@ macro_rules! application_handler {
             crate::plugin_host::plugin_process_abort,
             crate::plugin_development::plugin_development_status,
             crate::plugin_runtime::plugin_runtime,
+            crate::experimental::gmail_experiment,
+            crate::gmail::installation::gmail_install,
             crate::appearance::appearance_snapshot,
             crate::appearance::appearance_update,
             crate::keyboard_shortcuts::keyboard_shortcuts_snapshot,
@@ -177,6 +182,8 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(recovery_mode)
         .manage(keyboard_shortcuts::ShortcutPlugins::default())
+        .manage(experimental::Preferences::default())
+        .manage(gmail::Attempts::default())
         .manage(recovery::Recovery::default())
         .manage(plugin_changes::Changes::default())
         .manage(plugin_actions::Actions::default())
