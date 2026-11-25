@@ -319,7 +319,7 @@ impl NativeHost {
                 }
                 if role.is_none() || role.as_deref() == Some("support") {
                     tools.extend(
-                        crate::ai_plugin_tools::definitions(development.as_ref())
+                        crate::ai_plugin_tools::definitions(development.as_ref(), &conversation)
                             .into_iter()
                             .filter(|tool| {
                                 crate::ai_builtin_tools::allowed(
@@ -647,16 +647,10 @@ impl Host for NativeHost {
     async fn prepare_model(
         &self,
         config: &mut RunConfig,
+        development: Option<situate_core::conversation_store::Development>,
         cancel: CancellationToken,
     ) -> Result<(), String> {
         self.context.validate()?;
-        let development = self
-            .state
-            .lock()
-            .map_err(|_| NETWORK_ERROR)?
-            .captured
-            .as_ref()
-            .and_then(|captured| captured.development.clone());
         let (mut tools, role) = self.capture_tools(development.clone()).await?;
         let services = if role.is_none() {
             Some(crate::ai_executor::capture(&self.context.executor(), cancel.clone()).await?)
@@ -674,6 +668,7 @@ impl Host for NativeHost {
         }
         self.context.validate()?;
         let mut state = self.state.lock().map_err(|_| NETWORK_ERROR)?;
+        state.captured.as_mut().ok_or(NETWORK_ERROR)?.development = development;
         state.tools = tools;
         state.importing = role.as_deref() == Some("import");
         state.services = services;
@@ -1143,7 +1138,7 @@ impl Host for NativeHost {
                     .captured
                     .as_ref()
                     .and_then(|c| c.development.clone());
-                if crate::ai_plugin_tools::definitions(development.as_ref())
+                if crate::ai_plugin_tools::definitions(development.as_ref(), &self.conversation)
                     .iter()
                     .any(|definition| definition["name"] == name)
                 {
@@ -1174,6 +1169,7 @@ impl Host for NativeHost {
                 ToolOutcome::Completed(result) if !result.is_error => {
                     diagnostic.finish("success", None)
                 }
+                ToolOutcome::EnterPluginDevelopment => diagnostic.finish("success", None),
                 ToolOutcome::Failed(error) => diagnostic.result::<()>(&Err(error.clone())),
                 _ => diagnostic.finish("failure", Some("unknown")),
             }

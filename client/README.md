@@ -151,7 +151,7 @@ Draft storage allows at most 128 drafts, 1,024 source entries per draft, 1 MiB p
 
 ### Workspace-wide development
 
-On macOS, `start_plugin_development` accepts an assignment, relevant context and an optional starting `pluginId`. A separate conversation retains the assignment and its origin; the selected package is context, not an access boundary. A successful handoff focuses that conversation and submits the prepared assignment once. Reopening interrupted work waits for user input. Starting from Settings creates an empty conversation without submitting it or copying plugin code.
+On macOS, a plugin development request in an ordinary chat can switch that chat to development without resubmitting the request. The mode persists for follow-up work. To start separately, `start_plugin_development` accepts an assignment, relevant context and an optional starting `pluginId`. The new conversation retains the assignment and its origin and submits it once. The selected package is context, not an access boundary. Reopening interrupted work waits for user input. Starting from Settings creates an empty conversation without submitting it or copying plugin code.
 
 Development uses ordinary workspace capabilities, enabled plugin tools and the same direct action execution and task-scope rules as ordinary chat. History and drafts load independently of AI status, without a development-only readiness preflight; execution and tool failures use ordinary chat errors. Related connections, consumers and ordinary files can be changed in one conversation. Workspace edits are durable as they happen, independently of code activation. The development header/background differ, but messages, Activity and content-change presentation use the normal chat components.
 

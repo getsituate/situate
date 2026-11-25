@@ -1897,6 +1897,7 @@ fn check_result(outcome: Result<Value, ToolOutcome>) -> Result<Value, String> {
             )
         }
         Err(ToolOutcome::Failed(error)) => Err(error),
+        Err(ToolOutcome::EnterPluginDevelopment) => Err(UNAVAILABLE.into()),
     }
 }
 pub(crate) fn check_diagnostic(stage: &'static str, error: &str) {

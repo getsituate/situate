@@ -28,6 +28,7 @@ type PrepareModel =
 struct Fixture {
     root: tempfile::TempDir,
     storage: Storage,
+    conversation: String,
     live: AtomicBool,
     models: AtomicUsize,
     effects: AtomicUsize,
@@ -82,13 +83,17 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Arc<Self> {
+        Self::in_conversation("chat")
+    }
+    fn in_conversation(conversation: &str) -> Arc<Self> {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join(".situate")).unwrap();
         let storage = Storage::open(&root.path().canonicalize().unwrap(), "workspace").unwrap();
-        storage.create_conversation("chat", "Chat").unwrap();
+        storage.create_conversation(conversation, "Chat").unwrap();
         Arc::new(Self {
             root,
             storage,
+            conversation: conversation.into(),
             live: AtomicBool::new(true),
             models: AtomicUsize::new(0),
             effects: AtomicUsize::new(0),
@@ -154,7 +159,10 @@ impl Fixture {
         })
     }
     fn durable(&self) -> ConversationRecord {
-        self.storage.read_conversation("chat").unwrap().unwrap()
+        self.storage
+            .read_conversation(&self.conversation)
+            .unwrap()
+            .unwrap()
     }
     fn fail_at(&self, point: &'static str, published: bool) {
         *self.fail.lock().unwrap() = Some((point, published));
@@ -186,7 +194,7 @@ impl Host for Fixture {
     async fn load(&self) -> Result<ConversationContext, String> {
         self.validate_session()?;
         self.storage
-            .read_conversation_context("chat")?
+            .read_conversation_context(&self.conversation)?
             .ok_or("missing-chat".into())
     }
     async fn append(
@@ -258,7 +266,7 @@ impl Host for Fixture {
         if let Some((_, published)) = fail {
             if published {
                 self.storage.append_conversation_entries(
-                    "chat",
+                    &self.conversation,
                     expected_revision,
                     &entries,
                     selected_entry_id.as_deref(),
@@ -274,7 +282,7 @@ impl Host for Fixture {
         }
         self.panic_if(point);
         let saved = self.storage.append_conversation_entries(
-            "chat",
+            &self.conversation,
             expected_revision,
             &entries,
             selected_entry_id.as_deref(),
@@ -286,7 +294,9 @@ impl Host for Fixture {
         let bytes = std::fs::metadata(
             self.root
                 .path()
-                .join(".situate/conversations/chat/history.jsonl"),
+                .join(".situate/conversations")
+                .join(&self.conversation)
+                .join("history.jsonl"),
         )
         .unwrap()
         .len();
@@ -313,18 +323,20 @@ impl Host for Fixture {
             .map_err(Into::into)
     }
     async fn entry(&self, entry_id: String) -> Result<Option<HistoryEntry>, String> {
-        self.storage.find_conversation_entry("chat", &entry_id)
+        self.storage
+            .find_conversation_entry(&self.conversation, &entry_id)
     }
     async fn action(&self, action_id: String) -> Result<Option<HistoryEntry>, String> {
-        self.storage.find_conversation_action("chat", &action_id)
+        self.storage
+            .find_conversation_action(&self.conversation, &action_id)
     }
     async fn input_state(&self, input_id: String) -> Result<Option<String>, String> {
         self.storage
-            .find_conversation_input_state("chat", &input_id)
+            .find_conversation_input_state(&self.conversation, &input_id)
     }
     async fn history(&self, before: Option<String>, limit: usize) -> Result<HistoryPage, String> {
         self.storage
-            .read_conversation_history("chat", before.as_deref(), limit)
+            .read_conversation_history(&self.conversation, before.as_deref(), limit)
     }
     fn definitions(&self) -> Vec<ToolDefinition> {
         self.definition_reads.fetch_add(1, Ordering::SeqCst);
@@ -359,8 +371,13 @@ impl Host for Fixture {
     async fn prepare_model(
         &self,
         config: &mut RunConfig,
+        development: Option<situate_core::conversation_store::Development>,
         cancel: CancellationToken,
     ) -> Result<(), String> {
+        if development.is_some() {
+            assert_eq!(development, self.durable().development);
+            config.instructions = vec![json!({"role":"system","content":"Development mode"})];
+        }
         self.preparations.lock().unwrap().push(config.clone());
         if let Some(prepare) = self.prepare_model.lock().unwrap().as_ref() {
             prepare(self, config, cancel)?;
@@ -506,6 +523,9 @@ impl Host for Fixture {
         if let Err(error) = self.validate_session() {
             return ToolOutcome::Failed(error);
         }
+        if request.definition.name.as_str() == "enter_plugin_development" {
+            return ToolOutcome::EnterPluginDevelopment;
+        }
         self.tool_configs.lock().unwrap().push(request.config);
         self.dispatched_definitions
             .lock()
@@ -535,6 +555,104 @@ impl Host for Fixture {
         }
     }
 }
+fn plugin_development_fixture() -> Arc<Fixture> {
+    let host = Fixture::in_conversation("00000000-0000-4000-8000-000000000001");
+    *host.definitions.lock().unwrap() = vec![ToolDefinition::new(
+        ToolName::new("enter_plugin_development").unwrap(),
+        "Enter development",
+        json!({"type":"object","properties":{}}),
+    )];
+    let mut response = turn(true);
+    response["content"][0]["name"] = json!("enter_plugin_development");
+    *host.turns.lock().unwrap() = VecDeque::from([response, turn(false)]);
+    host
+}
+
+#[tokio::test]
+async fn development_mode_applies_to_the_next_request_and_survives_reopen() {
+    let host = plugin_development_fixture();
+    let owner = Owner::open(host.clone()).await.unwrap();
+    owner
+        .submit("action".into(), "Build a garden plugin".into(), 10)
+        .await
+        .unwrap();
+    owner.settled().await.unwrap();
+    let saved = host.durable();
+    assert_eq!(saved.id, "00000000-0000-4000-8000-000000000001");
+    assert_eq!(
+        serde_json::to_value(&saved.development).unwrap(),
+        json!({"version":2})
+    );
+    let messages = saved.messages.as_array().unwrap();
+    assert_eq!(messages[0]["content"], "Build a garden plugin");
+    assert_eq!(messages[2]["details"]["mode"], "pluginDevelopment");
+    let requests = host.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].config.instructions.is_empty());
+    assert_eq!(
+        requests[1].config.instructions[0]["content"],
+        "Development mode"
+    );
+    assert_eq!(host.storage.list_conversations().unwrap().len(), 1);
+    let reopened = Owner::open(host.clone()).await.unwrap();
+    assert_eq!(
+        reopened.snapshot().await.unwrap().record.development,
+        saved.development
+    );
+    assert_eq!(host.models.load(Ordering::SeqCst), 2);
+    host.turns.lock().unwrap().push_back(turn(false));
+    reopened
+        .submit("follow-up".into(), "Add a watering reminder".into(), 30)
+        .await
+        .unwrap();
+    reopened.settled().await.unwrap();
+    let requests = host.requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        requests[2].config.instructions[0]["content"],
+        "Development mode"
+    );
+    assert!(
+        requests[2]
+            .context
+            .iter()
+            .any(|message| message["content"] == "Build a garden plugin")
+    );
+}
+
+#[tokio::test]
+async fn interrupted_result_write_retains_the_mode_without_replaying_the_tool() {
+    let host = plugin_development_fixture();
+    host.fail_at("result", false);
+    let owner = Owner::open(host.clone()).await.unwrap();
+    owner
+        .submit("action".into(), "Build a garden plugin".into(), 10)
+        .await
+        .unwrap();
+    owner.settled().await.unwrap();
+    assert!(host.durable().development.is_some());
+    assert!(
+        !host
+            .durable()
+            .messages
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|message| message["role"] == "toolResult")
+    );
+    let reopened = Owner::open(host.clone()).await.unwrap();
+    assert!(
+        reopened
+            .snapshot()
+            .await
+            .unwrap()
+            .record
+            .development
+            .is_some()
+    );
+    assert_eq!(host.models.load(Ordering::SeqCst), 1);
+}
+
 fn onboarding_result(question: Value) -> (Arc<Fixture>, Value) {
     let host = Fixture::new();
     *host.provenance.lock().unwrap() = Value::Null;

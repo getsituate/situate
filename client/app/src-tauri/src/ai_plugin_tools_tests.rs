@@ -137,14 +137,26 @@ fn native_development_instructions_format_only_the_starting_plugin_context() {
 #[test]
 fn definitions_follow_conversation_development_mode() {
     let names = |development: Option<&Development>| {
-        definitions(development)
+        definitions(development, "00000000-0000-4000-8000-000000000001")
             .iter()
             .map(|value| value["name"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>()
     };
     let ordinary = names(None);
     assert!(ordinary.contains(&"start_plugin_development".into()));
+    assert!(ordinary.contains(&"enter_plugin_development".into()));
     assert!(!ordinary.contains(&"edit_plugin_sources".into()));
+    let legacy = definitions(None, "legacy");
+    assert!(
+        !legacy
+            .iter()
+            .any(|tool| tool["name"] == "enter_plugin_development")
+    );
+    assert!(
+        legacy
+            .iter()
+            .any(|tool| tool["name"] == "start_plugin_development")
+    );
     let development: Development = serde_json::from_value(json!({"version":2})).unwrap();
     let grouped = names(Some(&development));
     assert_eq!(
@@ -186,7 +198,7 @@ fn design_resources_are_offline_and_exactly_selected() {
 fn source_structure_operations_are_advertised_only_in_development() {
     let development: Development = serde_json::from_value(json!({"version":2})).unwrap();
     for (mode, expected) in [(None, false), (Some(&development), true)] {
-        let tools = definitions(mode);
+        let tools = definitions(mode, "00000000-0000-4000-8000-000000000001");
         assert!(
             !tools
                 .iter()
@@ -253,7 +265,7 @@ fn authoring_resources_are_exactly_selected_and_advertised() {
         None,
         Some(serde_json::from_value(json!({"version":2})).unwrap()),
     ] {
-        let definition = definitions(development.as_ref())
+        let definition = definitions(development.as_ref(), "00000000-0000-4000-8000-000000000001")
             .into_iter()
             .find(|value| value["name"] == "read_plugin_development")
             .unwrap();

@@ -397,6 +397,15 @@ impl<H: Host> Owner<H> {
         state: &mut State,
         next: &mut ConversationRecord,
     ) -> Result<(), SaveFailure> {
+        if state.batch.is_none() && state.metadata.development != next.development {
+            // Do not retain a successful tool result before the mode it reports.
+            let mut metadata = state.metadata.clone();
+            metadata.development = next.development.clone();
+            state.metadata = self
+                .host
+                .update_metadata(metadata, state.metadata.revision)
+                .await?;
+        }
         let mut delta = next.clone();
         if state.batch.is_none() {
             let receipts: Vec<String> = delta
@@ -458,7 +467,6 @@ impl<H: Host> Owner<H> {
         let mut metadata = batch.metadata.clone();
         metadata.title = next.title.clone();
         metadata.title_input = next.title_input.clone();
-        metadata.development = next.development.clone();
         if batch.clear_legacy_draft {
             metadata.legacy_draft = None;
         }

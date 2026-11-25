@@ -72,6 +72,7 @@ import {
   refreshWorkspaceChats,
   workspaceChatActivity,
   saveChatDrafts,
+  workspaceConversations,
 } from "./ai/chat";
 import { useVisualViewport } from "./use-visual-viewport";
 import { useLocalization } from "./settings/useLocalization";
@@ -876,6 +877,13 @@ onMounted(async () => {
           const active = state.value?.current?.id;
           if (active && (!scope || active === scope))
             void refreshWorkspaceChats(active);
+        },
+      ],
+      [
+        "ai-conversations-changed",
+        (scope: string) => {
+          if (state.value?.current?.id === scope)
+            void workspaceConversations(scope).refresh();
         },
       ],
       ["dictation-close-requested", continueClose],
