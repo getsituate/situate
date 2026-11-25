@@ -592,10 +592,7 @@ function openImport() {
                 "
                 :mobile="state.snapshot.mobile"
                 :workspace-name="state.snapshot.current?.name ?? 'Field notes'"
-                :mac="
-                  state.environment.profile === 'mac' ||
-                  state.environment.profile === 'ios'
-                "
+                :platform="state.environment.profile"
                 :navigation-id="navigation.navigationId"
                 :navigation-open="navigation.navigationOpen"
                 :show-navigation="navigation.showNavigation"

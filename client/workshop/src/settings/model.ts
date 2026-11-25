@@ -17,6 +17,12 @@ import { providerName } from "../ai/content";
 import { attentionCopy, connectionCopy, deviceAiCopy } from "./content";
 import type { ConnectionCatalog } from "./catalog";
 import type { ThinkingPreference } from "../chat/thinking";
+import {
+  shortcutCopy,
+  shortcutGroups,
+  type ShortcutOverrides,
+} from "./shortcuts";
+import type { PlatformId } from "../workshop/platform/model";
 
 export const providerStates = [
   { id: "ready", label: "Connected", state: "settings" },
@@ -66,7 +72,7 @@ export const categories = [
   { id: "appearance", label: appearanceCopy.title, icon: "palette" },
   { id: "formats", label: "Language & formats", icon: "globe" },
   { id: "ai", label: "AI & models", icon: "sparkle" },
-  { id: "shortcuts", label: "Keyboard shortcuts", icon: "keyboard" },
+  { id: "shortcuts", label: shortcutCopy.title, icon: "keyboard" },
   { id: "dictation", label: dictationCopy.title, icon: "mic" },
   { id: "updates", label: updateCopy.title, icon: "update" },
   { id: "about", label: updateCopy.about, icon: "info" },
@@ -200,13 +206,7 @@ export interface SettingsState {
   search: string;
   shortcutDraft: string;
   shortcutError: string;
-  shortcuts: {
-    id: string;
-    name: string;
-    group: string;
-    keys: string;
-    original: string;
-  }[];
+  shortcutOverrides: ShortcutOverrides;
 }
 export function createSettingsState(
   scenario = "settings-formats",
@@ -214,7 +214,9 @@ export function createSettingsState(
   const state: SettingsState = {
     page: settingsScenarios.find((s) => s.id === scenario)?.page ?? "formats",
     accent: scenario === "settings-appearance-light" ? "lemon" : "violet",
-    detail: scenario.startsWith("settings-appearance"),
+    detail:
+      scenario.startsWith("settings-appearance") ||
+      scenario === "settings-shortcuts",
     language: "en",
     formats: initialFormats("en", {
       time: "24",
@@ -254,36 +256,7 @@ export function createSettingsState(
     search: "",
     shortcutDraft: "",
     shortcutError: "",
-    shortcuts: [
-      {
-        id: "search",
-        name: "Search workspace",
-        group: "Navigation",
-        keys: "Mod+K",
-        original: "Mod+K",
-      },
-      {
-        id: "chat",
-        name: "New chat",
-        group: "Chat",
-        keys: "Mod+Shift+N",
-        original: "Mod+Shift+N",
-      },
-      {
-        id: "settings",
-        name: "Open settings",
-        group: "Navigation",
-        keys: "Mod+,",
-        original: "Mod+,",
-      },
-      {
-        id: "sidebar",
-        name: "Toggle sidebar",
-        group: "Navigation",
-        keys: "Mod+Shift+B",
-        original: "Mod+Shift+B",
-      },
-    ],
+    shortcutOverrides: {},
   };
   if (scenario === "settings-advanced") {
     state.advanced = true;
@@ -621,19 +594,34 @@ export function disconnect(state: SettingsState) {
   state.notice = deviceAiCopy.disconnected(name);
   state.dialog = null;
 }
-export function saveShortcut(state: SettingsState) {
-  const current = state.shortcuts.find((s) => s.id === state.target);
+export function saveShortcut(state: SettingsState, platform: PlatformId) {
+  const actions = shortcutGroups(platform, state.shortcutOverrides).flatMap(
+    (group) => group.actions,
+  );
+  const current = actions.find((action) => action.id === state.target);
   if (!current) return;
-  const conflict = state.shortcuts.find(
-    (s) => s.id !== current.id && s.keys && s.keys === state.shortcutDraft,
+  const conflict = actions.find(
+    (action) =>
+      action.id !== current.id &&
+      action.keys &&
+      action.keys === state.shortcutDraft,
   );
   if (conflict) {
-    state.shortcutError = `Already used for “${conflict.name}”. Choose another combination.`;
+    state.shortcutError = shortcutCopy.conflict.replace(
+      "{action}",
+      conflict.name,
+    );
     return;
   }
-  current.keys = state.shortcutDraft;
+  const overrides = state.shortcutOverrides[platform] ?? {};
+  if (current.original === state.shortcutDraft) delete overrides[current.id];
+  else overrides[current.id] = state.shortcutDraft;
+  if (Object.keys(overrides).length)
+    state.shortcutOverrides[platform] = overrides;
+  else delete state.shortcutOverrides[platform];
   state.dialog = null;
-  state.notice = `Shortcut for ${current.name.toLowerCase()} updated.`;
+  state.shortcutError = "";
+  state.notice = shortcutCopy.updated.replace("{action}", current.name);
 }
 export function cloneSettings(state: SettingsState): SettingsState {
   return JSON.parse(JSON.stringify(state));

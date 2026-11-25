@@ -220,9 +220,9 @@ function update(change: (s: SettingsState) => void) {
       <p class="help">{{ workshopSettings.aiHelp }}</p>
     </template>
     <p v-if="state.page === 'shortcuts'" class="help">
-      Binding capture, duplicate detection, clearing and restoring a default are
-      interactive. OS-reserved keys, plugin actions and device-specific binding
-      storage remain open.
+      Switch Platform profile to compare shortcuts. Edits stay with that profile
+      until you reset the scenario. The preview records shortcuts but does not
+      run their actions.
     </p>
     <SituateDisclosure>
       <template #label>Extension points and design basis</template>

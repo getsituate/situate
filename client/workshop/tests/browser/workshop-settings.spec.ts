@@ -364,9 +364,11 @@ test("settings reuse provider selection, authentication, save failure and comple
     "data-value",
     "anthropic-1",
   );
-  await expect(preview.getByRole("status")).toContainText(
-    "Anthropic connected",
-  );
+  await expect(
+    preview
+      .getByRole("region", { name: "Settings", exact: true })
+      .getByRole("status"),
+  ).toContainText("Anthropic connected");
   await expect(page.getByRole("region", { name: "AI controls" })).toHaveCount(
     0,
   );
@@ -499,34 +501,128 @@ test("branded select fields retain selection, keyboard focus and disabled states
   ).toBeDisabled();
 });
 
-test("shortcuts reject duplicates, preserve drafts during resizing and restore defaults", async ({
+test("shortcut settings find actions, preserve drafts and recover from conflicts", async ({
   page,
-}) => {
+}, testInfo) => {
   const preview = await open(page, "settings-shortcuts");
-  await preview
-    .getByRole("button", { name: "Change shortcut for New chat" })
-    .click();
-  await preview.getByLabel("Press a key combination").press("Control+k");
-  await preview.getByRole("button", { name: "Save shortcut" }).click();
-  await expect(preview.getByRole("alert")).toContainText("Already used");
-  await preview.getByLabel("Press a key combination").press("Control+Shift+j");
-  await preview.setViewportSize({ width: 390, height: 844 });
-  await expect(preview.getByLabel("Press a key combination")).toHaveValue(
-    /Shift.*J/,
+  await preview.setViewportSize({ width: 1040, height: 700 });
+  const scope = preview.getByRole("button", {
+    name: "About keyboard shortcuts",
+  });
+  const scopeText = preview.getByText(
+    "Changes to keyboard shortcuts apply only to this workspace and operating system.",
   );
-  await preview.getByRole("button", { name: "Save shortcut" }).click();
-  await preview.getByRole("button", { name: /Keyboard shortcuts/ }).click();
-  await expect(
-    preview.getByRole("button", { name: "Change shortcut for New chat" }),
-  ).toContainText("Modified");
-  await preview
-    .getByRole("button", { name: "Change shortcut for New chat" })
-    .click();
+  await expect(scopeText).toBeHidden();
+  await expect(preview.getByRole("region", { name: "Tabs" })).toBeVisible();
+  await expect(preview.getByRole("region", { name: "Panes" })).toBeVisible();
+  await preview.screenshot({
+    path: testInfo.outputPath("keyboard-shortcuts-macos.png"),
+  });
+  await scope.press("Enter");
+  await expect(scopeText).toBeVisible();
+  await preview.screenshot({
+    path: testInfo.outputPath("keyboard-shortcuts-info.png"),
+  });
+  await preview.keyboard.press("Escape");
+  await expect(scopeText).toBeHidden();
+  await expect(scope).toBeFocused();
+
+  const search = preview.getByRole("searchbox", { name: "Find an action" });
+  await search.fill("no-such-action");
+  await expect(preview.getByText("No matching actions")).toBeVisible();
+  await preview.getByRole("button", { name: "Clear search" }).click();
+  await expect(search).toBeFocused();
+  await search.fill("chat");
+  await expect(preview.getByRole("region", { name: "Tabs" })).toHaveCount(0);
+
+  const row = preview.getByRole("button", {
+    name: "Change shortcut for New chat",
+  });
+  const recorder = preview.getByLabel("Press a key combination");
+  const save = preview.getByRole("button", { name: "Save shortcut" });
+  await row.press("Enter");
+  await expect(recorder).toBeFocused();
+  await recorder.press("Meta+k");
+  await save.click();
+  await expect(preview.getByRole("alert")).toContainText("Search workspace");
+  await expect(recorder).toBeFocused();
+  await preview.screenshot({
+    path: testInfo.outputPath("keyboard-shortcuts-conflict.png"),
+  });
+
+  await recorder.press("Control+Shift+j");
+  await preview.setViewportSize({ width: 390, height: 844 });
+  await expect(recorder).toHaveValue("⌃ + ⇧ + J");
+  await preview.screenshot({
+    path: testInfo.outputPath("keyboard-shortcuts-narrow.png"),
+  });
+  await save.click();
+  await expect(row).toBeFocused();
+  await expect(row).toContainText("Modified");
+  await expect(row).toHaveAccessibleDescription(
+    "Control + Shift + J. Modified.",
+  );
+
+  await row.press("Enter");
+  await preview.getByRole("button", { name: "Remove shortcut" }).click();
+  await recorder.press("Escape");
+  await expect(row).toBeFocused();
+  await expect(row).toHaveAccessibleDescription(
+    "Control + Shift + J. Modified.",
+  );
+
+  await row.press("Enter");
+  await preview.getByRole("button", { name: "Remove shortcut" }).click();
+  await save.click();
+  await expect(row).toHaveAccessibleDescription("Not assigned. Modified.");
+  await row.press("Enter");
   await preview.getByRole("button", { name: "Use default" }).click();
+  await save.click();
+  await expect(row).toHaveAccessibleDescription("Command + Shift + N");
+  await expect(row).not.toContainText("Modified");
+});
+
+test("shortcut settings show and edit only the current platform", async ({
+  page,
+}, testInfo) => {
+  const preview = await open(page, "settings-shortcuts");
+  const newTab = preview.getByRole("button", {
+    name: "Change shortcut for New tab",
+  });
+  const split = preview.getByRole("button", {
+    name: "Change shortcut for Split right",
+  });
+  const profile = page.getByLabel("Platform profile");
+  await expect(newTab).toHaveAccessibleDescription("Command + T");
+  await expect(split).toHaveAccessibleDescription(
+    "Control + Command + Shift + Right arrow",
+  );
+  await selectOption(profile, "windows");
+  await preview.setViewportSize({ width: 1040, height: 700 });
+  await expect(newTab).toHaveAccessibleDescription("Control + T");
+  await expect(split).toHaveAccessibleDescription(
+    "Control + Alt + Shift + Right arrow",
+  );
+  await expect(preview.getByRole("combobox")).toHaveCount(0);
+  await preview.screenshot({
+    path: testInfo.outputPath("keyboard-shortcuts-windows.png"),
+  });
+
+  await newTab.click();
+  await preview.getByLabel("Press a key combination").press("Control+Shift+t");
   await preview.getByRole("button", { name: "Save shortcut" }).click();
-  await expect(
-    preview.getByRole("button", { name: "Change shortcut for New chat" }),
-  ).not.toContainText("Modified");
+  await expect(newTab).toHaveAccessibleDescription(
+    "Control + Shift + T. Modified.",
+  );
+  await newTab.click();
+  await preview.getByLabel("Press a key combination").press("Control+Shift+y");
+  await selectOption(profile, "mac");
+  await expect(preview.getByRole("dialog")).toHaveCount(0);
+  await expect(newTab).toHaveAccessibleDescription("Command + T");
+  await selectOption(profile, "windows");
+  await expect(newTab).toHaveAccessibleDescription(
+    "Control + Shift + T. Modified.",
+  );
 });
 
 test("mobile keyboard and safe areas preserve search and keep shortcut dialogs reachable", async ({
