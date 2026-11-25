@@ -150,14 +150,15 @@ async function close(confirmed = false) {
     </template>
   </SituateDialog>
   <ErrorDialog v-if="error" :open="true" :message="error" @dismiss="error = ''">
-    <SituateButton
-      v-if="enabled === undefined"
-      @click="
-        error = '';
-        read();
-      "
-    >
-      {{ t("settings.experimental.retry") }}
-    </SituateButton>
+    <template v-if="enabled === undefined" #actions>
+      <SituateButton
+        @click="
+          error = '';
+          read();
+        "
+      >
+        {{ t("settings.experimental.retry") }}
+      </SituateButton>
+    </template>
   </ErrorDialog>
 </template>

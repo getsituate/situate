@@ -62,9 +62,9 @@ export default () => ({
           accountId: account.id,
           input: {
             raw: encode(mime)
+              .split("=", 1)[0]
               .replaceAll("+", "-")
-              .replaceAll("/", "_")
-              .replace(/=+$/, ""),
+              .replaceAll("/", "_"),
           },
         });
         return {
