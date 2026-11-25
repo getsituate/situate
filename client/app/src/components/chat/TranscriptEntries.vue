@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { invoke } from "@tauri-apps/api/core";
 import { localizeError, t } from "@situate/localization";
+import { ref } from "vue";
+import ErrorDialog from "../../errors/ErrorDialog.vue";
+import { isWebLink, splitWebLinks } from "./chat-links";
 import type { RetainedQuestion } from "../../ai/question";
 import type { HistoryEntry } from "./work-history";
 import ChatMarkdown from "./ChatMarkdown.vue";
@@ -19,6 +23,21 @@ defineProps<{
 const emit = defineEmits<{
   preview: [preview: NonNullable<RetainedQuestion["preview"]>];
 }>();
+const linkError = ref("");
+async function followLink(event: MouseEvent): Promise<void> {
+  const href =
+    event.target instanceof Element
+      ? event.target.closest("a")?.getAttribute("href")
+      : null;
+  if (!href) return;
+  event.preventDefault();
+  if (event.button > 1 || !isWebLink(href)) return;
+  try {
+    await invoke("open_web_link", { href });
+  } catch {
+    linkError.value = t("native.files.external.openFailed");
+  }
+}
 </script>
 <template>
   <template v-for="entry in entries" :key="entry.key">
@@ -53,6 +72,8 @@ const emit = defineEmits<{
     <article
       v-else-if="entry.kind === 'message'"
       :class="['message', entry.role]"
+      @click.capture="followLink"
+      @auxclick.capture="followLink"
     >
       <strong class="sr-only">{{
         entry.role === "user" ? t("navigation.you") : t("navigation.ai")
@@ -63,11 +84,19 @@ const emit = defineEmits<{
           :content="part.text"
           :final="!entry.streaming"
         />
-        <p
-          v-else-if="part.type === 'text' && part.text"
-          data-localization-content="user"
-        >
-          {{ part.text }}
+        <p v-else-if="part.type === 'text' && part.text">
+          <template
+            v-for="(segment, index) in splitWebLinks(part.text)"
+            :key="index"
+          >
+            <a
+              v-if="index % 2 === 1 && isWebLink(segment)"
+              :href="segment"
+              data-localization-content="user"
+              >{{ segment }}</a
+            >
+            <span v-else data-localization-content="user">{{ segment }}</span>
+          </template>
         </p>
         <ChatImage
           v-else-if="part.type === 'image'"
@@ -81,6 +110,8 @@ const emit = defineEmits<{
       class="history-reasoning"
       role="note"
       :aria-label="t('chat.modelReasoning')"
+      @click.capture="followLink"
+      @auxclick.capture="followLink"
     >
       <ChatMarkdown :content="entry.text" :final="!entry.streaming" eager />
     </div>
@@ -90,6 +121,7 @@ const emit = defineEmits<{
     <ChatImportedFiles
       v-else-if="entry.kind === 'imported-files' && openReference"
       :references="entry.references"
+      :linked="entry.linked"
       :scope="scope"
       @open="openReference"
     />
@@ -105,6 +137,11 @@ const emit = defineEmits<{
       :scope="scope"
     />
   </template>
+  <ErrorDialog
+    :open="!!linkError"
+    :message="linkError"
+    @dismiss="linkError = ''"
+  />
 </template>
 <style scoped>
 .message {
@@ -123,6 +160,11 @@ const emit = defineEmits<{
   padding: 18px 22px;
   border-radius: 22px 22px 5px 22px;
   background: var(--situate-accent-soft, var(--situate-lilac));
+}
+.message.user a {
+  color: var(--situate-cobalt);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 p {
   margin: 0;

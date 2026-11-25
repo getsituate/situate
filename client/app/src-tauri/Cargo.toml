@@ -16,6 +16,7 @@ url = "2"
 [dependencies]
 situate-fixtures = { path = "../../crates/situate-fixtures", optional = true }
 situate-core = { path = "../../crates/situate-core" }
+situate-host = { path = "../../crates/situate-host" }
 situate-migrations = { path = "../../crates/situate-migrations" }
 situate-agent = { path = "../../crates/situate-agent" }
 tauri = { version = "=2.12.3", features = [] }
@@ -52,7 +53,7 @@ libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 situate-host-windows = { path = "../../crates/situate-host-windows" }
-windows-sys = { version = "0.61", features = ["Win32_Globalization", "Win32_Security_Credentials", "Win32_Storage_FileSystem", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Globalization", "Win32_Security_Credentials", "Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 situate-host-posix = { path = "../../crates/situate-host-posix" }

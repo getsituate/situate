@@ -51,6 +51,7 @@ impl Arguments {
         let allowed: &[&str] = match self.operation.as_str() {
             "read" => &["path", "offset", "limit"],
             "history" => &["path", "offset", "limit"],
+            "link_file" => &["path"],
             "read_revision" => &["path", "revision", "offset", "limit"],
             "list_conversations" => &["offset", "limit"],
             "read_conversation" => &["conversationId", "recordRevision", "offset", "limit"],
@@ -136,7 +137,7 @@ impl ToolRequest {
         }
         let valid = match self.operation.as_str() {
             "capabilities" | "instructions" | "ls" | "find" => true,
-            "read" | "history" => !self.path.is_empty(),
+            "read" | "history" | "link_file" => !self.path.is_empty(),
             "move" | "copy" => {
                 !self.path.is_empty()
                     && self

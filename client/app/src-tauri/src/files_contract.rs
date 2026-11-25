@@ -154,6 +154,12 @@ pub enum WireRequest {
         href: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         destination: Option<String>,
+        #[serde(
+            default,
+            deserialize_with = "present_value",
+            skip_serializing_if = "Option::is_none"
+        )]
+        reference: Option<situate_core::conversation_runtime::ContentReference>,
     },
     Resource {
         workspace_id: String,
@@ -226,10 +232,23 @@ impl WireRequest {
                 path,
                 href,
                 destination,
+                reference,
+                plugin_id,
                 ..
             } => {
-                (path.is_some() && href.is_none() && destination.is_none())
-                    || (path.is_none() && href.is_some() && destination.is_some())
+                if let Some(reference) = reference {
+                    plugin_id.is_none()
+                        && path.is_none()
+                        && href.is_none()
+                        && destination.is_none()
+                        && matches!(
+                            reference,
+                            situate_core::conversation_runtime::ContentReference::Live { .. }
+                        )
+                } else {
+                    (path.is_some() && href.is_none() && destination.is_none())
+                        || (path.is_none() && href.is_some() && destination.is_some())
+                }
             }
             Self::History {
                 path,

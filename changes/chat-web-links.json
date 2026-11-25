@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "chat-web-links",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "chat-web-links",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Open web links from chat",
+          "paragraphs": [
+            "Click a web link in a chat message to open it in your default browser."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "chat-web-links",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Weblinks aus dem Chat öffnen",
+          "paragraphs": [
+            "Klicke auf einen Weblink in einer Chatnachricht, um ihn im Standardbrowser zu öffnen."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -388,7 +388,7 @@ test.each([false, true])(
   },
 );
 
-function pane(props: Record<string, unknown> = {}) {
+function pane(props: Record<string, unknown> = {}, stubTranscript = true) {
   const wrapper = mount(ChatPane, {
     attachTo: document.body,
     props: {
@@ -397,7 +397,7 @@ function pane(props: Record<string, unknown> = {}) {
       embedded: true,
       ...props,
     },
-    global: { stubs: { ChatTranscript: true, ChatActivity: true } },
+    global: { stubs: { ChatTranscript: stubTranscript, ChatActivity: true } },
   });
   const viewport = wrapper.find(".transcript-scroll");
   if (viewport.exists())
@@ -954,6 +954,74 @@ test("navigating a moved Git reference preserves the original anchor in presenta
     reference,
   });
 });
+
+test.each(["external", "text", "failed"] as const)(
+  "opening a linked workspace file handles the %s result",
+  async (result) => {
+    const wrapper = pane({}, false);
+    await flushPromises();
+    services.get("one:topic")!.state.transcript = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "linked-file",
+            name: "link_file",
+            arguments: { path: live.path },
+          },
+        ],
+        stopReason: "toolUse",
+        timestamp: 1,
+        usage: null,
+      },
+      {
+        role: "toolResult",
+        toolName: "link_file",
+        toolCallId: "linked-file",
+        timestamp: 1,
+        content: [],
+        isError: false,
+        details: { reference: live },
+      },
+    ];
+    if (result === "external") mocks.files.mockResolvedValue({ status: "ok" });
+    if (result === "failed")
+      mocks.files.mockResolvedValue({ status: "deleted" });
+    await flushPromises();
+
+    const link = wrapper.get(".imported-file");
+    expect(link.text()).toBe(live.path);
+    expect(mocks.files).not.toHaveBeenCalled();
+    await link.trigger("click");
+    await flushPromises();
+
+    expect(mocks.files).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: "one",
+      operation: "openExternal",
+      reference: live,
+    });
+    expect(wrapper.emitted("navigate")).toEqual(
+      result === "text"
+        ? [
+            [
+              {
+                kind: "view",
+                viewId: "files",
+                contentId: "archive/current.md",
+              },
+              { reference: live },
+            ],
+          ]
+        : undefined,
+    );
+    if (result === "failed")
+      expect(wrapper.get('[role="alert"]').text()).toBe(
+        "⟦native.files.external.openFailed⟧",
+      );
+    else expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  },
+);
 
 test.each(["messages", "notices"])(
   "new %s follow only a view already at the end",

@@ -60,7 +60,12 @@ export type TranscriptBlock = (
   | { key: string; kind: "stopped"; outcome?: "cancelled" | "error" }
   | { key: string; kind: "notice"; notice: PluginNotice }
   | { key: string; kind: "question"; question: RetainedQuestion }
-  | { key: string; kind: "imported-files"; references: ContentReference[] }
+  | {
+      key: string;
+      kind: "imported-files";
+      references: ContentReference[];
+      linked?: boolean;
+    }
   | { key: string; kind: "tools"; calls: ToolView[] }
   | { key: string; kind: "change" | "call"; call: ToolView }
 ) & { messageIndex?: number };
@@ -122,14 +127,18 @@ export function importChangeReceipts(
 function importedFileReferences(call: ToolView): ContentReference[] {
   const details = call.result?.details;
   if (
-    call.name !== "show_imported_files" ||
+    !["show_imported_files", "link_file"].includes(call.name) ||
     !call.result ||
     call.result.isError ||
     !details ||
     typeof details !== "object"
   )
     return [];
-  const { files } = details as Record<string, unknown>;
+  const { files, reference } = details as Record<string, unknown>;
+  if (call.name === "link_file")
+    return validReference(reference) && reference.kind === "live"
+      ? [reference]
+      : [];
   if (!Array.isArray(files) || files.length > 10_000) return [];
   return mergeReferences(
     files.filter((file) => validReference(file) && file.kind === "live"),
@@ -360,6 +369,17 @@ export function transcriptBlocks(
     }
     for (const call of block.calls) {
       if (call.name === "ask_question" && call.state === "completed") continue;
+      const references = importedFileReferences(call);
+      if (call.name === "link_file" && references.length) {
+        grouped.push({
+          kind: "imported-files",
+          key: `linked:${call.key}`,
+          references,
+          linked: true,
+          messageIndex: call.messageIndex,
+        });
+        continue;
+      }
       if (verifiedChange(call) || importChangeReceipts(call)?.files.length)
         grouped.push({
           key: call.key,
@@ -379,7 +399,6 @@ export function transcriptBlocks(
         if (previous?.kind === "tools") previous.calls.push(call);
         else grouped.push({ kind: "tools", key: call.key, calls: [call] });
       }
-      const references = importedFileReferences(call);
       if (references.length)
         grouped.push({
           kind: "imported-files",

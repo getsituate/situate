@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
+situate-host-api = { path = "../situate-host-api" }
 situate-host-posix = { path = "../situate-host-posix" }
 cap-std = "3"
 rustix = { version = "1", features = ["fs"] }

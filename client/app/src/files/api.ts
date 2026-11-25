@@ -111,6 +111,7 @@ type RequestBody = StrictUnion<
       exactPath?: boolean;
     }
   | { operation: "revert"; path: string; revision: string }
+  | { operation: "openExternal"; reference: ContentReference }
   | { operation: "openExternal"; path: string }
   | { operation: "openExternal"; href: string; destination: string }
   | { operation: "export"; path: string; text: string }

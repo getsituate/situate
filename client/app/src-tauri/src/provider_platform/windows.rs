@@ -67,23 +67,6 @@ pub(crate) fn delete(account: &str) -> Result<(), String> {
     if error == MISSING { Ok(()) } else { Err(error) }
 }
 
-pub(crate) fn open_browser(url: &str) -> bool {
-    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
-    let url: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
-    let verb: Vec<u16> = "open".encode_utf16().chain(Some(0)).collect();
-    unsafe {
-        ShellExecuteW(
-            std::ptr::null_mut(),
-            verb.as_ptr(),
-            url.as_ptr(),
-            std::ptr::null(),
-            std::ptr::null(),
-            SW_SHOWNORMAL,
-        ) as isize
-            > 32
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

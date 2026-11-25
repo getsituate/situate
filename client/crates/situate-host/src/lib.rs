@@ -1,4 +1,7 @@
-//! Compile-time selection for the native filesystem primitives.
+//! Compile-time selection for native platform operations.
+
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+pub mod external;
 
 #[cfg(target_vendor = "apple")]
 pub use situate_host_macos::fs;

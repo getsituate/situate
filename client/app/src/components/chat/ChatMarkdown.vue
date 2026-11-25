@@ -6,6 +6,7 @@ import type {
   PreCodeNodeProps,
 } from "markstream-vue";
 import { h } from "vue";
+import { isWebLink } from "./chat-links";
 import "markstream-vue/index.css";
 
 defineProps<{ content: string; final: boolean; eager?: boolean }>();
@@ -13,11 +14,13 @@ defineProps<{ content: string; final: boolean; eager?: boolean }>();
 setCustomComponents("situate-chat", {
   code_block: (props: PreCodeNodeProps) => h("pre", h("code", props.node.code)),
   link: (props: LinkNodeProps) =>
-    h(LinkNode, { ...props, "aria-label": props.node.text }),
+    isWebLink(props.node.href)
+      ? h(LinkNode, { ...props, "aria-label": props.node.text })
+      : h("span", props.node.text),
 });
 
 const configureMarkdown: NodeRendererProps["customMarkdownIt"] = (md) =>
-  md.disable("image");
+  md.disable("image").enable("linkify").set({ linkify: true });
 </script>
 
 <template>

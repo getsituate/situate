@@ -43,6 +43,12 @@ pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value
             &["path"],
         ),
         tool(
+            "link_file",
+            "Show a clickable link to an existing workspace file in this chat. Pass its workspace-relative path. The tool does not open the file.",
+            json!({"path":path}),
+            &["path"],
+        ),
+        tool(
             "ls",
             "List immediate children of a workspace directory. Omit path for the root. Continue with nextOffset.",
             json!({"path":path,"offset":offset,"limit":limit}),
@@ -174,7 +180,8 @@ pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value
         let name = tool["name"].as_str().unwrap_or_default();
         (capabilities["writable"] == true
             || !matches!(name, "write" | "edit" | "create_batch" | "move" | "copy"))
-            && (capabilities["history"] == true || !matches!(name, "history" | "read_revision"))
+            && (capabilities["history"] == true
+                || !matches!(name, "history" | "read_revision" | "link_file"))
             && (capabilities["conversations"] == true
                 || !matches!(name, "list_conversations" | "read_conversation"))
             && allowed(role, name)
@@ -190,6 +197,7 @@ pub(crate) fn allowed(role: Option<&str>, name: &str) -> bool {
                 name,
                 "ask_question"
                     | "read"
+                    | "link_file"
                     | "ls"
                     | "find"
                     | "grep"
@@ -219,6 +227,7 @@ pub(crate) fn is_file(name: &str) -> bool {
     matches!(
         name,
         "read"
+            | "link_file"
             | "ls"
             | "find"
             | "grep"

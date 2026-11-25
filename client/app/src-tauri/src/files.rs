@@ -6,6 +6,7 @@ pub mod smoke;
 #[path = "files_tests.rs"]
 mod tests;
 
+use crate::external_links::web_url as remote_url;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 #[path = "files_contract.rs"]
@@ -377,7 +378,7 @@ fn dispatch(
             }
             #[cfg(desktop)]
             {
-                launch_default(target)
+                launch_default(target.as_ref())
             }
             #[cfg(mobile)]
             {
@@ -444,11 +445,15 @@ fn dispatch(
         }
     }
     if request.operation == Operation::OpenExternal {
-        let target = open_target(
-            request.path.as_deref(),
-            request.href.as_deref(),
-            request.destination.as_deref(),
-        )?;
+        let target = if let Some(reference) = &request.reference {
+            external_reference_path(&location.id, content.store.as_ref(), reference)?
+        } else {
+            open_target(
+                request.path.as_deref(),
+                request.href.as_deref(),
+                request.destination.as_deref(),
+            )?
+        };
         let target = if let Some(id) = target.strip_prefix("situate:") {
             resolve_identity(app, &location, &content, id)?
         } else {
@@ -463,6 +468,19 @@ fn dispatch(
             )?)?
             .is_some()
         {
+            if let Some(reference) = &request.reference {
+                let store = content
+                    .store
+                    .as_mut()
+                    .ok_or("native.files.provider.readOnly")?;
+                let (_, path, version) = store
+                    .observe_reference(reference)
+                    .map_err(err)?
+                    .ok_or("native.files.external.openFailed")?;
+                return Ok(
+                    json!({"status":"ok","document":document(app,&location,content.root.as_deref(),&path,version,None)}),
+                );
+            }
             let version = if let Some(store) = &content.store {
                 store.read_text(&target).map_err(err)?
             } else {
@@ -480,6 +498,10 @@ fn dispatch(
             return Ok(
                 json!({"status":"ok","document":document(app,&location,content.root.as_deref(),&target,version,None)}),
             );
+        }
+        if request.reference.is_some() {
+            open_external(app, &location, content.root.as_deref(), &target)?;
+            return Ok(json!({"status":"ok"}));
         }
         let root = content.root.clone();
         drop(_coordination);
@@ -579,6 +601,21 @@ fn plugin_request(
     }
 }
 
+fn external_reference_path(
+    scope: &str,
+    store: Option<&ContentStore>,
+    reference: &situate_core::conversation_runtime::ContentReference,
+) -> Result<String, String> {
+    if reference.workspace_id() != scope {
+        return Err("native.content.reference.invalid".into());
+    }
+    store
+        .ok_or("native.files.provider.readOnly")?
+        .resolve_reference_path(reference)
+        .map_err(err)?
+        .ok_or_else(|| "native.files.external.openFailed".into())
+}
+
 fn require_external_binary(path: &str, bytes: &[u8]) -> Result<(), String> {
     if text_from_bytes(bytes)?.is_some() {
         return Err("native.files.external.openFailed".into());
@@ -635,6 +672,21 @@ fn require_external_binary(path: &str, bytes: &[u8]) -> Result<(), String> {
                 | "vbs"
                 | "wsf"
                 | "hta"
+                | "msi"
+                | "msp"
+                | "mst"
+                | "scr"
+                | "cpl"
+                | "pif"
+                | "reg"
+                | "msc"
+                | "appref-ms"
+                | "application"
+                | "appinstaller"
+                | "msix"
+                | "appx"
+                | "appxbundle"
+                | "msixbundle"
         )
     {
         return Err("native.files.external.openFailed".into());
@@ -643,22 +695,8 @@ fn require_external_binary(path: &str, bytes: &[u8]) -> Result<(), String> {
 }
 
 #[cfg(desktop)]
-fn launch_default(target: &str) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let status = std::process::Command::new("/usr/bin/open")
-        .arg("--")
-        .arg(target)
-        .status();
-    #[cfg(target_os = "linux")]
-    let status = std::process::Command::new("xdg-open").arg(target).status();
-    #[cfg(target_os = "windows")]
-    let status = std::process::Command::new("rundll32.exe")
-        .args(["url.dll,FileProtocolHandler", target])
-        .status();
-    if !status.map_err(err)?.success() {
-        return Err("native.files.external.openFailed".into());
-    }
-    Ok(())
+fn launch_default(target: &std::ffi::OsStr) -> Result<(), String> {
+    situate_host::external::open(target).map_err(|_| "native.files.external.openFailed".into())
 }
 
 fn require_active(session: &Session, content: &ContentSession) -> Result<(), String> {
@@ -1536,6 +1574,15 @@ pub(crate) fn agent_request(
             json!({"isError":warning.is_some(),"change":{"path":request.path,"before":before.as_ref().map(|v| &v.text),"after":version.text,"beforeRevision":before.map(|v|v.revision),"afterRevision":version.revision},"historyRevision":history_revision,"warning":warning,"generatedTaskIds":generated_task_ids}),
         );
     }
+    if request.operation == "link_file" {
+        let reference = content
+            .store
+            .as_mut()
+            .ok_or("native.files.provider.readOnly")?
+            .capture_reference(&location.id, &request.path, None)
+            .map_err(err)?;
+        return Ok(json!({"reference":reference}));
+    }
     if matches!(request.operation.as_str(), "read" | "read_revision") {
         let bytes = if request.operation == "read_revision" {
             content
@@ -1847,18 +1894,6 @@ fn relative_resource(document: &str, target: &str) -> Result<String, String> {
     safe_parts(&result)?;
     Ok(result)
 }
-fn remote_url(target: &str) -> Result<url::Url, String> {
-    let url = url::Url::parse(target).map_err(err)?;
-    if !matches!(url.scheme(), "http" | "https")
-        || url.host_str().is_none()
-        || !url.username().is_empty()
-        || url.password().is_some()
-    {
-        return Err("native.files.link.httpOnly".into());
-    }
-    Ok(url)
-}
-
 fn read_local(root: &Path, path: &str) -> Result<Vec<u8>, String> {
     use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
     use std::io::Read;
@@ -2024,17 +2059,12 @@ fn open_external(
     #[cfg(desktop)]
     {
         let _ = (app, location);
-        let target = if let Ok(url) = remote_url(path) {
-            url.to_string()
-        } else {
-            let root = root.ok_or("native.files.workspace.folderUnavailable")?;
-            require_external_binary(path, &read_local(root, path)?)?;
-            root.join(path)
-                .to_str()
-                .ok_or("native.files.path.unsupported")?
-                .to_owned()
-        };
-        launch_default(&target)
+        if let Ok(url) = remote_url(path) {
+            return launch_default(url.as_str().as_ref());
+        }
+        let root = root.ok_or("native.files.workspace.folderUnavailable")?;
+        require_external_binary(path, &read_local(root, path)?)?;
+        launch_default(root.join(path).as_os_str())
     }
     #[cfg(mobile)]
     {

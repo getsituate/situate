@@ -208,6 +208,7 @@ interface FixtureOptions {
   aiHoldPartialResponse?: boolean;
   aiRequestError?: string;
   aiFailResponseSave?: boolean;
+  failOpenWebLink?: boolean;
   aiResponseText?: string;
   aiComment?: string;
   appearance?: AppearanceSnapshot;
@@ -1420,6 +1421,11 @@ export async function workspaceFixture(
             if (command === "recovery_register")
               return "fixture-recovery-registration";
             if (command === "recovery_open_email") return false;
+            if (command === "open_web_link") {
+              if (options.failOpenWebLink)
+                throw "native.files.external.openFailed";
+              return;
+            }
             if (command === "plugin_recovery_mode") {
               if (options.recoveryError) throw new Error("Startup unavailable");
               return recovery.recovery;

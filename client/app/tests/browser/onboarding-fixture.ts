@@ -866,6 +866,10 @@ export async function onboardingFixture(
                 ],
               },
             };
+          if (request.operation === "openExternal" && request.reference) {
+            if (!files.has(path)) throw "native.files.external.openFailed";
+            return { status: "ok", document: document(path) };
+          }
           if (
             request.operation === "read" ||
             request.operation === "resolveReference"

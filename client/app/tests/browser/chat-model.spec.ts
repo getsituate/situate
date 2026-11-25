@@ -65,6 +65,65 @@ test("assistant Markdown is formatted without widening the conversation on deskt
   }
 });
 
+test("chat opens web links on activation without navigating away", async ({
+  page,
+}) => {
+  await workspaceFixture(page, shellState, {
+    aiConnection: connection,
+    aiModel: "gpt-5.4",
+    aiResponseText:
+      "[Reference](https://example.org/docs?q=chat#links)\n\n" +
+      "See http://example.org/help.\n\n" +
+      "[Open app](my-app://action) [Email](mailto:contact@example.org)",
+  });
+  await page.goto("/");
+  const chatUrl = page.url();
+  await message(page).fill("**See** (https://example.org/wiki/Link_(web)).");
+  await send(page).click();
+
+  const userMessage = page.locator(".message.user p");
+  const response = page.locator(".message.assistant .chat-markdown");
+  await expect(userMessage).toHaveText(
+    "**See** (https://example.org/wiki/Link_(web)).",
+  );
+  await expect(response).toContainText("Open app");
+  await expect(response.getByRole("link")).toHaveCount(2);
+  const opened = async () =>
+    (await calls(page))
+      .filter((call) => call.command === "open_web_link")
+      .map((call) => call.args);
+  expect(await opened()).toEqual([]);
+
+  await userMessage.getByRole("link").click();
+  await response.getByRole("link", { name: "Reference" }).press("Enter");
+  await response.getByRole("link", { name: "http://example.org/help" }).click();
+  await expect
+    .poll(opened)
+    .toEqual([
+      { href: "https://example.org/wiki/Link_(web)" },
+      { href: "https://example.org/docs?q=chat#links" },
+      { href: "http://example.org/help" },
+    ]);
+  await expect(page).toHaveURL(chatUrl);
+  expect(page.context().pages()).toEqual([page]);
+});
+
+test("a failed web link opens the standard error dialog", async ({ page }) => {
+  await workspaceFixture(page, shellState, {
+    aiConnection: connection,
+    aiModel: "gpt-5.4",
+    aiResponseText: "[Reference](https://example.org)",
+    failOpenWebLink: true,
+  });
+  await page.goto("/");
+  await message(page).fill("Find a reference");
+  await send(page).click();
+  await page.getByRole("link", { name: "Reference" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    keyLabel("native.files.external.openFailed"),
+  );
+});
+
 test("the next request uses the changed model and retains the same conversation without reconnecting", async ({
   page,
 }) => {
