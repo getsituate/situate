@@ -80,12 +80,5 @@ export function qualifiedWindowsAssets(
   assert.equal(readFileSync(join(candidate, "SHA256SUMS.txt"), "utf8"), sums);
   local.set("SHA256SUMS.txt", Buffer.from(sums));
   local.set("windows-release.json", manifestBytes);
-  return {
-    files: Object.fromEntries(local),
-    notes: [
-      "## Windows",
-      "Requires Windows 10 version 22H2 or Windows 11. Choose the installer for your architecture: x64 or ARM64.",
-      "These installers do not have an Authenticode (Windows publisher) signature. Windows may warn or block installation.",
-    ].join("\n\n"),
-  };
+  return Object.fromEntries(local);
 }

@@ -63,20 +63,17 @@ const identity = { version, tag, sourceRevision: source };
 
 test("validates and stages both signed Windows installers for the common release", (t) => {
   const { folder, qualification, signer, artifacts } = setup(t);
-  const result = qualifiedWindowsAssets(
+  const files = qualifiedWindowsAssets(
     folder,
     qualification,
     signer.publicKey,
     identity,
   );
-  assert.deepEqual(Object.keys(result.files), [
+  assert.deepEqual(Object.keys(files), [
     ...artifacts.flatMap(({ file }) => [file, `${file}.sig`]),
     "SHA256SUMS.txt",
     "windows-release.json",
   ]);
-  assert.match(result.notes, /Windows may warn or block installation/);
-  assert.doesNotMatch(result.notes, /SHA-?256|\b[a-f0-9]{64}\b/iu);
-  assert.doesNotMatch(result.notes, /WebView2/u);
 });
 
 test("rejects a wrong source, incomplete qualification, or altered installer", (t) => {
