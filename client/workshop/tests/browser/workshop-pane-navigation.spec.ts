@@ -172,7 +172,7 @@ test("compact maximized pane toolbar keeps history, switching and restore; keybo
     "loading",
   );
   await expect(
-    preview.getByText("Opening view…", { exact: true }),
+    preview.getByRole("status").filter({ hasText: "Opening conversation…" }),
   ).toBeVisible();
   await expect(
     header.getByRole("button", { name: "Restore arrangement", exact: true }),

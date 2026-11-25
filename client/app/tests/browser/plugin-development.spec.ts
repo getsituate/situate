@@ -531,11 +531,12 @@ test("a narrow conversation load error retains access to conversation navigation
     page.getByRole("dialog", { name: "Oops. Something went wrong." }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Dismiss", exact: true }).click();
-  await expect(page.locator(".chat-load-error")).toBeVisible();
+  const error = page.locator(".chat-pane .situate-error-screen");
+  await expect(error).toBeVisible();
   await selectConversation(page, "Reading notes");
-  await expect(page.locator(".chat-load-error")).toHaveCount(0);
+  await expect(error).toHaveCount(0);
   await selectConversation(page, "Build a reading list");
-  await expect(page.locator(".chat-load-error")).toBeVisible();
+  await expect(error).toBeVisible();
   expect(await requests(page)).toEqual([]);
 });
 test(
@@ -550,8 +551,8 @@ test(
       page.getByRole("dialog", { name: "Oops. Something went wrong." }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Dismiss", exact: true }).click();
-    const error = page.locator(".chat-pane .chat-load-error");
-    await expect(error.locator(":scope > span:not(.error-actions)")).toHaveText(
+    const error = page.locator(".chat-pane .situate-error-screen");
+    await expect(error.getByRole("alert")).toHaveText(
       /^(The saved conversation is invalid or uses an unsupported version\. Keep the original file and check workspace storage\.|Die gespeicherte Unterhaltung ist ungültig oder verwendet eine nicht unterstützte Version\. Bewahre die Originaldatei auf und prüfe den Speicher des Arbeitsbereichs\.)$/u,
     );
     await expect(

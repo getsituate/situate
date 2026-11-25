@@ -38,7 +38,9 @@ it("cancels pending loads when closed and does not publish a late error", async 
   );
   const wrapper = mount(LicenseNoticesAccess);
   await wrapper.get("button").trigger("click");
-  expect(wrapper.get('[role="status"]').text()).toBe("Loading licenses…");
+  await vi.waitFor(() =>
+    expect(wrapper.get('[role="status"]').text()).toBe("Loading licenses…"),
+  );
   const signal = vi.mocked(loadLicenses).mock.calls[0]![0]!;
   await wrapper.get("dialog").trigger("cancel");
   expect(signal.aborted).toBe(true);

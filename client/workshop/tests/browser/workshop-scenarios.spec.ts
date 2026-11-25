@@ -180,7 +180,6 @@ test("tab starting states share one scenario and reset drafts without resetting 
       option.value.startsWith("tabs-"),
     ),
   ).toHaveLength(1);
-  await expect(await selectOptions(states)).toHaveLength(13);
   expect((await selectOptions(states)).map((option) => option.value)).toEqual(
     scenarioCatalog
       .find((item) => item.id === "tabs-overview")!
@@ -193,7 +192,9 @@ test("tab starting states share one scenario and reset drafts without resetting 
   await expect(draft).toHaveValue("Keep this pane draft");
   await page.getByLabel("Keyboard occlusion", { exact: true }).uncheck();
   await selectOption(states, "tabs-loading");
-  await expect(preview.locator(".loading-mark")).toBeVisible();
+  await expect(
+    preview.getByRole("status").filter({ hasText: "Opening view…" }),
+  ).toBeVisible();
   await expect(scenario).toHaveAttribute("data-value", "tabs-overview");
   await expect(
     page.getByLabel("Platform profile", { exact: true }),
@@ -213,6 +214,121 @@ test("tab starting states share one scenario and reset drafts without resetting 
   await expect(
     page.getByLabel("Platform profile", { exact: true }),
   ).toHaveAttribute("data-value", "ios");
+});
+
+test("opening an existing conversation shows loading until its history and draft are ready", async ({
+  page,
+}, info) => {
+  await page.goto(
+    "/?workshop=controls&scenario=tabs-conversation-loading&profile=mac",
+  );
+  const popup = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Open preview", exact: true }).click();
+  const preview = await popup;
+  await preview.setViewportSize({ width: 1100, height: 720 });
+
+  const pane = preview.getByRole("region", { name: "Pane: Planting plans" });
+  const status = pane.getByRole("status").and(pane.locator(".pane-loading"));
+  const history = pane.getByRole("region", { name: "Conversation history" });
+  const draft = pane.getByRole("textbox", { name: "Message", exact: true });
+  const availability = page.getByRole("combobox", {
+    name: "Active pane · Planting plans",
+    exact: true,
+  });
+  await expect(status).toHaveText("Opening conversation…");
+  await expect(history).toHaveCount(0);
+  await expect(draft).toHaveCount(0);
+  await expect(
+    preview.getByRole("button", { name: "Back in this pane", exact: true }),
+  ).toBeEnabled();
+  await preview.screenshot({
+    path: info.outputPath("conversation-loading.png"),
+    animations: "disabled",
+  });
+
+  await selectOption(availability, "ready");
+  await expect(status).toBeEmpty();
+  await expect(history).toContainText(
+    "Let’s check which beds are ready before we buy seeds.",
+  );
+  await expect(draft).toHaveValue("Can we plant the herbs on Sunday?");
+
+  await page
+    .getByRole("button", { name: "Reset scenario", exact: true })
+    .click();
+  await expect(status).toHaveText("Opening conversation…");
+  await selectOption(availability, "unavailable");
+  await expect(status).toBeEmpty();
+  await expect(
+    pane.getByRole("heading", { name: "This view isn’t available" }),
+  ).toBeVisible();
+  await expect(draft).toHaveCount(0);
+  await preview
+    .getByRole("button", { name: "Back in this pane", exact: true })
+    .click();
+  await expect(
+    preview.getByRole("heading", {
+      name: "A weekend in the garden",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("conversation list loading stays within navigation and keeps the open chat usable", async ({
+  page,
+}, info) => {
+  await page.goto(
+    "/?workshop=controls&scenario=tabs-conversation-list-loading&profile=mac",
+  );
+  const popup = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Open preview", exact: true }).click();
+  const preview = await popup;
+  await preview.setViewportSize({ width: 1440, height: 800 });
+  const list = preview.getByRole("region", {
+    name: "Conversations",
+    exact: true,
+  });
+  const status = list
+    .getByRole("status")
+    .filter({ hasText: "Loading conversations…" });
+  const draft = preview.getByRole("textbox", { name: "Message", exact: true });
+  const row = list.getByRole("button", {
+    name: "Planting plans · Ready",
+    exact: true,
+  });
+  await expect(status).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await expect(list.locator(".conversation-archive")).toBeHidden();
+  await expect(
+    preview.getByRole("region", { name: "Conversation history" }),
+  ).toBeVisible();
+  await draft.fill("Keep this draft");
+  await preview.screenshot({
+    path: info.outputPath("conversation-list-loading.png"),
+    animations: "disabled",
+  });
+
+  await page
+    .getByRole("checkbox", { name: "Load conversation list", exact: true })
+    .uncheck();
+  await expect(status).toHaveCount(0);
+  await expect(row).toBeVisible();
+  await expect(draft).toHaveValue("Keep this draft");
+
+  await preview.setViewportSize({ width: 700, height: 700 });
+  await page
+    .getByRole("button", { name: "Reset scenario", exact: true })
+    .click();
+  await preview
+    .getByRole("button", {
+      name: "Workspace navigation: Field notes",
+      exact: true,
+    })
+    .click();
+  await expect(status).toBeVisible();
+  await expect(status.locator("svg")).toHaveCSS("width", "16px");
+  await preview.keyboard.press("Escape");
+  await expect(draft).toHaveValue("Can we plant the herbs on Sunday?");
 });
 
 test("document tasks have one starting state and changing layout preserves the draft", async ({

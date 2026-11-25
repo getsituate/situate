@@ -18,6 +18,7 @@ import {
   SituateCheckbox,
   SituateSwitch,
   SituateButton,
+  SituateLoading,
 } from "@situate/ui";
 import ProviderIcon from "./ProviderIcon.vue";
 import wordmark from "../../../../design/brand/assets/wordmark.svg";
@@ -681,7 +682,12 @@ function cancelSkip(): void {
           {{ t("ai.removeConsequences", { name: workspaceName }) }}
         </p></template
       >
-      <p v-if="catalogLoading" role="status">{{ t("ai.loadingModels") }}</p>
+      <SituateLoading
+        v-if="catalogLoading"
+        placement="inline"
+        pending
+        :label="t('ai.loadingModels')"
+      />
       <div v-if="catalogFailed" role="alert">
         <p>{{ t("ai.modelChoicesCouldNotBeRead") }}</p>
         <SituateButton

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { useId, onBeforeUnmount, ref } from "vue";
-import { SituateButton, SituateDialog, SituateTextarea } from "@situate/ui";
+import {
+  SituateLoading,
+  SituateButton,
+  SituateDialog,
+  SituateTextarea,
+} from "@situate/ui";
 import { t } from "@situate/localization";
 import { loadLicenses } from "./licenses";
 
@@ -53,7 +58,12 @@ onBeforeUnmount(() => request?.abort());
       ><h2 :id="`licenses-title-${id}`">{{ t("licenses.title") }}</h2></template
     >
     <template v-if="open">
-      <p v-if="loading" role="status">{{ t("licenses.loading") }}</p>
+      <SituateLoading
+        v-if="loading"
+        placement="inline"
+        pending
+        :label="t('licenses.loading')"
+      />
       <div v-else-if="failed" role="alert">
         <p>{{ t("licenses.failed") }}</p>
         <SituateButton variant="secondary" @click="load">{{

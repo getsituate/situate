@@ -65,7 +65,7 @@ function temporary(id: string) {
 it("uses the new-tab title for a conversation confirmed missing from the inventory", async () => {
   const ui = await setup();
   const target = { kind: "conversation", conversationId: "deleted" } as const;
-  expect(ui.titleFor(target)).toBe("⟦navigation.newChat⟧");
+  expect(ui.titleFor(target)).toBe("⟦layoutHost.conversation⟧");
   chats.summaries.loaded = true;
   expect(ui.titleFor(target)).toBe("⟦layoutHost.newTab⟧");
   chats.summaries.conversations = [{ id: "deleted", title: "Garden" }];

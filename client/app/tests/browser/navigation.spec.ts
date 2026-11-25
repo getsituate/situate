@@ -396,6 +396,7 @@ test("unavailable controls and blocked sending preserve the draft and leave unre
         "ai_conversation_ack",
         "ai_conversation_action",
         "layout_save",
+        "keyboard_shortcuts_snapshot",
         "plugin_runtime",
         "plugin_executor",
       ].includes(call.command),
@@ -414,19 +415,22 @@ test("unavailable controls and blocked sending preserve the draft and leave unre
     ),
   );
   expect(
-    calls.filter(
-      (call) =>
-        ![
-          "ai_conversation_read",
-          "ai_conversation_subscribe",
-          "ai_conversation_ack",
-          "ai_conversation_action",
-          "layout_save",
-          "plugin_runtime",
-          "plugin_executor",
-        ].includes(call.command),
-    ),
-  ).toHaveLength(beforeDisabledClicks);
+    calls
+      .filter(
+        (call) =>
+          ![
+            "ai_conversation_read",
+            "ai_conversation_subscribe",
+            "ai_conversation_ack",
+            "ai_conversation_action",
+            "layout_save",
+            "keyboard_shortcuts_snapshot",
+            "plugin_runtime",
+            "plugin_executor",
+          ].includes(call.command),
+      )
+      .slice(beforeDisabledClicks),
+  ).toEqual([]);
   expect(
     calls.filter(
       (call) =>
@@ -437,6 +441,7 @@ test("unavailable controls and blocked sending preserve the draft and leave unre
           "layout_load",
           "layout_save",
           "localization_snapshot",
+          "keyboard_shortcuts_snapshot",
           "appearance_snapshot",
           "dictation_snapshot",
           "updates_snapshot",

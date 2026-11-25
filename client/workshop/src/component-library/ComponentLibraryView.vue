@@ -25,12 +25,14 @@ import {
   SituateFilterChip,
   SituateDisclosure,
   SituateTooltip,
+  SituateLoading,
   SituateProgress,
 } from "../ui";
 import { icons, type IconName } from "../ui/icons";
 import c from "../localization/en.components.json";
 import fieldCopy from "../localization/en.field-feedback.json";
 import FieldFeedbackExamples from "./FieldFeedbackExamples.vue";
+import WorkspaceLoading from "../workspaces/WorkspaceLoading.vue";
 import type { ComponentLibraryState } from "./model";
 
 const props = defineProps<{ state: ComponentLibraryState }>();
@@ -459,6 +461,18 @@ watch([dialog, () => props.state.dialogOpen], async ([element, open]) => {
             :text="state.longLabels ? c.sampleLongNote : c.infoText"
           />
         </article>
+        <article v-show="busy" data-component="SituateLoading">
+          <h3>SituateLoading</h3>
+          <div class="loading-examples">
+            <SituateLoading
+              placement="inline"
+              :pending="busy"
+              :label="c.loadingConversations"
+            />
+            <SituateLoading :pending="busy" :label="c.loadingCollection" />
+            <WorkspaceLoading :pending="busy" :label="c.openingWorkspace" />
+          </div>
+        </article>
         <article data-component="SituateProgress">
           <h3>SituateProgress</h3>
           <p>
@@ -716,6 +730,21 @@ article {
 }
 article:last-child {
   margin-bottom: 0;
+}
+.loading-examples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px;
+}
+.loading-examples > * {
+  min-height: 160px;
+  padding: 16px;
+  border: 1px solid var(--situate-line);
+  border-radius: 12px;
+  background: var(--situate-surface);
+}
+.loading-examples > :first-child {
+  padding-block-start: 24px;
 }
 .example-row {
   display: flex;

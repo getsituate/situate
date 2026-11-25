@@ -131,6 +131,10 @@ See the [production UI API](../../../client/packages/ui/README.md) for controlle
 | Failed or uncertain  | State what is known and what the person can do                                                                                     | Claiming everything is safe, unchanged, or recoverable without evidence         |
 | Rejected action      | Explain the reason in the standard error dialog after the attempt                                                                  | Inline limit warnings or controls disabled solely because capacity was reached  |
 
+Place loading feedback in the smallest area waiting for usable content. Use the inline mark beside a short status where a list or subsection will appear. Center the mark and label in an unavailable content area while leaving its title, navigation and adjacent areas in place. Only the workspace opening may add the static paper-and-tabs motif. Keep usable content during refreshes; do not replace it with a loading screen or show an empty state until emptiness is known.
+
+Acknowledge the destination immediately. Show the mark only when the same operation is still pending after 200 ms. Remove it on completion, failure or navigation away without waiting for an animation cycle. Use measured progress only when available, and keep action feedback and chat activity separate from reads.
+
 For a loading mark, keep visible status text outside the region marked `aria-busy="true"` so its announcement is not deferred with the region's updates. Use one polite status announcement per meaningful transition; hide frame punctuation and decorative SVG. Clear `aria-busy` and stop the mark on every terminal outcome. An indeterminate mark has no numerical progress value. Pausing decoration must not change busy state or prevent a result.
 
 ## Practical compositions

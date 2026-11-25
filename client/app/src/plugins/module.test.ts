@@ -11,8 +11,8 @@ describe("plugin host modules", () => {
     expect(host.vue.h).toBe(vue.h);
     expect(host.vue.watch).toBe(vue.watch);
     expect(host.vue.onUnmounted).toBe(vue.onUnmounted);
-    const components = Object.entries(ui).filter(([name]) =>
-      name.startsWith("Situate"),
+    const components = Object.entries(ui).filter(
+      ([name]) => name.startsWith("Situate") && name !== "SituateLoading",
     );
     expect(Object.keys(host.ui).sort()).toEqual(
       components.map(([name]) => name).sort(),

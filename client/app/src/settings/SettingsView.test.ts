@@ -128,8 +128,10 @@ it("keeps saving and background refresh silent while retaining initial loading a
     "Your settings could not be saved. Check workspace access and try again.",
   );
   await wrapper.setProps({ snapshot: null, error: "", loading: true });
-  expect(wrapper.get('[role="status"]').text()).toBe(
-    "Loading workspace settings…",
+  await vi.waitFor(() =>
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      "Loading workspace settings…",
+    ),
   );
   wrapper.unmount();
 });

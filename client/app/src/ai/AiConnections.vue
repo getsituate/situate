@@ -17,6 +17,7 @@ import {
   SituateInfoButton,
   SituateInput,
   SituateSelect,
+  SituateLoading,
 } from "@situate/ui";
 import ProviderIcon from "./ProviderIcon.vue";
 import AiSetup from "./AiSetup.vue";
@@ -226,7 +227,6 @@ const confirmationTitle = computed(() => {
 <template>
   <section
     class="connections"
-    :aria-busy="busy || loading"
     :aria-labelledby="editing ? undefined : `connections-heading--${id}`"
   >
     <AiSetup
@@ -260,11 +260,16 @@ const confirmationTitle = computed(() => {
           {{ t("ai.connections.add") }}
         </SituateButton>
       </div>
-      <p v-if="loading" role="status">{{ t("localization.loading") }}</p>
-      <p v-else-if="!connections.length && !error">
+      <SituateLoading
+        v-if="loading && !connections.length"
+        placement="inline"
+        pending
+        :label="t('localization.loading')"
+      />
+      <p v-else-if="!loading && !connections.length && !error">
         {{ t("ai.connections.empty") }}
       </p>
-      <ul>
+      <ul :aria-busy="loading || busy">
         <li v-for="item in connections" :key="item.config?.connectionId">
           <template v-if="item.config">
             <ProviderIcon :provider="item.config.provider" />

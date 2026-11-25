@@ -28,6 +28,7 @@ export function legacyChatLayout(): StoredLayout {
 export interface LayoutFixtureOptions {
   records?: Record<string, StoredLayout>;
   loadError?: string;
+  waitForLoad?: Promise<void>;
   saveError?: string;
 }
 type Request =
@@ -72,41 +73,46 @@ export async function layoutFixture(
   let loadError = options.loadError;
   let saveError = options.saveError;
   let sequence = 0;
-  await page.exposeBinding("__layoutStorage", (_source, request: Request) => {
-    if (request.command === "failLoad") {
-      loadError = request.error ?? undefined;
-      return;
-    }
-    if (request.command === "failSave") {
-      saveError = request.error ?? undefined;
-      return;
-    }
-    if (request.command === "replace") {
-      records.set(request.workspaceId, structuredClone(request.record));
-      return;
-    }
-    const record = records.get(request.workspaceId) ?? {
-      revision: null,
-      data: null,
-    };
-    if (request.command === "stored") return structuredClone(record);
-    if (request.command === "load") {
-      if (loadError) throw new Error(loadError);
-      return structuredClone(record);
-    }
-    if (saveError) throw new Error(saveError);
-    if (request.expectedRevision !== record.revision)
-      throw new Error("native.layout.storage.conflict");
-    const saved = {
-      revision: `fixture-layout-${++sequence}`,
-      data: structuredClone(request.data),
-      ...(request.pluginIncarnations
-        ? { pluginIncarnations: structuredClone(request.pluginIncarnations) }
-        : {}),
-    };
-    records.set(request.workspaceId, saved);
-    return structuredClone(saved);
-  });
+  await page.exposeBinding(
+    "__layoutStorage",
+    async (_source, request: Request) => {
+      if (request.command === "failLoad") {
+        loadError = request.error ?? undefined;
+        return;
+      }
+      if (request.command === "failSave") {
+        saveError = request.error ?? undefined;
+        return;
+      }
+      if (request.command === "replace") {
+        records.set(request.workspaceId, structuredClone(request.record));
+        return;
+      }
+      if (request.command === "load" && options.waitForLoad)
+        await options.waitForLoad;
+      const record = records.get(request.workspaceId) ?? {
+        revision: null,
+        data: null,
+      };
+      if (request.command === "stored") return structuredClone(record);
+      if (request.command === "load") {
+        if (loadError) throw new Error(loadError);
+        return structuredClone(record);
+      }
+      if (saveError) throw new Error(saveError);
+      if (request.expectedRevision !== record.revision)
+        throw new Error("native.layout.storage.conflict");
+      const saved = {
+        revision: `fixture-layout-${++sequence}`,
+        data: structuredClone(request.data),
+        ...(request.pluginIncarnations
+          ? { pluginIncarnations: structuredClone(request.pluginIncarnations) }
+          : {}),
+      };
+      records.set(request.workspaceId, saved);
+      return structuredClone(saved);
+    },
+  );
   await page.addInitScript(() => {
     const call = (request: Request) =>
       Reflect.get(window, "__layoutStorage")(request);

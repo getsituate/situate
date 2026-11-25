@@ -43,23 +43,17 @@ function send() {
 </script>
 
 <template>
-  <div v-if="pane.availability !== 'ready'" class="pane-message">
-    <template v-if="pane.availability === 'loading'">
-      <span class="loading-mark" aria-hidden="true">···</span>
-      <p role="status">{{ copy.loading }}</p>
-    </template>
-    <template v-else>
-      <SituateIcon name="notes" />
-      <h2>{{ copy.unavailable }}</h2>
-      <p>{{ copy.unavailableHelp }}</p>
-      <SituateButton
-        variant="secondary"
-        size="small"
-        @click="emit('action', { type: 'open', id: pane.id, view: 'empty' })"
-      >
-        {{ copy.openView }}
-      </SituateButton>
-    </template>
+  <div v-if="pane.availability === 'unavailable'" class="pane-message">
+    <SituateIcon name="notes" />
+    <h2>{{ copy.unavailable }}</h2>
+    <p>{{ copy.unavailableHelp }}</p>
+    <SituateButton
+      variant="secondary"
+      size="small"
+      @click="emit('action', { type: 'open', id: pane.id, view: 'empty' })"
+    >
+      {{ copy.openView }}
+    </SituateButton>
   </div>
   <ViewChooser
     v-else-if="currentView(pane) === 'empty' || currentView(pane) === 'views'"
@@ -255,10 +249,6 @@ function send() {
   max-width: 40ch;
   color: var(--situate-muted);
   font-size: 14px;
-}
-.loading-mark {
-  font-size: 40px;
-  color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
 .sent-message {
   margin-top: 20px;

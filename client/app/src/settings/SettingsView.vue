@@ -8,7 +8,12 @@ import {
   useTemplateRef,
   watch,
 } from "vue";
-import { SituateButton, SituateIcon, SituateInfoButton } from "@situate/ui";
+import {
+  SituateButton,
+  SituateIcon,
+  SituateInfoButton,
+  SituateLoading,
+} from "@situate/ui";
 import ShortcutSettings from "./ShortcutSettings.vue";
 import type { WorkspaceShortcuts } from "../layout/workspace-shortcuts";
 import type { PresentationValue } from "../layout/navigation";
@@ -434,9 +439,12 @@ function change(field: "language" | keyof Formats, event: Event): void {
             @retry="emit('retryAppearance')"
           />
           <template v-else-if="page === 'formats'">
-            <p v-if="loading && !snapshot" role="status">
-              {{ t("localization.loading") }}
-            </p>
+            <SituateLoading
+              v-if="loading && !snapshot"
+              placement="inline"
+              pending
+              :label="t('localization.loading')"
+            />
             <div v-if="error" class="settings-error" role="alert">
               <p>{{ t(error) }}</p>
               <SituateButton

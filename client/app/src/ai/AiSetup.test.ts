@@ -69,7 +69,9 @@ test("waits for complete provider metadata and retains the active language when 
   Reflect.deleteProperty(globalThis, "__SITUATE_LOCALIZATION_KEYS__");
   setPreferences({ language: "de", formats: preferences.value.formats });
   await flushPromises();
-  expect(wrapper.text()).toContain(de["ai.loadingModels"]);
+  await vi.waitFor(() =>
+    expect(wrapper.text()).toContain(de["ai.loadingModels"]),
+  );
   finish(modelCatalog);
   await flushPromises();
   expect(wrapper.findAll(".ai-provider-grid button")).toHaveLength(4);
@@ -130,7 +132,9 @@ test.each([
         wrapper.get('p[data-localization-content="identity"]').text(),
       ).toBe(provider);
       expect(wrapper.text()).not.toContain("⟦ai.compatibleEndpoint⟧");
-      expect(wrapper.text()).toContain("⟦ai.loadingModels⟧");
+      await vi.waitFor(() =>
+        expect(wrapper.text()).toContain("⟦ai.loadingModels⟧"),
+      );
       finish(modelCatalog);
       await flushPromises();
       expect(

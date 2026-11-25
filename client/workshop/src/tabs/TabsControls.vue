@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { SituateSelect, SituateButton } from "../ui";
+import { SituateSelect, SituateButton, SituateCheckbox } from "../ui";
+import copy from "../localization/en.tabs.json";
 import { computed } from "vue";
 import {
   applyOutcome,
@@ -60,6 +61,19 @@ function modelOutcome(id: string) {
       add views from the separated More views group. Compare the starting states
       with all or no pins, then try pinning and unpinning in the navigation.
     </p>
+    <label for="conversation-list-loading">
+      <SituateCheckbox
+        id="conversation-list-loading"
+        :checked="state.conversationsLoading"
+        @change="
+          emit('action', {
+            type: 'conversation-list-loading',
+            value: ($event.target as HTMLInputElement).checked,
+          })
+        "
+      />
+      {{ copy.simulateConversationListLoading }}
+    </label>
     <template v-if="tab">
       <label for="pane-availability"
         >Active pane · {{ paneTitle(tab.panes[tab.active]!, state) }}</label

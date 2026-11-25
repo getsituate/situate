@@ -36,6 +36,8 @@ Triggers carry `aria-haspopup="menu"`, `aria-controls`, `aria-expanded` and `pop
 
 **Disclosure** retains native `details` / `summary` behavior. Supply `label` or the `label` slot, plus default content. Optional `open` / `update:open` controls expansion; without `open`, the browser owns it. The `toggle` event retains its native event object. Native root attributes such as `name` remain available. `element` is the details element; `focus(options?)` focuses the summary. It expands content, not a menu of actions.
 
+**Loading** takes a localized `label`, a Boolean `pending` and optional `placement="centered|inline"` (default `centered`). Centered placement accepts a decorative `backdrop` slot behind Mini Bend. Keep the component mounted so the polite status region exists before an operation starts. Place it outside any region marked `aria-busy`. The caller owns timing, results and errors. See [Loading feedback](../component-library/loading-design.md) for placement and timing.
+
 **Progress** requires `label`, with optional `value` and `max` (default 100). Finite values expose bounded numeric completion; absent, null or non-finite values remain indeterminate. The optional `estimate` is a visual fraction for pending feedback only: it stays below completion and never supplies an ARIA numeric value. Callers own estimation clocks, pause/reduced-motion behavior and terminal state. The component has no timer or animation. Keep visible status text beside it, outside an `aria-busy` region; meaningful results must not depend on the bar.
 
 ## Content and associations

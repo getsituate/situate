@@ -27,6 +27,7 @@ import {
   SituateIcon,
   SituateIconButton,
   SituateResizeHandle,
+  SituateLoading,
 } from "@situate/ui";
 import FileDialog from "./FileDialog.vue";
 import FileActionMenu from "./FileActionMenu.vue";
@@ -1418,9 +1419,13 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           />
         </div>
         <div class="file-tree">
-          <p v-if="session.loading && !session.snapshot" class="tree-empty">
-            {{ t("files.loadingFiles") }}
-          </p>
+          <SituateLoading
+            v-if="session.loading && !session.snapshot"
+            placement="inline"
+            class="tree-empty"
+            pending
+            :label="t('files.loadingFiles')"
+          />
           <SituateEmptyState v-else-if="!entries.length" class="tree-empty">
             <p>
               {{ query ? t("files.noMatchingFiles") : t("files.noFilesYet") }}
@@ -1542,7 +1547,6 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
         class="document-pane"
         :role="embedded ? 'group' : 'region'"
         :aria-label="t('files.document')"
-        :aria-busy="documentLoading || undefined"
       >
         <header class="document-bar">
           <SituateIconButton
@@ -1623,9 +1627,12 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             />
           </div>
         </header>
-        <div v-if="documentLoading" class="empty-document" role="status">
-          <p>{{ t("files.loadingDocument") }}</p>
-        </div>
+        <SituateLoading
+          v-if="documentLoading"
+          :key="documentPath"
+          pending
+          :label="t('files.loadingDocument')"
+        />
         <template
           v-else-if="
             (file && !props.target?.revision) || historical || historicalDeleted
@@ -1876,9 +1883,12 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
         <p class="history-help">
           {{ t("files.reversingOneChangePreservesLaterIndependentEdits") }}
         </p>
-        <p v-if="historyLoading" class="history-help" role="status">
-          {{ t("files.loadingHistory") }}
-        </p>
+        <SituateLoading
+          v-if="historyLoading"
+          placement="inline"
+          pending
+          :label="t('files.loadingHistory')"
+        />
         <p v-else-if="!history.length" class="history-help">
           {{ t("files.noChangesToShow") }}
         </p>
@@ -2062,9 +2072,12 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
       :title="t('files.deletedFiles')"
       @dismiss="deletedOpen = false"
       ><div class="dialog-body">
-        <p v-if="deletedLoading" role="status">
-          {{ t("files.loadingHistory") }}
-        </p>
+        <SituateLoading
+          v-if="deletedLoading"
+          placement="inline"
+          pending
+          :label="t('files.loadingHistory')"
+        />
         <p v-else-if="deletedError" role="alert">
           {{ localizeFileError(deletedError) }}
         </p>

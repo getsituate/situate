@@ -9,6 +9,7 @@ import {
   SituateIcon,
   SituateIconButton,
   SituateDisclosure,
+  SituateLoading,
   type IconName,
 } from "@situate/ui";
 import wordmark from "../../../../design/brand/assets/wordmark.svg";
@@ -27,7 +28,9 @@ const props = withDefaults(
     pluginsActive?: boolean;
     conversations?: ConversationSummary[];
     selectedConversation?: string;
-    conversationsBusy?: boolean;
+    conversationsLoading?: boolean;
+    conversationsLoaded?: boolean;
+    conversationCreating?: boolean;
     conversationRunning?: (id: string) => boolean;
     availableViews?: { id: string; title: string; icon: IconName }[];
     pinnedViews?: readonly string[];
@@ -60,6 +63,12 @@ const emit = defineEmits<{
 const menuOpen = ref(false);
 const moreOpen = ref(false);
 const archiveFeedback = ref("");
+const initialListLoading = computed(
+  () =>
+    !!props.conversationsLoading &&
+    !props.conversationsLoaded &&
+    !props.conversations?.length,
+);
 const activeConversations = computed(() =>
   (props.conversations ?? []).filter((item) => !item.archived),
 );
@@ -415,14 +424,21 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
           <SituateIconButton
             icon="plus"
             :label="t('navigation.newChat')"
-            :disabled="!currentWorkspaceId || conversationsBusy"
+            :disabled="!currentWorkspaceId || conversationsLoading"
+            :busy="conversationCreating"
             @click="emit('newConversation')"
           />
         </div>
+        <SituateLoading
+          class="conversation-loading"
+          placement="inline"
+          :pending="initialListLoading"
+          :label="t('navigation.loadingConversations')"
+        />
         <ul
           v-if="activeConversations.length"
           class="nav-list"
-          :aria-busy="conversationsBusy"
+          :aria-busy="conversationsLoading || undefined"
         >
           <li
             v-for="item in activeConversations"
@@ -440,13 +456,18 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
           </li>
         </ul>
         <p
-          v-else-if="!conversationsBusy && !archivedConversations.length"
+          v-else-if="
+            (!currentWorkspaceId || conversationsLoaded) &&
+            !archivedConversations.length
+          "
           class="empty-conversations"
         >
           {{ t("navigation.noConversationsYet") }}
         </p>
         <SituateDisclosure
-          v-if="currentWorkspaceId"
+          v-if="
+            currentWorkspaceId && (conversationsLoaded || conversations?.length)
+          "
           :key="currentWorkspaceId"
           class="conversation-archive"
           :label="t('navigation.conversationArchive')"
@@ -454,7 +475,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
           <ul
             v-if="archivedConversations.length"
             class="nav-list"
-            :aria-busy="conversationsBusy"
+            :aria-busy="conversationsLoading || undefined"
           >
             <li v-for="item in archivedConversations" :key="item.id">
               <ConversationListItem
@@ -468,7 +489,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
               />
             </li>
           </ul>
-          <p v-else-if="!conversationsBusy" class="empty-conversations">
+          <p v-else-if="conversationsLoaded" class="empty-conversations">
             {{ t("navigation.noArchivedConversations") }}
           </p>
         </SituateDisclosure>
@@ -805,6 +826,9 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
 }
 .section-heading .situate-icon-button {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
+}
+.conversation-loading:not(:empty) {
+  margin: 8px 12px 16px;
 }
 .empty-conversations {
   margin: 8px 12px 16px;

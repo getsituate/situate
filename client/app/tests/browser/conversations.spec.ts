@@ -14,63 +14,134 @@ for (const target of [
   { kind: "conversation", conversationId: "deleted" },
   { kind: "view", viewId: "missing:board", contentId: "old-item" },
 ] as const) {
-  test(`a retained missing ${target.kind} opens the new-tab chooser without a startup error`, async ({
-    page,
-  }) => {
-    let sequence = 0;
-    await workspaceFixture(page, shellState, {
-      aiHoldConversationList: target.kind === "conversation",
-      layout: {
-        records: {
-          garden: {
-            revision: "retained-layout",
-            data: {
-              version: 1,
-              pinnedViews: ["files"],
-              layout: reduceLayout(
-                emptyLayout(),
-                {
-                  type: "open",
-                  target,
-                },
-                () => `retained-${++sequence}`,
-              ),
+  test(
+    `a retained missing ${target.kind} opens the new-tab chooser without a startup error`,
+    {
+      tag: target.kind === "conversation" ? "@visual-desktop" : [],
+    },
+    async ({ page, visual }) => {
+      if (target.kind === "conversation")
+        await page.setViewportSize({ width: 1280, height: 800 });
+      let sequence = 0;
+      await workspaceFixture(page, shellState, {
+        aiHoldConversationList: target.kind === "conversation",
+        layout: {
+          records: {
+            garden: {
+              revision: "retained-layout",
+              data: {
+                version: 1,
+                pinnedViews: ["files"],
+                layout: reduceLayout(
+                  emptyLayout(),
+                  {
+                    type: "open",
+                    target,
+                  },
+                  () => `retained-${++sequence}`,
+                ),
+              },
             },
           },
         },
-      },
-    });
-    await page.goto("/");
-    if (target.kind === "conversation")
-      await expect(page.locator(".view-message")).toContainText(
-        "Opening your layout…",
-      );
-    const requestsForMissing = () =>
-      page.evaluate(() =>
-        (
-          Reflect.get(window, "__ipcCalls") as {
-            args: { conversation?: string };
-          }[]
-        ).filter(({ args }) => args.conversation === "deleted"),
-      );
-    expect(await requestsForMissing()).toEqual([]);
-    if (target.kind === "conversation")
-      await page.evaluate(() =>
-        Reflect.get(window, "__releaseConversationList")(),
-      );
-    await expect(
-      page.getByRole("heading", {
-        name: "What would you like here?",
-        exact: true,
-      }),
-    ).toBeVisible();
-    expect(await requestsForMissing()).toEqual([]);
-    await page.locator(".view-chooser .new-conversation").click();
-    await expect(
-      page.getByRole("textbox", { name: "Message", exact: true }),
-    ).toHaveValue("");
-  });
+      });
+      await page.goto("/");
+      if (target.kind === "conversation") {
+        await expect(page.getByRole("tabpanel").getByRole("status")).toHaveText(
+          "Opening conversation…",
+        );
+        await expect(
+          page.getByRole("tab", { name: "Conversation", exact: true }),
+        ).toBeVisible();
+        const sidebar = page.getByRole("navigation", {
+          name: "Workspace navigation",
+          exact: true,
+        });
+        await expect(
+          sidebar.getByText("Loading conversations…", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          sidebar.getByText("No conversations yet.", { exact: true }),
+        ).toHaveCount(0);
+        await visual.capture("layout.pane.opening");
+      }
+      const requestsForMissing = () =>
+        page.evaluate(() =>
+          (
+            Reflect.get(window, "__ipcCalls") as {
+              args: { conversation?: string };
+            }[]
+          ).filter(({ args }) => args.conversation === "deleted"),
+        );
+      expect(await requestsForMissing()).toEqual([]);
+      if (target.kind === "conversation")
+        await page.evaluate(() =>
+          Reflect.get(window, "__releaseConversationList")(),
+        );
+      await expect(
+        page.getByRole("heading", {
+          name: "What would you like here?",
+          exact: true,
+        }),
+      ).toBeVisible();
+      expect(await requestsForMissing()).toEqual([]);
+      await page.locator(".view-chooser .new-conversation").click();
+      await expect(
+        page.getByRole("textbox", { name: "Message", exact: true }),
+      ).toHaveValue("");
+    },
+  );
 }
+
+test(
+  "a saved conversation does not show a new-chat greeting while its history loads",
+  { tag: "@visual-desktop" },
+  async ({ page, visual }) => {
+    const title = "Garden plans";
+    const message = "Keep the herbs by the kitchen.";
+    const draft = "An unfinished thought";
+    await workspaceFixture(page, shellState, {
+      aiHoldConversationSnapshot: "legacy",
+      aiConversations: [
+        {
+          id: "legacy",
+          title,
+          draft,
+          messages: [{ role: "user", content: message, timestamp: 1 }],
+        },
+      ],
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    const sidebar = page.getByRole("navigation", {
+      name: "Workspace navigation",
+      exact: true,
+    });
+    await sidebar.getByRole("button", { name: title, exact: true }).click();
+    const pane = page.getByRole("tabpanel");
+    await expect(
+      pane.getByText("Opening conversation…", { exact: true }),
+    ).toBeVisible();
+    await expect(pane.locator(".welcome-bend")).toHaveCount(0);
+    await expect(
+      page.getByRole("tab", { name: title, exact: true }),
+    ).toBeVisible();
+    await visual.capture("chat.history.opening");
+    await expect(
+      pane.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveCount(0);
+    await page.evaluate(() =>
+      Reflect.get(window, "__releaseConversationSnapshot")(),
+    );
+    await expect(pane.getByText(message, { exact: true })).toBeVisible();
+    await expect(
+      pane.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveValue(draft);
+    await expect(
+      pane.getByText("Opening conversation…", { exact: true }),
+    ).toHaveCount(0);
+  },
+);
 
 async function openNavigation(page: Page): Promise<void> {
   const navigation = page.getByRole("navigation", {

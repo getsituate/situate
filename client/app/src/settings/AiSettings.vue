@@ -31,6 +31,7 @@ import {
   SituateInfoButton,
   SituateInput,
   SituateSelect,
+  SituateLoading,
 } from "@situate/ui";
 import { refreshWorkspaceChats } from "../ai/chat";
 import ErrorDialog from "../errors/ErrorDialog.vue";
@@ -341,11 +342,7 @@ function thinking(event: Event): void {
 }
 </script>
 <template>
-  <div
-    :key="workspaceScope"
-    class="ai-settings"
-    :aria-busy="service ? service.state.loading || service.state.saving : false"
-  >
+  <div :key="workspaceScope" class="ai-settings">
     <AiConnections
       v-if="workspaceScope"
       :key="workspaceScope"
@@ -385,6 +382,7 @@ function thinking(event: Event): void {
         }}</label
         ><SituateSwitch
           :id="`settings-inline-${id}`"
+          :aria-busy="!!(service?.state.loading || service?.state.saving)"
           :checked="settings?.showInlineModel ?? false"
           :disabled="disabled"
           @change="toggle('showInlineModel', $event)"
@@ -400,9 +398,11 @@ function thinking(event: Event): void {
               <span class="model-list-label">{{
                 t("settings.ai.modelList")
               }}</span>
-              <p v-if="refreshingModels" role="status">
-                {{ t("ai.models.refreshing") }}
-              </p>
+              <SituateLoading
+                placement="inline"
+                :pending="refreshingModels"
+                :label="t('ai.models.refreshing')"
+              />
             </div>
             <SituateButton
               class="refresh-models-button"

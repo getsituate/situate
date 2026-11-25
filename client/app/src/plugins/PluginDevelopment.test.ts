@@ -189,8 +189,10 @@ test("shell history loads lazily and restores a selected deleted file without to
     },
   });
   await flushPromises();
-  expect(wrapper.get('[role="status"]').text()).toBe(
-    "⟦assignmentChanges.loading⟧",
+  await vi.waitFor(() =>
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      "⟦assignmentChanges.loading⟧",
+    ),
   );
   finish({
     status: "ready",

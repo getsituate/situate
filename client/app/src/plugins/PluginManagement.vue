@@ -10,7 +10,11 @@ import {
 } from "vue";
 import { t, localizeError } from "@situate/localization";
 import "@situate/localization/plugin-management";
-import { SituateButton, SituateDialogActions } from "@situate/ui";
+import {
+  SituateLoading,
+  SituateButton,
+  SituateDialogActions,
+} from "@situate/ui";
 import type { NavigationTicket } from "../layout/session";
 import { recoveryMode } from "../recovery";
 import type { PluginRuntime, RuntimePlugin } from "./runtime";
@@ -529,14 +533,13 @@ function settings(id: string) {
         embedded
         @leave="backToPlugins"
       />
-      <p
+      <SituateLoading
         v-else-if="
-          loading || (runtime?.state.status === 'loading' && !plugins.length)
+          !plugins.length && (loading || runtime?.state.status === 'loading')
         "
-        role="status"
-      >
-        {{ t("pluginManagement.loading") }}
-      </p>
+        pending
+        :label="t('pluginManagement.loading')"
+      />
       <template v-else-if="plugins.length || !inventoryFailure">
         <section
           v-if="!plugins.length"

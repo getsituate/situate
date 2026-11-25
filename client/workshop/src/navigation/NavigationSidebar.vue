@@ -12,7 +12,12 @@ import {
 import { catalogView, viewCatalog } from "../tabs/catalog";
 import copy from "../localization/en.tabs.json";
 import conversationCopy from "../localization/en.conversation-list.json";
-import { SituateIconButton, SituateButton, SituateIcon as UiIcon } from "../ui";
+import {
+  SituateIconButton,
+  SituateButton,
+  SituateLoading,
+  SituateIcon as UiIcon,
+} from "../ui";
 import SituateIcon from "./NavigationIcon.vue";
 import { views } from "./fixtures";
 import {
@@ -76,6 +81,7 @@ const conversations = computed(() =>
       }))
     : state.value.conversations,
 );
+const listLoading = computed(() => props.topics?.conversationsLoading ?? false);
 const active = computed(() =>
   conversations.value.filter((item) => !item.archived),
 );
@@ -261,11 +267,23 @@ function status(value: string) {
         <SituateIconButton
           icon="plus"
           :label="topics ? copy.newConversation : 'Open chat'"
+          :disabled="listLoading"
           @click="newConversation"
         />
       </div>
       <slot name="conversation-items" />
-      <ul ref="activeList" class="conversation-list" role="list">
+      <SituateLoading
+        class="conversation-loading"
+        placement="inline"
+        :pending="listLoading"
+        :label="copy.loadingConversations"
+      />
+      <ul
+        v-show="!listLoading"
+        ref="activeList"
+        class="conversation-list"
+        role="list"
+      >
         <li v-for="item in active" :key="item.id">
           <ConversationRow
             :title="item.title"
@@ -282,6 +300,7 @@ function status(value: string) {
         </li>
       </ul>
       <SituateDisclosure
+        v-show="!listLoading"
         ref="disclosure"
         class="conversation-archive"
         :label="copy.archive"
@@ -444,6 +463,9 @@ h2 {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+.conversation-loading[data-pending] {
+  padding: 6px 12px;
 }
 .conversation-archive .conversation-list {
   padding-inline-start: 12px;

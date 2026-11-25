@@ -223,6 +223,7 @@ function activate() {
   min-width: 0;
 }
 .pane-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   container: pane / inline-size;

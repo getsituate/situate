@@ -55,10 +55,11 @@ import {
   type PresentationValue,
   type ViewTarget,
 } from "../layout/navigation";
+import ViewHost from "../layout/ViewHost.vue";
+import WorkspaceLoading from "../layout/components/WorkspaceLoading.vue";
 const WorkspaceLayout = defineAsyncComponent(
   () => import("../layout/components/WorkspaceLayout.vue"),
 );
-import ViewHost from "../layout/ViewHost.vue";
 import {
   safeFileTarget,
   type FilePaneReference,
@@ -556,8 +557,9 @@ const sidebar = computed(() => ({
     activeTarget.value?.kind === "conversation"
       ? activeTarget.value.conversationId
       : undefined,
-  conversationsBusy:
-    conversations.value?.state.loading || conversations.value?.state.creating,
+  conversationsLoading: !!conversations.value?.state.loading,
+  conversationsLoaded: !!conversations.value?.state.loaded,
+  conversationCreating: !!conversations.value?.state.creating,
   conversationRunning: conversations.value?.running,
   filesActive:
     activeTarget.value?.kind === "view" &&
@@ -665,6 +667,10 @@ const sidebarActions = {
           />
         </template>
       </SituateErrorScreen>
+      <WorkspaceLoading
+        v-if="!layout && (!layoutError || document)"
+        :pending="ui.session.state.loading || !!document"
+      />
       <div v-if="layoutError && document" class="layout-notice">
         <SituateButton variant="secondary" @click="errorDismissed = false">
           {{ t("errorRecovery.review") }}
@@ -698,9 +704,6 @@ const sidebarActions = {
           />
         </template>
       </ErrorDialog>
-      <p v-if="ui.session.state.loading && !document" role="status">
-        {{ t("layoutHost.loading") }}
-      </p>
       <WorkspaceLayout
         v-if="document"
         ref="layout"

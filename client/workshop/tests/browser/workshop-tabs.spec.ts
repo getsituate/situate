@@ -2268,7 +2268,9 @@ test("empty, loading, unavailable and overflowing tabs remain reachable", async 
     .getByRole("button", { name: "Notes", exact: true })
     .click();
   await selectOption(page.getByLabel(/Active pane ·/), "loading");
-  await expect(preview.getByRole("status")).toHaveText("Opening view…");
+  await expect(
+    preview.getByRole("status").filter({ hasText: "Opening view…" }),
+  ).toBeVisible();
   await selectOption(page.getByLabel(/Active pane ·/), "unavailable");
   await expect(
     preview.getByRole("heading", { name: "This view isn’t available" }),

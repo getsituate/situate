@@ -4,6 +4,7 @@ import {
   SituateDialog,
   SituateScrollbars,
   selectEnvironment,
+  SituateLoading,
 } from "@situate/ui";
 import { t, localizeError } from "@situate/localization";
 import {
@@ -1080,7 +1081,12 @@ onBeforeUnmount(() => {
       <p v-if="state?.error || error" role="alert">
         {{ localizeError(state?.error || error) }}
       </p>
-      <p v-else role="status">{{ t("navigation.openingWorkspaces") }}</p>
+      <SituateLoading
+        v-else-if="!error && !state?.error"
+        placement="inline"
+        pending
+        :label="t('navigation.openingWorkspaces')"
+      />
       <SituateButton
         variant="secondary"
         size="small"

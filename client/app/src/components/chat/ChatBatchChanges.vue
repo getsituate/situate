@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { SituateButton, SituateIcon } from "@situate/ui";
+import { SituateLoading, SituateButton, SituateIcon } from "@situate/ui";
 import { t } from "@situate/localization";
 import FileDialog from "../../files/FileDialog.vue";
 import { filesRequest } from "../../files/api";
@@ -106,7 +106,12 @@ watch(
       wide
       @dismiss="selected = undefined"
     >
-      <p v-if="loading" role="status">{{ t("files.loadingDocument") }}</p>
+      <SituateLoading
+        v-if="loading"
+        placement="inline"
+        pending
+        :label="t('files.loadingDocument')"
+      />
       <template v-else-if="unavailable">
         <p role="status">{{ t("chat.importChangeUnavailable") }}</p>
         <SituateButton variant="ghost" @click="attempt++">{{

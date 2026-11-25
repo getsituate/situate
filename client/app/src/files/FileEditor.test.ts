@@ -1326,10 +1326,11 @@ describe("file editor actions", () => {
     );
     await button(editor, "Reading.md").trigger("click");
     await flushPromises();
-    expect(editor.get('[role="status"]').text()).toBe(
-      "⟦files.loadingDocument⟧",
+    await vi.waitFor(() =>
+      expect(editor.get('[role="status"]').text()).toBe(
+        "⟦files.loadingDocument⟧",
+      ),
     );
-    expect(editor.get(".document-pane").attributes("aria-busy")).toBe("true");
     expect(editor.findComponent(RenderedFile).exists()).toBe(false);
     reject(new Error("files.theFileCouldNotBeRead"));
     await flushPromises();
@@ -1351,17 +1352,15 @@ describe("file editor actions", () => {
     );
     await button(wrapper, "Reading.md").trigger("click");
     await flushPromises();
-    expect(wrapper.get('[role="status"]').text()).toBe(
-      "⟦files.loadingDocument⟧",
+    await vi.waitFor(() =>
+      expect(wrapper.get('[role="status"]').text()).toBe(
+        "⟦files.loadingDocument⟧",
+      ),
     );
-    expect(wrapper.get(".document-pane").attributes("aria-busy")).toBe("true");
     expect(wrapper.text()).not.toContain("⟦files.yourFilesInPlace⟧");
     reject(new Error("files.theFileCouldNotBeRead"));
     await flushPromises();
     expect(wrapper.find('[role="status"]').exists()).toBe(false);
-    expect(
-      wrapper.get(".document-pane").attributes("aria-busy"),
-    ).toBeUndefined();
     expect(wrapper.text()).not.toContain("⟦files.yourFilesInPlace⟧");
     expect(wrapper.text()).toContain("⟦files.theFileCouldNotBeRead⟧");
   });
@@ -1414,8 +1413,10 @@ describe("file editor actions", () => {
       ],
     };
     await flushPromises();
-    expect(wrapper.get("dialog [role='status']").text()).toBe(
-      "⟦files.loadingHistory⟧",
+    await vi.waitFor(() =>
+      expect(wrapper.get("dialog [role='status']").text()).toBe(
+        "⟦files.loadingHistory⟧",
+      ),
     );
     expect(wrapper.find(".deleted-entry").exists()).toBe(false);
     fail(new Error("files.theFileCouldNotBeRead"));

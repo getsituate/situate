@@ -20,6 +20,8 @@ export const scenarioBrowser = {
     "tabs-new-chat": "New conversation in a pane",
     "tabs-many": "Many tabs with long names",
     "tabs-loading": "Active pane loading",
+    "tabs-conversation-loading": "Opening an existing conversation",
+    "tabs-conversation-list-loading": "Loading conversations in navigation",
     "tabs-unavailable": "Active pane unavailable",
     "tabs-maximized": "Maximized pane with history",
     "tabs-maximized-many": "Maximized arrangement with twelve panes",

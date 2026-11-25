@@ -12,6 +12,7 @@ import {
   SituateInput,
   SituateIconButton,
   SituateIcon,
+  SituateLoading,
 } from "@situate/ui";
 import { t } from "@situate/localization";
 import "@situate/localization/assignment-changes";
@@ -350,9 +351,12 @@ defineExpose({ focusTitle, showList: showTree });
       />
     </header>
     <div v-if="state.status !== 'ready'" class="feedback">
-      <p v-if="state.status === 'loading'" role="status">
-        {{ t("assignmentChanges.loading") }}
-      </p>
+      <SituateLoading
+        v-if="state.status === 'loading'"
+        placement="inline"
+        pending
+        :label="t('assignmentChanges.loading')"
+      />
       <p v-else-if="state.status === 'unavailable'" role="status">
         {{ t("assignmentChanges.unavailable") }}
       </p>

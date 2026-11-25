@@ -6,7 +6,7 @@ The production client imports reusable Vue components from `@situate/ui`. Compon
 
 - Actions: `SituateButton`, `SituateIconButton`, `SituateIcon`.
 - Forms: `SituateInput`, `SituateTextarea`, `SituateCheckbox`, `SituateRadio`, `SituateSelect`, `SituateSwitch`, `SituateFilterChip`, `SituateField`.
-- Feedback and surfaces: `SituateBadge`, `SituateNotice`, `SituateEmptyState`, `SituatePanel`, `SituateDialog`, `SituateDialogActions`, `SituatePopover`, `SituateMenu`, `SituateDisclosure`, `SituateTooltip`, `SituateInfoButton`, `SituateProgress`.
+- Feedback and surfaces: `SituateBadge`, `SituateNotice`, `SituateEmptyState`, `SituatePanel`, `SituateDialog`, `SituateDialogActions`, `SituatePopover`, `SituateMenu`, `SituateDisclosure`, `SituateTooltip`, `SituateInfoButton`, `SituateLoading`, `SituateProgress`.
 - Layout: `SituateScrollbars`, `SituateResizeHandle`.
 
 ```vue
@@ -57,7 +57,9 @@ Default dialogs use a 1.25rem/1.3/650 title, 1rem/1.55/400 body, and 1rem/1.4/60
 
 `Menu` and `Popover` take caller-owned `open`, a localized `label`, and either an `anchor` element or viewport `point: { x, y }`. They emit `close`; the caller must update `open`. Positioning follows the visual viewport and safe-area bounds. `align="start|end"` chooses the anchor edge (end by default); `maxHeight` optionally limits the surface height in pixels, within viewport bounds. Surfaces invoked inside an open modal remain hosted there. Menu items stay caller-owned: supply `menuitem`, `menuitemradio` or `menuitemcheckbox` roles, checked state and action handlers. `initialFocus="first|last|checked"` selects the opening item; `:close-on-select="false"` leaves dismissal to the caller. Popover does not add menu navigation to arbitrary content. Anchored popovers ease away from the trigger unless `staticSurface` is set. Menus and pointer-positioned popovers open without movement.
 
-`Disclosure` accepts a `label` prop or label slot, default-slot content, and optional `v-model:open`; native details attributes and toggle events remain available. Use `customIndicator` when the label slot supplies its own open/closed indicator. `Progress` requires a label. Finite `value` and positive `max` describe measured work; an optional fractional `estimate` only changes the indeterminate visual fill, never numeric accessibility values.
+`Disclosure` accepts a `label` prop or label slot, default-slot content, and optional `v-model:open`; native details attributes and toggle events remain available. Use `customIndicator` when the label slot supplies its own open/closed indicator. `Loading` takes a localized `label` and a `pending` flag. It shows a polite status after 200 ms and removes it as soon as pending ends. Use `placement="inline"` for a subsection or the default centered placement for a whole content area. Centered placement accepts a decorative `backdrop` slot. The component does not own the operation, its error state, or focus. Keep the status outside the region marked `aria-busy`.
+
+`Progress` requires a label. Finite `value` and positive `max` describe measured work; an optional fractional `estimate` only changes the indeterminate visual fill, never numeric accessibility values.
 
 Mount `Scrollbars` once at the application root, with or without a default slot. It tracks native scrolling throughout the document, including teleported content, and releases its listeners when its final owner unmounts. It does not wrap or replace scrolling surfaces.
 

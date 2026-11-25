@@ -246,7 +246,13 @@ describe("registered workspace navigation", () => {
       props: { ui, tab, pane: tab.panes[0]!, workspaceName: "Workspace" },
     });
     cleanup.push(() => host.unmount());
-    expect(host.get('[role="status"]').text()).toContain("layoutHost.loading");
+    await nextTick();
+    expect(host.getComponent({ name: "SituateLoading" }).props()).toMatchObject(
+      {
+        pending: true,
+        label: "⟦layoutHost.openingView⟧",
+      },
+    );
     ready.resolve(defineComponent(() => () => h("p", "Loaded content")));
     await flushPromises();
     expect(host.text()).toBe("Loaded content");

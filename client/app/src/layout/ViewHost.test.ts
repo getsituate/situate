@@ -231,9 +231,12 @@ it("waits for inventory before mounting a retained target and leaves no missing 
   });
   try {
     await flushPromises();
-    expect(wrapper.get('[role="status"]').text()).toContain(
-      "⟦layoutHost.loading⟧",
-    );
+    expect(
+      wrapper.getComponent({ name: "SituateLoading" }).props(),
+    ).toMatchObject({
+      pending: true,
+      label: "⟦layoutHost.openingConversation⟧",
+    });
     expect(mounted).not.toHaveBeenCalled();
     const inventory = workspaceConversations("workspace").state;
     inventory.error = "ai.aiAccessOrConversationHistoryCouldNotBeRead";
