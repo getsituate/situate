@@ -2,8 +2,6 @@
   "chat.workHistory": "Work history",
   "chat.loadEarlierMessages": "Load earlier messages",
   "chat.loadingEarlierMessages": "Loading earlier messages…",
-  "chat.workingLabel": "Working…",
-  "chat.elapsedWorkTime": "Elapsed working time",
   "chat.stoppedState": "Stopped",
   "chat.modelReasoning": "Model reasoning",
   "chat.progressUpdate": "Progress update",

@@ -5,7 +5,6 @@ import {
   historySections,
   toolCaption,
   toolCategory,
-  elapsedClock,
   type HistoryPeriod,
 } from "./work-history";
 import { loadConversation } from "../../ai/conversation";
@@ -601,12 +600,5 @@ describe("work history projection", () => {
         args: { title: "Unused" },
       }),
     ).toBe("books.search");
-  });
-  it.each([
-    [0, "0:00"],
-    [61000, "1:01"],
-    [3600000, "1:00:00"],
-  ])("formats the live elapsed clock %s", (time, expected) => {
-    expect(elapsedClock(time as number)).toBe(expected);
   });
 });

@@ -47,6 +47,7 @@
   "chat.durationLessThanSecond": "weniger als 1 Sek.",
   "chat.durationSeconds": "{seconds} Sek.",
   "chat.durationMinutesSeconds": "{minutes} Min. {seconds} Sek.",
+  "chat.workInProgress": "Seit {duration} in Arbeit",
   "chat.workDuration": "{duration} gearbeitet",
   "chat.workStopped": "Gestoppt · {duration} gearbeitet",
   "chat.workFailed": "Durch Fehler beendet · {duration} gearbeitet",

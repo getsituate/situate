@@ -175,15 +175,31 @@ test("a new view starts at the end and follows growth beyond the old end range",
   expect(chat.element.scrollTop).toBe(2200);
 });
 
-test.each([47, 48, 49])(
-  "the end range includes 48 pixels (gap=%s)",
-  async (gap) => {
+test.each([
+  { gap: 96, follows: true },
+  { gap: 97, follows: false },
+])(
+  "follows only within 96 pixels of the end (gap=$gap)",
+  async ({ gap, follows }) => {
     const chat = await view();
     chat.move(800 - gap);
-    expect(chat.control.awayFromEnd.value).toBe(gap > 48);
+    expect(chat.control.awayFromEnd.value).toBe(!follows);
     chat.dimensions.contentHeight = 1400;
     resize();
-    expect(chat.element.scrollTop).toBe(gap <= 48 ? 1200 : 751);
+    expect(chat.element.scrollTop).toBe(follows ? 1200 : 800 - gap);
+  },
+);
+
+test.each([32, 72])(
+  "still follows when a %s-pixel upward scroll arrives with stream growth",
+  async (gap) => {
+    const chat = await view();
+    chat.control.wheel(new WheelEvent("wheel", { deltaY: -gap }));
+    chat.element.scrollTop = 800 - gap;
+    chat.dimensions.contentHeight = 1400;
+    chat.control.capture();
+    expect(chat.element.scrollTop).toBe(1200);
+    expect(chat.control.awayFromEnd.value).toBe(false);
   },
 );
 

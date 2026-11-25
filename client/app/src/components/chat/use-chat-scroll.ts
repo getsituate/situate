@@ -1,6 +1,6 @@
 import { nextTick, ref, watch, type Ref } from "vue";
 
-const endThreshold = 48;
+const endThreshold = 96;
 
 export function useChatScroll(
   viewport: Readonly<Ref<HTMLElement | null>>,
@@ -51,11 +51,10 @@ export function useChatScroll(
     if (element.scrollTop !== clampedTop) {
       restoreTop = undefined;
       // A stream update can move the end before the reader's scroll event arrives.
-      const reachedPreviousEnd =
-        element.scrollTop > top &&
+      const nearPreviousEnd =
         contentHeight - height - element.scrollTop <= endThreshold;
       following =
-        reachedPreviousEnd ||
+        nearPreviousEnd ||
         element.scrollHeight - element.clientHeight - element.scrollTop <=
           endThreshold;
     }

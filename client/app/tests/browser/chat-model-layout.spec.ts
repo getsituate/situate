@@ -244,6 +244,17 @@ for (const viewport of [
       await expect(
         page.getByText("A streamed test response.", { exact: true }),
       ).toBeVisible();
+      const timer = page.locator(".work-history-heading").getByRole("timer");
+      await expect(timer).toHaveText(
+        /^Working for (?:less than 1 sec|\d+ sec)$/u,
+      );
+      expect(
+        await timer.evaluate((element) => {
+          const text = document.createRange();
+          text.selectNodeContents(element);
+          return text.getClientRects().length;
+        }),
+      ).toBe(1);
       const activity = page.locator(".chat-activity");
       await expect(activity.getByRole("status")).not.toBeEmpty();
       await expect(activity.locator(".comment-reveal")).not.toBeEmpty();

@@ -70,7 +70,11 @@ export const test = base.extend<
             // String names are sanitized by Playwright and can collapse distinct state IDs.
             await expect(page).toHaveScreenshot([filename], {
               ...options,
-              mask: [page.getByRole("timer")],
+              mask: [
+                page.locator(".work-history-heading").filter({
+                  has: page.getByRole("timer"),
+                }),
+              ],
             });
             captures.push(filename);
           },

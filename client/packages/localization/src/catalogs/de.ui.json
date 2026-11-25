@@ -2,8 +2,6 @@
   "chat.workHistory": "Arbeitsverlauf",
   "chat.loadEarlierMessages": "Frühere Nachrichten laden",
   "chat.loadingEarlierMessages": "Frühere Nachrichten werden geladen…",
-  "chat.workingLabel": "In Arbeit …",
-  "chat.elapsedWorkTime": "Bisherige Arbeitszeit",
   "chat.stoppedState": "Gestoppt",
   "chat.modelReasoning": "Gedankengang des Modells",
   "chat.progressUpdate": "Zwischenmeldung",

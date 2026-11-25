@@ -23,11 +23,12 @@ test(
       aiResponseText: "",
     });
     const region = page.locator(".transcript-scroll");
-    async function stream(text: string, action?: "finish" | "return-to-end") {
+    async function stream(text: string, action?: "finish" | number) {
       await region.evaluate(
         (element, { text, action }) => {
-          if (action === "return-to-end")
-            element.scrollTop = element.scrollHeight;
+          if (typeof action === "number")
+            element.scrollTop =
+              element.scrollHeight - element.clientHeight - action;
           const native = Reflect.get(
             window,
             "__nativeConversationFixture",
@@ -68,10 +69,49 @@ test(
         (element) =>
           element.scrollHeight - element.clientHeight - element.scrollTop,
       );
+    await page.evaluate(() => {
+      const native = Reflect.get(
+        window,
+        "__nativeConversationFixture",
+      ) as NativeConversationFixture;
+      const record = native.getRecord("garden", "legacy");
+      for (const id of ["reading-list", "reading-notes"]) {
+        record.messages.push(
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "toolCall",
+                id,
+                name: "read",
+                arguments: { path: `${id}.md` },
+              },
+            ],
+            timestamp: Date.now(),
+            usage: null,
+            stopReason: "toolUse",
+          },
+          {
+            role: "toolResult",
+            toolCallId: id,
+            toolName: "read",
+            content: [{ type: "text", text: "Reading notes." }],
+            timestamp: Date.now(),
+            isError: false,
+          },
+        );
+      }
+      native.saveRecord("garden", record, { partialMessage: null });
+    });
+    const history = page.getByRole("button", { name: /^Working/u });
+    await expect(history).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator(".history-tools")).toHaveCount(1);
+    await expect(page.locator(".history-tools")).toBeHidden();
     for (const section of ["Morning", "Afternoon", "Evening"]) {
       await stream(
         `\n\n## ${section}\n\n` +
           "Read a chapter and record one useful idea.\n\n".repeat(14),
+        section === "Evening" ? 72 : undefined,
       );
       await expect(page.locator(".chat-markdown").last()).toContainText(
         section,
@@ -84,7 +124,7 @@ test(
     ).toBeVisible();
     await stream(
       "\n\n## Night\n\n" + "Write a short summary.\n\n".repeat(14),
-      "return-to-end",
+      72,
     );
     await expect(page.locator(".chat-markdown").last()).toContainText("Night");
     await expect.poll(distance).toBeLessThanOrEqual(1);
@@ -101,7 +141,9 @@ test(
     await expect
       .poll(() => region.evaluate((element) => element.scrollTop))
       .toBeCloseTo(readingTop, 0);
-    await expect.poll(distance).toBeGreaterThan(48);
+    await expect(
+      page.getByRole("button", { name: "Scroll to end", exact: true }),
+    ).toBeVisible();
     const readingAnchor = await page
       .locator(".message.assistant")
       .evaluate((element) => {
