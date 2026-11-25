@@ -152,6 +152,17 @@ To use the SonarQube MCP tools, [create a personal access token](https://docs.so
 
 Start Pi and run `/mcp` to check the connection. Changing issue status requires the **Administer Issues** permission on the SonarQube Cloud project. Without a token, Pi does not register the server. You can still view the [public Situate analysis](https://sonarcloud.io/project/overview?id=getsituate_situate) without a token.
 
+### Check the SonarCloud gate before opening a PR
+
+Install [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/scanners/sonarscanner-cli) on `PATH`, and set `SONAR_TOKEN` in the environment or the worktree root’s private `.env`. Use a token with **Execute Analysis** permission on the Situate project. The scan requires a clean worktree on a feature branch that includes current `origin/main`.
+
+- `/pr-check` generates the CI Vue coverage report and sends an analysis of the committed branch to the public SonarCloud project as `preflight/<branch>`. If there are uncommitted changes, Pi asks whether it should create a local commit first. It starts the scan only after that commit leaves a clean worktree. It does not push to GitHub or open a PR.
+- `/pr-open` runs the same check. If the gate fails, Pi can ask the selected model to fix the branch findings, commit the fixes locally, and retry once without another confirmation. Only after the gate passes does Pi ask the model to run the remaining local PR checks, push the checked commit, and open a PR against `main`. If a local check exposes a branch defect and no repair has been attempted yet, the model can commit a fix and request a fresh preflight without another confirmation. Pi does not publish the fix unless that commit passes. It requires an authenticated GitHub CLI with permission to push and open the PR.
+
+Pi shows live output while the preflight runs. Press **Esc** to stop the local command and return to the editor. SonarCloud may finish an analysis that was already submitted. If `/pr-check` returns a failed quality gate and a model is selected, Pi asks the model to explain the branch report without making changes.
+
+The preflight uses SonarCloud’s project gate for a short-lived branch. SonarCloud can classify new code differently in a PR analysis; the required PR gate and GitHub verification still run independently. Only use these commands for code that can be public.
+
 ## Herdr operational skill
 
 The repository's `delegate-with-herdr` skill uses your user-level Herdr skill at:
