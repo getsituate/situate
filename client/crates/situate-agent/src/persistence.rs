@@ -84,11 +84,13 @@ pub(crate) fn project(
             .push(entry.data["message"].clone());
         ids.push(entry.id.clone());
     }
-    let mut seen = std::collections::HashSet::new();
-    for entry in context.active_entries.iter().chain(context.entries.iter()) {
-        if !seen.insert(&entry.id) {
-            continue;
-        }
+    let visible_ids: std::collections::HashSet<_> =
+        context.entries.iter().map(|entry| &entry.id).collect();
+    let older_active = context
+        .active_entries
+        .iter()
+        .filter(|entry| !visible_ids.contains(&entry.id));
+    for entry in older_active.chain(&context.entries) {
         match entry.kind.as_str() {
             "message" => {
                 let message = entry.data["message"].clone();

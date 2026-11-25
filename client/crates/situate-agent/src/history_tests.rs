@@ -336,6 +336,49 @@ async fn empty_migrated_conversations_do_not_count_opaque_preservation_as_histor
 }
 
 #[tokio::test]
+async fn reopening_with_an_unanswered_tool_question_preserves_event_order() {
+    let host = Fixture::new();
+    let question = json!({"id":"follow-up","prompt":"Continue with the import?"});
+    seed(
+        &host,
+        vec![
+            (
+                "tool-end",
+                "event",
+                json!({"id":"tool-end","runId":"import","sequence":1,"type":"tool_execution_end","data":{}}),
+            ),
+            (
+                "question",
+                "event",
+                json!({"id":"question","runId":"import","sequence":2,"type":"question_presented","data":question}),
+            ),
+            (
+                "work-end",
+                "event",
+                json!({"id":"work-end","runId":"import","sequence":3,"type":"work_block_end","data":{}}),
+            ),
+        ],
+    );
+
+    let reopened = Owner::open(host).await.unwrap();
+    let (snapshot, _) = reopened.subscribe().await.unwrap();
+    let runtime = snapshot.record.runtime.as_ref().unwrap();
+    assert_eq!(
+        runtime
+            .events
+            .iter()
+            .map(|event| (event.kind.as_str(), event.sequence))
+            .collect::<Vec<_>>(),
+        [
+            ("tool_execution_end", 1),
+            ("question_presented", 2),
+            ("work_block_end", 3),
+        ]
+    );
+    assert_eq!(questions::pending(&snapshot.record), Some(question));
+}
+
+#[tokio::test]
 async fn settled_question_events_leave_the_window_without_losing_the_active_question() {
     for answered in [false, true] {
         let host = Fixture::new();
@@ -390,6 +433,16 @@ async fn settled_question_events_leave_the_window_without_losing_the_active_ques
                 "current"
             );
         }
+        let reopened = Owner::open(host.clone()).await.unwrap();
+        let (restored, _) = reopened.subscribe().await.unwrap();
+        assert_eq!(
+            questions::pending(&restored.record),
+            questions::pending(&snapshot.record)
+        );
+        assert_eq!(
+            questions::action_pending(&restored.record),
+            questions::action_pending(&snapshot.record)
+        );
         let history = host
             .storage
             .read_conversation_history("chat", None, 1000)
