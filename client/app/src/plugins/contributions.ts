@@ -1,6 +1,8 @@
 import { isIconName } from "@situate/ui/icons";
 import type { ViewDefinition } from "../layout/registry";
 import type { Component } from "vue";
+import { validCombination } from "../layout/shortcut-keys";
+import type { PluginShortcutDefinition } from "./layout-actions";
 import type { PluginUiContributions, PluginToolDescriptor } from "./types";
 
 function invalid(): never {
@@ -132,7 +134,11 @@ function component(value: unknown): value is Component {
   return object(value) || typeof value === "function";
 }
 function hasPluginUi(value: PluginUiContributions): boolean {
-  return !!(value.views?.length || Object.keys(value.components ?? {}).length);
+  return !!(
+    value.views?.length ||
+    value.shortcuts?.length ||
+    Object.keys(value.components ?? {}).length
+  );
 }
 
 export function validateUiContributions(
@@ -144,7 +150,10 @@ export function validateUiContributions(
   if (!object(value)) invalid();
   if (
     Object.keys(value).some(
-      (key) => !["views", "settings", "dispose", "components"].includes(key),
+      (key) =>
+        !["views", "settings", "dispose", "components", "shortcuts"].includes(
+          key,
+        ),
     )
   )
     invalid();
@@ -182,7 +191,50 @@ export function validateUiContributions(
       throw new Error("plugins.viewIconRequired");
     return { ...view, icon: validIcon ? icon : "plugins" } as ViewDefinition;
   }
+  const shortcutIds = new Set<string>();
+  if (
+    value.shortcuts !== undefined &&
+    (!Array.isArray(value.shortcuts) || value.shortcuts.length > 64)
+  )
+    invalid();
+  function validateShortcut(item: unknown): PluginShortcutDefinition {
+    if (
+      !object(item) ||
+      typeof item.id !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,128}$/u.test(item.id) ||
+      shortcutIds.has(item.id) ||
+      typeof item.title !== "string" ||
+      !item.title.trim() ||
+      item.title.length > 128 ||
+      typeof item.run !== "function"
+    )
+      invalid();
+    const defaults = item.defaults;
+    if (
+      defaults !== undefined &&
+      (!object(defaults) ||
+        Object.entries(defaults).some(
+          ([os, keys]) =>
+            (os !== "macos" && os !== "windows") ||
+            typeof keys !== "string" ||
+            !validCombination(keys, os),
+        ))
+    )
+      invalid();
+    shortcutIds.add(item.id);
+    return {
+      id: item.id,
+      title: item.title.trim(),
+      run: item.run as PluginShortcutDefinition["run"],
+      defaults: defaults
+        ? ({ ...defaults } as PluginShortcutDefinition["defaults"])
+        : undefined,
+    };
+  }
   const contributions = {
+    ...(value.shortcuts === undefined
+      ? {}
+      : { shortcuts: Array.from(value.shortcuts, validateShortcut) }),
     ...(value.components === undefined
       ? {}
       : {

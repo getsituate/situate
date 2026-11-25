@@ -7,6 +7,7 @@ export const icons = {
   grip: "M9 5v1m6-1v1M9 11v1m6-1v1M9 17v1m6-1v1",
   menu: "M4 6h16M4 12h16M4 18h16",
   info: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 8v6m0-10v.5",
+  search: "M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm4.25 10.25L20 20",
   folder:
     "M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   workspace:

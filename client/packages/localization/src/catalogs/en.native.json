@@ -1,4 +1,11 @@
 {
+  "native.shortcuts.unavailable": "The shortcut is not available.",
+  "native.shortcuts.invalid": "Choose a different key combination.",
+  "native.shortcuts.changed": "The shortcuts changed elsewhere. Reload them before saving.",
+  "native.shortcuts.conflict": "This key combination is already assigned.",
+  "native.shortcuts.storage": "Could not save the keyboard shortcuts.",
+  "native.shortcuts.busy": "The shortcut file is being edited elsewhere. Try again.",
+  "native.shortcuts.durability": "Could not confirm the shortcut was saved. Reload the shortcuts before trying again.",
   "native.workspace.migration.fileSystemError": "{error} File system error code: {code}.",
   "native.workspace.migration.updateRequired": "This workspace requires Situate {version} or later. Update Situate to open it.",
   "native.workspace.migration.busy": "This workspace is open or being prepared by another Situate process. Close it there, then try again.",

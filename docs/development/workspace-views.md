@@ -63,6 +63,38 @@ Mounted view components receive `workspaceId`, `workspaceName`, `embedded`, `tar
 
 Agent tools `open_view`, `reveal_content` and `open_conversation` use the coordinator bound when the tools are created. They cannot choose another workspace, create conversations, send messages or modify files. An unbound or replaced coordinator invalidates those tools; a new workspace lifetime needs newly created tools.
 
+## Keyboard shortcuts and plugin actions
+
+A UI entry can return `shortcuts` alongside `views`. Each shortcut has a stable local `id`, a visible `title`, a `run()` handler, and optional `defaults` with `macos` and `windows` bindings. The host stores the user's choices under `<plugin-id>:<id>`. Pick a new ID when adding a different action; keep the ID when only the title or default changes. A default is assigned only when the key is free. Users can assign a different key or remove the binding without changing the plugin. The handler does not run on a suspended, disabled or replaced registration.
+
+```js
+export default function createUi(host) {
+  if (!host.layout) return {};
+  return {
+    shortcuts: [
+      {
+        id: "open-guide",
+        title: "Open guide to the right",
+        defaults: { macos: "Control+Shift+J", windows: "Control+Shift+J" },
+        async run() {
+          const result = await host.layout.splitPane("right");
+          if (result.status !== "applied") return;
+          await host.layout.openInPane(result.pane, {
+            kind: "view",
+            viewId: "files",
+            contentId: "Guide.md",
+          });
+        },
+      },
+    ],
+  };
+}
+```
+
+`createTab()`, `switchTab("next" | "previous")`, `splitPane(edge)`, and `focusPane(direction)` act in the plugin's displayed workspace. Edges are `left`, `right`, `top`, and `bottom`. A successful result carries a pane handle, not the current focus. Only the same plugin instance can pass that handle to `openInPane`; closing the pane or invalidating the instance invalidates the handle. An unsuccessful result is `unchanged`, `cancelled`, `unavailable`, or `limit` with `limit: "tabs" | "panes"`. Earlier successful steps are not rolled back if a later call fails. Plugin previews return `unavailable` for these layout operations; they do not act on a live workspace. Feature-detect `host.layout` before returning `shortcuts` if the plugin also supports app versions without this API.
+
+Workspace overrides are in `.situate/keyboard-shortcuts.json`. The version 1 `bindings` object maps `macos` and `windows` to action IDs and key strings. A missing entry uses the default; `null` removes the binding. Use logical key names with modifiers in `Control`, `Alt`, `Shift`, `Meta` order. Settings edit only the current platform; the agent's shortcut tools can change a named platform on request. The file travels with the workspace directory, independently of its content Git history and device-local layout. Transport support for copying workspace configuration is separate from the binding format.
+
 ## File references
 
 [ADR-0012](../architecture/09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc) selects Git-anchored live references for every file, extending [ADR-0010](../architecture/09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc). Markdown and other files use the same anchored selectors. Unsupported stored formats fail closed and retain overwrite protection. The original no-conversion exception applies only to formats verified never to have shipped publicly; later changes follow [released-version compatibility](../../requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md). Format mismatch never authorizes workspace cleanup, reset or deletion.

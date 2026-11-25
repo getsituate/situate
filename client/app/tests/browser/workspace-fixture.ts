@@ -392,6 +392,13 @@ export async function workspaceFixture(
         if (!record) throw new Error("Missing conversation");
         return record;
       }
+      const keyboardShortcuts = new Map<
+        string,
+        {
+          revision: string | null;
+          bindings: Record<string, Record<string, string | null>>;
+        }
+      >();
       const appearances = new Map<string, AppearanceSnapshot>(
         JSON.parse(sessionStorage.getItem("appearance-fixture") ?? "null") ??
           Object.entries(options.appearanceByScope ?? {}),
@@ -1510,6 +1517,41 @@ export async function workspaceFixture(
                 args.data,
                 args.pluginIncarnations as Record<string, string> | undefined,
               );
+            if (command === "keyboard_shortcuts_plugins") return;
+            if (
+              command === "keyboard_shortcuts_snapshot" ||
+              command === "keyboard_shortcuts_update"
+            ) {
+              const scope = String(args.scope);
+              const current = keyboardShortcuts.get(scope) ?? {
+                revision: null,
+                bindings: {},
+              };
+              if (command === "keyboard_shortcuts_snapshot")
+                return structuredClone(current);
+              const request = args.request as {
+                expectedRevision: string | null;
+                action: string;
+                change: { kind: string; keys: string };
+              };
+              if (request.expectedRevision !== current.revision)
+                throw "native.shortcuts.changed";
+              const platform = navigator.userAgent.includes("Windows NT")
+                ? "windows"
+                : "macos";
+              const bindings = { ...current.bindings[platform] };
+              if (request.change.kind === "restore")
+                delete bindings[request.action];
+              else
+                bindings[request.action] =
+                  request.change.kind === "remove" ? null : request.change.keys;
+              const next = {
+                revision: `${current.revision ?? "initial"}-next`,
+                bindings: { ...current.bindings, [platform]: bindings },
+              };
+              keyboardShortcuts.set(scope, next);
+              return structuredClone(next);
+            }
             if (command === "appearance_snapshot") {
               if (options.appearanceLoadError)
                 throw "native.appearance.invalid";

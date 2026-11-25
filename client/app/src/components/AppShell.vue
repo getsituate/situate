@@ -39,6 +39,8 @@ import {
   SituateResizeHandle,
 } from "@situate/ui";
 import type { NavigationTicket } from "../layout/session";
+import type { LayoutAction, LayoutActionResult } from "../layout/actions";
+import { keyCombination } from "../layout/shortcut-keys";
 import type { Accent, AppearanceSnapshot } from "../settings/accents";
 import type { Workspace } from "../workspaces/api";
 import { workspaceUi } from "../layout/runtime";
@@ -106,6 +108,21 @@ const activeTarget = computed(() => {
   );
   return pane ? currentEntry(pane.navigation).target : undefined;
 });
+const composerFocus = ref<string>();
+function clearComposerFocus(id: string) {
+  if (composerFocus.value === id) composerFocus.value = undefined;
+}
+watch(
+  activeTarget,
+  (target) => {
+    if (
+      target?.kind !== "new-conversation" ||
+      target.conversationId !== composerFocus.value
+    )
+      composerFocus.value = undefined;
+  },
+  { flush: "sync" },
+);
 const viewChoices = computed(() =>
   (ui.value?.registry.browsableViews ?? [])
     .filter((view) => view.id !== "settings" && view.id !== "plugins")
@@ -180,6 +197,7 @@ watch(
   () => props.currentWorkspaceId,
   () => {
     ++workspaceGeneration;
+    composerFocus.value = undefined;
     operationError.value = "";
     closeNavigation();
     void conversations.value?.refresh();
@@ -228,10 +246,14 @@ async function newConversation(
 ) {
   const owner = ui.value,
     chats = conversations.value;
-  if (!owner || !chats || !(await guardDictation(props.currentWorkspaceId)))
-    return;
+  if (!owner || !chats) return;
+  const destination = owner.session.state.document
+    ? owner.session.capture(address)
+    : undefined;
+  if (!(await guardDictation(owner.session.workspaceId))) return;
   await owner.session.load();
-  const ticket = owner.session.capture(address);
+  const ticket = destination ?? owner.session.capture(address);
+  if (ui.value !== owner || !owner.session.current(ticket)) return;
   closeNavigation();
   operationError.value = "";
   let draftId: string | undefined;
@@ -256,7 +278,14 @@ async function newConversation(
       { kind: "new-conversation", conversationId: id },
       ticket,
     );
-    await focusView();
+    const target = activeTarget.value;
+    if (
+      opened &&
+      ui.value === owner &&
+      target?.kind === "new-conversation" &&
+      target.conversationId === id
+    )
+      composerFocus.value = id;
   } catch (error) {
     if (ui.value === owner) operationError.value = error;
   } finally {
@@ -306,6 +335,24 @@ function intent(
   diagnostic?: import("../diagnostics").Context,
 ) {
   ui.value?.coordinator.dispatch(value, diagnostic);
+}
+function runLayoutAction(
+  action: LayoutAction,
+  control: string,
+  isCurrent: () => boolean = () => true,
+): Promise<LayoutActionResult> {
+  const owner = ui.value;
+  const generation = workspaceGeneration;
+  return owner
+    ? owner.session.runAction(
+        action,
+        control,
+        () =>
+          generation === workspaceGeneration &&
+          owner === ui.value &&
+          isCurrent(),
+      )
+    : Promise.resolve({ status: "unavailable" });
 }
 function hasActivity(tabId: string) {
   const tab = document.value?.layout.tabs.find((tab) => tab.id === tabId);
@@ -429,10 +476,59 @@ defineExpose({
   showUpdates,
   revealConversation,
 });
-onMounted(() => media.addEventListener("change", updateLayout));
+watch(
+  [ui, layout, () => props.mobile],
+  ([workspace, surface, mobile], _, cleanup) => {
+    if (!workspace?.shortcuts.platform || !surface || mobile) return;
+    workspace.shortcuts.start();
+    const unbind = workspace.shortcuts.bindLayout(surface.runPluginAction);
+    cleanup(() => {
+      unbind();
+      workspace.shortcuts.stop();
+    });
+  },
+  { flush: "post" },
+);
+function handleShortcut(event: KeyboardEvent) {
+  const surface = layout.value;
+  const workspace = ui.value;
+  if (
+    !workspace?.shortcuts.platform ||
+    props.mobile ||
+    !surface ||
+    event.defaultPrevented ||
+    navigationOpen.value
+  )
+    return;
+  const keys = keyCombination(event);
+  if (!keys) return;
+  const entry = workspace.shortcuts.rows.value.find(
+    (item) => item.keys === keys,
+  );
+  if (!entry || event.target instanceof HTMLSelectElement) return;
+  if (
+    window.document.querySelector(
+      'dialog[open], [popover]:popover-open:not([role="tooltip"])',
+    )
+  )
+    return;
+  event.preventDefault();
+  if (event.repeat) return;
+  if (typeof entry.action === "function") {
+    void entry.action().catch((error: unknown) => {
+      if (ui.value === workspace) operationError.value = error;
+    });
+  } else if (entry.action.type === "new-chat") void newConversation();
+  else void surface.runShortcut(entry.action);
+}
+onMounted(() => {
+  media.addEventListener("change", updateLayout);
+  window.addEventListener("keydown", handleShortcut);
+});
 onBeforeUnmount(() => {
   ++workspaceGeneration;
   media.removeEventListener("change", updateLayout);
+  window.removeEventListener("keydown", handleShortcut);
   closeNavigation();
 });
 const sidebar = computed(() => ({
@@ -584,6 +680,7 @@ const sidebarActions = {
         :workspace-id="ui.session.workspaceId"
         :mobile="mobile"
         :title-for="ui.titleFor"
+        :run-action="runLayoutAction"
         :has-activity="hasActivity"
         :show-navigation="!wide || sidebarCollapsed"
         :navigation-id="navigationId"
@@ -591,12 +688,14 @@ const sidebarActions = {
         @intent="intent"
         @navigation="openNavigation"
       >
-        <template #pane="{ pane, tab }"
+        <template #pane="{ pane, tab, active }"
           ><ViewHost
             :ui="ui"
             :pane="pane"
             :tab="tab"
             :workspace-name="workspaceName ?? ''"
+            :focus-conversation="active ? composerFocus : undefined"
+            @composer-focused="clearComposerFocus"
             @new-conversation="
               newConversation({ tabId: tab.id, paneId: pane.id })
             "
@@ -609,6 +708,7 @@ const sidebarActions = {
                 :is="component"
                 :mobile="mobile"
                 :workspace-scope="currentWorkspaceId"
+                :shortcuts="ui.shortcuts"
                 :workspace-name="workspaceName"
                 :appearance="appearance"
                 :accent="accent"

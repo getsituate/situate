@@ -25,9 +25,11 @@ const props = defineProps<{
   pane: Pane;
   tab: TopicTab;
   workspaceName: string;
+  focusConversation?: string;
 }>();
 const emit = defineEmits<{
   newConversation: [];
+  composerFocused: [id: string];
   reference: [value: unknown];
   identity: [value: unknown];
   error: [value: unknown];
@@ -140,6 +142,10 @@ const viewProps = computed(() => {
       ...common,
       workspaceScope: props.ui.session.workspaceId,
       conversationId: target.conversationId,
+      focusComposerOnOpen:
+        target.kind === "new-conversation" &&
+        props.focusConversation === target.conversationId,
+      onComposerFocused: () => emit("composerFocused", target.conversationId),
       navigationId: "",
       navigationOpen: false,
     };

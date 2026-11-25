@@ -42,11 +42,17 @@ import { MAX_OPEN_TABS, MAX_PANES_PER_TAB } from "../limits";
 import { paneOrder, type PaneEdge } from "../tree";
 import { dimensions } from "./geometry";
 import { edges, edgeTitle } from "./edges";
+import type { LayoutAction, LayoutActionResult } from "../actions";
 const props = defineProps<{
   state: LayoutState;
   workspaceId?: string;
   mobile?: boolean;
   titleFor: (target: ViewTarget) => string;
+  runAction: (
+    action: LayoutAction,
+    control: string,
+    isCurrent?: () => boolean,
+  ) => Promise<LayoutActionResult>;
   hasActivity?: (tabId: string) => boolean;
   showNavigation?: boolean;
   navigationId?: string;
@@ -221,8 +227,10 @@ watch(
     revealActiveTab();
   },
 );
+let pendingLayoutActions = 0;
 watch([single, narrow, lonePane], async () => {
   dragging.value = null;
+  if (pendingLayoutActions) return;
   const focused = document.activeElement as HTMLElement | null;
   if (!focused || !root.value?.contains(focused)) return;
   const pane = focused.closest<HTMLElement>("[data-pane]");
@@ -357,12 +365,11 @@ function saveName() {
   });
   close();
 }
-function closeTab(id: string, origin: "surface" | "all") {
+function closeTab(id: string) {
   const index = props.state.tabs.findIndex((item) => item.id === id);
   overviewFocus.value =
     props.state.tabs[index + 1]?.id ?? props.state.tabs[index - 1]?.id ?? "";
-  recordIntent({ type: "close-tab", tabId: id });
-  void nextTick(origin === "all" ? focusDialog : focusActiveTab);
+  void runLayoutAction({ type: "close-tab", tabId: id }, "button");
 }
 function close() {
   if (mode.value === "tab" && renameOrigin.value === "all") {
@@ -379,17 +386,30 @@ function dismiss(restoreFocus: boolean) {
   });
 }
 function act(action: LayoutIntent) {
+  if (action.type === "split") {
+    void runLayoutAction(
+      { type: "split-pane", edge: action.edge, paneId: action.paneId },
+      "menu",
+    );
+    return;
+  }
+  if (action.type === "close-pane") {
+    void runLayoutAction({ type: "close-pane", paneId: action.paneId }, "menu");
+    return;
+  }
+  if (action.type === "new-tab" || action.type === "select-tab") {
+    void runLayoutAction(
+      action.type === "new-tab" ? { type: "create-tab" } : action,
+      "menu",
+    );
+    return;
+  }
   if (!recordIntent(action, "menu")) return;
   dismiss(false);
   void nextTick(() => {
-    const paneAction = [
-      "split",
-      "move",
-      "maximize",
-      "close-pane",
-      "open",
-      "history",
-    ].includes(action.type);
+    const paneAction = ["move", "maximize", "open", "history"].includes(
+      action.type,
+    );
     if (paneAction && tab.value) focusPaneHeader();
     else focusActiveTab();
   });
@@ -426,11 +446,69 @@ function focusActiveTab() {
     root.value?.querySelector<HTMLElement>(".mobile-tab-trigger, .new-tab")
   )?.focus({ preventScroll: true });
 }
-function selectTab(id: string, focus = true, control = "tab") {
-  recordIntent({ type: "select-tab", tabId: id }, control);
-  if (focus) void nextTick(() => focusActiveTab());
+async function runLayoutAction(
+  action: LayoutAction,
+  control: string,
+  isCurrent?: () => boolean,
+) {
+  pendingLayoutActions++;
+  try {
+    return await applyLayoutAction(action, control, isCurrent);
+  } finally {
+    pendingLayoutActions--;
+  }
+}
+async function applyLayoutAction(
+  action: LayoutAction,
+  control: string,
+  isCurrent?: () => boolean,
+): Promise<LayoutActionResult> {
+  const result = await props.runAction(action, control, isCurrent);
+  if (result.status === "limit") {
+    if (control !== "plugin") limitError.value = result.limit;
+    return result;
+  }
+  if (result.status === "unchanged" && action.type === "select-tab") {
+    if (control === "menu") dismiss(false);
+    await nextTick();
+    focusActiveTab();
+  }
+  if (result.status !== "applied") return result;
+  if (control === "menu") dismiss(false);
+  await nextTick();
+  const address = result.destination.address;
+  if (
+    !address ||
+    tab.value?.id !== address.tabId ||
+    tab.value.activePaneId !== address.paneId ||
+    (isCurrent && !isCurrent())
+  )
+    return result;
+  if (
+    action.type === "close-tab" &&
+    dialog.value?.open &&
+    mode.value === "all"
+  ) {
+    focusDialog();
+  } else if (
+    action.type === "split-pane" ||
+    action.type === "close-pane" ||
+    action.type === "close-active-view"
+  ) {
+    const chooser = root.value?.querySelector<HTMLElement>(
+      `[data-pane="${CSS.escape(address.paneId)}"] .view-chooser button`,
+    );
+    if (chooser) chooser.focus({ preventScroll: true });
+    else focusPaneHeader(address.paneId);
+  } else if (action.type === "focus-pane") focusPaneHeader(address.paneId);
+  else focusActiveTab();
+  return result;
+}
+function selectTab(id: string, control = "tab") {
+  void runLayoutAction({ type: "select-tab", tabId: id }, control);
 }
 function tabKey(event: KeyboardEvent, index: number) {
+  if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
   const count = props.state.tabs.length;
   let next: number;
   if (event.key === "Home") next = 0;
@@ -439,10 +517,10 @@ function tabKey(event: KeyboardEvent, index: number) {
   else if (event.key === "ArrowLeft") next = (index + count - 1) % count;
   else return;
   event.preventDefault();
-  selectTab(props.state.tabs[next]!.id, true, "keyboard");
+  selectTab(props.state.tabs[next]!.id, "keyboard");
 }
 function createTab() {
-  if (recordIntent({ type: "new-tab" })) void nextTick(focusActiveTab);
+  void runLayoutAction({ type: "create-tab" }, "button");
 }
 function tabHasActivity(id: string) {
   return props.hasActivity?.(id) ?? false;
@@ -480,7 +558,13 @@ watch(
       dismiss(false);
   },
 );
-defineExpose({ back, focusPaneHeader });
+defineExpose({
+  back,
+  focusPaneHeader,
+  runShortcut: (action: LayoutAction) => runLayoutAction(action, "keyboard"),
+  runPluginAction: (action: LayoutAction, isCurrent: () => boolean) =>
+    runLayoutAction(action, "plugin", isCurrent),
+});
 </script>
 
 <template>
@@ -552,7 +636,7 @@ defineExpose({ back, focusPaneHeader });
                 t('layoutUi.namedCloseTab', { title: tabName(item) })
               "
               :title="t('layoutUi.closeTab')"
-              @click="closeTab(item.id, 'surface')"
+              @click="closeTab(item.id)"
             >
               <SituateIcon name="close" />
             </SituateButton>
@@ -622,7 +706,7 @@ defineExpose({ back, focusPaneHeader });
         :key="tab.id"
         :label="t('layoutUi.tabOptions')"
         @rename="renameTab(tab.id, 'surface', $event)"
-        @close="closeTab(tab.id, 'surface')"
+        @close="closeTab(tab.id)"
       />
       <div v-if="tab && focusPane && lonePane" class="surface-pane-actions">
         <PaneHistory
@@ -664,7 +748,7 @@ defineExpose({ back, focusPaneHeader });
         @create="createTab"
         @layout="open('pane', $event, focusPane?.id)"
         @rename="renameTab(tab.id, 'surface', $event)"
-        @close="closeTab(tab.id, 'surface')"
+        @close="closeTab(tab.id)"
       />
     </header>
     <div class="topic-workarea">
@@ -988,7 +1072,7 @@ defineExpose({ back, focusPaneHeader });
             :data-tab-actions="item.id"
             :label="t('layoutUi.namedTabOptions', { title: tabName(item) })"
             @rename="renameTab(item.id, 'all', $event)"
-            @close="closeTab(item.id, 'all')"
+            @close="closeTab(item.id)"
           />
         </div>
         <footer class="tab-overview-actions">

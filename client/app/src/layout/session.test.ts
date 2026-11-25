@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLayoutSession, type LayoutSession } from "./session";
+import { confirmation, dictation } from "../dictation/runtime";
+import { currentEntry } from "./navigation";
+import { MAX_PANES_PER_TAB } from "./limits";
 import type { LayoutDocument, LayoutRecord, LayoutStorage } from "./storage";
 
 function deferred<T>() {
@@ -40,7 +43,135 @@ function create(store: LayoutStorage, scope = "workspace") {
 }
 afterEach(() => {
   owned.splice(0).forEach((owner) => owner.dispose());
+  confirmation.value?.decide(false);
+  dictation.owner = null;
   vi.useRealTimers();
+});
+
+describe("workspace layout actions", () => {
+  it("splits into an empty pane and returns a destination independent of later focus", async () => {
+    const session = create(storage());
+    await session.load();
+    const original = session.capture();
+    const chat = { kind: "conversation", conversationId: "chat" } as const;
+    session.open(chat);
+    const result = await session.runAction(
+      { type: "split-pane", edge: "right" },
+      "menu",
+    );
+    if (result.status !== "applied")
+      throw new Error(`Expected a split, got ${result.status}`);
+    const before = session.state.document!.layout.tabs[0]!;
+    expect(
+      before.panes.map((pane) => currentEntry(pane.navigation).target),
+    ).toEqual([chat, { kind: "empty" }]);
+    expect(result.destination.address).toEqual({
+      tabId: before.id,
+      paneId: before.panes[1]!.id,
+    });
+
+    await session.runAction(
+      { type: "focus-pane", direction: "left" },
+      "keyboard",
+    );
+    expect(session.capture().address).toEqual(original.address);
+    const note = {
+      kind: "view",
+      viewId: "files",
+      contentId: "note.md",
+    } as const;
+    expect(session.open(note, result.destination)).toBe(true);
+    const after = session.state.document!.layout.tabs[0]!;
+    expect(
+      after.panes.map((pane) => currentEntry(pane.navigation).target),
+    ).toEqual([chat, note]);
+  });
+
+  it("cycles tabs in order and chooses the adjacent pane with greatest overlap", async () => {
+    const session = create(storage());
+    await session.load();
+    const first = session.capture().address!;
+    await session.runAction({ type: "split-pane", edge: "right" }, "menu");
+    const right = session.capture().address!;
+    await session.runAction({ type: "split-pane", edge: "bottom" }, "menu");
+    const lower = session.capture().address!;
+    const layout = session.state.document!.layout.tabs[0]!.layout;
+    if (layout.kind !== "split" || layout.second.kind !== "split")
+      throw new Error("Expected a split on the right");
+    session.dispatch({
+      type: "resize",
+      tabId: first.tabId,
+      splitId: layout.second.id,
+      ratio: 0.25,
+    });
+    await session.runAction(
+      { type: "focus-pane", direction: "left" },
+      "keyboard",
+    );
+    expect(session.capture().address).toEqual(first);
+    await expect(
+      session.runAction({ type: "focus-pane", direction: "left" }, "keyboard"),
+    ).resolves.toEqual({ status: "unchanged" });
+    await session.runAction(
+      { type: "focus-pane", direction: "right" },
+      "keyboard",
+    );
+    expect(session.capture().address).toEqual(lower);
+    await session.runAction(
+      { type: "focus-pane", direction: "top" },
+      "keyboard",
+    );
+    expect(session.capture().address).toEqual(right);
+    await session.runAction({ type: "create-tab" }, "keyboard");
+    const second = session.capture().address;
+    await session.runAction({ type: "cycle-tab", delta: 1 }, "keyboard");
+    expect(session.capture().address).toEqual(right);
+    await session.runAction({ type: "cycle-tab", delta: -1 }, "keyboard");
+    expect(session.capture().address).toEqual(second);
+  });
+
+  it("rejects a split at capacity without affecting the selected pane", async () => {
+    const session = create(storage());
+    await session.load();
+    for (let count = 1; count < MAX_PANES_PER_TAB; count++)
+      await session.runAction({ type: "split-pane", edge: "right" }, "menu");
+    const previous = session.state.document!.layout;
+    await expect(
+      session.runAction({ type: "split-pane", edge: "left" }, "keyboard"),
+    ).resolves.toEqual({ status: "limit", limit: "panes" });
+    expect(session.state.document!.layout).toBe(previous);
+  });
+
+  it.each([false, true])(
+    "waits for dictation confirmation and does not apply a stale action: %s",
+    async (invalidate) => {
+      const session = create(storage());
+      await session.load();
+      session.open({ kind: "conversation", conversationId: "chat" });
+      dictation.owner = {
+        id: "recording",
+        scope: session.workspaceId,
+        conversation: "chat",
+        phase: "permission",
+      };
+      let active = true;
+      const pending = session.runAction(
+        { type: "split-pane", edge: "right" },
+        "keyboard",
+        () => active,
+      );
+      expect(session.state.document!.layout.tabs[0]!.panes).toHaveLength(1);
+      if (invalidate) {
+        active = false;
+        dictation.owner = null;
+      }
+      confirmation.value!.decide(invalidate);
+      await expect(pending).resolves.toEqual({
+        status: invalidate ? "unavailable" : "cancelled",
+      });
+      expect(session.state.document!.layout.tabs[0]!.panes).toHaveLength(1);
+    },
+  );
 });
 
 describe("workspace layout session", () => {

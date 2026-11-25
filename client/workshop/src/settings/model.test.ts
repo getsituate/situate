@@ -281,19 +281,22 @@ describe("workspace settings", () => {
     expect(state.provider).toBe("anthropic");
     expect(state.chatModel).toBe("Claude Sonnet");
   });
-  it("preserves bindings on conflicts and allows clearing and restoring", () => {
+  it("rejects a conflict on the current platform and distinguishes clearing from resetting", () => {
     const state = createSettingsState();
     state.target = "chat";
-    state.shortcutDraft = "Mod+K";
-    saveShortcut(state);
+    state.shortcutOverrides.mac = { chat: "Meta+J" };
+    state.shortcutDraft = "Control+K";
+    saveShortcut(state, "windows");
     expect(state.shortcutError).toContain("Search workspace");
-    expect(state.shortcuts[1]?.keys).toBe("Mod+Shift+N");
+    expect(state.shortcutOverrides).toEqual({ mac: { chat: "Meta+J" } });
+
     state.shortcutDraft = "";
-    saveShortcut(state);
-    expect(state.shortcuts[1]?.keys).toBe("");
-    state.shortcutDraft = state.shortcuts[1]!.original;
-    saveShortcut(state);
-    expect(state.shortcuts[1]?.keys).toBe("Mod+Shift+N");
+    saveShortcut(state, "windows");
+    expect(state.shortcutOverrides.windows?.chat).toBe("");
+
+    state.shortcutDraft = "Control+Shift+N";
+    saveShortcut(state, "windows");
+    expect(state.shortcutOverrides).toEqual({ mac: { chat: "Meta+J" } });
   });
   it("keeps workspace preferences separate when switching open workspaces", () => {
     let state = createSimulation("settings-formats");

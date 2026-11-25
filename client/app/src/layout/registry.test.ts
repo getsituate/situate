@@ -11,6 +11,7 @@ import {
   watch,
 } from "vue";
 import { createLayoutSession } from "./session";
+import { createWorkspaceShortcuts } from "./workspace-shortcuts";
 import {
   createUiCoordinator,
   createViewRegistry,
@@ -75,6 +76,7 @@ async function setup() {
     coordinator,
     titleFor: () => "Test",
     plugins: undefined,
+    shortcuts: createWorkspaceShortcuts(session.workspaceId),
     dispose: () => {},
   };
 }

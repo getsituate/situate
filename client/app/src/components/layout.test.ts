@@ -168,6 +168,9 @@ describe("workspace view host", () => {
           stored.set(input.workspaceId, record);
           return structuredClone(record);
         }
+        if (command === "keyboard_shortcuts_snapshot")
+          return { revision: null, bindings: {} };
+        if (command === "keyboard_shortcuts_plugins") return;
         if (command === "ai_status")
           return {
             config: null,
@@ -262,6 +265,100 @@ describe("workspace view host", () => {
     await settleViews();
     return wrapper.getComponent(managementStub);
   }
+  it("dispatches desktop shortcuts once and keeps native form controls and modal dialogs in charge of their keys", async () => {
+    const agent = vi
+      .spyOn(navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Windows NT 10.0)");
+    try {
+      const wrapper = await mountHost();
+      const session = workspaceUi("garden").session;
+      const shell = wrapper.get(".app-shell").element;
+      function press(target: Element, key: string, repeat = false) {
+        const event = new KeyboardEvent("keydown", {
+          key,
+          ctrlKey: true,
+          repeat,
+          bubbles: true,
+          cancelable: true,
+        });
+        target.dispatchEvent(event);
+        return event.defaultPrevented;
+      }
+      const select = document.createElement("select");
+      const dialog = document.createElement("dialog");
+      shell.append(select, dialog);
+      dialog.showModal();
+      expect(press(shell, "t")).toBe(false);
+      dialog.close();
+      expect(press(select, "t")).toBe(false);
+      expect(press(shell, "y")).toBe(false);
+      expect(press(shell, "Shift")).toBe(false);
+      expect(press(shell, "t", true)).toBe(true);
+      await settleViews();
+      expect(session.state.document?.layout.tabs).toHaveLength(1);
+
+      expect(press(shell, "t")).toBe(true);
+      await settleViews();
+      expect(session.state.document?.layout.tabs).toHaveLength(2);
+      expect(press(shell, "n")).toBe(true);
+      await settleViews();
+      const field = wrapper.get<HTMLTextAreaElement>(".chat-composer textarea");
+      expect(document.activeElement).toBe(field.element);
+      expect(field.element.value).toBe("");
+
+      await wrapper.setProps({ mobile: true });
+      expect(press(shell, "t")).toBe(false);
+      expect(session.state.document?.layout.tabs).toHaveLength(2);
+    } finally {
+      agent.mockRestore();
+    }
+  });
+
+  it("dispatches an active plugin shortcut and reports a failed action", async () => {
+    const agent = vi
+      .spyOn(navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Macintosh)");
+    try {
+      const wrapper = await mountHost();
+      const shortcuts = workspaceUi("garden").shortcuts;
+      const run = vi
+        .fn()
+        .mockRejectedValue(new Error("native.shortcuts.unavailable"));
+      const release = shortcuts.register([
+        {
+          id: "notebook:open",
+          title: "Open note",
+          plugin: "Notebook",
+          defaults: { macos: "Meta+J" },
+          available: () => true,
+          run,
+        },
+      ]);
+      function press() {
+        const event = new KeyboardEvent("keydown", {
+          key: "j",
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        wrapper.get(".app-shell").element.dispatchEvent(event);
+        return event.defaultPrevented;
+      }
+      expect(press()).toBe(true);
+      await settleViews();
+      expect(run).toHaveBeenCalledOnce();
+      expect(wrapper.get(".error-dialog").text()).toContain(
+        "native.shortcuts.unavailable",
+      );
+      await wrapper.get(".error-dialog button").trigger("click");
+      release();
+      expect(press()).toBe(false);
+      expect(run).toHaveBeenCalledOnce();
+    } finally {
+      agent.mockRestore();
+    }
+  });
+
   it("removes a conversation from open and closed tab histories only after deletion succeeds", async () => {
     const { session } = workspaceUi("garden");
     await session.load();

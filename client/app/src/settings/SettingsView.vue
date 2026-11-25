@@ -8,7 +8,9 @@ import {
   useTemplateRef,
   watch,
 } from "vue";
-import { SituateButton, SituateIcon } from "@situate/ui";
+import { SituateButton, SituateIcon, SituateInfoButton } from "@situate/ui";
+import ShortcutSettings from "./ShortcutSettings.vue";
+import type { WorkspaceShortcuts } from "../layout/workspace-shortcuts";
 import type { PresentationValue } from "../layout/navigation";
 import {
   t,
@@ -35,6 +37,7 @@ const AiSettings = defineAsyncComponent(() => import("./AiSettings.vue"));
 const props = defineProps<{
   mobile?: boolean;
   workspaceScope?: string;
+  shortcuts?: WorkspaceShortcuts;
   workspaceName?: string;
   appearance?: AppearanceSnapshot | null;
   accent?: Accent;
@@ -61,6 +64,7 @@ const id = useId();
 const pages = [
   "formats",
   "appearance",
+  "shortcuts",
   "ai",
   "dictation",
   "updates",
@@ -70,6 +74,20 @@ const pages = [
 type SettingsPage = (typeof pages)[number];
 const detail = ref(false);
 const page = ref<SettingsPage>("formats");
+const shortcutSearch = ref("");
+function retainPage() {
+  emit("presentation", {
+    page: page.value,
+    detail: detail.value,
+    ...(page.value === "shortcuts" && shortcutSearch.value
+      ? { shortcutSearch: shortcutSearch.value }
+      : {}),
+  });
+}
+function updateShortcutSearch(search: string) {
+  shortcutSearch.value = search.slice(0, 128);
+  retainPage();
+}
 const aiVisited = ref(false);
 watch(
   () => props.presentation,
@@ -81,6 +99,8 @@ watch(
         : pages.find((candidate) => candidate === value.page);
     if (
       !restored ||
+      (restored === "shortcuts" &&
+        (props.mobile || !props.shortcuts?.platform)) ||
       (restored === "updates" && !updates.supported) ||
       (restored === "dictation" && !dictation.supported) ||
       (restored === "analytics" && analyticsPreference.value === null)
@@ -88,6 +108,11 @@ watch(
       return;
     page.value = restored;
     detail.value = "detail" in value && value.detail === true;
+    if (restored === "shortcuts")
+      shortcutSearch.value =
+        "shortcutSearch" in value && typeof value.shortcutSearch === "string"
+          ? value.shortcutSearch.slice(0, 128)
+          : "";
     if (restored === "ai") aiVisited.value = true;
   },
   { immediate: true },
@@ -108,6 +133,10 @@ const appearanceCategoryControl = useTemplateRef<
 const appearanceCategory = computed(
   () => appearanceCategoryControl.value?.element,
 );
+const shortcutCategoryControl = useTemplateRef<
+  InstanceType<typeof SituateButton>
+>("shortcutCategoryControl");
+const shortcutCategory = computed(() => shortcutCategoryControl.value?.element);
 const aiCategoryControl =
   useTemplateRef<InstanceType<typeof SituateButton>>("aiCategoryControl");
 const aiCategory = computed(() => aiCategoryControl.value?.element);
@@ -141,17 +170,18 @@ async function openPage(value: SettingsPage): Promise<void> {
   if (value === "ai") aiVisited.value = true;
   page.value = value;
   detail.value = true;
-  emit("presentation", { page: value, detail: true });
+  retainPage();
   await nextTick();
   title.value?.focus();
 }
 async function back(): Promise<void> {
   detail.value = false;
-  emit("presentation", { page: page.value, detail: false });
+  retainPage();
   await nextTick();
   const selected = {
     formats: category,
     appearance: appearanceCategory,
+    shortcuts: shortcutCategory,
     ai: aiCategory,
     dictation: dictationCategory,
     updates: updatesCategory,
@@ -231,6 +261,17 @@ function change(field: "language" | keyof Formats, event: Event): void {
             t("settings.appearance.symbol")
           }}</span>
           <span>{{ t("settings.appearance.title") }}</span>
+          <span class="category-arrow" aria-hidden="true">›</span>
+        </SituateButton>
+        <SituateButton
+          v-if="shortcuts?.platform && !mobile"
+          ref="shortcutCategoryControl"
+          variant="plain"
+          :aria-current="page === 'shortcuts' ? 'page' : undefined"
+          @click="openPage('shortcuts')"
+        >
+          <SituateIcon name="keyboard" class="category-symbol" />
+          <span>{{ t("shortcuts.title") }}</span>
           <span class="category-arrow" aria-hidden="true">›</span>
         </SituateButton>
         <SituateButton
@@ -322,7 +363,10 @@ function change(field: "language" | keyof Formats, event: Event): void {
           >
             {{ t("settings.back") }}
           </SituateButton>
-          <header class="settings-page-heading">
+          <header
+            class="settings-page-heading"
+            :class="{ 'shortcut-heading': page === 'shortcuts' }"
+          >
             <h2 ref="title" tabindex="-1">
               {{
                 page === "analytics"
@@ -333,14 +377,27 @@ function change(field: "language" | keyof Formats, event: Event): void {
                       ? t("updates.title")
                       : page === "dictation"
                         ? t("dictation.title")
-                        : page === "appearance"
-                          ? t("settings.appearance.title")
-                          : page === "ai"
-                            ? t("settings.ai.title")
-                            : t("settings.formats.title")
+                        : page === "shortcuts"
+                          ? t("shortcuts.title")
+                          : page === "appearance"
+                            ? t("settings.appearance.title")
+                            : page === "ai"
+                              ? t("settings.ai.title")
+                              : t("settings.formats.title")
               }}
             </h2>
+            <SituateInfoButton
+              v-if="page === 'shortcuts'"
+              :label="t('shortcuts.info')"
+              :text="t('shortcuts.scope')"
+            />
           </header>
+          <ShortcutSettings
+            v-if="page === 'shortcuts' && shortcuts?.platform"
+            :shortcuts="shortcuts"
+            :search="shortcutSearch"
+            @update:search="updateShortcutSearch"
+          />
           <AiSettings
             v-if="aiVisited"
             v-show="page === 'ai'"

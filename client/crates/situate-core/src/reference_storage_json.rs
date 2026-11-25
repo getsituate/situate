@@ -21,12 +21,14 @@ enum Schema {
     Target,
     Presentation,
     List(&'static Schema),
+    Unique,
     Opaque,
 }
 impl Schema {
     fn child(self, key: &str) -> Self {
         use Schema::*;
         match (self, key) {
+            (Unique, _) => Unique,
             (Layout, "data") => Document,
             (Metadata, "legacyDraft") => Draft,
             (Draft | Input | HistoryData, "references") => List(&Reference),
@@ -48,6 +50,9 @@ impl Schema {
     }
 }
 
+pub(crate) fn decode_unique(bytes: &[u8]) -> Result<Value, serde_json::Error> {
+    decode(bytes, Schema::Unique)
+}
 pub(crate) fn decode_layout(bytes: &[u8]) -> Result<Value, serde_json::Error> {
     decode(bytes, Schema::Layout)
 }
@@ -123,6 +128,7 @@ impl<'de> Visitor<'de> for Node<'_> {
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
         let schema = match self.schema {
             Schema::List(child) => *child,
+            Schema::Unique => Schema::Unique,
             _ => Schema::Opaque,
         };
         let mut values = Vec::new();

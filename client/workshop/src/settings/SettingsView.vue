@@ -64,6 +64,14 @@ import AppearanceSettings from "./AppearanceSettings.vue";
 import UpdateSettings from "../updates/UpdateSettings.vue";
 import AboutSituate from "../updates/AboutSituate.vue";
 import type { UpdateState, UpdateAction } from "../updates/model";
+import type { PlatformId } from "../workshop/platform/model";
+import {
+  captureShortcut,
+  shortcutCopy,
+  shortcutGroups,
+  shortcutKeys,
+  shortcutModifiers,
+} from "./shortcuts";
 import "./settings.css";
 const props = defineProps<{
   state: SettingsState;
@@ -73,7 +81,7 @@ const props = defineProps<{
   showNavigation: boolean;
   navigationId: string;
   navigationOpen: boolean;
-  mac: boolean;
+  platform: PlatformId;
   mobile: boolean;
 }>();
 const emit = defineEmits<{
@@ -177,21 +185,47 @@ const custom = computed(
     state.value.showModelPicker ||
     state.value.activityModel !== "recommended",
 );
-const shortcuts = computed(() =>
-  state.value.shortcuts.filter((s) =>
-    `${s.name} ${s.group}`
-      .toLowerCase()
-      .includes(state.value.search.toLowerCase()),
-  ),
+const groups = computed(() =>
+  shortcutGroups(props.platform, state.value.shortcutOverrides),
 );
+const filteredGroups = computed(() => {
+  const query = state.value.search.trim().toLowerCase();
+  return groups.value
+    .map((group) => ({
+      ...group,
+      actions: group.actions.filter((action) =>
+        `${action.name} ${group.name}`.toLowerCase().includes(query),
+      ),
+    }))
+    .filter((group) => group.actions.length);
+});
 const shortcut = computed(() =>
-  state.value.shortcuts.find((s) => s.id === state.value.target),
+  groups.value
+    .flatMap((group) => group.actions)
+    .find((action) => action.id === state.value.target),
 );
-function keyLabel(keys: string) {
-  return keys
-    ? keys.replace("Mod", props.mac ? "⌘" : "Ctrl").replaceAll("+", " + ")
-    : "Not assigned";
+const shortcutSearch = ref<InstanceType<typeof SituateInput>>();
+const shortcutRecorder = ref<InstanceType<typeof SituateInput>>();
+const modifiers = computed(() => shortcutModifiers(props.platform));
+function keyLabel(binding: string, visual = false) {
+  return (
+    shortcutKeys(binding, props.platform)
+      .map((key) => key[visual ? 0 : 1])
+      .join(" + ") || shortcutCopy.unassigned
+  );
 }
+async function clearShortcutSearch() {
+  set("search", "");
+  await nextTick();
+  shortcutSearch.value?.focus();
+}
+watch(
+  () => props.platform,
+  () => {
+    if (state.value.dialog === "shortcut") closeDialog();
+    if (state.value.page === "shortcuts") set("notice", "");
+  },
+);
 function openDialog(
   kind: SettingsState["dialog"],
   target: string,
@@ -204,7 +238,13 @@ function openDialog(
     s.shortcutError = "";
     s.nameError = "";
     s.nameDraft = connectionName(s, target);
-    s.shortcutDraft = s.shortcuts.find((row) => row.id === target)?.keys ?? "";
+    s.shortcutDraft =
+      kind === "shortcut"
+        ? (groups.value
+            .flatMap((group) => group.actions)
+            .find((action) => action.id === target)?.keys ?? "")
+        : "";
+    if (kind === "shortcut") s.notice = "";
   });
 }
 async function confirmDisconnect() {
@@ -262,28 +302,29 @@ async function returnToSettings() {
   await nextTick();
   title.value?.focus();
 }
-function record(event: KeyboardEvent) {
-  if (event.key === "Tab" || event.key === "Escape") return;
-  event.preventDefault();
-  if (["Control", "Meta", "Alt", "Shift"].includes(event.key)) return;
-  if (!event.ctrlKey && !event.metaKey && !event.altKey) {
-    set(
-      "shortcutError",
-      "Hold Command, Control or Alt, then press another key.",
-    );
-    return;
-  }
+function changeShortcutDraft(binding: string) {
   update((s) => {
-    s.shortcutDraft = [
-      event.ctrlKey || event.metaKey ? "Mod" : "",
-      event.altKey ? "Alt" : "",
-      event.shiftKey ? "Shift" : "",
-      event.key.length === 1 ? event.key.toUpperCase() : event.key,
-    ]
-      .filter(Boolean)
-      .join("+");
+    s.shortcutDraft = binding;
     s.shortcutError = "";
   });
+}
+function record(event: KeyboardEvent) {
+  const binding = captureShortcut(event);
+  if (binding === null) return;
+  if (binding) changeShortcutDraft(binding);
+  else
+    set(
+      "shortcutError",
+      shortcutCopy.modifierError.replace("{modifiers}", modifiers.value),
+    );
+}
+async function confirmShortcut() {
+  if (!state.value.shortcutError)
+    update((s) => saveShortcut(s, props.platform));
+  if (state.value.shortcutError) {
+    await nextTick();
+    shortcutRecorder.value?.focus();
+  }
 }
 </script>
 
@@ -345,7 +386,7 @@ function record(event: KeyboardEvent) {
                 ? "✦"
                 : item.id === "appearance"
                   ? "◐"
-                  : "⌘"
+                  : "⌨︎"
           }}</span>
           <span>{{
             item.id === "dictation" && dictation
@@ -374,7 +415,12 @@ function record(event: KeyboardEvent) {
           >
             ‹ All settings
           </SituateButton>
-          <header class="settings-page-heading">
+          <header
+            class="settings-page-heading"
+            :class="{
+              'settings-shortcuts-heading': state.page === 'shortcuts',
+            }"
+          >
             <SituateIconButton
               v-if="showNavigation"
               class="settings-detail-navigation"
@@ -384,7 +430,7 @@ function record(event: KeyboardEvent) {
               :aria-expanded="navigationOpen"
               @click="emit('openNavigation', $event)"
             />
-            <div>
+            <div :class="{ 'shortcut-title': state.page === 'shortcuts' }">
               <h2 ref="title" tabindex="-1">
                 {{
                   state.page === "dictation" && dictation
@@ -392,14 +438,22 @@ function record(event: KeyboardEvent) {
                     : category.label
                 }}
               </h2>
+              <SituateInfoButton
+                v-if="state.page === 'shortcuts'"
+                :label="shortcutCopy.scopeLabel"
+                :text="shortcutCopy.scope"
+              />
               <span
-                v-if="showNavigation"
+                v-else-if="showNavigation"
                 class="settings-workspace settings-detail-navigation"
                 >{{ workspaceName }}</span
               >
             </div>
           </header>
-          <p v-if="state.notice" class="settings-notice" role="status">
+          <p v-if="state.page === 'shortcuts'" class="sr-only" role="status">
+            {{ state.notice }}
+          </p>
+          <p v-else-if="state.notice" class="settings-notice" role="status">
             {{ state.notice }}
           </p>
 
@@ -954,47 +1008,78 @@ function record(event: KeyboardEvent) {
             </SituateDisclosure>
           </template>
 
-          <template v-else>
-            <label class="shortcut-search" for="settings-shortcut-search"
-              ><span>Find an action</span
-              ><SituateInput
-                id="settings-shortcut-search"
+          <template v-else-if="state.page === 'shortcuts'">
+            <div class="shortcut-search">
+              <SituateIcon name="search" />
+              <SituateInput
+                ref="shortcutSearch"
                 type="search"
+                :aria-label="shortcutCopy.find"
                 :value="state.search"
-                placeholder="Search actions…"
+                :placeholder="shortcutCopy.searchPlaceholder"
                 @input="set('search', value($event))"
-            /></label>
-            <p class="settings-section-help">
-              These shortcuts work in Situate, not in other apps.
-            </p>
-            <div v-for="row in shortcuts" :key="row.id" class="setting-row">
-              <div>
-                <strong>{{ row.name }}</strong>
-                <p>{{ row.group }}</p>
-              </div>
-              <SituateButton
-                variant="plain"
-                class="shortcut-key"
-                type="button"
-                :aria-label="`Change shortcut for ${row.name}`"
-                @click="openDialog('shortcut', row.id, $event)"
-              >
-                {{ keyLabel(row.keys)
-                }}<span v-if="row.keys !== row.original" class="shortcut-custom"
-                  >Modified</span
-                >
-              </SituateButton>
+              />
             </div>
-            <div v-if="!shortcuts.length" class="settings-empty">
-              <h3>No matching actions</h3>
-              <p>Try a different name or clear the search.</p>
+            <section
+              v-for="group in filteredGroups"
+              :key="group.id"
+              class="shortcut-group"
+              :aria-labelledby="`shortcut-group-${group.id}`"
+            >
+              <h3 :id="`shortcut-group-${group.id}`">{{ group.name }}</h3>
+              <ul>
+                <li v-for="row in group.actions" :key="row.id">
+                  <SituateButton
+                    variant="plain"
+                    class="shortcut-row"
+                    aria-haspopup="dialog"
+                    :aria-label="
+                      shortcutCopy.change.replace('{action}', row.name)
+                    "
+                    :aria-description="
+                      row.keys === row.original
+                        ? keyLabel(row.keys)
+                        : `${keyLabel(row.keys)}. ${shortcutCopy.modified}.`
+                    "
+                    @click="openDialog('shortcut', row.id, $event)"
+                  >
+                    <span class="shortcut-name">{{ row.name }}</span>
+                    <span class="shortcut-binding" aria-hidden="true">
+                      <span
+                        v-if="row.keys !== row.original"
+                        class="shortcut-custom"
+                      >
+                        {{ shortcutCopy.modified }}
+                      </span>
+                      <span v-if="row.keys" class="shortcut-keys">
+                        <kbd
+                          v-for="([label], index) in shortcutKeys(
+                            row.keys,
+                            platform,
+                          )"
+                          :key="index"
+                          >{{ label }}</kbd
+                        >
+                      </span>
+                      <span v-else class="shortcut-unassigned">{{
+                        shortcutCopy.unassigned
+                      }}</span>
+                    </span>
+                  </SituateButton>
+                </li>
+              </ul>
+            </section>
+            <div
+              v-if="!filteredGroups.length"
+              class="settings-empty shortcut-empty"
+            >
+              <h3 role="status">{{ shortcutCopy.noMatches }}</h3>
               <SituateButton
                 variant="secondary"
                 size="small"
-                type="button"
-                @click="set('search', '')"
+                @click="clearShortcutSearch"
               >
-                Clear search
+                {{ shortcutCopy.clearSearch }}
               </SituateButton>
             </div>
           </template>
@@ -1009,7 +1094,7 @@ function record(event: KeyboardEvent) {
           ? `Disconnect ${connectionName(state, state.target)}?`
           : state.dialog === 'rename'
             ? connectionCopy.renameTitle
-            : `Shortcut: ${shortcut?.name}`
+            : shortcutCopy.editTitle.replace('{action}', shortcut?.name ?? '')
       "
       @close="closeDialog"
     >
@@ -1085,11 +1170,13 @@ function record(event: KeyboardEvent) {
           </div>
         </form>
         <template v-else>
-          <label for="shortcut-record">Press a key combination</label
-          ><SituateInput
+          <label for="shortcut-record">{{ shortcutCopy.record }}</label>
+          <SituateInput
             id="shortcut-record"
+            ref="shortcutRecorder"
+            autofocus
             readonly
-            :value="keyLabel(state.shortcutDraft)"
+            :value="keyLabel(state.shortcutDraft, true)"
             :aria-invalid="!!state.shortcutError"
             :aria-describedby="
               state.shortcutError
@@ -1098,45 +1185,46 @@ function record(event: KeyboardEvent) {
             "
             @keydown="record"
           />
-          <p id="shortcut-help">
-            Hold {{ mac ? "Command" : "Control" }} or Alt, then press another
-            key. Press Escape to cancel.
+          <span class="sr-only" role="status">{{
+            keyLabel(state.shortcutDraft)
+          }}</span>
+          <p id="shortcut-help" data-dialog-help>
+            {{ shortcutCopy.modifierHelp.replace("{modifiers}", modifiers) }}
           </p>
-          <p v-if="state.shortcutError" id="shortcut-error" role="alert">
+          <p
+            v-if="state.shortcutError"
+            id="shortcut-error"
+            class="shortcut-error"
+            role="alert"
+          >
             {{ state.shortcutError }}
           </p>
+          <div class="shortcut-draft-actions">
+            <SituateButton
+              variant="ghost"
+              size="small"
+              @click="changeShortcutDraft(shortcut?.original ?? '')"
+            >
+              {{ shortcutCopy.useDefault }}
+            </SituateButton>
+            <SituateButton
+              variant="ghost"
+              size="small"
+              @click="changeShortcutDraft('')"
+            >
+              {{ shortcutCopy.remove }}
+            </SituateButton>
+          </div>
           <div class="settings-dialog-actions">
             <SituateButton
               variant="secondary"
               size="small"
-              type="button"
-              @click="
-                update((s) => {
-                  s.shortcutDraft = shortcut?.original ?? '';
-                  s.shortcutError = '';
-                })
-              "
+              @click="closeDialog"
             >
-              Use default</SituateButton
-            ><SituateButton
-              variant="secondary"
-              size="small"
-              type="button"
-              @click="
-                update((s) => {
-                  s.shortcutDraft = '';
-                  s.shortcutError = '';
-                })
-              "
-            >
-              Clear</SituateButton
-            ><SituateButton
-              variant="primary"
-              size="small"
-              type="button"
-              @click="update(saveShortcut)"
-            >
-              Save shortcut
+              {{ shortcutCopy.cancel }}
+            </SituateButton>
+            <SituateButton size="small" @click="confirmShortcut">
+              {{ shortcutCopy.save }}
             </SituateButton>
           </div>
         </template>

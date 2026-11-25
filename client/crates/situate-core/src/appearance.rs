@@ -77,7 +77,10 @@ impl Storage {
         Ok(Self { dir })
     }
     pub fn bytes(&self) -> Result<Option<Vec<u8>>, String> {
-        match self.dir.symlink_metadata(FILE) {
+        self.read_named(FILE)
+    }
+    pub(crate) fn read_named(&self, name: &str) -> Result<Option<Vec<u8>>, String> {
+        match self.dir.symlink_metadata(name) {
             Ok(metadata) if metadata.is_file() => {}
             Ok(_) => return Err(STORAGE.into()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -86,7 +89,7 @@ impl Storage {
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
         situate_host::fs::nonblocking_file_options(&mut options);
-        let file = match self.dir.open_with(FILE, &options) {
+        let file = match self.dir.open_with(name, &options) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err(STORAGE.into()),
@@ -104,6 +107,9 @@ impl Storage {
         Ok(Some(bytes))
     }
     fn lock(&self) -> Result<StorageLock, String> {
+        self.lock_named("appearance.lock")
+    }
+    pub(crate) fn lock_named(&self, name: &str) -> Result<StorageLock, String> {
         let mut options = OpenOptions::new();
         options
             .read(true)
@@ -114,7 +120,7 @@ impl Storage {
         situate_host::fs::nonblocking_file_options(&mut options);
         let file = self
             .dir
-            .open_with("appearance.lock", &options)
+            .open_with(name, &options)
             .map_err(|_| STORAGE)?
             .into_std();
         if !file.metadata().map_err(|_| STORAGE)?.is_file() {
@@ -157,15 +163,20 @@ impl Storage {
         document["generation"] = json!(uuid::Uuid::new_v4().to_string());
         let bytes = serde_json::to_vec_pretty(&document).map_err(|_| STORAGE)?;
         let (_, mut saved) = decode(Some(&bytes))?;
-        self.save(&bytes, original.as_deref())?;
+        self.save_named(FILE, &bytes, original.as_deref())?;
         saved.writable = self.writable();
         Ok(saved)
     }
-    fn save(&self, bytes: &[u8], expected: Option<&[u8]>) -> Result<(), String> {
+    pub(crate) fn save_named(
+        &self,
+        name: &str,
+        bytes: &[u8],
+        expected: Option<&[u8]>,
+    ) -> Result<(), String> {
         if bytes.len() as u64 > LIMIT {
             return Err(INVALID.into());
         }
-        let temp = format!("appearance-{}.tmp", uuid::Uuid::new_v4());
+        let temp = format!("{name}-{}.tmp", uuid::Uuid::new_v4());
         let mut options = OpenOptions::new();
         options
             .write(true)
@@ -176,11 +187,11 @@ impl Storage {
         let result = (|| {
             file.write_all(bytes).map_err(|_| STORAGE)?;
             file.sync_all().map_err(|_| STORAGE)?;
-            if self.bytes()?.as_deref() != expected {
+            if self.read_named(name)?.as_deref() != expected {
                 return Err("native.appearance.changed".into());
             }
             self.dir
-                .rename(&temp, &self.dir, FILE)
+                .rename(&temp, &self.dir, name)
                 .map_err(|_| STORAGE)?;
             crate::durable_storage::sync_directory(&self.dir)
                 .map_err(|_| "native.appearance.durability")?;

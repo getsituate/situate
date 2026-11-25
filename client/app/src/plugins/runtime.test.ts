@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createViewRegistry, type UiCoordinator } from "../layout/registry";
+import { createLayoutSession } from "../layout/session";
+import {
+  createWorkspaceShortcuts,
+  type WorkspaceShortcuts,
+} from "../layout/workspace-shortcuts";
 import { pluginManagementGroup } from "./management";
 import { createPluginRuntime } from "./runtime";
 import type { NativeServiceEntry, PluginManifest, PluginUiHost } from "./types";
@@ -17,7 +22,10 @@ const mocks = vi.hoisted(() => ({
   persistenceUnwrap: vi.fn(),
   persistenceError: undefined as ((error: unknown) => void) | undefined,
 }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: mocks.invoke,
+  isTauri: () => false,
+}));
 vi.mock("@tauri-apps/api/event", () => ({ listen: mocks.listen }));
 vi.mock("./module", () => ({
   importPluginModule: mocks.importModule,
@@ -94,7 +102,7 @@ function definition(
 let definitions: ReturnType<typeof definition>[];
 let hosts: Map<string, PluginUiHost>;
 const instances: ReturnType<typeof createPluginRuntime>[] = [];
-function setup() {
+function setup(shortcuts?: WorkspaceShortcuts) {
   const registry = createViewRegistry("scope");
   const coordinator = {
     open: vi.fn(async () => true),
@@ -104,6 +112,7 @@ function setup() {
     scope: "scope",
     registry,
     coordinator,
+    shortcuts,
     isCurrent: () => true,
   });
   instances.push(runtime);
@@ -156,6 +165,86 @@ afterEach(() => {
 });
 
 describe("plugin UI runtime", () => {
+  it("registers an available key without stealing an existing one, then composes host actions in the returned pane", async () => {
+    const store = createWorkspaceShortcuts("scope", "windows");
+    const session = createLayoutSession("scope", {
+      load: async () => ({ revision: null, data: null }),
+      save: async () => ({ revision: null, data: null }),
+    });
+    await session.load();
+    const original = session.capture().address;
+    const unbind = store.bindLayout((action, guard) =>
+      session.runAction(action, "plugin", guard),
+    );
+    let former: PluginUiHost | undefined;
+    mocks.importModule.mockImplementationOnce(async () => ({
+      default: (host: PluginUiHost) => {
+        former = host;
+        return {
+          shortcuts: [
+            {
+              id: "open",
+              title: "Open example beside the chat",
+              defaults: { windows: "Control+J" },
+              async run() {
+                const split = await host.layout.splitPane("right");
+                if (split.status === "applied") {
+                  await host.layout.focusPane("left");
+                  await host.layout.openInPane(split.pane, {
+                    kind: "view",
+                    viewId: "files",
+                    contentId: "example.md",
+                  });
+                }
+              },
+            },
+            {
+              id: "contested",
+              title: "Contested",
+              defaults: { windows: "Control+T" },
+              run() {},
+            },
+          ],
+        };
+      },
+    }));
+    const { runtime, coordinator } = setup(store);
+    try {
+      await runtime.ready;
+      expect(
+        store.rows.value.find((row) => row.id === "layout.new-tab")?.keys,
+      ).toBe("Control+T");
+      expect(
+        store.rows.value.find((row) => row.id === "demo:contested")?.keys,
+      ).toBeNull();
+      const action = store.rows.value.find(
+        (row) => row.keys === "Control+J",
+      )?.action;
+      if (typeof action !== "function")
+        throw new Error("Plugin shortcut was not registered");
+      await action();
+      expect(session.capture().address).toEqual(original);
+      const second = session.state.document?.layout.tabs[0]?.panes[1];
+      expect(second).toBeDefined();
+      expect(coordinator.open).toHaveBeenCalledExactlyOnceWith(
+        { kind: "view", viewId: "files", contentId: "example.md" },
+        expect.objectContaining({
+          address: { tabId: original?.tabId, paneId: second?.id },
+        }),
+        expect.any(Object),
+      );
+      runtime.dispose();
+      expect(store.rows.value.some((row) => row.group === "plugins")).toBe(
+        false,
+      );
+      await expect(former?.layout.createTab()).resolves.toEqual({
+        status: "unavailable",
+      });
+    } finally {
+      unbind();
+      session.dispose();
+    }
+  });
   it("does not load a macOS-only UI entry on Windows", async () => {
     definitions = [definition(), definition("mac-only", [], ["macos"])];
     const native = mocks.invoke.getMockImplementation()!;

@@ -1025,6 +1025,209 @@ for (const viewport of [
   );
 }
 
+for (const platform of [
+  {
+    name: "macOS",
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    splitModifier: "Alt+Shift+Meta",
+    focus: "Alt+Meta+ArrowLeft",
+    focusDown: "Alt+Meta+ArrowDown",
+    tab: "Meta+t",
+    closeTab: "Alt+Meta+w",
+    closePane: "Shift+Meta+d",
+    newChat: "Meta+n",
+  },
+  {
+    name: "Windows",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    splitModifier: "Control+Alt+Shift",
+    focus: "Alt+ArrowLeft",
+    focusDown: "Alt+ArrowDown",
+    tab: "Control+t",
+    closeTab: "Control+w",
+    closePane: "Control+Shift+w",
+    newChat: "Control+n",
+  },
+]) {
+  test.describe(platform.name, () => {
+    test.use({ userAgent: platform.userAgent });
+    test("layout shortcuts preserve the draft and respect an open modal", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await workspaceFixture(page, shellState);
+      await page.goto("/");
+      const composer = page.getByRole("textbox", {
+        name: "Message",
+        exact: true,
+      });
+      await composer.fill("A draft to keep");
+      await composer.press(`${platform.splitModifier}+ArrowRight`);
+      const activePane = page.locator(".pane-tile.active");
+      await expect(
+        activePane
+          .locator(".view-chooser")
+          .getByRole("button", { name: "New chat", exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press(platform.focus);
+      await expect(
+        activePane.getByRole("textbox", { name: "Message", exact: true }),
+      ).toHaveValue("A draft to keep");
+
+      const options = await paneOptions(page);
+      await expect(options).toBeVisible();
+      await page.keyboard.press(platform.tab);
+      await expect(options).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("tab")).toHaveCount(1);
+      await page.keyboard.press(platform.tab);
+      await expect(page.getByRole("tab")).toHaveCount(2);
+      await expect(composer).toHaveCount(0);
+      await page.keyboard.press("Control+Shift+Tab");
+      await expect(composer).toHaveValue("A draft to keep");
+    });
+
+    test("split shortcuts insert and focus an empty pane above and below", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await workspaceFixture(page, shellState);
+      await page.goto("/");
+      const draft = page.getByRole("textbox", { name: "Message", exact: true });
+      await draft.fill("Keep this draft");
+      const panes = page.locator(".pane-tile");
+      const newChat = { name: "New chat", exact: true };
+      await draft.press(`${platform.splitModifier}+ArrowUp`);
+      await expect(panes).toHaveCount(2);
+      await expect(
+        panes.first().locator(".view-chooser").getByRole("button", newChat),
+      ).toBeFocused();
+      await page.keyboard.press(platform.focusDown);
+      await expect(panes.last()).toHaveClass(/\bactive\b/);
+      await page.keyboard.press(`${platform.splitModifier}+ArrowDown`);
+      await expect(panes).toHaveCount(3);
+      await expect(
+        panes.last().locator(".view-chooser").getByRole("button", newChat),
+      ).toBeFocused();
+      await expect(
+        panes.nth(1).getByRole("textbox", { name: "Message", exact: true }),
+      ).toHaveValue("Keep this draft");
+    });
+
+    test("shortcuts create a chat in the current pane and close only the selected pane or tab", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await workspaceFixture(page, shellState);
+      await page.goto("/");
+      const tabs = page.getByRole("tab");
+      const panes = page.locator(".pane-tile");
+      const draft = { name: "Message", exact: true };
+      const original = panes.first().getByRole("textbox", draft);
+      await original.fill("Original draft");
+      await original.press(`${platform.splitModifier}+ArrowRight`);
+      await expect(panes).toHaveCount(2);
+      await page.keyboard.press(platform.newChat);
+      const newChat = panes.last().getByRole("textbox", draft);
+      await expect(newChat).toBeFocused();
+      await page.keyboard.type("Start typing immediately");
+      await expect(newChat).toHaveValue("Start typing immediately");
+      await expect(original).toHaveValue("Original draft");
+      await expect(tabs).toHaveCount(1);
+      await newChat.press(platform.closePane);
+      await expect(panes).toHaveCount(1);
+      await expect(original).toHaveValue("Original draft");
+
+      await page.keyboard.press(platform.tab);
+      await expect(tabs).toHaveCount(2);
+      await expect(tabs.last()).toHaveAttribute("aria-selected", "true");
+      await page.keyboard.press(platform.closeTab);
+      await expect(tabs).toHaveCount(1);
+      await expect(original).toHaveValue("Original draft");
+    });
+
+    test("the close-pane shortcut closes its tab when only one pane remains", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await workspaceFixture(page, shellState);
+      await page.goto("/");
+      const composer = page.getByRole("textbox", {
+        name: "Message",
+        exact: true,
+      });
+      await composer.fill("Keep the original tab");
+      await page.keyboard.press(platform.tab);
+      const tabs = page.getByRole("tab");
+      await expect(tabs).toHaveCount(2);
+      await expect(tabs.last()).toHaveAttribute("aria-selected", "true");
+      await page.keyboard.press(platform.closePane);
+      await expect(tabs).toHaveCount(1);
+      await expect(composer).toHaveValue("Keep the original tab");
+      await page.keyboard.press(platform.closePane);
+      await expect(tabs).toHaveCount(1);
+      await expect(tabs.first()).toHaveText("New tab");
+      await expect(
+        page.locator(".pane-tile.active .view-chooser"),
+      ).toBeVisible();
+      await page.locator(".tab-header .tab-actions-trigger").click();
+      await page
+        .getByRole("menuitem", { name: "Reopen closed tab", exact: true })
+        .click();
+      await expect(composer).toHaveValue("Keep the original tab");
+    });
+
+    test("tab shortcuts still switch tabs while a title tooltip is visible", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await workspaceFixture(page, shellState);
+      await page.goto("/");
+      await expect(page.getByRole("tab", { name: "New chat" })).toBeVisible();
+      await newTab(page);
+      const first = page.getByRole("tab", { name: "New chat", exact: true });
+      const second = page.getByRole("tab", { name: "New tab", exact: true });
+      const tooltip = page.getByRole("tooltip");
+      await expect(second).toHaveAttribute("aria-selected", "true");
+      await page.mouse.move(0, 0);
+      await page.keyboard.press("End");
+      await page.keyboard.press("Control+Shift+Tab");
+      await expect(first).toBeFocused();
+      await expect(tooltip).toHaveText("New chat");
+      await page.keyboard.press("Control+Tab");
+      await expect(second).toHaveAttribute("aria-selected", "true");
+      await expect(second).toBeFocused();
+      await expect(tooltip).toHaveText("New tab");
+      await page.keyboard.press("Control+Shift+Tab");
+      await expect(first).toHaveAttribute("aria-selected", "true");
+
+      await page.locator(".tab-header .tab-actions-trigger").click();
+      const menu = page.getByRole("menu");
+      await expect(menu).toBeVisible();
+      await page.keyboard.press(platform.tab);
+      await expect(menu).toBeVisible();
+      await expect(page.getByRole("tab")).toHaveCount(2);
+    });
+  });
+}
+
+test("opening a new chat from the empty pane focuses its composer on first load", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await workspaceFixture(page, shellState, { layout: { records: {} } });
+  await page.goto("/");
+  const chooser = page.getByRole("region", {
+    name: "Open a view",
+    exact: true,
+  });
+  await chooser.getByRole("button", { name: "New chat", exact: true }).click();
+  const composer = page.getByRole("textbox", { name: "Message", exact: true });
+  await expect(composer).toBeFocused();
+  await page.keyboard.type("A first message");
+  await expect(composer).toHaveValue("A first message");
+});
+
 test("pane grips move between all four edges with real pointer gestures", async ({
   page,
 }) => {
@@ -1039,6 +1242,12 @@ test("pane grips move between all four edges with real pointer gestures", async 
   )
     .getByRole("button", { name: "Add pane to the right", exact: true })
     .click();
+  await expect(
+    page.locator(".pane-tile.active .view-chooser").getByRole("button", {
+      name: "New chat",
+      exact: true,
+    }),
+  ).toBeFocused();
   const ids = await page
     .locator(".pane-tile")
     .evaluateAll((items) =>

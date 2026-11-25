@@ -1,5 +1,7 @@
 import type * as Vue from "vue";
 import type * as Ui from "@situate/ui";
+import type { PluginLayout, PluginShortcutDefinition } from "./layout-actions";
+import type { WorkspaceShortcuts } from "../layout/workspace-shortcuts";
 import type {
   UiCoordinator,
   ViewDefinition,
@@ -250,6 +252,7 @@ export interface PluginUiHost {
   >;
   readonly ui: Pick<typeof Ui, Extract<keyof typeof Ui, `Situate${string}`>>;
   readonly navigation: Pick<UiCoordinator, "open" | "reveal">;
+  readonly layout: PluginLayout;
   readonly service: {
     invoke(exportName: string, args: unknown): Promise<unknown>;
   };
@@ -265,6 +268,7 @@ export interface PluginUiHost {
 export interface PluginUiContributions {
   components?: Record<string, Vue.Component>;
   views?: ViewDefinition[];
+  shortcuts?: PluginShortcutDefinition[];
   settings?: ViewDefinition;
   dispose?: () => void | Promise<void>;
 }
@@ -272,6 +276,7 @@ export interface PluginRuntimeOptions {
   scope: string;
   registry: ViewRegistry;
   coordinator: UiCoordinator;
+  shortcuts?: WorkspaceShortcuts;
   isCurrent: () => boolean;
   builtinToolNames?: readonly string[];
   platform?: "macos" | "ios";

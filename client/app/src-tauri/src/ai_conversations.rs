@@ -995,6 +995,20 @@ impl Host for NativeHost {
                     })
                     .await?;
                 ToolOutcome::Completed(ToolResult::json(reply))
+            } else if matches!(name.as_str(), "read_keyboard_shortcuts" | "update_keyboard_shortcut") {
+                if role.is_some() || cancel.is_cancelled() {
+                    return Err("native.ai.tool.unavailable".into());
+                }
+                let context = self.context.clone();
+                let conversation = self.conversation.clone();
+                let reply = self.context.blocking(move || {
+                    let claim = context.with_location(|_| {
+                        authorize_tool(&context.app, &context.scope, &conversation, &request.run_id, &request.id, &name, &request.arguments)
+                    })?;
+                    if claim.token().is_cancelled() || cancel.is_cancelled() { return Err("native.ai.request.cancelled".into()); }
+                    context.with_location(|location| crate::keyboard_shortcuts::agent_tool(&context.app, &context.window, location, &name, request.arguments))
+                }).await?;
+                ToolOutcome::Completed(ToolResult::json(reply))
             } else if crate::ai_builtin_tools::is_file(&name) {
                 let context = self.context.clone();
                 let conversation = self.conversation.clone();

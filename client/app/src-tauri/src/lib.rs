@@ -9,6 +9,7 @@ mod ai_protocol;
 mod analytics;
 mod appearance;
 mod change_history;
+mod keyboard_shortcuts;
 
 mod conversation_projection;
 mod device_locale;
@@ -88,6 +89,9 @@ macro_rules! application_handler {
             crate::plugin_runtime::plugin_runtime,
             crate::appearance::appearance_snapshot,
             crate::appearance::appearance_update,
+            crate::keyboard_shortcuts::keyboard_shortcuts_snapshot,
+            crate::keyboard_shortcuts::keyboard_shortcuts_update,
+            crate::keyboard_shortcuts::keyboard_shortcuts_plugins,
             crate::localization::localization_snapshot,
             crate::localization::localization_update,
             crate::files::files_request,
@@ -170,6 +174,7 @@ pub fn run() {
     }
     let builder = tauri::Builder::default()
         .manage(recovery_mode)
+        .manage(keyboard_shortcuts::ShortcutPlugins::default())
         .manage(recovery::Recovery::default())
         .manage(plugin_changes::Changes::default())
         .manage(plugin_actions::Actions::default())
