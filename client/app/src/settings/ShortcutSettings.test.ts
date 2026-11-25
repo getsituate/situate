@@ -6,7 +6,7 @@ import {
   type VueWrapper,
 } from "@vue/test-utils";
 import { invoke } from "@tauri-apps/api/core";
-import type { ShortcutPlatform } from "../layout/shortcuts";
+import type { ShortcutPlatform } from "../layout/shortcut-keys";
 import { createWorkspaceShortcuts } from "../layout/workspace-shortcuts";
 import SettingsView from "./SettingsView.vue";
 

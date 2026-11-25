@@ -1,11 +1,7 @@
 import { computed, shallowReactive } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import {
-  builtinShortcuts,
-  shortcutPlatform,
-  type ShortcutAction,
-  type ShortcutPlatform,
-} from "./shortcuts";
+import { builtinShortcuts, type ShortcutAction } from "./shortcuts";
+import { shortcutPlatform, type ShortcutPlatform } from "./shortcut-keys";
 import type { LayoutAction, LayoutActionResult } from "./actions";
 
 type LayoutRunner = (

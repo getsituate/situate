@@ -40,7 +40,7 @@ import {
 } from "@situate/ui";
 import type { NavigationTicket } from "../layout/session";
 import type { LayoutAction, LayoutActionResult } from "../layout/actions";
-import { keyCombination } from "../layout/shortcuts";
+import { keyCombination } from "../layout/shortcut-keys";
 import type { Accent, AppearanceSnapshot } from "../settings/accents";
 import type { Workspace } from "../workspaces/api";
 import { workspaceUi } from "../layout/runtime";

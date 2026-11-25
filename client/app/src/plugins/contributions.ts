@@ -1,7 +1,7 @@
 import { isIconName } from "@situate/ui/icons";
 import type { ViewDefinition } from "../layout/registry";
 import type { Component } from "vue";
-import { validCombination } from "../layout/shortcuts";
+import { validCombination } from "../layout/shortcut-keys";
 import type { PluginShortcutDefinition } from "./layout-actions";
 import type { PluginUiContributions, PluginToolDescriptor } from "./types";
 

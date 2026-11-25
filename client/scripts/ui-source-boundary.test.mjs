@@ -78,6 +78,7 @@ test("UI source boundaries include type-only and test imports", () => {
         "packages/ui",
         "packages/localization",
         "contracts/diagnostics.json",
+        "contracts/keyboard-shortcuts.json",
         "../design/brand",
         "node_modules",
       ],

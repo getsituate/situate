@@ -17,7 +17,7 @@ import {
   SituateInput,
 } from "@situate/ui";
 import ErrorDialog from "../errors/ErrorDialog.vue";
-import { keyCombination, validCombination } from "../layout/shortcuts";
+import { keyCombination, validCombination } from "../layout/shortcut-keys";
 import type {
   BindingChange,
   ShortcutRow,

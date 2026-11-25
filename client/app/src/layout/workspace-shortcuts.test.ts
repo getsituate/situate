@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { keyCombination, validCombination } from "./shortcuts";
+import { keyCombination, validCombination } from "./shortcut-keys";
 import {
   createWorkspaceShortcuts,
   type PluginShortcut,
