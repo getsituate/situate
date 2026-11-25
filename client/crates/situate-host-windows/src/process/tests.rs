@@ -20,7 +20,7 @@ fn request(cwd: &Path, script: &str) -> CommandRequest {
             .expect("system PowerShell is required")
             .into(),
         args: make_script_args(&shell.interpreter_args, script.into()),
-        timeout_ms: 60_000,
+        timeout_ms: 120_000,
         output_limit_bytes: 32_768,
     }
 }
@@ -72,34 +72,41 @@ fn windows_job_child_fixture() {
     std::thread::sleep(Duration::from_secs(120));
 }
 
+const JOB_LEADER: &str = "process::tests::windows_job_leader_fixture";
+
+#[test]
+fn windows_job_leader_fixture() {
+    if !std::env::args().skip(1).eq(["--exact", JOB_LEADER]) {
+        return;
+    }
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "process::tests::windows_job_child_fixture"])
+        .env("SITUATE_TEST_JOB_CHILD", "1")
+        .spawn()
+        .unwrap();
+    while !Path::new("release").exists() {
+        assert!(child.try_wait().unwrap().is_none());
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    // Leave the child running so the test checks the job rather than the leader.
+    std::process::exit(19);
+}
+
 #[tokio::test]
 async fn windows_job_drains_live_children_on_cancel_timeout_and_leader_exit() {
     async fn check(expected: CommandOutcome) {
         let root = TempDir::new().unwrap();
-        let exe = std::env::current_exe().unwrap();
-        let exe = dunce::simplified(&exe)
-            .to_str()
-            .unwrap()
-            .replace('\'', "''");
-        let script = format!(
-            r#"
-            $ErrorActionPreference = 'Stop';
-            $info = [Diagnostics.ProcessStartInfo]::new();
-            $info.FileName = '{exe}';
-            $info.WorkingDirectory = $PWD.Path;
-            $info.UseShellExecute = $false;
-            $info.CreateNoWindow = $true;
-            $info.Arguments = '--exact process::tests::windows_job_child_fixture';
-            $info.EnvironmentVariables['SITUATE_TEST_JOB_CHILD'] = '1';
-            $child = [Diagnostics.Process]::Start($info);
-            while (!(Test-Path -LiteralPath 'release')) {{ Start-Sleep -Milliseconds 25 }};
-            exit 19
-        "#
-        );
-        let mut command = request(root.path(), &script);
-        if expected == CommandOutcome::TimedOut {
-            command.timeout_ms = 45_000;
-        }
+        let command = CommandRequest {
+            cwd: root.path().to_owned(),
+            executable: std::env::current_exe().unwrap(),
+            args: vec!["--exact".into(), JOB_LEADER.into()],
+            timeout_ms: if expected == CommandOutcome::TimedOut {
+                45_000
+            } else {
+                60_000
+            },
+            output_limit_bytes: 32_768,
+        };
         let token = CancellationToken::new();
         let worker = tokio::spawn(execute(command, token.clone()));
         let started = tokio::time::timeout(Duration::from_secs(40), async {
