@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "direct-update-restart",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "direct-update-restart",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Install updates without confirming twice",
+          "paragraphs": [
+            "Install and restart starts the update directly when no actions are running. If an open window cannot prepare for the restart, you can choose whether to force the update."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "direct-update-restart",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Updates ohne doppelte Bestätigung installieren",
+          "paragraphs": [
+            "Wenn keine Aktionen laufen, startet Installieren und neu starten das Update direkt. Kann sich ein offenes Fenster nicht auf den Neustart vorbereiten, kannst du entscheiden, ob du das Update erzwingen möchtest."
+          ]
+        }
+      ]
+    }
+  }
+}

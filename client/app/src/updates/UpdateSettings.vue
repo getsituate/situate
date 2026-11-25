@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useId, computed, nextTick, ref, watch } from "vue";
+import { useId, computed, shallowRef, watch } from "vue";
 import { SituateButton, SituateDialog, SituateProgress } from "@situate/ui";
 import {
   t,
@@ -20,14 +20,14 @@ import {
 import UpdateSymbol from "./UpdateSymbol.vue";
 import ReleaseHistoryAccess from "./ReleaseHistoryAccess.vue";
 const id = useId();
-const confirming = ref(false);
-const confirmedTarget = ref<{ artifactId: string } | null>(null);
-const confirmRunning = ref(false);
-const confirmForced = ref(false);
+type RestartConfirmation = { artifactId: string; force: boolean };
+const confirmation = shallowRef<RestartConfirmation | null>(null);
+let ordinaryAttempt: string | null = null;
 const running = computed(
   () =>
     updates.runningActions ||
-    updateRequestError.value === "native.updates.runningActions",
+    updateRequestError.value === "native.updates.runningActions" ||
+    updates.error === "native.updates.runningActions",
 );
 const phaseKeys: Record<UpdatePhase, MessageKey> = {
   current: "updates.phase.current",
@@ -63,60 +63,77 @@ function megabytes(bytes: number): string {
   });
 }
 const canInstall = computed(() => updateReady());
+const canForce = computed(
+  () =>
+    canInstall.value && updates.error === "native.updates.preparationFailed",
+);
 watch(
   [canInstall, () => updates.artifactId],
   () => {
-    confirming.value = false;
-    confirmedTarget.value = null;
+    confirmation.value = null;
   },
   { flush: "sync" },
 );
-const confirmInstall = computed(() => {
-  const target = confirmedTarget.value;
-  const forced = confirmForced.value;
-  return () => install(target, forced);
+watch(
+  () => updates.artifactId,
+  () => {
+    ordinaryAttempt = null;
+  },
+  { flush: "sync" },
+);
+watch([() => updates.phase, () => updates.error], ([phase, error]) => {
+  if (phase === "preparing" || ordinaryAttempt === null) return;
+  const artifactId = ordinaryAttempt;
+  ordinaryAttempt = null;
+  if (phase !== "install-failed" || !canInstall.value) return;
+  if (canForce.value) confirmation.value = { artifactId, force: true };
+  else if (error === "native.updates.runningActions")
+    confirmation.value = { artifactId, force: false };
 });
-function confirm(event: MouseEvent, force = false): void {
-  (event.currentTarget as HTMLButtonElement).focus();
-  if (!canInstall.value || updates.artifactId === null) return;
-  confirmedTarget.value = { artifactId: updates.artifactId };
-  confirmRunning.value = running.value;
-  confirmForced.value = force;
-  confirming.value = true;
-}
-async function confirmForce(event: MouseEvent): Promise<void> {
-  const dialog = (event.currentTarget as HTMLButtonElement).closest("dialog");
-  confirmForced.value = true;
-  await nextTick();
-  dialog?.querySelector<HTMLButtonElement>("button[autofocus]")?.focus();
-}
-async function install(
-  target: { artifactId: string } | null,
-  forced: boolean,
-): Promise<void> {
+async function requestInstall(event: MouseEvent, force = false): Promise<void> {
   if (
-    !confirming.value ||
     !canInstall.value ||
-    target === null ||
-    target !== confirmedTarget.value ||
-    forced !== confirmForced.value ||
-    target.artifactId !== updates.artifactId
+    updateRequestPending.value ||
+    updates.artifactId === null
   )
     return;
-  if (running.value && !confirmRunning.value && !forced) {
-    confirmRunning.value = true;
-    return;
+  (event.currentTarget as HTMLButtonElement).focus();
+  const artifactId = updates.artifactId;
+  if (force ? canForce.value : running.value) {
+    confirmation.value = { artifactId, force };
+  } else if (!force) {
+    await install(artifactId, false, false);
   }
-  const installed = await installUpdate(
-    target.artifactId,
-    confirmRunning.value,
-    forced,
-  );
-  if (target !== confirmedTarget.value) return;
-  if (updateRequestError.value === "native.updates.runningActions")
-    confirmRunning.value = true;
-  if (installed || updateRequestError.value !== "native.updates.runningActions")
-    confirming.value = false;
+}
+const confirmInstall = computed(() => {
+  const target = confirmation.value;
+  return async () => {
+    if (
+      !target ||
+      target !== confirmation.value ||
+      updateRequestPending.value ||
+      !canInstall.value ||
+      (target.force && !canForce.value)
+    )
+      return;
+    confirmation.value = null;
+    await install(target.artifactId, true, target.force);
+  };
+});
+async function install(
+  artifactId: string,
+  abortRunning: boolean,
+  force: boolean,
+): Promise<void> {
+  ordinaryAttempt = force ? null : artifactId;
+  if (await installUpdate(artifactId, abortRunning, force)) return;
+  if (ordinaryAttempt !== artifactId) return;
+  ordinaryAttempt = null;
+  if (
+    canInstall.value &&
+    updateRequestError.value === "native.updates.runningActions"
+  )
+    confirmation.value = { artifactId, force: false };
 }
 </script>
 <template>
@@ -176,7 +193,7 @@ async function install(
           <SituateButton
             v-if="canInstall"
             :disabled="updateRequestPending"
-            @click="confirm"
+            @click="requestInstall"
             >{{
               t(
                 updates.phase === "ready"
@@ -186,12 +203,10 @@ async function install(
             }}</SituateButton
           >
           <SituateButton
-            v-if="
-              canInstall && updates.error === 'native.updates.preparationFailed'
-            "
+            v-if="canForce"
             variant="secondary"
             :disabled="updateRequestPending"
-            @click="confirm($event, true)"
+            @click="requestInstall($event, true)"
             >{{ t("updates.force") }}</SituateButton
           >
           <span
@@ -207,30 +222,32 @@ async function install(
       </div>
     </section>
     <SituateDialog
-      :open="confirming"
+      :open="confirmation !== null"
       :aria-labelledby="`update-restart-title-${id}`"
       :aria-describedby="`update-restart-description-${id}`"
-      @cancel.prevent="!updateRequestPending && (confirming = false)"
+      @cancel.prevent="confirmation = null"
     >
       <template #header
         ><h2 :id="`update-restart-title-${id}`">
-          {{ t(confirmForced ? "updates.forceTitle" : "updates.restartTitle") }}
+          {{
+            t(
+              confirmation?.force
+                ? "updates.forceTitle"
+                : "updates.restartTitle",
+            )
+          }}
         </h2></template
       >
       <p :id="`update-restart-description-${id}`">
         {{
           t(
-            confirmForced
+            confirmation?.force
               ? "updates.forceWarning"
-              : confirmRunning
-                ? "updates.restartWorking"
-                : "updates.restartIdle",
+              : "updates.restartWorking",
           )
         }}
       </p>
-      <p v-if="confirmRunning || confirmForced">
-        {{ t("updates.restartCaution") }}
-      </p>
+      <p>{{ t("updates.restartCaution") }}</p>
       <p v-if="updateRequestError" role="alert">
         {{ localizeError(updateRequestError) }}
       </p>
@@ -239,27 +256,22 @@ async function install(
           variant="secondary"
           autofocus
           :disabled="updateRequestPending"
-          @click="confirming = false"
+          @click="confirmation = null"
           >{{ t("updates.later") }}</SituateButton
         >
         <SituateButton
-          v-if="!confirmForced"
-          variant="secondary"
-          :disabled="updateRequestPending || !canInstall"
-          @click="confirmForce"
-          >{{ t("updates.force") }}</SituateButton
-        >
-        <SituateButton
-          :variant="confirmRunning || confirmForced ? 'danger' : 'primary'"
-          :disabled="updateRequestPending || !canInstall"
+          variant="danger"
+          :disabled="
+            updateRequestPending ||
+            !canInstall ||
+            (confirmation?.force && !canForce)
+          "
           @click="confirmInstall"
           >{{
             t(
-              confirmForced
+              confirmation?.force
                 ? "updates.forceConfirm"
-                : confirmRunning
-                  ? "updates.abortConfirm"
-                  : "updates.install",
+                : "updates.abortConfirm",
             )
           }}</SituateButton
         >

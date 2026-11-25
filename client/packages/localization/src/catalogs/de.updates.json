@@ -15,7 +15,6 @@
   "updates.lastCheck": "Zuletzt geprüft: {time}",
   "updates.readyDetail": "Das Update ist geprüft und bereit zur Installation.",
   "updates.restartTitle": "Situate für das Update neu starten?",
-  "updates.restartIdle": "Situate speichert deine Arbeit, installiert das Update und startet neu.",
   "updates.restartWorking": "In einem oder mehreren Arbeitsbereichen laufen Aktionen. Du kannst später aktualisieren oder die Aktionen jetzt stoppen und neu starten.",
   "updates.restartCaution": "Nach dem Neustart kannst du betroffene Chats mit einer weiteren Nachricht fortsetzen.",
   "updates.later": "Nicht jetzt",

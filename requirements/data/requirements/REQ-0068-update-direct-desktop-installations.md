@@ -10,7 +10,7 @@ goals: [GOAL-0001]
 
 ## Description
 
-Direct desktop installations must automatically check for app updates and download available updates in the background. Installation and the subsequent application restart require the user's confirmation. Downloading an update must not itself interrupt ongoing work or initiate plugin migrations. Users must also be able to check for updates manually.
+Direct desktop installations must automatically check for app updates and download available updates in the background. Choosing Install and restart authorizes installation and restart without a second confirmation when no actions are running. Downloading an update must not itself interrupt ongoing work or initiate plugin migrations. Users must also be able to check for updates manually.
 
 Automatic checks use a rolling 24-hour interval from the last successful update check, retained across application restarts. If no successful check is recorded, a check is due. A due check runs in the background at application startup or while the application remains running. After device sleep, a due check runs when the application resumes; Situate does not wake the device for update checks. Checks neither block startup or interaction nor open a dialog. Manual checks remain available independently of the automatic interval.
 
@@ -101,7 +101,7 @@ Private release-notes clarification; transcript not publicly available. The app 
 - The installed update package is removed after confirming a successful upgrade.
 - Direct desktop app-update downloads are not blocked solely because a connection is classified as mobile data or metered; dictation-model download restrictions are not applied to them.
 - Background download leaves running actions and the installed app version unchanged.
-- Installation and restart do not occur without confirmation.
+- Installation and restart do not occur without user authorization. Choosing Install and restart starts preparation without a second confirmation when no actions are running.
 - If a failed installation leaves the bundle known unchanged, reversible preparation is released, the original installation remains usable and the verified package is retained for a later user-requested attempt.
 - Actions aborted for installation are not automatically replayed after an installation failure.
 - Uncertain replacement or relaunch outcomes are explained with recovery steps, without automatic installation retry or restart; another attempt requires explicit user action and renewed package/installation-state validation.

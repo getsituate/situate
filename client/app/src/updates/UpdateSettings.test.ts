@@ -60,19 +60,15 @@ it("postpones running work without sending installation or abort commands", asyn
   expect(updates.runningActions).toBe(true);
   wrapper.unmount();
 });
-it("requires explicit stop confirmation when work starts after the dialog opens", async () => {
+it("starts an idle installation without opening a restart dialog", async () => {
   const wrapper = mount(UpdateSettings);
-  await wrapper.get(".status-actions button").trigger("click");
-  updates.runningActions = true;
-  await wrapper.get("dialog button:last-child").trigger("click");
   expect(invoke).not.toHaveBeenCalled();
-  expect(wrapper.get("dialog button:last-child").text()).toBe(
-    "Stop actions and restart",
-  );
-  await wrapper.get("dialog button:last-child").trigger("click");
-  expect(invoke).toHaveBeenCalledWith("updates_install", {
+  expect(wrapper.findAll(".status-actions button")).toHaveLength(1);
+  await wrapper.get(".status-actions button").trigger("click");
+  expect(wrapper.get("dialog").element.open).toBe(false);
+  expect(invoke).toHaveBeenCalledExactlyOnceWith("updates_install", {
     artifactId: "artifact-b",
-    abortRunning: true,
+    abortRunning: false,
   });
   wrapper.unmount();
 });
@@ -80,7 +76,6 @@ it("keeps native errors inline and offers renewed confirmation after a failed in
   vi.mocked(invoke).mockRejectedValue("native.updates.installFailed");
   const wrapper = mount(UpdateSettings);
   await wrapper.get(".status-actions button").trigger("click");
-  await wrapper.get("dialog button:last-child").trigger("click");
   await flushPromises();
   expect(wrapper.get('[role="alert"]').text()).toContain(
     "installed app is unchanged",
@@ -95,7 +90,6 @@ it("requires renewed stop consent after native detects work racing the confirmat
     .mockResolvedValueOnce({ ...updates });
   const wrapper = mount(UpdateSettings);
   await wrapper.get(".status-actions button").trigger("click");
-  await wrapper.get("dialog button:last-child").trigger("click");
   await flushPromises();
   expect(invoke).toHaveBeenCalledWith("updates_install", {
     artifactId: "artifact-b",
@@ -114,6 +108,7 @@ it("requires renewed stop consent after native detects work racing the confirmat
 });
 it("replaces installation confirmation with manual guidance when recovery becomes uncertain", async () => {
   updates.phase = "install-failed";
+  updates.runningActions = true;
   const wrapper = mount(UpdateSettings);
   expect(wrapper.get(".status-actions button").text()).toBe(
     "Try installation again",
@@ -138,6 +133,7 @@ it.each([
 ])(
   "invalidates confirmation when the target becomes %s / %s",
   async (version, artifactId) => {
+    updates.runningActions = true;
     const wrapper = mount(UpdateSettings);
     await wrapper.get(".status-actions button").trigger("click");
     const staleInstall = wrapper.findAllComponents(SituateButton).at(-1)!.vm.$
@@ -155,7 +151,7 @@ it.each([
       await wrapper.get("dialog button:last-child").trigger("click");
       expect(invoke).toHaveBeenCalledWith("updates_install", {
         artifactId,
-        abortRunning: false,
+        abortRunning: true,
       });
     } else {
       expect(wrapper.find(".status-actions button").exists()).toBe(false);
@@ -164,6 +160,7 @@ it.each([
   },
 );
 it("does not revive a stale callback when the original artifact returns", async () => {
+  updates.runningActions = true;
   const wrapper = mount(UpdateSettings);
   await wrapper.get(".status-actions button").trigger("click");
   const staleInstall = wrapper.findAllComponents(SituateButton).at(-1)!.vm.$
@@ -177,7 +174,7 @@ it("does not revive a stale callback when the original artifact returns", async 
   await wrapper.get("dialog button:last-child").trigger("click");
   expect(invoke).toHaveBeenCalledWith("updates_install", {
     artifactId: "artifact-b",
-    abortRunning: false,
+    abortRunning: true,
   });
   wrapper.unmount();
 });
@@ -185,7 +182,6 @@ it("requires renewed confirmation when native rejects a changed target", async (
   vi.mocked(invoke).mockRejectedValue("native.updates.changed");
   const wrapper = mount(UpdateSettings);
   await wrapper.get(".status-actions button").trigger("click");
-  await wrapper.get("dialog button:last-child").trigger("click");
   await flushPromises();
   expect(wrapper.get("dialog").element.open).toBe(false);
   expect(wrapper.get('[role="alert"]').text()).toContain(
@@ -194,23 +190,24 @@ it("requires renewed confirmation when native rejects a changed target", async (
   expect(invoke).toHaveBeenCalledOnce();
   wrapper.unmount();
 });
-it("requires a separate loss warning before forcing an idle update", async () => {
+it("offers forced installation only after the ordinary attempt fails to prepare", async () => {
   const wrapper = mount(UpdateSettings);
   await wrapper.get(".status-actions button").trigger("click");
-  const ordinaryConfirm = wrapper.findAllComponents(SituateButton).at(-1)!.vm.$
-    .vnode.props!.onClick as () => Promise<void>;
-  const force = wrapper
-    .findAll("dialog button")
-    .find((button) => button.text() === "Force update…")!;
-  await force.trigger("click");
+  updates.phase = "preparing";
+  await flushPromises();
+  expect(wrapper.get("dialog").element.open).toBe(false);
+  Object.assign(updates, {
+    phase: "install-failed",
+    error: "native.updates.preparationFailed",
+  });
+  await flushPromises();
+  expect(wrapper.get("dialog").element.open).toBe(true);
   expect(wrapper.get("dialog").text()).toContain(
     "Unsaved changes in any window may be lost",
   );
-  expect(invoke).not.toHaveBeenCalled();
-  await ordinaryConfirm();
-  expect(invoke).not.toHaveBeenCalled();
+  expect(invoke).toHaveBeenCalledOnce();
   await wrapper.get("dialog button:last-child").trigger("click");
-  expect(invoke).toHaveBeenCalledExactlyOnceWith("updates_install", {
+  expect(invoke).toHaveBeenLastCalledWith("updates_install", {
     artifactId: "artifact-b",
     abortRunning: true,
     force: true,
@@ -242,12 +239,10 @@ it("offers force after preparation fails and postpones without stopping work", a
 });
 
 it("invalidates forced consent when the verified package changes", async () => {
+  updates.phase = "install-failed";
+  updates.error = "native.updates.preparationFailed";
   const wrapper = mount(UpdateSettings);
-  await wrapper.get(".status-actions button").trigger("click");
-  await wrapper
-    .findAll("dialog button")
-    .find((button) => button.text() === "Force update…")!
-    .trigger("click");
+  await wrapper.findAll(".status-actions button")[1]!.trigger("click");
   const staleForce = wrapper.findAllComponents(SituateButton).at(-1)!.vm.$.vnode
     .props!.onClick as () => Promise<void>;
   updates.artifactId = "artifact-c";
