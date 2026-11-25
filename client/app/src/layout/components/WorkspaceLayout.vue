@@ -16,6 +16,7 @@ import {
   SituateInput,
   SituateIcon,
   SituateIconButton,
+  SituateMenu,
   SituateSelect,
 } from "@situate/ui";
 import { diagnosticsFor, type Context } from "../../diagnostics";
@@ -77,6 +78,7 @@ const emit = defineEmits<{
 }>();
 const tab = computed(() => activeTab(props.state));
 const limitError = ref<ReturnType<typeof layoutLimit>>();
+let limitPaneAnchor: HTMLElement | undefined;
 const limitMessage = computed(() =>
   limitError.value === "tabs"
     ? t("layoutUi.tabLimit", { count: MAX_OPEN_TABS })
@@ -126,7 +128,13 @@ const treeSize = computed(() =>
     : { width: 0, height: 0 },
 );
 const dragging = ref<string | null>(null);
-const mode = ref<"tab" | "pane" | "move" | "all">("tab");
+const paneMenuId = `${instanceId}-pane-options`;
+const paneMenu = ref<{
+  paneId: string;
+  anchor: HTMLElement;
+  initialFocus: "first" | "last";
+}>();
+const mode = ref<"tab" | "move" | "all">("tab");
 const selectedPane = ref("");
 const selectedTab = ref("");
 const renameOrigin = ref<"surface" | "all">("surface");
@@ -145,11 +153,9 @@ const edge = ref<PaneEdge>("right");
 const title = computed(() =>
   mode.value === "tab"
     ? t("layoutUi.rename")
-    : mode.value === "pane"
-      ? t("layoutUi.paneOptions")
-      : mode.value === "move"
-        ? t("layoutUi.movePane")
-        : t("layoutUi.allTabs"),
+    : mode.value === "move"
+      ? t("layoutUi.movePane")
+      : t("layoutUi.allTabs"),
 );
 let observer: ResizeObserver | undefined;
 let returnFocus: HTMLElement | null = null;
@@ -276,41 +282,49 @@ function focusDialog() {
       : '.tab-sheet-select[aria-current="true"]';
   dialog.value
     ?.querySelector<HTMLElement>(
-      mode.value === "all"
-        ? allTarget
-        : "input, [role=combobox], .pane-actions button",
+      mode.value === "all" ? allTarget : "input, [role=combobox]",
     )
     ?.focus();
 }
-function open(
-  which: typeof mode.value,
-  event: MouseEvent | HTMLElement,
-  pane = "",
-) {
-  returnFocus =
-    event instanceof HTMLElement ? event : (event.currentTarget as HTMLElement);
+function openOverview(event: MouseEvent) {
+  returnFocus = event.currentTarget as HTMLElement;
   returnFocus.focus();
-  mode.value = which;
-  renameOrigin.value = "surface";
+  mode.value = "all";
   overviewFocus.value = "";
-  selectedPane.value = pane || tab.value?.activePaneId || "";
-  selectedTab.value = tab.value?.id ?? "";
-  name.value = tab.value ? tabName(tab.value) : "";
-  target.value = paneIds.value.find((id) => id !== selectedPane.value) ?? "";
-  edge.value = "right";
   dialog.value?.showModal();
-  void nextTick(() => {
-    const field = dialog.value?.querySelector<HTMLInputElement>("input");
-    if (field) {
-      field.focus();
-      field.select();
-    } else
-      dialog.value
-        ?.querySelector<HTMLElement>(
-          '.pane-actions button, .tab-sheet-select[aria-current="true"], [role=combobox]',
-        )
-        ?.focus();
-  });
+  void nextTick(focusDialog);
+}
+function togglePaneMenu(paneId: string, source: Event | HTMLElement) {
+  const anchor =
+    source instanceof HTMLElement
+      ? source
+      : (source.currentTarget as HTMLElement);
+  if (source instanceof MouseEvent && paneMenu.value?.anchor === anchor) {
+    closePaneMenu(true);
+    return;
+  }
+  paneMenu.value = {
+    paneId,
+    anchor,
+    initialFocus:
+      source instanceof KeyboardEvent && source.key === "ArrowUp"
+        ? "last"
+        : "first",
+  };
+}
+function closePaneMenu(restore = false) {
+  if (restore) paneMenu.value?.anchor.focus({ preventScroll: true });
+  paneMenu.value = undefined;
+}
+async function openMove(paneId: string) {
+  returnFocus = paneMenu.value?.anchor ?? null;
+  selectedPane.value = paneId;
+  target.value = paneIds.value.find((id) => id !== paneId) ?? "";
+  edge.value = "right";
+  mode.value = "move";
+  await nextTick();
+  dialog.value?.showModal();
+  focusDialog();
 }
 function renameTab(
   id: string,
@@ -347,9 +361,12 @@ function recordIntent(intent: LayoutIntent, control = "button") {
   return true;
 }
 function dismissLimitError() {
+  const anchor = limitPaneAnchor;
+  limitPaneAnchor = undefined;
   limitError.value = undefined;
   void nextTick(() => {
     if (dialog.value?.open) focusDialog();
+    else if (anchor?.isConnected) anchor.focus({ preventScroll: true });
     else focusActiveTab();
   });
 }
@@ -415,6 +432,13 @@ function act(action: LayoutIntent) {
   });
 }
 function paneAction(action: LayoutIntent) {
+  if (action.type === "close-pane") {
+    void runLayoutAction(
+      { type: "close-pane", paneId: action.paneId },
+      "button",
+    );
+    return;
+  }
   if (!recordIntent(action, "pane")) return;
   if (
     action.type === "open" ||
@@ -463,9 +487,14 @@ async function applyLayoutAction(
   control: string,
   isCurrent?: () => boolean,
 ): Promise<LayoutActionResult> {
+  const anchor =
+    action.type === "split-pane" ? paneMenu.value?.anchor : undefined;
   const result = await props.runAction(action, control, isCurrent);
   if (result.status === "limit") {
-    if (control !== "plugin") limitError.value = result.limit;
+    if (control !== "plugin") {
+      limitPaneAnchor = anchor;
+      limitError.value = result.limit;
+    }
     return result;
   }
   if (result.status === "unchanged" && action.type === "select-tab") {
@@ -530,6 +559,10 @@ function back(): boolean {
     dismissLimitError();
     return true;
   }
+  if (paneMenu.value) {
+    closePaneMenu(true);
+    return true;
+  }
   if (maximizedHeader.value?.back()) return true;
   for (const menu of [...overviewMenus.value, surfaceMenu.value]) {
     if (menu?.back()) return true;
@@ -552,11 +585,26 @@ watch(
   ([activeId, hasSource], [previousId]) => {
     if (
       dialog.value?.open &&
-      (mode.value === "pane" || mode.value === "move") &&
+      mode.value === "move" &&
       (activeId !== previousId || !hasSource)
     )
       dismiss(false);
   },
+);
+watch(
+  [() => tab.value?.id, paneIds, single, narrow, () => focusPane.value?.id],
+  ([tabId], [previousTabId]) => {
+    const open = paneMenu.value;
+    if (
+      open &&
+      (tabId !== previousTabId ||
+        !open.anchor.isConnected ||
+        !paneIds.value.includes(open.paneId) ||
+        (single.value && open.paneId !== focusPane.value?.id))
+    )
+      closePaneMenu();
+  },
+  { flush: "post" },
 );
 defineExpose({
   back,
@@ -650,7 +698,7 @@ defineExpose({
           class="all-tabs"
           icon="chevron"
           :label="t('layoutUi.allTabs')"
-          @click="open('all', $event)"
+          @click="openOverview"
         />
       </div>
       <div
@@ -670,7 +718,7 @@ defineExpose({
           "
           :aria-haspopup="multipleTabs ? 'dialog' : undefined"
           :title="t('layoutUi.title', { title: tabName(tab) })"
-          @click="multipleTabs ? open('all', $event) : selectTab(tab.id)"
+          @click="multipleTabs ? openOverview($event) : selectTab(tab.id)"
           @mousedown.middle.prevent="closeTab(tab.id)"
         >
           <span
@@ -731,7 +779,12 @@ defineExpose({
           :label="
             t('layoutUi.namedPaneOptions', { title: paneTitle(focusPane) })
           "
-          @click="open('pane', $event, focusPane.id)"
+          aria-haspopup="menu"
+          :aria-expanded="paneMenu?.paneId === focusPane.id"
+          :popovertarget="paneMenuId"
+          @click.prevent="togglePaneMenu(focusPane.id, $event)"
+          @keydown.down.exact.prevent="togglePaneMenu(focusPane.id, $event)"
+          @keydown.up.exact.prevent="togglePaneMenu(focusPane.id, $event)"
         />
       </div>
       <TabActions
@@ -750,7 +803,7 @@ defineExpose({
           lonePane ? t('layoutUi.surfaceActions') : t('layoutUi.tabOptions')
         "
         @create="createTab"
-        @layout="open('pane', $event, focusPane?.id)"
+        @layout="focusPane && togglePaneMenu(focusPane.id, $event)"
         @rename="renameTab(tab.id, 'surface', $event)"
         @close="closeTab(tab.id)"
       />
@@ -783,6 +836,8 @@ defineExpose({
           ref="maximizedHeader"
           :pane="focusPane"
           :panes="pagerPanes"
+          :options-id="paneMenuId"
+          :options-open="paneMenu?.paneId === focusPane.id"
           @select="
             recordIntent({
               type: 'select-pane',
@@ -801,7 +856,7 @@ defineExpose({
               delta: $event,
             })
           "
-          @options="open('pane', $event, focusPane.id)"
+          @options="togglePaneMenu(focusPane.id, $event)"
         />
         <div
           v-else-if="narrow && !lonePane && focusPane"
@@ -835,7 +890,12 @@ defineExpose({
             :label="
               t('layoutUi.namedPaneOptions', { title: paneTitle(focusPane) })
             "
-            @click="open('pane', $event, focusPane.id)"
+            aria-haspopup="menu"
+            :aria-expanded="paneMenu?.paneId === focusPane.id"
+            :popovertarget="paneMenuId"
+            @click.prevent="togglePaneMenu(focusPane.id, $event)"
+            @keydown.down.exact.prevent="togglePaneMenu(focusPane.id, $event)"
+            @keydown.up.exact.prevent="togglePaneMenu(focusPane.id, $event)"
           />
         </div>
         <div class="layout-scroll">
@@ -855,9 +915,8 @@ defineExpose({
               active
               :dragging="null"
               :maximized="true"
-              :compact="narrow || lonePane || !!tab.maximizedPaneId"
+              compact
               @intent="paneAction"
-              @options="(id, event) => open('pane', event, id)"
               ><template #pane="slotProps"
                 ><slot name="pane" v-bind="slotProps" /></template
             ></PaneTile>
@@ -867,8 +926,10 @@ defineExpose({
               :tab="tab"
               :title-for="titleFor"
               :dragging="dragging"
+              :options-id="paneMenuId"
+              :options-pane-id="paneMenu?.paneId"
               @intent="paneAction"
-              @options="(id, event) => open('pane', event, id)"
+              @options="togglePaneMenu"
               @drag="dragging = $event"
               ><template #pane="slotProps"
                 ><slot name="pane" v-bind="slotProps" /></template
@@ -877,6 +938,79 @@ defineExpose({
         </div>
       </section>
     </div>
+    <SituateMenu
+      :id="paneMenuId"
+      :open="!!paneMenu"
+      :anchor="paneMenu?.anchor"
+      :initial-focus="paneMenu?.initialFocus"
+      :label="t('layoutUi.paneOptions')"
+      @close="closePaneMenu()"
+    >
+      <template v-if="tab && paneMenu">
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="
+            act({
+              type: 'split',
+              tabId: tab.id,
+              paneId: paneMenu.paneId,
+              edge: 'right',
+            })
+          "
+        >
+          {{ t("layoutUi.splitRight") }}
+        </SituateButton>
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="
+            act({
+              type: 'split',
+              tabId: tab.id,
+              paneId: paneMenu.paneId,
+              edge: 'bottom',
+            })
+          "
+        >
+          {{ t("layoutUi.splitBelow") }}
+        </SituateButton>
+        <SituateButton
+          v-if="!lonePane"
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="openMove(paneMenu.paneId)"
+        >
+          {{ t("layoutUi.movePane") }}
+        </SituateButton>
+        <SituateButton
+          v-if="!narrow && !lonePane"
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="
+            act({ type: 'maximize', tabId: tab.id, paneId: paneMenu.paneId })
+          "
+        >
+          {{
+            tab.maximizedPaneId ? t("layoutUi.restore") : t("layoutUi.maximize")
+          }}
+        </SituateButton>
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="
+            act({ type: 'close-pane', tabId: tab.id, paneId: paneMenu.paneId })
+          "
+        >
+          {{ t("layoutUi.closePane") }}
+        </SituateButton>
+      </template>
+    </SituateMenu>
     <SituateDialog
       ref="dialogControl"
       :id="`${instanceId}-topic-layout-dialog`"
@@ -916,62 +1050,6 @@ defineExpose({
           </SituateButton>
         </SituateDialogActions>
       </form>
-      <div v-else-if="mode === 'pane' && tab" class="pane-actions">
-        <SituateButton
-          variant="ghost"
-          @click="
-            act({
-              type: 'split',
-              tabId: tab.id,
-              paneId: selectedPane,
-              edge: 'right',
-            })
-          "
-        >
-          <SituateIcon name="split" />{{ t("layoutUi.splitRight") }}
-        </SituateButton>
-        <SituateButton
-          variant="ghost"
-          @click="
-            act({
-              type: 'split',
-              tabId: tab.id,
-              paneId: selectedPane,
-              edge: 'bottom',
-            })
-          "
-        >
-          <SituateIcon name="split" class="rotate-icon" />{{
-            t("layoutUi.splitBelow")
-          }}
-        </SituateButton>
-        <SituateButton
-          variant="ghost"
-          v-if="paneIds.length > 1"
-          @click="mode = 'move'"
-        >
-          <SituateIcon name="grip" />{{ t("layoutUi.movePane") }}
-        </SituateButton>
-        <SituateButton
-          variant="ghost"
-          v-if="!narrow && paneIds.length > 1"
-          @click="
-            act({ type: 'maximize', tabId: tab.id, paneId: selectedPane })
-          "
-        >
-          <SituateIcon :name="tab.maximizedPaneId ? 'restore' : 'expand'" />{{
-            tab.maximizedPaneId ? t("layoutUi.restore") : t("layoutUi.maximize")
-          }}
-        </SituateButton>
-        <SituateButton
-          variant="ghost"
-          @click="
-            act({ type: 'close-pane', tabId: tab.id, paneId: selectedPane })
-          "
-        >
-          <SituateIcon name="close" />{{ t("layoutUi.closePane") }}
-        </SituateButton>
-      </div>
       <form
         v-else-if="mode === 'move' && tab && paneIds.includes(selectedPane)"
         class="move-pane-form"
@@ -1288,33 +1366,6 @@ defineExpose({
   padding: 8px 12px;
   border-radius: 10px;
 }
-.pane-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.pane-actions button {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 14px;
-  min-height: 48px;
-  padding: 10px;
-  border: 0;
-  border-radius: 10px;
-  text-align: start;
-  font-size: 14px;
-}
-.pane-actions button svg {
-  flex-shrink: 0;
-  color: var(--situate-muted);
-}
-.pane-actions button svg:nth-child(2) {
-  margin-inline-start: auto;
-}
-.rotate-icon {
-  transform: rotate(90deg);
-}
 .all-tab-list {
   display: flex;
   flex-direction: column;
@@ -1488,8 +1539,5 @@ defineExpose({
     var(--app-safe-area-bottom, env(safe-area-inset-bottom, 0px))
   );
   border-radius: 24px 24px 0 0;
-}
-.pane-actions button:disabled {
-  color: var(--situate-control-line);
 }
 </style>

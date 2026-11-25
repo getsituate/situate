@@ -12,13 +12,15 @@ const props = defineProps<{
   tab: TopicTab;
   titleFor: (target: ViewTarget) => string;
   dragging: string | null;
+  optionsId: string;
+  optionsPaneId?: string;
 }>();
 defineSlots<{
   pane(props: { pane: Pane; tab: TopicTab; active: boolean }): unknown;
 }>();
 const emit = defineEmits<{
   intent: [intent: LayoutIntent];
-  options: [id: string, event: MouseEvent];
+  options: [id: string, event: Event];
   drag: [id: string | null];
 }>();
 const root = ref<HTMLElement>();
@@ -98,6 +100,8 @@ function commitResize(pixels: number) {
     :dragging="dragging"
     :maximized="false"
     :tab="tab"
+    :options-id="optionsId"
+    :options-open="optionsPaneId === node.id"
     @intent="emit('intent', $event)"
     @options="(id, event) => emit('options', id, event)"
     @drag="emit('drag', $event)"
@@ -117,6 +121,8 @@ function commitResize(pixels: number) {
       :tab="tab"
       :title-for="titleFor"
       :dragging="dragging"
+      :options-id="optionsId"
+      :options-pane-id="optionsPaneId"
       @intent="emit('intent', $event)"
       @options="(id, event) => emit('options', id, event)"
       @drag="emit('drag', $event)"
@@ -145,6 +151,8 @@ function commitResize(pixels: number) {
       :tab="tab"
       :title-for="titleFor"
       :dragging="dragging"
+      :options-id="optionsId"
+      :options-pane-id="optionsPaneId"
       @intent="emit('intent', $event)"
       @options="(id, event) => emit('options', id, event)"
       @drag="emit('drag', $event)"
