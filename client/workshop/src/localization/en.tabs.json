@@ -82,6 +82,14 @@
   "openView": "Open a view",
   "chooseView": "What would you like here?",
   "loading": "Opening view…",
+  "loadingConversation": "Opening conversation…",
+  "loadingConversations": "Loading conversations…",
+  "simulateConversationListLoading": "Load conversation list",
+  "weekendConversation": {
+    "title": "Planting plans",
+    "draft": "Can we plant the herbs on Sunday?",
+    "message": "Let’s check which beds are ready before we buy seeds."
+  },
   "unavailable": "This view isn’t available",
   "unavailableHelp": "The content may have moved or its view may no longer be available. Open another view, or go back.",
   "working": "Working",

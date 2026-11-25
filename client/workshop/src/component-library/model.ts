@@ -82,6 +82,7 @@ export const componentGroups = {
     "SituateEmptyState",
     "SituateTooltip",
     "SituateInfoButton",
+    "SituateLoading",
     "SituateProgress",
   ],
   layout: [

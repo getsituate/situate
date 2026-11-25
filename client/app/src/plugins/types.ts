@@ -250,7 +250,10 @@ export interface PluginUiHost {
     | "nextTick"
     | "compile"
   >;
-  readonly ui: Pick<typeof Ui, Extract<keyof typeof Ui, `Situate${string}`>>;
+  readonly ui: Pick<
+    typeof Ui,
+    Exclude<Extract<keyof typeof Ui, `Situate${string}`>, "SituateLoading">
+  >;
   readonly navigation: Pick<UiCoordinator, "open" | "reveal">;
   readonly layout: PluginLayout;
   readonly service: {

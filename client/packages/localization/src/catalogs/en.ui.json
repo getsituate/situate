@@ -229,6 +229,7 @@
   "navigation.noArchivedConversations": "No archived conversations.",
   "navigation.conversations": "Conversations",
   "navigation.workspaceChat": "Workspace chat",
+  "navigation.loadingConversations": "Loading conversations…",
   "navigation.noConversationsYet": "No conversations yet.",
   "navigation.pluginsAreUnavailable": "Plugins are unavailable.",
   "navigation.plugins": "Plugins",

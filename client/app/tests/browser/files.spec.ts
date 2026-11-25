@@ -158,13 +158,12 @@ for (const viewport of [
     await expect(document.getByRole("status")).toHaveText(
       keyLabel("files.loadingDocument"),
     );
-    await expect(document).toHaveAttribute("aria-busy", "true");
+    await expect(document.getByRole("status")).toBeVisible();
     await expect(document).not.toContainText(
       keyLabel("files.yourFilesInPlace"),
     );
     await page.evaluate(() => window.__filesTest.releaseRead());
     await expect(document.getByRole("status")).toHaveCount(0);
-    await expect(document).not.toHaveAttribute("aria-busy", "true");
     await expect(
       document.getByRole("heading", { name: "Reading list", exact: true }),
     ).toBeVisible();

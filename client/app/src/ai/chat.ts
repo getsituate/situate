@@ -61,6 +61,7 @@ export interface ChatState extends DictationDraft {
   questionAnnouncement?: { id: string; prompt: string };
   questionActionPending?: string;
   ephemeral: boolean;
+  hydrated: boolean;
   loadError?: unknown;
   pluginNotices?: PluginNotice[];
   pluginNoticeAnnouncement?: PluginNotice;
@@ -317,6 +318,7 @@ export function workspaceChat(
       questions: [],
       questionBusy: false,
       ephemeral: false,
+      hydrated: false,
       pluginNotices: [],
       draft: "",
       draftSelection: null,
@@ -651,6 +653,7 @@ export function workspaceChat(
         };
       });
     if (replaceDraft) setInput(current.draftBase);
+    current.state.hydrated = true;
     updateSummary(owner, record);
   }
   async function load(): Promise<void> {

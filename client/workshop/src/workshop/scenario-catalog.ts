@@ -150,6 +150,8 @@ const definitions = [
       "tabs-new-chat",
       "tabs-many",
       "tabs-loading",
+      "tabs-conversation-loading",
+      "tabs-conversation-list-loading",
       "tabs-unavailable",
       "tabs-maximized",
       "tabs-maximized-many",

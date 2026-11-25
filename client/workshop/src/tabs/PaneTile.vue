@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { SituateIcon, SituateIconButton, SituateButton } from "../ui";
+import {
+  SituateIcon,
+  SituateIconButton,
+  SituateButton,
+  SituateLoading,
+} from "../ui";
 import copy from "../localization/en.tabs.json";
 import PaneBody from "./PaneBody.vue";
 import PaneHistory from "./PaneHistory.vue";
@@ -93,7 +98,15 @@ function activate() {
       />
     </header>
     <div class="pane-body">
+      <SituateLoading
+        class="pane-loading"
+        :pending="pane.availability === 'loading'"
+        :label="
+          currentView(pane) === 'chat' ? copy.loadingConversation : copy.loading
+        "
+      />
       <PaneBody
+        v-if="pane.availability !== 'loading'"
         :pane="pane"
         :state="state"
         :active="active"
@@ -213,6 +226,11 @@ function activate() {
   flex: 1;
   min-height: 0;
   container: pane / inline-size;
+}
+.pane-loading[data-pending] {
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
 }
 .drop-targets {
   position: absolute;

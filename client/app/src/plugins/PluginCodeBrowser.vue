@@ -10,7 +10,12 @@ import {
 } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { t, localizeError } from "@situate/localization";
-import { SituateIcon, SituateButton, SituateInput } from "@situate/ui";
+import {
+  SituateLoading,
+  SituateIcon,
+  SituateButton,
+  SituateInput,
+} from "@situate/ui";
 import SituateErrorScreen from "../components/SituateErrorScreen.vue";
 import { codeRows, createCodeBrowser } from "./code-browser";
 import SourceText from "../files/SourceText.vue";
@@ -143,9 +148,12 @@ defineExpose({ showTree });
     :aria-label="t('pluginDevelopment.files')"
   >
     <div v-if="state.status !== 'ready'" class="code-feedback">
-      <p v-if="state.status === 'loading'" role="status">
-        {{ t("pluginDevelopment.loadingFiles") }}
-      </p>
+      <SituateLoading
+        v-if="state.status === 'loading'"
+        placement="inline"
+        pending
+        :label="t('pluginDevelopment.loadingFiles')"
+      />
       <template
         v-else-if="
           state.status === 'error' && error === 'native.plugins.readFailed'
@@ -268,9 +276,12 @@ defineExpose({ showTree });
             <h4>{{ t("pluginDevelopment.binaryFile") }}</h4>
             <p>{{ t("pluginDevelopment.noFilePreview") }}</p>
           </div>
-          <p v-else-if="reading" role="status">
-            {{ t("pluginDevelopment.loadingFiles") }}
-          </p>
+          <SituateLoading
+            v-else-if="reading"
+            placement="inline"
+            pending
+            :label="t('pluginDevelopment.loadingFiles')"
+          />
           <pre
             v-else
             class="code-source"

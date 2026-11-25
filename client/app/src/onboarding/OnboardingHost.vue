@@ -3,7 +3,7 @@ import "@situate/localization/onboarding";
 import { listenInWindow } from "../window-events";
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import { localizeError, t } from "@situate/localization";
-import { SituateButton, SituateDialog } from "@situate/ui";
+import { SituateLoading, SituateButton, SituateDialog } from "@situate/ui";
 import AiSetup from "../ai/AiSetup.vue";
 import ChatModelPicker from "../ai/ChatModelPicker.vue";
 import ChatPane from "../components/ChatPane.vue";
@@ -366,13 +366,15 @@ defineExpose({ cancelAndWait, flush: session.flush });
     :initial-from="initialFrom"
     :blocked="!!(error || state.error)"
   >
-    <p role="status">
-      {{
-        error || state.error
-          ? t("onboarding.loadFailed")
-          : t("navigation.openingWorkspaces")
-      }}
+    <p v-if="error || state.error" role="status">
+      {{ t("onboarding.loadFailed") }}
     </p>
+    <SituateLoading
+      v-else
+      pending
+      placement="inline"
+      :label="t('navigation.openingWorkspaces')"
+    />
     <p v-if="error || state.error" role="alert">
       {{ localizeError(error || state.error) }}
     </p>

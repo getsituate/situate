@@ -4,6 +4,7 @@ import {
   SituateRadio,
   SituateDialog,
   SituateIcon,
+  SituateLoading,
 } from "@situate/ui";
 import {
   computed,
@@ -110,9 +111,12 @@ function colorName(color: Accent): string {
 </script>
 
 <template>
-  <p v-if="loading && !available" role="status">
-    {{ t("settings.appearance.loading") }}
-  </p>
+  <SituateLoading
+    v-if="loading && !available"
+    placement="inline"
+    pending
+    :label="t('settings.appearance.loading')"
+  />
   <div v-if="props.error && !saveFailure" class="settings-error" role="alert">
     <p>{{ t(props.error) }}</p>
     <SituateButton

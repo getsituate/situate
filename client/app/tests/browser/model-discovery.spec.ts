@@ -29,14 +29,10 @@ async function settings(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: t("settings.ai.title"), exact: true })
     .click();
-  await expect(page.locator(".ai-settings .connections")).toHaveAttribute(
-    "aria-busy",
-    "false",
-  );
-  await expect(page.locator(".ai-settings")).toHaveAttribute(
-    "aria-busy",
-    "false",
-  );
+  await expect(page.locator(".ai-settings .add-connection")).toBeEnabled();
+  await expect(
+    page.locator(".ai-settings [role='switch']").first(),
+  ).toHaveAttribute("aria-busy", "false");
   await page.locator(".advanced-settings summary").click();
   await expect(page.locator(".advanced-settings")).toHaveAttribute("open", "");
 }

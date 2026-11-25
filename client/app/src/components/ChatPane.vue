@@ -27,7 +27,9 @@ import {
   SituateIcon,
   SituateIconButton,
   SituateDialog,
+  SituateLoading,
 } from "@situate/ui";
+import SituateErrorScreen from "./SituateErrorScreen.vue";
 import ChatGreeting from "./chat/ChatGreeting.vue";
 import { chooseGreeting } from "./chat/greetings";
 import { useChatScroll } from "./chat/use-chat-scroll";
@@ -68,6 +70,7 @@ const props = withDefaults(
     conversationId?: string;
     focusComposerOnOpen?: boolean;
     embedded?: boolean;
+    openingInHost?: boolean;
     presentation?: PresentationValue;
   }>(),
   { navigationOpen: false },
@@ -75,6 +78,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   openNavigation: [event: MouseEvent];
   composerFocused: [];
+  opening: [pending: boolean];
   presentation: [value: PresentationValue];
   navigate: [target: ViewTarget, presentation?: PresentationValue];
 }>();
@@ -224,6 +228,14 @@ async function dismissNotice() {
 const development = computed(() => chat.value?.state.development);
 const developmentCovered = ref(false);
 const loadError = computed(() => chat.value?.state.loadError);
+const awaitingHistory = computed(
+  () => chat.value?.state.hydrated === false && !chat.value.state.ephemeral,
+);
+watch(
+  () => awaitingHistory.value && !loadError.value,
+  (pending) => emit("opening", pending),
+  { immediate: true },
+);
 watch(
   loadError,
   (failure) => {
@@ -607,7 +619,39 @@ defineExpose({
           @click="$emit('openNavigation', $event)"
         />
       </template>
-      <div v-if="loadError" class="chat-load-error" role="alert">
+      <SituateErrorScreen
+        v-if="awaitingHistory && loadError && !development"
+        :title="t('layoutHost.viewFailed')"
+        :message="localizeError(loadError)"
+      >
+        <template #actions>
+          <SituateButton @click="chat?.refresh()">{{
+            t("layoutHost.retry")
+          }}</SituateButton>
+          <SituateButton
+            v-if="embedded"
+            variant="secondary"
+            @click="emit('navigate', { kind: 'empty' })"
+          >
+            {{ t("layoutHost.chooseView") }}
+          </SituateButton>
+          <ErrorActions
+            boundary="conversation"
+            :error="loadError"
+            :scope="workspaceScope"
+          />
+        </template>
+      </SituateErrorScreen>
+      <SituateLoading
+        v-else-if="awaitingHistory && !loadError && !openingInHost"
+        pending
+        :label="t('layoutHost.openingConversation')"
+      />
+      <div
+        v-if="loadError && (!awaitingHistory || development)"
+        class="chat-load-error"
+        role="alert"
+      >
         <span>{{ localizeError(loadError) }}</span>
         <ErrorActions
           boundary="conversation"
@@ -616,6 +660,7 @@ defineExpose({
         />
       </div>
       <div
+        v-if="!awaitingHistory"
         class="empty-chat"
         :class="{ 'has-history': hasHistory, 'development-chat': development }"
       >
@@ -663,6 +708,13 @@ defineExpose({
                   }}</span>
                 </SituateButton>
               </div>
+              <SituateLoading
+                v-if="chat.state.historyLoading"
+                placement="inline"
+                pending
+                :label="t('chat.loadingEarlierMessages')"
+                class="earlier-messages-loading"
+              />
               <ChatTranscript
                 :key="`${workspaceScope}:${conversationId ?? ''}`"
                 :messages="chat.state.transcript"
@@ -1204,6 +1256,16 @@ defineExpose({
   flex-wrap: wrap;
   gap: 6px;
   margin-block: 8px;
+}
+.earlier-messages-loading {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  block-size: 0;
+}
+.earlier-messages-loading:not(:empty) > :deep(span) {
+  align-self: flex-start;
+  background: var(--situate-surface);
 }
 .reference-chip {
   display: inline-flex;

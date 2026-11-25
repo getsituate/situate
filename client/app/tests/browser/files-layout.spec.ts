@@ -233,10 +233,15 @@ for (const viewport of [
       await enterFiles(page, true);
       const document = page.locator(".document-pane");
       await expect(document.getByRole("status")).toHaveText("Loading file…");
-      await expect(document).toHaveAttribute("aria-busy", "true");
+      await expect(document.getByRole("status")).toBeVisible();
+      await expect(
+        document.getByRole("heading", { name: "A small garden", exact: true }),
+      ).toHaveCount(0);
       await visual.capture("files.document.loading");
       await page.evaluate(() => window.__filesTest.releaseRead());
-      await expect(document).not.toHaveAttribute("aria-busy", "true");
+      await expect(
+        document.getByText("Loading file…", { exact: true }),
+      ).toHaveCount(0);
       await expect(
         page.getByRole("heading", { name: "A small garden", exact: true }),
       ).toBeVisible();

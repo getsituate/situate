@@ -4,6 +4,7 @@ import {
   SituateDialog,
   SituateScrollbars,
   selectEnvironment,
+  SituateLoading,
 } from "@situate/ui";
 import { t, localizeError } from "@situate/localization";
 import {
@@ -38,9 +39,12 @@ import {
   initializeDictation,
   stopDictationListeners,
 } from "./dictation/runtime";
-const AppShell = defineAsyncComponent(
-  () => import("./components/AppShell.vue"),
-);
+import WorkspaceLoading from "./layout/components/WorkspaceLoading.vue";
+const AppShell = defineAsyncComponent({
+  loader: () => import("./components/AppShell.vue"),
+  loadingComponent: WorkspaceLoading,
+  delay: 0,
+});
 const flushLayouts = async (scope?: string) =>
   (await import("./layout/session")).flushLayouts(scope);
 let layoutRuntime: typeof import("./layout/runtime") | undefined;
@@ -1065,7 +1069,12 @@ onBeforeUnmount(() => {
       <p v-if="state?.error || error" role="alert">
         {{ localizeError(state?.error || error) }}
       </p>
-      <p v-else role="status">{{ t("navigation.openingWorkspaces") }}</p>
+      <SituateLoading
+        v-else-if="!error && !state?.error"
+        placement="inline"
+        pending
+        :label="t('navigation.openingWorkspaces')"
+      />
       <SituateButton
         variant="secondary"
         size="small"

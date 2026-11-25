@@ -8,7 +8,12 @@ import {
   watch,
 } from "vue";
 import { t, localizeError } from "@situate/localization";
-import { SituateButton, SituateIcon, SituateIconButton } from "@situate/ui";
+import {
+  SituateButton,
+  SituateIcon,
+  SituateIconButton,
+  SituateLoading,
+} from "@situate/ui";
 import {
   currentEntry,
   type PresentationValue,
@@ -47,6 +52,13 @@ const availability = computed(() =>
     plugins.value?.state.plugins,
   ),
 );
+const openingLabel = computed(() =>
+  t(
+    entry.value.target.kind === "conversation"
+      ? "layoutHost.openingConversation"
+      : "layoutHost.openingView",
+  ),
+);
 const definition = computed(() =>
   props.ui.registry.definitions.get(viewType(entry.value.target)),
 );
@@ -82,6 +94,15 @@ async function resume() {
 }
 const failed = ref(false);
 const retry = ref(0);
+const awaitingView = ref(false);
+const awaitingConversation = ref(false);
+const opening = computed(
+  () =>
+    !failed.value &&
+    (availability.value.status === "loading" ||
+      awaitingView.value ||
+      awaitingConversation.value),
+);
 const showAll = ref(false);
 const chooser = ref<HTMLElement>();
 async function browseAll(all: boolean) {
@@ -104,6 +125,8 @@ watch(
   () => entry.value.id,
   () => {
     failed.value = false;
+    awaitingView.value = false;
+    awaitingConversation.value = false;
     showAll.value = false;
   },
 );
@@ -141,6 +164,10 @@ const viewProps = computed(() => {
     return {
       ...common,
       workspaceScope: props.ui.session.workspaceId,
+      openingInHost: true,
+      onOpening: (pending: boolean) => {
+        if (entry.value.id === entryId) awaitingConversation.value = pending;
+      },
       conversationId: target.conversationId,
       focusComposerOnOpen:
         target.kind === "new-conversation" &&
@@ -159,6 +186,13 @@ const viewProps = computed(() => {
 </script>
 
 <template>
+  <SituateLoading
+    v-if="opening"
+    :key="entry.id"
+    class="view-opening"
+    pending
+    :label="openingLabel"
+  />
   <section
     v-if="entry.target.kind === 'empty' || availability.status === 'missing'"
     ref="chooser"
@@ -236,22 +270,15 @@ const viewProps = computed(() => {
       </SituateButton>
     </div>
   </section>
+  <template v-else-if="availability.status === 'loading'"></template>
   <section
-    v-else-if="
-      availability.status === 'loading' || availability.status === 'error'
-    "
+    v-else-if="availability.status === 'error'"
     class="view-message"
     role="status"
   >
-    <p>
-      {{
-        availability.status === "error"
-          ? localizeError(availability.error)
-          : t("layoutHost.loading")
-      }}
-    </p>
+    <p>{{ localizeError(availability.error) }}</p>
     <SituateButton
-      v-if="availability.status === 'error' && availability.retry"
+      v-if="availability.retry"
       variant="secondary"
       @click="availability.status === 'error' && availability.retry?.()"
       >{{ t("layoutHost.retry") }}</SituateButton
@@ -306,7 +333,12 @@ const viewProps = computed(() => {
       {{ t("layoutHost.chooseView") }}
     </SituateButton>
   </section>
-  <Suspense v-else :key="`${entry.id}:${retry}`">
+  <Suspense
+    v-else
+    :key="`${entry.id}:${retry}`"
+    @pending="awaitingView = true"
+    @resolve="awaitingView = false"
+  >
     <slot
       v-if="definition.id === 'settings' || definition.id === 'plugins'"
       :name="definition.id"
@@ -324,15 +356,15 @@ const viewProps = computed(() => {
       @reference="emit('reference', $event)"
       @identity="emit('identity', $event)"
     />
-    <template #fallback
-      ><p class="view-message" role="status">
-        {{ t("layoutHost.loading") }}
-      </p></template
-    >
   </Suspense>
 </template>
 
 <style scoped>
+.view-opening {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .view-chooser {
   height: 100%;
   overflow: auto;

@@ -191,7 +191,9 @@ function createWorkspaceUi(workspaceId: string) {
       const conversation = inventory.conversations.find(
         (item) => item.id === target.conversationId,
       );
-      return conversation?.title || t("navigation.newChat");
+      return conversation
+        ? conversation.title || t("navigation.newChat")
+        : t("layoutHost.conversation");
     }
     if (target.viewId === "files" && target.contentId)
       return target.contentId.split("/").at(-1)!;

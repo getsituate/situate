@@ -107,6 +107,7 @@ export interface TabsState {
   next: number;
   pinnedViews: PinnedView[];
   conversations: Record<string, Conversation>;
+  conversationsLoading: boolean;
   completed: number[];
   dashboardCompleted: boolean[];
 }
@@ -136,6 +137,7 @@ export type TabsAction =
   | { type: "maximize"; id: string }
   | { type: "close-pane"; id: string }
   | { type: "availability"; value: Availability }
+  | { type: "conversation-list-loading"; value: boolean }
   | { type: "draft"; id: string; value: string }
   | { type: "task"; index: number }
   | { type: "dashboard-task"; index: number }
@@ -186,6 +188,16 @@ export const tabScenarios = [
     group: "Tabs and panes",
   },
   { id: "tabs-loading", label: "Pane loading", group: "Tabs and panes" },
+  {
+    id: "tabs-conversation-loading",
+    label: "Opening conversation",
+    group: "Tabs and panes",
+  },
+  {
+    id: "tabs-conversation-list-loading",
+    label: "Loading conversations in navigation",
+    group: "Tabs and panes",
+  },
   {
     id: "tabs-unavailable",
     label: "Unavailable view",
@@ -361,9 +373,27 @@ export function createTabsState(scenario = "tabs-overview"): TabsState {
         archived: false,
       },
     },
+    conversationsLoading: scenario === "tabs-conversation-list-loading",
     completed: [],
     dashboardCompleted: [false, false, false],
   };
+  if (scenario === "tabs-conversation-loading" || state.conversationsLoading) {
+    const tab = addTab(state, "note", copy.weekendConversation.title);
+    const pane = tab.panes[tab.active]!;
+    state.conversations.planting = {
+      ...conversationPresentation(),
+      id: "planting",
+      title: copy.weekendConversation.title,
+      draft: copy.weekendConversation.draft,
+      activity: "ready",
+      tabIds: [],
+      messages: [copy.weekendConversation.message],
+      archived: false,
+    };
+    visit(state, tab, pane, "conversation:planting");
+    pane.availability = state.conversationsLoading ? "ready" : "loading";
+    return state;
+  }
   const empty = ["tabs-empty", "tabs-no-pins", "tabs-new-chat"].includes(
     scenario,
   );
@@ -594,6 +624,9 @@ export function reduceTabs(previous: TabsState, action: TabsAction): TabsState {
       break;
     case "availability":
       if (tab) tab.panes[tab.active]!.availability = action.value;
+      break;
+    case "conversation-list-loading":
+      state.conversationsLoading = action.value;
       break;
     case "select-pane":
       if (tab?.panes[action.id]) {

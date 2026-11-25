@@ -12,7 +12,7 @@ The libraries are independent. Matching filenames and small Vue props/events/slo
 
 ## General components
 
-All names below have the `Situate` prefix. Both libraries export 23 components.
+All names below have the `Situate` prefix.
 
 | Component     | Purpose and relevant states                                                                                                   | Workshop             | Client               |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------------------- |
@@ -39,6 +39,7 @@ All names below have the `Situate` prefix. Both libraries export 23 components.
 | FilterChip    | Removable active filter with an explicit accessible action label                                                              | Yes                  | Yes                  |
 | Disclosure    | Native expandable section with a summary, content and optional controlled open state                                          | Yes                  | Yes                  |
 | Tooltip       | Supplementary hover/focus help; Escape dismissal, hoverable content and bounded position                                      | Yes                  | Yes                  |
+| Loading       | Indeterminate loading for a region, with a visible status label and Mini Bend                                                 | Yes                  | Yes                  |
 | Progress      | Measured values or indeterminate work; estimates never expose numeric completion                                              | Yes                  | Yes                  |
 
 `plain` is an explicit escape hatch for specialized controls such as file trees, pane tabs, editor surfaces and chat composers. Those controls retain their interaction-specific geometry. Ordinary actions and fields should use library defaults rather than restating the same styles in a feature stylesheet.

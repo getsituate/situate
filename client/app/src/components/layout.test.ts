@@ -21,6 +21,7 @@ import { updates } from "../updates/runtime";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
+  Channel: class {},
   isTauri: () => true,
 }));
 enableAutoUnmount(afterEach);
@@ -109,7 +110,9 @@ describe("workspace view host", () => {
     HTMLElement.prototype,
     "scrollIntoView",
   );
+  let conversationRunning = false;
   beforeEach(() => {
+    conversationRunning = false;
     retainWorkspaceUi([]);
     vi.stubGlobal(
       "matchMedia",
@@ -149,6 +152,7 @@ describe("workspace view host", () => {
       .mockImplementation(async (command, args) => {
         const input = args as {
           workspaceId: string;
+          conversation: string;
           expectedRevision: string | null;
           data: LayoutDocument;
           request: FilesRequest;
@@ -181,14 +185,22 @@ describe("workspace view host", () => {
           };
         if (command === "ai_conversations")
           return [{ id: "legacy", title: "Garden chat", revision: 0 }];
-        if (command === "ai_conversation_read")
+        if (command === "ai_conversation_subscribe")
           return {
             version: 1,
-            id: "legacy",
-            title: "Garden chat",
-            revision: 0,
-            messages: [],
-            draft: "",
+            generation: "fixture",
+            position: 0,
+            record: {
+              version: 2,
+              id: input.conversation,
+              title: "Garden chat",
+              revision: 0,
+              messages: [],
+              draft: "",
+            },
+            phase: conversationRunning ? "running" : "idle",
+            taskActive: conversationRunning,
+            error: null,
           };
         if (command === "files_request") {
           const request = input.request;
@@ -862,7 +874,8 @@ describe("workspace view host", () => {
     expect(wrapper.findAll(".chat-pane")).toHaveLength(2);
     const chat = workspaceChat("garden", "legacy");
     const shared = chat.state;
-    shared.running = true;
+    conversationRunning = true;
+    await chat.refresh();
     await settleViews();
     await wrapper.get(`[data-pane="${other}"] .pane-title`).trigger("click");
     await hostButton(wrapper, "⟦layoutUi.closePane⟧").trigger("click");

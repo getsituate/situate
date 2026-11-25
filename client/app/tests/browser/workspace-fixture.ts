@@ -190,6 +190,7 @@ interface FixtureOptions {
   aiDeleteFailures?: number;
   aiArchiveFailures?: number;
   aiHoldConversationList?: boolean;
+  aiHoldConversationSnapshot?: string;
   aiConversationLoadErrors?: Record<string, string>;
   aiLoginOutcome?: "success" | "denied" | "pending";
   aiConnection?: Config;
@@ -449,6 +450,11 @@ export async function workspaceFixture(
       const conversationListGate = options.aiHoldConversationList
         ? new Promise<void>((resolve) => {
             Reflect.set(window, "__releaseConversationList", resolve);
+          })
+        : Promise.resolve();
+      const snapshotGate = options.aiHoldConversationSnapshot
+        ? new Promise<void>((resolve) => {
+            Reflect.set(window, "__releaseConversationSnapshot", resolve);
           })
         : Promise.resolve();
       const status = (
@@ -2380,6 +2386,7 @@ export async function workspaceFixture(
             ) {
               const scope = String(args.scope),
                 id = String(args.conversation);
+              if (id === options.aiHoldConversationSnapshot) await snapshotGate;
               const error = options.aiConversationLoadErrors?.[id];
               if (error) throw error;
               if (command === "ai_conversation_subscribe")

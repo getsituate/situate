@@ -21,6 +21,53 @@ async function open(page: Page, state = "ready") {
   return preview;
 }
 
+test("loading keeps a readable status without motion and clears on completion", async ({
+  page,
+}, info) => {
+  const preview = await open(page, "loading");
+  await preview.emulateMedia({ reducedMotion: "no-preference" });
+  const example = preview.locator('[data-component="SituateLoading"]');
+  const status = example
+    .getByRole("status")
+    .filter({ hasText: "Opening collection…" });
+  const mark = status.locator("svg");
+  const inline = example
+    .getByRole("status")
+    .filter({ hasText: "Loading conversations…" });
+  const workspace = example
+    .getByRole("status")
+    .filter({ hasText: "Opening workspace…" });
+  await example.scrollIntoViewIfNeeded();
+  await expect(status).toHaveText("Opening collection…");
+  await expect(mark).toHaveAttribute("aria-hidden", "true");
+  await expect(mark).toHaveCSS("width", "32px");
+  await expect(inline).toHaveCSS("flex-direction", "row");
+  await expect(inline.locator("svg")).toHaveCSS("width", "16px");
+  await expect(workspace.locator(".workspace-paper")).toBeVisible();
+  await expect(workspace.locator(".loading-symbol")).toHaveCSS("width", "32px");
+  await expect(mark.locator(".rest")).toHaveCSS("animation-duration", "2.4s");
+  await mark.evaluate((element) => {
+    for (const animation of element.getAnimations({ subtree: true })) {
+      animation.pause();
+      animation.currentTime = 1550;
+    }
+  });
+  await expect(mark.locator(".blink")).toHaveCSS("visibility", "visible");
+  await expect(mark.locator(".rest")).toHaveCSS("visibility", "hidden");
+
+  await preview.emulateMedia({ reducedMotion: "reduce" });
+  await expect(mark.locator(".rest")).toHaveCSS("animation-name", "none");
+  await expect(mark.locator(".rest")).toHaveCSS("visibility", "visible");
+  await expect(status).toHaveText("Opening collection…");
+  await preview.screenshot({ path: info.outputPath("loading-component.png") });
+
+  await page
+    .getByRole("button", { name: "Complete example action", exact: true })
+    .click();
+  await expect(example).toBeHidden();
+  await expect(example.locator("svg")).toHaveCount(0);
+});
+
 const topPressShadow = /0px 3px 2px -1px inset/;
 
 test("buttons acknowledge a press without moving the target or committing early", async ({

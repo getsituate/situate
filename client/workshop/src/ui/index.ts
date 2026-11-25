@@ -5,6 +5,7 @@ export { default as SituateFilterChip } from "./SituateFilterChip.vue";
 export { default as SituateDisclosure } from "./SituateDisclosure.vue";
 export { default as SituateInfoButton } from "./SituateInfoButton.vue";
 export { default as SituateTooltip } from "./SituateTooltip.vue";
+export { default as SituateLoading } from "./SituateLoading.vue";
 export { default as SituateProgress } from "./SituateProgress.vue";
 export { default as SituateResizeHandle } from "./SituateResizeHandle.vue";
 export { default as SituateScrollbars } from "./SituateScrollbars.vue";

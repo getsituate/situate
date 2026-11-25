@@ -58,6 +58,7 @@ function service() {
     questions: [],
     questionBusy: false,
     ephemeral: false,
+    hydrated: true,
     draft: "Shared draft",
     draftSelection: null,
     dictationNotice: null,

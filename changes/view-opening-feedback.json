@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "view-opening-feedback",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "view-opening-feedback",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Clearer feedback while opening content",
+          "paragraphs": [
+            "Situate shows what is loading without covering the rest of your workspace. Saved conversations no longer show the new-chat greeting while their history loads."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "view-opening-feedback",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Klarere Rückmeldung beim Öffnen von Inhalten",
+          "paragraphs": [
+            "Situate zeigt an, was gerade lädt, ohne den restlichen Arbeitsbereich zu verdecken. Beim Öffnen eines gespeicherten Gesprächs erscheint nicht mehr die Begrüßung für ein neues Gespräch."
+          ]
+        }
+      ]
+    }
+  }
+}
