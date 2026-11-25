@@ -22,145 +22,50 @@
   "installingDetail": "Situate will reopen when installation is complete.",
   "checkFailed": "Couldn’t check for updates",
   "checkFailedDetail": "A connection to the update service couldn’t be established. Check again later.",
-  "readNotes": "Browse version history",
-  "featureNotes": {
-    "title": "Fixes for navigation and document search",
-    "intro": "Corrections to pane navigation and filtered document results.",
-    "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
-    "sections": [
+  "readNotes": "What’s new",
+  "changes": {
+    "0.8.1": [
       {
-        "title": "Pane navigation",
-        "paragraphs": [
-          "Fixed Back returning to the wrong note after following two references in the same pane."
-        ],
-        "subheading": "macOS",
-        "details": [
-          "This fix applies to multi-pane layouts on macOS. iOS navigation is unchanged."
-        ],
-        "image": null,
-        "imageAlt": "",
-        "imageCaption": ""
+        "title": "Back returns to the right note",
+        "text": "After following links in a split pane on macOS, Back now returns to the previous note in that pane."
       },
       {
-        "title": "Document search",
-        "paragraphs": [
-          "Fixed a cleared tag filter remaining active when you changed the search text."
-        ],
-        "subheading": "If a filter still appears active",
-        "details": [
-          "Clear the search once and enter it again. Your documents and tags are unchanged."
-        ],
-        "image": null,
-        "imageAlt": "",
-        "imageCaption": ""
+        "title": "Cleared tags stay cleared",
+        "text": "Changing the search text no longer brings back a tag filter you cleared."
+      }
+    ],
+    "0.8.0": [
+      {
+        "title": "Keep a note beside its conversation",
+        "text": "On macOS, you can split a tab and resize its panes. Each pane keeps its own Back and Forward history."
+      },
+      {
+        "title": "Combine document tags",
+        "text": "Choose Any to match at least one selected tag or All to match every tag. Saved searches keep their existing rule until you change it."
+      }
+    ],
+    "0.7.2": [
+      {
+        "title": "Keep your conversation draft",
+        "text": "Your draft stays in the conversation when you switch away while a reply is still coming in."
+      }
+    ],
+    "0.7.1": [
+      {
+        "title": "Find notes with pasted search text",
+        "text": "Leading spaces in pasted text no longer hide matching notes."
+      },
+      {
+        "title": "Return to where you were reading",
+        "text": "On macOS, switching back to a note restores your reading position."
+      }
+    ],
+    "0.7.0": [
+      {
+        "title": "Filter documents by tag",
+        "text": "Choose a tag in Documents to narrow your results. Refresh an existing document source to load any tags it provides."
       }
     ]
-  },
-  "releaseArchive": {
-    "0.8.0": {
-      "title": "Pane layouts and combined tag filters",
-      "intro": "Keep related material in view and narrow a document search with multiple tags.",
-      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
-      "sections": [
-        {
-          "title": "Keep a note beside its conversation",
-          "paragraphs": [
-            "On macOS, split a tab into panes and resize them. Each pane keeps its own Back and Forward history."
-          ],
-          "subheading": "On iOS",
-          "details": [
-            "Notes and conversations open one at a time; split-pane layouts are not available."
-          ],
-          "image": null,
-          "imageAlt": "",
-          "imageCaption": ""
-        },
-        {
-          "title": "Combine document tags",
-          "paragraphs": [
-            "Select Any to match at least one chosen tag, or All to match every chosen tag."
-          ],
-          "subheading": "Existing searches",
-          "details": [
-            "Saved searches keep their current matching rule. Select All explicitly if you want to narrow an existing search."
-          ],
-          "image": null,
-          "imageAlt": "",
-          "imageCaption": ""
-        }
-      ]
-    },
-    "0.7.2": {
-      "title": "Fixes for drafts and long filenames",
-      "intro": "Corrections to retained conversation drafts and file list labels.",
-      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
-      "sections": [
-        {
-          "title": "Conversation drafts",
-          "paragraphs": [
-            "Fixed a draft disappearing from view when switching away from a conversation during a reply."
-          ],
-          "subheading": "After reopening",
-          "details": [
-            "Open the conversation to continue editing its retained draft. Sending still requires your action."
-          ],
-          "image": null,
-          "imageAlt": "",
-          "imageCaption": ""
-        },
-        {
-          "title": "Long filenames on iOS",
-          "paragraphs": [
-            "Fixed the file action button being pushed offscreen by long filenames."
-          ],
-          "subheading": "macOS",
-          "details": ["File list layout is unchanged."],
-          "image": null,
-          "imageAlt": "",
-          "imageCaption": ""
-        }
-      ]
-    },
-    "0.7.1": {
-      "title": "Fixes for search and scrolling",
-      "intro": "Search and reading-position corrections.",
-      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
-      "sections": [
-        {
-          "title": "Search text",
-          "paragraphs": [
-            "Fixed pasted search text retaining leading spaces and hiding otherwise matching notes."
-          ],
-          "subheading": "Reading position",
-          "details": [
-            "Fixed a note jumping to its beginning when returning from another tab on macOS."
-          ],
-          "image": null,
-          "imageAlt": "",
-          "imageCaption": ""
-        }
-      ]
-    },
-    "0.7.0": {
-      "title": "Document tags",
-      "intro": "Filter the document collection by a tag.",
-      "imageUnavailable": "This image is unavailable. You can still read the explanation below.",
-      "sections": [
-        {
-          "title": "Filter by tag",
-          "paragraphs": [
-            "Choose a tag in Documents to show matching material alongside your search results."
-          ],
-          "subheading": "Source refresh required",
-          "details": [
-            "Refresh an existing document source once to include its tags. Tags are available only when the source supplies them."
-          ],
-          "image": null,
-          "imageAlt": "",
-          "imageCaption": ""
-        }
-      ]
-    }
   },
   "restartTitle": "Restart to install the update?",
   "restartIdle": "Situate will save your work in all open windows, then restart with the update.",
@@ -192,7 +97,7 @@
   "syncDetail": "The workspace stays open. Restart only continues after synchronization completes.",
   "withoutSync": "Restart without synchronizing",
   "cancelSync": "Keep working",
-  "close": "Close history",
+  "close": "Close",
   "workspace": "Back to workspace",
   "controls": {
     "title": "Update simulation",
@@ -226,24 +131,17 @@
     "running": "Actions running",
     "unsynced": "Unsynchronized workspace changes",
     "completeSync": "Complete synchronization",
-    "notes": "Open version history",
+    "notes": "Open What’s new",
     "screenNotice": "Workspace · update ready",
     "screenSettings": "Settings · Updates",
     "screenRestart": "Confirm update restart",
     "screenSync": "Wait for synchronization",
     "screenInstalling": "Install update",
-    "screenNotes": "Version history",
+    "screenNotes": "What’s new",
     "scenario": "Update the app",
-    "notesScenario": "Browse release history"
+    "notesScenario": "Browse what’s new"
   },
   "about": "About Situate",
-  "history": "Version history",
-  "backToHistory": "All releases",
-  "searchHistory": "Find a release",
-  "searchPlaceholder": "Version or change",
-  "noReleases": "No matching releases",
-  "clearSearch": "Clear search",
-  "installed": "Installed",
-  "olderRelease": "Older",
-  "newerRelease": "Newer"
+  "history": "What’s new",
+  "noChanges": "There are no release notes for this installation yet."
 }

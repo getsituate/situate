@@ -358,6 +358,8 @@ const noteSections = {
 export function notesForCatalog(catalog) {
   const en = releaseLocales(catalog).en;
   assert(en, "Catalog is missing English notes");
+  if (!en.entries.length)
+    return "This release contains only technical changes.";
   const entries = Object.groupBy(en.entries, ({ type }) => {
     assert(Object.hasOwn(noteSections, type), "Unknown release note category");
     return type;

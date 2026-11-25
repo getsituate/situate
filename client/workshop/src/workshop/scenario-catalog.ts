@@ -53,6 +53,7 @@ const definitions = [
       "release-notes-homebrew",
       "release-notes-store",
       "release-notes-skipped",
+      "release-notes-empty",
     ],
   },
   {

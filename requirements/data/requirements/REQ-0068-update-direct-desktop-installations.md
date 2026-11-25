@@ -42,13 +42,17 @@ If bundle replacement or relaunch has an uncertain outcome, Situate explains the
 
 Correct faulty released application versions through a new update with a higher version number, not an application rollback or downgrade. Direct-update feed and website download metadata must not be rewound to an older release, and published artifact bytes must not be replaced under the same version. Operators may pause availability while preparing the fix without advertising an older application version. Changing or pausing feed metadata does not reliably revoke already downloaded, validly signed packages; a package-revocation system is not included in this delivery.
 
-Situate must not automatically display a changelog, including after successful installation and restart. Users can open the version history from the update area in direct installations and from About Situate regardless of installation channel, including App Store installations. Access through About Situate does not introduce an update area, update checks or update promotion for store- or package-managed installations.
+Situate must not automatically display release notes, including after successful installation and restart. Users can open the notes from the update area in direct installations and from About Situate on every installation channel. Access through About Situate does not introduce an update area, update checks or update promotion for store- or package-managed installations.
 
-The version history starts with the first release prepared through the changelog workflow. The installed app includes all finalized, committed changelogs from that point onward at or below its installed version, identified by version number. No separate publication record or public-availability evidence is required for inclusion. Older releases require neither retroactive changelogs nor imported publication records. Users can browse individual releases, including releases skipped when updating; this is not limited to versions previously installed on that device. Newer uninstalled versions are excluded, including a version already downloaded by the updater. The update area links to the installed history, not release notes for an available update. The history is available offline without fetching release notes. Entries explain new capabilities, changes to existing workflows and concrete bug fixes in terms users understand. Necessary user actions, relevant limitations and platform-specific differences are identified where applicable. Commit lists and internal changes without an observable user impact are not substitutes for user-oriented release notes.
+The app presents changes in a single list, newest releases first, with the text visible without opening individual release pages. Changes from the same release are grouped and identified by version number. Releases without public entries do not appear in the list. The installed version remains available in About Situate and in the direct-install update area, even if it has no release notes.
+
+The list starts with the first release prepared through the changelog workflow. It shows finalized, committed entries at or below the installed version, including entries from releases skipped during updates. No separate publication record or public-availability evidence is required for inclusion. Older releases require neither retroactive changelogs nor imported publication records. Newer uninstalled versions are excluded, including a version already downloaded by the updater. The update area opens the installed release notes, not notes for an available update. The notes are available offline without fetching content.
+
+Entries explain new capabilities, changes to existing workflows and concrete bug fixes in terms users understand. Necessary user actions, relevant limitations and platform-specific differences are identified where applicable. Commit lists and internal changes without an observable user impact are not substitutes for user-oriented release notes.
 
 ## Rationale
 
-Users can keep direct installations current without repeatedly downloading installers or having their work interrupted at an unexpected time. An optional version history lets users understand product changes and look up relevant fixes without interrupting their work after an update.
+Users can keep direct installations current without repeatedly downloading installers or having their work interrupted at an unexpected time. Optional release notes let users understand product changes and look up relevant fixes without interrupting their work. Omitting empty releases keeps those changes easy to find even when internal updates are frequent.
 
 ## Source
 
@@ -73,6 +77,8 @@ Private update-installation failure clarification; date not recorded, transcript
 Private faulty-release handling clarification; date not recorded, transcript not publicly available. Faulty releases are corrected by higher-version updates, without app rollback/downgrade, metadata rewind or replacement of published bytes under the same version. Availability may be paused without offering an older version; cached signed packages are not reliably recalled by feed changes and no separate revocation system is included.
 
 Private app-versioning and changelog clarification; date not recorded, transcript not publicly available. An optional, user-oriented history for every published version was selected instead of automatic changelog display. Access from the direct-install update area and from About Situate on all installation channels, including the App Store, was confirmed. A subsequent clarification limited the bundled history to the installed version and earlier published releases, with no release-note fetch or preview of newer uninstalled versions. A later scope clarification starts the history with the new changelog workflow and excludes retroactive changelogs, historical imports and earlier publication-evidence prerequisites.
+
+Private release-notes clarification; transcript not publicly available. The app presents product changes in a single list and omits releases without public entries. The installed version and offline access remain unchanged.
 
 ## Acceptance criteria
 
@@ -117,14 +123,16 @@ Private app-versioning and changelog clarification; date not recorded, transcrip
 - Update closure preserves the existing choices for pending synchronization and retains interrupted conversation state.
 - Reopening after the update does not silently resume interrupted conversations; the user can continue an affected chat through a new message.
 - The interruption notice explains continuation through a new chat message without promising guaranteed action resumption; no separate explanation of external-action reversal or outcome uncertainty is required.
-- Installing an update and restarting into the new version does not automatically open a changelog or version history.
-- Users can open the version history from the direct-install update area.
-- Users can open the same version history from About Situate on every installation channel, including App Store installations, without introducing a Situate-owned update area or update promotion on store- or package-managed installations.
-- Starting with the first release prepared through the changelog workflow, all finalized, committed changelogs at or below the installed version are included automatically, including releases skipped during an update, without a separate publication record.
-- Releases predating that workflow need no changelogs or imported publication records and do not block the first new release.
-- Newer uninstalled versions are excluded from history, search and release navigation even when an update is downloaded and ready.
-- History opened from Updates refers to the installed history, not the available update's release notes.
-- Browsing history works offline and makes no release-note requests.
+- Installing an update and restarting does not automatically open release notes.
+- Users can open the release notes from the direct-install update area.
+- Users can open the same notes from About Situate on every installation channel, including App Store installations, without introducing a Situate-owned update area or update promotion on store- or package-managed installations.
+- Starting with the first release prepared through the changelog workflow, all finalized, committed public entries at or below the installed version appear automatically, including entries from releases skipped during an update, without a separate publication record.
+- Users can read entries directly in a single list, grouped by release and ordered newest release first.
+- Releases without public entries do not appear in the list. The installed version is still shown in About Situate and, for direct installations, in the update area.
+- Releases predating the workflow need no changelogs or imported publication records and do not block the first new release.
+- Newer uninstalled versions are excluded from the list even when an update is downloaded and ready.
+- Notes opened from Updates refer to the installed release notes, not the available update's notes.
+- Browsing works offline and makes no release-note requests.
 - Entries describe user-visible capabilities, workflow changes and concrete bug fixes rather than merely listing commits or internal implementation changes.
 - Entries identify necessary user actions, relevant limitations and platform-specific differences when applicable.
 

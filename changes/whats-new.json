@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "whats-new",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "whats-new",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Read release notes in one list",
+          "paragraphs": [
+            "Open What’s new in About Situate or Updates to read changes and fixes directly. Releases without notes are skipped."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "whats-new",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Versionshinweise in einer Liste lesen",
+          "paragraphs": [
+            "Öffne Was ist neu? unter Über Situate oder Updates, um Änderungen und Fehlerbehebungen direkt zu lesen. Versionen ohne Hinweise werden ausgelassen."
+          ]
+        }
+      ]
+    }
+  }
+}

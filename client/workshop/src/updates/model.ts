@@ -86,6 +86,11 @@ export const updateScenarios = [
     label: "About · skipped releases",
     group: "Settings",
   },
+  {
+    id: "release-notes-empty",
+    label: "About · no release notes yet",
+    group: "Settings",
+  },
 ] as const;
 export type UpdateAction =
   | { type: "check" }
@@ -112,6 +117,15 @@ export type UpdateAction =
   | { type: "result"; value: UpdateState["result"] };
 export function createUpdates(scenario: string): UpdateState {
   const notes = scenario.startsWith("release-notes-");
+  const skipped = scenario === "release-notes-skipped";
+  const empty = scenario === "release-notes-empty";
+  const installed = skipped
+    ? "0.8.2"
+    : empty
+      ? "0.6.0"
+      : notes
+        ? "0.8.1"
+        : "0.8.0";
   return {
     enabled: scenario.startsWith("updates-") || notes,
     channel:
@@ -133,9 +147,9 @@ export function createUpdates(scenario: string): UpdateState {
                 ? "installing"
                 : "ready",
     progress: scenario.endsWith("downloading") ? 42 : 100,
-    installed: notes ? "0.8.1" : "0.8.0",
-    previousVersion: scenario === "release-notes-skipped" ? "0.7.0" : "0.8.0",
-    available: "0.8.1",
+    installed,
+    previousVersion: empty ? installed : skipped ? "0.7.0" : "0.8.0",
+    available: skipped || empty ? installed : "0.8.1",
     dialog:
       scenario.endsWith("restart") || scenario.endsWith("sync")
         ? "restart"
@@ -146,7 +160,7 @@ export function createUpdates(scenario: string): UpdateState {
     forced: false,
     running: scenario.endsWith("restart"),
     unsynced: scenario.endsWith("sync"),
-    result: "available",
+    result: skipped || empty ? "current" : "available",
   };
 }
 function reopen(state: UpdateState) {

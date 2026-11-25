@@ -3,11 +3,13 @@ import { computed } from "vue";
 import { SituateButton, SituateDialog, SituateIcon } from "../ui";
 import copy from "../localization/en.updates.json" with { type: "json" };
 import ReleaseHistory from "./ReleaseHistory.vue";
+import { installedReleaseCatalog } from "./release-history";
 import RestartDecision from "./RestartDecision.vue";
 import type { UpdateState, UpdateAction } from "./model";
 const props = defineProps<{ state: UpdateState }>();
 const emit = defineEmits<{ action: [action: UpdateAction] }>();
 const notes = computed(() => props.state.dialog === "release-notes");
+const catalog = computed(() => installedReleaseCatalog(props.state.installed));
 const heading = computed(() =>
   notes.value
     ? copy.history
@@ -60,6 +62,7 @@ function close() {
     class="update-dialog"
     :class="{
       'release-dialog': notes,
+      'release-dialog-empty': notes && !catalog.length,
       'restart-dialog': state.dialog === 'force',
     }"
     aria-labelledby="update-dialog-title"
@@ -72,7 +75,7 @@ function close() {
       </div>
     </template>
     <template v-if="notes">
-      <ReleaseHistory :state="state" />
+      <ReleaseHistory :catalog="catalog" />
     </template>
     <template v-else-if="state.dialog === 'force'">
       <p id="update-dialog-description">{{ copy.forceWarning }}</p>
@@ -80,9 +83,13 @@ function close() {
     </template>
     <p v-else id="update-dialog-description">{{ copy.syncDetail }}</p>
     <template #actions>
-      <SituateButton v-if="notes" autofocus @click="close">{{
-        copy.close
-      }}</SituateButton>
+      <SituateButton
+        v-if="notes"
+        variant="secondary"
+        autofocus
+        @click="close"
+        >{{ copy.close }}</SituateButton
+      >
       <template v-else-if="state.dialog === 'force'">
         <SituateButton variant="secondary" autofocus @click="close">{{
           copy.later
@@ -131,6 +138,10 @@ function close() {
     calc(100dvh - 48px),
     calc(var(--app-content-height, 100dvh) - 48px)
   );
+}
+.release-dialog-empty[open] {
+  width: min(560px, calc(100% - 24px));
+  height: auto;
 }
 .release-dialog :deep(.situate-dialog-actions) {
   flex-shrink: 0;

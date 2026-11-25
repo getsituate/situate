@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { useId, ref } from "vue";
+import { computed, useId, ref } from "vue";
 import { SituateButton, SituateDialog } from "@situate/ui";
-import { t } from "@situate/localization";
+import { preferences, t } from "@situate/localization";
 import ReleaseHistory from "./ReleaseHistory.vue";
-import { loadInstalledVersion } from "./release-history";
+import { installedReleases, loadInstalledVersion } from "./release-history";
 const id = useId();
 const open = ref(false);
+const catalog = computed(() =>
+  open.value ? installedReleases().releases : [],
+);
+const releases = computed(() =>
+  catalog.value.flatMap(({ version, date, locales }) => {
+    const entries = (locales[preferences.value.language] ?? locales.en).entries;
+    return entries.length ? [{ version, date, entries }] : [];
+  }),
+);
 async function show(event: MouseEvent) {
   (event.currentTarget as HTMLElement).focus();
   await loadInstalledVersion();
@@ -19,6 +28,7 @@ async function show(event: MouseEvent) {
   <SituateDialog
     :open="open"
     class="release-dialog"
+    :class="{ 'release-dialog-empty': !releases.length }"
     fade-backdrop
     :aria-labelledby="`release-history-title-${id}`"
     @cancel.prevent="open = false"
@@ -28,9 +38,9 @@ async function show(event: MouseEvent) {
         {{ t("releaseHistory.history") }}
       </h2></template
     >
-    <ReleaseHistory v-if="open" />
+    <ReleaseHistory v-if="open" :releases="releases" />
     <template #actions
-      ><SituateButton autofocus @click="open = false">{{
+      ><SituateButton variant="secondary" autofocus @click="open = false">{{
         t("releaseHistory.close")
       }}</SituateButton></template
     >
@@ -54,6 +64,11 @@ async function show(event: MouseEvent) {
     calc(var(--app-content-height, 100dvh) - 48px)
   );
   overflow: hidden;
+}
+.release-dialog-empty[open] {
+  display: block;
+  width: min(560px, calc(100% - 24px));
+  height: fit-content;
 }
 .release-dialog :deep(.situate-dialog-actions) {
   flex-shrink: 0;

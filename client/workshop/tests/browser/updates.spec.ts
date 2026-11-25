@@ -64,15 +64,13 @@ test("review update surfaces at desktop and compact sizes", async ({
   await selectScenario(page, "release-notes-store");
   await expect(preview.getByRole("dialog")).toHaveCount(0);
   await preview
-    .getByRole("button", { name: "Browse version history", exact: true })
+    .getByRole("button", { name: "What’s new", exact: true })
     .click();
-  await expect(preview.getByRole("dialog")).toHaveAccessibleName(
-    "Version history",
-  );
+  await expect(preview.getByRole("dialog")).toHaveAccessibleName("What’s new");
   await capture("updates.changelog");
   await preview.setViewportSize({ width: 390, height: 700 });
   const continueButton = preview.getByRole("button", {
-    name: "Close history",
+    name: "Close",
     exact: true,
   });
   await expect
@@ -89,7 +87,7 @@ test("store history retains its close action within mobile safe areas", async ({
 }) => {
   const preview = await open(page, "release-notes-store");
   await preview
-    .getByRole("button", { name: "Browse version history", exact: true })
+    .getByRole("button", { name: "What’s new", exact: true })
     .click();
   await selectOption(
     page.getByRole("combobox", { name: "Platform profile", exact: true }),
@@ -101,16 +99,16 @@ test("store history retains its close action within mobile safe areas", async ({
   ]) {
     await preview.setViewportSize(size);
     await expect(preview.getByRole("dialog")).toHaveAccessibleName(
-      "Version history",
+      "What’s new",
     );
     const bounds = await preview
-      .getByRole("button", { name: "Close history", exact: true })
+      .getByRole("button", { name: "Close", exact: true })
       .boundingBox();
     expect(bounds!.y).toBeGreaterThanOrEqual(0);
     await expect
       .poll(async () => {
         const current = await preview
-          .getByRole("button", { name: "Close history", exact: true })
+          .getByRole("button", { name: "Close", exact: true })
           .boundingBox();
         return current!.y + current!.height;
       })
@@ -121,152 +119,121 @@ test("store history retains its close action within mobile safe areas", async ({
       ),
     ).toBe(true);
   }
-  await preview
-    .getByRole("button", { name: "Close history", exact: true })
-    .click();
+  await preview.getByRole("button", { name: "Close", exact: true }).click();
   await expect(preview.getByRole("dialog")).toHaveCount(0);
 });
 
-test("an older installed version hides newer releases from history, search and adjacent navigation", async ({
+test("a downloaded update does not add notes to the installed feed", async ({
   page,
 }) => {
-  const preview = await open(page, "updates-current");
+  const preview = await open(page, "updates-settings");
   await preview
-    .getByRole("button", { name: "Browse version history", exact: true })
+    .getByRole("button", { name: "What’s new", exact: true })
     .click();
   const dialog = preview.getByRole("dialog", {
-    name: "Version history",
+    name: "What’s new",
     exact: true,
   });
   await expect(dialog.locator("[data-version]")).toHaveCount(4);
   await expect(dialog.locator('[data-version="0.8.1"]')).toHaveCount(0);
-  const search = dialog.getByRole("searchbox", { name: "Find a release" });
-  await search.fill("0.8.1");
-  await expect(dialog.getByRole("status")).toHaveText("No matching releases");
-  await dialog
-    .getByRole("button", { name: "Clear search", exact: true })
-    .click();
-  await dialog.locator('[data-version="0.8.0"]').click();
-  await expect(
-    dialog.getByRole("button", { name: "Newer", exact: true }),
-  ).toBeDisabled();
-  await expect(
-    dialog.getByRole("heading", { name: "Version 0.8.0", exact: true }),
-  ).toBeFocused();
 });
 
-test("About opens complete history with skipped releases and restores keyboard focus", async ({
+test("About shows the latest written notes after skipped releases and a quiet update", async ({
   page,
 }, info) => {
   const preview = await open(page, "release-notes-skipped");
+  const errors: string[] = [];
+  preview.on("pageerror", (error) => errors.push(error.message));
   await expect(preview.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    preview.getByText("Version 0.8.2", { exact: true }),
+  ).toBeVisible();
   const entry = preview.getByRole("button", {
-    name: "Browse version history",
+    name: "What’s new",
     exact: true,
   });
   await entry.click();
   const dialog = preview.getByRole("dialog", {
-    name: "Version history",
+    name: "What’s new",
     exact: true,
   });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.locator("[data-version]")).toHaveCount(5);
-  await expect(dialog.locator("[data-version='0.7.0']")).toBeVisible();
-  await preview.screenshot({
-    path: info.outputPath("history.desktop-index.png"),
-  });
-  const search = dialog.getByRole("searchbox", { name: "Find a release" });
-  await search.fill("0.7");
-  const selected = dialog.locator("[data-version='0.7.1']");
-  await selected.focus();
-  await preview.keyboard.press("Enter");
-  const heading = dialog.getByRole("heading", {
-    name: "Version 0.7.1",
-    exact: true,
-  });
-  await expect(heading).toBeFocused();
+  const groups = dialog.locator("[data-version]");
+  await expect(groups).toHaveCount(5);
+  await expect(groups.first()).toHaveAttribute("data-version", "0.8.1");
+  await expect(dialog.locator('[data-version="0.8.2"]')).toHaveCount(0);
+  await expect(
+    dialog.getByRole("heading", { name: "Back returns to the right note" }),
+  ).toBeInViewport();
   await expect(
     dialog.getByText(
-      "Fixed pasted search text retaining leading spaces and hiding otherwise matching notes.",
+      "Changing the search text no longer brings back a tag filter you cleared.",
     ),
-  ).toBeVisible();
-  await preview.screenshot({
-    path: info.outputPath("history.desktop-release.png"),
-  });
-  await dialog.getByRole("button", { name: "All releases" }).click();
-  await expect(search).toHaveValue("0.7");
-  await expect(selected).toBeFocused();
-  await search.fill("no such release");
-  await expect(dialog.getByRole("status")).toHaveText("No matching releases");
-  await dialog
-    .getByRole("button", { name: "Clear search", exact: true })
-    .click();
-  await expect(dialog.locator("[data-version]")).toHaveCount(5);
-  await expect(search).toBeFocused();
-  await search.fill("0.8.0");
-  await dialog.locator("[data-version='0.8.0']").click();
-  await expect(
-    dialog.getByText(
-      "Notes and conversations open one at a time; split-pane layouts are not available.",
-    ),
-  ).toBeVisible();
-  await dialog.getByRole("button", { name: "Newer", exact: true }).click();
-  await expect(
-    dialog.getByRole("heading", { name: "Version 0.8.1", exact: true }),
-  ).toBeFocused();
-  await expect(
-    dialog.getByRole("button", { name: "Newer", exact: true }),
-  ).toBeDisabled();
-  await dialog.getByRole("button", { name: "Older", exact: true }).click();
-  await expect(
-    dialog.getByRole("heading", { name: "Version 0.8.0", exact: true }),
-  ).toBeFocused();
-  await dialog.getByRole("button", { name: "Newer", exact: true }).click();
-  await dialog.getByRole("button", { name: "All releases" }).click();
-  await expect(search).toHaveValue("0.8.0");
-  await expect(dialog.locator("[data-version='0.8.0']")).toBeFocused();
+  ).toBeInViewport();
+  await preview.screenshot({ path: info.outputPath("whats-new.desktop.png") });
+  await expect(dialog.getByRole("searchbox")).toHaveCount(0);
   await preview.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(entry).toBeFocused();
   await entry.click();
-  await expect(dialog.locator("[data-version]")).toHaveCount(5);
-  await dialog
-    .getByRole("button", { name: "Close history", exact: true })
-    .click();
+  await expect(groups.first()).toHaveAttribute("data-version", "0.8.1");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(entry).toBeFocused();
+  expect(errors).toEqual([]);
 });
 
-test("iOS history reflows, scrolls and keeps navigation and exit accessible", async ({
+test("an installation without release notes shows an empty state instead of empty releases", async ({
+  page,
+}, info) => {
+  const preview = await open(page, "release-notes-empty");
+  await preview
+    .getByRole("button", { name: "What’s new", exact: true })
+    .click();
+  const dialog = preview.getByRole("dialog", {
+    name: "What’s new",
+    exact: true,
+  });
+  await expect(dialog.getByRole("status")).toHaveText(
+    "There are no release notes for this installation yet.",
+  );
+  await expect(dialog.getByRole("searchbox")).toHaveCount(0);
+  await expect(dialog.locator("[data-version]")).toHaveCount(0);
+  await preview.screenshot({ path: info.outputPath("whats-new.empty.png") });
+});
+
+test("the feed reflows, scrolls by keyboard and keeps the exit within reach", async ({
   page,
 }, info) => {
   const preview = await open(page, "release-notes-store", "ios");
-  await expect(preview.getByRole("dialog")).toHaveCount(0);
-  await preview
-    .getByRole("button", { name: "Browse version history", exact: true })
-    .click();
+  const entry = preview.getByRole("button", {
+    name: "What’s new",
+    exact: true,
+  });
+  await entry.click();
   const dialog = preview.getByRole("dialog");
   for (const size of [
     { width: 390, height: 844 },
     { width: 320, height: 568 },
   ]) {
     await preview.setViewportSize(size);
-    const oldest = dialog.locator("[data-version='0.7.0']");
-    await oldest.scrollIntoViewIfNeeded();
-    const scrollTop = await dialog
-      .locator(".history-list")
-      .evaluate((el) => el.scrollTop);
-    if (size.width === 320) expect(scrollTop).toBeGreaterThan(0);
-    await oldest.click();
-    await expect(
-      dialog.getByRole("heading", { name: "Version 0.7.0", exact: true }),
-    ).toBeFocused();
-    await expect(
-      dialog.getByRole("button", { name: "Older", exact: true }),
-    ).toBeDisabled();
-    const exit = dialog.getByRole("button", {
-      name: "Close history",
-      exact: true,
+    const reading = dialog.getByRole("region", { name: "What’s new" });
+    await reading.evaluate((el) => {
+      el.scrollTop = 0;
     });
+    await expect(reading.getByRole("heading").first()).toBeInViewport();
+    await preview.screenshot({
+      path: info.outputPath(`whats-new.compact-${size.width}.png`),
+    });
+    await reading.focus();
+    await reading.press("End");
+    await expect
+      .poll(() => reading.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    await expect(
+      dialog.getByText(
+        "Choose a tag in Documents to narrow your results. Refresh an existing document source to load any tags it provides.",
+      ),
+    ).toBeInViewport();
+    const exit = dialog.getByRole("button", { name: "Close", exact: true });
     const box = await exit.boundingBox();
     expect(box!.y).toBeGreaterThanOrEqual(0);
     expect(box!.y + box!.height).toBeLessThanOrEqual(size.height);
@@ -275,41 +242,12 @@ test("iOS history reflows, scrolls and keeps navigation and exit accessible", as
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await preview.screenshot({
-      path: info.outputPath(`history.ios-${size.width}.png`),
-    });
-    const reading = dialog.locator(".history-detail");
-    await reading.focus();
-    await reading.press("End");
-    await expect
-      .poll(() => reading.evaluate((el) => el.scrollTop))
-      .toBeGreaterThan(0);
-    await expect(
-      dialog.getByText(
-        "Refresh an existing document source once to include its tags. Tags are available only when the source supplies them.",
-      ),
-    ).toBeInViewport();
-    await preview.screenshot({
-      path: info.outputPath(`history.ios-${size.width}-scrolled.png`),
-    });
-    await dialog.getByRole("button", { name: "All releases" }).click();
-    await expect(oldest).toBeFocused();
-    expect(
-      await dialog.locator(".history-list").evaluate((el) => el.scrollTop),
-    ).toBe(scrollTop);
     await exit.focus();
-    await preview
-      .getByRole("button", { name: "Browse version history", exact: true })
-      .evaluate((el) => (el as HTMLElement).focus());
+    await entry.evaluate((el) => (el as HTMLElement).focus());
     await expect(exit).toBeFocused();
   }
   await preview.keyboard.press("Escape");
-  await expect(
-    preview.getByRole("button", {
-      name: "Browse version history",
-      exact: true,
-    }),
-  ).toBeFocused();
+  await expect(entry).toBeFocused();
 });
 
 test("a direct installation opens the same installed history from Updates and About", async ({
@@ -317,7 +255,7 @@ test("a direct installation opens the same installed history from Updates and Ab
 }) => {
   const preview = await open(page, "updates-settings");
   await preview
-    .getByRole("button", { name: "Browse version history", exact: true })
+    .getByRole("button", { name: "What’s new", exact: true })
     .click();
   await expect(
     preview.getByRole("dialog").locator("[data-version]"),
@@ -332,7 +270,7 @@ test("a direct installation opens the same installed history from Updates and Ab
     preview.getByText("Version 0.8.0", { exact: true }),
   ).toBeVisible();
   await preview
-    .getByRole("button", { name: "Browse version history", exact: true })
+    .getByRole("button", { name: "What’s new", exact: true })
     .click();
   await expect(
     preview.getByRole("dialog").locator("[data-version]"),
@@ -415,7 +353,7 @@ test("restart revision keeps safe defaults, inline preparation and explicit loss
     );
     await capture("preparing", width);
     await preview
-      .getByRole("button", { name: "Browse version history", exact: true })
+      .getByRole("button", { name: "What’s new", exact: true })
       .click();
     await preview.keyboard.press("Escape");
     await expect(
@@ -712,11 +650,9 @@ test("manual check downloads in the background, reports progress, then requires 
     .click();
   await expect(preview.getByRole("dialog")).toHaveCount(0);
   await preview
-    .getByRole("button", { name: "Browse version history", exact: true })
+    .getByRole("button", { name: "What’s new", exact: true })
     .click();
-  await expect(preview.getByRole("dialog")).toHaveAccessibleName(
-    "Version history",
-  );
+  await expect(preview.getByRole("dialog")).toHaveAccessibleName("What’s new");
   await preview.keyboard.press("Escape");
   await expect(
     preview.getByRole("button", { name: "Update available", exact: true }),
@@ -790,10 +726,10 @@ for (const channel of ["homebrew", "store"]) {
       .click();
     await expect(preview.getByRole("dialog")).toHaveCount(0);
     await preview
-      .getByRole("button", { name: "Browse version history", exact: true })
+      .getByRole("button", { name: "What’s new", exact: true })
       .click();
     await expect(preview.getByRole("dialog")).toHaveAccessibleName(
-      "Version history",
+      "What’s new",
     );
     await preview.keyboard.press("Escape");
     await expect(
@@ -852,7 +788,7 @@ test("settings and release notes fit a narrow window and support keyboard dismis
     ),
   ).toBe(true);
   await page
-    .getByRole("button", { name: "Open version history", exact: true })
+    .getByRole("button", { name: "Open What’s new", exact: true })
     .click();
   await expect(preview.getByRole("dialog")).toBeVisible();
   await preview.keyboard.press("Tab");
