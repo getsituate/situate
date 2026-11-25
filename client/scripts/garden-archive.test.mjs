@@ -34,12 +34,18 @@ test("reads only references belonging to the configured folder", async () => {
     await exports.documentLibraryDescribe({}, host),
   );
   for (const ref of [
-    {
+    ...[
+      "../secret.pdf",
+      ".hidden.pdf",
+      "folder/nested.pdf",
+      "folder\\nested.pdf",
+      "drive:receipt.pdf",
+    ].map((id) => ({
       source: descriptor.source,
-      id: "../secret.pdf",
+      id,
       identity: "path",
       revision: "1",
-    },
+    })),
     {
       source: { ...descriptor.source, instanceId: "another-folder" },
       id: "receipt.pdf",
@@ -55,6 +61,59 @@ test("reads only references belonging to the configured folder", async () => {
     assert.equal(original.error.code, "permission");
     assert.equal(details.error.code, "permission");
   }
+});
+
+test("orders names consistently across pages without locale-dependent sorting", async () => {
+  const host = {
+    signal: new AbortController().signal,
+    config: {
+      read: async () => ({
+        text: '{"folder":"/synthetic/archive"}',
+        revision: "fixture-folder",
+      }),
+    },
+    process: {
+      capability: async () => ({
+        available: true,
+        interpreterDialect: "posixSh",
+        interpreter: "/bin/sh",
+        interpreterArgs: ["-c"],
+      }),
+      run: async () => ({
+        commandResult: {
+          Ok: {
+            outcome: "exited",
+            exitCode: 0,
+            stdout: {
+              text: [
+                "apple.pdf",
+                "1:1",
+                "Zebra.pdf",
+                "1:2",
+                "Éclair.pdf",
+                "1:3",
+                "",
+              ].join("\0"),
+            },
+          },
+        },
+      }),
+    },
+  };
+  const first = await exports.documentLibraryList({ limit: 1 }, host);
+  assert.deepEqual(
+    first.items.map(({ title }) => title),
+    ["Zebra.pdf"],
+  );
+  const next = await exports.documentLibraryList(
+    { limit: 2, continuation: first.next },
+    host,
+  );
+  assert.deepEqual(
+    next.items.map(({ title }) => title),
+    ["apple.pdf", "Éclair.pdf"],
+  );
+  assert.equal(next.truncated, false);
 });
 
 test(

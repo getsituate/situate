@@ -48,7 +48,8 @@ function fileName(value) {
   return (
     typeof value === "string" &&
     value.length <= 255 &&
-    !/^[.]|[/\\:]/.test(value) &&
+    !value.startsWith(".") &&
+    !/[/\\:]/.test(value) &&
     ![...value].some((character) => character.charCodeAt(0) < 32) &&
     Object.hasOwn(types, value.split(".").at(-1)?.toLowerCase())
   );
@@ -172,7 +173,10 @@ export default function defineService({ pluginId }) {
     const listing = await scan(host, folder);
     if (!listing.files) return failure(base, listing.error);
     const names = [...listing.files.keys()]
-      .sort()
+      .sort((a, b) => {
+        if (a === b) return 0;
+        return a < b ? -1 : 1;
+      })
       .filter(
         (name) => !query || name.toLowerCase().includes(query.toLowerCase()),
       );

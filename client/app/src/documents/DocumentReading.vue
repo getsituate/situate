@@ -213,7 +213,7 @@ watch(
         :tabindex="loading ? -1 : 0"
       >
         <template v-if="isPdf">
-          <canvas ref="canvas" aria-hidden="true" />
+          <canvas ref="canvas" inert />
           <p class="sr-only">{{ text }}</p>
         </template>
         <img

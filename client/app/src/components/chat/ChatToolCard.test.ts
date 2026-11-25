@@ -6,6 +6,7 @@ import ChatToolCard from "./ChatToolCard.vue";
 import ChatTranscript from "./ChatTranscript.vue";
 import { initialFormats, setPreferences } from "@situate/localization";
 import type { AssistantMessage, ToolResultMessage } from "../../ai/contracts";
+import { bindCoordinator } from "../../layout/registry";
 
 enableAutoUnmount(afterEach);
 
@@ -48,6 +49,60 @@ const tool: ToolResultMessage = {
   isError: false,
   timestamp: 20000,
 };
+
+test("opens a document result with its exact reference in the originating workspace", async () => {
+  const source = { pluginId: "archive", instanceId: "garden" };
+  const ref = { source, id: "r-1", identity: "stable", revision: "v3" };
+  const unnamed = { ...ref, id: "r-2" };
+  const open = vi.fn(async () => true);
+  const unbind = bindCoordinator({
+    workspaceId: "garden",
+    open,
+    reveal: vi.fn(),
+    dispatch: vi.fn(),
+  });
+  try {
+    const wrapper = mount(ChatToolCard, {
+      props: {
+        scope: "garden",
+        call: {
+          key: "call",
+          id: "call",
+          name: "search_archive",
+          state: "completed",
+          result: {
+            ...tool,
+            structuredContent: {
+              version: 1,
+              operation: "list",
+              status: "ok",
+              source,
+              items: [{ ref, title: "Seed receipt" }, { ref: unnamed }],
+            },
+          },
+        },
+      },
+    });
+    expect(wrapper.text()).not.toContain("Seed receipt");
+    const disclosure = wrapper.get<HTMLDetailsElement>("details.call-details");
+    disclosure.element.open = true;
+    await disclosure.trigger("toggle");
+    const links = wrapper.findAll("li button");
+    expect(links.map((link) => link.text())).toEqual([
+      "Seed receipt",
+      "⟦documents.openReference⟧",
+    ]);
+    await links[1]!.trigger("click");
+    expect(open).toHaveBeenCalledExactlyOnceWith(
+      { kind: "view", viewId: "documents" },
+      undefined,
+      undefined,
+      { document: unnamed },
+    );
+  } finally {
+    unbind();
+  }
+});
 
 test.each([
   ["en", "Worked for 1 min 24 sec"],

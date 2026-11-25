@@ -336,6 +336,11 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   await expect(preview.locator("canvas")).toBeVisible();
   await expect(opening).toHaveCount(0);
   await expect(stage).toHaveAttribute("aria-busy", "false");
+  await stage.focus();
+  await preview
+    .locator("canvas")
+    .evaluate((canvas: HTMLCanvasElement) => canvas.focus());
+  await expect(stage).toBeFocused();
   await expect(preview.getByText("Document preview ready.")).toBeAttached();
   expect(await stage.boundingBox()).toEqual(reservedPdfStage);
   const detailsRequests = () =>

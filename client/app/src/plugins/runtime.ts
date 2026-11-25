@@ -1318,6 +1318,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
       gates.has(id)
     )
       throw new Error("native.plugins.unavailable");
+    const available = () => current() && !provider.retired;
     const ids = Object.keys(provider.revisions);
     for (const owner of ids)
       activeActions.set(owner, (activeActions.get(owner) ?? 0) + 1);
@@ -1332,7 +1333,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
           scope: options.scope,
           request: { operation: "reserveDocumentRead" },
         });
-        if (signal.aborted || !provider.isAvailable())
+        if (signal.aborted || !available())
           throw new Error("native.plugins.unavailable");
         signal.addEventListener("abort", cancel, { once: true });
       }
@@ -1349,8 +1350,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
       });
       signal?.throwIfAborted();
       const value = await persistence.unwrap(reply, id);
-      if (!provider.isAvailable())
-        throw new Error("native.plugins.unavailable");
+      if (!available()) throw new Error("native.plugins.unavailable");
       handedOff = readId !== undefined;
       return value;
     } catch (error) {
