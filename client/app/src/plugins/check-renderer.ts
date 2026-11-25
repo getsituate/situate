@@ -3,6 +3,7 @@ import { checkFailureCode } from "./check-errors";
 import { createPluginModule, type PluginModule } from "./module-source";
 import { importPluginModule, loadHostModules } from "./module";
 import { validateUiContributions } from "./contributions";
+import { pluginLayout } from "./layout-actions";
 import {
   validPreviewRequest,
   type PreviewRequest,
@@ -150,6 +151,7 @@ export function startCheckRenderer(
               };
               const host: PluginUiHost = {
                 ...modules,
+                layout: pluginLayout(),
                 navigation: owned.preview.navigation,
                 service: { invoke: (name, args) => call(name, args) },
                 dependencies: {

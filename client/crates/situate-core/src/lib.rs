@@ -12,6 +12,7 @@ pub mod appearance;
 pub mod diagnostics;
 mod durable_storage;
 mod ignored_files;
+pub mod keyboard_shortcuts;
 pub mod layout_storage;
 pub mod localization;
 pub mod messages;

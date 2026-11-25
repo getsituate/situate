@@ -161,6 +161,15 @@ pub(crate) fn definitions(capabilities: &Value, role: Option<&str>) -> Vec<Value
         );
         tools.push(tool("shell", &description, json!({"command":{"type":"string","minLength":1,"maxLength":65536},"timeoutMs":{"type":"integer","minimum":1,"maximum":300000}}), &["command"]));
     }
+    if role.is_none() && situate_core::keyboard_shortcuts::Platform::current().is_some() {
+        tools.push(tool("read_keyboard_shortcuts", "Read keyboard shortcut overrides, defaults and revision in this workspace. An absent entry uses the default and a null entry removes the shortcut.", json!({}), &[]));
+        if capabilities["writable"] == true {
+            tools.push(tool("update_keyboard_shortcut", "When requested, change one keyboard shortcut in this workspace. Read the configuration first and pass its revision (null if absent). Omit platform unless the user explicitly names one. Use set with the key spelling and modifier order used by the defaults, remove to leave the action unassigned, or restore to use the default. The tool cannot verify OS delivery. If a write is rejected or uncertain, read before trying again.", json!({
+                "action":{"type":"string"},"platform":{"enum":["macos","windows"]},"expectedRevision":{"type":["string","null"]},
+                "change":{"oneOf":[{"type":"object","additionalProperties":false,"properties":{"kind":{"const":"set"},"keys":{"type":"string"}},"required":["kind","keys"]},{"type":"object","additionalProperties":false,"properties":{"kind":{"enum":["remove","restore"]}},"required":["kind"]}]}
+            }), &["action","expectedRevision","change"]));
+        }
+    }
     tools.retain(|tool| {
         let name = tool["name"].as_str().unwrap_or_default();
         (capabilities["writable"] == true

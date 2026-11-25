@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "keyboard-shortcuts",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "keyboard-shortcuts",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Keyboard shortcuts for tabs and panes",
+          "paragraphs": [
+            "Open and switch tabs, split a pane, or move focus between panes from the keyboard. To view, change, or remove a shortcut, open Settings and choose Keyboard shortcuts. Changes apply to the current workspace and operating system."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "keyboard-shortcuts",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Tastaturkürzel für Tabs und Bereiche",
+          "paragraphs": [
+            "Öffne oder wechsle Tabs, teile einen Bereich oder wechsle den Fokus per Tastatur. Unter Einstellungen → Tastaturkürzel kannst du Belegungen ansehen, ändern oder entfernen. Änderungen gelten für den aktuellen Workspace und das aktuelle Betriebssystem."
+          ]
+        }
+      ]
+    }
+  }
+}

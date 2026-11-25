@@ -28,9 +28,11 @@ import {
 } from "./registry";
 import { retainLayouts, workspaceLayout } from "./session";
 import type { ViewTarget } from "./navigation";
+import { createWorkspaceShortcuts } from "./workspace-shortcuts";
 
 function createWorkspaceUi(workspaceId: string) {
   const session = workspaceLayout(workspaceId);
+  const shortcuts = createWorkspaceShortcuts(workspaceId);
   const registry = createViewRegistry(workspaceId);
   registry.register({
     id: "files",
@@ -142,6 +144,7 @@ function createWorkspaceUi(workspaceId: string) {
           scope: workspaceId,
           registry,
           coordinator,
+          shortcuts,
           isCurrent: () => current,
         });
         pluginRuntime.value = runtime;
@@ -201,10 +204,12 @@ function createWorkspaceUi(workspaceId: string) {
     session,
     registry,
     coordinator,
+    shortcuts,
     plugins,
     titleFor,
     dispose() {
       current = false;
+      shortcuts.stop();
       if (inventoryTimer) clearInterval(inventoryTimer);
       stopPluginLayout?.();
       stopChats();

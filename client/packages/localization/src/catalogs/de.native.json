@@ -1,4 +1,11 @@
 {
+  "native.shortcuts.unavailable": "Das Tastaturkürzel ist nicht verfügbar.",
+  "native.shortcuts.invalid": "Wähle eine andere Tastenkombination.",
+  "native.shortcuts.changed": "Die Kürzel wurden an anderer Stelle geändert. Lade sie vor dem Speichern neu.",
+  "native.shortcuts.conflict": "Diese Tastenkombination ist bereits belegt.",
+  "native.shortcuts.storage": "Die Tastaturkürzel konnten nicht gespeichert werden.",
+  "native.shortcuts.busy": "Die Kürzeldatei wird an anderer Stelle bearbeitet. Versuche es erneut.",
+  "native.shortcuts.durability": "Das Speichern konnte nicht bestätigt werden. Lade die Kürzel vor einem weiteren Versuch neu.",
   "native.workspace.migration.fileSystemError": "{error} Dateisystem-Fehlercode: {code}.",
   "native.workspace.migration.updateRequired": "Dieser Arbeitsbereich benötigt Situate {version} oder neuer. Aktualisiere Situate, um ihn zu öffnen.",
   "native.workspace.migration.busy": "Dieser Arbeitsbereich ist in einem anderen Situate-Prozess geöffnet oder wird dort vorbereitet. Schließe ihn dort und versuche es erneut.",

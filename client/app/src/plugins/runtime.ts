@@ -10,6 +10,7 @@ import {
   resumePlugins,
 } from "../recovery";
 import { importPluginModule, loadHostModules } from "./module";
+import { pluginLayout } from "./layout-actions";
 import { observeManualPersistence } from "./manual-persistence";
 import { createPluginModule, type PluginModule } from "./module-source";
 import {
@@ -578,6 +579,15 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
             };
             const host: PluginUiHost = {
               ...modules,
+              layout: pluginLayout(
+                options.coordinator,
+                options.shortcuts,
+                () =>
+                  guard.isCurrent() &&
+                  !gates.has(plugin.id) &&
+                  loaded.get(plugin.id)?.executorGeneration ===
+                    definition.generation,
+              ),
               service: {
                 invoke: (name, args) =>
                   invokeExport(plugin.id, name, args, {
@@ -682,6 +692,43 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
               );
             registrations.set(plugin.id, releases);
             loaded.set(plugin.id, instance);
+            if (options.shortcuts && validated.shortcuts?.length) {
+              const id = plugin.id;
+              const available = () =>
+                options.isCurrent() &&
+                executable(id) &&
+                !gates.has(id) &&
+                enabled.get(id) === true &&
+                loaded.get(id) === instance &&
+                instance.isAvailable() &&
+                options.shortcuts?.isActive() === true;
+              releases.push(
+                options.shortcuts.register(
+                  validated.shortcuts.map((shortcut) => ({
+                    id: `${id}:${shortcut.id}`,
+                    title: shortcut.title,
+                    plugin: source.manifest.name,
+                    defaults: shortcut.defaults ?? {},
+                    available,
+                    async run() {
+                      if (!available()) return;
+                      activeActions.set(id, (activeActions.get(id) ?? 0) + 1);
+                      try {
+                        await shortcut.run();
+                      } catch (error) {
+                        recordFailure("view", error, options.scope);
+                        throw sanitizedError(error, "plugins.executionFailed");
+                      } finally {
+                        activeActions.set(id, (activeActions.get(id) ?? 1) - 1);
+                        for (const [instance, id] of retiring)
+                          closeWhenIdle(id, instance);
+                        for (const check of drainListeners) check();
+                      }
+                    },
+                  })),
+                ),
+              );
+            }
           };
           const instance = {
             exports: exported,

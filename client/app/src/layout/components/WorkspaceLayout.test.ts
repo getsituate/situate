@@ -13,8 +13,11 @@ import { defineComponent, h, onMounted, onUnmounted } from "vue";
 import WorkspaceLayout from "./WorkspaceLayout.vue";
 import { chooseSelect } from "../../ui/select-test";
 import PanePager from "./PanePager.vue";
+import { resolveLayoutAction } from "../actions";
 import {
+  layoutLimit,
   reduceLayout,
+  selectedTab,
   type LayoutState,
   type Pane,
   type LayoutIntent,
@@ -102,6 +105,25 @@ function render(state = fixture(), mobile = false) {
       mobile,
       titleFor,
       showNavigation: true,
+      runAction: async (action) => {
+        const intent = resolveLayoutAction(state, action);
+        const limit = intent && layoutLimit(state, intent);
+        if (limit) return { status: "limit", limit };
+        if (!intent) return { status: "unchanged" };
+        const previous = state;
+        wrapper.vm.$emit("intent", intent);
+        const tab = selectedTab(state);
+        if (state === previous || !tab) return { status: "unchanged" };
+        return {
+          status: "applied",
+          destination: {
+            workspaceId: "workspace",
+            address: { tabId: tab.id, paneId: tab.activePaneId },
+            generation: 0,
+            paneGeneration: 0,
+          },
+        };
+      },
       onIntent: (intent: LayoutIntent) => {
         state = reduceLayout(state, intent, () => `generated-${++next}`);
         void wrapper.setProps({ state });
@@ -431,7 +453,11 @@ describe("workspace layout rendering", () => {
     });
     const state = fixture(false);
     const wrapper = mount(WorkspaceLayout, {
-      props: { state, titleFor },
+      props: {
+        state,
+        titleFor,
+        runAction: async () => ({ status: "unchanged" }),
+      },
       slots: {
         pane: ({ pane: item }: { pane: Pane }) =>
           h(Body, {
@@ -926,12 +952,13 @@ describe("workspace layout rendering", () => {
     expect(wrapper.findAll("input")).toHaveLength(1);
   });
   it("uses distinct accessible IDs across renderer instances", () => {
+    const runAction = async () => ({ status: "unchanged" }) as const;
     const host = mount(
       defineComponent({
         setup: () => () =>
           h("div", [
-            h(WorkspaceLayout, { state: fixture(false), titleFor }),
-            h(WorkspaceLayout, { state: fixture(false), titleFor }),
+            h(WorkspaceLayout, { state: fixture(false), titleFor, runAction }),
+            h(WorkspaceLayout, { state: fixture(false), titleFor, runAction }),
           ]),
       }),
     );

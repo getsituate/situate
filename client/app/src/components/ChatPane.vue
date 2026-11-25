@@ -66,6 +66,7 @@ const props = withDefaults(
     showNavigation?: boolean;
     workspaceScope?: string;
     conversationId?: string;
+    focusComposerOnOpen?: boolean;
     embedded?: boolean;
     presentation?: PresentationValue;
   }>(),
@@ -73,6 +74,7 @@ const props = withDefaults(
 );
 const emit = defineEmits<{
   openNavigation: [event: MouseEvent];
+  composerFocused: [];
   presentation: [value: PresentationValue];
   navigate: [target: ViewTarget, presentation?: PresentationValue];
 }>();
@@ -280,6 +282,15 @@ const root = useTemplateRef<HTMLElement>("root");
 const scroll = useTemplateRef<HTMLElement>("scroll");
 const transcriptContent = useTemplateRef<HTMLElement>("transcriptContent");
 const composer = useTemplateRef<InstanceType<typeof ChatComposer>>("composer");
+watch(
+  [composer, () => props.focusComposerOnOpen],
+  ([control, requested]) => {
+    if (!requested || !control) return;
+    control.focus();
+    emit("composerFocused");
+  },
+  { flush: "post" },
+);
 const actionError = ref<unknown>("");
 const errorDismissed = ref(false);
 const representedWorkError = computed(() => {

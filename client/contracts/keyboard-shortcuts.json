@@ -1,0 +1,43 @@
+{
+  "layout.new-tab": { "macos": "Meta+T", "windows": "Control+T" },
+  "layout.close-tab": { "macos": "Alt+Meta+W", "windows": "Control+W" },
+  "layout.next-tab": { "macos": "Control+Tab", "windows": "Control+Tab" },
+  "layout.previous-tab": {
+    "macos": "Control+Shift+Tab",
+    "windows": "Control+Shift+Tab"
+  },
+  "layout.split-left": {
+    "macos": "Alt+Shift+Meta+ArrowLeft",
+    "windows": "Control+Alt+Shift+ArrowLeft"
+  },
+  "layout.split-right": {
+    "macos": "Alt+Shift+Meta+ArrowRight",
+    "windows": "Control+Alt+Shift+ArrowRight"
+  },
+  "layout.split-up": {
+    "macos": "Alt+Shift+Meta+ArrowUp",
+    "windows": "Control+Alt+Shift+ArrowUp"
+  },
+  "layout.split-down": {
+    "macos": "Alt+Shift+Meta+ArrowDown",
+    "windows": "Control+Alt+Shift+ArrowDown"
+  },
+  "layout.close-pane": {
+    "macos": "Shift+Meta+D",
+    "windows": "Control+Shift+W"
+  },
+  "layout.focus-left": {
+    "macos": "Alt+Meta+ArrowLeft",
+    "windows": "Alt+ArrowLeft"
+  },
+  "layout.focus-right": {
+    "macos": "Alt+Meta+ArrowRight",
+    "windows": "Alt+ArrowRight"
+  },
+  "layout.focus-up": { "macos": "Alt+Meta+ArrowUp", "windows": "Alt+ArrowUp" },
+  "layout.focus-down": {
+    "macos": "Alt+Meta+ArrowDown",
+    "windows": "Alt+ArrowDown"
+  },
+  "chat.new": { "macos": "Meta+N", "windows": "Control+N" }
+}

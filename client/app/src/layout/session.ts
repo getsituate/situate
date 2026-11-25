@@ -3,7 +3,13 @@ import { dictation, guardDictation } from "../dictation/runtime";
 import { diagnosticsFor, type Context } from "../diagnostics";
 import { layoutAction } from "../diagnostics/actions";
 import {
+  resolveLayoutAction,
+  type LayoutAction,
+  type LayoutActionResult,
+} from "./actions";
+import {
   emptyLayout,
+  layoutLimit,
   reduceLayout,
   removeConversations,
   selectedTab,
@@ -104,39 +110,88 @@ export function createLayoutSession(
     })();
     return loading;
   }
+  function requiresDictationGuard(
+    intent: LayoutIntent,
+    layout: LayoutDocument["layout"],
+  ) {
+    const owner = dictation.owner;
+    if (owner?.scope !== workspaceId || owner.phase === "transcribing")
+      return false;
+    const tab = selectedTab(layout);
+    const pane = tab?.panes.find((pane) => pane.id === tab.activePaneId);
+    const target = pane?.navigation.entries[pane.navigation.cursor]?.target;
+    const stays =
+      (target?.kind === "conversation" ||
+        target?.kind === "new-conversation") &&
+      target.conversationId === owner.conversation;
+    return (
+      !stays &&
+      !["retain-presentation", "resize", "rename-tab"].includes(intent.type)
+    );
+  }
   function dispatch(intent: LayoutIntent, diagnostic?: Context): boolean {
     if (disposed || !state.document) return false;
     const layout = reduceLayout(state.document.layout, intent, nextId);
     if (layout === state.document.layout) return false;
-    const owner = dictation.owner;
-    if (owner?.scope === workspaceId && owner.phase !== "transcribing") {
-      const tab = selectedTab(layout);
-      const pane = tab?.panes.find((pane) => pane.id === tab.activePaneId);
-      const target = pane?.navigation.entries[pane.navigation.cursor]?.target;
-      const stays =
-        (target?.kind === "conversation" ||
-          target?.kind === "new-conversation") &&
-        target.conversationId === owner.conversation;
-      if (
-        !stays &&
-        !["retain-presentation", "resize", "rename-tab"].includes(intent.type)
-      ) {
-        const ticket = capture();
-        void guardDictation(workspaceId).then((allowed) => {
-          if (allowed && current(ticket)) dispatch(intent, diagnostic);
-        });
-        return false;
-      }
+    if (requiresDictationGuard(intent, layout)) {
+      const ticket = capture();
+      void guardDictation(workspaceId).then((allowed) => {
+        if (allowed && current(ticket)) dispatch(intent, diagnostic);
+      });
+      return false;
     }
+    commitLayout(state.document, layout, intent, diagnostic);
+    return true;
+  }
+  async function runAction(
+    action: LayoutAction,
+    control: string,
+    isCurrent: () => boolean = () => true,
+  ): Promise<LayoutActionResult> {
+    const previous = state.document?.layout;
+    if (disposed || !previous || !isCurrent()) return { status: "unavailable" };
+    const intent = resolveLayoutAction(previous, action);
+    if (!intent) return { status: "unchanged" };
+    const limit = layoutLimit(previous, intent);
+    if (limit) return { status: "limit", limit };
+    const layout = reduceLayout(previous, intent, nextId);
+    if (layout === previous) return { status: "unchanged" };
+    if (requiresDictationGuard(intent, layout)) {
+      const ticket = capture();
+      if (!(await guardDictation(workspaceId))) return { status: "cancelled" };
+      if (!current(ticket) || !isCurrent()) return { status: "unavailable" };
+    }
+    const document = state.document;
+    if (!document || document.layout !== previous)
+      return { status: "unavailable" };
+    const target = selectedTab(layout);
+    if (!target) return { status: "unchanged" };
+    const diagnostic = diagnosticsFor(workspaceId).action(
+      layoutAction(intent),
+      control,
+      "layout",
+    );
+    commitLayout(document, layout, intent, diagnostic);
+    return {
+      status: "applied",
+      destination: capture({ tabId: target.id, paneId: target.activePaneId }),
+    };
+  }
+  function commitLayout(
+    previous: LayoutDocument,
+    layout: LayoutDocument["layout"],
+    intent: LayoutIntent,
+    diagnostic?: Context,
+  ) {
     const retained = new Set(
       layout.tabs.flatMap((tab) => tab.panes.map((pane) => pane.id)),
     );
-    for (const tab of state.document.layout.tabs)
+    for (const tab of previous.layout.tabs)
       for (const pane of tab.panes) {
         if (!retained.has(pane.id))
           paneGenerations.set(pane.id, (paneGenerations.get(pane.id) ?? 0) + 1);
       }
-    state.document = { ...state.document, layout };
+    state.document = { ...previous, layout };
     if (intent.type !== "retain-presentation")
       diagnosticsFor(workspaceId).emit(
         "navigation.changed",
@@ -147,7 +202,6 @@ export function createLayoutSession(
       );
     state.dirty = true;
     schedule();
-    return true;
   }
   function pin(viewId: string) {
     if (disposed || !state.document) return;
@@ -396,6 +450,7 @@ export function createLayoutSession(
     state,
     load,
     dispatch,
+    runAction,
     pin,
     flush,
     retry,

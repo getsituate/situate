@@ -14,6 +14,7 @@ const sourceRoots = [
   "../packages/ui",
   "../packages/localization",
   "../contracts/diagnostics.json",
+  "../contracts/keyboard-shortcuts.json",
   "../../design/brand",
 ].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 

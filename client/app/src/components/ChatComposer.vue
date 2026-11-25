@@ -87,9 +87,14 @@ function submit(kind: "steering" | "followUp" = "steering"): void {
 }
 function keydown(event: KeyboardEvent): void {
   if (event.isComposing || event.ctrlKey || event.metaKey) return;
-  if (event.altKey && !event.shiftKey && event.key === "ArrowUp") {
+  if (
+    props.hasPending &&
+    event.altKey &&
+    !event.shiftKey &&
+    event.key === "ArrowUp"
+  ) {
     event.preventDefault();
-    if (props.hasPending) emit("recall");
+    emit("recall");
   } else if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     submit(event.altKey ? "followUp" : "steering");

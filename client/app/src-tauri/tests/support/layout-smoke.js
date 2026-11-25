@@ -63,7 +63,37 @@ window.runLayoutSmoke = async () => {
     const value = await invoke("layout_load", { workspaceId });
     return value.data && value;
   }, "Initial layout was not persisted through native IPC");
+  const platform = navigator.userAgent.includes("Windows NT")
+    ? "windows"
+    : "macos";
+  const action = "layout.new-tab";
+  const keys = "Control+J";
+  const shortcuts = await invoke("keyboard_shortcuts_snapshot", {
+    scope: workspaceId,
+  });
   if (!phase.restart && !sessionStorage.getItem(marker)) {
+    const request = {
+      action,
+      expectedRevision: shortcuts.revision,
+      change: { kind: "set", keys },
+    };
+    const shortcutSave = await invoke("keyboard_shortcuts_update", {
+      scope: workspaceId,
+      request,
+    });
+    if (shortcutSave.bindings[platform][action] !== keys)
+      throw new Error("The shortcut was not saved for this platform");
+    let shortcutConflict;
+    try {
+      await invoke("keyboard_shortcuts_update", {
+        scope: workspaceId,
+        request,
+      });
+    } catch (error) {
+      shortcutConflict = String(error);
+    }
+    if (shortcutConflict !== "native.shortcuts.changed")
+      throw new Error("The shortcut writer accepted a stale revision");
     let previous = record.revision;
     let stable = 0;
     record = await wait(async ({ invoke }) => {
@@ -180,6 +210,8 @@ window.runLayoutSmoke = async () => {
     location.reload();
     return true;
   }
+  if (shortcuts.bindings[platform]?.[action] !== keys)
+    throw new Error("The workspace shortcut was lost after reopening");
   await invoke("smoke_progress", { stage: "layout-readback" });
   const scope = workspaceId;
   const chats = await invoke("ai_conversations", { scope });

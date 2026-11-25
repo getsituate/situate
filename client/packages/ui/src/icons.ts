@@ -1,6 +1,8 @@
 export const icons = {
   menu: "M4 6h16M4 12h16M4 18h16",
   search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0Zm-1 5 5 5",
+  keyboard:
+    "M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm3 4h1m3 0h1m3 0h1m-9 4h10",
   globe:
     "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9Z",
   history: "M3 11a9 9 0 1 1 2 7M3 4v7h7m2-4v5l3 2",
