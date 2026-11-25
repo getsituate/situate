@@ -1,4 +1,14 @@
 {
+  "SituateErrorDialog": {
+    "purpose": "Show a failed action without replacing a usable view.",
+    "props": {
+      "open": "Boolean controlling whether the dialog is shown.",
+      "message": "Localized error text."
+    },
+    "events": { "dismiss": "Emitted when the user dismisses the dialog." },
+    "slots": { "actions": "Optional recovery actions such as retry." },
+    "usage": "Keep field validation by its field. For a rejected or failed action, show the error dialog after the attempt."
+  },
   "SituateButton": {
     "purpose": "Labeled action.",
     "props": {

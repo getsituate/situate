@@ -1509,8 +1509,25 @@ export function reduceSimulation(
         createEditorState("empty");
     state.onboarding.hintOpen = false;
     state.onboarding.hintDone = state.userHintsDone;
+    const gmail = state.plugins.gmailExperiment;
+    const connector = state.plugins.plugins.find(
+      (plugin) => plugin.id === "gmail",
+    );
     state.plugins =
       (workspace && state.pluginsByWorkspace[workspace]) || createPluginState();
+    if (gmail && connector) {
+      state.plugins.gmailExperiment = {
+        grants: {},
+        partialAccount: null,
+        ...state.plugins.gmailExperiment,
+        enabled: gmail.enabled,
+        selection: null,
+        error: null,
+      };
+      state.plugins.accounts.gmail ??= [];
+      if (!state.plugins.plugins.some((plugin) => plugin.id === "gmail"))
+        state.plugins.plugins.push({ ...connector });
+    }
     state.tabs =
       (workspace && state.tabsByWorkspace[workspace]) ||
       createTabsState("tabs-empty");

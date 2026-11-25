@@ -139,7 +139,7 @@ impl MigrationWorkspace<'_> {
     }
     pub(crate) fn initialize_metadata(&self) -> Result<()> {
         if let Some(value) = crate::metadata::load(self.managed)? {
-            if crate::metadata::parse(&value)?.1 == 0 {
+            if crate::metadata::parse(&value)?.position == 0 {
                 return Ok(());
             }
             return Err(MigrationError::new(MigrationErrorKind::InvalidMetadata));

@@ -294,7 +294,7 @@ fn verify_migration(root: &std::path::Path, storage: &Storage) -> Result<(), Str
         .exists()
         || regular(&root.join(".situate/opaque-state.json"), 4096)? != RELEASE_OPAQUE
         || marker(&root.join(".situate/migrations.json"))?["lastAppliedMigration"] != 3
-        || marker(&root.join(".situate/migrations.json"))?["minimumAppVersion"] != "0.1.6"
+        || marker(&root.join(".situate/migrations.json"))?["minimumReaderEpoch"] != 3
         || !context.entries.iter().any(|entry| {
             entry.kind == "legacy"
                 && entry.data["field"] == "nativeFixtureOpaque"

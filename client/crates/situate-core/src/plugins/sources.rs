@@ -65,7 +65,16 @@ pub fn create(root: &Path, id: &str) -> Result<(), String> {
     if container_count(&inventory).map_err(|e| e.to_string())? >= MAX_PACKAGES {
         return Err(PluginError::TooLarge.to_string());
     }
-    let plugin = drafts::ensure_child(&inventory, id).map_err(|e| e.to_string())?;
+    inventory.create_dir(id).map_err(|error| {
+        if error.kind() == io::ErrorKind::AlreadyExists {
+            "native.plugins.stateConflict"
+        } else {
+            ERROR
+        }
+    })?;
+    crate::durable_storage::sync_directory(&inventory)
+        .map_err(|_| "native.plugins.stateOutcomeUnknown")?;
+    let plugin = child(&inventory, id).map_err(|e| e.to_string())?;
     folder::new_installation(root, id)?;
     drafts::ensure_child(&plugin, "code").map_err(|e| e.to_string())?;
     drop(open(root, id)?);

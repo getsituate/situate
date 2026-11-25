@@ -67,7 +67,8 @@ export type SettingsPage =
   | "shortcuts"
   | "dictation"
   | "updates"
-  | "about";
+  | "about"
+  | "experimental";
 export const categories = [
   { id: "appearance", label: appearanceCopy.title, icon: "palette" },
   { id: "formats", label: "Language & formats", icon: "globe" },
@@ -76,8 +77,15 @@ export const categories = [
   { id: "dictation", label: dictationCopy.title, icon: "mic" },
   { id: "updates", label: updateCopy.title, icon: "update" },
   { id: "about", label: updateCopy.about, icon: "info" },
+  { id: "experimental", label: "Experimental features", icon: "sparkle" },
 ] as const;
 export const settingsScenarios = [
+  { id: "settings-gmail-off", label: "Experiment off", page: "experimental" },
+  {
+    id: "settings-gmail-accounts",
+    label: "Two connected accounts",
+    page: "experimental",
+  },
   {
     id: "settings-appearance",
     label: "Workspace accent colors",
@@ -216,7 +224,8 @@ export function createSettingsState(
     accent: scenario === "settings-appearance-light" ? "lemon" : "violet",
     detail:
       scenario.startsWith("settings-appearance") ||
-      scenario === "settings-shortcuts",
+      scenario === "settings-shortcuts" ||
+      scenario.startsWith("settings-gmail-"),
     language: "en",
     formats: initialFormats("en", {
       time: "24",

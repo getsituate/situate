@@ -6,6 +6,8 @@ withDefaults(
   defineProps<{
     plugin: Plugin;
     illustrated?: boolean;
+    titleNote?: string;
+    compactActions?: boolean;
     canEnable?: boolean;
     settingsLabel?: string;
     unavailableHelp?: string;
@@ -36,7 +38,10 @@ const emit = defineEmits<{
       <div v-if="illustrated" class="plugin-card-artwork">
         <slot name="artwork" />
       </div>
-      <h3 v-else :id="`plugin-title-${plugin.id}`">{{ plugin.name }}</h3>
+      <h3 v-else>
+        <span :id="`plugin-title-${plugin.id}`">{{ plugin.name }}</span>
+        <span v-if="titleNote" class="plugin-title-note">{{ titleNote }}</span>
+      </h3>
       <span
         class="plugin-availability"
         :class="{ 'plugin-enabled': plugin.enabled }"
@@ -47,8 +52,9 @@ const emit = defineEmits<{
       </span>
     </div>
     <div class="plugin-row-content">
-      <h3 v-if="illustrated" :id="`plugin-title-${plugin.id}`">
-        {{ plugin.name }}
+      <h3 v-if="illustrated">
+        <span :id="`plugin-title-${plugin.id}`">{{ plugin.name }}</span>
+        <span v-if="titleNote" class="plugin-title-note">{{ titleNote }}</span>
       </h3>
       <p>{{ plugin.description }}</p>
       <slot />
@@ -58,6 +64,7 @@ const emit = defineEmits<{
       <slot name="notice" />
     </div>
     <PluginCardActions
+      :compact="compactActions"
       :enabled="plugin.enabled"
       :name="plugin.name"
       :can-enable="canEnable"

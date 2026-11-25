@@ -24,7 +24,10 @@ import SituateProgress from "@situate/ui/components/SituateProgress";
 import SituateScrollbars from "@situate/ui/components/SituateScrollbars";
 import SituateResizeHandle from "@situate/ui/components/SituateResizeHandle";
 
+import SituateErrorDialog from "../errors/ErrorDialog.vue";
+
 export const ui = {
+  SituateErrorDialog,
   SituateButton,
   SituateIcon,
   SituateIconButton,

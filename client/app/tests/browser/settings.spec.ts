@@ -208,6 +208,53 @@ test.describe("Privacy and troubleshooting settings", () => {
   );
 });
 
+test("Gmail stays off until the test notice is accepted and can be paused", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await workspaceFixture(page, shellState);
+  await page.goto("/");
+  const openExperiment = async () => {
+    await page
+      .getByRole("button", {
+        name: keyLabel("navigation.settings"),
+        exact: true,
+      })
+      .click();
+    await page
+      .getByRole("button", { name: keyLabel("settings.experimental.title") })
+      .click();
+  };
+  await openExperiment();
+  const toggle = page.getByRole("switch", {
+    name: keyLabel("settings.experimental.gmail"),
+  });
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: keyLabel("settings.experimental.cancel") })
+    .click();
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: keyLabel("settings.experimental.enable") })
+    .click();
+  await expect(toggle).toBeChecked();
+  await expect(
+    page.getByRole("heading", {
+      name: keyLabel("settings.experimental.title"),
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".settings-content a")).toHaveCount(0);
+  await page.reload();
+  await openExperiment();
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+});
+
 test.describe("German settings layout", () => {
   test.use({ localizationMode: "real", locale: "de-DE" });
   for (const width of [320, 375, 768, 1440]) {
@@ -312,6 +359,28 @@ test.describe("German settings layout", () => {
         await expect(
           page.getByLabel("Number format", { exact: true }),
         ).toHaveAttribute("data-value", "dot-apostrophe");
+        await chooseSelect(
+          page.getByLabel("Interface language", { exact: true }),
+          "de",
+        );
+        await expect(page.locator("html")).toHaveAttribute("lang", "de");
+        if (width <= 760) await page.locator(".settings-back").click();
+        await page
+          .getByRole("button", { name: "Experimentelle Funktionen" })
+          .click();
+        await expect(
+          page.getByRole("switch", { name: "Gmail" }),
+        ).not.toBeChecked();
+        await visual.capture("settings.experimental-off");
+        await page.getByRole("switch", { name: "Gmail" }).click();
+        await expect(
+          page.getByRole("dialog", { name: "Gmail aktivieren?" }),
+        ).toBeVisible();
+        await visual.capture("settings.experimental-notice");
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: "Abbrechen" })
+          .click();
       },
     );
   }

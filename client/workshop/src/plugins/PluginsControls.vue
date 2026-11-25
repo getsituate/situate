@@ -2,6 +2,7 @@
 import { SituateSelect, SituateButton } from "../ui";
 import { computed } from "vue";
 import { c } from "./content";
+import { finishGmailAuthorization } from "./gmail-experiment";
 import { assignmentAffectedIds } from "./assignment-model";
 import type { CodeBrowserState } from "./code-browser";
 import {
@@ -299,7 +300,56 @@ function stressChanges() {
           >{{ copy.longDiff }}</SituateButton
         >
       </fieldset>
-      <fieldset v-if="connection">
+      <fieldset v-if="connection?.id === 'gmail' && state.gmailExperiment">
+        <legend>Gmail authorization</legend>
+        <template v-if="state.gmailExperiment.selection?.pending">
+          <SituateButton
+            variant="secondary"
+            size="small"
+            @click="update((s) => finishGmailAuthorization(s, 'connected'))"
+            >Grant selected permissions</SituateButton
+          >
+          <SituateButton
+            v-if="state.gmailExperiment.selection.permissions.length > 1"
+            variant="secondary"
+            size="small"
+            @click="update((s) => finishGmailAuthorization(s, 'partial'))"
+            >Grant only some permissions</SituateButton
+          >
+          <SituateButton
+            variant="secondary"
+            size="small"
+            @click="update((s) => finishGmailAuthorization(s, 'notListed'))"
+            >Account not on test list</SituateButton
+          >
+          <SituateButton
+            v-if="state.gmailExperiment.selection.accountId"
+            variant="secondary"
+            size="small"
+            @click="update((s) => finishGmailAuthorization(s, 'wrongAccount'))"
+            >Return with another account</SituateButton
+          >
+        </template>
+        <template v-else-if="!state.gmailExperiment.selection">
+          <SituateButton
+            v-for="account in state.accounts.gmail"
+            :key="account.id"
+            variant="secondary"
+            size="small"
+            :disabled="account.status === 'expired'"
+            @click="
+              update((s) => {
+                const existing = s.accounts.gmail.find(
+                  (item) => item.id === account.id,
+                );
+                if (existing) existing.status = 'expired';
+              })
+            "
+            >Expire {{ account.name }}</SituateButton
+          >
+        </template>
+      </fieldset>
+      <fieldset v-else-if="connection">
         <legend>{{ copy.connection }}</legend>
         <label for="plugin-connection-platform"
           >{{ copy.platform

@@ -700,7 +700,9 @@ for (const size of [
                 ? /Language & formats/
                 : scene.page === "ai"
                   ? /AI & models/
-                  : /Keyboard shortcuts/,
+                  : scene.page === "experimental"
+                    ? /Experimental features/
+                    : /Keyboard shortcuts/,
           })
           .click();
         await expect(

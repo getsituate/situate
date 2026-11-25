@@ -320,6 +320,35 @@ pub fn publish(
     checked: &[PackageRevision],
     restore: &[String],
 ) -> Result<Publication, String> {
+    publish_inner(root, selected, checked, restore, None)
+}
+
+/// Publish a replacement only while its predecessor is still the enabled revision.
+pub fn replace_active(
+    root: &Path,
+    previous: &PackageRevision,
+    next: &PackageRevision,
+    checked: &[PackageRevision],
+) -> Result<Publication, String> {
+    if previous.plugin_id != next.plugin_id || previous.incarnation != next.incarnation {
+        return Err("native.plugins.stateConflict".into());
+    }
+    publish_inner(
+        root,
+        std::slice::from_ref(next),
+        checked,
+        &[],
+        Some(previous),
+    )
+}
+
+fn publish_inner(
+    root: &Path,
+    selected: &[PackageRevision],
+    checked: &[PackageRevision],
+    restore: &[String],
+    previous: Option<&PackageRevision>,
+) -> Result<Publication, String> {
     for package in selected.iter().chain(checked) {
         if package.incarnation.as_deref()
             != Some(folder::incarnation(root, &package.plugin_id)?.as_str())
@@ -340,6 +369,16 @@ pub fn publish(
         .lock_named("plugin-state.lock")
         .map_err(|_| "native.plugins.stateBusy")?;
     let (mut state, _) = runtime::retained(root)?;
+    if let Some(previous) = previous
+        && !state.plugins.iter().any(|entry| {
+            entry.id == previous.plugin_id
+                && entry.enabled
+                && entry.revision.as_ref() == Some(&previous.revision)
+                && entry.incarnation == previous.incarnation
+        })
+    {
+        return Err("native.plugins.stateConflict".into());
+    }
     let evidence = folder::records(root)?;
     let mut publication = Publication {
         attempt: uuid::Uuid::new_v4().to_string(),

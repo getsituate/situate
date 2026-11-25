@@ -109,14 +109,74 @@ fn disconnected_checks_retain_a_bounded_tail_of_observations() {
 }
 
 #[test]
+fn a_gmail_response_failure_survives_nested_invocation_without_losing_uncertainty() {
+    let request = json!({"operation":"dependenciesInvoke","pluginId":"situate-gmail"});
+    let error = r#"{"key":"native.gmail.apiOutcomeUnknown","params":{"status":503,"reason":"backendError"}}"#;
+    let outcome = Err(error.into());
+    let receipt = observation("1", &request, &outcome);
+    assert_eq!(receipt["uncertain"], true);
+    assert_eq!(
+        ledger_receipt(&request, &outcome),
+        json!({"success":false,"uncertain":true,"code":"native.gmail.apiOutcomeUnknown","statusCode":503})
+    );
+    let mut state = InvocationState::default();
+    state.observations.push(receipt);
+    let surfaced = state.host_error_preventing_result(None).unwrap();
+    let result = state.failed_result(&surfaced);
+    assert_eq!(result.content[0]["text"], error);
+    assert_eq!(invocation_error(ToolOutcome::Completed(result)), error);
+    assert!(
+        gmail_error(&json!(
+            r#"{"key":"native.gmail.apiFailed","params":{"status":403,"reason":"private-mail-id"}}"#
+        ))
+        .is_none()
+    );
+}
+
+#[test]
+fn a_native_gmail_dependency_failure_surfaces_its_localized_code() {
+    let request = json!({"operation":"dependenciesInvoke","pluginId":"situate-gmail"});
+    let mut state = InvocationState::default();
+    state.observations.push(observation(
+        "1",
+        &request,
+        &Err("native.gmail.notARegisteredKey".into()),
+    ));
+    assert_eq!(
+        state.host_error_preventing_result(None).as_deref(),
+        Some(UNAVAILABLE)
+    );
+    state.observations.push(observation(
+        "2",
+        &request,
+        &Err("native.gmail.invalidOperation".into()),
+    ));
+    assert_eq!(
+        state.host_error_preventing_result(None).as_deref(),
+        Some("native.gmail.invalidOperation")
+    );
+    assert_eq!(state.host_error_preventing_result(Some("fixture")), None);
+    let result = state.failed_result(&state.host_error_preventing_result(None).unwrap());
+    assert!(result.is_error);
+    assert_eq!(result.details["observations"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        result.content,
+        vec![json!({"type":"text","text":"native.gmail.invalidOperation"})]
+    );
+}
+
+#[test]
 fn caught_fixture_host_denials_do_not_override_assertions_but_production_errors_do() {
     let mut state = InvocationState::default();
-    assert!(!state.host_error_prevents_result(None));
+    assert_eq!(state.host_error_preventing_result(None), None);
     let receipt =
         json!({"operation":"http","error":"native.plugins.fixtureUnmatched","uncertain":true});
     state.observations.push(receipt.clone());
-    assert!(!state.host_error_prevents_result(Some("fixture")));
-    assert!(state.host_error_prevents_result(None));
+    assert_eq!(state.host_error_preventing_result(Some("fixture")), None);
+    assert_eq!(
+        state.host_error_preventing_result(None).as_deref(),
+        Some(UNAVAILABLE)
+    );
     assert_eq!(state.observations, vec![receipt]);
     assert_eq!(
         check_result(Ok(json!({"passed":true,"assertions":1}))).unwrap(),
@@ -304,6 +364,9 @@ fn invocation() -> Invocation {
         run_id: "manual-action".into(),
         cancel: CancellationToken::new(),
         progress: None,
+        caller: None,
+        interactive: false,
+        check_owner: "demo".into(),
         operation_gate: tokio::sync::Mutex::new(()),
         ledger: tokio::sync::Mutex::new(None),
         action: Mutex::new(None),
@@ -465,6 +528,9 @@ fn manual_invocation() -> (tempfile::TempDir, Invocation) {
         run_id: "manual-action".into(),
         cancel: CancellationToken::new(),
         progress: None,
+        caller: None,
+        interactive: false,
+        check_owner: "demo".into(),
         operation_gate: tokio::sync::Mutex::new(()),
         ledger: tokio::sync::Mutex::new(Some(ManualLedger {
             store,
@@ -1013,6 +1079,7 @@ fn executor_controls_remain_authorized_while_lifecycle_admission_is_held() {
                 export_name: "run".into(),
                 args: Value::Null,
                 generation: 1,
+                dependency: None,
             },
             Request::PendingPersistences,
         ] {

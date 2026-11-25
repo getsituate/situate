@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 2,
+  "id": "gmail-inbox",
+  "name": "Gmail inbox",
+  "description": "Look up recent message details in the selected Gmail account.",
+  "dependencies": ["situate-gmail"],
+  "uiEntry": "ui.js"
+}

@@ -64,6 +64,7 @@ export const scenarioBrowser = {
     plugins: "Installed plugins",
     pluginFiles: "Plugin files",
     pluginSettings: "Plugin settings",
+    gmailExperiment: "Gmail experiment",
     development: "Develop a plugin",
     appearance: "Workspace appearance",
     formats: "Language and formats",

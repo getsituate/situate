@@ -2,6 +2,7 @@ export {
   defineComponent,
   h,
   ref,
+  useId,
   shallowRef,
   reactive,
   computed,

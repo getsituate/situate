@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "workspace-data-format-compatibility",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "workspace-data-format-compatibility",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Open compatible workspaces",
+          "paragraphs": [
+            "Situate checks the workspace’s data format when opening it. A different app version no longer blocks a workspace whose format the app supports."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "workspace-data-format-compatibility",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Kompatible Workspaces öffnen",
+          "paragraphs": [
+            "Situate prüft beim Öffnen das Datenformat des Workspaces. Eine andere App-Version blockiert den Workspace nicht mehr, wenn die App sein Format unterstützt."
+          ]
+        }
+      ]
+    }
+  }
+}

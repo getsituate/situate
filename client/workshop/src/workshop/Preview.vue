@@ -199,6 +199,38 @@ function navigateShared(): void {
     feature: conversation && tab?.kind === "chat" ? "chat" : "navigation",
   });
 }
+function setGmailEnabled(enabled: boolean): void {
+  const plugins = state.value?.plugins;
+  if (!plugins?.gmailExperiment) return;
+  dispatch({
+    type: "plugins",
+    state: {
+      ...plugins,
+      gmailExperiment: {
+        ...plugins.gmailExperiment,
+        enabled,
+        selection: null,
+        error: null,
+      },
+    },
+  });
+}
+function openGmailSettings(): void {
+  if (!state.value) return;
+  dispatch({
+    type: "settings",
+    state: {
+      ...state.value.settings,
+      page: "experimental",
+      detail: true,
+      notice: "",
+    },
+  });
+  dispatch({ type: "feature", feature: "settings" });
+  void nextTick(() =>
+    document.querySelector<HTMLElement>(".settings-page-heading h2")?.focus(),
+  );
+}
 function openPlugins(): void {
   if (!state.value) return;
   dispatch({
@@ -559,6 +591,7 @@ function openImport() {
                 @update:state="dispatch({ type: 'plugins', state: $event })"
                 @open-navigation="navigation.openNavigation"
                 @settings="dispatch({ type: 'feature', feature: 'settings' })"
+                @gmail-settings="openGmailSettings"
                 @update:documents="
                   dispatch({
                     type: 'documents',
@@ -597,6 +630,8 @@ function openImport() {
                 :navigation-open="navigation.navigationOpen"
                 :show-navigation="navigation.showNavigation"
                 @update:state="dispatch({ type: 'settings', state: $event })"
+                :gmail-enabled="state.plugins.gmailExperiment?.enabled"
+                @gmail-toggle="setGmailEnabled"
                 @plugins="openPlugins"
                 @open-navigation="navigation.openNavigation"
               />

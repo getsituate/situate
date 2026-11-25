@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "experimental-gmail-connection",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "experimental-gmail-connection",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Experimental Gmail connection",
+          "paragraphs": [
+            "Install Gmail in a workspace and choose which permissions its plugins can use. Google sign-in is limited to test accounts."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "experimental-gmail-connection",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Experimentelle Gmail-Verbindung",
+          "paragraphs": [
+            "Installiere Gmail in einem Workspace und wähle, welche Berechtigungen seine Plugins nutzen dürfen. Die Google-Anmeldung ist auf Testkonten beschränkt."
+          ]
+        }
+      ]
+    }
+  }
+}

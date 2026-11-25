@@ -11,6 +11,8 @@ impl ExternalOpenHost for Host {
     fn open(target: &OsStr) -> io::Result<()> {
         let status = Command::new("xdg-open")
             .arg(target)
+            .env_remove("SITUATE_GMAIL_TEST_CLIENT_ID")
+            .env_remove("SITUATE_GMAIL_TEST_CLIENT_SECRET")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

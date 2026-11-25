@@ -1,4 +1,5 @@
 import { c } from "./content";
+import type { GmailExperiment } from "./gmail-experiment";
 import { connectionAvailability } from "./connection-readiness";
 import {
   createAssignmentInspection,
@@ -66,6 +67,7 @@ export interface PluginDisableOperation {
   previous: { id: string; enabled: boolean; blocked: boolean }[];
 }
 export interface PluginState {
+  gmailExperiment?: GmailExperiment;
   disableOperation: PluginDisableOperation | null;
   connectionAvailability: Record<
     string,
@@ -134,6 +136,10 @@ export function openPluginScreen(
   s: PluginState,
   screen: PluginState["screen"],
 ) {
+  if (s.gmailExperiment) {
+    s.gmailExperiment.selection = null;
+    s.gmailExperiment.error = null;
+  }
   s.screen = screen;
   s.dialog = null;
   s.notice = "";
@@ -495,6 +501,46 @@ export function createPluginState(scenario = "plugins-list"): PluginState {
     notice: "",
     nextId: 1,
   };
+  if (scenario.startsWith("settings-gmail-")) {
+    const ready = scenario === "settings-gmail-accounts";
+    s.plugins = mailPluginFixtures
+      .filter((plugin) => plugin.id !== "follow-up")
+      .map((plugin) => ({ ...plugin }));
+    s.plugins.push({
+      ...mailPluginFixtures[2],
+      id: "status-report",
+      name: "Status report",
+      description: "Send your weekly report by email.",
+    });
+    s.accounts = {
+      gmail: ready
+        ? [
+            {
+              id: "gmail-personal",
+              name: "alex@example.com",
+              status: "connected",
+            },
+            {
+              id: "gmail-work",
+              name: "alex.work@example.com",
+              status: "connected",
+            },
+          ]
+        : [],
+    };
+    s.accountSelections = ready
+      ? { inbox: ["gmail-personal"], "status-report": ["gmail-work"] }
+      : {};
+    s.gmailExperiment = {
+      enabled: ready,
+      grants: ready
+        ? { "gmail-personal": ["read"], "gmail-work": ["send"] }
+        : {},
+      selection: null,
+      error: null,
+      partialAccount: null,
+    };
+  }
   if (scenario.startsWith("plugins-files")) {
     openPluginFiles(s, "weekly");
     if (scenario === "plugins-files-loading")

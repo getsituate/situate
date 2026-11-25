@@ -61,6 +61,7 @@ import {
   type SettingsState,
 } from "./model";
 import AppearanceSettings from "./AppearanceSettings.vue";
+import ExperimentalSettings from "./ExperimentalSettings.vue";
 import UpdateSettings from "../updates/UpdateSettings.vue";
 import AboutSituate from "../updates/AboutSituate.vue";
 import type { UpdateState, UpdateAction } from "../updates/model";
@@ -83,11 +84,13 @@ const props = defineProps<{
   navigationOpen: boolean;
   platform: PlatformId;
   mobile: boolean;
+  gmailEnabled?: boolean;
 }>();
 const emit = defineEmits<{
   "update:state": [state: SettingsState];
   openNavigation: [event: MouseEvent];
   plugins: [];
+  gmailToggle: [enabled: boolean];
   dictationAction: [action: DictationAction];
   updateAction: [action: UpdateAction];
 }>();
@@ -361,6 +364,7 @@ async function confirmShortcut() {
           v-for="item in categories.filter(
             (item) =>
               (item.id !== 'dictation' || dictation) &&
+              (item.id !== 'experimental' || gmailEnabled !== undefined) &&
               (item.id !== 'updates' ||
                 (updates?.enabled && updates.channel === 'direct')),
           )"
@@ -379,6 +383,12 @@ async function confirmShortcut() {
             :name="item.id === 'about' ? 'info' : 'update'"
             class="category-symbol"
           />
+          <span
+            v-else-if="item.id === 'experimental'"
+            class="category-symbol"
+            aria-hidden="true"
+            >⚗</span
+          >
           <span v-else class="category-symbol" aria-hidden="true">{{
             item.id === "formats"
               ? "Aa"
@@ -471,6 +481,13 @@ async function confirmShortcut() {
             v-else-if="state.page === 'dictation' && dictation"
             :state="dictation"
             @action="emit('dictationAction', $event)"
+          />
+          <ExperimentalSettings
+            v-else-if="
+              state.page === 'experimental' && gmailEnabled !== undefined
+            "
+            :enabled="gmailEnabled"
+            @change="emit('gmailToggle', $event)"
           />
           <AppearanceSettings
             v-else-if="state.page === 'appearance'"

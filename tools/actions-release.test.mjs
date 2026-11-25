@@ -243,6 +243,8 @@ test("stage credentials exclude signing and GitHub access from private qualifica
     APPLE_API_PRIVATE_KEY: "synthetic-apple",
     SITUATE_POSTHOG_TOKEN: "synthetic-public-project-token",
     TAURI_SIGNING_PRIVATE_KEY: "synthetic-updater",
+    SITUATE_GMAIL_TEST_CLIENT_ID: "synthetic-gmail-id",
+    SITUATE_GMAIL_TEST_CLIENT_SECRET: "synthetic-gmail-secret",
     AWS_SECRET_ACCESS_KEY: "synthetic-unrelated",
     SITUATE_RELEASE_CONFIG_JSON: "synthetic-private-config",
     SITUATE_WINDOWS_UPDATER_PUBLIC_KEY: "synthetic-windows-key",
@@ -259,6 +261,11 @@ test("stage credentials exclude signing and GitHub access from private qualifica
   assert.equal(signing.APPLE_API_PRIVATE_KEY, "synthetic-apple");
   assert.equal(signing.GH_TOKEN, undefined);
   assert.equal(signing.SITUATE_POSTHOG_TOKEN, "synthetic-public-project-token");
+  assert.equal(signing.SITUATE_GMAIL_TEST_CLIENT_ID, "synthetic-gmail-id");
+  assert.equal(
+    signing.SITUATE_GMAIL_TEST_CLIENT_SECRET,
+    "synthetic-gmail-secret",
+  );
   const inputs = stageEnvironment(env, "create", "inputs");
   assert.equal(inputs.GH_TOKEN, "synthetic-gh");
   assert.equal(inputs.APPLE_API_PRIVATE_KEY, undefined);
@@ -276,6 +283,8 @@ test("stage credentials exclude signing and GitHub access from private qualifica
   );
   assert.equal(publisher.TAURI_SIGNING_PRIVATE_KEY, undefined);
   assert.equal(publisher.SITUATE_POSTHOG_TOKEN, undefined);
+  assert.equal(inputs.SITUATE_GMAIL_TEST_CLIENT_ID, undefined);
+  assert.equal(publisher.SITUATE_GMAIL_TEST_CLIENT_SECRET, undefined);
   assert.equal(publisher.AWS_SECRET_ACCESS_KEY, undefined);
 });
 

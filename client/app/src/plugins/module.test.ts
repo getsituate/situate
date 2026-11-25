@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as vue from "vue";
 import { mount } from "@vue/test-utils";
 import * as ui from "@situate/ui";
+import ErrorDialog from "../errors/ErrorDialog.vue";
 import { loadHostModules } from "./module";
 
 describe("plugin host modules", () => {
@@ -15,8 +16,9 @@ describe("plugin host modules", () => {
       ([name]) => name.startsWith("Situate") && name !== "SituateLoading",
     );
     expect(Object.keys(host.ui).sort()).toEqual(
-      components.map(([name]) => name).sort(),
+      [...components.map(([name]) => name), "SituateErrorDialog"].sort(),
     );
+    expect(host.ui.SituateErrorDialog).toBe(ErrorDialog);
     for (const [name, component] of components) {
       expect(host.ui[name as keyof typeof host.ui]).toBe(component);
     }
