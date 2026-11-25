@@ -228,9 +228,10 @@ test("the native reopen checks a saved note without exercising the updater", asy
   );
 });
 
-test("the upgrade launches the installed updater and verifies cancellation before replacing the app", async () => {
+test("the legacy restart flow verifies cancellation before replacing the app", async () => {
   const steps = [];
   const journey = upgradeWorkspaceJourney({
+    legacyRestartFlow: true,
     actions: async (items) => steps.push(...items),
     verify: async (note) => steps.push({ saved: note }),
     verifyCancellation: async (draft) => steps.push({ cancelledDraft: draft }),
@@ -272,5 +273,41 @@ test("the upgrade launches the installed updater and verifies cancellation befor
   assert.deepEqual(
     steps.filter((step) => "saved" in step).map((step) => step.saved),
     [upgradeNoteBefore, upgradeNoteAfter, upgradeNoteAfter, unsaved],
+  );
+});
+
+test("the direct restart flow declines force and retries normal installation", async () => {
+  const steps = [];
+  const journey = upgradeWorkspaceJourney({
+    legacyRestartFlow: false,
+    actions: async (items) => steps.push(...items),
+    verify: async () => {},
+    verifyCancellation: async () => steps.push({ cancelled: true }),
+    writable: async (value) => steps.push({ writable: value }),
+  });
+  await journey.update();
+  assert.deepEqual(
+    steps.flatMap((step) => {
+      if (step.click) return [step.click.name];
+      if (step.assert?.role === "AXStaticText") return [step.assert.name];
+      if (step.cancelled) return ["Cancelled update verified"];
+      if (step.writable === true) return ["Workspace writable again"];
+      return [];
+    }),
+    [
+      "Action could not be completed",
+      "Dismiss",
+      "Not saved",
+      "Update available",
+      "The update is verified and ready to install.",
+      "Install and restart",
+      "Keep your unsaved changes",
+      "Cancel",
+      "Force update and restart?",
+      "Not now",
+      "Cancelled update verified",
+      "Workspace writable again",
+      "Try installation again",
+    ],
   );
 });

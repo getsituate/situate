@@ -11,6 +11,7 @@ export function upgradeWorkspaceJourney({
   verify,
   verifyCancellation,
   writable,
+  legacyRestartFlow = false,
   progress = () => {},
 }) {
   async function step(name, action) {
@@ -55,10 +56,12 @@ export function upgradeWorkspaceJourney({
     await click({ role: "AXPopUpButton", name: "File actions", window });
     await click({ role: "AXMenuItem", name: "Edit source", window });
   };
-  const confirmInstall = async (label) => {
+  const requestInstall = async (label) => {
     await click(button(label));
-    await expect(text("Restart to update Situate?"));
-    await click(button("Install and restart"));
+    if (legacyRestartFlow) {
+      await expect(text("Restart to update Situate?"));
+      await click(button("Install and restart"));
+    }
   };
   return {
     open: () =>
@@ -108,7 +111,7 @@ export function upgradeWorkspaceJourney({
           await expect(text("The update is verified and ready to install."));
         });
         await step("confirm_first_install", () =>
-          confirmInstall("Install and restart"),
+          requestInstall("Install and restart"),
         );
         await step("observe_unsaved_dialog", async () => {
           await expect(text("Keep your unsaved changes"));
@@ -122,6 +125,10 @@ export function upgradeWorkspaceJourney({
         await step("find_cancel", () => expect(cancel));
         await step("press_cancel", () => actions([{ click: cancel }]));
         await step("verify_cancellation", async () => {
+          if (!legacyRestartFlow) {
+            await expect(text("Force update and restart?"));
+            await click(button("Not now"));
+          }
           await expect(button("Try installation again"));
           await verifyCancellation(pendingNote);
         });
@@ -129,7 +136,7 @@ export function upgradeWorkspaceJourney({
         await writable(true);
       }
       await step("retry_install", () =>
-        confirmInstall("Try installation again"),
+        requestInstall("Try installation again"),
       );
     },
     reopen: (expectedNote = pendingNote) =>

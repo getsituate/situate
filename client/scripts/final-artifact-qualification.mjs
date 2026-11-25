@@ -57,6 +57,7 @@ export {
   checkAccessibilityAction,
 } from "./qualification-accessibility.mjs";
 import { qualificationProgressReporter } from "../../tools/qualification-progress.mjs";
+import { compareVersions } from "../../tools/release-catalog.mjs";
 
 const hash = (path) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -992,6 +993,9 @@ function createNativeQualificationHost(
               join(stateRoot, "workspace"),
             );
             upgrade = upgradeWorkspaceJourney({
+              // v2026.11.38 starts idle updates directly and offers force after failed preparation.
+              legacyRestartFlow:
+                compareVersions(previous.manifest.version, "2026.11.38") < 0,
               actions: (items) => actions(items, "update"),
               progress: (code) => reporter.emit("update", code, "upgrade_step"),
               verify: (expected) => verifyUpgradeWorkspace(root, expected),
