@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "file-reading-mode",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "file-reading-mode",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Read files without entering edit mode",
+          "paragraphs": [
+            "Use the button in the file toolbar to switch between reading and source. You can scroll as soon as you switch to reading, and clicking text no longer opens the editor. Version history is in the File actions menu."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "file-reading-mode",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Dateien lesen, ohne in den Bearbeitungsmodus zu wechseln",
+          "paragraphs": [
+            "Über die Dateileiste wechselst du zwischen Leseansicht und Quelltext. In der Leseansicht kannst du sofort scrollen. Ein Klick auf den Text öffnet den Editor nicht mehr. Den Versionsverlauf findest du unter Dateiaktionen."
+          ]
+        }
+      ]
+    }
+  }
+}

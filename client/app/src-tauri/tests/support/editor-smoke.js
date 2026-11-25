@@ -324,28 +324,23 @@ window.runEditorSmoke = async (conversationTitle) => {
     "The native document did not open",
   );
   await invoke("smoke_progress", { stage: "editor-source-roundtrip" });
-  let actions;
+  heading.click();
+  assert(
+    !document.querySelector("textarea.source-text"),
+    "Clicking rendered text left reading mode",
+  );
+  const edit = await waitFor(
+    () => document.querySelector('button[aria-label="Edit source"]'),
+    "The source button is unavailable",
+  );
+  edit.click();
+  await waitFor(
+    () =>
+      document.activeElement?.matches("textarea.source-text:not([readonly])"),
+    "The native source editor did not receive focus",
+  );
   const readButton = await window.withSmokeReadMenuTrace(async (snapshot) => {
-    heading.click();
-    const sourceAtBlock = await waitFor(
-      () => document.querySelector("textarea.source-text:not([readonly])"),
-      "Clicking native rendered text did not open source",
-    );
-    try {
-      await waitFor(
-        () =>
-          document.querySelector("textarea.source-text:not([readonly])")
-            ?.selectionStart === candidate.indexOf("# Native editor"),
-        "Rendered source position did not include file metadata",
-      );
-    } catch (error) {
-      throw new Error(
-        `${String(error)} (expected ${candidate.indexOf("# Native editor")}, observed ${document.querySelector("textarea.source-text:not([readonly])")?.selectionStart}, originalConnected ${sourceAtBlock.isConnected})`,
-        { cause: error },
-      );
-    }
-    actions = document.querySelector('button[aria-label="File actions"]');
-    actions.click();
+    document.querySelector('button[aria-label="File actions"]').click();
     try {
       return await waitFor(
         () =>
@@ -365,20 +360,12 @@ window.runEditorSmoke = async (conversationTitle) => {
   });
   readButton.click();
   await waitFor(
-    () => document.querySelector(".markdown h1"),
-    "Reading mode was not restored",
-  );
-  actions.click();
-  const sourceButton = await waitFor(
     () =>
-      [
-        ...document.querySelectorAll(
-          '[popover]:popover-open [role="menuitemradio"]',
-        ),
-      ].find((button) => button.textContent.trim() === "Edit source"),
-    "The source action is unavailable",
+      document.activeElement?.matches(".document-scroll") &&
+      document.querySelector(".markdown h1"),
+    "Reading mode was not restored with focus",
   );
-  sourceButton.click();
+  document.querySelector('button[aria-label="Edit source"]').click();
   const textarea = await waitFor(
     () => document.querySelector("textarea.source-text:not([readonly])"),
     "The native source editor is unavailable",

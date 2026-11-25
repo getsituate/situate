@@ -264,10 +264,6 @@ textarea::placeholder {
   color: var(--situate-muted);
   margin-inline-start: auto;
 }
-.history-toggle[aria-expanded="true"] {
-  background: var(--situate-accent-soft, var(--situate-lilac));
-  color: var(--situate-accent-strong, var(--situate-violet-deep));
-}
 .document-scroll {
   position: relative;
   flex: 1;
@@ -284,11 +280,13 @@ textarea::placeholder {
   line-height: 1.85;
   overflow-wrap: anywhere;
 }
-.markdown[data-editable="true"] {
-  cursor: text;
-}
-.markdown:focus:where(html:not([data-input-modality="pointer"]) *) {
-  outline-offset: -6px;
+.document-scroll:focus:where(html:not([data-input-modality="pointer"]) *):where(
+    :focus-visible,
+    [data-input-modality="keyboard"] *
+  ) {
+  outline: var(--situate-stroke-focus) solid
+    var(--situate-accent-strong, var(--situate-violet-deep));
+  outline-offset: var(--situate-focus-offset);
 }
 .markdown h1 {
   font-size: clamp(27px, 2.6vw, 36px);
@@ -1039,15 +1037,17 @@ textarea::placeholder {
   }
 }
 @container document (max-width: 620px) {
-  .history-toggle span {
-    display: none;
-  }
-  .history-toggle {
-    min-width: 44px;
-    padding-inline: 12px;
-  }
   .document-bar {
     gap: 0;
+  }
+}
+@container document (max-width: 520px) {
+  .document-mode span {
+    display: none;
+  }
+  .document-mode {
+    min-width: 44px;
+    padding-inline: 12px;
   }
 }
 @container document (max-width: 560px) {

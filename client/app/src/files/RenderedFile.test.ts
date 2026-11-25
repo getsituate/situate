@@ -37,124 +37,13 @@ afterEach(() => {
   retainedWorkspaces().forEach(releaseWorkspace);
   vi.useRealTimers();
   vi.restoreAllMocks();
-  window.getSelection()?.removeAllRanges();
 });
 
-describe("rendered source navigation", () => {
-  it("emits once at the nearest annotated block without modifying source or requesting a write", async () => {
-    const text = "# One\n\n> **Two**\n\n```\nThree\n```";
-    const wrapper = render(
-      '<h1 data-source-offset="0">One</h1><blockquote data-source-offset="7"><p data-source-offset="9"><strong>Two</strong></p></blockquote><pre data-source-offset="18"><code>Three</code></pre>',
-      text,
-    );
-    await wrapper.setProps({ editable: true });
-    for (const selector of ["h1", "strong", "code"])
-      await wrapper.get(selector).trigger("click");
-    expect(wrapper.emitted("editSource")).toEqual([[0], [9], [18]]);
-    expect(wrapper.props("text")).toBe(text);
-    expect(invoke).not.toHaveBeenCalled();
-    expect(wrapper.find('[tabindex], [role="button"]').exists()).toBe(false);
-  });
-
-  it("is passive by default and in historical or read-only views", async () => {
-    const wrapper = render('<h1 data-source-offset="0">One</h1>');
-    await wrapper.get("h1").trigger("click");
-    await wrapper.setProps({ editable: true, historical: true });
-    await wrapper.get("h1").trigger("click");
-    await wrapper.setProps({ editable: false, historical: false });
-    await wrapper.get("h1").trigger("click");
-    expect(wrapper.emitted("editSource")).toBeUndefined();
-  });
-
-  it("does not invent positions for missing, malformed, out-of-range or non-block annotations", async () => {
-    const wrapper = render(
-      '<blockquote data-source-offset="0"><p>Unknown</p></blockquote>' +
-        ["-1", "1.5", "NaN", "9007199254740992", "5", "01", ""]
-          .map((offset) => `<p data-source-offset="${offset}">Invalid</p>`)
-          .join("") +
-        '<span data-source-offset="0">Not a block</span>',
-    );
-    await wrapper.setProps({ editable: true });
-    for (const element of wrapper.findAll("p, span"))
-      await element.trigger("click");
-    expect(wrapper.emitted("editSource")).toBeUndefined();
-    expect(wrapper.findAll("[data-source-offset]")).toHaveLength(1);
-  });
-
-  it("accepts UTF-16 positions and rejects positions within a surrogate pair", async () => {
-    const wrapper = render(
-      '<p data-source-offset="1">Invalid</p><p data-source-offset="4">Again</p>',
-      "🦀\n\nAgain",
-    );
-    await wrapper.setProps({ editable: true });
-    for (const paragraph of wrapper.findAll("p"))
-      await paragraph.trigger("click");
-    expect(wrapper.emitted("editSource")).toEqual([[4]]);
-  });
-
-  it("leaves links, images and disabled checkboxes out of source navigation", async () => {
-    const wrapper = render(
-      '<p data-source-offset="0"><a href="Two.md"><strong>Next</strong></a><img src="https://example.org/a.png"><input type="checkbox"></p>',
-    );
-    await wrapper.setProps({ editable: true });
-    for (const selector of ["strong", "img", "input"])
-      await wrapper.get(selector).trigger("click");
-    await flushPromises();
-    expect(wrapper.emitted("editSource")).toBeUndefined();
-    expect(invoke).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ operation: "openExternal", href: "Two.md" }),
-    );
-  });
-
-  it("ignores modified and middle clicks, selection, and pointer drags", async () => {
-    const wrapper = render('<h1 data-source-offset="0">One</h1>');
-    await wrapper.setProps({ editable: true });
-    const heading = wrapper.get("h1");
-    for (const options of [
-      { altKey: true },
-      { ctrlKey: true },
-      { metaKey: true },
-      { shiftKey: true },
-      { button: 1 },
-    ])
-      await heading.trigger("click", options);
-    await heading.trigger("auxclick", { button: 1 });
-    const selection = vi
-      .spyOn(window, "getSelection")
-      .mockReturnValue({ isCollapsed: false } as Selection);
-    await heading.trigger("click");
-    selection.mockRestore();
-    heading.element.dispatchEvent(
-      new MouseEvent("pointerdown", {
-        bubbles: true,
-        clientX: 10,
-        clientY: 10,
-      }),
-    );
-    heading.element.dispatchEvent(
-      new MouseEvent("pointermove", {
-        bubbles: true,
-        clientX: 30,
-        clientY: 10,
-      }),
-    );
-    await heading.trigger("click");
-    expect(wrapper.emitted("editSource")).toBeUndefined();
-    heading.element.dispatchEvent(
-      new MouseEvent("pointerdown", {
-        bubbles: true,
-        clientX: 10,
-        clientY: 10,
-      }),
-    );
-    await heading.trigger("click");
-    expect(wrapper.emitted("editSource")).toEqual([[0]]);
-  });
-
-  it("uses requested draft positions even when the preview reply carries the disk version", async () => {
+describe("draft previews", () => {
+  it("renders the requested draft even when the reply carries the disk version", async () => {
     vi.useFakeTimers();
     const wrapper = render('<h1 data-source-offset="0">One</h1>');
-    await wrapper.setProps({ editable: true, text: "🦀\n\nDraft" });
+    await wrapper.setProps({ text: "🦀\n\nDraft" });
     expect(wrapper.find("h1").exists()).toBe(false);
     invoke.mockResolvedValueOnce({
       status: "ok",
@@ -170,9 +59,7 @@ describe("rendered source navigation", () => {
     expect(invoke).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ operation: "read", text: "🦀\n\nDraft" }),
     );
-    await wrapper.get("p").trigger("click");
-    expect(wrapper.emitted("editSource")).toEqual([[4]]);
-    expect(wrapper.props("text")).toBe("🦀\n\nDraft");
+    expect(wrapper.get("p").text()).toBe("Draft");
   });
 
   it("discards an old draft response after source or document identity changes", async () => {
@@ -184,7 +71,7 @@ describe("rendered source navigation", () => {
         resolve = done;
       }),
     );
-    await wrapper.setProps({ editable: true, text: "Old draft" });
+    await wrapper.setProps({ text: "Old draft" });
     await vi.advanceTimersByTimeAsync(150);
     await wrapper.setProps({ text: "New draft", path: "Notes/Two.md" });
     resolve({
@@ -198,7 +85,6 @@ describe("rendered source navigation", () => {
     });
     await flushPromises();
     expect(wrapper.find("p").exists()).toBe(false);
-    expect(wrapper.emitted("editSource")).toBeUndefined();
   });
 });
 

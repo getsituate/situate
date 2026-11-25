@@ -284,8 +284,17 @@ for (const viewport of [
         await expect(firstFile).toHaveCSS("outline-offset", "-3px");
         await page.emulateMedia({ forcedColors: "none" });
       }
-      const input = await source(page);
+      await document
+        .getByRole("button", { name: "Edit source", exact: true })
+        .click();
+      const input = document.getByRole("textbox", {
+        name: "Markdown source",
+        exact: true,
+      });
+      await expect(input).toBeFocused();
       await expect(input).toHaveValue(/# A small garden/);
+      await page.mouse.move(0, 0);
+      await expect(page.getByRole("tooltip")).toHaveCount(0);
       await visual.capture("files.document.source");
       await input.fill("# A new garden\n\nRoom for lavender.");
       await expect(page.getByText("Saved", { exact: true })).toBeVisible();
@@ -299,7 +308,10 @@ for (const viewport of [
           ),
         )
         .toBe("# A new garden\n\nRoom for lavender.");
-      await fileMode(page, "Read");
+      await document.getByRole("button", { name: "Read", exact: true }).click();
+      await expect(
+        document.getByRole("region", { name: "Reading view", exact: true }),
+      ).toBeFocused();
       await expect(
         page.getByRole("heading", { name: "A new garden", exact: true }),
       ).toBeVisible();
@@ -371,7 +383,19 @@ for (const viewport of [
           "On this device",
         );
       }
-      const trigger = page.getByRole("button", {
+      const documentBar = page.locator(".document-bar");
+      await expect(
+        documentBar.getByRole("button", { name: "Version history" }),
+      ).toHaveCount(0);
+      const mode = documentBar.getByRole("button", {
+        name: "Edit source",
+        exact: true,
+      });
+      await expect(mode).toBeVisible();
+      const modeLabel = mode.getByText("Edit source", { exact: true });
+      if (viewport.width < 600) await expect(modeLabel).toBeHidden();
+      else await expect(modeLabel).toBeVisible();
+      const trigger = documentBar.getByRole("button", {
         name: "File actions",
         exact: true,
       });
@@ -409,12 +433,14 @@ for (const viewport of [
         menu.getByRole("menuitem", { name: "Delete…", exact: true }),
       ).toBeFocused();
       await page.keyboard.press("Home");
-      await expect(
-        menu.getByRole("menuitemradio", { name: "Read", exact: true }),
-      ).toBeFocused();
+      const history = menu.getByRole("menuitem", {
+        name: "Version history",
+        exact: true,
+      });
+      await expect(history).toBeFocused();
       await page.keyboard.press("ArrowDown");
       await expect(
-        menu.getByRole("menuitemradio", { name: "Edit source", exact: true }),
+        menu.getByRole("menuitemradio", { name: "Read", exact: true }),
       ).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(menu).toHaveCount(0);
@@ -423,6 +449,23 @@ for (const viewport of [
       await page.keyboard.press("Escape");
       await expect(page.getByRole("tooltip")).toHaveCount(0);
       await visual.capture("files.document.actions-closed");
+
+      await trigger.press("Enter");
+      await history.click();
+      await expect(menu).toHaveCount(0);
+      const close = page.getByRole("button", {
+        name: "Close history",
+        exact: true,
+      });
+      await expect(close).toBeFocused();
+      await expect(
+        page.getByRole("button", { name: /Add a reading corner/ }),
+      ).toBeVisible();
+      await page.mouse.move(0, 0);
+      await visual.capture("files.document.history");
+      await close.press("Enter");
+      await expect(close).toHaveCount(0);
+      await expect(trigger).toBeFocused();
     },
   );
 }

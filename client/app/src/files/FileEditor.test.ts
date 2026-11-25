@@ -250,20 +250,10 @@ describe("file panes", () => {
     editor.get<HTMLTextAreaElement>("textarea").element.setSelectionRange(4, 6);
     await choose(editor, "⟦files.fileActions⟧", "⟦files.read⟧");
     expect(editor.find("textarea").exists()).toBe(false);
+    expect(document.activeElement).toBe(editor.get(".document-scroll").element);
     expect(editor.getComponent(RenderedFile).props("text")).toContain(
       "# Garden",
     );
-  });
-  it("keeps the clicked source offset when an older mode update is echoed", async () => {
-    const { wrapper, session } = await setup();
-    wrapper.unmount();
-    const editor = await echoingPane(session.id, { mode: "read" });
-    editor.getComponent(RenderedFile).vm.$emit("editSource", 31);
-    await flushPromises();
-    const source = editor.get<HTMLTextAreaElement>("textarea").element;
-    expect(document.activeElement).toBe(source);
-    expect(source.selectionStart).toBe(31);
-    expect(source.selectionEnd).toBe(31);
   });
   async function navigatingPane(workspaceId: string) {
     const host = mount(
@@ -407,8 +397,7 @@ describe("file panes", () => {
     );
     expect(editor.get("textarea").attributes("readonly")).toBeDefined();
     expect(editor.find(".historical-date").exists()).toBe(true);
-    await button(editor, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(editor, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     expect(editor.get(".version").attributes("aria-pressed")).toBe("true");
     await button(editor, "⟦files.returnToCurrentFile⟧").trigger("click");
     await flushPromises();
@@ -441,8 +430,7 @@ describe("file panes", () => {
     );
     const host = await navigatingPane(session.id);
     let editor = host.getComponent(FileEditor);
-    await button(editor, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(editor, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     await editor.get(".version").trigger("click");
     await flushPromises();
     editor = host.getComponent(FileEditor);
@@ -452,8 +440,7 @@ describe("file panes", () => {
     expect(calls().some((request) => request.operation === "revision")).toBe(
       false,
     );
-    await button(editor, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(editor, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     expect(
       calls()
         .filter((request) => request.operation === "history")
@@ -469,9 +456,12 @@ describe("file panes", () => {
     const { wrapper, session } = await setup();
     wrapper.unmount();
     const editor = await pane(session.id, "Notes/Garden.md", { mode: "read" });
-    editor.getComponent(RenderedFile).vm.$emit("editSource", 31);
+    await button(editor, "⟦files.editSource⟧").trigger("click");
     await flushPromises();
     const stale = editor.emitted("presentation")![0]![0] as PresentationValue;
+    const source = editor.get<HTMLTextAreaElement>("textarea");
+    source.element.setSelectionRange(31, 31);
+    await source.trigger("select");
     await editor.setProps({ presentation: stale });
     await flushPromises();
     expect(
@@ -518,8 +508,7 @@ describe("file panes", () => {
     expect(calls().some((request) => request.operation === "revision")).toBe(
       false,
     );
-    await button(editor, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(editor, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     expect(
       calls()
         .filter((request) => request.operation === "history")
@@ -539,8 +528,7 @@ describe("file panes", () => {
       mode: "read",
       treeOpen: true,
     });
-    await button(editor, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(editor, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     expect(editor.find(".version-panel").exists()).toBe(true);
     const presentation = editor
       .emitted("presentation")!
@@ -1188,7 +1176,7 @@ describe("file panes", () => {
   });
 });
 describe("file editor actions", () => {
-  it("uses aligned headers, actual parent path and footers without permanent mode controls", async () => {
+  it("shows the file location and source action in the document header", async () => {
     const { wrapper } = await setup();
     expect(wrapper.find(".files-header").exists()).toBe(false);
     expect(wrapper.get(".document-location p").text()).toBe("Notes");
@@ -1202,13 +1190,9 @@ describe("file editor actions", () => {
     expect(wrapper.get(".document-footer").text()).toContain("⟦files.saved⟧");
     expect(
       wrapper
-        .findAll("button")
-        .some((button) =>
-          ["⟦files.read⟧", "Source", "⟦files.editSource⟧"].includes(
-            button.text(),
-          ),
-        ),
-    ).toBe(false);
+        .get('.document-bar button[aria-label="⟦files.editSource⟧"]')
+        .text(),
+    ).toBe("⟦files.editSource⟧");
     expect(button(wrapper, "⟦navigation.openNavigation⟧")).toBeDefined();
     await button(wrapper, "⟦files.closeFiles⟧").trigger("click");
     expect(wrapper.emitted("leave")).toHaveLength(1);
@@ -1439,8 +1423,7 @@ describe("file editor actions", () => {
   });
   it("switches historical representation without leaving its selected revision", async () => {
     const { wrapper } = await setup();
-    await button(wrapper, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(wrapper, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     await wrapper.get(".version").trigger("click");
     await flushPromises();
     expect(wrapper.get(".historical-notice").text()).toContain(
@@ -1479,8 +1462,7 @@ describe("file editor actions", () => {
   });
   it("opens the live row explicitly even when a historical version shares its path", async () => {
     const { wrapper } = await setup();
-    await button(wrapper, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(wrapper, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     await wrapper.get(".version").trigger("click");
     await flushPromises();
     await button(wrapper, "⟦files.expandFileBrowser⟧").trigger("click");
@@ -1519,8 +1501,7 @@ describe("file editor actions", () => {
         },
       ],
     });
-    await button(wrapper, "⟦files.versionHistory⟧").trigger("click");
-    await flushPromises();
+    await choose(wrapper, "⟦files.fileActions⟧", "⟦files.versionHistory⟧");
     const summaries = wrapper.findAll(".version strong");
     expect(summaries[0]!.get("[data-localization-content=user]").text()).toBe(
       "Add a reading corner",
@@ -1564,17 +1545,14 @@ describe("file editor actions", () => {
       setPreferences(previous);
     }
   });
-  it("enters source at the emitted UTF-16 offset and ignores editing in a read-only workspace", async () => {
-    const { wrapper } = await setup();
-    wrapper.getComponent(RenderedFile).vm.$emit("editSource", 12);
+  it("offers View source without enabling editing in a read-only workspace", async () => {
+    const { wrapper } = await setup(false);
+    await wrapper
+      .get('button[aria-label="⟦files.viewSource⟧"]')
+      .trigger("click");
     await flushPromises();
     const source = wrapper.get<HTMLTextAreaElement>("textarea");
-    expect(source.element.selectionStart).toBe(12);
+    expect(source.element.readOnly).toBe(true);
     expect(document.activeElement).toBe(source.element);
-    wrapper.unmount();
-    const readonly = await setup(false);
-    readonly.wrapper.getComponent(RenderedFile).vm.$emit("editSource", 12);
-    await flushPromises();
-    expect(readonly.wrapper.find("textarea").exists()).toBe(false);
   });
 });

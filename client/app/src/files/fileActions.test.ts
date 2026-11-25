@@ -46,6 +46,11 @@ describe("file action menus", () => {
         .map((item) => item?.action),
     ).toEqual(["source"]);
   });
+  it("lists Version history first in the open document's menu", () => {
+    expect(fileMenu({ ...options, documentContext: true })[0]?.label).toBe(
+      "⟦files.versionHistory⟧",
+    );
+  });
   it("does not claim another item or a historical version is the active reading mode", () => {
     expect(
       fileMenu({ ...options, selected: "Other.md" }).some(

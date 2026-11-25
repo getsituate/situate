@@ -40,6 +40,17 @@ async function fileMode(
     })
     .click();
 }
+async function openHistory(page: Page): Promise<void> {
+  await page
+    .getByRole("button", { name: keyLabel("files.fileActions"), exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", {
+      name: keyLabel("files.versionHistory"),
+      exact: true,
+    })
+    .click();
+}
 async function source(page: Page) {
   await fileMode(page, "Edit source");
   return page.getByRole("textbox", {
@@ -255,12 +266,7 @@ for (const viewport of [
         exact: true,
       }),
     ).toHaveCount(0);
-    await page
-      .getByRole("button", {
-        name: keyLabel("files.versionHistory"),
-        exact: true,
-      })
-      .click();
+    await openHistory(page);
     await expect(
       page.getByRole("group", { name: keyLabel("files.fileHistory") }),
     ).not.toContainText("retained-revision");
@@ -276,12 +282,7 @@ for (const viewport of [
       path: info.outputPath(`files-history-source-${viewport.width}.png`),
       fullPage: true,
     });
-    await page
-      .getByRole("button", {
-        name: keyLabel("files.versionHistory"),
-        exact: true,
-      })
-      .click();
+    await openHistory(page);
     await expect(
       page.getByRole("button", { name: /Add a reading corner/ }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -313,12 +314,7 @@ for (const viewport of [
       .click();
     await expect(input).toHaveValue(currentText);
     await expect(input).toBeEditable();
-    await page
-      .getByRole("button", {
-        name: keyLabel("files.versionHistory"),
-        exact: true,
-      })
-      .click();
+    await openHistory(page);
     await expect(
       page.getByRole("button", { name: /Add a reading corner/ }),
     ).toHaveAttribute("aria-pressed", "false");
@@ -328,59 +324,84 @@ for (const viewport of [
   });
 }
 
-test("rendered text opens source at its block without saving, while selection and links remain passive", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await filesFixture(page);
-  await enterFiles(page);
-  await page
-    .getByRole("heading", { name: "A small garden", exact: true })
-    .click();
-  const input = page.getByRole("textbox", {
-    name: keyLabel("files.markdownSource"),
-    exact: true,
-  });
-  await expect(input).toBeEditable();
-  await expect(input).toBeFocused();
-  const text = await input.inputValue();
-  expect(
-    await input.evaluate(
-      (element: HTMLTextAreaElement) => element.selectionStart,
-    ),
-  ).toBe(text.indexOf("# A small garden"));
-  expect(
-    await page.evaluate(() =>
-      window.__filesTest.calls.some((call) =>
-        ["save", "stage"].includes(call.operation),
-      ),
-    ),
-  ).toBe(false);
-  await fileMode(page, "Read");
-  const paragraph = page.locator(".markdown p").first();
-  await paragraph.evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    window.getSelection()!.removeAllRanges();
-    window.getSelection()!.addRange(range);
-    element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-  await expect(input).toHaveCount(0);
-  await page.evaluate(() => window.getSelection()?.removeAllRanges());
-  await page.getByRole("link", { name: "Garden guide", exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.__filesTest.calls.some(
-          (call) =>
-            call.operation === "openExternal" &&
-            call.href === "https://example.org/gardens",
+test(
+  "Markdown stays in Read while scrolling, clicking text, and following links",
+  { tag: "@webkit-smoke" },
+  async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 520 });
+    await filesFixture(page);
+    await enterFiles(page);
+    const input = await source(page);
+    await expect(input).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await fileMode(page, "Read");
+    const reader = page.getByRole("region", {
+      name: keyLabel("files.readingView"),
+      exact: true,
+    });
+    await expect(reader).toBeFocused();
+    await page.keyboard.press("PageDown");
+    await expect
+      .poll(() => reader.evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(0);
+    await reader.hover();
+    await page.mouse.wheel(0, -1000);
+    await expect.poll(() => reader.evaluate((node) => node.scrollTop)).toBe(0);
+
+    await page
+      .getByRole("heading", { name: "A small garden", exact: true })
+      .click();
+    await expect(input).toHaveCount(0);
+    const paragraph = page.locator(".markdown p").first();
+    await paragraph.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(range);
+      element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await expect(input).toHaveCount(0);
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.getByRole("link", { name: "Garden guide", exact: true }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.__filesTest.calls.some(
+            (call) =>
+              call.operation === "openExternal" &&
+              call.href === "https://example.org/gardens",
+          ),
+        ),
+      )
+      .toBe(true);
+    await expect(input).toHaveCount(0);
+
+    const readingPosition = await reader.evaluate((node) => node.scrollTop);
+    expect(readingPosition).toBeGreaterThan(0);
+    await page
+      .getByRole("button", { name: keyLabel("files.editSource"), exact: true })
+      .click();
+    await expect(input).toBeFocused();
+    expect(
+      await input.evaluate((node: HTMLTextAreaElement) => node.selectionStart),
+    ).toBe(1);
+    await page
+      .getByRole("button", { name: keyLabel("files.read"), exact: true })
+      .click();
+    await expect(reader).toBeFocused();
+    await expect(input).toHaveCount(0);
+    await expect
+      .poll(() => reader.evaluate((node) => node.scrollTop))
+      .toBe(readingPosition);
+    expect(
+      await page.evaluate(() =>
+        window.__filesTest.calls.some((call) =>
+          ["save", "stage"].includes(call.operation),
         ),
       ),
-    )
-    .toBe(true);
-  await expect(input).toHaveCount(0);
-});
+    ).toBe(false);
+  },
+);
 
 test("contextual creation and separate rename and duplicate actions preserve the open file", async ({
   page,
@@ -624,12 +645,7 @@ test("silent merged content preserves live caret and explicit historical inspect
   await expect(
     page.locator('[role="alert"], [role="status"]').filter({ hasText: /\S/ }),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", {
-      name: keyLabel("files.versionHistory"),
-      exact: true,
-    })
-    .click();
+  await openHistory(page);
   await page.getByRole("button", { name: /Add a reading corner/ }).click();
   await expect(input).toHaveValue("# Earlier garden\n\nA quiet corner.");
   await page.evaluate(() =>
@@ -658,12 +674,7 @@ test("silent merged content preserves live caret and explicit historical inspect
     .getByRole("button", { name: keyLabel("files.returnToCurrentFile") })
     .click();
   await expect(input).toHaveValue("# External current");
-  await page
-    .getByRole("button", {
-      name: keyLabel("files.versionHistory"),
-      exact: true,
-    })
-    .click();
+  await openHistory(page);
   await expect(
     page.getByRole("button", { name: /Add a reading corner/ }),
   ).toHaveAttribute("aria-pressed", "false");
@@ -677,24 +688,14 @@ test("a late revision reply cannot undo returning to the current file", async ({
   await enterFiles(page);
   const input = await source(page);
   const currentText = await input.inputValue();
-  await page
-    .getByRole("button", {
-      name: keyLabel("files.versionHistory"),
-      exact: true,
-    })
-    .click();
+  await openHistory(page);
   await page.getByRole("button", { name: /Add a reading corner/ }).click();
   await expect(input).toHaveAttribute("readonly");
   await page
     .getByRole("button", { name: keyLabel("files.returnToCurrentFile") })
     .click();
   await expect(input).toBeEditable();
-  await page
-    .getByRole("button", {
-      name: keyLabel("files.versionHistory"),
-      exact: true,
-    })
-    .click();
+  await openHistory(page);
   await page.evaluate(() => window.__filesTest.holdRevision());
   await page.getByRole("button", { name: /Add a reading corner/ }).click();
   await expect
@@ -734,12 +735,7 @@ test("history hides generated commit references without changing hashes in docum
   await expect(
     page.getByText(keyLabel("files.saved"), { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", {
-      name: keyLabel("files.versionHistory"),
-      exact: true,
-    })
-    .click();
+  await openHistory(page);
   await expect(
     page.getByRole("group", { name: keyLabel("files.fileHistory") }),
   ).not.toContainText(revision);
@@ -755,12 +751,7 @@ test("history action confirmations and recovery errors hide internal revision ID
   await page.setViewportSize({ width: 1440, height: 1000 });
   await filesFixture(page);
   await enterFiles(page);
-  await page
-    .getByRole("button", {
-      name: keyLabel("files.versionHistory"),
-      exact: true,
-    })
-    .click();
+  await openHistory(page);
   const version = page
     .locator(".version-entry")
     .filter({ hasText: "Add a reading corner" });
@@ -1040,12 +1031,7 @@ test("deleted history uses a revision seed and exact historical paths, with expl
       name: keyLabel("files.fileDeletedInThisChange"),
     }),
   ).toBeVisible();
-  await page
-    .getByRole("button", {
-      name: keyLabel("files.versionHistory"),
-      exact: true,
-    })
-    .click();
+  await openHistory(page);
   await page.getByRole("button", { name: /Add a reading corner/ }).click();
   await expect
     .poll(() =>
