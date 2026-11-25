@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileDiff } from "../files/line-diff";
-import { diffParts } from "./assignment-diff";
+import { fileDiff, diffParts } from "./assignment-diff";
 
 describe("file diffs", () => {
   it("compares exact lines with old/new numbers and deletion before insertion", () => {

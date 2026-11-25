@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { t } from "@situate/localization";
-import { fileDiff } from "../../files/line-diff";
+import { fileDiff } from "../../plugins/assignment-diff";
 import type { VerifiedChange } from "./transcript";
 
 const props = defineProps<{
