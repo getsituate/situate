@@ -923,6 +923,7 @@ test.each(["external", "text", "failed"] as const)(
         ],
         stopReason: "toolUse",
         timestamp: 1,
+        usage: null,
       },
       {
         role: "toolResult",
