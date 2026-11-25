@@ -180,6 +180,9 @@ test("Windows checks are selected together for product and Windows CI inputs", (
   for (const path of [
     "client/app/src/App.vue",
     "client/Cargo.lock",
+    "client/scripts/ai-catalog.mjs",
+    "client/scripts/ui-boundary.mjs",
+    "client/scripts/localization-check.mjs",
     "tools/test-windows.mjs",
     "tools/test-windows.test.mjs",
     ".github/workflows/verify.yml",
@@ -195,9 +198,24 @@ test("Windows checks are selected together for product and Windows CI inputs", (
     "docs/development/testing.md",
     "client/workshop/src/App.vue",
     "changes/new.json",
+    "client/scripts/final-artifact-qualification.mjs",
+    "client/scripts/final-artifact-qualification.test.mjs",
+    "client/scripts/apple-release.mjs",
+    "client/scripts/native-smoke-runtime.mjs",
+    "tools/native-vm.mjs",
   ])
     assert.equal(lane(path, "verify"), undefined, path);
   assert.equal(lane("client/app/src/App.vue", "release"), undefined);
+  assert.ok(
+    planPaths(["tools/native-vm.mjs"]).lanes.some(
+      ({ id }) => id === "macos-native",
+    ),
+  );
+  assert.ok(
+    suites(
+      planPaths(["client/scripts/final-artifact-qualification.mjs"]),
+    ).includes("client-scripts-unit"),
+  );
 });
 
 test("editing the external sign-in page selects Edge on macOS", () => {
