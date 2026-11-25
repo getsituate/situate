@@ -15,7 +15,6 @@
   "updates.lastCheck": "Last checked: {time}",
   "updates.readyDetail": "The update is verified and ready to install.",
   "updates.restartTitle": "Restart to update Situate?",
-  "updates.restartIdle": "Situate will save your work, install the update and restart.",
   "updates.restartWorking": "Actions are running in one or more workspaces. You can update later, or stop the actions and restart now.",
   "updates.restartCaution": "You can continue affected chats by sending another message after the restart.",
   "updates.later": "Not now",

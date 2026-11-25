@@ -80,6 +80,9 @@ test(
       name: "Restart to update Situate?",
     });
     await expect(dialog).toContainText("another message");
+    await expect(
+      dialog.getByRole("button", { name: "Force update…" }),
+    ).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Not now" })).toBeFocused();
     await visual.capture("updates.restart.running");
     await dialog.press("Escape");
@@ -103,25 +106,30 @@ test(
     await workspaceFixture(page, shellState, {
       updates: {
         supported: true,
-        phase: "install-failed",
+        phase: "ready",
         artifactId: "artifact-b",
         availableVersion: "1.1.0",
-        error: "native.updates.preparationFailed",
       },
     });
     await page.goto("/");
     await openUpdates(page);
-    await expect(page.getByRole("alert")).toContainText("An open window");
-    await expect(
-      page.getByRole("button", { name: "Force update…", exact: true }),
-    ).toBeVisible();
-    await visual.capture("updates.settings.preparation-failed");
+    const force = page.getByRole("button", {
+      name: "Force update…",
+      exact: true,
+    });
+    await expect(force).toHaveCount(0);
     await page
-      .getByRole("button", { name: "Force update…", exact: true })
+      .getByRole("button", { name: "Install and restart", exact: true })
       .click();
+    await change(page, { phase: "preparing" });
     const dialog = page.getByRole("dialog", {
       name: "Force update and restart?",
       exact: true,
+    });
+    await expect(dialog).not.toBeVisible();
+    await change(page, {
+      phase: "install-failed",
+      error: "native.updates.preparationFailed",
     });
     await expect(dialog).toContainText(
       "Unsaved changes in any window may be lost",
@@ -129,17 +137,13 @@ test(
     await expect(
       dialog.getByRole("button", { name: "Not now", exact: true }),
     ).toBeFocused();
-    expect(await calls(page, "updates_install")).toHaveLength(0);
+    expect(await calls(page, "updates_install")).toHaveLength(1);
     await visual.capture("updates.restart.forced");
     await dialog.getByRole("button", { name: "Not now", exact: true }).click();
-    expect(await calls(page, "updates_install")).toHaveLength(0);
-    await page
-      .getByRole("button", { name: "Try installation again", exact: true })
-      .click();
-    await page
-      .getByRole("dialog", { name: "Restart to update Situate?", exact: true })
-      .getByRole("button", { name: "Force update…", exact: true })
-      .click();
+    expect(await calls(page, "updates_install")).toHaveLength(1);
+    await expect(page.getByRole("alert")).toContainText("An open window");
+    await visual.capture("updates.settings.preparation-failed");
+    await force.click();
     await expect(dialog).toBeVisible();
     await expect(
       dialog.getByRole("button", { name: "Not now", exact: true }),
@@ -147,11 +151,12 @@ test(
     await dialog
       .getByRole("button", { name: "Force update and restart", exact: true })
       .click();
-    expect((await calls(page, "updates_install"))[0].args).toEqual({
-      artifactId: "artifact-b",
-      abortRunning: true,
-      force: true,
-    });
+    expect(
+      (await calls(page, "updates_install")).map(({ args }) => args),
+    ).toEqual([
+      { artifactId: "artifact-b", abortRunning: false },
+      { artifactId: "artifact-b", abortRunning: true, force: true },
+    ]);
   },
 );
 
@@ -403,7 +408,7 @@ test("inspecting and postponing an update leaves active dictation running", asyn
   expect(await calls(page, "updates_install")).toHaveLength(0);
 });
 
-test("updates remain accessible without an open workspace and idle restart needs confirmation", async ({
+test("updates remain accessible without an open workspace and idle restart starts directly", async ({
   page,
 }) => {
   await workspaceFixture(
@@ -430,15 +435,9 @@ test("updates remain accessible without an open workspace and idle restart needs
   await area
     .getByRole("button", { name: "Install and restart", exact: true })
     .click();
-  const confirmation = page.getByRole("dialog", {
-    name: "Restart to update Situate?",
-  });
   await expect(
-    confirmation.getByRole("button", { name: "Not now" }),
-  ).toBeFocused();
-  await confirmation
-    .getByRole("button", { name: "Install and restart", exact: true })
-    .click();
+    page.getByRole("dialog", { name: "Restart to update Situate?" }),
+  ).toHaveCount(0);
   expect((await calls(page, "updates_install"))[0].args).toEqual({
     artifactId: "artifact-b",
     abortRunning: false,
