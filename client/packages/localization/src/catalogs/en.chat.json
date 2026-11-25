@@ -57,6 +57,8 @@
   "chat.saved": "Saved",
   "chat.removed": "Removed",
   "chat.added": "Added",
+  "chat.diffTooLarge": "This edit is too large to show as a line-by-line comparison.",
+  "chat.noFinalNewline": "No line break at the end of the file",
   "chat.written": "Written content",
   "chat.usingPlugin": "Using {name}",
   "chat.pauseAnimation": "Pause animation",
