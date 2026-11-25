@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "windows-sealed-release-inputs",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Windows release packaging and test reliability only."
+}

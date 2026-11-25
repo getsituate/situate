@@ -399,7 +399,14 @@ fn cache_rebuilds_after_same_length_replacement_and_in_place_edit() {
             .id,
         "b"
     );
+    let prior_modified = fs::metadata(&path).unwrap().modified().unwrap();
     fs::write(&path, &original).unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(prior_modified - std::time::Duration::from_secs(2))
+        .unwrap();
     assert_eq!(
         storage
             .read_conversation_entry("one", "a")
