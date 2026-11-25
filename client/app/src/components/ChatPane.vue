@@ -239,12 +239,24 @@ const settings = computed(() =>
       )
     : undefined,
 );
-const pending = computed(
+const waiting = computed(
   () =>
     chat.value?.state.pending.filter(
       (message) => message.state === "pending",
     ) ?? [],
 );
+const showPending = ref(false);
+watch(
+  [chat, () => waiting.value.length > 0],
+  ([, hasWaiting], _, onCleanup) => {
+    showPending.value = false;
+    if (!hasWaiting) return;
+    const timer = setTimeout(() => (showPending.value = true), 250);
+    onCleanup(() => clearTimeout(timer));
+  },
+  { immediate: true },
+);
+const pending = computed(() => (showPending.value ? waiting.value : []));
 const pendingReferences = computed(() =>
   mergeReferences(pending.value.flatMap((message) => message.references ?? [])),
 );

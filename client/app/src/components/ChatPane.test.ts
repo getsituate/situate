@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
-import { shallowReactive } from "vue";
+import { nextTick, shallowReactive } from "vue";
 import type { ChatState } from "../ai/chat";
 import type { ContentReference } from "../files/content-reference";
 import ChatPane from "./ChatPane.vue";
@@ -216,6 +216,56 @@ test("enqueue acknowledgements disable sending but preserve editable follow-up t
   expect(queue.attributes("disabled")).toBeUndefined();
   await field.trigger("keydown", { key: "Enter", altKey: true });
   expect(chat.send).toHaveBeenCalledExactlyOnceWith("followUp");
+});
+
+test("briefly pending sends stay hidden while waiting messages remain recallable after Stop", async () => {
+  const chat = service();
+  mocks.chat.mockReturnValue(chat);
+  const wrapper = pane();
+  await flushPromises();
+  const message: ChatState["pending"][number] = {
+    id: "first",
+    kind: "steering",
+    state: "pending",
+    text: "Shared draft",
+    attachments: [],
+    references: [live],
+    timestamp: 2,
+  };
+  const pending = wrapper.findComponent({ name: "ChatPending" });
+  vi.useFakeTimers();
+  try {
+    chat.send.mockImplementationOnce(() => {
+      chat.state.running = true;
+      chat.state.pending = [message];
+    });
+    await wrapper.get("textarea").trigger("keydown", { key: "Enter" });
+    expect(chat.send).toHaveBeenCalledOnce();
+    expect(pending.find(".pending").exists()).toBe(false);
+    expect(wrapper.find(".pending-references").exists()).toBe(false);
+    await vi.advanceTimersByTimeAsync(50);
+    chat.state.pending = [];
+    await nextTick();
+
+    chat.state.pending = [{ ...message, id: "next", kind: "followUp" }];
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(pending.find(".pending").exists()).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(pending.find(".pending").exists()).toBe(true);
+    expect(wrapper.get(".pending-references").text()).toContain(live.path);
+
+    chat.state.running = false;
+    await nextTick();
+    await pending.get(".edit-pending").trigger("click");
+    expect(chat.recallPending).toHaveBeenCalledOnce();
+    chat.state.pending = [];
+    await nextTick();
+    expect(pending.find(".pending").exists()).toBe(false);
+    expect(wrapper.find(".pending-references").exists()).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("embedded question choices and written answers share the real draft and full composer", async () => {

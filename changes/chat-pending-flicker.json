@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "chat-pending-flicker",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "chat-pending-flicker",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "No flicker when sending a chat message",
+          "paragraphs": [
+            "Messages that start processing right away no longer briefly appear in the pending list."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "chat-pending-flicker",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Kein Aufblitzen beim Senden im Chat",
+          "paragraphs": [
+            "Nachrichten, die der Chat sofort verarbeitet, tauchen nicht mehr kurz in der Warteliste auf."
+          ]
+        }
+      ]
+    }
+  }
+}
