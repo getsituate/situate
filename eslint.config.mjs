@@ -50,6 +50,8 @@ export default tseslint.config(
       "client/app/src/**/*.{js,ts,vue}",
       "client/packages/ui/src/**/*.{js,ts,vue}",
       "client/app/src-tauri/tests/support/*.js",
+      "client/app/src-tauri/plugins/gmail/ui.js",
+      "client/app/src-tauri/tests/fixtures/gmail/previous-ui.js",
       "requirements/src/**/*.js",
       "design/**/*.js",
       "website/**/*.js",
