@@ -194,30 +194,8 @@ pub(crate) async fn open_browser(app: &tauri::AppHandle, raw: &str) -> Result<()
 }
 
 #[cfg(desktop)]
-fn desktop_browser(url: &str) -> Result<(), String> {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let success = {
-        #[cfg(target_os = "macos")]
-        let mut command = std::process::Command::new("/usr/bin/open");
-        #[cfg(target_os = "linux")]
-        let mut command = std::process::Command::new("xdg-open");
-        #[cfg(target_os = "macos")]
-        command.arg("--");
-        command
-            .arg(url)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
-    };
-    #[cfg(target_os = "windows")]
-    let success = windows::open_browser(url);
-    if success {
-        Ok(())
-    } else {
-        Err("native.ai.browser.openFailed".into())
-    }
+pub(crate) fn desktop_browser(url: &str) -> Result<(), String> {
+    situate_host::external::open(url.as_ref()).map_err(|_| "native.ai.browser.openFailed".into())
 }
 
 #[cfg(target_os = "macos")]
@@ -340,7 +318,9 @@ mod platform {
 mod windows;
 
 #[cfg(all(test, target_os = "windows"))]
-pub(crate) use windows::open_browser as open_browser_for_test;
+pub(crate) fn open_browser_for_test(url: &str) -> bool {
+    desktop_browser(url).is_ok()
+}
 
 #[cfg(target_os = "windows")]
 mod platform {

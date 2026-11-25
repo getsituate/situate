@@ -20,6 +20,7 @@ import {
   mergeReferences,
   type ContentReference,
 } from "../files/content-reference";
+import { filesRequest } from "../files/api";
 import { resolveReference } from "../files/reference-operations";
 import type { PresentationValue, ViewTarget } from "../layout/navigation";
 import {
@@ -467,7 +468,10 @@ async function attach(files: File[]): Promise<void> {
   for (const file of files) await chat.value?.addAttachment(file);
 }
 let referenceNavigation = 0;
-async function openReference(reference: ContentReference): Promise<void> {
+async function openReference(
+  reference: ContentReference,
+  useDefaultApplication = false,
+): Promise<void> {
   const scope = props.workspaceScope,
     owner = chat.value;
   const navigation = ++referenceNavigation;
@@ -480,10 +484,22 @@ async function openReference(reference: ContentReference): Promise<void> {
   const current = () =>
     !!root.value && chat.value === owner && navigation === referenceNavigation;
   try {
-    const path =
-      reference.kind === "live"
-        ? (await resolveReference(scope, reference)).path
-        : reference.path;
+    let path = reference.path;
+    if (reference.kind === "live") {
+      if (useDefaultApplication) {
+        const reply = await filesRequest({
+          workspaceId: scope,
+          operation: "openExternal",
+          reference,
+        });
+        if (reply.status !== "ok")
+          throw new Error("native.files.external.openFailed");
+        if (!reply.document) return;
+        path = reply.document.path;
+      } else {
+        path = (await resolveReference(scope, reference)).path;
+      }
+    }
     if (!current()) return;
     const target: ViewTarget = {
       kind: "view",
@@ -667,7 +683,7 @@ defineExpose({
                 :key="`${workspaceScope}:${conversationId ?? ''}`"
                 :messages="chat.state.transcript"
                 :message-offset="chat.state.messageOffset"
-                :open-reference="openReference"
+                :open-reference="(reference) => openReference(reference, true)"
                 @preview="questionPreview = $event"
                 :questions="questions"
                 :notices="chat.state.pluginNotices"

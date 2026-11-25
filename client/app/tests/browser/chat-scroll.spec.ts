@@ -462,6 +462,67 @@ test("the scroll-to-end button works in the onboarding conversation", async ({
   await expect(button).toBeHidden();
 });
 
+test("opens an AI-linked document through its workspace reference", async ({
+  page,
+}) => {
+  await openChat(page);
+  const reference = {
+    kind: "live",
+    workspaceId: "garden",
+    path: "Report.pdf",
+    anchorRevision: "a".repeat(40),
+  };
+  const openDocument: unknown[] = [];
+  await page.exposeBinding(
+    "__openLinkedDocument",
+    (_source, request: unknown) => {
+      openDocument.push(request);
+      if (openDocument.length === 2)
+        throw new Error("native.files.external.openFailed");
+      return { status: "ok" };
+    },
+  );
+  await page.evaluate((reference) => {
+    const host = Reflect.get(window, "__TAURI_INTERNALS__");
+    const nativeInvoke = host.invoke.bind(host);
+    host.invoke = (
+      command: string,
+      args: { request?: { operation: string } },
+    ) =>
+      command === "files_request" && args.request?.operation === "openExternal"
+        ? Reflect.get(window, "__openLinkedDocument")(args.request)
+        : nativeInvoke(command, args);
+    const state = Reflect.get(window, "__scrollChat").state;
+    state.transcript = [
+      ...state.transcript,
+      {
+        role: "toolResult",
+        toolCallId: "linked-document",
+        toolName: "link_file",
+        content: [],
+        isError: false,
+        timestamp: Date.now(),
+        details: { reference },
+      },
+    ];
+  }, reference);
+  const link = page.getByRole("button", {
+    name: "Open Report.pdf",
+    exact: true,
+  });
+  await expect(link).toBeVisible();
+  expect(openDocument).toEqual([]);
+  await link.press("Enter");
+  await expect
+    .poll(() => openDocument)
+    .toEqual([{ operation: "openExternal", workspaceId: "garden", reference }]);
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page.getByRole("dialog")).toContainText(
+    t("native.files.external.openFailed"),
+  );
+});
+
 for (const onboarding of [false, true]) {
   test(`opens individual imported files with the keyboard in ${onboarding ? "onboarding" : "ordinary chat"}`, async ({
     page,

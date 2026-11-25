@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[dependencies]
+situate-host-api = { path = "../situate-host-api" }
+
 [target.'cfg(target_vendor = "apple")'.dependencies]
 situate-host-macos = { path = "../situate-host-macos" }
 

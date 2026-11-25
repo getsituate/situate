@@ -77,6 +77,28 @@ fn native_batch_acknowledgement_contains_compact_anchored_references() {
 }
 
 #[test]
+fn external_reference_tracks_a_move_without_retargeting_after_delete() {
+    let root = workspace();
+    let bytes = b"%PDF-1.7\0\xff";
+    std::fs::write(root.path().join("Report.pdf"), bytes).unwrap();
+    let mut store = ContentStore::open(root.path()).unwrap();
+    let reference = store
+        .capture_reference("workspace", "Report.pdf", None)
+        .unwrap();
+    assert!(external_reference_path("other", Some(&store), &reference).is_err());
+
+    store.move_entry("Report.pdf", "Renamed.pdf").unwrap();
+    let path = external_reference_path("workspace", Some(&store), &reference).unwrap();
+    assert_eq!(path, "Renamed.pdf");
+    require_external_binary(&path, &read_local(root.path(), &path).unwrap()).unwrap();
+
+    store.delete_entry("Renamed.pdf").unwrap();
+    std::fs::write(root.path().join("Renamed.pdf"), bytes).unwrap();
+    store.record_external_changes().unwrap();
+    assert!(external_reference_path("workspace", Some(&store), &reference).is_err());
+}
+
+#[test]
 fn native_mixed_batch_renders_imported_images_and_returns_attachment_references() {
     let root = workspace();
     let sources = tempfile::tempdir().unwrap();
@@ -607,6 +629,23 @@ fn requests_reject_caller_roots_unknown_operations_and_invalid_choices() {
         json!({"workspaceId":"known","operation":"resolve","choice":"anything"}),
     ] {
         assert!(serde_json::from_value::<Request>(value).is_err());
+    }
+}
+
+#[test]
+fn external_reference_request_cannot_override_the_anchored_target() {
+    let reference = json!({"kind":"live","workspaceId":"known","path":"Report.pdf","anchorRevision":"a".repeat(40)});
+    let request = json!({"workspaceId":"known","operation":"openExternal","reference":reference});
+    assert!(serde_json::from_value::<Request>(request.clone()).is_ok());
+    for (key, value) in [
+        ("path", "Other.pdf"),
+        ("href", "https://example.org"),
+        ("destination", "note.md"),
+        ("pluginId", "example"),
+    ] {
+        let mut forged = request.clone();
+        forged[key] = json!(value);
+        assert!(serde_json::from_value::<Request>(forged).is_err());
     }
 }
 

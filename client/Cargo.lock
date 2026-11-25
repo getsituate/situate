@@ -4614,6 +4614,7 @@ dependencies = [
  "situate-agent",
  "situate-core",
  "situate-fixtures",
+ "situate-host",
  "situate-host-macos",
  "situate-host-posix",
  "situate-host-windows",
@@ -4672,6 +4673,7 @@ dependencies = [
 name = "situate-host"
 version = "0.1.6"
 dependencies = [
+ "situate-host-api",
  "situate-host-macos",
  "situate-host-posix",
  "situate-host-windows",
@@ -4692,6 +4694,7 @@ version = "0.1.6"
 dependencies = [
  "cap-std",
  "rustix",
+ "situate-host-api",
  "situate-host-posix",
  "tempfile",
 ]

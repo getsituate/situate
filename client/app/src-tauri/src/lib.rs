@@ -15,6 +15,7 @@ mod conversation_projection;
 mod device_locale;
 mod diagnostics;
 mod dictation;
+mod external_links;
 mod file_tool;
 mod files;
 mod layout;
@@ -95,6 +96,7 @@ macro_rules! application_handler {
             crate::localization::localization_snapshot,
             crate::localization::localization_update,
             crate::files::files_request,
+            crate::external_links::open_web_link,
             crate::diagnostics::diagnostics_register,
             crate::diagnostics::diagnostics_emit,
             crate::diagnostics::diagnostics_release,
