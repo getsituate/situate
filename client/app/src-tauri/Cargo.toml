@@ -66,7 +66,7 @@ plist = "1"
 objc2 = "=0.6.4"
 block2 = "=0.6.2"
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSValue"] }
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSBitmapImageRep", "NSImage", "NSImageRep", "NSGraphicsContext", "NSView", "NSWindow", "NSTextCheckingClient", "objc2-core-graphics"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSApplication", "NSBitmapImageRep", "NSImage", "NSImageRep", "NSGraphicsContext", "NSEvent", "NSView", "NSWindow", "NSTextCheckingClient", "block2", "objc2-core-graphics"] }
 objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration", "WKSnapshotConfiguration", "block2", "objc2-app-kit", "objc2-core-foundation"] }
 objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGImage"] }
 

@@ -89,6 +89,65 @@ async function openNavigation(page: Page): Promise<void> {
   if (!(await navigation.isVisible())) await trigger.click();
 }
 
+for (const width of [1280, 1000]) {
+  test(`middle-click opens and focuses a new conversation tab at ${width}px`, async ({
+    page,
+  }) => {
+    const title = "Garden plans";
+    await workspaceFixture(page, shellState, {
+      aiConversations: [{ id: "legacy", title, draft: "Existing draft" }],
+    });
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    const item = page.getByRole("button", { name: title, exact: true });
+    const tabs = page.getByRole("tab", { name: title, exact: true });
+    const message = page.getByRole("textbox", { name: "Message", exact: true });
+    await expect(message).toHaveValue("Existing draft");
+    await expect(tabs).toHaveCount(1);
+    await openNavigation(page);
+    await item.click({ button: "middle" });
+    await expect(tabs).toHaveCount(2);
+    await expect(tabs.first()).toHaveAttribute("aria-selected", "false");
+    await expect(tabs.last()).toHaveAttribute("aria-selected", "true");
+    await expect(tabs.last()).toBeFocused();
+    await expect(message).toHaveValue("Existing draft");
+  });
+}
+
+test("right-click opens the conversation menu without selecting the row", async ({
+  page,
+}) => {
+  const title = "Garden plans";
+  await workspaceFixture(page, shellState, {
+    aiConversations: [
+      { id: "legacy", title: "Notes", draft: "" },
+      { id: "garden-plans", title, draft: "" },
+    ],
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  const item = page.getByRole("button", { name: title, exact: true });
+  await expect(item).not.toHaveAttribute("aria-current", "page");
+  await item.click({ button: "right" });
+  const menu = page.getByRole("menu", {
+    name: `Conversation options: ${title}`,
+  });
+  await expect(menu).toBeVisible();
+  await expect(item).not.toHaveAttribute("aria-current", "page");
+  const rename = menu.getByRole("menuitem", { name: "Rename conversation" });
+  await expect(rename).toBeFocused();
+  await rename.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: `Conversation options: ${title}` }),
+  ).toBeFocused();
+  await item.click({ button: "right" });
+  await rename.click();
+  await expect(
+    page.getByRole("textbox", { name: "Conversation title" }),
+  ).toHaveValue(title);
+});
+
 for (const viewport of [
   { width: 1280, height: 800 },
   { width: 390, height: 844 },

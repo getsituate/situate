@@ -22,7 +22,7 @@ const props = defineProps<{
   running: boolean;
   announceArchiveChange?: (scope: string, archived: boolean) => void;
 }>();
-const emit = defineEmits<{ open: [] }>();
+const emit = defineEmits<{ open: []; openInNewTab: [] }>();
 const title = computed(() => props.item.title || t("navigation.newChat"));
 const interruptsWork = computed(
   () => props.running || ownsDictation(props.scope, props.item.id),
@@ -36,6 +36,7 @@ const deleteError = ref(false);
 const cancelDeleteButton =
   useTemplateRef<InstanceType<typeof SituateButton>>("cancelDeleteButton");
 const menuOpen = ref(false);
+const menuPoint = ref<{ x: number; y: number }>();
 const editing = ref(false);
 const saving = ref(false);
 const error = ref(false);
@@ -46,6 +47,21 @@ const trigger =
   useTemplateRef<InstanceType<typeof SituateIconButton>>("trigger");
 const anchor = computed(() => trigger.value?.element);
 const input = useTemplateRef<InstanceType<typeof SituateInput>>("input");
+function openMenu(open: boolean, point?: { x: number; y: number }) {
+  if (moving.value) return;
+  menuPoint.value = point;
+  menuOpen.value = open;
+}
+function contextMenu(event: MouseEvent) {
+  if (editing.value) return;
+  event.preventDefault();
+  openMenu(
+    true,
+    event.clientX || event.clientY
+      ? { x: event.clientX, y: event.clientY }
+      : undefined,
+  );
+}
 async function changeArchive() {
   if (moving.value) return;
   const archived = !props.item.archived;
@@ -175,7 +191,11 @@ async function save() {
 </script>
 
 <template>
-  <div class="conversation-row" :class="{ selected, editing }">
+  <div
+    class="conversation-row"
+    :class="{ selected, editing }"
+    @contextmenu="contextMenu"
+  >
     <form
       v-if="editing"
       class="title-form"
@@ -240,6 +260,7 @@ async function save() {
           class="conversation-destination"
           :aria-current="selected ? 'page' : undefined"
           @click="emit('open')"
+          @mousedown.middle.prevent="emit('openInNewTab')"
         >
           <span
             class="conversation-title"
@@ -272,13 +293,15 @@ async function save() {
         :aria-controls="menuId"
         :popovertarget="menuId"
         :aria-disabled="moving || undefined"
-        @click.prevent="!moving && (menuOpen = !menuOpen)"
-        @keydown.down.prevent="!moving && (menuOpen = true)"
+        @click.prevent="openMenu(!menuOpen)"
+        @keydown.down.prevent="openMenu(true)"
       />
       <SituateMenu
         :id="menuId"
         :open="menuOpen"
         :anchor="anchor"
+        :point="menuPoint"
+        @contextmenu.stop.prevent
         :label="t('chat.conversationActions', { title })"
         @close="menuOpen = false"
       >

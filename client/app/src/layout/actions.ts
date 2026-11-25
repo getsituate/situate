@@ -3,7 +3,7 @@ import type { NavigationTicket } from "./session";
 import type { LayoutNode, PaneEdge } from "./tree";
 
 export type LayoutAction =
-  | { readonly type: "create-tab" }
+  | { readonly type: "create-tab"; readonly conversationId?: string }
   | { readonly type: "select-tab"; readonly tabId: string }
   | { readonly type: "cycle-tab"; readonly delta: -1 | 1 }
   | { readonly type: "close-tab"; readonly tabId?: string }
@@ -77,7 +77,8 @@ export function resolveLayoutAction(
   state: LayoutState,
   action: LayoutAction,
 ): LayoutIntent | undefined {
-  if (action.type === "create-tab") return { type: "new-tab" };
+  if (action.type === "create-tab")
+    return { type: "new-tab", conversationId: action.conversationId };
   const tab = selectedTab(state);
   if (!tab) return;
   switch (action.type) {

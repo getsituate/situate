@@ -1299,6 +1299,73 @@ test("pane grips move between all four edges with real pointer gestures", async 
   }
 });
 
+test("middle-click closes the tab under the pointer", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 920 });
+  await workspaceFixture(page, shellState);
+  await page.goto("/");
+  const chat = page.getByRole("tab", { name: "New chat", exact: true });
+  const message = page.getByRole("textbox", { name: "Message", exact: true });
+  await message.fill("Keep this draft");
+  await newTab(page);
+  await (
+    await navigation(page)
+  )
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  const files = page.getByRole("tab", { name: "Files", exact: true });
+  await expect(files).toHaveAttribute("aria-selected", "true");
+  await chat.click({ button: "middle" });
+  await expect(chat).toHaveCount(0);
+  await expect(files).toHaveAttribute("aria-selected", "true");
+  await files.click({ button: "middle" });
+  await expect(files).toHaveCount(0);
+  await expect(page.locator(".view-chooser")).toBeVisible();
+});
+
+test("mouse history buttons navigate the focused pane, not the pane under the pointer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 920 });
+  await workspaceFixture(page, shellState);
+  await page.goto("/");
+  const panes = page.locator(".pane-tile");
+  const focused = panes.first();
+  const other = panes.last();
+  const message = focused.getByRole("textbox", {
+    name: "Message",
+    exact: true,
+  });
+  await message.fill("Keep this draft");
+  await (
+    await paneOptions(page)
+  )
+    .getByRole("button", { name: "Add pane to the right", exact: true })
+    .click();
+  await expect(panes).toHaveCount(2);
+  await message.focus();
+  await (
+    await navigation(page)
+  )
+    .getByRole("button", { name: "Files", exact: true })
+    .click();
+  await expect(focused.locator(".file-browser")).toBeVisible();
+  await expect(other.locator(".view-chooser")).toBeVisible();
+
+  const pressSideButton = async (button: 3 | 4) => {
+    await other.dispatchEvent("pointerdown", { button, pointerType: "mouse" });
+    // Playwright's mouse API only supports left, middle and right.
+    await other.dispatchEvent("mouseup", { button });
+  };
+  await pressSideButton(3);
+  await expect(message).toHaveValue("Keep this draft");
+  await expect(other.locator(".view-chooser")).toBeVisible();
+
+  await pressSideButton(4);
+  await expect(focused.locator(".file-browser")).toBeVisible();
+  await expect(focused).toHaveClass(/active/);
+  await expect(other.locator(".view-chooser")).toBeVisible();
+});
+
 test(
   "main navigation reveals an open conversation while pane Back permits two shared displays",
   { tag: "@visual-desktop" },
