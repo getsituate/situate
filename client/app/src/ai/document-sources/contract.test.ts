@@ -171,6 +171,44 @@ describe("library profile", () => {
     );
   });
 
+  test("accepts ordered detail fields and binds them to the exact document", () => {
+    const args = { ref, locale: "de" };
+    const field = { id: "sender", label: "Absender", value: "Example company" };
+    const fields = [field, { id: "date", label: "Datum", value: "04.03.2026" }];
+    const result = { ...envelope("details"), version: 2, ref, fields };
+    expect(validateLibraryResult(library, "details", args, result)).toBe(
+      result,
+    );
+    expect(
+      validateLibraryResult(library, "details", args, {
+        ...result,
+        fields: [],
+      }),
+    ).toMatchObject({ status: "ok", fields: [] });
+    for (const change of [
+      { ref: { ...ref, revision: "r2" } },
+      { source: { ...source, instanceId: "other-account" } },
+      { scopeId: "other-subset" },
+      { status: "partial" },
+      { fields: [field, { ...field, label: "Other label" }] },
+      { fields: [{ ...field, value: " " }] },
+      { fields: [{ ...field, value: { text: "Not a string" } }] },
+      { fields: [{ ...field, value: "x".repeat(2049) }] },
+      {
+        fields: Array.from({ length: 33 }, (_, i) => ({
+          ...field,
+          id: `field-${i}`,
+        })),
+      },
+    ])
+      invalid(() =>
+        validateLibraryResult(library, "details", args, {
+          ...result,
+          ...change,
+        }),
+      );
+  });
+
   test("binds a search page to its query and rejects unadvertised excerpts", () => {
     const response = {
       ...envelope("search"),

@@ -170,7 +170,8 @@ mod tests {
                 "documentLibraryDescribe",
                 "documentLibraryList",
                 "documentLibrarySearch",
-                "documentLibraryReadOriginal"
+                "documentLibraryReadOriginal",
+                "documentLibraryDetails"
             ]
         );
         use situate_core::plugins::storage::{self, Area};

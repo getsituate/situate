@@ -60,7 +60,17 @@ export type LibraryOriginal =
       original: OriginalHandle;
     };
 
+export interface LibraryDetailField {
+  id: string;
+  label: string;
+  value: string;
+}
+export type LibraryDetails =
+  | LibraryFailure
+  | { status: "ok"; ref: DocumentReference; fields: LibraryDetailField[] };
+
 export const LIBRARY_VERSION: 2;
+export const LIBRARY_DETAILS_EXPORT: "documentLibraryDetails";
 export interface OriginalHandle {
   id: string;
   size: number;
@@ -81,7 +91,7 @@ export function validateLibraryDescriptor(
 export function validateLibraryReference(value: unknown): DocumentReference;
 export function validateLibraryRequest(
   descriptor: LibraryDescriptor,
-  operation: "list" | "search" | "readOriginal",
+  operation: "list" | "search" | "readOriginal" | "details",
   args: unknown,
 ): unknown;
 export function validateLibraryResult(
@@ -96,3 +106,9 @@ export function validateLibraryResult(
   args: unknown,
   value: unknown,
 ): LibraryOriginal;
+export function validateLibraryResult(
+  descriptor: LibraryDescriptor,
+  operation: "details",
+  args: unknown,
+  value: unknown,
+): LibraryDetails;

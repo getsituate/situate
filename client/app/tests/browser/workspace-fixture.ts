@@ -384,6 +384,26 @@ export async function workspaceFixture(
         string,
         { scope: string; base64?: string }
       >();
+      const documentGates = new Map<
+        string,
+        { ready: Promise<void>; release: () => void }
+      >();
+      Reflect.set(
+        window,
+        "__holdDocumentReply",
+        (key: string, hold: boolean) => {
+          if (hold && !documentGates.has(key)) {
+            let release!: () => void;
+            const ready = new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            documentGates.set(key, { ready, release });
+          } else if (!hold) {
+            documentGates.get(key)?.release();
+            documentGates.delete(key);
+          }
+        },
+      );
       const modelErrors = new Map<string, string>();
       const conversations = new Map<string, ConversationRecord>(
         (options.aiConversations ?? []).map((record) => [
@@ -1706,6 +1726,7 @@ export async function workspaceFixture(
               return structuredClone(value);
             }
             if (command === "plugin_document_chunk") {
+              await documentGates.get("chunk")?.ready;
               const read = documentReads.get(String(args.id));
               if (!read?.base64 || read.scope !== args.scope)
                 throw "native.plugins.unavailable";
@@ -1848,6 +1869,8 @@ export async function workspaceFixture(
                     result.original.id = request.readId;
                   }
                 }
+                if (request.exportName === "documentLibraryDetails")
+                  await documentGates.get(String(request.pluginId))?.ready;
                 return { outcome: "completed", value };
               }
               throw "native.plugins.unavailable";

@@ -40,6 +40,13 @@ it("keeps its accessible label and fixed arch while stepping only the eyes, then
   expect(vi.getTimerCount()).toBe(0);
 });
 
+it("is decorative when the surrounding status supplies the label", () => {
+  const wrapper = mount(WorkingIndicator, { attachTo: document.body });
+  expect(wrapper.attributes("aria-hidden")).toBe("true");
+  expect(wrapper.attributes("role")).toBeUndefined();
+  expect(wrapper.attributes("aria-label")).toBeUndefined();
+});
+
 it("shows static rest for initial and live reduced motion without losing busy meaning", async () => {
   preference.matches = true;
   const wrapper = mount(WorkingIndicator, {

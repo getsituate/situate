@@ -379,6 +379,7 @@ export const LIBRARY_EXPORTS = Object.freeze({
   search: "documentLibrarySearch",
   readOriginal: "documentLibraryReadOriginal",
 });
+export const LIBRARY_DETAILS_EXPORT = "documentLibraryDetails";
 export const MAX_ORIGINAL_BYTES = 32 * 1024 * 1024;
 export const ORIGINAL_CHUNK_BYTES = 1024 * 1024;
 
@@ -428,9 +429,15 @@ export function validateLibraryReference(value) {
 
 export function validateLibraryRequest(descriptor, operation, args) {
   validateLibraryDescriptor(descriptor);
-  requireValid(["list", "search", "readOriginal"].includes(operation));
-  if (operation === "readOriginal") {
-    record(args, ["ref"]);
+  requireValid(
+    ["list", "search", "readOriginal", "details"].includes(operation),
+  );
+  if (operation === "readOriginal" || operation === "details") {
+    record(args, operation === "details" ? ["ref", "locale"] : ["ref"]);
+    if (operation === "details") {
+      string(args.locale, 64);
+      requireValid(/^[a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*$/.test(args.locale));
+    }
     reference(args.ref, descriptor.source);
     requireValid(
       args.ref.identity !== "path" || Object.hasOwn(args.ref, "revision"),
@@ -479,6 +486,8 @@ export function validateLibraryResult(descriptor, operation, args, value) {
     "reason",
     "document",
     "original",
+    "ref",
+    "fields",
   ]);
   requireValid(
     value.version === LIBRARY_VERSION &&
@@ -500,6 +509,21 @@ export function validateLibraryResult(descriptor, operation, args, value) {
         "too-large",
       ].includes(value.error.code),
     );
+  } else if (operation === "details") {
+    record(value, [...base, "ref", "fields"]);
+    requireValid(value.status === "ok");
+    reference(value.ref, descriptor.source, args.ref);
+    const ids = new Set();
+    array(value.fields, 32, (field) => {
+      record(field, ["id", "label", "value"]);
+      string(field.id, 64);
+      requireValid(
+        /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(field.id) && !ids.has(field.id),
+      );
+      ids.add(field.id);
+      string(field.label, 128);
+      string(field.value, 2048);
+    });
   } else if (operation === "readOriginal") {
     record(value, [...base, "document", "original"]);
     requireValid(value.status === "ok");

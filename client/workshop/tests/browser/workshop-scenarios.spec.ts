@@ -407,9 +407,12 @@ test("live controls still follow preview navigation rather than the chosen start
 }) => {
   const preview = await open(page, "documents-find");
   await preview
-    .getByRole("button", { name: "Document actions", exact: true })
+    .getByRole("button", { name: "Open navigation", exact: true })
     .click();
-  await preview.getByRole("menuitem", { name: "Sources", exact: true }).click();
+  await preview
+    .getByRole("dialog", { name: "Workspace navigation" })
+    .getByRole("button", { name: "Plugins", exact: true })
+    .click();
   await expect(
     page.getByRole("group", { name: "Card appearance", exact: true }),
   ).toBeVisible();

@@ -11,7 +11,7 @@
           "platforms": ["macos", "windows"],
           "title": "Open documents in Situate",
           "paragraphs": [
-            "Browse and search compatible document sources. Open PDFs, PNGs and JPEGs up to 32 MiB in the Documents view without moving the originals."
+            "Browse and search compatible document sources. Open PDFs, PNGs and JPEGs up to 32 MiB in the Documents view without moving the originals. Sources can also show details such as the original filename."
           ]
         }
       ]
@@ -25,7 +25,7 @@
           "platforms": ["macos", "windows"],
           "title": "Dokumente in Situate öffnen",
           "paragraphs": [
-            "Durchsuche kompatible Dokumentquellen und öffne PDFs, PNGs und JPEGs bis 32 MiB in der Dokumentansicht. Die Originale bleiben in ihren Quellen."
+            "Durchsuche kompatible Dokumentquellen und öffne PDFs, PNGs und JPEGs bis 32 MiB in der Dokumentansicht. Die Originale bleiben in ihren Quellen. Quellen können auch Details wie den Originaldateinamen anzeigen."
           ]
         }
       ]

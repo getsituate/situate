@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isMessageKey } from "@situate/localization";
 import { createFailureReporter } from "../diagnostics/failures";
 import {
+  LIBRARY_DETAILS_EXPORT,
   LIBRARY_EXPORTS,
   MAX_ORIGINAL_BYTES,
   ORIGINAL_CHUNK_BYTES,
@@ -1308,7 +1309,10 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
     const plugin = state.plugins.find((candidate) => candidate.id === id);
     if (
       plugin?.manifest?.kind !== "source" ||
-      !Object.values(LIBRARY_EXPORTS).some((operation) => operation === name) ||
+      (name !== LIBRARY_DETAILS_EXPORT &&
+        !Object.values(LIBRARY_EXPORTS).some(
+          (operation) => operation === name,
+        )) ||
       !provider?.isAvailable() ||
       !provider.exports.includes(name) ||
       gates.has(id)

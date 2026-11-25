@@ -210,6 +210,23 @@ export default function defineService({ pluginId }) {
     };
   }
 
+  async function findDocument(ref, host, operation) {
+    const { folder, source } = await configuration(host);
+    const base = { version: 2, source, scopeId: scope.id, operation };
+    if (
+      ref?.source?.pluginId !== source.pluginId ||
+      ref.source.instanceId !== source.instanceId ||
+      ref.identity !== "path" ||
+      !fileName(ref.id)
+    )
+      return { error: failure(base, "permission") };
+    const listing = await scan(host, folder);
+    if (!listing.files) return { error: failure(base, listing.error) };
+    if (!ref.revision || listing.files.get(ref.id) !== ref.revision)
+      return { error: failure(base, "not-found") };
+    return { base, folder, separator: listing.separator };
+  }
+
   return {
     exports: {
       documentSourceDescribe: async (_args, host) =>
@@ -219,27 +236,29 @@ export default function defineService({ pluginId }) {
         descriptor((await configuration(host)).source, 2),
       documentLibraryList: (args, host) => page(args, host, "list", 2),
       documentLibrarySearch: (args, host) => page(args, host, "search", 2),
-      async documentLibraryReadOriginal({ ref }, host) {
-        const { folder, source } = await configuration(host);
-        const base = {
-          version: 2,
-          source,
-          scopeId: scope.id,
-          operation: "readOriginal",
+      async documentLibraryDetails({ ref, locale }, host) {
+        const result = await findDocument(ref, host, "details");
+        if (result.error) return result.error;
+        return {
+          ...result.base,
+          status: "ok",
+          ref,
+          fields: [
+            {
+              id: "filename",
+              label:
+                locale === "de" ? "Originaldateiname" : "Original filename",
+              value: ref.id,
+            },
+          ],
         };
-        if (
-          ref?.source?.pluginId !== source.pluginId ||
-          ref.source.instanceId !== source.instanceId ||
-          ref.identity !== "path" ||
-          !fileName(ref.id)
-        )
-          return failure(base, "permission");
-        const listing = await scan(host, folder);
-        if (!listing.files) return failure(base, listing.error);
-        if (!ref.revision || listing.files.get(ref.id) !== ref.revision)
-          return failure(base, "not-found");
+      },
+      async documentLibraryReadOriginal({ ref }, host) {
+        const result = await findDocument(ref, host, "readOriginal");
+        if (result.error) return result.error;
+        const { base, folder, separator } = result;
         const reply = await host.documents.fromFile(
-          `${folder}${listing.separator}${ref.id}`,
+          `${folder}${separator}${ref.id}`,
         );
         if (!reply.original) return failure(base, reply.error ?? "unavailable");
         const after = await scan(host, folder);

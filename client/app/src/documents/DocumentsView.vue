@@ -8,7 +8,7 @@ import {
   useId,
   watch,
 } from "vue";
-import { t } from "@situate/localization";
+import { preferences, t } from "@situate/localization";
 import {
   SituateButton,
   SituateDialog,
@@ -20,6 +20,7 @@ import {
   SituateResizeHandle,
 } from "@situate/ui";
 import {
+  LIBRARY_DETAILS_EXPORT,
   LIBRARY_EXPORTS,
   validateLibraryDescriptor,
   validateLibraryReference,
@@ -27,6 +28,7 @@ import {
   type DocumentReference,
   type LibraryContinuation,
   type LibraryDescriptor,
+  type LibraryDetailField,
   type LibraryDocument,
   type LibraryError,
 } from "../ai/document-sources/contract.js";
@@ -78,8 +80,7 @@ const inventory = computed(() =>
 );
 const busy = ref(false);
 const browse = ref(false);
-const menu = ref(false);
-const heading = ref<HTMLElement>();
+const searchInput = ref<InstanceType<typeof SituateInput>>();
 const previewHeading = ref<HTMLElement>();
 const browseButton = ref<InstanceType<typeof SituateButton>>();
 const root = ref<HTMLElement>();
@@ -135,6 +136,17 @@ const preview = shallowRef<{
 }>();
 const previewError = ref<LibraryError | "failed">();
 const opening = ref(false);
+const detailFields = shallowRef<LibraryDetailField[]>([]);
+const familiarFormats: Record<string, string> = {
+  "application/pdf": "PDF",
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+};
+const fileFormat = computed(() => {
+  const mimeType =
+    preview.value?.document.mimeType ?? selection.value?.mimeType;
+  return mimeType && (familiarFormats[mimeType] ?? mimeType);
+});
 
 interface SourcePage {
   plugin: string;
@@ -169,8 +181,7 @@ const sourceName = computed(
     )?.manifest?.name ??
     "",
 );
-const canPreview = (type: string) =>
-  ["application/pdf", "image/png", "image/jpeg"].includes(type);
+const canPreview = (type: string) => Object.hasOwn(familiarFormats, type);
 let listTurn = 0;
 let openTurn = 0;
 let controller: AbortController | undefined;
@@ -391,10 +402,10 @@ async function closePreview() {
   retain();
   await nextTick();
   if (trigger?.isConnected) trigger.focus({ preventScroll: true });
-  else heading.value?.focus({ preventScroll: true });
+  else if (searchInput.value) searchInput.value.focus({ preventScroll: true });
+  else root.value?.focus({ preventScroll: true });
 }
 function sources(id?: string) {
-  menu.value = false;
   retain();
   emit("sources", id);
 }
@@ -422,6 +433,43 @@ watch(
   },
   { immediate: true },
 );
+watch(
+  [selection, inventory, () => preferences.value.language],
+  async ([target, , locale], _, onCleanup) => {
+    detailFields.value = [];
+    const plugin = candidates.value.find(
+      ({ id }) => id === target?.ref.source.pluginId,
+    );
+    if (!target || !plugin?.manifest?.exports?.includes(LIBRARY_DETAILS_EXPORT))
+      return;
+    const request = new AbortController();
+    const { signal } = request;
+    onCleanup(() => request.abort());
+    try {
+      const descriptor =
+        pages.value.find((source) => source.plugin === plugin.id)?.descriptor ??
+        (await describe(plugin));
+      if (
+        signal.aborted ||
+        descriptor.source.instanceId !== target.ref.source.instanceId
+      )
+        return;
+      const args = { ref: target.ref, locale };
+      const value = await runtime.value?.invokeDocumentSource(
+        plugin.id,
+        LIBRARY_DETAILS_EXPORT,
+        args,
+        signal,
+      );
+      if (signal.aborted) return;
+      const result = validateLibraryResult(descriptor, "details", args, value);
+      if (result.status === "ok") detailFields.value = result.fields;
+    } catch {
+      // Supplementary metadata can be unavailable without affecting the original.
+    }
+  },
+  { immediate: true },
+);
 onUnmounted(() => {
   ++listTurn;
   ++openTurn;
@@ -435,24 +483,8 @@ onUnmounted(() => {
     class="documents-view"
     :class="{ 'documents-selected': selection }"
     :aria-label="t('documents.title')"
+    tabindex="-1"
   >
-    <header class="doc-workspace-heading">
-      <SituateIcon name="notes" />
-      <h1 ref="heading" tabindex="-1">{{ t("documents.title") }}</h1>
-      <div class="doc-actions" @keydown.esc="menu = false">
-        <SituateIconButton
-          icon="more"
-          :label="t('documents.actions')"
-          :aria-expanded="menu"
-          @click="menu = !menu"
-        />
-        <div v-if="menu" class="doc-menu">
-          <SituateButton variant="plain" @click="sources()">{{
-            t("documents.sources")
-          }}</SituateButton>
-        </div>
-      </div>
-    </header>
     <div v-if="candidates.length || selection" class="doc-shell">
       <aside
         :id="sidebarId"
@@ -502,6 +534,7 @@ onUnmounted(() => {
                 t("documents.search")
               }}</label>
               <SituateInput
+                ref="searchInput"
                 :id="queryId"
                 v-model="draft"
                 appearance="plain"
@@ -571,9 +604,6 @@ onUnmounted(() => {
                 t("documents.incomplete")
               }}</SituateButton
             >
-            <p v-if="query" class="doc-muted">
-              {{ t("documents.searchCoverage") }}
-            </p>
           </div>
           <div class="doc-sort">
             <SituateButton
@@ -679,10 +709,7 @@ onUnmounted(() => {
           </p>
         </header>
         <div class="doc-preview-scroll">
-          <p v-if="opening" class="doc-status" role="status">
-            {{ t("documents.opening") }}
-          </p>
-          <div v-else-if="previewError" class="doc-status">
+          <div v-if="previewError" class="doc-status doc-preview-error">
             <p role="status">{{ previewErrorText(previewError) }}</p>
             <SituateButton
               v-if="previewError === 'unavailable' || previewError === 'failed'"
@@ -700,13 +727,14 @@ onUnmounted(() => {
             >
           </div>
           <DocumentReading
-            v-else-if="preview"
-            :bytes="preview.bytes"
-            :title="preview.document.title"
-            :mime-type="preview.document.mimeType"
+            v-else
+            :key="`${keyFor(selection.ref)}:${selection.ref.revision ?? ''}`"
+            :bytes="preview?.bytes"
+            :title="preview?.document.title ?? selection.title"
+            :mime-type="preview?.document.mimeType ?? selection.mimeType"
             @failed="previewFailed()"
           />
-          <div class="doc-metadata">
+          <section class="doc-metadata">
             <div class="doc-navigation-heading">
               <h3>{{ t("documents.tags") }}</h3>
               <SituateButton
@@ -719,16 +747,24 @@ onUnmounted(() => {
             <p :id="`${unavailableId}-edit`" class="doc-muted">
               {{ t("documents.later") }}
             </p>
-            <SituateDisclosure v-if="preview || selection.mimeType" open>
+            <SituateDisclosure v-if="fileFormat || detailFields.length" open>
               <template #label>{{ t("documents.details") }}</template>
-              <p>
-                {{ t("documents.type") }}:
-                <span data-localization-content="external">{{
-                  preview?.document.mimeType ?? selection.mimeType
-                }}</span>
-              </p>
+              <dl>
+                <template v-if="fileFormat">
+                  <dt>{{ t("documents.type") }}</dt>
+                  <dd data-localization-content="external">{{ fileFormat }}</dd>
+                </template>
+                <template v-for="field in detailFields" :key="field.id">
+                  <dt data-localization-content="external">
+                    {{ field.label }}
+                  </dt>
+                  <dd data-localization-content="external">
+                    {{ field.value }}
+                  </dd>
+                </template>
+              </dl>
             </SituateDisclosure>
-          </div>
+          </section>
         </div>
       </section>
     </div>
@@ -744,26 +780,50 @@ onUnmounted(() => {
       {{ t("documents.loading") }}
     </p>
     <SituateEmptyState
-      v-else
-      class="doc-status"
-      :title="t('documents.empty')"
+      v-else-if="!runtimeFailed"
+      class="doc-empty-collection"
       :description="
-        t(
-          installed.length || runtimeFailed
-            ? 'documents.noCompatible'
-            : 'documents.emptyHelp',
-        )
+        t(installed.length ? 'documents.noCompatible' : 'documents.emptyHelp')
       "
     >
-      <template #actions
-        ><SituateButton
+      <template #title>
+        <SituateIcon name="notes" />
+        <h2>{{ t("documents.empty") }}</h2>
+      </template>
+      <template #actions>
+        <SituateButton
+          v-if="installed.length"
+          variant="primary"
+          size="small"
+          @click="sources()"
+        >
+          {{ t("documents.sources") }}
+        </SituateButton>
+        <SituateButton
+          v-else
+          variant="primary"
+          size="small"
+          @click="emit('develop')"
+        >
+          <span aria-hidden="true">+</span> {{ t("documents.createSource") }}
+        </SituateButton>
+      </template>
+    </SituateEmptyState>
+    <SituateEmptyState
+      v-else
+      class="doc-status"
+      :title="t('documents.noCompatibleTitle')"
+      :description="t('documents.noCompatible')"
+    >
+      <template #actions>
+        <SituateButton
           variant="primary"
           @click="installed.length ? sources() : emit('develop')"
           >{{
             t(installed.length ? "documents.sources" : "documents.connect")
           }}</SituateButton
-        ></template
-      >
+        >
+      </template>
     </SituateEmptyState>
     <SituateDialog
       v-if="browse"

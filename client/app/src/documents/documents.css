@@ -8,16 +8,11 @@
   background: var(--situate-surface);
   container: documents / size;
 }
-.documents-view h1,
 .documents-view h2,
 .documents-view h3 {
   margin: 0;
   line-height: 1.25;
   overflow-wrap: anywhere;
-}
-.documents-view h1 {
-  font-size: 22px;
-  letter-spacing: -0.025em;
 }
 .documents-view h2 {
   font-size: 20px;
@@ -28,32 +23,10 @@
 .documents-view p {
   margin: 8px 0 16px;
 }
-.doc-workspace-heading,
 .doc-navigation-heading {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.doc-workspace-heading {
-  padding: 12px 24px;
-  min-height: 68px;
-  border-bottom: 1px solid var(--situate-line);
-}
-.doc-workspace-heading > svg {
-  color: var(--situate-accent-strong);
-}
-.doc-actions {
-  position: relative;
-  margin-inline-start: auto;
-}
-.doc-menu {
-  position: absolute;
-  z-index: 1;
-  inset-inline-end: 0;
-  padding: 4px;
-  border: 1px solid var(--situate-line);
-  border-radius: 8px;
-  background: var(--situate-surface);
 }
 .doc-shell,
 .doc-collection,
@@ -167,7 +140,6 @@
 .doc-filters button,
 .doc-sort button,
 .doc-metadata button,
-.doc-menu button,
 .doc-results-heading .doc-freshness {
   display: inline-flex;
   align-items: center;
@@ -193,7 +165,6 @@
   opacity: 0.72;
 }
 .doc-search-box button:hover,
-.doc-menu button:hover,
 .doc-filters button:enabled:hover {
   background: var(--situate-paper);
 }
@@ -304,6 +275,21 @@
   padding: 8px;
   font-size: 10px;
 }
+.documents-view .doc-empty-collection {
+  margin: auto;
+  padding: 32px 24px;
+  max-inline-size: min(100%, 540px);
+  overflow: auto;
+}
+.doc-empty-collection > svg {
+  margin-bottom: 24px;
+  color: var(--situate-accent-strong);
+}
+.doc-empty-collection h2 {
+  font-size: 21px;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
 .doc-status,
 .doc-more {
   margin: 16px 24px;
@@ -316,6 +302,7 @@
 }
 .doc-preview-heading {
   position: relative;
+  flex-shrink: 0;
   padding: 20px 24px 12px;
   background: var(--situate-surface);
 }
@@ -334,17 +321,34 @@
   display: none;
 }
 .doc-preview-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   min-height: 0;
   overflow: auto;
+  scrollbar-gutter: stable;
+}
+.doc-reading {
+  display: grid;
+  /* Leave room for metadata without resizing for late source fields. */
+  flex: 0 0 max(240px, calc(100% - 216px));
+  grid-template: 60px minmax(0, 1fr) / minmax(0, 1fr);
+  min-height: 0;
+}
+.doc-preview-error {
+  flex: 1 0 auto;
 }
 .doc-page-tools {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  justify-content: safe center;
   align-items: center;
   gap: 6px;
   padding: 8px;
+  overflow-x: auto;
   font-size: 12px;
+}
+.doc-page-tools > * {
+  flex-shrink: 0;
 }
 .doc-page-tools button {
   min-height: 44px;
@@ -363,22 +367,81 @@
   min-width: 40px;
   text-align: center;
 }
+.doc-page-frame {
+  position: relative;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
 .doc-page-stage {
   padding: 8px 20px 24px;
   overflow: auto;
 }
-.doc-page-stage canvas,
-.doc-page-stage img {
+.doc-page-stage :is(canvas, img) {
   display: block;
-  max-width: none;
-  height: auto;
   margin-inline: auto;
+}
+.doc-page-stage canvas {
+  max-inline-size: var(--doc-zoom);
+  max-block-size: var(--doc-zoom);
   background: var(--situate-surface);
 }
+.doc-page-stage img {
+  inline-size: var(--doc-zoom);
+  block-size: var(--doc-zoom);
+  object-fit: contain;
+}
+.doc-page-pending {
+  overflow: hidden;
+}
+.doc-page-pending :is(canvas, img) {
+  visibility: hidden;
+}
+.doc-opening {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-inline: 12px;
+  color: var(--situate-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .doc-page-reveal :is(canvas, img) {
+    animation: doc-page-in var(--situate-duration-feedback)
+      var(--situate-ease-settle);
+  }
+  @keyframes doc-page-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
 .doc-metadata {
+  flex-shrink: 0;
   padding: 16px 24px;
   border-top: 1px solid var(--situate-line);
   background: var(--situate-surface);
+}
+.doc-metadata summary {
+  font-size: 14px;
+  font-weight: 600;
+}
+.doc-metadata dl {
+  display: grid;
+  grid-template-columns: minmax(60px, 0.6fr) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.doc-metadata dt {
+  color: var(--situate-muted);
+}
+.doc-metadata dd {
+  margin: 0;
 }
 @container documents (max-width: 1140px) {
   .documents-selected .doc-navigation {
@@ -412,10 +475,6 @@
   }
   .doc-preview-heading h2 {
     padding-inline-end: 0;
-  }
-  .doc-workspace-heading {
-    padding: 8px 16px;
-    min-height: 60px;
   }
   .doc-search-area {
     padding: 16px 16px 10px;

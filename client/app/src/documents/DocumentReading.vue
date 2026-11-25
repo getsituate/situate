@@ -3,11 +3,12 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { t } from "@situate/localization";
 import { SituateButton } from "@situate/ui";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import WorkingIndicator from "../components/WorkingIndicator.vue";
 
 const props = defineProps<{
-  bytes: Uint8Array<ArrayBuffer>;
-  mimeType: string;
-  title: string;
+  bytes?: Uint8Array<ArrayBuffer>;
+  mimeType?: string;
+  title?: string;
 }>();
 const emit = defineEmits<{ failed: [] }>();
 const canvas = ref<HTMLCanvasElement>();
@@ -15,10 +16,25 @@ const page = ref(1);
 const total = ref(0);
 const zoom = ref(100);
 const loading = ref(true);
+const loadingAnnounced = ref(false);
 const text = ref("");
 const pdf = shallowRef<PDFDocumentProxy>();
 const isPdf = computed(() => props.mimeType === "application/pdf");
 const image = ref<string>();
+const imageElement = ref<HTMLImageElement>();
+
+watch(
+  loading,
+  (busy, _, onCleanup) => {
+    if (!busy) return;
+    loadingAnnounced.value = false;
+    const timer = setTimeout(() => {
+      loadingAnnounced.value = true;
+    }, 200);
+    onCleanup(() => clearTimeout(timer));
+  },
+  { immediate: true },
+);
 
 watch(
   () => [props.bytes, props.mimeType] as const,
@@ -35,6 +51,7 @@ watch(
     zoom.value = 100;
     total.value = 0;
     loading.value = true;
+    if (!bytes || !mimeType) return;
     try {
       if (mimeType !== "application/pdf") {
         const signature =
@@ -68,7 +85,6 @@ watch(
       if (!current) return;
       pdf.value = document;
       total.value = document.numPages;
-      loading.value = false;
     } catch {
       if (current) emit("failed");
     }
@@ -109,6 +125,7 @@ watch(
       cancel = () => task.cancel();
       await task.promise;
       if (!current) return;
+      loading.value = false;
       const content = await sheet.getTextContent();
       if (current)
         text.value = content.items
@@ -122,65 +139,103 @@ watch(
   },
   { flush: "post" },
 );
+
+watch(
+  [imageElement, image],
+  async ([element, url], _, onCleanup) => {
+    if (!element || !url) return;
+    let current = true;
+    onCleanup(() => {
+      current = false;
+    });
+    try {
+      await element.decode();
+      if (current) loading.value = false;
+    } catch {
+      if (current) emit("failed");
+    }
+  },
+  { flush: "post" },
+);
 </script>
 
 <template>
-  <div v-if="!loading || !isPdf" class="doc-page-tools">
-    <template v-if="isPdf">
-      <SituateButton
-        variant="plain"
-        :aria-label="t('documents.previous')"
-        :disabled="page <= 1"
-        @click="page--"
-        >‹</SituateButton
+  <div class="doc-reading">
+    <div class="doc-page-tools">
+      <template v-if="!loading">
+        <template v-if="isPdf">
+          <SituateButton
+            variant="plain"
+            :aria-label="t('documents.previous')"
+            :disabled="page <= 1"
+            @click="page--"
+            >‹</SituateButton
+          >
+          <span role="status" :aria-label="t('documents.page', { page, total })"
+            >{{ page }} / {{ total }}</span
+          >
+          <SituateButton
+            variant="plain"
+            :aria-label="t('documents.next')"
+            :disabled="page >= total"
+            @click="page++"
+            >›</SituateButton
+          >
+        </template>
+        <SituateButton
+          variant="plain"
+          :aria-label="t('documents.zoomOut')"
+          :disabled="zoom <= 80"
+          @click="zoom -= 20"
+          >−</SituateButton
+        >
+        <span>{{ zoom }}%</span>
+        <SituateButton
+          variant="plain"
+          :aria-label="t('documents.zoomIn')"
+          :disabled="zoom >= 160"
+          @click="zoom += 20"
+          >+</SituateButton
+        >
+      </template>
+    </div>
+    <div class="doc-page-frame">
+      <div
+        class="doc-page-stage"
+        :class="{
+          'doc-page-pending': loading,
+          'doc-page-reveal': !loading && loadingAnnounced,
+        }"
+        :style="{ '--doc-zoom': zoom + '%' }"
+        role="group"
+        :aria-label="t('documents.preview')"
+        :aria-busy="loading"
+        :tabindex="loading ? -1 : 0"
       >
-      <span role="status" :aria-label="t('documents.page', { page, total })"
-        >{{ page }} / {{ total }}</span
+        <template v-if="isPdf">
+          <canvas ref="canvas" aria-hidden="true" />
+          <p class="sr-only">{{ text }}</p>
+        </template>
+        <img
+          v-else-if="image"
+          ref="imageElement"
+          :src="image"
+          :alt="title ?? ''"
+        />
+      </div>
+      <div
+        role="status"
+        aria-atomic="true"
+        :class="loading && loadingAnnounced ? 'doc-opening' : 'sr-only'"
       >
-      <SituateButton
-        variant="plain"
-        :aria-label="t('documents.next')"
-        :disabled="page >= total"
-        @click="page++"
-        >›</SituateButton
-      >
-    </template>
-    <SituateButton
-      variant="plain"
-      :aria-label="t('documents.zoomOut')"
-      :disabled="zoom <= 80"
-      @click="zoom -= 20"
-      >−</SituateButton
-    >
-    <span>{{ zoom }}%</span>
-    <SituateButton
-      variant="plain"
-      :aria-label="t('documents.zoomIn')"
-      :disabled="zoom >= 160"
-      @click="zoom += 20"
-      >+</SituateButton
-    >
-  </div>
-  <p v-if="loading" class="doc-status" role="status">
-    {{ t("documents.opening") }}
-  </p>
-  <div class="doc-page-stage" :aria-label="t('documents.preview')" tabindex="0">
-    <template v-if="isPdf">
-      <canvas
-        v-if="!loading"
-        ref="canvas"
-        :style="{ maxWidth: `${zoom}%` }"
-        aria-hidden="true"
-      />
-      <p class="sr-only">{{ text }}</p>
-    </template>
-    <img
-      v-else-if="image"
-      :src="image"
-      :alt="title"
-      :style="{ width: `${zoom}%` }"
-      @load="loading = false"
-      @error="emit('failed')"
-    />
+        <template v-if="loading && loadingAnnounced">
+          <WorkingIndicator />
+          <span>{{ t("documents.opening") }}</span>
+        </template>
+        <span v-else-if="loadingAnnounced">{{
+          t("documents.previewReady")
+        }}</span>
+      </div>
+    </div>
   </div>
 </template>

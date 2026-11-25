@@ -30,7 +30,7 @@ pub(super) fn seed(root: &Path, archive: &Path) -> Result<(), String> {
             "garden-archive",
             "Garden archive",
             "Lists and opens documents from a local folder.",
-            json!({"kind":"source","serviceEntry":"service.js","exports":["documentSourceDescribe","documentSourceList","documentLibraryDescribe","documentLibraryList","documentLibrarySearch","documentLibraryReadOriginal"]}),
+            json!({"kind":"source","serviceEntry":"service.js","exports":["documentSourceDescribe","documentSourceList","documentLibraryDescribe","documentLibraryList","documentLibrarySearch","documentLibraryReadOriginal","documentLibraryDetails"]}),
             "service.js",
             include_str!("archive.js"),
         ),

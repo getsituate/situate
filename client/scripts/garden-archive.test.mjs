@@ -47,8 +47,13 @@ test("reads only references belonging to the configured folder", async () => {
       revision: "1",
     },
   ]) {
-    const result = await exports.documentLibraryReadOriginal({ ref }, host);
-    assert.equal(result.error.code, "permission");
+    const original = await exports.documentLibraryReadOriginal({ ref }, host);
+    const details = await exports.documentLibraryDetails(
+      { ref, locale: "en" },
+      host,
+    );
+    assert.equal(original.error.code, "permission");
+    assert.equal(details.error.code, "permission");
   }
 });
 
@@ -141,6 +146,14 @@ test(
     });
     assert.deepEqual(onlyPdf.items, second.items);
     const ref = onlyPdf.items[0].ref;
+    const details = await library("documentLibraryDetails", "details", {
+      ref,
+      locale: "de",
+    });
+    assert.deepEqual(details.fields, [
+      { id: "filename", label: "Originaldateiname", value: "Seed swap.PDF" },
+    ]);
+    assert.equal(requests.length, 0);
     const original = await library(
       "documentLibraryReadOriginal",
       "readOriginal",
@@ -153,6 +166,11 @@ test(
       ref,
     });
     assert.equal(stale.error.code, "not-found");
+    const staleDetails = await library("documentLibraryDetails", "details", {
+      ref,
+      locale: "en",
+    });
+    assert.equal(staleDetails.error.code, "not-found");
     assert.equal(requests.length, 1);
   },
 );

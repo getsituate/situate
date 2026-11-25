@@ -47,6 +47,7 @@ function source(
   title: string,
   mimeType: string,
   base64: string,
+  fields?: { id: string; label: string; value: string }[],
 ) {
   const source = { pluginId, instanceId: "default" };
   const scope = {
@@ -83,7 +84,9 @@ function source(
         description: "Synthetic source",
         skills: [],
         kind: "source" as const,
-        exports: libraryExports,
+        exports: fields
+          ? [...libraryExports, "documentLibraryDetails"]
+          : libraryExports,
       },
     },
     original: { [original.id]: base64 },
@@ -111,11 +114,126 @@ function source(
         document,
         original,
       },
+      ...(fields && {
+        documentLibraryDetails: {
+          ...result("details"),
+          ref: document.ref,
+          fields,
+        },
+      }),
     },
   };
 }
 
 test.use({ localizationMode: "real" });
+
+function documentsLayout() {
+  return {
+    records: {
+      garden: {
+        revision: "saved",
+        data: {
+          version: 1,
+          pinnedViews: [],
+          layout: reduceLayout(
+            emptyLayout(),
+            { type: "open", target: { kind: "view", viewId: "documents" } },
+            randomUUID,
+          ),
+        },
+      },
+    },
+  };
+}
+
+for (const mobile of [false, true]) {
+  test.describe(() => {
+    test.use({ locale: mobile ? "de-DE" : "en-US" });
+    test(
+      `no document sources offers source creation on ${mobile ? "mobile" : "desktop"}`,
+      { tag: mobile ? "@visual-mobile" : "@visual-desktop" },
+      async ({ page, visual }) => {
+        await page.setViewportSize(
+          mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 },
+        );
+        await workspaceFixture(
+          page,
+          { ...shellState, mobile },
+          {
+            layout: documentsLayout(),
+            ...(mobile && {
+              localization: {
+                language: "de",
+                formats: { time: "24", date: "dmy-dot", number: "comma-dot" },
+                writable: true,
+              },
+            }),
+          },
+        );
+        await page.goto("/");
+        const library = page.getByRole("main", {
+          name: mobile ? "Dokumente" : "Documents",
+        });
+        await expect(
+          library.getByRole("heading", {
+            name: mobile
+              ? "Deine Dokumente an einem Ort"
+              : "Your documents, together",
+          }),
+        ).toBeVisible();
+        await expect(library.getByRole("searchbox")).toHaveCount(0);
+        await expect(
+          library.getByRole("heading", {
+            name: mobile ? "Dokumente" : "Documents",
+            exact: true,
+          }),
+        ).toHaveCount(0);
+        const create = library.getByRole("button", {
+          name: mobile ? "Quelle erstellen" : "Create a source",
+          exact: true,
+        });
+        await expect(create).toBeVisible();
+        await visual.capture("documents.library.no-sources");
+        await create.press("Enter");
+        await expect(
+          page.getByRole("region", {
+            name: mobile ? "Unterhaltung" : "Conversation",
+            exact: true,
+          }),
+        ).toBeVisible();
+      },
+    );
+  });
+}
+
+test("a disabled document source leaves the Library in the no-sources layout @visual-desktop", async ({
+  page,
+  visual,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const { installed } = source(
+    "test-folder",
+    "Fixture folder",
+    "Scan",
+    "image/png",
+    png,
+  );
+  await workspaceFixture(page, shellState, {
+    layout: documentsLayout(),
+    installedPlugins: [{ ...installed, enabled: false }],
+  });
+  await page.goto("/");
+  const library = page.getByRole("main", { name: "Documents" });
+  await expect(
+    library.getByRole("heading", { name: "Your documents, together" }),
+  ).toBeVisible();
+  await expect(library.getByRole("searchbox")).toHaveCount(0);
+  await visual.capture("documents.library.no-active-sources");
+  await library.getByRole("button", { name: "Sources", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Sources 1", exact: true }),
+  ).toBeVisible();
+});
 
 test("opens a multipage PDF and an image from two sources in the same Library @visual-desktop", async ({
   page,
@@ -128,6 +246,13 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
     "Receipt",
     "application/pdf",
     pdf,
+    [
+      {
+        id: "filename",
+        label: "Original filename",
+        value: "Workshop receipt.pdf",
+      },
+    ],
   );
   const archive = source(
     "test-archive",
@@ -137,22 +262,7 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
     png,
   );
   await workspaceFixture(page, shellState, {
-    layout: {
-      records: {
-        garden: {
-          revision: "saved",
-          data: {
-            version: 1,
-            pinnedViews: [],
-            layout: reduceLayout(
-              emptyLayout(),
-              { type: "open", target: { kind: "view", viewId: "documents" } },
-              randomUUID,
-            ),
-          },
-        },
-      },
-    },
+    layout: documentsLayout(),
     installedPlugins: [folder.installed, archive.installed],
     pluginExportResults: {
       [folder.installed.id]: folder.values,
@@ -190,9 +300,67 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   expect(searchRequests).toEqual(["Receipt", "Receipt"]);
   await page.mouse.move(0, 0);
   await visual.capture("documents.library.results");
+  const holdDocument = (key: string, hold: boolean) =>
+    page.evaluate(
+      ({ key, hold }) => Reflect.get(window, "__holdDocumentReply")(key, hold),
+      { key, hold },
+    );
+  await holdDocument("chunk", true);
+  await holdDocument(folder.installed.id, true);
   await receipt.click();
   const preview = library.getByRole("region", { name: "Document preview" });
+  const stage = preview.getByRole("group", { name: "Document preview" });
+  const opening = preview.getByText("Opening document…", { exact: true });
+  await expect(opening).toBeVisible();
+  await expect(stage).toHaveAttribute("aria-busy", "true");
+  await expect(preview.getByRole("button", { name: "Next page" })).toHaveCount(
+    0,
+  );
+  const reservedPdfStage = await stage.boundingBox();
+  expect(reservedPdfStage?.height).toBeGreaterThan(300);
+  const details = preview.locator("details");
+  await expect(details.locator("dt")).toHaveText(["File type"]);
+  await holdDocument(folder.installed.id, false);
+  await expect(details.locator("dt")).toHaveText([
+    "File type",
+    "Original filename",
+  ]);
+  await expect(details.locator("dd")).toHaveText([
+    "PDF",
+    "Workshop receipt.pdf",
+  ]);
+  expect(await stage.boundingBox()).toEqual(reservedPdfStage);
+  await page.mouse.move(0, 0);
+  await visual.capture("documents.library.opening");
+  await holdDocument("chunk", false);
   await expect(preview.locator("canvas")).toBeVisible();
+  await expect(opening).toHaveCount(0);
+  await expect(stage).toHaveAttribute("aria-busy", "false");
+  await expect(preview.getByText("Document preview ready.")).toBeAttached();
+  expect(await stage.boundingBox()).toEqual(reservedPdfStage);
+  const detailsRequests = () =>
+    page.evaluate(() =>
+      (
+        Reflect.get(window, "__ipcCalls") as {
+          args: { request?: { exportName?: string; args?: unknown } };
+        }[]
+      ).flatMap(({ args }) =>
+        args.request?.exportName === "documentLibraryDetails"
+          ? [args.request.args]
+          : [],
+      ),
+    );
+  expect(await detailsRequests()).toEqual([
+    {
+      locale: "en",
+      ref: {
+        id: "42",
+        identity: "stable",
+        revision: "r1",
+        source: { pluginId: "test-folder", instanceId: "default" },
+      },
+    },
+  ]);
   await expect(
     preview.getByText("Workshop receipt", { exact: true }),
   ).toBeAttached();
@@ -222,6 +390,19 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   await expect(receipt).toBeFocused();
   await expect(search).toHaveValue("Receipt");
 
+  await holdDocument(folder.installed.id, true);
+  await receipt.click();
+  await expect.poll(async () => (await detailsRequests()).length).toBe(2);
+  await library
+    .getByRole("button", { name: "Receipt scan Fixture archive" })
+    .click();
+  await holdDocument(folder.installed.id, false);
+  await expect(
+    preview.getByRole("img", { name: "Receipt scan" }),
+  ).toBeVisible();
+  await expect(details.locator("dd")).toHaveText(["PNG"]);
+  await preview.getByRole("button", { name: "Close preview" }).click();
+
   await page.setViewportSize({ width: 390, height: 844 });
   await library.getByRole("button", { name: "Browse", exact: true }).click();
   const browse = page.getByRole("dialog", { name: "Browse" });
@@ -230,10 +411,27 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(browse).toBeHidden();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await holdDocument("chunk", true);
   await library
     .getByRole("button", { name: "Receipt scan Fixture archive" })
     .click();
+  await expect(opening).toBeVisible();
+  const reservedImageStage = await stage.boundingBox();
+  expect(reservedImageStage?.height).toBeGreaterThan(250);
+  await expect(preview.locator("[data-bend-mini]")).toHaveAttribute(
+    "data-mini-frame",
+    "rest",
+  );
+  await holdDocument("chunk", false);
   const image = preview.getByRole("img", { name: "Receipt scan" });
+  await expect(details.locator("dt")).toHaveText(["File type"]);
+  await expect(details.locator("dd")).toHaveText(["PNG"]);
+  await expect(image).toBeVisible();
+  await expect(image).toHaveCSS("animation-name", "none");
+  expect(await stage.boundingBox()).toEqual(reservedImageStage);
+  await details.getByText("Details", { exact: true }).click();
+  await expect(details.getByText("PNG", { exact: true })).toBeHidden();
   await expect
     .poll(() =>
       image.evaluate((element) => (element as HTMLImageElement).naturalWidth),
@@ -244,7 +442,7 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   await expect(search).toHaveValue("Receipt");
 });
 
-test("a failed source does not hide results from other sources", async ({
+test("a failed source does not hide results or details from other sources", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -252,8 +450,9 @@ test("a failed source does not hide results from other sources", async ({
     "test-folder",
     "Fixture folder",
     "Receipt",
-    "application/pdf",
-    pdf,
+    "text/plain",
+    png,
+    [{ id: "correspondent", label: "Correspondent", value: "Garden club" }],
   );
   const archive = source(
     "test-archive",
@@ -282,8 +481,13 @@ test("a failed source does not hide results from other sources", async ({
   await expect(library.getByText("No documents in these sources")).toHaveCount(
     0,
   );
-  await library.getByRole("button", { name: "Document actions" }).click();
-  await library.getByRole("button", { name: "Sources", exact: true }).click();
+  await library.getByRole("button", { name: "Receipt Fixture folder" }).click();
+  const preview = library.getByRole("region", { name: "Document preview" });
+  await expect(preview.getByRole("status")).toBeVisible();
+  await expect(preview.locator("dd")).toHaveText(["text/plain", "Garden club"]);
+  await library
+    .getByRole("button", { name: "Some results may be missing" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Sources 2", exact: true }),
   ).toBeVisible();
