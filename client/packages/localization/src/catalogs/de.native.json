@@ -8,6 +8,7 @@
   "native.shortcuts.durability": "Das Speichern konnte nicht bestätigt werden. Lade die Kürzel vor einem weiteren Versuch neu.",
   "native.workspace.migration.fileSystemError": "{error} Dateisystem-Fehlercode: {code}.",
   "native.workspace.migration.updateRequired": "Dieser Arbeitsbereich benötigt Situate {version} oder neuer. Aktualisiere Situate, um ihn zu öffnen.",
+  "native.workspace.migration.readerUpdateRequired": "Dieser Arbeitsbereich verwendet ein neueres Datenformat. Aktualisiere Situate, um ihn zu öffnen.",
   "native.workspace.migration.busy": "Dieser Arbeitsbereich ist in einem anderen Situate-Prozess geöffnet oder wird dort vorbereitet. Schließe ihn dort und versuche es erneut.",
   "native.workspace.migration.failed": "Die Aktualisierung des Arbeitsbereichs ist fehlgeschlagen. Der Arbeitsbereich bleibt geschlossen. Versuche, ihn erneut zu öffnen.",
   "native.workspace.migration.restorationFailed": "Der Arbeitsbereich konnte nach einer unterbrochenen Aktualisierung nicht wiederhergestellt werden. Er bleibt geschlossen; die Sicherung zur Wiederherstellung bleibt erhalten.",

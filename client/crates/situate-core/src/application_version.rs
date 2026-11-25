@@ -82,36 +82,4 @@ mod tests {
             assert!(std::panic::catch_unwind(|| resolve(Some(version), "0.1.6")).is_err());
         }
     }
-
-    #[test]
-    fn generated_calver_opens_compatible_legacy_and_newer_minimum_workspaces() {
-        for minimum in ["0.1.6", "2026.10.1", "2026.11.1"] {
-            let root = tempfile::tempdir().unwrap();
-            let managed = root.path().join(".situate");
-            std::fs::create_dir(&managed).unwrap();
-            let bytes = format!(
-                r#"{{"minimumAppVersion":"{minimum}","lastAppliedMigration":1,"unknown":"retained"}}"#
-            );
-            std::fs::write(managed.join("migrations.json"), &bytes).unwrap();
-            let lease =
-                situate_migrations::prepare(root.path(), resolve(Some("2026.11.1"), "0.1.6"))
-                    .unwrap();
-            drop(lease);
-            let retained: serde_json::Value =
-                serde_json::from_slice(&std::fs::read(managed.join("migrations.json")).unwrap())
-                    .unwrap();
-            assert_eq!(retained["minimumAppVersion"], minimum);
-            assert_eq!(retained["unknown"], "retained");
-            if minimum != "0.1.6" {
-                let error = situate_migrations::prepare(root.path(), resolve(None, "0.1.6"))
-                    .err()
-                    .unwrap();
-                assert_eq!(
-                    error.kind(),
-                    situate_migrations::MigrationErrorKind::UpdateRequired
-                );
-                assert_eq!(error.required_app_version(), Some(minimum));
-            }
-        }
-    }
 }

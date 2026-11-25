@@ -32,7 +32,7 @@ fn legacy_migration_preserves_exact_bytes_unknown_fields_and_reopens() {
     let root = workspace();
     let app = tempfile::tempdir().unwrap();
     let bytes = legacy(&root);
-    let lease = situate_migrations::prepare(root.path(), crate::application_version()).unwrap();
+    let lease = situate_migrations::prepare(root.path()).unwrap();
     let store = open(&root, &app);
     let loaded = store.load().unwrap();
     lease.validate().unwrap();

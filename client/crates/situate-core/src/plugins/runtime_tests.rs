@@ -62,25 +62,18 @@ fn migration_rewrites_the_active_revision_without_activating_editable_code() {
     .unwrap();
 
     let prepare = || {
-        situate_migrations::prepare_with_plugin_history(
-            root,
-            crate::application_version(),
-            sources::migrate_manifest_revision,
-        )
+        situate_migrations::prepare_with_plugin_history(root, sources::migrate_manifest_revision)
     };
     let original_state = fs::read(&marker).unwrap();
-    let error = situate_migrations::prepare_with_plugin_history(
-        root,
-        crate::application_version(),
-        |root, id, revision, convert| {
+    let error =
+        situate_migrations::prepare_with_plugin_history(root, |root, id, revision, convert| {
             let result = sources::migrate_manifest_revision(root, id, revision, convert)?;
             if result == revision {
                 return Err(std::io::Error::other("Synthetic validation failure").into());
             }
             Ok(result)
-        },
-    )
-    .unwrap_err();
+        })
+        .unwrap_err();
     assert_eq!(
         error.kind(),
         situate_migrations::MigrationErrorKind::MigrationFailed

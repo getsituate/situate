@@ -20,6 +20,7 @@ pub use runner::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MigrationErrorKind {
     UpdateRequired,
+    ReaderUpdateRequired,
     Busy,
     MigrationFailed,
     RestorationFailed,
@@ -28,7 +29,6 @@ pub enum MigrationErrorKind {
     InvalidRegistry,
     Io,
     UnsafePath,
-    InvalidAppVersion,
 }
 
 #[derive(Debug)]

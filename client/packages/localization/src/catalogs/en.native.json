@@ -8,6 +8,7 @@
   "native.shortcuts.durability": "Could not confirm the shortcut was saved. Reload the shortcuts before trying again.",
   "native.workspace.migration.fileSystemError": "{error} File system error code: {code}.",
   "native.workspace.migration.updateRequired": "This workspace requires Situate {version} or later. Update Situate to open it.",
+  "native.workspace.migration.readerUpdateRequired": "This workspace uses a newer data format. Update Situate to open it.",
   "native.workspace.migration.busy": "This workspace is open or being prepared by another Situate process. Close it there, then try again.",
   "native.workspace.migration.failed": "The workspace update failed. The workspace remains closed. Try opening it again.",
   "native.workspace.migration.restorationFailed": "The workspace could not be restored after an interrupted update. It remains closed and its recovery backup has been retained.",

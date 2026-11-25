@@ -49,7 +49,6 @@ pub(crate) fn prepare_local(root: &std::path::Path) -> Result<PreparedWorkspace,
 fn prepare_root(root: &std::path::Path) -> Result<WorkspaceLease, String> {
     situate_migrations::prepare_with_plugin_history(
         root,
-        situate_core::application_version(),
         situate_core::plugins::sources::migrate_manifest_revision,
     )
     .map_err(localized_error)
@@ -58,6 +57,9 @@ fn prepare_root(root: &std::path::Path) -> Result<WorkspaceLease, String> {
 fn error_key(kind: MigrationErrorKind) -> &'static str {
     match kind {
         MigrationErrorKind::UpdateRequired => "native.workspace.migration.updateRequired",
+        MigrationErrorKind::ReaderUpdateRequired => {
+            "native.workspace.migration.readerUpdateRequired"
+        }
         MigrationErrorKind::Busy => "native.workspace.migration.busy",
         MigrationErrorKind::MigrationFailed => "native.workspace.migration.failed",
         MigrationErrorKind::RestorationFailed => "native.workspace.migration.restorationFailed",
@@ -141,8 +143,8 @@ mod tests {
                 "native.workspace.migration.preparationFailed",
             ),
             (
-                MigrationErrorKind::InvalidAppVersion,
-                "native.workspace.migration.preparationFailed",
+                MigrationErrorKind::ReaderUpdateRequired,
+                "native.workspace.migration.readerUpdateRequired",
             ),
         ] {
             assert_eq!(error_key(kind), expected);
@@ -176,8 +178,7 @@ mod tests {
         std::fs::create_dir(&managed).unwrap();
         let directory =
             cap_std::fs::Dir::open_ambient_dir(&managed, cap_std::ambient_authority()).unwrap();
-        situate_migrations::initialize_fresh(&directory, situate_core::application_version())
-            .unwrap();
+        situate_migrations::initialize_fresh(&directory).unwrap();
         let initialized = std::fs::read(managed.join("migrations.json")).unwrap();
         let _prepared = prepare_local(root.path()).unwrap();
         assert_eq!(
@@ -188,26 +189,18 @@ mod tests {
 
     #[cfg(not(target_os = "ios"))]
     #[test]
-    fn workspace_minimum_uses_the_compiled_application_version() {
+    fn opens_published_workspace_offline_without_rewriting_its_metadata() {
         let root = tempfile::tempdir().unwrap();
         let managed = root.path().join(".situate");
         std::fs::create_dir(&managed).unwrap();
-        let metadata = serde_json::to_vec(&serde_json::json!({
-            "minimumAppVersion": situate_core::application_version(),
-            "lastAppliedMigration": 1,
-            "unknown": "retained",
-        }))
-        .unwrap();
-        std::fs::write(managed.join("migrations.json"), &metadata).unwrap();
-        let _prepared = prepare_local(root.path()).unwrap();
-        let retained: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(managed.join("migrations.json")).unwrap())
-                .unwrap();
-        assert_eq!(
-            retained["minimumAppVersion"],
-            situate_core::application_version()
-        );
-        assert_eq!(retained["unknown"], "retained");
+        let bytes =
+            br#"{"minimumAppVersion":"2026.11.27","lastAppliedMigration":3,"unknown":"retained"}"#;
+        let path = managed.join("migrations.json");
+        std::fs::write(&path, bytes).unwrap();
+        for _ in 0..2 {
+            let _prepared = prepare_local(root.path()).unwrap();
+            assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        }
     }
 
     #[cfg(not(target_os = "ios"))]

@@ -4,7 +4,7 @@ digraph WorkspaceCompatibility {
   edge [color="#536171", fontname="Helvetica", fontsize=11, arrowsize=0.8];
 
   metadata [label="Read compatibility metadata\ninside .situate"];
-  gate [label="App version >=\nminimumAppVersion?", shape=diamond];
+  gate [label="Required reader epoch\nsupported?", shape=diamond];
   blocked [label="Keep workspace closed\nRequest an app update", fillcolor="#fbe9e7"];
   position [label="Compare lastAppliedMigration\nwith the app's ordered registry"];
   pending [label="Run pending migrations\nbefore opening"];

@@ -18,14 +18,13 @@ fn published_manifest_is_rewritten_once_and_keeps_its_exports() {
         include_bytes!("../fixtures/m0003/before/plugin.json.fixture"),
     )
     .unwrap();
-    let app = option_env!("SITUATE_RELEASE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
-    drop(situate_migrations::prepare(root.path(), app).unwrap());
+    drop(situate_migrations::prepare(root.path()).unwrap());
     let bytes = fs::read(&manifest).unwrap();
     let expected: Value = serde_json::from_slice(include_bytes!(
         "../fixtures/m0003/after/plugin.json.fixture"
     ))
     .unwrap();
     assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), expected);
-    drop(situate_migrations::prepare(root.path(), app).unwrap());
+    drop(situate_migrations::prepare(root.path()).unwrap());
     assert_eq!(fs::read(&manifest).unwrap(), bytes);
 }

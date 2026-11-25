@@ -1,4 +1,6 @@
-use crate::{MigrationError, MigrationErrorKind, Result, filesystem};
+use crate::{
+    MigrationDescriptor, MigrationError, MigrationErrorKind, Result, filesystem, registry,
+};
 use cap_std::fs::Dir;
 use semver::Version;
 use serde_json::{Value, json};
@@ -9,19 +11,68 @@ pub(crate) const LIMIT: u64 = 64 * 1024;
 pub(crate) fn initial() -> Value {
     json!({"minimumAppVersion":"0.0.0","lastAppliedMigration":0})
 }
-pub(crate) fn parse(value: &Value) -> Result<(Version, u64)> {
+pub(crate) struct Metadata<'a> {
+    pub legacy_floor: &'a str,
+    pub position: u64,
+    pub reader_epoch: Option<u64>,
+}
+
+pub(crate) fn parse(value: &Value) -> Result<Metadata<'_>> {
     let invalid = || MigrationError::new(MigrationErrorKind::InvalidMetadata);
     let minimum = value
         .get("minimumAppVersion")
         .and_then(Value::as_str)
         .ok_or_else(invalid)?;
-    let version = Version::parse(minimum).map_err(|_| invalid())?;
+    Version::parse(minimum).map_err(|_| invalid())?;
     let position = value
         .get("lastAppliedMigration")
         .and_then(Value::as_u64)
         .ok_or_else(invalid)?;
-    Ok((version, position))
+    let reader_epoch = value
+        .get("minimumReaderEpoch")
+        .map(|epoch| {
+            epoch
+                .as_u64()
+                .filter(|epoch| *epoch <= position)
+                .ok_or_else(invalid)
+        })
+        .transpose()?;
+    Ok(Metadata {
+        legacy_floor: minimum,
+        position,
+        reader_epoch,
+    })
 }
+
+pub(crate) fn require_reader(value: &Value, migrations: &[MigrationDescriptor]) -> Result<u64> {
+    let metadata = parse(value)?;
+    let expected = registry::reader_at(migrations, metadata.position);
+    if let Some(epoch) = metadata.reader_epoch {
+        let supported = registry::reader_at(migrations, u64::MAX);
+        if epoch > supported.epoch {
+            return Err(MigrationError::new(
+                MigrationErrorKind::ReaderUpdateRequired,
+            ));
+        }
+        if epoch != expected.epoch || metadata.legacy_floor != expected.legacy_floor {
+            return Err(MigrationError::new(MigrationErrorKind::InvalidMetadata));
+        }
+    } else if metadata.legacy_floor != expected.legacy_floor
+        // Before sealed releases, development builds recorded the package version for migration 3.
+        && !(expected.epoch == 3 && metadata.position == 3 && metadata.legacy_floor == "0.1.6")
+    {
+        return Err(MigrationError::update(metadata.legacy_floor));
+    }
+    Ok(metadata.position)
+}
+
+pub(crate) fn advance(value: &mut Value, position: u64, migrations: &[MigrationDescriptor]) {
+    let reader = registry::reader_at(migrations, position);
+    value["minimumAppVersion"] = reader.legacy_floor.into();
+    value["minimumReaderEpoch"] = reader.epoch.into();
+    value["lastAppliedMigration"] = position.into();
+}
+
 pub(crate) fn load(dir: &Dir) -> Result<Option<Value>> {
     match dir.symlink_metadata(FILE) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),

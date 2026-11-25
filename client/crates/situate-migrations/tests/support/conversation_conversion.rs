@@ -139,13 +139,13 @@ fn late_invalid_conversation_restores_all_sources_and_other_managed_data() {
     fs::write(managed.join("opaque.bin"), [0, 255, 4]).unwrap();
     fs::write(root.path().join("user.md"), "Outside managed state").unwrap();
     let before = tree(&managed);
-    assert!(runner::prepare_with(root.path(), "0.1.6", CHAIN).is_err());
+    assert!(runner::prepare_with(root.path(), CHAIN).is_err());
     assert_eq!(tree(&managed), before);
     assert_eq!(
         fs::read_to_string(root.path().join("user.md")).unwrap(),
         "Outside managed state"
     );
-    assert!(runner::prepare_with(root.path(), "0.1.6", CHAIN).is_err());
+    assert!(runner::prepare_with(root.path(), CHAIN).is_err());
     assert_eq!(tree(&managed), before);
 }
 
@@ -162,7 +162,7 @@ fn successful_conversion_preserves_all_chats_and_reopening_does_not_repeat_it() 
         .unwrap();
     }
     fs::write(managed.join("opaque.bin"), [0, 255, 4]).unwrap();
-    let lease = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+    let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert!(!managed.join("native-conversation-a.json").exists());
     assert!(managed.join("conversations/a/history.jsonl").is_file());
     assert!(managed.join("conversations/z/history.jsonl").is_file());
@@ -171,11 +171,11 @@ fn successful_conversion_preserves_all_chats_and_reopening_does_not_repeat_it() 
         serde_json::from_slice(&fs::read(managed.join("migrations.json")).unwrap()).unwrap();
     assert_eq!(
         metadata,
-        json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":2})
+        json!({"minimumAppVersion":"0.1.6","lastAppliedMigration":2,"minimumReaderEpoch":2})
     );
     let converted = tree(&managed);
     drop(lease);
-    let _lease = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+    let _lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert_eq!(tree(&managed), converted);
 }
 
@@ -201,7 +201,7 @@ fn already_structured_conversations_migrate_without_altering_unrelated_siblings(
     let root = already_structured_workspace();
     let managed = root.path().join(".situate");
     let original = tree(&managed);
-    let lease = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+    let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     let migrated = tree(&managed);
     let mut records = migrated.clone();
     let metadata: Value =
@@ -209,7 +209,7 @@ fn already_structured_conversations_migrate_without_altering_unrelated_siblings(
     assert_eq!(metadata["lastAppliedMigration"], 2);
     assert_eq!(records, original);
     drop(lease);
-    let _reopened = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+    let _reopened = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert_eq!(tree(&managed), migrated);
 }
 
@@ -227,7 +227,7 @@ fn unrelated_siblings_do_not_mask_corrupt_or_missing_conversation_records() {
             fs::remove_file(&history).unwrap();
         }
         let original = tree(&managed);
-        let error = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap_err();
+        let error = runner::prepare_with(root.path(), CHAIN).unwrap_err();
         assert_eq!(error.kind(), MigrationErrorKind::MigrationFailed);
         if !corrupt {
             assert_eq!(
@@ -290,7 +290,7 @@ fn conversion_crash_child() {
     let Ok(root) = std::env::var("SITUATE_CONVERSATION_CONVERSION_ROOT") else {
         return;
     };
-    runner::prepare_with(Path::new(&root), "0.1.6", CHAIN).unwrap();
+    runner::prepare_with(Path::new(&root), CHAIN).unwrap();
 }
 
 #[test]
@@ -317,7 +317,7 @@ fn interrupted_conversion_and_source_cleanup_restore_then_convert_once() {
             .unwrap();
         assert_eq!(child.code(), Some(73), "{point}");
         assert!(managed.join(".migrations/backup.tar").is_file());
-        let lease = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+        let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
         for id in ["a", "z"] {
             let lines =
                 fs::read_to_string(managed.join(format!("conversations/{id}/history.jsonl")))
@@ -342,7 +342,7 @@ fn interrupted_conversion_and_source_cleanup_restore_then_convert_once() {
         assert!(!managed.join(".migrations/backup.tar").exists());
         let saved = tree(&managed);
         drop(lease);
-        let _lease = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap();
+        let _lease = runner::prepare_with(root.path(), CHAIN).unwrap();
         assert_eq!(tree(&managed), saved);
     }
 }
@@ -357,6 +357,6 @@ fn legacy_symlink_cannot_be_read_or_replaced_by_conversion() {
     fs::write(&outside, serde_json::to_vec(&source("one")).unwrap()).unwrap();
     std::os::unix::fs::symlink(&outside, managed.join("native-conversation-one.json")).unwrap();
     let original = fs::read(&outside).unwrap();
-    assert!(runner::prepare_with(root.path(), "0.1.6", CHAIN).is_err());
+    assert!(runner::prepare_with(root.path(), CHAIN).is_err());
     assert_eq!(fs::read(&outside).unwrap(), original);
 }

@@ -12,8 +12,7 @@ use std::path::Path;
 
 pub(super) fn seed(location: &Location) -> Result<(), String> {
     let root = Path::new(&location.handle);
-    let _lease = situate_migrations::prepare(root, situate_core::application_version())
-        .map_err(|error| error.to_string())?;
+    let _lease = situate_migrations::prepare(root).map_err(|error| error.to_string())?;
     let mut files = ContentStore::open(root).map_err(|error| error.to_string())?;
     for path in [
         "Inbox",

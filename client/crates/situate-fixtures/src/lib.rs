@@ -56,13 +56,9 @@ pub fn apply(scenario: &str, target: &Path) -> Result<ConversationRecord, String
     if target.as_os_str() != root.as_os_str() {
         return Err("Confirm the canonical workspace path before applying a fixture".into());
     }
-    let lease =
-        situate_migrations::lock_current_exclusively(root, situate_core::application_version())
-            .map_err(|error| {
-                format!(
-                    "Workspace must be closed and already opened with a compatible client: {error}"
-                )
-            })?;
+    let lease = situate_migrations::lock_current_exclusively(root).map_err(|error| {
+        format!("Workspace must be closed and already opened with a compatible client: {error}")
+    })?;
     lease.validate().map_err(|error| error.to_string())?;
     add_chat_draft(&Storage::open(root, &location.id)?)
 }
@@ -160,8 +156,7 @@ mod tests {
         let location = workspaces::create(parent.path(), "Existing").unwrap();
         let root = Path::new(&location.handle);
         fs::write(root.join("Keep.md"), "Keep me").unwrap();
-        let session =
-            situate_migrations::prepare(root, situate_core::application_version()).unwrap();
+        let session = situate_migrations::prepare(root).unwrap();
         assert!(apply("chat-draft", root).is_err());
         drop(session);
         let storage = Storage::open(root, &location.id).unwrap();
