@@ -15,7 +15,8 @@ import {
 } from "@situate/ui";
 import { t } from "@situate/localization";
 import "@situate/localization/assignment-changes";
-import { fileDiff, diffParts } from "./assignment-diff";
+import { fileDiff } from "../files/line-diff";
+import { diffParts } from "./assignment-diff";
 import SourceText from "../files/SourceText.vue";
 import { highlightLines, type SourceToken } from "../files/source-highlighting";
 import {

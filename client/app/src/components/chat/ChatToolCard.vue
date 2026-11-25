@@ -45,6 +45,7 @@ const plugin = computed(() => props.call.pluginName);
     <ChatFileChanges
       v-if="!isBatch"
       :changes="changes"
+      :line-diff="call.name === 'edit'"
       :is-error="call.result?.isError"
     />
     <SituateDisclosure

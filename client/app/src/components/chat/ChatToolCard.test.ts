@@ -209,6 +209,84 @@ test("ordinary note writes keep their confirmed content visible outside tool det
   ).toBe(false);
 });
 
+test.each([
+  {
+    scenario: "inserted task",
+    before: "# Actions\n- Existing task\n",
+    after:
+      "# Actions\n- [ ] Call the library <!-- task-id: 123 -->\n- Existing task\n",
+    blocks: [["added", "- [ ] Call the library <!-- task-id: 123 -->"]],
+  },
+  {
+    scenario: "separate replacement and deletion",
+    before: "Heading\nOld time\nLocation\nOld reminder\nEnd\n",
+    after: "Heading\nNew time\nLocation\nEnd\n",
+    blocks: [
+      ["removed", "Old time"],
+      ["added", "New time"],
+      ["removed", "Old reminder"],
+    ],
+  },
+  {
+    scenario: "final line break removed",
+    before: "Heading\nLast line\n",
+    after: "Heading\nLast line",
+    blocks: [
+      ["removed", "Last line"],
+      ["added", "Last line"],
+    ],
+    notice: "chat.noFinalNewline",
+  },
+  {
+    scenario: "comparison exceeds the diff limit",
+    before: "Repeated old line\n".repeat(600),
+    after: "Repeated new line\n".repeat(600),
+    blocks: [],
+    notice: "chat.diffTooLarge",
+  },
+])(
+  "shows the recorded edit result: $scenario",
+  ({ before, after, blocks, notice }) => {
+    const wrapper = mount(ChatToolCard, {
+      props: {
+        scope: "workspace",
+        call: {
+          key: "edit",
+          id: "edit",
+          name: "edit",
+          state: "completed",
+          args: { edits: [{ oldText: "Heading", newText: "Intended text" }] },
+          result: {
+            ...tool,
+            toolName: "edit",
+            details: {
+              change: {
+                path: "Actions.md",
+                before,
+                after,
+                beforeRevision: "a".repeat(40),
+                afterRevision: "b".repeat(40),
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(wrapper.get(".change-path").text()).toBe("Actions.md");
+    const change = wrapper.get(".change-content");
+    expect(change.element.closest("details")).toBeNull();
+    expect(
+      change
+        .findAll("section")
+        .map((section) => [
+          section.classes().includes("change-added") ? "added" : "removed",
+          section.get("pre").text(),
+        ]),
+    ).toEqual(blocks);
+    if (notice) expect(change.text()).toContain(`⟦${notice}⟧`);
+  },
+);
+
 test("partial import previews reject intervening content instead of displaying it as the saved write", async () => {
   files.mockReset().mockResolvedValue({
     status: "ok",

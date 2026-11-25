@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "chat-edit-line-diff",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "chat-edit-line-diff",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "See which lines changed in chat",
+          "paragraphs": [
+            "When the assistant edits a file, the chat shows added and removed lines without marking unchanged text as changed."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "chat-edit-line-diff",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Geänderte Zeilen im Chat sehen",
+          "paragraphs": [
+            "Wenn der Assistent eine Datei bearbeitet, zeigt der Chat hinzugefügte und entfernte Zeilen an. Unveränderter Text wird nicht als Änderung markiert."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,11 +1,56 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { t } from "@situate/localization";
+import { fileDiff } from "../../files/line-diff";
 import type { VerifiedChange } from "./transcript";
-defineProps<{ changes: VerifiedChange[]; isError?: boolean }>();
+
+const props = defineProps<{
+  changes: VerifiedChange[];
+  isError?: boolean;
+  lineDiff?: boolean;
+}>();
+
+type ChangeBlock = {
+  kind: "added" | "removed";
+  lines: string[];
+  missingFinalNewline: boolean;
+};
+
+function editPreview(before: string, after: string) {
+  const { rows, simplified } = fileDiff(before, after);
+  const blocks: ChangeBlock[] = [];
+  if (simplified) return { blocks, simplified };
+
+  const finalNewlineChanged = before.endsWith("\n") !== after.endsWith("\n");
+  let block: ChangeBlock | undefined;
+  for (const row of rows) {
+    if (row.kind === "same") {
+      block = undefined;
+      continue;
+    }
+    if (block?.kind !== row.kind) {
+      block = { kind: row.kind, lines: [], missingFinalNewline: false };
+      blocks.push(block);
+    }
+    block.lines.push(row.text);
+    block.missingFinalNewline = finalNewlineChanged && row.noNewline;
+  }
+  return { blocks, simplified };
+}
+
+const previews = computed(() =>
+  props.changes.map((change) => ({
+    change,
+    diff:
+      props.lineDiff && change.before !== null
+        ? editPreview(change.before, change.after)
+        : undefined,
+  })),
+);
 </script>
 
 <template>
-  <template v-for="change in changes" :key="change.path">
+  <template v-for="{ change, diff } in previews" :key="change.path">
     <header
       class="change-header"
       :class="{ 'created-file': !isError && change.before === null }"
@@ -17,7 +62,23 @@ defineProps<{ changes: VerifiedChange[]; isError?: boolean }>();
         t(isError ? "chat.written" : "chat.saved")
       }}</span>
     </header>
-    <div class="change-content">
+    <div v-if="diff" class="change-content">
+      <p v-if="diff.simplified">{{ t("chat.diffTooLarge") }}</p>
+      <p v-else-if="!diff.blocks.length">{{ t("files.noChangesToShow") }}</p>
+      <section
+        v-for="(block, index) in diff.blocks"
+        :key="index"
+        :class="block.kind === 'added' ? 'change-added' : 'change-removed'"
+        :aria-label="t(block.kind === 'added' ? 'chat.added' : 'chat.removed')"
+      >
+        <span aria-hidden="true">{{ block.kind === "added" ? "+" : "−" }}</span>
+        <pre data-localization-content="user">{{ block.lines.join("\n") }}</pre>
+        <small v-if="block.missingFinalNewline" class="newline-note">{{
+          t("chat.noFinalNewline")
+        }}</small>
+      </section>
+    </div>
+    <div v-else class="change-content">
       <section
         v-if="change.before !== null"
         class="change-removed"
@@ -80,6 +141,10 @@ defineProps<{ changes: VerifiedChange[]; isError?: boolean }>();
   font-family: inherit;
   font-size: 12px;
   line-height: 1.6;
+}
+.newline-note {
+  grid-column: 2;
+  color: var(--situate-muted);
 }
 .change-removed {
   color: var(--situate-muted);

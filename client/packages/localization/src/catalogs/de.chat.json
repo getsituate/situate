@@ -57,6 +57,8 @@
   "chat.saved": "Gespeichert",
   "chat.removed": "Entfernt",
   "chat.added": "Hinzugefügt",
+  "chat.diffTooLarge": "Diese Änderung ist zu groß für einen zeilenweisen Vergleich.",
+  "chat.noFinalNewline": "Kein Zeilenumbruch am Dateiende",
   "chat.written": "Geschriebener Inhalt",
   "chat.usingPlugin": "Mit {name}",
   "chat.pauseAnimation": "Animation pausieren",
