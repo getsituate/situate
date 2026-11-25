@@ -691,7 +691,6 @@ export async function productionStages(
       );
       const github =
         publicationAdapter?.github ?? githubAdapter({ environment });
-      let windowsNotes;
       if (fresh) {
         const { assembleWindowsRelease } =
           await import("../client/scripts/windows-release.mjs");
@@ -711,14 +710,12 @@ export async function productionStages(
           request.identity.sourceRevision,
           publicKey,
         );
-        const windows = qualifiedWindowsAssets(
+        request.windowsFiles = qualifiedWindowsAssets(
           candidate,
           json(receipt),
           publicKey,
           request.identity,
         );
-        request.windowsFiles = windows.files;
-        windowsNotes = windows.notes;
       }
       const prepared = (
         publicationAdapter?.evidence ?? createEvidenceFromDirectory
@@ -729,9 +726,7 @@ export async function productionStages(
         {
           ...prepared,
           identity: request.identity,
-          notes: [notesForCatalog(inputs.catalog), windowsNotes]
-            .filter(Boolean)
-            .join("\n\n"),
+          notes: notesForCatalog(inputs.catalog),
           journalPath,
         },
         {
