@@ -69,8 +69,11 @@ const native = (file) =>
   );
 const windowsNative = (file) =>
   !isPlainDocumentation(file) &&
-  (native(file) ||
-    (/^client\/scripts\//.test(file) && !platformInput.test(file)) ||
+  (product(file) ||
+    /^client\/app\//.test(file) ||
+    /^client\/scripts\/(?:ai-catalog|localization-check|ui-boundary)\.mjs$/.test(
+      file,
+    ) ||
     file === ".github/workflows/verify.yml" ||
     file === "tools/test-windows-arm64.ps1" ||
     /^tools\/(?:test(?:-windows[^/]*)?|test-(?:inputs|scope)|pipeline(?:-[^/]*)?|source-verification[^/]*|actions-adapter)\.(?:mjs|py)$/.test(
