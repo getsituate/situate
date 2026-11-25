@@ -126,6 +126,7 @@ fn retained_package_remains_the_install_target_when_checks_or_replacement_downlo
     assert!(!data.due(2_000, Some(1_000), false, Some(true)));
     assert!(data.due(61_000, Some(1_000), false, Some(true)));
 }
+#[cfg(target_os = "macos")]
 #[test]
 fn host_reachability_accepts_cellular_and_does_not_require_wifi() {
     use system_configuration::network_reachability::ReachabilityFlags as Flags;
@@ -159,7 +160,7 @@ fn host() -> tauri::App<tauri::test::MockRuntime> {
 fn test_updater(app: &tauri::AppHandle<tauri::test::MockRuntime>) -> Updater {
     app.updater_builder()
         .target("test-target")
-        .executable_path("/tmp/Synthetic.app/Contents/MacOS/Synthetic")
+        .executable_path(std::env::current_exe().unwrap())
         .endpoints(vec!["https://example.invalid/feed".parse().unwrap()])
         .unwrap()
         .configure_client(|_| panic!("Cached verification must not request the network"))
@@ -210,9 +211,8 @@ fn pending_download_damage_never_discards_a_verified_installable_package() {
         let cache = Cache::open(directory.path().into()).unwrap();
         let mut release = manifest();
         let target = release["platforms"]["test-target"].clone();
-        for platform in ["darwin-aarch64", "darwin-x86_64"] {
-            release["platforms"][platform] = target.clone();
-        }
+        let platform = tauri_plugin_updater::target().unwrap();
+        release["platforms"][&platform] = target.clone();
         cache.retain("2.0.0".into(), release, b"test").unwrap();
         let pending = directory.path().join("download.json");
         match damage {
@@ -223,9 +223,7 @@ fn pending_download_damage_never_discards_a_verified_installable_package() {
                 release["version"] = json!("3.0.0");
                 let mut target = target;
                 target["url"] = json!("http://example.invalid/package");
-                for platform in ["darwin-aarch64", "darwin-x86_64"] {
-                    release["platforms"][platform] = target.clone();
-                }
+                release["platforms"][&platform] = target;
                 cache.save_pending(&release).unwrap();
             }
         }

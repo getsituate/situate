@@ -13,6 +13,8 @@ import test from "node:test";
 import {
   aggregate,
   digest,
+  decodeWorkflowPlan,
+  encodeVerifyPlan,
   eventSelection,
   laneHosts,
   main,
@@ -25,6 +27,26 @@ import {
   sonarLcov,
 } from "./actions-adapter.mjs";
 import { encodeActionsReceipt } from "./actions-receipts.mjs";
+
+test("large Verify plans cross the job environment without changing their digest", () => {
+  const plan = {
+    lanes: [{ id: "windows-native" }],
+    paths: Array.from(
+      { length: 3000 },
+      (_, index) =>
+        `client/app/tests/visual/baselines/desktop/synthetic-workspace-state-${index}-1280x900.png`,
+    ),
+  };
+  assert.ok(Buffer.byteLength(JSON.stringify(plan)) > 128 * 1024);
+  const payload = encodeVerifyPlan(plan);
+  assert.ok(Buffer.byteLength(payload) < 24 * 1024);
+  assert.deepEqual(decodeWorkflowPlan(payload), plan);
+  assert.equal(digest(decodeWorkflowPlan(payload)), digest(plan));
+  assert.throws(
+    () => decodeWorkflowPlan("gzip:!"),
+    /Invalid compressed verification plan/,
+  );
+});
 
 test("desktop preflight uses the shared adapter without production credentials", async () => {
   const evidence = { desktopUnlocked: true, accessibilityTrusted: true };
@@ -150,6 +172,34 @@ const environment = {
   GITHUB_SHA: source,
   GITHUB_REF: "refs/heads/main",
 };
+
+test("Verify requires a successful selected Windows job and its receipt", () => {
+  const lane = {
+    id: "windows-native",
+    host: "windows",
+    reasons: [],
+    suites: ["client-windows-build"],
+  };
+  const input = { ...plan, workflow: "verify", lanes: [...plan.lanes, lane] };
+  const windows = { ...receipt, lane: lane.id, host: lane.host };
+  const needs = { ...statuses(), [lane.id]: { result: "success" } };
+  assert.equal(aggregate(input, [receipt, windows], needs).status, "passed");
+  assert.throws(() => aggregate(input, [receipt], needs), /Missing/);
+  for (const result of ["skipped", "failure", "cancelled", undefined])
+    assert.throws(
+      () =>
+        aggregate(input, [receipt, windows], {
+          ...needs,
+          [lane.id]: { result },
+        }),
+      /Unexpected windows-native job result/,
+    );
+  const { [lane.id]: _windows, ...releaseNeeds } = statuses();
+  assert.equal(
+    aggregate({ ...plan, workflow: "create" }, [receipt], releaseNeeds).status,
+    "passed",
+  );
+});
 
 test("event adapter rejects missing history and uses integrated PR source, preceding push, and merge queue base", () => {
   for (const [event, body] of [

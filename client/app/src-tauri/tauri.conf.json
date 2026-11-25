@@ -42,6 +42,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/update-hooks.nsh"
+      }
+    },
     "iOS": {
       "minimumSystemVersion": "16.0",
       "infoPlist": "Info.plist"

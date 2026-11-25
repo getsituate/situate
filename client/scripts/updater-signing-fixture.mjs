@@ -10,8 +10,8 @@ export function createUpdaterSignerFixture() {
   const box = `untrusted comment: synthetic test key\n${Buffer.concat([Buffer.from("Ed"), id, publicBytes]).toString("base64")}\n`;
   return {
     publicKey: Buffer.from(box).toString("base64"),
-    sign(bytes, version = "1.2.3") {
-      const comment = `timestamp:1\tfile:synthetic.app.tar.gz\tversion:${version}`;
+    sign(bytes, version = "1.2.3", filename = "synthetic.app.tar.gz") {
+      const comment = `timestamp:1\tfile:${filename}\tversion:${version}`;
       const signature = sign(
         null,
         createHash("blake2b512").update(bytes).digest(),

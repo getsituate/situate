@@ -1,4 +1,27 @@
-export function ordinaryEnvironment(environment = process.env) {
+import assert from "node:assert/strict";
+import { win32 } from "node:path";
+
+export function windowsInstallationPath(directory, ...segments) {
+  assert(
+    directory && /^[a-z]:[\\/]/iu.test(directory),
+    "Expected an absolute Windows installation directory",
+  );
+  return win32.join(directory, ...segments);
+}
+
+export function pipelineGitPath(
+  platform = process.platform,
+  environment = process.env,
+) {
+  return platform === "win32"
+    ? windowsInstallationPath(environment.ProgramFiles, "Git", "bin", "git.exe")
+    : "/usr/bin/git";
+}
+
+export function ordinaryEnvironment(
+  environment = process.env,
+  platform = process.platform,
+) {
   const names = [
     "PATH",
     "HOME",
@@ -44,6 +67,40 @@ export function ordinaryEnvironment(environment = process.env) {
     );
     if (environment.LD_PRELOAD === "/opt/ci-tools/libnss_wrapper.so")
       names.push("LD_PRELOAD");
+  }
+  if (platform === "win32") {
+    names.push(
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "USERPROFILE",
+      "APPDATA",
+      "LOCALAPPDATA",
+      "PROGRAMDATA",
+      "ProgramFiles",
+      "ProgramFiles(x86)",
+      "ProgramW6432",
+      "PROCESSOR_ARCHITECTURE",
+      "PROCESSOR_ARCHITEW6432",
+      "ImageOS",
+      "ImageVersion",
+      "RUNNER_ENVIRONMENT",
+      "RUNNER_TEMP",
+    );
+    const windows = new Map(
+      Object.entries(environment).map(([key, value]) => [
+        key.toUpperCase(),
+        value,
+      ]),
+    );
+    return Object.fromEntries(
+      names.flatMap((name) => {
+        const key = name.toUpperCase();
+        return windows.has(key) ? [[name, windows.get(key)]] : [];
+      }),
+    );
   }
   return Object.fromEntries(
     names

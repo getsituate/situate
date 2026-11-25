@@ -42,7 +42,7 @@ fn artifact_capacity_counts_only_exact_activation_directories() {
     .unwrap();
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        use std::os::unix::ffi::OsStringExt;
+        use situate_host::unix_test_support::RawNameBuf;
         fs::write(
             temp.path().join(std::ffi::OsString::from_vec(vec![0xff])),
             "keep",
@@ -547,7 +547,7 @@ fn snapshot_rejects_limits_and_unsafe_paths() {
 #[cfg(unix)]
 #[test]
 fn symlinks_are_rejected_at_source_and_destination_boundaries() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let temp = tempdir();
     let root = temp.path();
     let active = setup(root);

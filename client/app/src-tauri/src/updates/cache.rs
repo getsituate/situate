@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 const ERROR: &str = "native.updates.cacheFailed";
@@ -42,15 +42,27 @@ impl Cache {
             lock.try_lock().map_err(|_| "native.updates.busy")?;
             Ok(Self { root, _lock: lock })
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
+            use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT,
+            };
+            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return Err(ERROR.into());
+            }
             let lock = OpenOptions::new()
                 .read(true)
                 .write(true)
                 .create(true)
                 .truncate(false)
+                .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
                 .open(root.join("owner.lock"))
                 .map_err(|_| ERROR)?;
+            let info = lock.metadata().map_err(|_| ERROR)?;
+            if !info.is_file() || info.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return Err(ERROR.into());
+            }
             lock.try_lock().map_err(|_| "native.updates.busy")?;
             Ok(Self { root, _lock: lock })
         }
@@ -138,11 +150,24 @@ impl Cache {
     pub fn clear_installing(&self) -> Result<(), String> {
         self.remove("installing.json")
     }
+    #[cfg(windows)]
+    pub fn stage_installer(&self, bytes: &[u8]) -> Result<PathBuf, String> {
+        self.atomic_bytes("installer.exe", bytes)?;
+        Ok(self.root.join("installer.exe"))
+    }
+    #[cfg(windows)]
+    pub fn remove_installer(&self) -> Result<(), String> {
+        self.remove("installer.exe")
+    }
     fn remove(&self, name: &str) -> Result<(), String> {
         match fs::remove_file(self.root.join(name)) {
-            Ok(()) => File::open(&self.root)
-                .and_then(|f| f.sync_all())
-                .map_err(|_| ERROR.into()),
+            Ok(()) => {
+                #[cfg(unix)]
+                File::open(&self.root)
+                    .and_then(|f| f.sync_all())
+                    .map_err(|_| ERROR)?;
+                Ok(())
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(_) => Err(ERROR.into()),
         }
@@ -164,28 +189,40 @@ impl Cache {
                 .open(&candidate)
                 .map_err(|_| ERROR)?
         };
-        #[cfg(not(unix))]
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&candidate)
-            .map_err(|_| ERROR)?;
+        #[cfg(windows)]
+        let mut file = {
+            self.remove("candidate")?;
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&candidate)
+                .map_err(|_| ERROR)?
+        };
         file.write_all(bytes)
             .and_then(|()| file.sync_all())
             .map_err(|_| ERROR)?;
-        fs::rename(candidate, self.root.join(name)).map_err(|_| ERROR)?;
-        File::open(&self.root)
-            .and_then(|f| f.sync_all())
-            .map_err(|_| ERROR.into())
+        #[cfg(unix)]
+        {
+            fs::rename(candidate, self.root.join(name)).map_err(|_| ERROR)?;
+            File::open(&self.root)
+                .and_then(|f| f.sync_all())
+                .map_err(|_| ERROR.into())
+        }
+        #[cfg(windows)]
+        {
+            drop(file);
+            situate_host_windows::fs::replace_file_write_through(&candidate, &self.root.join(name))
+                .map_err(|_| ERROR.into())
+        }
     }
 }
 
-pub fn bundle_path(executable: &Path) -> Result<PathBuf, String> {
+#[cfg(target_os = "macos")]
+pub fn bundle_path(executable: &std::path::Path) -> Result<PathBuf, String> {
     executable
         .ancestors()
         .find(|p| p.extension().is_some_and(|e| e == "app"))
-        .map(Path::to_path_buf)
+        .map(std::path::Path::to_path_buf)
         .ok_or_else(|| "native.updates.installFailed".into())
 }
 
@@ -267,6 +304,38 @@ mod tests {
         );
         assert_eq!(cache.last_check(), Some(9876));
     }
+    #[cfg(windows)]
+    #[test]
+    fn locked_publication_preserves_verified_bytes_after_reopen() {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("updates");
+        let cache = Cache::open(root.clone()).unwrap();
+        cache
+            .retain("1.0.0".into(), Value::Null, b"verified")
+            .unwrap();
+        let held = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(root.join("verified.json"))
+            .unwrap();
+        assert!(
+            cache
+                .retain("2.0.0".into(), Value::Null, b"replacement")
+                .is_err()
+        );
+        drop(held);
+        drop(cache);
+        let cache = Cache::open(root.clone()).unwrap();
+        let record = cache.record().unwrap().unwrap();
+        assert_eq!(record.version, "1.0.0");
+        assert_eq!(cache.read(&record).unwrap(), b"verified");
+        cache.clean_candidates(Some(&record)).unwrap();
+        assert!(!root.join("b.package").exists());
+    }
+
     #[test]
     fn metadata_cannot_select_arbitrary_paths() {
         let dir = tempfile::tempdir().unwrap();

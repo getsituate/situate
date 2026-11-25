@@ -18,7 +18,11 @@ The native conversation gateway, registry and host adapters in <<native-conversa
 |`client/app/src-tauri/src`
 |Window-authorized conversation registry and host adapters, model operation admission and provider transport, built-in and plugin tool dispatch, conversation persistence, workspace sessions, lifecycle coordination and platform integration.
 |`client/crates/situate-core`
-|Storage, content history, path policies and conversation format validation without application-window ownership.
+|Storage, content history, path policies and conversation format validation without application-window ownership. Uses the selected filesystem adapter for native operations.
+|`client/crates/situate-host-api` and `client/crates/situate-host`
+|Native process and filesystem contracts, and compile-time selection of the filesystem implementation. Neither crate depends on Tauri or on the storage domain.
+|`client/crates/situate-host-macos`, `situate-host-windows` and `situate-host-posix`
+|Native filesystem operations and owned subprocesses. The macOS host reuses POSIX primitives and adds Apple-specific durability barriers. Native primitive tests live with their implementations.
 |`client/crates/situate-agent`
 |Conversation owner embedding Rig and using core domain/storage contracts. Owns accepted input, pending decisions, request preparation, tool scheduling, checkpoints, cancellation and completion through the native application's host implementation.
 |`client/crates/tauri-plugin-executor-platform`

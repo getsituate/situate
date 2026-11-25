@@ -123,7 +123,13 @@ export function hashReleaseFileDescriptor(fd, size, algorithm = "sha256") {
 }
 
 // Minisign authenticates the BLAKE2b payload digest and, separately, the trusted comment.
-export function verifyUpdaterSignature(path, signature, publicKey, version) {
+export function verifyUpdaterSignature(
+  path,
+  signature,
+  publicKey,
+  version,
+  expectedFilename,
+) {
   const keyLines = base64(publicKey).toString("utf8").trim().split(/\r?\n/);
   const key = base64(keyLines.at(-1));
   const lines = base64(signature).toString("utf8").trim().split(/\r?\n/);
@@ -141,7 +147,9 @@ export function verifyUpdaterSignature(path, signature, publicKey, version) {
     sig.subarray(0, 2).toString() !== "ED" ||
     !sig.subarray(2, 10).equals(key.subarray(2, 10)) ||
     !/^timestamp:[0-9]+\tfile:[^\t\r\n]+\tversion:[^\t\r\n]+$/.test(comment) ||
-    comment.split("\t").at(-1) !== `version:${version}`
+    comment.split("\t").at(-1) !== `version:${version}` ||
+    (expectedFilename !== undefined &&
+      comment.split("\t")[1] !== `file:${expectedFilename}`)
   )
     throw new Error(
       "Updater signature is not bound to the requested version and key.",

@@ -8,12 +8,17 @@ use tokio::{sync::mpsc, time::timeout};
 
 const SUPERVISOR: &str = include_str!("../supervisor.js");
 
+#[cfg(target_os = "macos")]
 mod bundled;
 #[allow(dead_code)]
 #[path = "../../../src/document.rs"]
 mod document;
+#[cfg(target_os = "macos")]
 mod hung_ui;
+#[cfg(target_os = "macos")]
 mod preview;
+#[cfg(target_os = "windows")]
+mod windows;
 
 async fn next(rx: &mut mpsc::UnboundedReceiver<ExecutorEvent>) -> Result<ExecutorEvent, String> {
     timeout(Duration::from_secs(25), rx.recv())
@@ -21,6 +26,7 @@ async fn next(rx: &mut mpsc::UnboundedReceiver<ExecutorEvent>) -> Result<Executo
         .map_err(|_| "event-timeout")?
         .ok_or_else(|| "event-channel-closed".into())
 }
+#[cfg(target_os = "macos")]
 async fn message(
     rx: &mut mpsc::UnboundedReceiver<ExecutorEvent>,
     expected: Value,
@@ -31,6 +37,7 @@ async fn message(
     }
 }
 
+#[cfg(target_os = "macos")]
 async fn check(app: AppHandle, bundle: Option<String>) -> Result<(), String> {
     preview::check(app.clone()).await?;
     let executor = Executor::new(app.clone());
@@ -157,14 +164,20 @@ fn main() {
         );
         return;
     }
-    tauri::Builder::default()
+    let builder = tauri::Builder::default().plugin(tauri_plugin_executor_platform::init());
+    #[cfg(target_os = "macos")]
+    let builder = builder
         .manage(hung_ui::LoopEntry::default())
-        .invoke_handler(hung_ui::invoke)
-        .plugin(tauri_plugin_executor_platform::init())
+        .invoke_handler(hung_ui::invoke);
+    builder
         .setup(move |app| {
             let app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                match check(app.clone(), bundle).await {
+                #[cfg(target_os = "macos")]
+                let result = check(app.clone(), bundle).await;
+                #[cfg(target_os = "windows")]
+                let result = windows::check(app.clone()).await;
+                match result {
                     Ok(()) => {
                         println!("executor-native-test: passed");
                         app.exit(0);

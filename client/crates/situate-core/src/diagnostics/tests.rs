@@ -458,7 +458,8 @@ fn unrelated_entries_survive_startup_rotation_and_restart() {
     fs::write(temp.path().join("unrelated-directory/keep"), "preserve").unwrap();
     #[cfg(target_os = "linux")]
     let opaque = {
-        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+        use situate_host::unix_test_support::RawName;
+        use std::ffi::OsStr;
         let path = temp.path().join(OsStr::from_bytes(b"opaque-\xff"));
         fs::write(&path, "preserve").unwrap();
         path
@@ -507,7 +508,7 @@ fn device_identity_persists_but_corruption_is_preserved() {
 #[cfg(unix)]
 #[test]
 fn symlinks_hardlinks_and_deletion_substitution_are_not_followed() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let temp = tempfile::tempdir().unwrap();
     let external = tempfile::tempdir().unwrap();
     let target = external.path().join("private");
@@ -602,7 +603,7 @@ fn rotation_deletion_failure_preserves_unknown_entries() {
 #[cfg(unix)]
 #[test]
 fn directory_symlink_is_rejected_without_changing_target_permissions() {
-    use std::os::unix::fs::{PermissionsExt, symlink};
+    use situate_host::unix_test_support::{PermissionsExt, symlink};
     let temp = tempfile::tempdir().unwrap();
     let target = tempfile::tempdir().unwrap();
     fs::set_permissions(target.path(), fs::Permissions::from_mode(0o755)).unwrap();

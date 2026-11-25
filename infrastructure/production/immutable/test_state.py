@@ -92,6 +92,23 @@ class StateTest(unittest.TestCase):
         # Only ownership is emulated; links, modes, manifests and file bytes are real.
         return verify.check_release(self.dist, release, deploy_uid=self.dist.stat().st_uid)
 
+    def test_windows_feed_survives_a_newer_macos_only_release(self):
+        windows_target = self.publish_fixture('1.2.3')
+        mac_target = self.publish_fixture('1.2.4')
+        (self.dist / 'current-release').symlink_to(mac_target)
+        dump(self.dist / windows_target / 'windows-update.json', {
+            'version': '1.2.3', 'distribution': 'direct', 'platforms': {
+                'windows-x86_64': {}, 'windows-aarch64': {},
+            },
+        })
+        with self.assertRaisesRegex(ValueError, 'Invalid active Windows release pointer'):
+            self.check_release()
+        (self.dist / 'current-windows-release').symlink_to(windows_target)
+        self.check_release()
+        (self.dist / '.windows-release-activation').symlink_to(windows_target)
+        with self.assertRaisesRegex(ValueError, 'Unresolved release operation'):
+            self.check_release()
+
     def test_website_activation_and_rollback_leave_distribution_unchanged(self):
         pointer = self.dist / 'current-release'
         pointer.symlink_to(self.publish_fixture('1.2.3'))

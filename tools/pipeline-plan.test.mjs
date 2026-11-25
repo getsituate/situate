@@ -173,6 +173,33 @@ test("Intel macOS compatibility allows 45 minutes per suite in PR and release ve
   }
 });
 
+test("Windows checks are selected together for product and Windows CI inputs", () => {
+  const lane = (path, mode) =>
+    planPaths([path], { mode }).lanes.find(({ id }) => id === "windows-native");
+  const ids = ["client-windows-build", "client-windows-workspace"];
+  for (const path of [
+    "client/app/src/App.vue",
+    "client/Cargo.lock",
+    "tools/test-windows.mjs",
+    "tools/test-windows.test.mjs",
+    ".github/workflows/verify.yml",
+    "tools/pipeline-bootstrap.py",
+    "package.json",
+  ]) {
+    const selected = lane(path, "verify");
+    assert.deepEqual(selected?.suites, ids, path);
+    assert.equal(selected.host, "windows");
+    assert.equal(selected.execution, "native");
+  }
+  for (const path of [
+    "docs/development/testing.md",
+    "client/workshop/src/App.vue",
+    "changes/new.json",
+  ])
+    assert.equal(lane(path, "verify"), undefined, path);
+  assert.equal(lane("client/app/src/App.vue", "release"), undefined);
+});
+
 test("editing the external sign-in page selects Edge on macOS", () => {
   const edgeLane = (path) =>
     planPaths([path], { mode: "verify" }).lanes.find(({ suites }) =>
@@ -233,7 +260,9 @@ test("release source gates are complete, unique and exclude diagnostics and advi
   for (const lane of plan.lanes) {
     const execution = testPlan({
       suite: lane.suites,
-      platform: lane.host === "macos" ? "darwin" : "linux",
+      platform: { macos: "darwin", linux: "linux", windows: "win32" }[
+        lane.host
+      ],
     });
     assert.deepEqual(
       execution.suites.map((suite) => suite.id).sort(),

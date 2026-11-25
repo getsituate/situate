@@ -32,10 +32,35 @@ impl From<&Location> for Entry {
         Self {
             id: l.id.clone(),
             name: l.name.clone(),
-            display: l.display.clone(),
+            display: workspace_display_path(&l.display),
         }
     }
 }
+fn workspace_display_path(path: &str) -> String {
+    #[cfg(windows)]
+    let path = situate_host_windows::fs::display_path(Path::new(path))
+        .to_str()
+        .unwrap_or(path);
+    path.to_owned()
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn workspace_display_does_not_expose_verbatim_prefix_on_short_drive_paths() {
+    let handle = r"\\?\C:\Users\Test\Documents";
+    let location = Location {
+        id: format!("path:{handle}"),
+        name: "Documents".into(),
+        display: handle.into(),
+        kind: "path".into(),
+        handle: handle.into(),
+    };
+    let entry = Entry::from(&location);
+    assert_eq!(entry.display, r"C:\Users\Test\Documents");
+    assert_eq!(entry.id, format!("path:{handle}"));
+    assert_eq!(location.handle, handle);
+}
+
 #[derive(Clone, Serialize)]
 pub struct Failure {
     pub location: Entry,
@@ -51,7 +76,6 @@ pub struct Snapshot {
     current: Option<Entry>,
     ai_setup: bool,
     onboarding: bool,
-    onboarding_available: bool,
     failures: Vec<Failure>,
     error: Option<String>,
 }
@@ -511,16 +535,9 @@ fn native(
                 .map(|p| fs::location(&p))
                 .transpose(),
             "inspect" => fs::inspect(path()?).map(Some),
-            "preflight" => {
-                fs::preflight(path()?, name.ok_or("native.workspace.name.required")?)?;
-                Ok(location.cloned())
-            }
             "create" => {
-                #[cfg(target_os = "macos")]
-                let create = fs::create_for_onboarding;
-                #[cfg(not(target_os = "macos"))]
-                let create = fs::create;
-                create(path()?, name.ok_or("native.workspace.name.required")?).map(Some)
+                fs::create_for_onboarding(path()?, name.ok_or("native.workspace.name.required")?)
+                    .map(Some)
             }
             _ => Err("native.workspace.operation.unknownFolder".into()),
         }
@@ -927,7 +944,6 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     });
     Ok(())
 }
-#[cfg(any(target_os = "macos", test))]
 fn stored_onboarding_incomplete(root: &Path, scope: &str) -> Result<bool, String> {
     Ok(
         situate_core::onboarding::OnboardingStorage::open(root, scope)?
@@ -940,16 +956,9 @@ fn stored_onboarding_incomplete(root: &Path, scope: &str) -> Result<bool, String
 }
 
 fn onboarding_incomplete(app: &tauri::AppHandle, location: &Location) -> Result<bool, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let root =
-            crate::files::local_root(app, location)?.ok_or("native.onboarding.storage.failed")?;
-        stored_onboarding_incomplete(&root, &location.id)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (app, location);
-        Ok(false)
+    match crate::files::local_root(app, location)? {
+        Some(root) => stored_onboarding_incomplete(&root, &location.id),
+        None => Ok(false),
     }
 }
 
@@ -995,7 +1004,6 @@ pub async fn workspace_snapshot(
             ai_setup: current.is_some_and(|s| s.ai_setup),
             onboarding: current
                 .is_some_and(|s| onboarding_incomplete(&app, &s.location).unwrap_or(true)),
-            onboarding_available: cfg!(target_os = "macos"),
             failures: inner.failures.clone(),
             error: inner.error.clone(),
         })
@@ -1044,18 +1052,29 @@ pub async fn workspace_preflight(
             .parents
             .get(&parent)
             .ok_or("native.workspace.parent.chooseAgain")?;
-        native(&app, "preflight", Some(location), Some(&name))?;
-        if location.display.starts_with("native.") || location.display.starts_with('{') {
-            Ok(situate_core::messages::error(
-                "native.workspace.location.child",
-                serde_json::json!({"parent": location.display, "name":name}),
-            ))
-        } else {
-            Ok(format!(
-                "{}/{}",
-                location.display.trim_end_matches('/'),
-                name
-            ))
+        #[cfg(desktop)]
+        {
+            if location.kind != "path" {
+                return Err("native.workspace.handle.unsupportedOnDevice".into());
+            }
+            let path = situate_core::workspaces::preflight(Path::new(&location.handle), &name)?;
+            Ok(workspace_display_path(&path))
+        }
+        #[cfg(mobile)]
+        {
+            native(&app, "preflight", Some(location), Some(&name))?;
+            if location.display.starts_with("native.") || location.display.starts_with('{') {
+                Ok(situate_core::messages::error(
+                    "native.workspace.location.child",
+                    serde_json::json!({"parent": location.display, "name":name}),
+                ))
+            } else {
+                Ok(format!(
+                    "{}/{}",
+                    location.display.trim_end_matches('/'),
+                    name
+                ))
+            }
         }
     })
     .await
@@ -1627,7 +1646,7 @@ pub(crate) fn with_retained_control<R: tauri::Runtime, T>(
         .with_authorized_control(window, session, || false, operation)
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
 pub(crate) fn with_authorized_read<P, T>(
     app: &tauri::AppHandle,
     window: &str,
@@ -1922,18 +1941,21 @@ mod scope_tests {
 
     #[cfg(not(target_os = "ios"))]
     #[test]
-    fn reopening_a_replaced_marker_does_not_reuse_old_admission() {
+    fn active_admission_prevents_or_rejects_marker_replacement() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join(".situate")).unwrap();
         let preparation =
             Arc::new(crate::workspace_preparation::prepare_local(root.path()).unwrap());
         let mut active = session("active", "workspace-1");
         active.preparation = Some(preparation);
-        std::fs::rename(
-            root.path().join(".situate"),
-            root.path().join(".situate-original"),
-        )
-        .unwrap();
+        let moved = root.path().join(".situate-original");
+        let rename = std::fs::rename(root.path().join(".situate"), &moved);
+        if cfg!(windows) {
+            assert!(matches!(rename.unwrap_err().raw_os_error(), Some(5 | 32)));
+            assert!(!moved.exists());
+            return;
+        }
+        rename.unwrap();
         std::fs::create_dir(root.path().join(".situate")).unwrap();
         let bytes = br#"{"minimumAppVersion":"9999.0.0","lastAppliedMigration":1}"#;
         std::fs::write(root.path().join(".situate/migrations.json"), bytes).unwrap();

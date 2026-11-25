@@ -63,15 +63,13 @@ pub(crate) struct HistoryIndex {
 #[derive(PartialEq)]
 struct CacheOwner {
     scope: String,
-    #[cfg(unix)]
-    identity: (u64, u64),
+    identity: Option<(u64, u64)>,
 }
 #[derive(PartialEq)]
 pub(super) struct FileStamp {
     size: u64,
     modified: std::time::SystemTime,
-    #[cfg(unix)]
-    identity: (u64, u64),
+    identity: Option<(u64, u64)>,
 }
 pub(super) fn file_stamp(file: &File) -> Result<FileStamp, String> {
     std_file_stamp(&file.try_clone().map_err(|_| STORAGE)?.into_std())
@@ -81,11 +79,7 @@ fn std_file_stamp(file: &std::fs::File) -> Result<FileStamp, String> {
     Ok(FileStamp {
         size: metadata.len(),
         modified: metadata.modified().map_err(|_| STORAGE)?,
-        #[cfg(unix)]
-        identity: {
-            use std::os::unix::fs::MetadataExt;
-            (metadata.dev(), metadata.ino())
-        },
+        identity: situate_host::fs::file_cache_identity(&metadata),
     })
 }
 
@@ -366,11 +360,7 @@ impl HistoryIndex {
             .map_err(|_| STORAGE)?;
         let owner = CacheOwner {
             scope: scope.into(),
-            #[cfg(unix)]
-            identity: {
-                use std::os::unix::fs::MetadataExt;
-                (metadata.dev(), metadata.ino())
-            },
+            identity: situate_host::fs::file_cache_identity(&metadata),
         };
         if self.owner.as_ref() != Some(&owner) {
             self.reset();

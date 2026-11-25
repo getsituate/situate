@@ -10,6 +10,7 @@ import {
   watch,
 } from "vue";
 import { SituateField, SituateInput, SituateButton } from "@situate/ui";
+import ErrorDialog from "../errors/ErrorDialog.vue";
 import AppearanceSettings from "../settings/AppearanceSettings.vue";
 import { accentStyle, type Accent } from "../settings/accents";
 import {
@@ -23,7 +24,6 @@ import {
 const props = defineProps<{
   run: RunAction;
   busy: boolean;
-  setup?: boolean;
   operationError?: unknown;
 }>();
 const emit = defineEmits<{
@@ -34,7 +34,7 @@ const emit = defineEmits<{
 }>();
 const accent = ref<Accent>("violet");
 watch(accent, (value) => emit("accent", value));
-const name = ref(props.setup ? t("onboarding.creation.defaultName") : "");
+const name = ref(t("onboarding.creation.defaultName"));
 const parent = ref<Workspace | null>(null);
 const error = ref<unknown>("");
 const checking = ref(false);
@@ -53,13 +53,14 @@ const errorBox = useTemplateRef<HTMLElement>("errorBox");
 let generation = 0;
 let alive = true;
 const validation = computed(() => nameError(name.value));
-const target = computed(() =>
-  parent.value && name.value
-    ? localizeProvidedText(parent.value.display).replace(/\/$/u, "") +
-      "/" +
-      name.value
-    : "",
-);
+const target = computed(() => {
+  if (!parent.value || !name.value) return "";
+  const { display } = parent.value;
+  if (/^(?:[a-z]:\\|\\\\)/iu.test(display)) {
+    return `${display.replace(/\\$/u, "")}\\${name.value}`;
+  }
+  return `${localizeProvidedText(display).replace(/\/$/u, "")}/${name.value}`;
+});
 const canCreate = computed(
   () =>
     checked.value &&
@@ -78,6 +79,8 @@ const canAttempt = computed(
     (!!validation.value || canCreate.value),
 );
 const operationError = ref(props.operationError);
+const pathTooLong = "native.workspace.create.pathTooLong";
+const showPathError = ref(false);
 watch(
   () => props.operationError,
   (value) => (operationError.value = value),
@@ -88,7 +91,11 @@ function isDestinationError(value: unknown): boolean {
     /^native\.workspace\.(folder|parent|name)\./u.test(value)
   );
 }
-const message = computed(() => operationError.value || error.value);
+const message = computed(() =>
+  operationError.value === pathTooLong
+    ? error.value
+    : operationError.value || error.value,
+);
 const destinationError = computed(() =>
   isDestinationError(operationError.value) ? operationError.value : error.value,
 );
@@ -154,12 +161,16 @@ async function create(): Promise<void> {
     return;
   }
   if (!canCreate.value || !parent.value) return;
-  if (await props.run("create", parent.value.id, name.value, accent.value))
+  if (await props.run("create", parent.value.id, name.value, accent.value)) {
     emit("opened");
-  else await check();
+  } else {
+    await nextTick();
+    if (operationError.value === pathTooLong) showPathError.value = true;
+    else await check();
+  }
 }
 onMounted(() => {
-  if (props.setup) document.getElementById("create-title")?.focus();
+  document.getElementById("create-title")?.focus();
   emit("accent", accent.value);
   return choose(false);
 });
@@ -325,4 +336,9 @@ onBeforeUnmount(() => {
       >{{ t("workspace.createWorkspace") }}</SituateButton
     >
   </footer>
+  <ErrorDialog
+    :open="showPathError"
+    :message="localizeError(pathTooLong)"
+    @dismiss="showPathError = false"
+  />
 </template>

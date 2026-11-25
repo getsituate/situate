@@ -1435,27 +1435,29 @@ async fn workspace(context: &Context) -> Result<Arc<Workspace>, String> {
     Ok(opened)
 }
 
-fn current_platform() -> situate_core::plugins::PluginPlatform {
-    if cfg!(target_os = "ios") {
-        situate_core::plugins::PluginPlatform::Ios
-    } else {
-        situate_core::plugins::PluginPlatform::Macos
-    }
+fn supports_current_platform(manifest: &situate_core::plugins::PluginManifest) -> bool {
+    use situate_core::plugins::PluginPlatform;
+    manifest.platforms.as_ref().is_none_or(|platforms| {
+        let platform = match std::env::consts::OS {
+            "macos" => PluginPlatform::Macos,
+            "ios" => PluginPlatform::Ios,
+            _ => return false,
+        };
+        platforms.contains(&platform)
+    })
 }
+
 fn supported_plugins(listing: &situate_core::plugins::runtime::Listing) -> HashSet<String> {
-    let platform = current_platform();
     let candidates = listing
         .plugins
         .iter()
         .filter(|plugin| {
             plugin.enabled
                 && plugin.error.is_none()
-                && plugin.manifest.as_ref().is_some_and(|manifest| {
-                    manifest
-                        .platforms
-                        .as_ref()
-                        .is_none_or(|platforms| platforms.contains(&platform))
-                })
+                && plugin
+                    .manifest
+                    .as_ref()
+                    .is_some_and(supports_current_platform)
         })
         .map(|plugin| plugin.id.clone())
         .collect::<HashSet<_>>();
@@ -1626,7 +1628,7 @@ pub async fn capture(
                     let incarnation=incarnations.get(&plugin.id).cloned().ok_or(UNAVAILABLE)?;
                     let revision=revisions.get(&plugin.id).cloned().ok_or(UNAVAILABLE)?;
                     let source=if let Some(revision)=revision.as_ref(){situate_core::plugins::sources::at_revision(&root,&situate_core::plugins::sources::PackageRevision{plugin_id:plugin.id.clone(),revision:revision.clone(),incarnation:Some(incarnation.clone())})?}else{situate_core::plugins::runtime::load(&root,&plugin.id)?};
-                    if source.manifest.platforms.as_ref().is_some_and(|platforms|!platforms.contains(&current_platform())){return Err(UNAVAILABLE.into());}
+                    if !supports_current_platform(&source.manifest){return Err(UNAVAILABLE.into());}
                     Ok((serde_json::to_value(source).map_err(|_|UNAVAILABLE)?,revision,incarnation,revisions,incarnations))
                 })();
                 match captured{
@@ -1932,6 +1934,10 @@ pub(crate) async fn check_inner(
     let execute = async {
         let mut target_plugin = None;
         for source in sources {
+            #[cfg(target_os = "windows")]
+            if !source["manifest"]["platforms"].is_null() {
+                return Err(UNAVAILABLE.into());
+            }
             let plugin = workspace
                 .load(
                     CapturedSource {

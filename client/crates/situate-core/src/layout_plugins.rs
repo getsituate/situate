@@ -28,11 +28,7 @@ pub(super) fn child(dir: &Dir, name: &str) -> Result<Option<Dir>, String> {
 pub(super) fn read(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, String> {
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NONBLOCK);
-    }
+    situate_host::fs::nonblocking_file_options(&mut options);
     let file = match dir.open_with(name, &options) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -139,29 +135,23 @@ pub fn write_immutable(dir: &Dir, name: &str, payload: &[u8]) -> Result<(), Stri
         .write(true)
         .create_new(true)
         .follow(FollowSymlinks::No);
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    situate_host::fs::private_file_options(&mut options);
     // Publish only complete immutable records; interrupted temporary files are never read.
     let temporary = format!("layout-record-{}.tmp", uuid::Uuid::new_v4());
     let mut file = dir.open_with(&temporary, &options).map_err(|_| INVALID)?;
-    let result = file
-        .write_all(payload)
-        .and_then(|_| file.sync_all())
-        .and_then(|_| dir.hard_link(&temporary, dir, name));
+    let result = file.write_all(payload).and_then(|_| file.sync_all());
+    drop(file);
+    let result = result.and_then(|_| dir.hard_link(&temporary, dir, name));
     let _ = dir.remove_file(&temporary);
     match result {
         Ok(()) => (),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             let mut options = OpenOptions::new();
-            options.read(true).follow(FollowSymlinks::No);
-            #[cfg(unix)]
-            {
-                use cap_std::fs::OpenOptionsExt;
-                options.custom_flags(libc::O_NONBLOCK);
-            }
+            options
+                .read(true)
+                .write(situate_host::fs::WRITABLE_SYNC_HANDLE)
+                .follow(FollowSymlinks::No);
+            situate_host::fs::nonblocking_file_options(&mut options);
             let mut file = dir.open_with(name, &options).map_err(|_| INVALID)?;
             if !file.metadata().map_err(|_| INVALID)?.is_file() {
                 return Err(INVALID.into());

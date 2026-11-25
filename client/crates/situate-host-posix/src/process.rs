@@ -1,4 +1,54 @@
-use super::{CommandOutcome, CommandOutput, CommandRequest, CommandResult, ShellError};
+use situate_host_api::process::*;
+
+pub struct Host;
+
+impl ProcessHost for Host {
+    fn capability() -> ShellCapability {
+        capability()
+    }
+
+    fn script_args(prefix: &[&str], command: String) -> Vec<String> {
+        make_script_args(prefix, command)
+    }
+
+    async fn execute(
+        request: CommandRequest,
+        cancellation: CancellationToken,
+    ) -> Result<CommandResult, ShellError> {
+        execute(request, cancellation).await
+    }
+}
+
+fn capability() -> ShellCapability {
+    let installed = std::path::Path::new("/bin/sh").is_file();
+    ShellCapability {
+        available: installed,
+        platform: std::env::consts::OS,
+        implementation: if installed {
+            "nativeProcess"
+        } else {
+            "unavailable"
+        },
+        interpreter: installed.then(|| "/bin/sh".into()),
+        interpreter_dialect: installed.then_some("posixSh"),
+        interpreter_args: if installed { vec!["-c"] } else { vec![] },
+        unavailable_reason: (!installed).then_some("systemInterpreterMissing"),
+        ownership: if installed { "processGroup" } else { "none" },
+        detached_descendants_contained: false,
+        requires_path_backed_workspace: true,
+        max_timeout_ms: MAX_TIMEOUT_MS,
+        max_output_bytes_per_stream: MAX_OUTPUT_BYTES,
+    }
+}
+
+fn make_script_args(prefix: &[&str], command: String) -> Vec<String> {
+    prefix
+        .iter()
+        .map(|arg| (*arg).to_owned())
+        .chain([command, "situate-command".into()])
+        .collect()
+}
+
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::Stdio;
 use std::time::Duration;
@@ -107,33 +157,6 @@ fn zombie_only_group(group: libc::pid_t) -> bool {
     true
 }
 
-#[derive(Default)]
-struct Capture {
-    bytes: Vec<u8>,
-    total: u64,
-    eof: bool,
-    failed: bool,
-}
-
-impl Capture {
-    fn append(&mut self, bytes: &[u8], limit: usize) {
-        self.total = self.total.saturating_add(bytes.len() as u64);
-        let remaining = limit.saturating_sub(self.bytes.len());
-        self.bytes
-            .extend_from_slice(&bytes[..remaining.min(bytes.len())]);
-    }
-
-    fn finish(self) -> CommandOutput {
-        CommandOutput {
-            text: String::from_utf8_lossy(&self.bytes).into_owned(),
-            captured_bytes: self.bytes.len(),
-            total_bytes: self.total,
-            truncated: self.total > self.bytes.len() as u64,
-            incomplete: !self.eof || self.failed,
-        }
-    }
-}
-
 async fn read_chunk(reader: &mut (impl AsyncRead + Unpin), capture: &mut Capture, limit: usize) {
     let mut bytes = [0; 8192];
     match reader.read(&mut bytes).await {
@@ -147,26 +170,16 @@ async fn read_chunk(reader: &mut (impl AsyncRead + Unpin), capture: &mut Capture
     }
 }
 
-pub(super) async fn execute(
+async fn execute(
     request: CommandRequest,
     cancellation: CancellationToken,
 ) -> Result<CommandResult, ShellError> {
+    if !capability().available {
+        return Err(ShellError::Unavailable);
+    }
+    request.validate()?;
     if cancellation.is_cancelled() {
-        return Ok(CommandResult {
-            outcome: CommandOutcome::Cancelled,
-            exit_code: None,
-            signal: None,
-            stdout: Capture {
-                eof: true,
-                ..Capture::default()
-            }
-            .finish(),
-            stderr: Capture {
-                eof: true,
-                ..Capture::default()
-            }
-            .finish(),
-        });
+        return Ok(cancelled_before_start());
     }
     let deadline = Instant::now() + Duration::from_millis(request.timeout_ms);
     let mut command = Command::new(&request.executable);
@@ -240,3 +253,6 @@ pub(super) async fn execute(
         stderr: err.finish(),
     })
 }
+
+#[cfg(test)]
+mod tests;

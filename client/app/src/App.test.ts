@@ -55,7 +55,9 @@ vi.mock("@tauri-apps/api/core", () => ({
                     formats: { time: "12", date: "mdy", number: "dot-comma" },
                     writable: true,
                   }
-                : undefined,
+                : command === "onboarding_load"
+                  ? { record: null, revision: null, writable: true }
+                  : undefined,
   ),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
@@ -1071,6 +1073,9 @@ describe("Android Back", () => {
     await settleViews();
     await openEntry(wrapper);
     await wrapper.get(".primary-choice").trigger("click");
+    await settleViews();
+    await wrapper.get(".skip").trigger("click");
+    await settleViews();
     const field = wrapper.get<HTMLInputElement>("#workspace-name");
     field.element.focus();
     await field.setValue("Unsubmitted draft");

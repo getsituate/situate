@@ -4,6 +4,13 @@ use std::{collections::HashMap, path::Path};
 const INVALID: &str = "native.plugins.checkInvalid";
 const LIMIT: &str = "native.plugins.checkLimit";
 
+#[cfg(test)]
+pub(crate) const TEST_TOOL: &str = if cfg!(windows) {
+    r"C:\synthetic\tool.exe"
+} else {
+    "/synthetic/tool"
+};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HttpFixture {
@@ -340,7 +347,7 @@ mod tests {
 
     #[test]
     fn process_fixtures_validate_bounds_and_exact_synthetic_requests() {
-        let fixture = json!({"executable":"/synthetic/tool","args":[],"exitCode":-2147483648_i64,"stdout":"","stderr":""});
+        let fixture = json!({"executable":TEST_TOOL,"args":[],"exitCode":-2147483648_i64,"stdout":"","stderr":""});
         let parsed: ProcessFixture = serde_json::from_value(fixture.clone()).unwrap();
         assert_eq!(serde_json::to_value(&parsed).unwrap(), fixture);
         let fixtures = vec![parsed];
@@ -363,7 +370,10 @@ mod tests {
         assert!(validate_processes(&vec![fixtures[0].clone(); 2]).is_err());
         for (key, value) in [
             ("executable", json!("relative")),
-            ("executable", json!(format!("/{}", "a".repeat(4096)))),
+            (
+                "executable",
+                json!(format!("{TEST_TOOL}{}", "a".repeat(4096))),
+            ),
             ("args", json!(vec!["a"; 257])),
             ("args", json!(["a".repeat(65_537)])),
             ("stdout", json!("é".repeat(16_385))),

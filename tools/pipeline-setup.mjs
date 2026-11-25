@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readImageLock } from "./ci-image.mjs";
 import { suiteHost } from "./test-scope.mjs";
+import { ordinaryEnvironment } from "./pipeline-environment.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export function prerequisites(lane) {
@@ -13,10 +14,12 @@ export function prerequisites(lane) {
     image: lane.host === "linux" && lane.execution !== "host-docker",
     docker: lane.execution === "host-docker",
     rust:
-      lane.host === "macos" &&
-      [...suites].some(
-        (id) => id !== "client-browser-msedge" && /^(dev-tui|client-)/.test(id),
-      ),
+      lane.host === "windows" ||
+      (lane.host === "macos" &&
+        [...suites].some(
+          (id) =>
+            id !== "client-browser-msedge" && /^(dev-tui|client-)/.test(id),
+        )),
     coverage: suites.has("client-rust-coverage"),
     swift:
       lane.host === "macos" &&
@@ -62,6 +65,20 @@ export async function prepareLane(
       throw new Error(
         "Use the pinned tool-container launcher for portable checks.",
       );
+    return selected;
+  }
+  if (lane.host === "windows") {
+    if (platform !== "win32" || lane.execution !== "native")
+      throw new Error("Selected prerequisites require native Windows.");
+    execute(
+      process.execPath,
+      [join(directory, "tools/test-windows.mjs"), "setup"],
+      {
+        cwd: directory,
+        env: ordinaryEnvironment(environment, platform),
+        stdio: "inherit",
+      },
+    );
     return selected;
   }
   if (platform !== "darwin")

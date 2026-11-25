@@ -85,11 +85,7 @@ impl Storage {
         }
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NONBLOCK);
-        }
+        situate_host::fs::nonblocking_file_options(&mut options);
         let file = match self.dir.open_with(FILE, &options) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -114,11 +110,8 @@ impl Storage {
             .write(true)
             .create(true)
             .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.mode(0o600).custom_flags(libc::O_NONBLOCK);
-        }
+        situate_host::fs::private_file_options(&mut options);
+        situate_host::fs::nonblocking_file_options(&mut options);
         let file = self
             .dir
             .open_with("appearance.lock", &options)
@@ -178,11 +171,7 @@ impl Storage {
             .write(true)
             .create_new(true)
             .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        {
-            use cap_std::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        situate_host::fs::private_file_options(&mut options);
         let mut file = self.dir.open_with(&temp, &options).map_err(|_| STORAGE)?;
         let result = (|| {
             file.write_all(bytes).map_err(|_| STORAGE)?;

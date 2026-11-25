@@ -29,7 +29,8 @@ test("initial bytes include shared static dependencies once but exclude lazy chu
   const directory = await mkdtemp(join(tmpdir(), "situate-bundle-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await mkdir(join(directory, ".vite"));
-  const providerFile = join("assets", "provider.js");
+  const providerFile = "assets/provider.js";
+  const sharedFile = "assets/shared.js";
   await writeFile(
     join(directory, ".vite/manifest.json"),
     JSON.stringify({
@@ -39,13 +40,13 @@ test("initial bytes include shared static dependencies once but exclude lazy chu
         imports: ["shared"],
         dynamicImports: ["provider"],
       },
-      shared: { file: "shared.js", imports: ["app"] },
+      shared: { file: sharedFile, imports: ["app"] },
       provider: { file: providerFile, imports: ["shared"] },
     }),
   );
   await writeFile(join(directory, "app.js"), "app");
-  await writeFile(join(directory, "shared.js"), "shared");
   await mkdir(join(directory, "assets"));
+  await writeFile(join(directory, sharedFile), "shared");
   await writeFile(join(directory, providerFile), "provider");
   await writeFile(join(directory, "executor-supervisor.js"), "supervisor");
   await writeFile(join(directory, "plugin-check-renderer.js"), "preview");

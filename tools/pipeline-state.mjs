@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { validateSourceVerificationReuse } from "./source-verification-evidence.mjs";
+import { windowsNativeSuites } from "./test-scope.mjs";
 
 export function digest(value) {
   const canonical = (entry) =>
@@ -51,11 +52,14 @@ export function atomicJson(file, value) {
     closeSync(fd);
   }
   renameSync(temporary, file);
-  const parent = openSync(directory, "r");
-  try {
-    fsyncSync(parent);
-  } finally {
-    closeSync(parent);
+  // Windows does not expose directory handles through Node openSync.
+  if (process.platform !== "win32") {
+    const parent = openSync(directory, "r");
+    try {
+      fsyncSync(parent);
+    } finally {
+      closeSync(parent);
+    }
   }
 }
 
@@ -94,8 +98,22 @@ export function validatePlan(plan) {
       "Duplicate or invalid lane",
     );
     lanes.add(lane.id);
-    assert(["linux", "macos"].includes(lane.host), "Unknown lane host");
+    assert(
+      ["linux", "macos", "windows"].includes(lane.host),
+      "Unknown lane host",
+    );
     assert(Array.isArray(lane.suites) && lane.suites.length > 0, "Empty lane");
+    if (
+      lane.id === "windows-native" ||
+      lane.host === "windows" ||
+      lane.suites.some((suite) => windowsNativeSuites.includes(suite))
+    ) {
+      assert.equal(plan.workflow, "verify", "Windows checks are Verify-only");
+      assert.equal(lane.id, "windows-native");
+      assert.equal(lane.host, "windows");
+      assert.equal(lane.execution, "native");
+      assert.deepEqual(lane.suites, [...windowsNativeSuites]);
+    }
     for (const suite of lane.suites) {
       assert(
         typeof suite === "string" && !suites.has(suite),
@@ -123,6 +141,18 @@ export function aggregateReceipts(plan, receipts) {
       "Unexpected or duplicate lane receipt",
     );
     received.add(lane.id);
+    if (lane.host === "windows") {
+      assert.equal(
+        receipt.executionHost,
+        "windows",
+        "Windows lane requires native execution",
+      );
+      assert.equal(
+        receipt.kind,
+        undefined,
+        "Windows evidence must execute on the exact source",
+      );
+    }
     if (receipt.kind === "source-verification-reuse")
       validateSourceVerificationReuse(plan, receipt);
     else

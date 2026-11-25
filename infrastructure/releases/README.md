@@ -80,6 +80,18 @@ All URLs are restricted to `https://getsituate.com/releases/`. Metadata must be 
 
 The app's history was sealed before signing from approved declarations and retained finalized catalogs. Publication neither edits that history nor requires a separate note-writing step.
 
+## Windows direct releases
+
+The protected-main release workflow builds the macOS packages and the x64 and ARM64 Windows NSIS installers for the same reserved version and checkout. Windows builds start automatically as part of the same run.
+
+Restrict `windows-release` to `main`. It supplies `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as secrets and `SITUATE_UPDATER_PUBLIC_KEY` as a variable. Set `SITUATE_WINDOWS_UPDATER_PUBLIC_KEY` in `macos-release` to the same public key so the shared publisher can verify Windows signatures without access to the Windows private key.
+
+The release workflow runs the Windows host and core tests on `windows-11-arm`. On the same runner, it installs the exact ARM64 candidate, checks that its workspace chooser opens, exercises NSIS upgrade from a synthetic baseline, and checks uninstall. The runner emits the candidate hash and the results. The publisher requires those results and validates the x64 and ARM64 updater signatures before sealing the shared `vVERSION` GitHub Release. It does not wait for a manual receipt. This does not qualify Windows 10, native x64, or WebView2 bootstrap. The NSIS upgrade test does not exercise update discovery or download.
+
+The publication job downloads the exact completed GitHub Release, verifies the installer hashes and updater signatures again, and derives the Windows feed from those files. Set `SITUATE_WINDOWS_UPDATER_PUBLIC_KEY` in `macos-publication` to the same Windows public key. If publication needs a new attempt, use **Publish macOS** with the same combined GitHub Release ID. This workflow publishes the signed packages without rebuilding them or using a signing key.
+
+The publisher stores `metadata/windows-update.json` in the immutable release directory and updates `current-windows-release` under the release lock. The public endpoint `/releases/windows/current/update.json` is checked for the exact version, architecture URLs, signatures and `no-store`. A macOS-only release does not move the Windows pointer. The Windows release does not expose a website download link.
+
 ## Interrupted legacy local publication
 
 For operations started with the legacy local publisher, do not repeat `publish`, remove pending markers or assume a disconnected SSH client cancelled the host operation. Preserve the local journal, stage, transport archive and remote incoming directory.

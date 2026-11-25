@@ -21,6 +21,7 @@ jobs:
       pull-requests: read
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
+      lanes: ${{ steps.plan.outputs.lanes }}
       digest: ${{ steps.plan.outputs.digest }}
       app_impact: ${{ steps.plan.outputs.app_impact }}
     steps:
@@ -36,7 +37,7 @@ jobs:
 
   policy:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'policy')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'policy')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -55,7 +56,7 @@ jobs:
 
   tooling:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'tooling')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -75,9 +76,9 @@ jobs:
   macos-arm64:
     needs: plan
     if: >-
-      contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos') ||
-      contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code') ||
-      contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native')
+      contains(fromJSON(needs.plan.outputs.lanes), 'tooling-macos') ||
+      contains(fromJSON(needs.plan.outputs.lanes), 'macos-code') ||
+      contains(fromJSON(needs.plan.outputs.lanes), 'macos-native')
     runs-on: macos-latest
     timeout-minutes: 360
     outputs:
@@ -101,7 +102,7 @@ jobs:
       - id: bootstrap
         run: python3 tools/pipeline-bootstrap.py
       - id: setup-tooling-macos
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'tooling-macos') }}
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.lanes), 'tooling-macos') }}
         run: node tools/actions-adapter.mjs setup --workflow verify --lane tooling-macos
       - id: tooling-macos
         name: tooling-macos
@@ -109,7 +110,7 @@ jobs:
         timeout-minutes: 120
         run: node tools/actions-adapter.mjs lane --workflow verify --lane tooling-macos
       - id: setup-macos-code
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-code') }}
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.lanes), 'macos-code') }}
         run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-code
       - id: macos-code
         name: macos-code
@@ -117,10 +118,10 @@ jobs:
         timeout-minutes: 120
         run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-code
       - id: desktop
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native') }}
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.lanes), 'macos-native') }}
         run: node tools/actions-adapter.mjs desktop
       - id: setup-macos-native
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-native') && steps.desktop.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' && contains(fromJSON(needs.plan.outputs.lanes), 'macos-native') && steps.desktop.outcome == 'success' }}
         run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-native
       - id: macos-native
         name: macos-native
@@ -132,7 +133,7 @@ jobs:
 
   docker-integration:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'docker-integration')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'docker-integration')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -153,7 +154,7 @@ jobs:
 
   frontend:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'frontend')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'frontend')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -173,7 +174,7 @@ jobs:
 
   rust:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'rust')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'rust')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -193,7 +194,7 @@ jobs:
 
   browser:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'browser')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'browser')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -220,7 +221,7 @@ jobs:
 
   browser-webkit:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'browser-webkit')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'browser-webkit')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -240,7 +241,7 @@ jobs:
 
   macos-compatibility:
     needs: plan
-    if: contains(fromJSON(needs.plan.outputs.plan).lanes.*.id, 'macos-compatibility')
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'macos-compatibility')
     runs-on: macos-15-intel
     timeout-minutes: 60
     outputs:
@@ -261,6 +262,139 @@ jobs:
       - run: node tools/actions-adapter.mjs setup --workflow verify --lane macos-compatibility
       - id: lane
         run: node tools/actions-adapter.mjs lane --workflow verify --lane macos-compatibility
+
+  windows-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'windows-native')
+    runs-on: windows-2025
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      receipt: ${{ steps.lane.outputs.receipt }}
+    env:
+      PIPELINE_PLAN: ${{ needs.plan.outputs.plan }}
+      PIPELINE_PLAN_DIGEST: ${{ needs.plan.outputs.digest }}
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - run: node tools/actions-adapter.mjs setup --workflow verify --lane windows-native
+      - id: lane
+        run: node tools/actions-adapter.mjs lane --workflow verify --lane windows-native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-ci-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/situate-windows-ci/artifact/
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-arm64-native:
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.lanes), 'windows-native')
+    runs-on: windows-11-arm
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    env:
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - shell: pwsh
+        run: ./tools/test-windows-arm64.ps1
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/situate-arm64-target
+
+  windows-webview-probe:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [windows-2025, windows-11-arm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - shell: pwsh
+        run: ./tools/probe-windows-webview2.ps1
+
+  windows-smoke-build:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
+    runs-on: windows-2025
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - run: node tools/build-windows-smoke.mjs windows-smoke-artifact
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-smoke-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: windows-smoke-artifact/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build unsigned installer preview
+        shell: pwsh
+        run: ./tools/build-windows-installer-preview.ps1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-installer-preview-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/installer-preview/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-update-pair-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/swu/pair/
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-arm64-installer:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'windows-support'
+    runs-on: windows-2025
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    env:
+      SITUATE_WINDOWS_INSTALLER_TARGET: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - name: Build unsigned ARM64 installer preview
+        shell: pwsh
+        run: ./tools/build-windows-installer-preview.ps1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-installer-preview-arm64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/installer-preview/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-update-pair-arm64-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/swu/pair/
+          if-no-files-found: error
+          retention-days: 7
 
   architecture:
     name: Architecture documentation
@@ -291,11 +425,13 @@ jobs:
         browser,
         browser-webkit,
         macos-compatibility,
+        windows-native,
+        windows-arm64-native,
       ]
     if: always()
     runs-on: ubuntu-24.04
     env:
-      PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"macos-arm64":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"browser":{7},"browser-webkit":{8},"macos-compatibility":{9}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.macos-arm64), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.browser), toJSON(needs.browser-webkit), toJSON(needs.macos-compatibility)) }}
+      PIPELINE_NEEDS: ${{ format('{{"plan":{{"result":{0}}},"policy":{1},"tooling":{2},"macos-arm64":{3},"docker-integration":{4},"frontend":{5},"rust":{6},"browser":{7},"browser-webkit":{8},"macos-compatibility":{9},"windows-native":{10}}}', toJSON(needs.plan.result), toJSON(needs.policy), toJSON(needs.tooling), toJSON(needs.macos-arm64), toJSON(needs.docker-integration), toJSON(needs.frontend), toJSON(needs.rust), toJSON(needs.browser), toJSON(needs.browser-webkit), toJSON(needs.macos-compatibility), toJSON(needs.windows-native)) }}
     permissions:
       contents: read
       actions: read
@@ -308,6 +444,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - if: needs.architecture.result != 'success'
+        run: exit 1
+      - if: contains(fromJSON(needs.plan.outputs.lanes), 'windows-native') && needs.windows-arm64-native.result != 'success'
         run: exit 1
       - run: python3 tools/pipeline-container.py actions aggregate --workflow verify
         env:

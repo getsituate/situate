@@ -10,8 +10,7 @@ pub(super) struct ObservationCache {
 pub(super) struct FileStamp {
     size: u64,
     modified: std::time::SystemTime,
-    #[cfg(unix)]
-    identity: (u64, u64, i64, i64, u32),
+    identity: Option<(u64, u64, i64, i64, u32)>,
 }
 impl FileStamp {
     pub fn read(metadata: &cap_std::fs::Metadata) -> Result<Self> {
@@ -21,22 +20,12 @@ impl FileStamp {
         Ok(Self {
             size: metadata.len(),
             modified: metadata.modified()?.into_std(),
-            #[cfg(unix)]
-            identity: {
-                use cap_std::fs::MetadataExt;
-                (
-                    metadata.dev(),
-                    metadata.ino(),
-                    metadata.ctime(),
-                    metadata.ctime_nsec(),
-                    metadata.mode(),
-                )
-            },
+            identity: situate_host::fs::file_change_identity(metadata),
         })
     }
     pub fn reusable(&self, other: &Self) -> bool {
         // Reuse requires file identity and change time, not just a restorable modification time.
-        cfg!(unix) && self == other
+        self.identity.is_some() && self == other
     }
 }
 
@@ -50,10 +39,15 @@ pub(super) struct CachedBlob {
 impl ContentStore {
     pub(super) fn sync_observed_history(&self) -> Result<()> {
         let head = self.repo.head()?.peel_to_commit()?.id();
-        if self.observations.durable_head.get() != Some(head) {
-            git_storage::sync_history(&self.history_dir)?;
-            self.observations.durable_head.set(Some(head));
+        if self.observations.durable_head.get() == Some(head) {
+            // Windows sharing restrictions can change even when the revision has not.
+            if situate_host::fs::RECHECK_HISTORY_CONTROLS {
+                git_storage::sync_controls(&self.history_dir)?;
+            }
+            return Ok(());
         }
+        git_storage::sync_history(&self.history_dir)?;
+        self.observations.durable_head.set(Some(head));
         Ok(())
     }
 
@@ -112,17 +106,11 @@ impl ContentStore {
         options.read(true).follow(FollowSymlinks::No).nonblock(true);
         let metadata = dir.open_with(&name, &options)?.metadata()?;
         FileStamp::read(&metadata)?;
-        #[cfg(unix)]
-        let mode = {
-            use cap_std::fs::MetadataExt;
-            if metadata.mode() & 0o111 != 0 {
-                0o100755
-            } else {
-                0o100644
-            }
+        let mode = if situate_host::fs::executable(&metadata) {
+            0o100755
+        } else {
+            0o100644
         };
-        #[cfg(not(unix))]
-        let mode = 0o100644;
         let parent = self.repo.head()?.peel_to_commit()?;
         let blob =
             git_storage::write_object(&self.repo, git2::ObjectType::Blob, version.text.as_bytes())?;
@@ -354,7 +342,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn cached_scans_detect_same_size_edits_with_restored_modification_times_and_deletions() {
-        use std::os::unix::fs::PermissionsExt;
+        use situate_host::unix_test_support::PermissionsExt;
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join(".situate")).unwrap();
         let path = root.path().join("note.md");

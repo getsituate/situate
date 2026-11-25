@@ -1,10 +1,22 @@
+pub use std::os::windows::fs::MetadataExt;
 use std::{
     io,
     os::windows::io::{AsRawHandle, FromRawHandle},
 };
 use windows_sys::Win32::Foundation::ERROR_NO_TOKEN;
 
-pub(super) struct RevertImpersonation(std::marker::PhantomData<std::rc::Rc<()>>);
+pub fn deny_write_sharing(path: &std::path::Path, directory: bool) -> std::fs::File {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ};
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).share_mode(FILE_SHARE_READ);
+    if directory {
+        options.custom_flags(FILE_FLAG_BACKUP_SEMANTICS);
+    }
+    options.open(path).unwrap()
+}
+
+pub struct RevertImpersonation(std::marker::PhantomData<std::rc::Rc<()>>);
 
 impl Drop for RevertImpersonation {
     fn drop(&mut self) {
@@ -18,7 +30,7 @@ impl Drop for RevertImpersonation {
     }
 }
 
-pub(super) fn restricted_context() -> io::Result<RevertImpersonation> {
+pub fn restricted_context() -> io::Result<RevertImpersonation> {
     use std::os::windows::io::OwnedHandle;
     use windows_sys::Win32::{
         Security::{

@@ -1,3 +1,5 @@
+import { windowsNativeSuites } from "./test-scope.mjs";
+
 const shared =
   /^(package(?:-lock)?\.json|\.node-version|\.prettier[^/]*|prettier\.config\.[^/]+|eslint\.config\.[^/]+|\.editorconfig|\.gitignore)$/;
 const clientConfig =
@@ -10,7 +12,7 @@ const platformInput =
 const declarations = /^changes\//;
 const swiftPolicy = /^\.(?:swift-format|swiftlint\.yml)$/;
 const delivery =
-  /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime(?:-authorization|-recovery)?|release-checkpoint(?:-[a-z-]+)?|qualification-runtime-envelope|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|promote|recovery|checkpoint(?:-commit)?|launch-trace|qualification-(?:host|route-guardian)))(?:\.test)?\.(?:mjs|py)$/;
+  /^(?:tools\/(?:actions-windows-release|change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime(?:-authorization|-recovery)?|release-checkpoint(?:-[a-z-]+)?|qualification-runtime-envelope|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|promote|recovery|checkpoint(?:-commit)?|launch-trace|windows-feed|publish-windows|qualification-(?:host|route-guardian)))(?:\.test)?\.(?:mjs|py)$/;
 const migrationContracts =
   /^tools\/(?:migration-history|published-migrations)(?:\.test)?\.mjs$/;
 const migrationConsumers =
@@ -65,6 +67,15 @@ const native = (file) =>
   /^client\/scripts\/(?:qualification-accessibility\.mjs|qualification-ax-text\.swift|upgrade-workspace-(?:fixture|journey)\.mjs|fixtures\/upgrade-016\/workspace\.mjs)$/.test(
     file,
   );
+const windowsNative = (file) =>
+  !isPlainDocumentation(file) &&
+  (native(file) ||
+    (/^client\/scripts\//.test(file) && !platformInput.test(file)) ||
+    file === ".github/workflows/verify.yml" ||
+    file === "tools/test-windows-arm64.ps1" ||
+    /^tools\/(?:test(?:-windows[^/]*)?|test-(?:inputs|scope)|pipeline(?:-[^/]*)?|source-verification[^/]*|actions-adapter)\.(?:mjs|py)$/.test(
+      file,
+    ));
 const requirements = (file) => file.startsWith("requirements/");
 const pi = (file) => file.startsWith(".pi/") || tools.test(file);
 const dev = (file) =>
@@ -107,6 +118,9 @@ const rules = {
     ].includes(file),
   "delivery-unit": (file) =>
     delivery.test(file) ||
+    /^client\/scripts\/(?:windows-release|updater-signing(?:-fixture)?)\.mjs$/.test(
+      file,
+    ) ||
     declarations.test(file) ||
     /^releases\//.test(file) ||
     file === "tools/test.mjs" ||
@@ -174,6 +188,7 @@ const rules = {
     ) ||
     file === ".github/workflows/verify.yml" ||
     file === ".github/workflows/release-macos.yml",
+  ...Object.fromEntries(windowsNativeSuites.map((id) => [id, windowsNative])),
   "client-agent-e2e": native,
   "client-onboarding-e2e": native,
   "client-plugins-e2e": native,
@@ -278,6 +293,10 @@ export function suiteAffectedFiles(suite, files) {
       ].includes(id)
     )
       return true;
+    if (windowsNativeSuites.includes(id))
+      return (
+        requiresFullSelection(file) || clientConfig.test(file) || rule(file)
+      );
     if (file === ".env.example")
       return [
         "runner-unit",

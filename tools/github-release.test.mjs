@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { qualificationFixture } from "./release-qualification-fixture.mjs";
+import { verifyDownloadReceipt } from "../infrastructure/releases/publish.mjs";
 import {
   createEvidenceFromDirectory,
   createGitHubRelease,
@@ -163,6 +164,62 @@ function fixture(t, options) {
     create,
   };
 }
+
+test("one GitHub draft seals both Windows installers alongside the macOS packages", async (t) => {
+  const f = fixture(t);
+  const windowsFiles = {};
+  const artifacts = [
+    ["x86_64-pc-windows-msvc", "x64"],
+    ["aarch64-pc-windows-msvc", "arm64"],
+  ].map(([target, arch]) => {
+    const file = `Situate-${f.identity.version}-windows-${arch}-setup.exe`;
+    const bytes = Buffer.from(`synthetic ${arch} installer`);
+    windowsFiles[file] = bytes;
+    windowsFiles[`${file}.sig`] = Buffer.from(`synthetic ${arch} sidecar`);
+    return { target, file, size: bytes.length, sha256: releaseHash(bytes) };
+  });
+  windowsFiles["windows-release.json"] = json({
+    source: f.identity.sourceRevision,
+    version: f.identity.version,
+    artifacts,
+  });
+  windowsFiles["SHA256SUMS.txt"] = Buffer.from("synthetic checksums");
+  const prepare = () =>
+    createEvidenceFromDirectory({
+      identity: f.identity,
+      directory: f.directory,
+      windowsFiles,
+    });
+  const built = prepare();
+  delete windowsFiles[`${artifacts[1].file}.sig`];
+  assert.throws(prepare);
+  assert.deepEqual(f.effects, []);
+  const result = await createGitHubRelease(
+    { ...f.request, ...built },
+    { github: f.github, authorize: async () => {} },
+  );
+  assert.equal(f.releases.length, 1);
+  assert.equal(f.releases[0].tag_name, f.identity.tag);
+  assert.equal(f.effects.at(-1), "finalize");
+  assert.equal(
+    result.receipt.assets.filter(({ name }) => name.endsWith(".exe")).length,
+    2,
+  );
+  assert(result.receipt.assets.some(({ name }) => name.endsWith(".dmg")));
+  const destination = join(f.directory, "combined-download");
+  const downloaded = await downloadGitHubRelease(
+    {
+      identity: result.identity,
+      destination,
+      evidenceSha256: result.evidenceSha256,
+    },
+    { github: f.github },
+  );
+  assert.deepEqual(
+    verifyDownloadReceipt(destination, downloaded.manifest, downloaded.receipt),
+    result.identity,
+  );
+});
 
 test("published notes can be edited without changing the retained evidence or release history", async (t) => {
   const f = fixture(t);

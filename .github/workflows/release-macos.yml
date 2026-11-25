@@ -417,6 +417,80 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  windows-build:
+    name: Build Windows (${{ matrix.arch }})
+    needs: [plan, required, hosting-ready]
+    if: github.ref_protected && needs.plan.outputs.enabled == 'true' && needs.plan.outputs.app_impact == 'true'
+    runs-on: windows-2025
+    environment: windows-release
+    timeout-minutes: 150
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python tools/pipeline-bootstrap.py
+      - id: reservation
+        run: node tools/actions-windows-release.mjs version
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - shell: pwsh
+        run: ./tools/build-windows-installer-preview.ps1
+        env:
+          SITUATE_WINDOWS_RELEASE_VERSION: ${{ steps.reservation.outputs.version }}
+          SITUATE_WINDOWS_INSTALLER_TARGET: ${{ matrix.target }}
+          SITUATE_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/swp/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-qualification:
+    name: Qualify Windows on native ARM64
+    needs: windows-build
+    if: github.ref_protected
+    runs-on: windows-11-arm
+    timeout-minutes: 55
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - shell: pwsh
+        run: ./tools/test-windows-arm64.ps1
+        env:
+          CARGO_PROFILE_TEST_DEBUG: "0"
+          CARGO_TARGET_DIR: ${{ runner.temp }}/situate-arm64-target
+      - shell: pwsh
+        run: ./tools/test-windows-release-arm64.ps1
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-qualification-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-release-inputs/qualification.json
+          if-no-files-found: error
+          retention-days: 7
+
   create:
     name: Create GitHub Release
     needs:
@@ -443,10 +517,11 @@ jobs:
       cancel-in-progress: false
     runs-on: macos-latest
     environment: macos-release
-    timeout-minutes: 180
+    timeout-minutes: 360
     outputs:
       release_id: ${{ steps.github_release.outputs.release_id }}
     permissions:
+      actions: read
       contents: write
       deployments: read
     env:
@@ -496,6 +571,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
+      - run: node tools/actions-windows-release.mjs reservation
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-reservation-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-release-inputs/reservation.json
+          if-no-files-found: error
+          retention-days: 7
       - id: cache_start
         if: steps.cache_plan.outputs.enabled == 'true'
         continue-on-error: true
@@ -553,12 +635,16 @@ jobs:
         env:
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
+      - run: node tools/actions-windows-release.mjs collect
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: node tools/wait-for-hosting.mjs --check
         env:
           GH_TOKEN: ${{ github.token }}
       - id: github_release
         run: node tools/actions-adapter.mjs create-stage --stage github
         env:
+          SITUATE_WINDOWS_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_WINDOWS_UPDATER_PUBLIC_KEY }}
           GH_TOKEN: ${{ github.token }}
           SITUATE_RELEASE_SSH_PRIVATE_KEY: ${{ secrets.SITUATE_RELEASE_SSH_PRIVATE_KEY }}
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
@@ -611,6 +697,7 @@ jobs:
           SITUATE_RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.SITUATE_RELEASE_SSH_KNOWN_HOSTS }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           SITUATE_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_UPDATER_PUBLIC_KEY }}
+          SITUATE_WINDOWS_UPDATER_PUBLIC_KEY: ${{ vars.SITUATE_WINDOWS_UPDATER_PUBLIC_KEY }}
 
   notify-release:
     needs: publish

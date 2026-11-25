@@ -451,7 +451,7 @@ fn inventory_and_recursive_file_limits_fail_whole_operation() {
 #[cfg(unix)]
 #[test]
 fn symlinks_at_every_storage_boundary_and_special_files_are_rejected() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let outside = tempfile::tempdir().unwrap();
     let external = package(outside.path(), "demo");
     for boundary in [
@@ -487,8 +487,7 @@ fn symlinks_at_every_storage_boundary_and_special_files_are_rejected() {
         Err(PluginError::InvalidPath)
     );
     fs::remove_file(code.join("SKILL.md")).unwrap();
-    let fifo = std::ffi::CString::new(code.join("SKILL.md").to_str().unwrap()).unwrap();
-    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    situate_host::unix_test_support::make_fifo(&code.join("SKILL.md")).unwrap();
     assert_eq!(
         read(root.path(), "demo", "SKILL.md"),
         Err(PluginError::InvalidPath)
@@ -500,8 +499,8 @@ fn symlinks_at_every_storage_boundary_and_special_files_are_rejected() {
 #[cfg(unix)]
 #[test]
 fn unreadable_inventory_and_sources_report_errors() {
-    use std::os::unix::fs::PermissionsExt;
-    if unsafe { libc::geteuid() } == 0 {
+    use situate_host::unix_test_support::PermissionsExt;
+    if situate_host::unix_test_support::is_root() {
         return;
     }
     let root = tempfile::tempdir().unwrap();

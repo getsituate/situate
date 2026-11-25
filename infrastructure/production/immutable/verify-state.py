@@ -43,7 +43,8 @@ def check_release(distribution, release, *, deploy_uid=1100, evidence=None):
     for name in distribution.iterdir():
         require(not name.name.startswith(('.release-incoming-', '.current-release-')) and
                 name.name not in ('release-pending.json', 'release-pending.tmp',
-                                  'release-allocation-pending.json', 'release-allocation-pending.tmp'),
+                                  'release-allocation-pending.json', 'release-allocation-pending.tmp',
+                                  '.windows-release-activation'),
                 f'Unresolved release operation: {name.name}')
     check_journal(distribution / 'release-operations.jsonl')
     release.ROOT = distribution
@@ -54,6 +55,20 @@ def check_release(distribution, release, *, deploy_uid=1100, evidence=None):
     require(any(item['version'] == version for item in stored) and
             all(item['version'] == version or release.compare(item['version'], version) < 0 for item in stored),
             'Active release is not the latest complete release on this volume.')
+    windows = distribution / 'current-windows-release'
+    windows_versions = [item['version'] for item in stored if release.entry(
+        distribution / 'releases' / item['version'] / 'metadata/windows-update.json') is not None]
+    if windows_versions or release.entry(windows) is not None:
+        target = re.fullmatch(r'releases/([^/]+)/metadata', windows.readlink().as_posix()) if windows.is_symlink() else None
+        require(target and target[1] in windows_versions and all(
+            release.compare(target[1], version) >= 0 for version in windows_versions), 'Invalid active Windows release pointer.')
+        release.validate_tree(distribution / 'releases' / target[1])
+        feed = distribution / target[0] / 'windows-update.json'
+        release.require_regular(feed.lstat())
+        value = json.loads(feed.read_bytes())
+        require(value.get('version') == target[1] and value.get('distribution') == 'direct' and
+                set(value.get('platforms', {})) == {'windows-x86_64', 'windows-aarch64'},
+                'Invalid active Windows update feed.')
     current = distribution / 'releases' / version
     release.validate_tree(current)
     manifest = json.loads((current / 'manifest.json').read_bytes())

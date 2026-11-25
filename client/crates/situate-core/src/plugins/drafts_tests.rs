@@ -41,7 +41,7 @@ fn discovery_and_quota_select_only_canonical_draft_directories() {
     fs::write(drafts.join(regular_uuid), "keep").unwrap();
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        use std::os::unix::ffi::OsStringExt;
+        use situate_host::unix_test_support::RawNameBuf;
         let name = std::ffi::OsString::from_vec(vec![0xff]);
         fs::write(plugins.join(&name), "keep").unwrap();
         fs::write(drafts.join(&name), "keep").unwrap();
@@ -73,7 +73,7 @@ fn selected_draft_symlink_is_not_followed() {
     let temp = tempfile::tempdir().unwrap();
     create(temp.path(), ID, "demo").unwrap();
     let outside = tempfile::tempdir().unwrap();
-    std::os::unix::fs::symlink(outside.path(), location(temp.path(), OTHER)).unwrap();
+    situate_host::unix_test_support::symlink(outside.path(), location(temp.path(), OTHER)).unwrap();
     assert!(list(temp.path()).is_err());
     assert!(inspect(temp.path(), OTHER).is_err());
     assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
@@ -450,7 +450,7 @@ fn aggregate_copy_limit_is_enforced() {
 #[cfg(unix)]
 #[test]
 fn symlinks_cannot_escape_source_or_draft_boundaries() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     let outside = tempfile::tempdir().unwrap();

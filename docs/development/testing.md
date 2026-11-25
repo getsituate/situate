@@ -260,6 +260,38 @@ Each guest executes one complete journey at a time across all worktrees, includi
 
 Re-run setup after changing the repository's Node/npm pins. Stop an idle guest with `tart stop situate-tests`. VM execution remains macOS host integration evidence, not a release, signing, or hardware qualification.
 
+### Windows installer preview
+
+Build the unsigned, per-user NSIS installer in a dedicated Windows x64 checkout with the pinned Volta and Rust toolchains, Visual Studio C++ build tools, and the Windows SDK. Download the pinned [Sherpa-ONNX archive](https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/sherpa-onnx-v2.0.2-win-x64-shared-MT-Release.tar.bz2) and its matching [ONNX Runtime archive](https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.28.2/onnxruntime-win-x64-MT-Release-1.28.2.tar.bz2), then run:
+
+```powershell
+node client/scripts/windows-installer.mjs C:\Temp\swp C:\Temp\sherpa-onnx-v2.0.2-win-x64-shared-MT-Release.tar.bz2 C:\Temp\onnxruntime-win-x64-MT-Release-1.28.2.tar.bz2
+```
+
+Choose a short output path that does not exist yet. The script checks both archive hashes before extracting the runtime and notices. The installer appears under `target/x86_64-pc-windows-msvc/release/bundle/nsis/` in the output directory. It embeds Microsoft's WebView2 bootstrapper, which needs a network connection if the machine lacks WebView2. Situate downloads the dictation model separately. The preview installs as **Situate Preview**, with separate app data and no update artifacts. Use a disposable Windows test account and synthetic workspaces; the preview does not qualify the signed release installer.
+
+### Windows startup smoke in UTM
+
+Use UTM 5.0.9 or newer and a dedicated Windows test guest with the QEMU guest agent, WebView2, and an unlocked console. You can use the guest's existing account, including an administrator account, as long as the test runs without elevated rights. Connect UTM to a private virtual network. Run the host command from a single macOS account across your worktrees; its guest lock is shared by those worktrees.
+
+On a Windows build host with the pinned Volta and Rust toolchains, MSVC, and the Windows SDK, run this command from a clean client checkout:
+
+```powershell
+node tools/build-windows-smoke.mjs C:\Temp\situate-smoke-artifact
+```
+
+Copy only `manifest.json` and `situate-client.exe` to the Mac. The executable uses a profile directory relative to itself. Ordinary Verify executables are not suitable for this test because they use the standard application data directories.
+
+```sh
+node tools/windows-vm-smoke.mjs "$VM_UUID" "$HOST_BRIDGE_IP" 'WINDOWS-VM\test-account' --artifact "$ARTIFACT_DIRECTORY"
+```
+
+Use the exact guest UUID from `utmctl list` and the Mac's address on the private UTM network. The runner checks the artifact checksum, starts it with a fresh app and WebView2 profile, and verifies that an on-screen window shows the enabled Create and Open workspace buttons. A run on a Windows ARM64 guest with an x64 executable exercises x64 emulation, not native x64 behavior.
+
+Use `--workspace "$ARTIFACT_DIRECTORY"` instead of `--artifact ...` to run the workspace journey. It skips the welcome animation, creates a workspace with the native folder picker and verifies that required provider setup resumes after reopening. It then opens a separate legacy workspace, saves a Markdown file and verifies the saved text after restarting the app. Keep the guest desktop in the foreground and do not interact with it during the run.
+
+Use `--fixture 15` instead of `--artifact ...` to exercise the queue with a synthetic process tree without launching Situate. Use `--fixture timeout` to exercise guest-side timeout and cleanup; it should return status 124. `Ctrl+C` requests cancellation; let the command finish cleaning up. If cleanup cannot be confirmed, the host retains the UUID-specific lease in `~/.config/situate/windows-vm-queue/`. Do not remove it until the matching guest task, its process tree, and its run directory are gone.
+
 ### Local process connection qualification
 
 The default macOS native suite includes an offline process-backed connection and consumer. Run `node client/scripts/test-native-process.mjs` from the repository root to execute only that additional phase. It checks exact synthetic process fixtures without starting programs, then exercises direct execution without a command confirmation and cancellation through the production WebView and Rust host. The command writes only to the owned disposable workspace and returns fixed data. A second owned process verifies that cancelling workspace closure preserves running work, quit is blocked before file preparation, and explicit abort stops the worker and retains observed history before the workspace closes. No personal files, service accounts, network traffic or Notes automation are used.
@@ -436,6 +468,10 @@ node tools/pipeline.mjs run verify --plan /PATH/TO/verify-plan.json
 
 Use full commit SHAs and retain complete Git history. Plans report changed paths, suite IDs, execution hosts, relevance reasons and application impact before work starts. The Linux tool-container lanes are `policy`, `tooling`, `frontend`, `rust`, `browser` and `browser-webkit`. The last two run in parallel in GitHub Actions on the pinned Linux/AMD64 image. `browser` runs Chromium product flows and selected executor and website checks; `browser-webkit` runs the WebKit smoke suite. `docker-integration` uses host Node/Docker orchestration without a nested daemon. Native macOS work belongs to `tooling-macos`, `macos-code` and `macos-native`. A local macOS invocation launches the same Linux tool image for portable lanes; it cannot substitute native-host results for those container results. A missing selected host, failed suite, cancellation, absent receipt or unexpected skip fails aggregation. Rust, product-browser and native lanes allow 1800 seconds per suite for cold builds and single-worker runs; other lanes use 600 seconds. The five-second quick budget is unchanged.
 
+For relevant client changes, Verify requires two Windows jobs. `windows-native` builds the unbundled Tauri executable and runs the locked Rust workspace tests on `windows-2025` x64. `windows-arm64-native` runs the locked core and Windows host tests on `windows-11-arm` with a native ARM64 compiler and test binaries. Both jobs test the exact checkout without signing credentials or an interactive desktop. The runner labels do not establish which Windows releases the app supports.
+
+The short-lived `windows-ci-x64-…` artifact records the checkout SHA, target, runner and toolchain versions, and executable hash. Neither job exercises WebView2 rendering or qualifies a release installer. A local Verify invocation cannot substitute for the hosted jobs.
+
 GitHub Actions runs the broad Rust, Swift, and desktop suites on Apple Silicon (`macos-code` and `macos-native`). In Verify, those lanes and `tooling-macos` share one ARM64 runner and run in sequence when selected. The `macos-compatibility` job runs on macOS 15 Intel. Client changes run the short launch and workspace-reopen test. Dictation changes also run a synthetic speech sample through the real recognizer with the pinned model. That test downloads and verifies the model in a temporary directory; a download or recognition failure fails the job. App releases require both checks. To run either locally on the current Mac, use `node tools/test.mjs --suite client-native-compatibility` or `node tools/test.mjs --suite client-dictation-recognition`.
 
 Before publishing, use an isolated Intel Mac with macOS 14 Sonoma to install and launch the exact signed candidate DMG. On the same system, exercise the update from the released predecessor with an existing test workspace and check that it reopens intact. Check dictation with a real microphone. The hosted job does not establish this coverage: GitHub [retired its macOS 14 images](https://github.com/actions/runner-images/issues/13518).
@@ -466,7 +502,7 @@ The [monitoring workflow](../../.github/workflows/dependency-monitoring.yml) sup
 
 ### History storage tests
 
-The core suite includes ordinary history initialization, external content changes, repeated object reuse, failed publication and flush retries, and reopening a workspace in a separate process. The Windows cases exercise real file/directory sharing errors and retained identities under a restricted token. These Windows-specific cases are outside current supported verification. Before resuming Windows support, run the complete Rust workspace suite on native Windows; successful macOS tests do not establish Windows behavior.
+The core suite covers history initialization, external content changes, object reuse, publication and flush failures, and reopening a workspace in a separate process. Native Windows tests also exercise filesystem sharing errors, retained identities under a restricted token, and recovery when a workspace is moved from a path too long for its Git history.
 
 Tests with READONLY hardlink aliases retain their synthetic fixtures at the printed temporary paths, including on failure. Automatic cleanup could change attributes through an outside alias. The subprocess tests check readability after reopening, not persistence after power loss. Restricted-token execution does not establish equivalence to every account, security descriptor or filesystem configuration.
 
@@ -492,7 +528,7 @@ When changing an image input, [build and publish the image locally](../../client
 
 ### Deferred platforms
 
-iOS, Android, Windows and Linux desktop have no active product packaging or qualification lanes. No mobile workflow is retained for reactivation. Reintroducing a platform requires an explicit scope decision, native verification and separately reviewed provisioning; shared or historical tests do not establish support. Useful historical readers and focused device contracts can remain without becoming required macOS gates.
+iOS, Android and Linux desktop have no active product packaging or qualification lanes. No mobile workflow is retained for reactivation. Reintroducing a platform requires an explicit scope decision, native verification and separately reviewed provisioning; shared or historical tests do not establish support. Useful historical readers and focused device contracts can remain without becoming required macOS gates.
 
 ## Localization checks
 

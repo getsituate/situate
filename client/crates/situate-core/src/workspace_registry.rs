@@ -50,8 +50,7 @@ impl Registry {
             file.write_all(&serde_json::to_vec(self)?)?;
             file.as_file().sync_all()?;
             file.persist(path)?;
-            #[cfg(unix)]
-            fs::File::open(parent)?.sync_all()?;
+            situate_host::fs::sync_registry_parent(parent)?;
             Ok(())
         };
         save().map_err(|_| "native.workspace.registry.saveFailed".into())

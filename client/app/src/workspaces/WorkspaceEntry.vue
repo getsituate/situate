@@ -154,9 +154,9 @@ const sections = computed(() =>
 );
 let removeOrigin: string | null = null;
 async function showCreation(): Promise<void> {
-  if (props.state.onboardingAvailable) await loadSetupFrame();
+  await loadSetupFrame();
   creating.value = true;
-  welcome.value = !!props.state.onboardingAvailable;
+  welcome.value = true;
   motionPaused.value = false;
   creationAccent.value = "violet";
   await nextTick();
@@ -251,7 +251,7 @@ defineExpose({ back });
 
 <template>
   <div
-    v-if="creating && state.onboardingAvailable"
+    v-if="creating"
     class="setup-entry-host"
     :inert="inert || undefined"
     :class="{ 'motion-still': motionPaused }"
@@ -283,7 +283,6 @@ defineExpose({ back });
       >
         <div class="workspace-entry setup-create">
           <WorkspaceCreateForm
-            setup
             :run="run"
             :busy="busy"
             :operation-error="openingFailure ? undefined : error"
@@ -305,10 +304,7 @@ defineExpose({ back });
     :inert="inert || undefined"
     :class="{ 'mobile-entry': state.mobile }"
   >
-    <div
-      class="workspace-window"
-      :class="{ 'compact-entry': empty || creating }"
-    >
+    <div class="workspace-window" :class="{ 'compact-entry': empty }">
       <header class="entry-titlebar">
         <img
           :src="wordmark"
@@ -319,7 +315,7 @@ defineExpose({ back });
         <div class="entry-titlebar-actions">
           <SituateButton
             variant="plain"
-            v-if="state.current && !creating"
+            v-if="state.current"
             type="button"
             class="entry-back"
             :disabled="busy"
@@ -376,13 +372,9 @@ defineExpose({ back });
           </SituateMenu>
         </div>
       </header>
-      <div
-        v-if="!creating"
-        class="entry-layout"
-        :class="{ 'without-list': empty }"
-      >
+      <div class="entry-layout" :class="{ 'without-list': empty }">
         <aside
-          v-if="!empty && !creating"
+          v-if="!empty"
           class="workspace-lists"
           :aria-label="t('workspace.workspacesOnThisDevice')"
         >
@@ -571,19 +563,6 @@ defineExpose({ back });
           </section>
         </section>
       </div>
-      <WorkspaceCreateForm
-        @accent="emit('accent', $event)"
-        v-else
-        :run="run"
-        :busy="busy"
-        :operation-error="openingFailure ? undefined : error"
-        @cancel="cancelCreation"
-        @open="open('pick', undefined, $event.currentTarget)"
-        @opened="
-          creating = false;
-          emit('opened');
-        "
-      />
       <p class="operation-status" role="status">
         {{ busy ? t("workspace.working") : "" }}
       </p>
@@ -678,6 +657,8 @@ defineExpose({ back });
 
 <style scoped>
 .setup-entry-host {
+  container-type: size;
+  padding-bottom: var(--app-safe-area-bottom, env(safe-area-inset-bottom, 0px));
   position: relative;
   width: 100%;
   height: 100%;
@@ -824,7 +805,7 @@ defineExpose({ back });
     width: min(32vw, 120px);
   }
 }
-@media (max-height: 500px) {
+@container (max-height: 500px) {
   .setup-entry-host > .setup-entry-destination {
     padding-block: 12px;
   }
@@ -839,7 +820,7 @@ defineExpose({ back });
     padding-bottom: 0;
   }
 }
-@media (max-width: 700px) and (max-height: 600px) {
+@container (max-width: 700px) and (max-height: 600px) {
   .setup-entry-destination :deep(.frame-stage) {
     grid-template-rows: minmax(0, 1fr);
   }

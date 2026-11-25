@@ -6,6 +6,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+situate-host = { path = "../situate-host" }
+situate-host-api = { path = "../situate-host-api" }
 situate-migrations = { path = "../situate-migrations" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
@@ -22,9 +24,5 @@ uuid = { version = "1", features = ["v4"] }
 chacha20poly1305 = "=0.10.1"
 zeroize = "=1.8.2"
 
-[target.'cfg(unix)'.dependencies]
-rustix = { version = "1", features = ["fs"] }
-libc = "0.2"
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Threading"] }
+[dev-dependencies]
+situate-host = { path = "../situate-host", features = ["test-support"] }

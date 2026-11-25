@@ -212,22 +212,7 @@ fn desktop_browser(url: &str) -> Result<(), String> {
             .is_ok_and(|status| status.success())
     };
     #[cfg(target_os = "windows")]
-    let success = {
-        use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
-        let url: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
-        let verb: Vec<u16> = "open".encode_utf16().chain(Some(0)).collect();
-        unsafe {
-            ShellExecuteW(
-                std::ptr::null_mut(),
-                verb.as_ptr(),
-                url.as_ptr(),
-                std::ptr::null(),
-                std::ptr::null(),
-                SW_SHOWNORMAL,
-            ) as isize
-                > 32
-        }
-    };
+    let success = windows::open_browser(url);
     if success {
         Ok(())
     } else {
@@ -352,80 +337,26 @@ mod platform {
 }
 
 #[cfg(target_os = "windows")]
+mod windows;
+
+#[cfg(all(test, target_os = "windows"))]
+pub(crate) use windows::open_browser as open_browser_for_test;
+
+#[cfg(target_os = "windows")]
 mod platform {
     use super::*;
-    use windows_sys::Win32::{
-        Foundation::{
-            ERROR_ACCESS_DENIED, ERROR_NO_SUCH_LOGON_SESSION, ERROR_NOT_FOUND, GetLastError,
-        },
-        Security::Credentials::*,
-    };
-    fn target(account: &str) -> Vec<u16> {
-        format!("{SERVICE}:{account}")
-            .encode_utf16()
-            .chain(Some(0))
-            .collect()
-    }
-    fn error() -> String {
-        match unsafe { GetLastError() } {
-            ERROR_NOT_FOUND => MISSING,
-            ERROR_NO_SUCH_LOGON_SESSION => UNAVAILABLE,
-            ERROR_ACCESS_DENIED => LOCKED,
-            _ => FAILED,
-        }
-        .into()
-    }
+
     pub(super) fn get(_: &tauri::AppHandle, account: &str) -> Result<Vec<u8>, String> {
-        let mut credential = std::ptr::null_mut();
-        if unsafe {
-            CredReadW(
-                target(account).as_ptr(),
-                CRED_TYPE_GENERIC,
-                0,
-                &mut credential,
-            )
-        } == 0
-        {
-            return Err(error());
-        }
-        unsafe {
-            let result = if (*credential).CredentialBlobSize == 32
-                && !(*credential).CredentialBlob.is_null()
-            {
-                Ok(std::slice::from_raw_parts((*credential).CredentialBlob, 32).to_vec())
-            } else {
-                Err(INVALID.into())
-            };
-            CredFree(credential.cast());
-            result
-        }
+        windows::get(account)
     }
     pub(super) fn set(_: &tauri::AppHandle, account: &str, key: &[u8]) -> Result<(), String> {
-        let mut name = target(account);
-        let credential = CREDENTIALW {
-            Type: CRED_TYPE_GENERIC,
-            TargetName: name.as_mut_ptr(),
-            CredentialBlobSize: key.len() as u32,
-            CredentialBlob: key.as_ptr() as *mut u8,
-            // Persistence is local to this computer; Credential Manager still scopes access to the current user.
-            Persist: CRED_PERSIST_LOCAL_MACHINE,
-            ..unsafe { std::mem::zeroed() }
-        };
-        if unsafe { CredWriteW(&credential, 0) } == 0 {
-            Err(error())
-        } else {
-            Ok(())
-        }
+        windows::set(account, key)
     }
     pub(super) fn delete(_: &tauri::AppHandle, account: &str) -> Result<(), String> {
-        if unsafe { CredDeleteW(target(account).as_ptr(), CRED_TYPE_GENERIC, 0) } != 0 {
-            return Ok(());
-        }
-        let error = error();
-        if error == MISSING { Ok(()) } else { Err(error) }
+        windows::delete(account)
     }
-    pub(super) fn available(app: &tauri::AppHandle) -> Result<(), String> {
-        match get(app, "availability-probe") {
+    pub(super) fn available(_: &tauri::AppHandle) -> Result<(), String> {
+        match windows::get("availability-probe") {
             Ok(_) => Ok(()),
             Err(e) if e == MISSING => Ok(()),
             Err(e) => Err(e),

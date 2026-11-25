@@ -1,5 +1,7 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { flushPromises, mount } from "@vue/test-utils";
+import DictationSettings from "./DictationSettings.vue";
 import { dictateDraft, type DictationDraft } from "./draft";
 import {
   confirmation,
@@ -38,6 +40,7 @@ beforeEach(async () => {
   Object.assign(dictation, {
     supported: true,
     model: "ready",
+    mobileDownload: false,
     progress: 100,
     busy: false,
     owner: null,
@@ -51,6 +54,47 @@ beforeEach(async () => {
 afterEach(() => {
   stopDictationListeners();
   events.clear();
+});
+
+test("offers the mobile-data override only when the download is waiting for it", async () => {
+  const settings = mount(DictationSettings);
+  try {
+    dictation.model = "waiting";
+    await flushPromises();
+    expect(settings.get('[role="status"]').text()).toContain(
+      "⟦dictation.waitingDetail⟧",
+    );
+    expect(settings.find("button").exists()).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith(
+      "dictation_control",
+      expect.anything(),
+    );
+
+    dictation.mobileDownload = true;
+    await flushPromises();
+    expect(settings.get('[role="status"]').text()).toContain(
+      "⟦dictation.waitingMobile⟧",
+    );
+    const download = settings.get("button");
+    expect(download.text()).toBe("⟦dictation.downloadMobile⟧");
+    await download.trigger("click");
+    await flushPromises();
+    expect(invoke).toHaveBeenCalledWith("dictation_control", {
+      action: "download",
+    });
+
+    dictation.model = "failed";
+    await flushPromises();
+    const retry = settings.get("button");
+    expect(retry.text()).toBe("⟦dictation.retry⟧");
+    await retry.trigger("click");
+    await flushPromises();
+    expect(invoke).toHaveBeenLastCalledWith("dictation_control", {
+      action: "retry",
+    });
+  } finally {
+    settings.unmount();
+  }
 });
 
 test("microphone levels belong only to the active recording and never refresh snapshots", async () => {

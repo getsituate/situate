@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { gzipSync, gunzipSync } from "node:zlib";
 
 import {
   encodeActionsReceipt,
@@ -18,6 +19,33 @@ import {
 } from "./actions-receipts.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sha = /^[a-f0-9]{40}$/;
+const planWireLimit = 24 * 1024;
+const planDecodedLimit = 2 * 1024 * 1024;
+
+export function encodeVerifyPlan(plan) {
+  const bytes = Buffer.from(JSON.stringify(plan));
+  if (bytes.length > planDecodedLimit)
+    throw new Error("Verification plan exceeds the decoded size limit.");
+  const encoded = `gzip:${gzipSync(bytes, { level: 9 }).toString("base64")}`;
+  if (encoded.length > planWireLimit)
+    throw new Error("Verification plan exceeds the runner environment limit.");
+  return encoded;
+}
+
+export function decodeWorkflowPlan(value) {
+  if (!value?.startsWith("gzip:")) return JSON.parse(value);
+  if (
+    value.length > planWireLimit ||
+    !/^gzip:[A-Za-z0-9+/]+={0,2}$/u.test(value)
+  ) {
+    throw new Error("Invalid compressed verification plan.");
+  }
+  return JSON.parse(
+    gunzipSync(Buffer.from(value.slice(5), "base64"), {
+      maxOutputLength: planDecodedLimit,
+    }),
+  );
+}
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
 export const laneHosts = {
   policy: "linux",
@@ -31,6 +59,7 @@ export const laneHosts = {
   "browser-webkit": "linux",
   "macos-native": "macos",
   "macos-compatibility": "macos",
+  "windows-native": "windows",
 };
 export const verifyMacosJob = "macos-arm64";
 export const verifyMacosLanes = ["tooling-macos", "macos-code", "macos-native"];
@@ -106,6 +135,7 @@ export function aggregate(plan, receipts, needs) {
   if (needs.plan?.result !== "success")
     throw new Error("Planning did not succeed.");
   for (const id of Object.keys(laneHosts)) {
+    if (id === "windows-native" && plan.workflow === "create") continue;
     const selected = plan.lanes.some((lane) => lane.id === id);
     if (needs[id]?.result !== (selected ? "success" : "skipped"))
       throw new Error(`Unexpected ${id} job result.`);
@@ -651,7 +681,12 @@ export async function main(
     const matrix = matrices(plan);
     output(
       {
-        plan,
+        ...(workflow === "verify"
+          ? {
+              plan: encodeVerifyPlan(plan),
+              lanes: plan.lanes.map(({ id }) => id),
+            }
+          : { plan }),
         digest: digest(plan),
         linux: matrix.linux,
         macos: matrix.macos,
@@ -663,7 +698,7 @@ export async function main(
     );
     return plan;
   }
-  const plan = validatePlan(JSON.parse(env.PIPELINE_PLAN));
+  const plan = validatePlan(decodeWorkflowPlan(env.PIPELINE_PLAN));
   if (digest(plan) !== env.PIPELINE_PLAN_DIGEST)
     throw new Error("Workflow plan digest mismatch.");
   if (command === "source-reuse") {
@@ -813,23 +848,42 @@ export async function main(
         throw new Error("Lane was not selected.");
       if (execute("git", ["rev-parse", "HEAD"]).trim() !== plan.source)
         throw new Error("Checkout does not match planned source.");
-      const receipt = join(directory, "runner.json");
-      execute(
-        process.execPath,
-        [
-          "tools/pipeline.mjs",
-          "run",
-          workflow,
-          "--plan",
-          planFile,
-          "--lane",
-          values.lane,
-          "--receipt",
-          receipt,
-        ],
-        { stdio: "inherit" },
-      );
-      const result = JSON.parse(readFileSync(receipt, "utf8"));
+      let result;
+      if (values.lane === "windows-native") {
+        const { runLane } = await import("./pipeline.mjs");
+        const controller = new AbortController();
+        const stop = () => controller.abort();
+        process.on("SIGINT", stop);
+        process.on("SIGTERM", stop);
+        try {
+          // Each Windows phase owns a Job Object on an isolated hosted runner.
+          result = await runLane(root, plan, values.lane, {
+            environment: env,
+            signal: controller.signal,
+          });
+        } finally {
+          process.removeListener("SIGINT", stop);
+          process.removeListener("SIGTERM", stop);
+        }
+      } else {
+        const receipt = join(directory, "runner.json");
+        execute(
+          process.execPath,
+          [
+            "tools/pipeline.mjs",
+            "run",
+            workflow,
+            "--plan",
+            planFile,
+            "--lane",
+            values.lane,
+            "--receipt",
+            receipt,
+          ],
+          { stdio: "inherit" },
+        );
+        result = JSON.parse(readFileSync(receipt, "utf8"));
+      }
       if (
         result.status !== "passed" ||
         result.source !== plan.source ||

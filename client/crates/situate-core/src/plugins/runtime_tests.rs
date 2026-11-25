@@ -713,7 +713,7 @@ fn lock_contention_and_uncertain_durability_do_not_report_success() {
 #[cfg(unix)]
 #[test]
 fn symlinks_invalid_utf8_and_oversized_sources_fail_closed() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let root = fixture();
     let first = set_enabled(
         root.path(),

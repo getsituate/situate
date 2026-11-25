@@ -12,7 +12,7 @@ goals: [GOAL-0001]
 
 Users must be able to create a local workspace from the [workspace entry window](REQ-0044-select-and-remember-workspaces.md) by entering a name and choosing a parent storage directory. Situate proposes a changeable parent directory and shows the complete resulting workspace path before confirmation. Creation makes a new subdirectory named for the workspace rather than converting the selected parent directory into a workspace.
 
-On macOS, normal startup retains the workspace overview, with the workspace list and its creation and opening actions. Choosing **Create a workspace** starts the fullscreen Astra welcome. Completion or Skip proceeds directly to the creation form, without another workspace-choice screen. Reduced motion bypasses the welcome immediately. Creation and subsequent setup use the shared setup frame, five-step progress, paper-garden/Bend illustration and task card. Cancelling before creation returns to the normal overview. Opening an existing workspace does not replay the welcome or creation; an incomplete workspace resumes its saved setup state.
+On desktop, normal startup retains the workspace overview, with the workspace list and its creation and opening actions. Choosing **Create a workspace** starts the fullscreen Astra welcome. Completion or Skip proceeds directly to the creation form, without another workspace-choice screen. Reduced motion bypasses the welcome immediately. Creation and subsequent setup use the shared setup frame, five-step progress, paper-garden/Bend illustration and task card. Cancelling before creation returns to the normal overview. Opening an existing workspace does not replay the welcome or creation; an incomplete workspace resumes its saved setup state.
 
 Only confirmation creates the workspace. On success, Situate remembers its location and opens its setup flow. The workspace follows the [portable directory boundary](REQ-0038-copy-portable-workspaces.md). Immediately after successful creation, users must connect usable AI access using the providers and authentication methods defined by [REQ-0015](REQ-0015-connect-user-provided-models.md) before entering guided onboarding. This step has no skip-to-manual-use route. The created local workspace and retained setup progress remain available for later continuation if connection setup cannot be completed. This setup configures only the current device. Synchronization and import are optional, not prerequisites for creation or onboarding completion.
 
@@ -36,7 +36,7 @@ Private diagnostic workspace-identity clarification; date not recorded, transcri
 
 ## Acceptance criteria
 
-- On macOS, startup shows the normal workspace overview. Only choosing Create a workspace starts the fullscreen welcome; completing or skipping it opens creation directly, and reduced motion reaches creation without delay.
+- On desktop, startup shows the normal workspace overview. Only choosing Create a workspace starts the fullscreen welcome; completing or skipping it opens creation directly, and reduced motion reaches creation without delay.
 - The creation form and subsequent setup retain the shared setup frame, five-step progress, paper-garden/Bend illustration and task-card layout.
 - Opening an established workspace does not replay onboarding. Opening an already-created incomplete workspace resumes saved setup without repeating the welcome or creation.
 - The creation flow accepts a workspace name and offers a proposed parent directory that the user can change.

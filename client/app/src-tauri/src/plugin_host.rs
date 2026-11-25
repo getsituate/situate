@@ -565,7 +565,7 @@ async fn execute_request(
             );
         }
         // Long-running work must release the workspace operation lock so Stop can cancel it.
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         if matches!(
             request,
             Request::Read { .. }
@@ -896,8 +896,9 @@ fn process_capability(testing: bool, path_backed: bool) -> crate::shell_host::Sh
         capability.available = true;
         capability.implementation = "syntheticProcess";
         capability.ownership = "none";
+        capability.detached_descendants_contained = false;
         capability.unavailable_reason = None;
-    } else if !cfg!(target_os = "macos") {
+    } else if !cfg!(any(target_os = "macos", target_os = "windows")) {
         capability.available = false;
         capability.unavailable_reason = Some("platformHostNotImplemented");
     }
@@ -1105,10 +1106,12 @@ fn migrate_credentials(
                 }
                 drop(_old_lock);
                 drop(old);
+                let parent =
+                    cap_std::fs::Dir::open_ambient_dir(legacy_base, cap_std::ambient_authority())
+                        .map_err(|_| ERROR)?;
                 std::fs::remove_dir_all(&path).map_err(|_| ERROR)?;
-                let parent = std::fs::File::open(legacy_base).map_err(|_| ERROR)?;
-                parent
-                    .sync_all()
+                situate_migrations::directory_for_sync(&parent)
+                    .and_then(|directory| directory.sync_all())
                     .map_err(|_| "native.plugins.stateOutcomeUnknown")?;
             }
             _ => return Err(ERROR.into()),

@@ -15,6 +15,7 @@ import {
   ordinaryEnvironment,
   main,
   planWorkflow,
+  pipelineGitPath,
   runLane,
   runWorkflow,
   inspectWorkflow,
@@ -24,6 +25,18 @@ import {
 } from "./pipeline.mjs";
 import { main as actionsMain } from "./actions-adapter.mjs";
 import { digest, readOperation, sealPlan } from "./pipeline-state.mjs";
+
+test("lane source verification locates Git outside the checkout on Windows", () => {
+  assert.equal(
+    pipelineGitPath("win32", { ProgramFiles: "D:\\Program Files" }),
+    "D:\\Program Files\\Git\\bin\\git.exe",
+  );
+  assert.throws(
+    () => pipelineGitPath("win32", { ProgramFiles: "\\Program Files" }),
+    /absolute Windows installation directory/,
+  );
+  assert.equal(pipelineGitPath("linux", {}), "/usr/bin/git");
+});
 
 const source = "a".repeat(40),
   base = "b".repeat(40);
@@ -479,6 +492,61 @@ test("lane execution strips production credentials and records every selected su
       inventory: [],
     }),
     /unavailable/,
+  );
+});
+
+test("Windows lanes run on win32 with the runner environment but no credentials", async (t) => {
+  const root = fixture(t);
+  const suites = ["client-windows-build", "client-windows-workspace"];
+  const plan = sealPlan({
+    ...selection(),
+    workflow: "verify",
+    lanes: [
+      { id: "windows-native", host: "windows", execution: "native", suites },
+    ],
+  });
+  const runner = async ({ suites: selected }, { environment }) => {
+    assert.deepEqual(
+      selected.map(({ id }) => id),
+      suites,
+    );
+    assert.deepEqual(environment, {
+      PATH: "windows-path",
+      SystemRoot: "C:\\Windows",
+      APPDATA: "windows-appdata",
+      "ProgramFiles(x86)": "windows-program-files",
+      RUNNER_TEMP: "windows-runner-temp",
+      ImageOS: "win25",
+      RUNNER_ENVIRONMENT: "github-hosted",
+    });
+    return {
+      status: "passed",
+      results: suites.map((id) => ({ id, status: "passed", exitCode: 0 })),
+    };
+  };
+  const options = {
+    assertCheckout: () => {},
+    inventory: suites.map((id) => ({ id })),
+    runner,
+    environment: {
+      Path: "windows-path",
+      SYSTEMROOT: "C:\\Windows",
+      AppData: "windows-appdata",
+      "PROGRAMFILES(x86)": "windows-program-files",
+      runner_temp: "windows-runner-temp",
+      ImageOS: "win25",
+      RUNNER_ENVIRONMENT: "github-hosted",
+      GH_TOKEN: "synthetic-credential",
+    },
+  };
+  const result = await runLane(root, plan, "windows-native", {
+    ...options,
+    host: "win32",
+  });
+  assert.equal(result.executionHost, "windows");
+  await assert.rejects(
+    runLane(root, plan, "windows-native", { ...options, host: "darwin" }),
+    /different execution host/,
   );
 });
 

@@ -1,13 +1,22 @@
 use super::{Updates, native::Native, policy::Phase};
+#[cfg(target_os = "macos")]
 use sha2::{Digest, Sha256};
+#[cfg(target_os = "macos")]
 use std::{
     fs::{self, File},
     io::Read,
     path::Path,
+};
+use std::{
     sync::{Arc, atomic::Ordering},
     time::Duration,
 };
+#[cfg(windows)]
+#[path = "install_windows.rs"]
+mod windows;
 use tauri::Manager;
+#[cfg(windows)]
+pub(super) use windows::windows_installed_version;
 
 const ERROR: &str = "native.updates.installFailed";
 impl Native {
@@ -161,6 +170,17 @@ impl Native {
             return;
         }
         super::diagnostics::record(app, "prepare_finished", None, forced);
+        self.handoff(app, token, artifact_id, forced).await;
+    }
+
+    #[cfg(target_os = "macos")]
+    async fn handoff(
+        self: &Arc<Self>,
+        app: &tauri::AppHandle,
+        token: String,
+        artifact_id: String,
+        forced: bool,
+    ) {
         let (restart, installed) = std::sync::mpsc::channel::<File>();
         let handle = app.clone();
         if std::thread::Builder::new()
@@ -216,6 +236,7 @@ impl Native {
             s.error = Some(error);
         });
     }
+    #[cfg(target_os = "macos")]
     fn replace(&self, app: &tauri::AppHandle, artifact_id: &str, forced: bool) -> InstallOutcome {
         super::diagnostics::record(app, "install_validate", None, forced);
         let before_mutation = (|| {
@@ -359,12 +380,14 @@ async fn wait_for_actions(
     }
 }
 
+#[cfg(target_os = "macos")]
 enum InstallOutcome {
     Installed(File),
     Unchanged(String),
     Uncertain,
 }
 
+#[cfg(target_os = "macos")]
 fn bundle_version(path: &Path) -> Result<String, String> {
     let value = plist::Value::from_file(path.join("Contents/Info.plist")).map_err(|_| ERROR)?;
     value
@@ -375,6 +398,7 @@ fn bundle_version(path: &Path) -> Result<String, String> {
         .ok_or_else(|| ERROR.into())
 }
 
+#[cfg(target_os = "macos")]
 fn fingerprint(root: &Path) -> std::io::Result<[u8; 32]> {
     fn visit(root: &Path, path: &Path, hash: &mut Sha256) -> std::io::Result<()> {
         use std::os::unix::{
@@ -495,6 +519,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn installation_directory_lock_serializes_independent_processes() {
         const DIRECTORY: &str = "SITUATE_TEST_UPDATE_LOCK_DIRECTORY";
@@ -516,6 +541,7 @@ mod tests {
         drop(lock);
         assert!(child(true).status.success());
     }
+    #[cfg(target_os = "macos")]
     #[test]
     fn unchanged_requires_identical_bundle_contents_modes_and_symlink_targets() {
         use std::os::unix::fs::{PermissionsExt, symlink};

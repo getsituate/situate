@@ -311,7 +311,7 @@ fn history_has_no_sixteen_mib_total_or_result_ceiling() {
 #[cfg(unix)]
 #[test]
 fn directories_files_and_locks_reject_symlinks_and_writes_remain_in_held_workspace() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let (temp, storage) = workspace();
     let external = tempfile::tempdir().unwrap();
     let target = external.path().join("target");
@@ -338,7 +338,7 @@ fn directories_files_and_locks_reject_symlinks_and_writes_remain_in_held_workspa
 #[cfg(unix)]
 #[test]
 fn metadata_failure_keeps_appended_history_and_retry_does_not_duplicate() {
-    use std::os::unix::fs::PermissionsExt;
+    use situate_host::unix_test_support::PermissionsExt;
     let (temp, storage) = workspace();
     let dir = temp.path().join(".situate/conversations/one");
     fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import assert from "node:assert/strict";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -19,7 +20,11 @@ import { parseArgs } from "node:util";
 import { cachedQualitySuite } from "./quality-cache.mjs";
 import { cargoEnvironment } from "./cargo-environment.mjs";
 import { compilerCacheEnvironment } from "./compiler-cache.mjs";
-import { supportedSuiteEnabled, suiteAvailable } from "./test-scope.mjs";
+import {
+  supportedSuiteEnabled,
+  suiteAvailable,
+  windowsNativeSuites,
+} from "./test-scope.mjs";
 import {
   QUICK_BUDGET_MS,
   QUICK_EXECUTION_MS,
@@ -224,7 +229,7 @@ export function suiteInventory(files, host = process.platform) {
   if (migrationTests.length)
     nodeTests("delivery-migrations", "runner", "unit", migrationTests);
   const deliveryTests = matching(
-    /^(?:tools\/(?:change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime(?:-authorization|-recovery)?|release-checkpoint(?:-[a-z-]+)?|qualification-runtime-envelope|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery|checkpoint|launch-trace|qualification-(?:host|route-guardian)))\.test\.mjs$/,
+    /^(?:tools\/(?:actions-windows-release|change-fragments|release-inputs|release-reservation|release-qualification(?:-worker)?|release-runtime(?:-authorization|-recovery)?|release-checkpoint(?:-[a-z-]+)?|qualification-runtime-envelope|github-release|pipeline(?:-plan|-state|-operations)?)|infrastructure\/releases\/(?:allocator|recovery|checkpoint|launch-trace|windows-feed|publish-windows|qualification-(?:host|route-guardian)))\.test\.mjs$/,
   );
   if (deliveryTests.length)
     nodeTests("delivery-unit", "runner", "unit", deliveryTests);
@@ -374,6 +379,8 @@ export function suiteInventory(files, host = process.platform) {
     "situate-core",
     "--locked",
   ]);
+  for (const id of windowsNativeSuites)
+    node(id, "client", "native", ["tools/test-windows.mjs", id]);
   add("client-core-macos", "client", "integration", "client", "cargo", [
     "test",
     "-p",
@@ -850,7 +857,9 @@ export function createPlan(
     const suite = inventory.find((entry) => entry.id === id);
     if (!suite) throw new Error(`Unknown suite: ${id}`);
     if (!suiteAvailable(suite, platform))
-      throw new Error(`Suite ${id} requires a macOS host.`);
+      throw new Error(
+        `Suite ${id} requires a ${windowsNativeSuites.includes(id) ? "Windows" : "macOS"} host.`,
+      );
   }
   const files = changed ? changedFiles(directory, base) : [];
   const selected = changed ? affectedProjects(files) : [...projects];
@@ -1040,6 +1049,29 @@ export function suiteEnvironment(
       );
   }
   return env;
+}
+
+export function dependencyOwnerBirth(pid) {
+  assert(Number.isInteger(pid) && pid > 0);
+  if (process.platform !== "win32") return processSnapshot().get(pid)?.born;
+  const systemRoot = process.env.SystemRoot;
+  assert(
+    systemRoot && /^[a-z]:[\\/]/iu.test(systemRoot),
+    "Expected an absolute Windows system directory",
+  );
+  const birth = execFileSync(
+    join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `$ErrorActionPreference = 'Stop'; try { $process = Get-Process -Id ${pid} } catch { if ($_.FullyQualifiedErrorId -notlike 'NoProcessFoundForGivenId,*') { throw }; exit 0 }; $start = $process.StartTime; if (!$start) { throw 'Cannot identify process start time' }; $start.ToUniversalTime().Ticks`,
+    ],
+    { encoding: "utf8", timeout: 30_000 },
+  ).trim();
+  assert(!birth || /^\d+$/.test(birth), "Invalid process start time");
+  return birth || undefined;
 }
 
 function processSnapshot() {
@@ -1413,7 +1445,7 @@ export async function prepareDependencies(
       }
       if (owner) {
         unidentifiedSince = undefined;
-        if (processSnapshot().get(owner.pid)?.born !== owner.born) {
+        if (dependencyOwnerBirth(owner.pid) !== owner.born) {
           // The previous owner may have released the lock while ps was running.
           try {
             const current = JSON.parse(readFileSync(ownerFile, "utf8"));
@@ -1459,7 +1491,7 @@ export async function prepareDependencies(
     rmdirSync(lock);
   };
   try {
-    const born = processSnapshot().get(process.pid)?.born;
+    const born = dependencyOwnerBirth(process.pid);
     if (!born) throw new Error("Could not identify dependency lock owner.");
     writeFileSync(ownerFile, JSON.stringify({ pid: process.pid, born }), {
       mode: 0o600,

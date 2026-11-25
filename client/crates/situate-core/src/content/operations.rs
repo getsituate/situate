@@ -40,120 +40,7 @@ pub(super) fn read_operation_file(
     Ok((bytes, identity))
 }
 
-pub(super) enum PatchIdentity {
-    Ordinary(same_file::Handle),
-    #[cfg(windows)]
-    Detached {
-        _pin: File,
-        id: windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
-    },
-}
-
-impl PatchIdentity {
-    pub(super) fn new(
-        identity: same_file::Handle,
-        inside_moved_directory: bool,
-    ) -> io::Result<Self> {
-        #[cfg(windows)]
-        if inside_moved_directory {
-            return detached_patch_identity(identity);
-        }
-        #[cfg(not(windows))]
-        let _ = inside_moved_directory;
-        Ok(Self::Ordinary(identity))
-    }
-
-    pub(super) fn matches(&self, candidate: &same_file::Handle) -> io::Result<bool> {
-        match self {
-            Self::Ordinary(identity) => Ok(identity == candidate),
-            #[cfg(windows)]
-            Self::Detached { id, .. } => {
-                Ok(same_windows_file_ids(id, &windows_file_id(candidate)?))
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-fn windows_file_id(
-    file: &impl std::os::windows::io::AsRawHandle,
-) -> io::Result<windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO> {
-    use windows_sys::Win32::Storage::FileSystem::{
-        FILE_ID_INFO, FileIdInfo, GetFileInformationByHandleEx,
-    };
-    let mut id = FILE_ID_INFO::default();
-    if unsafe {
-        GetFileInformationByHandleEx(
-            file.as_raw_handle(),
-            FileIdInfo,
-            (&mut id as *mut FILE_ID_INFO).cast(),
-            std::mem::size_of::<FILE_ID_INFO>() as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(id)
-}
-
-#[cfg(windows)]
-fn same_windows_file_ids(
-    left: &windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
-    right: &windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
-) -> bool {
-    left.VolumeSerialNumber == right.VolumeSerialNumber
-        && left.FileId.Identifier == right.FileId.Identifier
-}
-
-#[cfg(windows)]
-fn detached_patch_identity(identity: same_file::Handle) -> io::Result<PatchIdentity> {
-    use std::os::windows::{
-        fs::MetadataExt,
-        io::{AsRawHandle, FromRawHandle},
-    };
-    use windows_sys::Win32::{
-        Foundation::INVALID_HANDLE_VALUE,
-        Storage::FileSystem::{
-            ExtendedFileIdType, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT,
-            FILE_ID_DESCRIPTOR, FILE_ID_DESCRIPTOR_0, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
-            FILE_SHARE_READ, FILE_SHARE_WRITE, OpenFileById,
-        },
-    };
-    let id = windows_file_id(&identity)?;
-    let descriptor = FILE_ID_DESCRIPTOR {
-        dwSize: std::mem::size_of::<FILE_ID_DESCRIPTOR>() as u32,
-        Type: ExtendedFileIdType,
-        Anonymous: FILE_ID_DESCRIPTOR_0 {
-            ExtendedFileId: id.FileId,
-        },
-    };
-    // Relative-open readers and ReOpenFile handles can block ancestor moves.
-    // Open by ID while keeping the original handle alive until verification.
-    let handle = unsafe {
-        OpenFileById(
-            identity.as_raw_handle(),
-            &descriptor,
-            FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            std::ptr::null(),
-            FILE_FLAG_OPEN_REPARSE_POINT,
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    let pin = unsafe { File::from_raw_handle(handle) };
-    let metadata = pin.metadata()?;
-    if !metadata.is_file()
-        || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        || !same_windows_file_ids(&id, &windows_file_id(&pin)?)
-    {
-        return Err(io::Error::other(
-            "Content identity changed while opening its identity handle.",
-        ));
-    }
-    Ok(PatchIdentity::Detached { _pin: pin, id })
-}
+pub(super) use situate_host::fs::PatchIdentity;
 
 /// A failed operation may have published content. The pre-operation revision keeps
 /// originals recoverable; callers must not report these outcomes as saved.
@@ -292,7 +179,8 @@ impl ContentStore {
             for (patch, stage) in patches.iter_mut().zip(&staged) {
                 // Transfer the identity pin only after checking the post-move file.
                 // Keeping the detached Windows link blocks later replacement.
-                patch.identity = PatchIdentity::Ordinary(self.check_patch(patch, &patch.new_path)?);
+                patch.identity =
+                    PatchIdentity::new(self.check_patch(patch, &patch.new_path)?, false)?;
                 let (dir, name) = self.parent(&patch.new_path)?;
                 let permissions = dir.symlink_metadata(&name)?.permissions();
                 marker.set_permissions(stage, permissions)?;
@@ -1104,11 +992,7 @@ fn build_image(parent: &Dir, stage: &str, image: &Image) -> Result<()> {
                 .write(true)
                 .create_new(true)
                 .follow(FollowSymlinks::No);
-            #[cfg(unix)]
-            {
-                use cap_std::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
+            situate_host::fs::private_file_options(&mut options);
             let mut file = dir.open_with(name, &options)?;
             file.write_all(bytes)?;
             file.sync_all()?;
@@ -1120,61 +1004,10 @@ fn build_image(parent: &Dir, stage: &str, image: &Image) -> Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 pub(super) fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> Result<()> {
     crate::durable_storage::rename_noreplace(from, old, to, new)?;
     Ok(())
 }
-#[cfg(windows)]
-fn rename_noreplace(from: &Dir, old: &str, to: &Dir, new: &str) -> Result<()> {
-    use std::os::windows::{ffi::OsStrExt, ffi::OsStringExt, io::AsRawHandle};
-    use windows_sys::Win32::Storage::FileSystem::{GetFinalPathNameByHandleW, MoveFileExW};
-    fn path(dir: &Dir, name: &str) -> io::Result<Vec<u16>> {
-        let file = dir.try_clone()?.into_std_file();
-        let mut buffer = vec![0u16; 32768];
-        // The directory handle was opened without following symlinks. Windows
-        // publication still requires ancestors to stay put until MoveFileExW.
-        let size = unsafe {
-            GetFinalPathNameByHandleW(
-                file.as_raw_handle(),
-                buffer.as_mut_ptr(),
-                buffer.len() as u32,
-                0,
-            )
-        };
-        if size == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if size as usize >= buffer.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "native.content.path.tooLong",
-            ));
-        }
-        buffer.truncate(size as usize);
-        let path = PathBuf::from(std::ffi::OsString::from_wide(&buffer)).join(name);
-        Ok(path.as_os_str().encode_wide().chain(Some(0)).collect())
-    }
-    let from = path(from, old)?;
-    let to = path(to, new)?;
-    // Zero flags exclude replacement, including an existing empty directory.
-    if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == 0 {
-        return Err(io::Error::last_os_error().into());
-    }
-    Ok(())
-}
-#[cfg(not(any(
-    target_vendor = "apple",
-    target_os = "linux",
-    target_os = "android",
-    windows
-)))]
-fn rename_noreplace(_from: &Dir, _old: &str, _to: &Dir, _new: &str) -> Result<()> {
-    Err(unsupported(
-        "native.content.operation.publicationUnsupported",
-    ))
-}
-
 fn retarget_image(
     image: &mut Image,
     source: &str,

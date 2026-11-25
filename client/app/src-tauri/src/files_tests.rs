@@ -526,15 +526,12 @@ fn shared_plugin_explorer_is_code_only_readonly_and_recovery_independent() {
         "sample",
         &request("openExternal", json!({"path":"image.png"})),
         |path| {
-            opened.borrow_mut().push(path.to_owned());
+            opened.borrow_mut().push(std::path::PathBuf::from(path));
             Ok(())
         },
     )
     .unwrap();
-    assert_eq!(
-        *opened.borrow(),
-        vec![code.join("image.png").to_str().unwrap().to_owned()]
-    );
+    assert_eq!(*opened.borrow(), vec![code.join("image.png")]);
     for path in [
         "../config.json",
         "/entry.js",

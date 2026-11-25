@@ -19,7 +19,8 @@ fn ignored_artifacts_are_excluded_from_plugin_scans_and_snapshots() {
     fs::write(code.join("nested/.module.js.swp"), "swap").unwrap();
     fs::create_dir(code.join(".AppleDouble")).unwrap();
     #[cfg(unix)]
-    std::os::unix::fs::symlink("/unavailable", code.join(".AppleDouble/link")).unwrap();
+    situate_host::unix_test_support::symlink("/unavailable", code.join(".AppleDouble/link"))
+        .unwrap();
     assert_eq!(
         files(root.path(), "sample")
             .unwrap()

@@ -30,22 +30,12 @@ pub(crate) fn ensure_child(dir: &Dir, name: &str) -> Result<Dir> {
 }
 pub(crate) fn sync(dir: &Dir) -> Result<()> {
     checkpoint("directory-sync")?;
-    #[cfg(target_os = "linux")]
-    {
-        use rustix::fs::{Mode, OFlags, openat};
-        let fd = openat(
-            dir,
-            ".",
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-            Mode::empty(),
-        )
-        .map_err(std::io::Error::from)?;
-        std::fs::File::from(fd).sync_all()?;
-    }
-    #[cfg(not(target_os = "linux"))]
-    dir.try_clone()?.into_std_file().sync_all()?;
+    directory_for_sync(dir)?.sync_all()?;
     Ok(())
 }
+
+pub use situate_host::fs::directory_for_sync;
+
 pub(crate) fn options() -> OpenOptions {
     let mut options = OpenOptions::new();
     options.follow(FollowSymlinks::No);
@@ -145,6 +135,8 @@ pub(crate) fn remove_tree(parent: &Dir, name: &str) -> Result<()> {
         for entry in names(&dir)? {
             remove_tree(&dir, &entry)?;
         }
+        // Windows directory capabilities deny deletion until closed.
+        drop(dir);
         parent.remove_dir(name)?;
     } else if meta.is_file() {
         parent.remove_file(name)?;

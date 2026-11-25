@@ -28,14 +28,7 @@ fn directory(path: &Path) -> io::Result<Dir> {
         Path::new(path.file_name().ok_or_else(invalid)?),
     )?;
     let dir = Dir::from_std_file(file);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        dir.set_permissions(
-            ".",
-            cap_std::fs::Permissions::from_std(std::fs::Permissions::from_mode(0o700)),
-        )?;
-    }
+    situate_host::fs::restrict_directory(&dir, ".")?;
     Ok(dir)
 }
 
@@ -45,39 +38,14 @@ fn open(dir: &Dir, name: &str, create: bool) -> io::Result<File> {
     if create {
         options.create_new(true);
     }
-    #[cfg(unix)]
-    {
-        use cap_std::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    situate_host::fs::private_file_options(&mut options);
     let file = dir.open_with(name, &options)?.into_std();
     let metadata = file.metadata()?;
     if !metadata.is_file() {
         return Err(invalid());
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        if metadata.nlink() != 1 {
-            return Err(invalid());
-        }
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawHandle;
-        use windows_sys::Win32::Storage::FileSystem::{
-            BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
-        };
-        let mut information = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
-        if unsafe {
-            GetFileInformationByHandle(file.as_raw_handle().cast(), information.as_mut_ptr())
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        if unsafe { information.assume_init() }.nNumberOfLinks != 1 {
-            return Err(invalid());
-        }
+    if !situate_host::fs::is_single_link(&file, &metadata)? {
+        return Err(invalid());
     }
     Ok(file)
 }

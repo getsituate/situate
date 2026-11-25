@@ -458,7 +458,7 @@ fn invalid_records_and_busy_writes_leave_saved_progress_reopenable() {
 #[cfg(unix)]
 #[test]
 fn symlink_records_locks_and_storage_directories_are_not_followed() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let temp = workspace();
     let outside = workspace();
     let storage = open(&temp);
@@ -494,7 +494,7 @@ fn symlink_records_locks_and_storage_directories_are_not_followed() {
 #[cfg(unix)]
 #[test]
 fn failed_publication_preserves_previous_progress() {
-    use std::os::unix::fs::PermissionsExt;
+    use situate_host::unix_test_support::PermissionsExt;
     let temp = workspace();
     let storage = open(&temp);
     let saved = storage.initialize().unwrap();

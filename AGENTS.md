@@ -4,9 +4,9 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 
 ## MVP platform scope
 
-- macOS is the only active product target. iOS, Windows, Linux desktop and Android are deferred and are not currently supported. Ordinary development does not need their SDKs, packaging, platform-specific compatibility fixes or CI gates unless explicitly requested.
+- macOS is the released product platform. Windows is the next delivery target and requires feature parity, native verification and direct distribution under [REQ-0012](requirements/data/requirements/REQ-0012-platform-availability.md). iOS, Linux desktop and Android remain deferred; ordinary development does not need their SDKs or packaging.
 - Preserve useful existing platform code and tests unless removal has a concrete benefit. Deferred targets are not supported or qualified by passing shared tests. Reintroducing a target requires an explicit scope decision and native verification.
-- Linux may still host shared CI tooling, security scans and other platform-independent checks. A CI host is not a product support commitment. Browser tests do not replace native macOS qualification; shared or historical mobile checks do not establish current iOS support.
+- Linux may still host shared CI tooling, security scans and other platform-independent checks. A CI host is not a product support commitment. Browser tests do not replace native macOS or Windows qualification; shared or historical mobile checks do not establish current iOS support.
 - Use focused tests within the default MVP scope for local development; CI runs the broader PR verification plan. Expensive workshop, design-browser and screenshot sweeps are opt-in through `node tools/test.mjs --extended` or their dedicated commands. Run focused deferred checks when changing the behavior they cover; do not present an MVP pass as exhaustive coverage.
 
 ## Released data and compatibility
@@ -44,6 +44,11 @@ Situate is developed as a public, open-source project. Treat every tracked file,
 - Keep links and examples working when files move. Write for readers who do not have access to private conversations or notes.
 - Do not record task narration, compliance claims, or conversation history in product copy, comments, or documentation.
 - In an otherwise usable view, show rejected or failed actions, including capacity limits, in the standard error dialog after the attempt. Do not put the error inline in a view or another dialog, or disable an action solely because a capacity limit was reached. If a view or workspace cannot be opened, show the general error screen with recovery and exit actions; dismissal must not expose an empty, unusable view. Keep field validation beside its field and retain recovery access for unresolved failures. Follow [error placement and recovery](design/brand/docs/layout-and-components.md#error-placement-and-recovery).
+
+## Development plans
+
+- Save temporary development plans as Markdown in the Git-ignored `.plan/` directory at the worktree root. Keep plans out of commits. Record durable product and architecture decisions in the requirements catalog or architecture documentation instead.
+- `.plan/` is worktree-local. Pass the relevant scope and decisions to delegates explicitly; do not assume they can see another worktree's plan.
 
 ## Delegation
 

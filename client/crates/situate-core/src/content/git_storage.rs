@@ -213,7 +213,7 @@ fn sync_object_directories(
     Ok(())
 }
 
-fn sync_controls(directory: &Dir) -> Result<()> {
+pub(super) fn sync_controls(directory: &Dir) -> Result<()> {
     let mut batch = crate::durable_storage::SyncBatch::default();
     for entry in directory.entries()? {
         let entry = entry?;

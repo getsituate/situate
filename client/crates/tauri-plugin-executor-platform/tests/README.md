@@ -17,6 +17,21 @@ prints `executor-native-test: passed` and exits. Append
 `-- --supervisor client/app/dist/executor-supervisor.js` to also check the built supervisor's
 captured module graph, export calls, and initialization, tool, and generated-check loops.
 
+## Windows WebView2 boundary
+
+From an interactive Windows x64 desktop with MSVC and WebView2 installed, run:
+
+```powershell
+cargo +1.98.1 run --manifest-path client/crates/tauri-plugin-executor-platform/tests/native/Cargo.toml --target x86_64-pc-windows-msvc
+```
+
+The fixture opens no main app window. It checks that two workspace executors
+receive their own Worker replies and that closing one removes its view without
+interrupting the other. It also checks the pixels of a cropped screenshot at 125%
+scale, rejects out-of-bounds rectangles, and checks that a closed preview returns
+no image. The preview window remains hidden. A successful run prints
+`executor-native-test: passed`.
+
 ## iOS WebKit boundary
 
 Requires Xcode, XcodeGen, XcodeBuildMCP, an installed iOS simulator, and the Tauri Swift API

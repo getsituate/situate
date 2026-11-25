@@ -18,6 +18,7 @@ pub mod messages;
 pub mod metadata;
 pub mod onboarding;
 pub mod plugins;
+pub use situate_host_api as platform;
 mod reference_storage;
 mod reference_storage_json;
 #[cfg(test)]

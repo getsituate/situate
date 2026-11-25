@@ -256,7 +256,7 @@ pub fn publish(root: &Path, draft_id: &str, expected_digest: &str) -> Result<Pub
     } else if old {
         drafts::ensure_child(&plugin, ".situate")?;
     }
-    let mut history = if old {
+    let history = if old {
         Some(
             crate::content::ContentStore::open_with_history(
                 &plugin_path.join("code"),
@@ -307,35 +307,37 @@ pub fn publish(root: &Path, draft_id: &str, expected_digest: &str) -> Result<Pub
         let _ = cleanup(&plugin, &stage_name);
         return Err(error);
     }
-    if old {
-        if let Err(error) = plugin.rename("code", &plugin, &backup_name) {
+    let replace_code = || -> Result<()> {
+        if old {
+            if let Err(error) = plugin.rename("code", &plugin, &backup_name) {
+                let _ = cleanup(&plugin, &stage_name);
+                return Err(error.into());
+            }
+            #[cfg(test)]
+            if tests::fail_at("backup-sync").is_err() {
+                return Err(unknown());
+            }
+            sync_directory(&plugin).map_err(|_| unknown())?;
+        }
+        if let Err(error) = plugin.rename(&stage_name, &plugin, "code") {
+            if old {
+                plugin
+                    .rename(&backup_name, &plugin, "code")
+                    .map_err(|_| unknown())?;
+                sync_directory(&plugin).map_err(|_| unknown())?;
+            }
             let _ = cleanup(&plugin, &stage_name);
             return Err(error.into());
         }
-        #[cfg(test)]
-        if tests::fail_at("backup-sync").is_err() {
-            return Err(unknown());
-        }
         sync_directory(&plugin).map_err(|_| unknown())?;
-    }
-    if let Err(error) = plugin.rename(&stage_name, &plugin, "code") {
-        if old {
-            plugin
-                .rename(&backup_name, &plugin, "code")
-                .map_err(|_| unknown())?;
-            sync_directory(&plugin).map_err(|_| unknown())?;
-        }
-        let _ = cleanup(&plugin, &stage_name);
-        return Err(error.into());
-    }
-    sync_directory(&plugin).map_err(|_| unknown())?;
-    #[cfg(test)]
-    tests::fail_at("history").map_err(|_| unknown())?;
-    let revision = if let Some(history) = &mut history {
-        history
-            .record_directory_replacement(&plugin_path.join("code"))
-            .map_err(|_| unknown())?
+        #[cfg(test)]
+        tests::fail_at("history").map_err(|_| unknown())?;
+        Ok(())
+    };
+    let revision = if let Some(history) = history {
+        history.record_directory_replacement(&plugin_path.join("code"), replace_code, unknown)?
     } else {
+        replace_code()?;
         drafts::ensure_child(&plugin, ".situate").map_err(|_| unknown())?;
         let mut history = crate::content::ContentStore::open_with_history(
             &plugin_path.join("code"),
@@ -344,7 +346,6 @@ pub fn publish(root: &Path, draft_id: &str, expected_digest: &str) -> Result<Pub
         .map_err(|_| unknown())?;
         history.record_external_changes().map_err(|_| unknown())?
     };
-    drop(history);
     let enable = (|| {
         let expected_revision = if state
             .plugins

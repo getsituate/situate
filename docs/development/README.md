@@ -16,7 +16,7 @@ Follow the [client setup guide](../../client/README.md) for native prerequisites
 - Python 3 for coordinated test and dependency commands.
 - [sccache](https://github.com/mozilla/sccache) is recommended for reusing Rust compilation results across local builds.
 
-Develop the current product on macOS with Xcode for macOS. iOS, Windows, Linux desktop and Android are deferred and do not require compatibility work, SDK setup, simulators or store provisioning. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
+Develop and verify the released macOS client with Xcode. Windows is the next delivery target; work on Windows-native features requires the relevant Windows toolchain and verification. iOS, Linux desktop and Android remain deferred and do not require compatibility work, SDK setup, simulators or store provisioning. Linux-hosted shared CI tooling remains useful, but does not establish Linux product support. See the [platform scope](../../requirements/data/foundations.md#mvp-platform-scope) and [test tiers](testing.md#profiles-and-change-selection).
 
 ## Install Volta
 
@@ -292,6 +292,10 @@ cp -R "$source/$revision" "$HOME/Library/Caches/Situate/Dictation/"
 The revision must match [`ModelManifest.swift`](../../client/app/src-tauri/dictation/Sources/SituateDictation/ModelManifest.swift). A new pinned revision needs its own complete source directory. A missing or corrupt local file makes dictation provisioning fail; it never falls back to an internet download. Typed chat remains available, and **Settings → Dictation** offers retry after the source is repaired. Local copying works offline.
 
 To use another source directory, set the build-time variable `SITUATE_DICTATION_MODEL_SOURCE` to an absolute path before starting the console or `npm run dev:client`. Its layout is `<source>/<revision>/<model files>`. The variable is embedded at build time, not read from the running application's environment. Empty and relative values are rejected. Builds outside the desktop wrapper use Hugging Face when the variable is unset; release builds reject the local override and use the fixed Hugging Face source. Keep local paths out of release environments and do not distribute development binaries containing them.
+
+On Windows x64, an unbundled build needs the [Sherpa-ONNX 2.0.2 CPU archive](https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/sherpa-onnx-v2.0.2-win-x64-shared-MT-Release.tar.bz2). Verify the archive's SHA-256 (`55ada3f155344355c4b07445a10f4d96708a96bc483d69641fafc4966b6578ef`). Copy `sherpa-onnx-c-api.dll`, `onnxruntime.dll` and `onnxruntime_providers_shared.dll` from its `lib/` directory into `dictation/sherpa-onnx-2.0.2/` beside the executable. The app verifies the DLLs before enabling dictation.
+
+The app downloads the pinned [INT8 conversion](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/ed5d745623472f97cfc2e6c2916ee248798fc5a8) of [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (CC BY 4.0) separately into `dictation/parakeet-tdt-v3-int8-ed5d7456/` under its local app data directory. For an offline test, seed the four model files from the pinned revision in that directory before starting the app. The same size and hash checks apply to seeded files and downloads.
 
 ## Run the client
 

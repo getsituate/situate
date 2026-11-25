@@ -375,12 +375,11 @@ fn encode<R: Serialize>(record: OnboardingRecord<R>) -> Result<Vec<u8>, String> 
     Ok(bytes)
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn initialize_marker(marker: &cap_std::fs::Dir) -> std::io::Result<()> {
     #[cfg(test)]
     use crate::workspaces::onboarding_tests::{Checkpoint, checkpoint};
     use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
-    use cap_std::fs::{OpenOptions, OpenOptionsExt};
+    use cap_std::fs::OpenOptions;
     use std::io::Write;
 
     let bytes = encode(OnboardingRecord::default()).map_err(std::io::Error::other)?;
@@ -388,8 +387,8 @@ pub(crate) fn initialize_marker(marker: &cap_std::fs::Dir) -> std::io::Result<()
     options
         .write(true)
         .create_new(true)
-        .mode(0o600)
         .follow(FollowSymlinks::No);
+    situate_host::fs::private_file_options(&mut options);
     let mut file = marker.open_with(FILE, &options)?;
     #[cfg(test)]
     checkpoint(Checkpoint::ProgressWrite, marker)?;

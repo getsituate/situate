@@ -113,6 +113,25 @@ function checkWorkflowBootstrap(name, workflow) {
         ],
         context,
       );
+    } else if (name === "verify.yml" && id === "windows-webview-probe") {
+      assert.deepEqual(
+        commands,
+        ["./tools/probe-windows-webview2.ps1"],
+        context,
+      );
+    } else if (name === "release-macos.yml" && id === "windows-qualification") {
+      assert.match(block, /^ {4}runs-on: windows-11-arm$/m, context);
+      assert.deepEqual(
+        commands,
+        [
+          "./tools/test-windows-arm64.ps1",
+          "./tools/test-windows-release-arm64.ps1",
+        ],
+        context,
+      );
+    } else if (name === "verify.yml" && id === "windows-arm64-native") {
+      assert.match(block, /^ {4}runs-on: windows-11-arm$/m, context);
+      assert.deepEqual(commands, ["./tools/test-windows-arm64.ps1"], context);
     } else if (name === "deploy-website.yml" && id === "website") {
       assert.match(block, /^ {4}runs-on: ubuntu-24\.04$/m, context);
       assert.deepEqual(commands, websiteDeliveryCommands, context);
@@ -157,15 +176,28 @@ function checkWorkflowBootstrap(name, workflow) {
           context,
         );
     } else {
-      assert.equal(commands[0], "python3 tools/pipeline-bootstrap.py", context);
+      const python = /^ {4}runs-on: windows-2025$/m.test(block)
+        ? "python"
+        : "python3";
+      assert.equal(
+        commands[0],
+        `${python} tools/pipeline-bootstrap.py`,
+        context,
+      );
       assert.ok(commands.length > 1, context);
       for (const command of commands.slice(1))
         assert.match(
           command,
           name === "release-macos.yml" &&
             ["create", "macos-compatibility"].includes(id)
-            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|swift-plan|start|report)|wait-for-hosting\.mjs --(?:probe|check))$/
+            ? /^node tools\/(?:actions-adapter\.mjs [a-z-]+(?: .*)?|release-build-cache\.mjs (?:prepare|plan|swift-plan|start|report)|actions-windows-release\.mjs (?:reservation|collect)|wait-for-hosting\.mjs --(?:probe|check))$/
             : ({
+                "verify.yml: windows-smoke-build":
+                  /^(?:node tools\/build-windows-smoke\.mjs windows-smoke-artifact|\.\/tools\/build-windows-installer-preview\.ps1)$/,
+                "verify.yml: windows-arm64-installer":
+                  /^\.\/tools\/build-windows-installer-preview\.ps1$/,
+                "release-macos.yml: windows-build":
+                  /^(?:node tools\/actions-windows-release\.mjs version|\.\/tools\/build-windows-installer-preview\.ps1)$/,
                 "diagnostics.yml: launch-check":
                   /^node tools\/qualification-launch-check\.mjs$/,
                 "verify-hosting.yml: offline":

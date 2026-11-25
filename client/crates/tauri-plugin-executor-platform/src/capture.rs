@@ -2,12 +2,15 @@
 
 const INVALID: &str = "native.plugins.checkInvalid";
 const LIMIT: &str = "native.plugins.checkLimit";
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "windows")]
+pub(crate) mod windows;
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const UNAVAILABLE: &str = "native.plugins.captureUnavailable";
 const MAX_SIDE: f64 = 2048.0;
 const MAX_PIXELS: f64 = 4_000_000.0;
 
-/// Coordinates in the WKWebView's local view coordinate system (points, not device pixels).
+/// Coordinates in the WebView's local view coordinate system, not device pixels.
 #[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CaptureRect {
@@ -38,7 +41,7 @@ impl CaptureRect {
         Ok(())
     }
 
-    #[cfg(any(target_os = "macos", test))]
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
     fn validate_in(self, bounds: Self) -> Result<(), String> {
         self.validate()?;
         if ![bounds.x, bounds.y, bounds.width, bounds.height]
@@ -59,7 +62,7 @@ impl CaptureRect {
     }
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 fn complete(
     sender: tokio::sync::oneshot::Sender<Result<String, String>>,
     deadline: tokio::time::Instant,

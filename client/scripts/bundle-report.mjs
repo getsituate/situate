@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { open, readdir } from "node:fs/promises";
-import { resolve, dirname, isAbsolute, relative } from "node:path";
+import { resolve, dirname, isAbsolute, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { assertLocalPath } from "./ios-project-lock.mjs";
@@ -47,7 +47,11 @@ export async function bundleReport(directory) {
   const initialFiles = new Set([...initial].map((key) => manifest[key].file));
   const files = (await readdir(root, { recursive: true, withFileTypes: true }))
     .filter((entry) => entry.name.endsWith(".js"))
-    .map((entry) => relative(root, resolve(entry.parentPath, entry.name)));
+    .map((entry) =>
+      relative(root, resolve(entry.parentPath, entry.name))
+        .split(sep)
+        .join("/"),
+    );
   const present = new Set(files);
   // The native assets load outside Vite's entry graph but must still exist.
   for (const file of [

@@ -285,6 +285,7 @@ export function publicationEnvironment(environment) {
       "VOLTA_HOME",
       "SSH_AUTH_SOCK",
       "SITUATE_UPDATER_PUBLIC_KEY",
+      "SITUATE_WINDOWS_UPDATER_PUBLIC_KEY",
       "APPLE_TEAM_ID",
       "GH_TOKEN",
       "GITHUB_TOKEN",
@@ -688,18 +689,49 @@ export async function productionStages(
         operationDirectory(root, plan.operation),
         "github-journal.json",
       );
+      const github =
+        publicationAdapter?.github ?? githubAdapter({ environment });
+      let windowsNotes;
+      if (fresh) {
+        const { assembleWindowsRelease } =
+          await import("../client/scripts/windows-release.mjs");
+        const { qualifiedWindowsAssets } =
+          await import("../infrastructure/releases/publish-windows.mjs");
+        const receipt = environment.SITUATE_WINDOWS_QUALIFICATION_FILE;
+        assert(receipt, "Missing Windows qualification receipt");
+        const candidate = `${receipt}-candidate`;
+        const publicKey = environment.SITUATE_WINDOWS_UPDATER_PUBLIC_KEY;
+        assembleWindowsRelease(
+          candidate,
+          {
+            "x86_64-pc-windows-msvc": environment.SITUATE_WINDOWS_X64,
+            "aarch64-pc-windows-msvc": environment.SITUATE_WINDOWS_ARM64,
+          },
+          request.identity.version,
+          request.identity.sourceRevision,
+          publicKey,
+        );
+        const windows = qualifiedWindowsAssets(
+          candidate,
+          json(receipt),
+          publicKey,
+          request.identity,
+        );
+        request.windowsFiles = windows.files;
+        windowsNotes = windows.notes;
+      }
       const prepared = (
         publicationAdapter?.evidence ?? createEvidenceFromDirectory
       )(request);
-      const github =
-        publicationAdapter?.github ?? githubAdapter({ environment });
       const result = await (
         publicationAdapter?.createRelease ?? createGitHubRelease
       )(
         {
           ...prepared,
           identity: request.identity,
-          notes: notesForCatalog(inputs.catalog),
+          notes: [notesForCatalog(inputs.catalog), windowsNotes]
+            .filter(Boolean)
+            .join("\n\n"),
           journalPath,
         },
         {

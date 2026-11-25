@@ -1,0 +1,10 @@
+Parakeet TDT 0.6B v3, NVIDIA Corporation and affiliates
+https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+
+ONNX export and INT8 quantization: sherpa-onnx project
+https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/ed5d745623472f97cfc2e6c2916ee248798fc5a8
+
+Situate downloads the converted model files separately and uses them without
+further changes. No endorsement is implied.

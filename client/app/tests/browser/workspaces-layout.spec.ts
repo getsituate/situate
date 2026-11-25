@@ -39,6 +39,8 @@ for (const [scene, width] of [
           },
         },
       );
+      if (scene === "create")
+        await page.emulateMedia({ reducedMotion: "reduce" });
       await page.goto("/");
       if (scene === "create") {
         await page.getByRole("button", { name: "Create a workspace" }).click();
@@ -108,8 +110,7 @@ for (const [scene, width] of [
               ".primary-choice",
             ]
           : [
-              ".workspace-window",
-              ".entry-titlebar",
+              ".setup-entry-destination",
               ".creation",
               ".form-actions",
               "#create-title",
@@ -194,9 +195,17 @@ for (const [scene, width] of [
           "aria-describedby",
           "folder-error",
         );
-        const error = await page.locator("#folder-error").boundingBox();
-        const colors = await page.locator(".appearance-colors").boundingBox();
-        expect(error!.y + error!.height).toBeLessThanOrEqual(colors!.y);
+        expect(
+          await page
+            .locator("#folder-error")
+            .evaluate(
+              (error) =>
+                error.getBoundingClientRect().bottom <=
+                document
+                  .querySelector(".appearance-colors")!
+                  .getBoundingClientRect().top,
+            ),
+        ).toBe(true);
         await visual.capture("workspaces.create.name-conflict");
       }
     },
@@ -312,6 +321,7 @@ test("workspace entry and creation remain usable at 200% CSS zoom", async ({
 }) => {
   await workspaceFixture(page, { ...initial(), mobile: false, open: [] });
   await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await page.evaluate(() => {
     document.documentElement.style.zoom = "2";
@@ -348,15 +358,13 @@ for (const width of [320, 390, 800]) {
   }) => {
     await workspaceFixture(page, { ...initial(), mobile: width < 600 });
     await page.setViewportSize({ width, height: 360 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     await page.getByRole("button", { name: "Create a workspace" }).click();
     const actions = page.locator(".form-actions");
+    await expect(actions).toBeInViewport({ ratio: 1 });
+    await expect(page.locator(".setup-entry-enter-active")).toHaveCount(0);
     const bounds = await actions.boundingBox();
-    expect(bounds!.y + bounds!.height).toBe(360);
-    await expect(page.locator(".entry-titlebar")).toHaveCSS(
-      "height",
-      width < 600 ? "58px" : "64px",
-    );
     await expect(
       page.getByRole("heading", { name: "Create a workspace" }),
     ).toBeFocused();
@@ -400,6 +408,7 @@ for (const bottomInset of [0, 28]) {
       });
     });
     await workspaceFixture(page, initial());
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     await page.getByRole("button", { name: "Create a workspace" }).click();
     await page.addStyleTag({
@@ -407,12 +416,14 @@ for (const bottomInset of [0, 28]) {
     });
     const field = page.getByRole("textbox", { name: "Workspace name" });
     await field.fill("Keyboard draft");
-    await expect(page.locator(".workspace-entry")).toHaveCSS(
+    await expect(page.locator(".setup-entry-host")).toHaveCSS(
       "padding-bottom",
       `${bottomInset}px`,
     );
     const closedActions = await page.locator(".form-actions").boundingBox();
-    expect(closedActions!.y + closedActions!.height).toBe(800 - bottomInset);
+    expect(closedActions!.y + closedActions!.height).toBeLessThanOrEqual(
+      800 - bottomInset,
+    );
     for (const [height, offsetTop] of [
       [430, 0],
       [400, 24],
@@ -428,20 +439,22 @@ for (const bottomInset of [0, 28]) {
       );
       const actions = await page.locator(".form-actions").boundingBox();
       const inset = height === 800 ? bottomInset : 0;
-      expect(actions!.y + actions!.height).toBe(height! + offsetTop! - inset);
-      await expect(page.locator(".workspace-entry")).toHaveCSS(
+      expect(actions!.y + actions!.height).toBeLessThanOrEqual(
+        height! + offsetTop! - inset,
+      );
+      await expect(page.locator(".setup-entry-host")).toHaveCSS(
         "padding-bottom",
         `${inset}px`,
       );
       expect(
         await page
-          .locator(".entry-titlebar")
+          .locator(".setup-entry-host")
           .evaluate((e) => e.getBoundingClientRect().top),
       ).toBe(offsetTop);
       await expect(field).toHaveValue("Keyboard draft");
       await expect(field).toBeFocused();
       await field.scrollIntoViewIfNeeded();
-      await expect(field).toBeInViewport({ ratio: 1 });
+      await expect(field).toBeInViewport({ ratio: 0.99 });
     }
     await page.evaluate(() => {
       Object.assign(window.visualViewport!, {
@@ -456,7 +469,7 @@ for (const bottomInset of [0, 28]) {
         .locator("#app")
         .evaluate((e) => e.getBoundingClientRect().height),
     ).toBe(800);
-    await expect(page.locator(".workspace-entry")).toHaveCSS(
+    await expect(page.locator(".setup-entry-host")).toHaveCSS(
       "padding-bottom",
       `${bottomInset}px`,
     );

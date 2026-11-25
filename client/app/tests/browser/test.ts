@@ -17,7 +17,10 @@ export const test = base.extend<
     localizationMode: "keys" | "real";
     localizationAudit: void;
     visual: {
-      capture(name: string, options?: { threshold: number }): Promise<void>;
+      capture(
+        name: string,
+        options?: { threshold?: number; maxDiffPixels?: number },
+      ): Promise<void>;
     };
   }
 >({

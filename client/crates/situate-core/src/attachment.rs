@@ -136,7 +136,7 @@ mod tests {
         let outside = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(outside.path(), b"external").unwrap();
         std::fs::remove_file(&binary).unwrap();
-        std::os::unix::fs::symlink(outside.path(), &binary).unwrap();
+        situate_host::unix_test_support::symlink(outside.path(), &binary).unwrap();
         assert!(storage.read_attachment(&reference.id).is_err());
         assert_eq!(std::fs::read(outside.path()).unwrap(), b"external");
     }

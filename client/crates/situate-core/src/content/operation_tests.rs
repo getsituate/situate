@@ -879,7 +879,7 @@ fn structural_reversal_rejects_a_reused_markdown_path_even_with_identical_bytes(
 #[cfg(unix)]
 #[test]
 fn symlinks_and_readonly_sources_reject_structural_mutation() {
-    use std::os::unix::{fs::PermissionsExt, fs::symlink};
+    use situate_host::unix_test_support::{PermissionsExt, symlink};
     let temp = workspace();
     fs::create_dir(temp.path().join("folder")).unwrap();
     fs::write(temp.path().join("folder/note.md"), "keep").unwrap();

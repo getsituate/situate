@@ -1,54 +1,6 @@
 use super::*;
-use crate::content::windows_test_support::restricted_context;
+use situate_host::windows_test_support::restricted_context;
 use std::fs;
-
-#[test]
-fn detached_identity_comparison_uses_all_identifier_bytes_and_volume() {
-    use windows_sys::Win32::Storage::FileSystem::{FILE_ID_128, FILE_ID_INFO};
-    let original = FILE_ID_INFO {
-        VolumeSerialNumber: 7,
-        FileId: FILE_ID_128 {
-            Identifier: [0; 16],
-        },
-    };
-    assert!(same_windows_file_ids(&original, &original));
-    for byte in 0..16 {
-        let mut replacement = original;
-        replacement.FileId.Identifier[byte] = 1;
-        assert!(!same_windows_file_ids(&original, &replacement));
-    }
-    let mut other_volume = original;
-    other_volume.VolumeSerialNumber = 8;
-    assert!(!same_windows_file_ids(&original, &other_volume));
-}
-
-#[test]
-fn restricted_token_retains_identity_across_ancestor_move_and_replacement() {
-    let _context = restricted_context().unwrap();
-    let temp = tempfile::tempdir().unwrap();
-    fs::create_dir_all(temp.path().join("source/sub")).unwrap();
-    fs::write(temp.path().join("source/sub/note.md"), b"original").unwrap();
-    let root = Dir::open_ambient_dir(temp.path(), ambient_authority()).unwrap();
-    let identity = {
-        let source = child_dir(&root, "source").unwrap();
-        let sub = child_dir(&source, "sub").unwrap();
-        let (_, identity) = read_operation_file(&sub, "note.md", 1024).unwrap();
-        PatchIdentity::new(identity, true).unwrap()
-    };
-    rename_noreplace(&root, "source", &root, "moved").unwrap();
-    assert!(!temp.path().join("source").exists());
-    let moved = child_dir(&root, "moved").unwrap();
-    let sub = child_dir(&moved, "sub").unwrap();
-    let (bytes, candidate) = read_operation_file(&sub, "note.md", 1024).unwrap();
-    assert_eq!(bytes, b"original");
-    assert!(identity.matches(&candidate).unwrap());
-    sub.rename("note.md", &sub, "retained.md").unwrap();
-    sub.write("note.md", b"original").unwrap();
-    let (bytes, replacement) = read_operation_file(&sub, "note.md", 1024).unwrap();
-    assert_eq!(bytes, b"original");
-    assert!(!identity.matches(&replacement).unwrap());
-    assert_eq!(sub.read("retained.md").unwrap(), b"original");
-}
 
 #[test]
 fn restricted_token_can_move_nested_reference_patches() {
@@ -90,7 +42,7 @@ fn restricted_token_can_move_nested_reference_patches() {
 }
 
 fn reference_replacement(readonly: bool) {
-    use std::os::windows::fs::MetadataExt;
+    use situate_host::windows_test_support::MetadataExt;
     let _context = restricted_context().unwrap();
     let path = tempfile::tempdir().unwrap().keep();
     eprintln!("Reference replacement fixture: {}", path.display());

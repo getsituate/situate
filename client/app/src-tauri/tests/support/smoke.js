@@ -36,7 +36,18 @@
       button("Continue without AI").click();
     }
     await waitFor(() => document.querySelector(".topic-window"));
-    if ((await invoke("smoke_phase")).pluginChecksMode) {
+    if (window.runWindowsDictationSmoke) {
+      await window.runWindowsDictationSmoke();
+      await invoke("finish_smoke_test", { error: null });
+      return;
+    }
+    const pluginChecksMode = (await invoke("smoke_phase")).pluginChecksMode;
+    if (pluginChecksMode === "windows") {
+      await window.runWindowsPluginSmoke();
+      await invoke("finish_smoke_test", { error: null });
+      return;
+    }
+    if (pluginChecksMode) {
       await window.runPluginChecksSmoke();
       await invoke("smoke_shell_ready");
       return;

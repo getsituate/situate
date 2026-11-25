@@ -5,9 +5,9 @@ mod document;
 mod ios;
 #[cfg(target_os = "ios")]
 pub use ios::capture;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+mod desktop;
 mod lifecycle;
-#[cfg(target_os = "macos")]
-mod macos;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -84,7 +84,7 @@ struct Session {
     callback_gate: Mutex<()>,
     shutdown: tokio::sync::Mutex<()>,
     stopped: tokio::sync::watch::Sender<bool>,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     created: std::sync::atomic::AtomicBool,
 }
 
@@ -107,10 +107,10 @@ impl Executor {
         Self { app }
     }
 
-    /// Native-created macOS executor windows still owned by the platform, including during close.
+    /// Native-created desktop executor windows still owned by the platform, including during close.
     /// iOS executors are not Tauri windows.
     pub fn supervisor_window_labels(&self) -> Vec<String> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
             self.app
                 .state::<Sessions>()
@@ -122,7 +122,7 @@ impl Executor {
                 .map(|session| session.id.clone())
                 .collect()
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         Vec::new()
     }
 
@@ -178,7 +178,7 @@ impl Executor {
             callback_gate: Mutex::new(()),
             shutdown: tokio::sync::Mutex::new(()),
             stopped: tokio::sync::watch::channel(false).0,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             created: std::sync::atomic::AtomicBool::new(false),
         });
         {
@@ -232,7 +232,7 @@ impl ExecutorHandle {
 
     /// Captures only this executor's native view; closure fences pending replies.
     /// Callers own authorization and must recheck admission after awaiting.
-    /// Timeout fences the reply, not WebKit's internal snapshot completion.
+    /// Timeout fences the reply, not the WebView's internal snapshot completion.
     pub async fn capture(&self, rect: CaptureRect) -> Result<String, String> {
         rect.validate()?;
         if self.session.lifecycle.lock().unwrap().is_closed() {
@@ -246,9 +246,20 @@ impl ExecutorHandle {
                 .ok_or("executor.closed")?;
             capture::macos::capture(&window, rect, self.session.clone()).await
         };
+        #[cfg(target_os = "windows")]
+        let result = {
+            if self.session.document_kind != DocumentKind::Preview {
+                return Err("native.plugins.captureUnavailable".into());
+            }
+            let window = self
+                .app
+                .get_webview_window(&self.session.id)
+                .ok_or("executor.closed")?;
+            capture::windows::capture(&window, rect, self.session.clone()).await
+        };
         #[cfg(target_os = "ios")]
         let result = ios::capture_executor(self, rect).await;
-        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
         let result = Err("executor.platformUnavailable".into());
         if self.session.lifecycle.lock().unwrap().is_closed() {
             return Err("executor.closed".into());
@@ -381,40 +392,42 @@ fn start_watchdog(handle: &ExecutorHandle) {
     });
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use desktop::{
+    bridge as platform_bridge, close as platform_close, open as platform_open,
+    send as platform_send,
+};
 #[cfg(target_os = "ios")]
 use ios::{
     bridge as platform_bridge, close as platform_close, open as platform_open,
     send as platform_send,
 };
-#[cfg(target_os = "macos")]
-use macos::{
-    bridge as platform_bridge, close as platform_close, open as platform_open,
-    send as platform_send,
-};
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
+mod unavailable {
+    use super::ExecutorHandle;
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-fn platform_bridge() -> &'static str {
-    "()=>{}"
+    pub(super) fn platform_bridge() -> &'static str {
+        "()=>{}"
+    }
+    pub(super) async fn platform_open(_: &ExecutorHandle) -> Result<(), String> {
+        Err("executor.platformUnavailable".into())
+    }
+    pub(super) async fn platform_send(_: &ExecutorHandle, _: String) -> Result<(), String> {
+        Err("executor.platformUnavailable".into())
+    }
+    pub(super) async fn platform_close(_: &ExecutorHandle) -> Result<(), String> {
+        Ok(())
+    }
 }
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-async fn platform_open(_: &ExecutorHandle) -> Result<(), String> {
-    Err("executor.platformUnavailable".into())
-}
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-async fn platform_send(_: &ExecutorHandle, _: String) -> Result<(), String> {
-    Err("executor.platformUnavailable".into())
-}
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-async fn platform_close(_: &ExecutorHandle) -> Result<(), String> {
-    Ok(())
-}
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
+use unavailable::*;
 
 pub fn init() -> TauriPlugin<Wry> {
     let builder = Builder::new("executor-platform")
         .setup(|app, _api| {
             app.manage(Sessions::default());
-            #[cfg(target_os = "macos")]
-            macos::setup(app)?;
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            desktop::setup(app)?;
             #[cfg(target_os = "ios")]
             ios::setup(app, _api)?;
             Ok(())
@@ -438,9 +451,9 @@ pub fn init() -> TauriPlugin<Wry> {
                 }
             }
         });
-    #[cfg(target_os = "macos")]
-    let builder = macos::configure(builder);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    let builder = desktop::configure(builder);
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let builder = builder.invoke_handler(|invoke| {
         invoke.resolver.reject("executor.nativeOnly");
         true

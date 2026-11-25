@@ -34,10 +34,16 @@ async fn server_with_hook(
                 request.push(socket.read_u8().await.unwrap());
                 assert!(request.len() < 8192);
             }
-            captured
-                .lock()
-                .unwrap()
-                .push(String::from_utf8(request).unwrap());
+            let headers = String::from_utf8(request).unwrap();
+            if let Some(length) = headers.lines().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().unwrap())
+            }) {
+                assert!(length < 8192);
+                socket.read_exact(&mut vec![0; length]).await.unwrap();
+            }
+            captured.lock().unwrap().push(headers);
             if let Some(hook) = hook.take() {
                 hook();
             }

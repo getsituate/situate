@@ -433,6 +433,7 @@ test("unavailable controls and blocked sending preserve the draft and leave unre
         ![
           "plugin:event|listen",
           "workspace_snapshot",
+          "onboarding_load",
           "layout_load",
           "layout_save",
           "localization_snapshot",

@@ -73,7 +73,7 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             "actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
           ]
         : []),
-      ...(name === "deploy-website"
+      ...(["deploy-website", "release-macos"].includes(name)
         ? ["actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"]
         : []),
       ...(name === "verify"
@@ -114,7 +114,10 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
             ? /^(?:node tools\/wait-for-hosting\.mjs(?: --check)?|python3 tools\/pipeline-bootstrap\.py|node website\/site\.mjs --build|python3 tools\/pipeline-container\.py website prepared website\/dist|python3 infrastructure\/production\/immutable\/website_content\.py deploy website\/dist "\$WEBSITE_SOURCE_REVISION")$/
             : name === "verify-hosting" && match[1].startsWith("terraform ")
               ? /^terraform -chdir=infrastructure\/production\/terraform (?:init -backend=false -input=false -lockfile=readonly|validate)$/
-              : /^(?:python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
+              : ["verify", "release-macos"].includes(name) &&
+                  match[1].endsWith(".ps1")
+                ? /^\.\/tools\/(?:build-windows-installer-preview|probe-windows-webview2|test-windows(?:-release)?-arm64)\.ps1$/
+                : /^(?:python tools\/pipeline-bootstrap\.py|python3 tools\/pipeline-(?:bootstrap|container)\.py|node tools\/[a-z-]+\.mjs)(?: [a-z-]+)*(?: --[a-z-]+(?: [a-z-]+)?)*$/,
       );
     }
     assert.match(workflow, /persist-credentials: false/);
@@ -142,12 +145,38 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
         assert.match(body, /run: python3 tools\/build-architecture\.py/);
       } else if (name === "deploy-architecture" && !body.includes("run: ")) {
         assert.match(body, /uses: actions\/deploy-pages@/);
-      } else if (body.includes("run: node ")) {
-        assert.ok(body.includes("run: python3 tools/pipeline-bootstrap.py"));
-        assert.ok(
-          body.indexOf("run: python3 tools/pipeline-bootstrap.py") <
-            body.indexOf("run: node "),
+      } else if (
+        name === "verify" &&
+        body.includes("probe-windows-webview2.ps1")
+      ) {
+        assert.match(body, /image: \[windows-2025, windows-11-arm\]/);
+        assert.doesNotMatch(
+          body,
+          /secrets\.|permissions: write|upload-artifact/,
         );
+      } else if (
+        name === "verify" &&
+        body.includes("runs-on: windows-11-arm")
+      ) {
+        assert.match(body, /run: \.\/tools\/test-windows-arm64\.ps1/);
+      } else if (
+        name === "release-macos" &&
+        body.includes("test-windows-release-arm64.ps1")
+      ) {
+        assert.match(body, /runs-on: windows-11-arm/);
+        assert.doesNotMatch(body, /environment:|secrets\./);
+      } else if (
+        name === "verify" &&
+        body.includes("Build unsigned ARM64 installer preview")
+      ) {
+        assert.match(body, /run: python tools\/pipeline-bootstrap\.py/);
+      } else if (body.includes("run: node ")) {
+        const python = body.includes("runs-on: windows-2025")
+          ? "python"
+          : "python3";
+        const bootstrap = `run: ${python} tools/pipeline-bootstrap.py`;
+        assert.ok(body.includes(bootstrap));
+        assert.ok(body.indexOf(bootstrap) < body.indexOf("run: node "));
       } else {
         assert.match(body, /run: python3 tools\/pipeline-container\.py/);
       }
@@ -156,7 +185,10 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
       ? workflow.replace(job(workflow, "macos-compatibility"), "")
       : workflow;
     assert.doesNotMatch(otherJobs, /runs-on: macos-1[0-9]/);
-    assert.doesNotMatch(workflow, /runs-on: windows|--target.*(?:ios|android)/);
+    assert.doesNotMatch(
+      workflow,
+      /runs-on: windows(?!(?:-2025|-11-arm)\b)|--target.*(?:ios|android)/,
+    );
   }
 });
 
@@ -209,7 +241,7 @@ test("verification jobs depend on planning and aggregate every selected receipt"
   for (const name of ["verify", "release-macos"]) {
     const workflow = read(name);
     assert.doesNotMatch(
-      workflow.split("\n  create:")[0],
+      workflow.split(/\n {2}(?:create|windows-build):/)[0],
       /secrets\.|actions: write|contents: write|packages: write|ACTIONS_RUNTIME/,
     );
     assert.match(
@@ -217,8 +249,8 @@ test("verification jobs depend on planning and aggregate every selected receipt"
       /outputs:[\s\S]*plan:.*steps\.plan\.outputs\.plan[\s\S]*digest:/,
     );
     const shared = ["tooling-macos", "macos-code", "macos-native"];
-    const independent = Object.entries(laneHosts).filter(
-      ([id]) => name !== "verify" || !shared.includes(id),
+    const independent = Object.entries(laneHosts).filter(([id, host]) =>
+      name === "verify" ? !shared.includes(id) : host !== "windows",
     );
     for (const [id, host] of independent) {
       const lane = job(workflow, id);
@@ -228,25 +260,35 @@ test("verification jobs depend on planning and aggregate every selected receipt"
           ? "macos-15-intel"
           : host === "macos"
             ? "macos-latest"
-            : "ubuntu-24.04";
+            : host === "windows"
+              ? "windows-2025"
+              : "ubuntu-24.04";
       assert.ok(lane.includes(`runs-on: ${runner}\n`));
       if (id === "macos-compatibility")
         assert.match(
           lane,
           /DEVELOPER_DIR: \/Applications\/Xcode_26\.3\.app\/Contents\/Developer/,
         );
-      assert.ok(lane.includes(`.lanes.*.id, '${id}')`));
+      assert.ok(
+        lane.includes(
+          name === "verify"
+            ? `fromJSON(needs.plan.outputs.lanes), '${id}')`
+            : `.lanes.*.id, '${id}')`,
+        ),
+      );
       assert.match(lane, /receipt:.*steps\.lane\.outputs\.receipt/);
       assert.match(lane, /PIPELINE_PLAN_DIGEST:.*needs\.plan\.outputs\.digest/);
       assert.match(lane, /PIPELINE_PLAN:.*needs\.plan\.outputs\.plan/);
       assert.match(lane, /ref:.*github\.sha/);
       assert.doesNotMatch(lane, /needs: \[/);
-      if (host === "macos" || id === "docker-integration") {
+      if (host !== "linux" || id === "docker-integration") {
         assert.ok(
           lane.indexOf("actions-adapter.mjs setup") <
             lane.indexOf("actions-adapter.mjs lane"),
         );
         assert.match(lane, /pipeline-bootstrap\.py/);
+        if (host === "windows")
+          assert.doesNotMatch(lane, /source-reuse|secrets\./);
       } else {
         assert.ok(
           lane.includes(
@@ -285,6 +327,133 @@ test("verification jobs depend on planning and aggregate every selected receipt"
   }
 });
 
+test("the desktop CD builds Windows for the reserved version before creating the shared release", () => {
+  const workflow = read("release-macos");
+  const build = job(workflow, "windows-build");
+  const creator = job(workflow, "create");
+  assert.match(build, /environment: windows-release/);
+  assert.match(
+    build,
+    /github\.ref_protected && needs\.plan\.outputs\.enabled == 'true' && needs\.plan\.outputs\.app_impact == 'true'/,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /WINDOWS_RELEASE_ENABLED|needs\.plan\.outputs\.windows/,
+  );
+  assert.match(
+    build,
+    /target: x86_64-pc-windows-msvc[\s\S]*target: aarch64-pc-windows-msvc/,
+  );
+  assert.match(
+    build,
+    /SITUATE_WINDOWS_RELEASE_VERSION:.*steps\.reservation\.outputs\.version/,
+  );
+  assert.match(
+    build,
+    /TAURI_SIGNING_PRIVATE_KEY:.*secrets\.TAURI_SIGNING_PRIVATE_KEY/,
+  );
+  assert.doesNotMatch(build, /contents: write|SSH/);
+  const qualification = job(workflow, "windows-qualification");
+  assert.match(
+    qualification,
+    /needs: windows-build[\s\S]*runs-on: windows-11-arm/,
+  );
+  assert.match(
+    qualification,
+    /test-windows-arm64\.ps1[\s\S]*test-windows-release-arm64\.ps1[\s\S]*upload-artifact/,
+  );
+  assert.doesNotMatch(
+    qualification,
+    /environment:|secrets\.|continue-on-error/,
+  );
+  assert.match(
+    creator,
+    /create-stage --stage inputs[\s\S]*actions-windows-release\.mjs reservation/,
+  );
+  assert.match(
+    creator,
+    /- run: node tools\/actions-windows-release\.mjs collect[\s\S]*create-stage --stage github/,
+  );
+});
+
+test("PR verification fails if selected native ARM64 tests cannot run or fail", () => {
+  const workflow = read("verify");
+  const arm = job(workflow, "windows-arm64-native");
+  const x64 = job(workflow, "windows-native");
+  assert.equal(
+    arm.match(/^ {4}if: (.+)$/m)?.[1],
+    x64.match(/^ {4}if: (.+)$/m)?.[1],
+  );
+  assert.match(arm, /runs-on: windows-11-arm/);
+  assert.match(arm, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(arm, /run: \.\/tools\/test-windows-arm64\.ps1/);
+  assert.doesNotMatch(arm, /secrets\.|continue-on-error/);
+  const required = job(workflow, "required");
+  assert.match(required.split("    if:")[0], /windows-arm64-native,/);
+  assert.match(
+    required,
+    /contains\(fromJSON\(needs\.plan\.outputs\.lanes\), 'windows-native'\) && needs\.windows-arm64-native\.result != 'success'\s+run: exit 1/,
+  );
+});
+
+test("the ARM64 installer job stages architecture-specific preview artifacts", () => {
+  const workflow = read("verify");
+  const lane = job(workflow, "windows-arm64-installer");
+  assert.match(
+    lane,
+    /SITUATE_WINDOWS_INSTALLER_TARGET: aarch64-pc-windows-msvc/,
+  );
+  assert.match(lane, /run: \.\/tools\/build-windows-installer-preview\.ps1/);
+  assert.match(lane, /name: windows-installer-preview-arm64-/);
+  assert.match(lane, /name: windows-update-pair-arm64-/);
+  assert.doesNotMatch(job(workflow, "required"), /windows-arm64-installer/);
+});
+
+test("Windows verify requires a native receipt and uploads the CI build after it passes", () => {
+  const workflow = read("verify");
+  const lane = job(workflow, "windows-native");
+  assert.match(lane, /runs-on: windows-2025/);
+  assert.match(lane, /ref:.*github\.sha/);
+  assert.match(lane, /contents: read/);
+  assert.doesNotMatch(
+    lane,
+    /secrets\.|environment:|continue-on-error|source-reuse/,
+  );
+  assert.match(lane, /steps\.lane\.outputs\.receipt/);
+  assert.match(
+    lane,
+    /lane --workflow verify --lane windows-native[\s\S]*upload-artifact/,
+  );
+  assert.match(lane, /situate-windows-ci\/artifact\//);
+  assert.match(lane, /if-no-files-found: error/);
+  const required = job(workflow, "required");
+  assert.match(required.split("    if:")[0], /windows-native/);
+  assert.equal(
+    (required.match(/toJSON\(needs\.windows-native\)/g) ?? []).length,
+    1,
+  );
+});
+
+test("the Windows VM artifact is separate from required verification and release builds", () => {
+  const workflow = read("verify");
+  const smoke = job(workflow, "windows-smoke-build");
+  assert.match(smoke, /head\.repo\.full_name == github\.repository/);
+  assert.match(smoke, /github\.head_ref == 'windows-support'/);
+  assert.match(smoke, /runs-on: windows-2025/);
+  assert.match(smoke, /ref:.*github\.sha/);
+  assert.match(
+    smoke,
+    /build-windows-smoke\.mjs windows-smoke-artifact[\s\S]*upload-artifact/,
+  );
+  assert.match(smoke, /name: windows-smoke-x64-/);
+  assert.match(smoke, /path: windows-smoke-artifact\//);
+  assert.doesNotMatch(job(workflow, "required"), /windows-smoke-build/);
+  assert.doesNotMatch(
+    read("release-macos"),
+    /windows-smoke-build|build-windows-smoke/,
+  );
+});
+
 test("Verify runs selected ARM64 lanes on one runner with independent step results", () => {
   const workflow = read("verify");
   const shared = job(workflow, "macos-arm64");
@@ -298,7 +467,7 @@ test("Verify runs selected ARM64 lanes on one runner with independent step resul
   const [jobHeader, steps] = shared.split("    steps:\n");
   for (const id of ["tooling-macos", "macos-code", "macos-native"]) {
     assert.doesNotMatch(workflow, new RegExp(`^  ${id}:`, "m"));
-    assert.ok(jobHeader.includes(`.lanes.*.id, '${id}')`));
+    assert.ok(jobHeader.includes(`.outputs.lanes), '${id}')`));
     assert.ok(jobHeader.includes(`${id}-result: \${{ steps.${id}.outcome }}`));
     assert.ok(
       jobHeader.includes(`${id}-receipt: \${{ steps.${id}.outputs.receipt }}`),
@@ -310,7 +479,7 @@ test("Verify runs selected ARM64 lanes on one runner with independent step resul
         ),
       );
     const setup = steps.split(`- id: setup-${id}\n`)[1]?.split("      - ")[0];
-    assert.ok(setup?.includes(`.lanes.*.id, '${id}')`));
+    assert.ok(setup?.includes(`.outputs.lanes), '${id}')`));
     assert.ok(
       setup.includes("!cancelled() && steps.bootstrap.outcome == 'success'"),
     );
@@ -490,7 +659,8 @@ test("paused releases skip planning and source work", () => {
   assert.match(plan, /release-selection --workflow create/);
   assert.match(plan, /PIPELINE_RELEASE_ENABLED:.*vars\.MACOS_RELEASE_ENABLED/);
   assert.match(plan, /if: steps\.selection\.outputs\.enabled == 'true'/);
-  for (const id of Object.keys(laneHosts)) {
+  for (const [id, host] of Object.entries(laneHosts)) {
+    if (host === "windows") continue;
     assert.match(job(workflow, id), /needs\.plan\.outputs\.enabled == 'true'/);
     assert.doesNotMatch(job(workflow, id), /concurrency:/);
   }

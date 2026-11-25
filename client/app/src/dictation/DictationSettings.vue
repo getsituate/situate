@@ -11,7 +11,13 @@ import { dictation as state, retryProvisioning } from "./runtime";
       <div role="status" aria-atomic="true">
         <p class="download-state">{{ modelLabel() }}</p>
         <p v-if="state.model === 'waiting'" class="download-help">
-          {{ t("dictation.waitingDetail") }}
+          {{
+            t(
+              state.mobileDownload
+                ? "dictation.waitingMobile"
+                : "dictation.waitingDetail",
+            )
+          }}
         </p>
         <p v-if="state.model === 'failed'" class="download-help">
           {{ t("dictation.downloadRecovery") }}
@@ -33,6 +39,12 @@ import { dictation as state, retryProvisioning } from "./runtime";
         />
         <span>{{ state.progress }}%</span>
       </div>
+      <SituateButton
+        v-if="state.model === 'waiting' && state.mobileDownload"
+        variant="secondary"
+        @click="retryProvisioning(true)"
+        >{{ t("dictation.downloadMobile") }}</SituateButton
+      >
       <SituateButton
         v-if="state.model === 'failed' || state.model === 'storage'"
         variant="secondary"

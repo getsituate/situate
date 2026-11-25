@@ -1,0 +1,18 @@
+[package]
+name = "situate-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+situate-host-macos = { path = "../situate-host-macos" }
+
+[target.'cfg(unix)'.dependencies]
+situate-host-posix = { path = "../situate-host-posix" }
+
+[target.'cfg(windows)'.dependencies]
+situate-host-windows = { path = "../situate-host-windows" }
+
+[features]
+test-support = ["situate-host-macos/test-support", "situate-host-windows/test-support", "situate-host-posix/test-support"]

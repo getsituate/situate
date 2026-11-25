@@ -159,12 +159,6 @@ fn held_writer_lock_does_not_block_reads_or_replace_data() {
 #[cfg(unix)]
 #[test]
 fn unrelated_fork_does_not_extend_writer_ownership_or_mask_stale_revisions() {
-    use std::io::{Read, Write};
-    use std::os::fd::AsRawFd;
-    use std::os::unix::{net::UnixStream, process::CommandExt};
-    use std::process::Command;
-    use std::time::Duration;
-
     let root = workspace();
     let path = root.path().join(".situate/appearance.json");
     let original = br#"{"version":1,"accent":"cobalt","custom":{"retained":[1,null]}}"#;
@@ -172,35 +166,7 @@ fn unrelated_fork_does_not_extend_writer_ownership_or_mask_stale_revisions() {
     let store = Storage::open(root.path()).unwrap();
     let first = store.snapshot().unwrap();
     let lock = store.lock().unwrap();
-    let (mut parent, child) = UnixStream::pair().unwrap();
-    parent
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
-    child
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
-    let worker = std::thread::spawn(move || {
-        let fd = child.as_raw_fd();
-        let mut command = Command::new("/bin/sh");
-        command.args(["-c", ":"]);
-        // Only async-signal-safe syscalls run between fork and exec.
-        unsafe {
-            command.pre_exec(move || {
-                let mut byte = 1u8;
-                if libc::write(fd, (&byte as *const u8).cast(), 1) != 1
-                    || libc::read(fd, (&mut byte as *mut u8).cast(), 1) != 1
-                {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-        let result = command.spawn();
-        drop(child);
-        result.unwrap().wait().unwrap()
-    });
-    let mut ready = [0];
-    parent.read_exact(&mut ready).unwrap();
+    let worker = situate_host::unix_test_support::PausedChild::spawn();
     let reopened = Storage::open(root.path()).unwrap();
     let while_owned = reopened.update(Accent::Sky, first.revision.as_deref());
     let while_owned_bytes = fs::read(&path).unwrap();
@@ -208,8 +174,7 @@ fn unrelated_fork_does_not_extend_writer_ownership_or_mask_stale_revisions() {
     let stale = reopened.update(Accent::Sky, None);
     let after_stale_bytes = fs::read(&path).unwrap();
     let saved = reopened.update(Accent::Lemon, first.revision.as_deref());
-    parent.write_all(&[1]).unwrap();
-    assert!(worker.join().unwrap().success());
+    worker.resume();
 
     assert_eq!(while_owned.unwrap_err(), "native.appearance.busy");
     assert_eq!(while_owned_bytes, original);
@@ -230,7 +195,7 @@ fn unrelated_fork_does_not_extend_writer_ownership_or_mask_stale_revisions() {
 #[cfg(unix)]
 #[test]
 fn read_only_directory_and_file_are_read_without_writes() {
-    use std::os::unix::fs::PermissionsExt;
+    use situate_host::unix_test_support::PermissionsExt;
     let root = workspace();
     let directory = root.path().join(".situate");
     let path = directory.join("appearance.json");
@@ -268,7 +233,7 @@ fn read_only_directory_and_file_are_read_without_writes() {
 #[cfg(unix)]
 #[test]
 fn symlink_files_locks_ancestors_and_nonregular_files_cannot_redirect_io() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let root = workspace();
     let outside = workspace();
     let target = outside.path().join("sentinel");
@@ -308,7 +273,7 @@ fn symlink_files_locks_ancestors_and_nonregular_files_cannot_redirect_io() {
 #[cfg(unix)]
 #[test]
 fn held_directory_is_not_redirected_by_marker_replacement() {
-    use std::os::unix::fs::symlink;
+    use situate_host::unix_test_support::symlink;
     let root = workspace();
     let outside = workspace();
     let store = Storage::open(root.path()).unwrap();
@@ -326,7 +291,7 @@ fn held_directory_is_not_redirected_by_marker_replacement() {
 #[cfg(unix)]
 #[test]
 fn atomic_replacement_keeps_hardlink_alias_unchanged_and_private_permissions() {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use situate_host::unix_test_support::{MetadataExt, PermissionsExt};
     let root = workspace();
     let outside = workspace();
     let path = root.path().join(".situate/appearance.json");

@@ -1,3 +1,8 @@
+import { windowsAssetNames } from "../../client/scripts/windows-release.mjs";
+import {
+  verifyPublicWindowsFeed,
+  windowsFeedForRelease,
+} from "./windows-feed.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
@@ -226,6 +231,9 @@ export function verifyDownloadReceipt(directory, manifest, receipt) {
         item.updater.signaturePath,
       ]),
     "github-release.json",
+    ...(receipt?.assets?.some?.(({ name }) => name === "windows-release.json")
+      ? windowsAssetNames(manifest.version)
+      : []),
   ].sort(compareCodeUnits);
   if (
     receipt?.schemaVersion !== 1 ||
@@ -289,13 +297,13 @@ export function verifyPublicationInputs(
     );
   if (!manifest.releaseInputs) return {};
   const receiptBytes = readMetadata(resolve(releaseReceipt));
+  const receipt = JSON.parse(receiptBytes);
   return {
-    releaseIdentity: verifyDownloadReceipt(
-      directory,
-      manifest,
-      JSON.parse(receiptBytes),
-    ),
+    releaseIdentity: verifyDownloadReceipt(directory, manifest, receipt),
     releaseReceiptSha256: hash(receiptBytes),
+    ...(receipt.assets.some(({ name }) => name === "windows-release.json")
+      ? { includesWindows: true }
+      : {}),
   };
 }
 
@@ -529,7 +537,14 @@ async function preflight(directory, revision, config) {
   };
 }
 
-function stage(directory, destination, manifest, artifact) {
+function releaseMetadata(manifest, artifact, windowsFeed) {
+  return {
+    ...metadata(manifest, artifact),
+    ...(windowsFeed ? { "windows-update.json": windowsFeed } : {}),
+  };
+}
+
+function stage(directory, destination, manifest, artifact, windowsFeed) {
   mkdirSync(destination, { recursive: false, mode: 0o700 });
   mkdirSync(join(destination, "metadata"));
   for (const name of [
@@ -543,7 +558,9 @@ function stage(directory, destination, manifest, artifact) {
       errorOnExist: true,
       force: false,
     });
-  for (const [name, value] of Object.entries(metadata(manifest, artifact)))
+  for (const [name, value] of Object.entries(
+    releaseMetadata(manifest, artifact, windowsFeed),
+  ))
     writeFileSync(
       join(destination, "metadata", name),
       `${JSON.stringify(value, null, 2)}\n`,
@@ -816,12 +833,25 @@ async function runPublication(
     await preflight(directory, values["reviewed-revision"], config);
   let releaseIdentity;
   let releaseReceiptSha256;
+  let windowsFeed;
   if (action === "publish" || action === "reconcile") {
-    ({ releaseIdentity, releaseReceiptSha256 } = verifyPublicationInputs(
-      directory,
-      manifest,
-      { action, releaseReceipt: values["release-receipt"] },
-    ));
+    const publication = verifyPublicationInputs(directory, manifest, {
+      action,
+      releaseReceipt: values["release-receipt"],
+    });
+    ({ releaseIdentity, releaseReceiptSha256 } = publication);
+    if (publication.includesWindows) {
+      if (!values.fresh)
+        throw new Error(
+          "Use the hosted publisher for a combined desktop release.",
+        );
+      windowsFeed = windowsFeedForRelease(
+        directory,
+        releaseIdentity,
+        configuration(["SITUATE_WINDOWS_UPDATER_PUBLIC_KEY"])
+          .SITUATE_WINDOWS_UPDATER_PUBLIC_KEY,
+      );
+    }
   }
   if (action === "check") {
     console.log(`Verified direct release ${manifest.version}.`);
@@ -865,7 +895,7 @@ async function runPublication(
       );
   } else {
     if (!existsSync(destination))
-      stage(directory, destination, manifest, artifact);
+      stage(directory, destination, manifest, artifact, windowsFeed);
     journal = {
       host: config.WEBSITE_DEPLOY_HOST,
       stage: destination,
@@ -886,6 +916,7 @@ async function runPublication(
     artifact,
     manifestSha256,
     qualificationSha256,
+    windowsFeed,
   );
   if (JSON.stringify(staged) !== JSON.stringify(journal.request.files))
     throw new Error("Staged inventory differs from the publication journal.");
@@ -930,6 +961,7 @@ async function runPublication(
     },
   );
   await verifyPublicAvailability(manifest, artifact);
+  if (windowsFeed) await verifyPublicWindowsFeed(windowsFeed);
   if (values.fresh) {
     console.log(JSON.stringify(result));
     return;
@@ -950,8 +982,9 @@ export function verifyStagedRelease(
   artifact,
   manifestSha256,
   qualificationSha256,
+  windowsFeed,
 ) {
-  const expectedMetadata = metadata(manifest, artifact);
+  const expectedMetadata = releaseMetadata(manifest, artifact, windowsFeed);
   const staged = inventory(destination);
   const expectedNames = [
     artifact.path,
