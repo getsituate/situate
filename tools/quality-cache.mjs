@@ -25,7 +25,7 @@ const digest = (content) => createHash("sha256").update(content).digest("hex");
 // and the type project. Changed ignore/type configs use the unpruned inventory.
 const exclusionConfigurations = {
   "eslint.config.mjs":
-    "be1bf3364a5ef45bb6f9b2396f3c24019f7f19bb8880d7a1d10dcb2ad121528e",
+    "0611c8626f02bf1ef66144d30eda2d9f18906eeecde912a2ab7fdd41164f71a5",
   "tsconfig.quality.json":
     "da8f95fb39c889521d9588eee7f3459b01b1a1fff8faef02184828a44b1112ab",
   ".prettierignore":
