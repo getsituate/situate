@@ -33,6 +33,11 @@ const props = defineProps<{
   state: NavigationState;
   topics?: TabsState;
   hiddenViews?: string[];
+  unlistedConversationId?: string;
+}>();
+defineSlots<{
+  "conversation-actions"?(props: { id: string; close: () => void }): unknown;
+  "conversation-items"?(): unknown;
 }>();
 const root = ref<HTMLElement>();
 const moreOpen = ref(false);
@@ -75,10 +80,9 @@ const selected = computed(() => {
 });
 const conversations = computed(() =>
   props.topics
-    ? Object.values(props.topics.conversations).map((item) => ({
-        ...item,
-        status: item.activity,
-      }))
+    ? Object.values(props.topics.conversations)
+        .filter((item) => item.id !== props.unlistedConversationId)
+        .map((item) => ({ ...item, status: item.activity }))
     : state.value.conversations,
 );
 const listLoading = computed(() => props.topics?.conversationsLoading ?? false);
@@ -296,7 +300,14 @@ function status(value: string) {
             @rename="renameItem(item.id, $event)"
             @archive="changeConversation(item.id, 'archive')"
             @delete="changeConversation(item.id, 'delete')"
-          />
+          >
+            <template
+              v-if="$slots['conversation-actions']"
+              #actions="{ close }"
+            >
+              <slot name="conversation-actions" :id="item.id" :close="close" />
+            </template>
+          </ConversationRow>
         </li>
       </ul>
       <SituateDisclosure
@@ -324,7 +335,18 @@ function status(value: string) {
               @rename="renameItem(item.id, $event)"
               @archive="changeConversation(item.id, 'archive')"
               @delete="changeConversation(item.id, 'delete')"
-            />
+            >
+              <template
+                v-if="$slots['conversation-actions']"
+                #actions="{ close }"
+              >
+                <slot
+                  name="conversation-actions"
+                  :id="item.id"
+                  :close="close"
+                />
+              </template>
+            </ConversationRow>
           </li>
         </ul>
         <p v-else class="empty-archive">{{ conversationCopy.emptyArchive }}</p>

@@ -140,7 +140,33 @@
   "consumerAccessNeeded": "{name}: {reason}",
   "selectAccount": "Choose an account for this tool",
   "dependencyDisabled": "Connection disabled",
+  "chatMode": {
+    "chat": "Chat",
+    "newChat": "New chat",
+    "exampleTitle": "Notes for my weekly review",
+    "exampleQuestion": "How could I keep track of the notes I want to revisit each week?",
+    "switchToChat": "Switch to chat",
+    "switchToDevelopment": "Switch to plugin development",
+    "busy": "Wait for the current work to finish or stop it.",
+    "actions": "Chat actions",
+    "showChanges": "Show changes",
+    "hideChanges": "Hide changes",
+    "placement": "Mode switch placement",
+    "placements": {
+      "corner": "Top-right menu",
+      "conversation": "Conversation menu",
+      "pane": "Pane layout menu",
+      "composer": "Below the message field"
+    },
+    "welcome": "What would you like to do?",
+    "helpIntro": "Use this mode to create or change connections, plugins and other workspace files. You can return to Chat without losing the conversation or the changes.",
+    "exampleRequest": "Add a reading view to my notes plugin.",
+    "exampleReply": "A reading view can bring notes from your collection together in one place."
+  },
   "scenarioLabels": {
+    "mode-development": "Plugin development · checks failed",
+    "mode-chat": "Normal chat",
+    "mode-new-chat": "New chat",
     "development-connection-only": "Plugins · connection with chat tools",
     "development-reuse": "Plugins · reuse an unchanged connection",
     "development-missing-connection": "Plugins · create a connection and view",

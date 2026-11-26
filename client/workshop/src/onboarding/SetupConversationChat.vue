@@ -62,6 +62,8 @@ defineExpose({ focusTitle: () => view.value?.focusTitle() });
       hide-model-choice
       start-at-latest
       :hide-header="hideHeader"
+      :mode-switch="!hideHeader && state.view === 'app'"
+      mode-session="completed-setup-chat"
       :retry-enabled="!activeQuestion(state.transcript)"
       :send-enabled="true"
       :show-navigation="showNavigation"

@@ -2,7 +2,8 @@
 import SituateDisclosure from "../ui/SituateDisclosure.vue";
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import ChatView from "../chat/ChatView.vue";
-import { changePhase, createChatState } from "../chat/model";
+import ChatModeSurface from "../chat/ChatModeSurface.vue";
+import { changePhase, createChatState, events } from "../chat/model";
 import MiniBendPlayful from "../mini-bend-playful/MiniBendPlayful.vue";
 import {
   SituateIcon,
@@ -108,246 +109,277 @@ function keydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <section class="queue-chat" aria-label="Chat with pending messages">
-    <ChatView
-      class="queue-history"
-      :class="{ 'queue-stopped': state.phase === 'stopped' }"
-      :state="historyState"
-      :show-navigation="showNavigation"
-      :navigation-id="navigationId"
-      :navigation-open="navigationOpen"
-      @open-navigation="emit('open-navigation', $event)"
-    />
-    <footer class="queue-footer">
-      <div class="queue-column">
-        <SituateDisclosure v-if="state.consumed.length" class="received">
-          <template #label>
-            {{ state.consumed.length }}
-            {{ state.consumed.length === 1 ? "message" : "messages" }} received
-            by Situate
-          </template>
-          <div
-            class="received-list"
-            role="region"
-            tabindex="0"
-            aria-label="Received messages"
-          >
-            <article v-for="item in state.consumed" :key="item.id">
-              <p>{{ item.text }}</p>
-              <span
-                v-for="(attachment, index) in item.attachments"
-                :key="index"
-                class="attachment"
-                >{{ attachment.name }}</span
+  <ChatModeSurface
+    title="Chat with pending messages"
+    session-key="queue"
+    :draft="state.draft"
+    :events="historyState.transcript ?? events"
+    :working="running || !!state.pending.length"
+    :navigation-open="navigationOpen"
+    content-selector=".chat-thread"
+    @draft="emit('action', { type: 'draft', text: $event })"
+  >
+    <template v-if="showNavigation" #navigation>
+      <SituateIconButton
+        icon="menu"
+        label="Open navigation"
+        aria-haspopup="dialog"
+        :aria-controls="navigationId"
+        :aria-expanded="navigationOpen"
+        @click="emit('open-navigation', $event)"
+      />
+    </template>
+    <template #default="{ developmentEvents }">
+      <section class="queue-chat" aria-label="Chat with pending messages">
+        <ChatView
+          class="queue-history"
+          :class="{ 'queue-stopped': state.phase === 'stopped' }"
+          :state="historyState"
+          hide-header
+          :extra-events="developmentEvents"
+        />
+        <footer class="queue-footer">
+          <div class="queue-column">
+            <SituateDisclosure v-if="state.consumed.length" class="received">
+              <template #label>
+                {{ state.consumed.length }}
+                {{ state.consumed.length === 1 ? "message" : "messages" }}
+                received by Situate
+              </template>
+              <div
+                class="received-list"
+                role="region"
+                tabindex="0"
+                aria-label="Received messages"
               >
-            </article>
-          </div>
-        </SituateDisclosure>
-        <section
-          v-if="state.pending.length"
-          class="pending"
-          aria-label="Pending messages"
-        >
-          <header>
-            <SituateButton
-              variant="plain"
-              type="button"
-              class="pending-toggle"
-              :id="`${pendingDetailsId}-toggle`"
-              :aria-expanded="pendingExpanded"
-              :aria-controls="pendingDetailsId"
-              @click="pendingExpanded = !pendingExpanded"
-            >
-              <span
-                class="pending-chevron"
-                :class="{ expanded: pendingExpanded }"
-                aria-hidden="true"
-                >›</span
-              >{{ state.pending.length }} pending
-              {{
-                state.pending.length === 1 ? "message" : "messages"
-              }}</SituateButton
-            ><SituateButton
-              variant="plain"
-              type="button"
-              class="edit-pending"
-              aria-keyshortcuts="Alt+ArrowUp"
-              @click="restore"
-            >
-              Edit all pending
-            </SituateButton>
-          </header>
-          <div
-            v-show="pendingExpanded"
-            v-overflow-tab-stop
-            :id="pendingDetailsId"
-            class="pending-list"
-            role="region"
-            :aria-labelledby="`${pendingDetailsId}-toggle`"
-          >
-            <section
-              v-for="kind in ['steering', 'follow-up'] as const"
-              :key="kind"
-              class="pending-group"
-            >
-              <template v-if="state.pending.some((item) => item.kind === kind)">
-                <h3>
-                  {{ kind === "steering" ? "Steering" : "Follow-up" }} ·
-                  {{
-                    state.pending.filter((item) => item.kind === kind).length
-                  }}
+                <article v-for="item in state.consumed" :key="item.id">
+                  <p>{{ item.text }}</p>
                   <span
-                    >·
-                    {{
-                      kind === "steering"
-                        ? "At the next opportunity"
-                        : "After this task"
-                    }}</span
+                    v-for="(attachment, index) in item.attachments"
+                    :key="index"
+                    class="attachment"
+                    >{{ attachment.name }}</span
                   >
-                </h3>
-                <div
-                  class="pending-items"
-                  role="region"
-                  :aria-label="
-                    kind === 'steering'
-                      ? 'Pending steering messages'
-                      : 'Pending follow-up messages'
-                  "
+                </article>
+              </div>
+            </SituateDisclosure>
+            <section
+              v-if="state.pending.length"
+              class="pending"
+              aria-label="Pending messages"
+            >
+              <header>
+                <SituateButton
+                  variant="plain"
+                  type="button"
+                  class="pending-toggle"
+                  :id="`${pendingDetailsId}-toggle`"
+                  :aria-expanded="pendingExpanded"
+                  :aria-controls="pendingDetailsId"
+                  @click="pendingExpanded = !pendingExpanded"
                 >
-                  <SituateDisclosure
-                    v-for="item in state.pending.filter(
-                      (item) => item.kind === kind,
-                    )"
-                    :key="item.id"
-                    class="pending-message"
+                  <span
+                    class="pending-chevron"
+                    :class="{ expanded: pendingExpanded }"
+                    aria-hidden="true"
+                    >›</span
+                  >{{ state.pending.length }} pending
+                  {{
+                    state.pending.length === 1 ? "message" : "messages"
+                  }}</SituateButton
+                ><SituateButton
+                  variant="plain"
+                  type="button"
+                  class="edit-pending"
+                  aria-keyshortcuts="Alt+ArrowUp"
+                  @click="restore"
+                >
+                  Edit all pending
+                </SituateButton>
+              </header>
+              <div
+                v-show="pendingExpanded"
+                v-overflow-tab-stop
+                :id="pendingDetailsId"
+                class="pending-list"
+                role="region"
+                :aria-labelledby="`${pendingDetailsId}-toggle`"
+              >
+                <section
+                  v-for="kind in ['steering', 'follow-up'] as const"
+                  :key="kind"
+                  class="pending-group"
+                >
+                  <template
+                    v-if="state.pending.some((item) => item.kind === kind)"
                   >
-                    <template #label>
-                      <span class="pending-preview">{{
-                        item.text || "Attachment"
-                      }}</span
-                      ><span
-                        v-if="item.attachments.length"
-                        class="attachment-count"
-                        >{{ item.attachments.length }}
+                    <h3>
+                      {{ kind === "steering" ? "Steering" : "Follow-up" }} ·
+                      {{
+                        state.pending.filter((item) => item.kind === kind)
+                          .length
+                      }}
+                      <span
+                        >·
                         {{
-                          item.attachments.length === 1 ? "file" : "files"
+                          kind === "steering"
+                            ? "At the next opportunity"
+                            : "After this task"
                         }}</span
                       >
-                    </template>
-                    <div class="pending-body">
-                      <p>{{ item.text }}</p>
-                      <span
-                        v-for="(attachment, index) in item.attachments"
-                        :key="index"
-                        class="attachment"
-                        >{{ attachment.name }}</span
+                    </h3>
+                    <div
+                      class="pending-items"
+                      role="region"
+                      :aria-label="
+                        kind === 'steering'
+                          ? 'Pending steering messages'
+                          : 'Pending follow-up messages'
+                      "
+                    >
+                      <SituateDisclosure
+                        v-for="item in state.pending.filter(
+                          (item) => item.kind === kind,
+                        )"
+                        :key="item.id"
+                        class="pending-message"
                       >
+                        <template #label>
+                          <span class="pending-preview">{{
+                            item.text || "Attachment"
+                          }}</span
+                          ><span
+                            v-if="item.attachments.length"
+                            class="attachment-count"
+                            >{{ item.attachments.length }}
+                            {{
+                              item.attachments.length === 1 ? "file" : "files"
+                            }}</span
+                          >
+                        </template>
+                        <div class="pending-body">
+                          <p>{{ item.text }}</p>
+                          <span
+                            v-for="(attachment, index) in item.attachments"
+                            :key="index"
+                            class="attachment"
+                            >{{ attachment.name }}</span
+                          >
+                        </div>
+                      </SituateDisclosure>
                     </div>
-                  </SituateDisclosure>
-                </div>
-              </template>
+                  </template>
+                </section>
+              </div>
             </section>
-          </div>
-        </section>
-        <form
-          class="queue-composer"
-          @submit.prevent="emit('action', { type: 'submit', kind: 'steering' })"
-        >
-          <div
-            v-if="state.attachments.length"
-            class="draft-attachments"
-            aria-label="Draft attachments"
-          >
-            <span
-              v-for="(attachment, index) in state.attachments"
-              :key="index"
-              class="attachment removable"
-              ><span>{{ attachment.name }}</span
-              ><SituateButton
-                variant="plain"
-                type="button"
-                class="remove-attachment"
-                :aria-label="`Remove attachment ${attachment.name}`"
-                @click="removeAttachment(index)"
-              >
-                <SituateIcon name="close" /></SituateButton
-            ></span>
-          </div>
-          <div class="input-line">
-            <SituateIconButton
-              icon="plus"
-              label="Attach file"
-              disabled
-              unavailable-reason="File attachment selection is unavailable."
-            />
-            <label class="sr-only" for="queue-message">Message</label>
-            <SituateTextarea
-              appearance="plain"
-              id="queue-message"
-              ref="field"
-              :value="state.draft"
-              rows="1"
-              placeholder="Message…"
-              @input="
-                emit('action', {
-                  type: 'draft',
-                  text: ($event.target as HTMLTextAreaElement).value,
-                })
+            <form
+              class="queue-composer"
+              @submit.prevent="
+                emit('action', { type: 'submit', kind: 'steering' })
               "
-              @keydown="keydown"
-            />
-            <SituateButton
-              variant="plain"
-              v-if="running"
-              type="button"
-              class="stop-action"
-              aria-label="Stop"
-              title="Stop"
-              @click="stop"
             >
-              <span aria-hidden="true" />
-            </SituateButton>
-            <SituateIconButton
-              icon="arrow"
-              :label="running ? 'Queue steering' : 'Send message'"
-              variant="primary"
-              :disabled="!state.draft.trim() && !state.attachments.length"
-              @click="emit('action', { type: 'submit', kind: 'steering' })"
-            />
+              <div
+                v-if="state.attachments.length"
+                class="draft-attachments"
+                aria-label="Draft attachments"
+              >
+                <span
+                  v-for="(attachment, index) in state.attachments"
+                  :key="index"
+                  class="attachment removable"
+                  ><span>{{ attachment.name }}</span
+                  ><SituateButton
+                    variant="plain"
+                    type="button"
+                    class="remove-attachment"
+                    :aria-label="`Remove attachment ${attachment.name}`"
+                    @click="removeAttachment(index)"
+                  >
+                    <SituateIcon name="close" /></SituateButton
+                ></span>
+              </div>
+              <div class="input-line">
+                <SituateIconButton
+                  icon="plus"
+                  label="Attach file"
+                  disabled
+                  unavailable-reason="File attachment selection is unavailable."
+                />
+                <label class="sr-only" for="queue-message">Message</label>
+                <SituateTextarea
+                  appearance="plain"
+                  id="queue-message"
+                  ref="field"
+                  :value="state.draft"
+                  rows="1"
+                  placeholder="Message…"
+                  @input="
+                    emit('action', {
+                      type: 'draft',
+                      text: ($event.target as HTMLTextAreaElement).value,
+                    })
+                  "
+                  @keydown="keydown"
+                />
+                <SituateButton
+                  variant="plain"
+                  v-if="running"
+                  type="button"
+                  class="stop-action"
+                  aria-label="Stop"
+                  title="Stop"
+                  @click="stop"
+                >
+                  <span aria-hidden="true" />
+                </SituateButton>
+                <SituateIconButton
+                  icon="arrow"
+                  :label="running ? 'Queue steering' : 'Send message'"
+                  variant="primary"
+                  :disabled="!state.draft.trim() && !state.attachments.length"
+                  @click="emit('action', { type: 'submit', kind: 'steering' })"
+                />
+              </div>
+            </form>
+            <div v-if="running" class="bend-status">
+              <SituateButton
+                variant="plain"
+                class="bend-motion"
+                :aria-label="paused ? 'Resume animation' : 'Pause animation'"
+                :aria-pressed="paused"
+                @click="paused = !paused"
+              >
+                <MiniBendPlayful
+                  busy
+                  :paused="paused || navigationOpen"
+                  variant="mixed"
+                />
+              </SituateButton>
+              <span class="sr-only">{{
+                state.phase === "compacting"
+                  ? "Situate is compacting the conversation"
+                  : "Situate is working"
+              }}</span>
+              <span class="bend-comment">{{
+                state.phase === "compacting"
+                  ? "Making room to keep going."
+                  : comments[commentIndex]
+              }}</span>
+            </div>
+            <p v-if="state.phase === 'stopped'" class="phase-status">Stopped</p>
+            <p
+              class="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {{ state.notice }}
+            </p>
           </div>
-        </form>
-        <div v-if="running" class="bend-status">
-          <SituateButton
-            variant="plain"
-            class="bend-motion"
-            :aria-label="paused ? 'Resume animation' : 'Pause animation'"
-            :aria-pressed="paused"
-            @click="paused = !paused"
-          >
-            <MiniBendPlayful
-              busy
-              :paused="paused || navigationOpen"
-              variant="mixed"
-            />
-          </SituateButton>
-          <span class="sr-only">{{
-            state.phase === "compacting"
-              ? "Situate is compacting the conversation"
-              : "Situate is working"
-          }}</span>
-          <span class="bend-comment">{{
-            state.phase === "compacting"
-              ? "Making room to keep going."
-              : comments[commentIndex]
-          }}</span>
-        </div>
-        <p v-if="state.phase === 'stopped'" class="phase-status">Stopped</p>
-        <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {{ state.notice }}
-        </p>
-      </div>
-    </footer>
-  </section>
+        </footer>
+      </section>
+    </template>
+  </ChatModeSurface>
 </template>
 
 <style scoped>

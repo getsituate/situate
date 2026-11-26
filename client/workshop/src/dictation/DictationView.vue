@@ -87,11 +87,22 @@ function conversation(owner: string) {
         phase: state.drafts[owner]!.working ? 'working' : 'complete',
       }"
       :conversation="conversation(owner)"
+      :mode-session="`dictation:${owner}`"
+      mode-switch
+      :mode-blocked="covered || !!feedback || state.session?.owner === owner"
       hide-model-choice
       :show-navigation="index === 0 && showNavigation"
       :navigation-id="navigationId"
       :navigation-open="navigationOpen"
       @open-navigation="emit('openNavigation', $event)"
+      @update:state="
+        emit('action', {
+          type: 'edit',
+          owner,
+          text: $event.draft,
+          selection: { start: $event.draft.length, end: $event.draft.length },
+        })
+      "
     >
       <template #actions>
         <SituateIconButton

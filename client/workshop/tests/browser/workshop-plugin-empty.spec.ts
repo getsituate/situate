@@ -1,3 +1,4 @@
+import { chatAction } from "./chat-actions";
 import { selectScenario } from "./scenarios";
 import { expect, test, type Page } from "./test";
 
@@ -86,14 +87,14 @@ test("shared creation opens development and preserves the route to unfinished wo
   await create.focus();
   await create.press("Enter");
   await expect(
-    preview.getByRole("heading", { name: "New assignment", exact: true }),
+    preview
+      .getByRole("main", { name: "New assignment", exact: true })
+      .getByRole("button", { name: "Chat actions" }),
   ).toBeFocused();
   await expect(
     preview.getByLabel("Your request", { exact: true }),
   ).toBeEditable();
-  await preview
-    .getByRole("button", { name: "Close development view", exact: true })
-    .click();
+  await chatAction(preview, "Close development view");
   await preview.getByRole("button", { name: /Pending code/ }).click();
   await expect(
     preview.getByRole("heading", { name: "Pending code", exact: true }),
@@ -116,7 +117,9 @@ test("shared creation opens development and preserves the route to unfinished wo
       .getByRole("button", { name: "Create a plugin", exact: true })
       .click();
     await expect(
-      preview.getByRole("heading", { name: "New assignment", exact: true }),
+      preview
+        .getByRole("main", { name: "New assignment", exact: true })
+        .getByRole("button", { name: "Chat actions" }),
     ).toBeFocused();
     await expect(
       preview.getByLabel("Your request", { exact: true }),

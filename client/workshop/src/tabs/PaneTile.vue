@@ -25,10 +25,13 @@ const props = defineProps<{
   dragging: string | null;
   maximized: boolean;
   compact?: boolean;
+  optionsId?: string;
+  optionsOpen?: boolean;
 }>();
+defineSlots<{ pane?(props: { pane: Pane; active: boolean }): unknown }>();
 const emit = defineEmits<{
   action: [action: TabsAction];
-  options: [id: string, event: MouseEvent];
+  options: [id: string, event: MouseEvent | KeyboardEvent];
   drag: [id: string | null];
 }>();
 const title = computed(() => paneTitle(props.pane, props.state));
@@ -71,7 +74,9 @@ function activate() {
         :title="copy.drag"
         @dragstart="dragStart"
         @dragend="emit('drag', null)"
-        @click="emit('options', pane.id, $event)"
+        :aria-haspopup="optionsId ? 'menu' : undefined"
+        :popovertarget="optionsId"
+        @click.prevent="emit('options', pane.id, $event)"
       >
         <SituateIcon name="grip" />
       </SituateButton>
@@ -85,16 +90,29 @@ function activate() {
         variant="plain"
         class="pane-title"
         :title="title"
-        @click="emit('options', pane.id, $event)"
+        :aria-haspopup="optionsId ? 'menu' : undefined"
+        :popovertarget="optionsId"
+        @click.prevent="emit('options', pane.id, $event)"
       >
-        <SituateIcon :name="viewIcons[currentView(pane)]" /><span>{{
-          title
-        }}</span>
+        <SituateIcon
+          v-if="!optionsId"
+          :name="viewIcons[currentView(pane)]"
+        /><span>{{ title }}</span>
       </SituateButton>
       <SituateIconButton
         icon="more"
         :label="`${copy.paneOptions}: ${title}`"
-        @click="emit('options', pane.id, $event)"
+        :aria-haspopup="optionsId ? 'menu' : undefined"
+        :aria-expanded="optionsId ? optionsOpen : undefined"
+        :popovertarget="optionsId"
+        @click.prevent="emit('options', pane.id, $event)"
+        @keydown.down.prevent="emit('options', pane.id, $event)"
+      />
+      <SituateIconButton
+        v-if="optionsId"
+        icon="close"
+        :label="copy.closePane"
+        @click="emit('action', { type: 'close-pane', id: pane.id })"
       />
     </header>
     <div class="pane-body">
@@ -105,13 +123,19 @@ function activate() {
           currentView(pane) === 'chat' ? copy.loadingConversation : copy.loading
         "
       />
-      <PaneBody
+      <slot
         v-if="pane.availability !== 'loading'"
+        name="pane"
         :pane="pane"
-        :state="state"
         :active="active"
-        @action="emit('action', $event)"
-      />
+      >
+        <PaneBody
+          :pane="pane"
+          :state="state"
+          :active="active"
+          @action="emit('action', $event)"
+        />
+      </slot>
     </div>
     <div
       v-if="dragging && dragging !== pane.id && !maximized"

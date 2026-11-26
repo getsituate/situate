@@ -22,6 +22,7 @@ const props = withDefaults(
   }>(),
   { navigable: true },
 );
+defineSlots<{ actions?(props: { close: () => void }): unknown }>();
 const emit = defineEmits<{
   open: [];
   rename: [title: string];
@@ -189,6 +190,7 @@ function paste(event: ClipboardEvent) {
       @close="menuOpen = false"
     >
       <div class="action-list">
+        <slot name="actions" :close="() => (menuOpen = false)" />
         <SituateButton variant="plain" @click="startRename">{{
           copy.rename
         }}</SituateButton>

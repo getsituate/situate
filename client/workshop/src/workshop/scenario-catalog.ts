@@ -327,6 +327,9 @@ const definitions = [
     topic: "Plugins",
     states: [
       "plugins-create",
+      "plugins-mode-development",
+      "plugins-mode-chat",
+      "plugins-mode-new-chat",
       "plugins-development",
       "plugins-development-connection-only",
       "plugins-development-reuse",

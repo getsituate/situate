@@ -503,9 +503,7 @@ test("a lone conversation keeps its tab row and gains local headers only when sp
   const reference = await open(page, "chat-empty");
   await reference.emulateMedia({ reducedMotion: "reduce" });
   await reference.evaluate(() => document.fonts.ready);
-  const referenceHeader = (await reference
-    .locator(".chat-heading")
-    .boundingBox())!;
+  await expect(reference.locator(".chat-pane-header")).toHaveCount(0);
   const referenceWelcome = (await reference.locator(".welcome").boundingBox())!;
   await reference.close();
   const preview = await open(page, "tabs-new-chat");
@@ -518,13 +516,12 @@ test("a lone conversation keeps its tab row and gains local headers only when sp
   ).toHaveCount(0);
   const header = (await preview.locator(".tab-header").boundingBox())!;
   const welcome = (await preview.locator(".welcome").boundingBox())!;
-  expect(header.height).toBeLessThan(referenceHeader.height);
+  await expect(
+    preview.getByRole("button", { name: "Chat actions" }),
+  ).toBeVisible();
   expect(welcome.width).toBe(referenceWelcome.width);
   expect(welcome.x).toBe(referenceWelcome.x);
-  expect(welcome.y).toBeCloseTo(
-    referenceWelcome.y + (header.height - referenceHeader.height) / 2,
-    0,
-  );
+  expect(welcome.y).toBeCloseTo(referenceWelcome.y + header.height / 2, 0);
   const tile = (await preview.locator(".pane-tile").boundingBox())!;
   expect(tile.x).toBe(header.x);
   expect(tile.width).toBe(header.width);

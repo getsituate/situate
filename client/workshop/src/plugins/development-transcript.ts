@@ -5,7 +5,26 @@ import copy from "../localization/en.assignment-files.json";
 import { changePath } from "./assignment-files";
 
 export function developmentTranscript(d: Development): Event[] {
-  return d.messages.flatMap((message, index): Event[] => {
+  const chatTurns = new Map<number, Event[]>();
+  d.modeSwitch?.chatTurns.forEach((turn, index) => {
+    const events = chatTurns.get(turn.after) ?? [];
+    events.push(
+      {
+        kind: "message",
+        speaker: "user",
+        id: `chat-${index}`,
+        text: turn.message,
+      },
+      {
+        kind: "message",
+        speaker: "assistant",
+        id: `chat-reply-${index}`,
+        text: turn.reply,
+      },
+    );
+    chatTurns.set(turn.after, events);
+  });
+  const development = d.messages.flatMap((message, index): Event[] => {
     const latest = index === d.messages.length - 1;
     const records = d.inspection.recordedChanges.filter(
       (change) =>
@@ -92,6 +111,8 @@ export function developmentTranscript(d: Development): Event[] {
           .filter(Boolean)
           .join("\n\n"),
       },
+      ...(chatTurns.get(index + 1) ?? []),
     ];
   });
+  return [...(chatTurns.get(0) ?? []), ...development];
 }

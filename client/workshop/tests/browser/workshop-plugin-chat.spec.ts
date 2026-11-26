@@ -1,4 +1,5 @@
 import { selectOption } from "./select";
+import { toggleChanges } from "./chat-actions";
 import { expect, test, type Page } from "./test";
 
 async function open(page: Page, scenario = "plugins-create") {
@@ -61,126 +62,65 @@ test("normal and development transcripts share message and change styling", asyn
   await ordinary.close();
 });
 
-test("compact plugin headers keep navigation, title, help and actions on one row", async ({
+test("development actions stay in the corner without a separate header", async ({
   page,
-  browserName,
 }) => {
   const preview = await open(page, "plugins-development");
-  const header = preview.locator(".chat-pane-header");
-  const title = header.locator(".pane-title");
-  const context = header.locator(".context-label");
-  const help = header.getByRole("button", {
-    name: "About plugin development",
-    exact: true,
-  });
-  const files = header.getByRole("button", {
-    name: "Changes",
-    exact: true,
-  });
-  const close = header.getByRole("button", {
-    name: "Close development view",
-    exact: true,
-  });
   const request = preview.getByLabel("Your request", { exact: true });
   await request.fill("Keep my draft while the layout changes.");
+  const surface = preview.locator(".plugin-development");
+  const info = surface.getByRole("button", {
+    name: "About plugin development",
+  });
+  const more = surface.getByRole("button", { name: "Chat actions" });
   for (const width of [320, 375, 390, 412, 600, 768, 1440]) {
     await preview.setViewportSize({ width, height: 844 });
-    await expect(header).toHaveCSS(
-      "min-height",
-      width <= 600 ? "60px" : "80px",
-    );
-    const name = (await title.boundingBox())!;
-    const info = (await help.boundingBox())!;
-    const folder = (await files.boundingBox())!;
-    const dismiss = (await close.boundingBox())!;
-    expect(name.y + name.height / 2).toBeCloseTo(info.y + info.height / 2, 0);
-    expect(info.y).toBeCloseTo(folder.y, 0);
-    expect(folder.y).toBeCloseTo(dismiss.y, 0);
-    expect(name.height).toBeLessThan(24);
-    if (width <= 600) {
-      await expect(context).toHaveCSS("clip-path", "inset(50%)");
-      const navigation = (await header
-        .getByRole("button", { name: "Open navigation", exact: true })
-        .boundingBox())!;
-      expect(navigation.y).toBeCloseTo(info.y, 0);
-      expect(info.x - name.x - name.width).toBeLessThanOrEqual(8);
-      expect((await header.boundingBox())!.height).toBeLessThanOrEqual(64);
-    } else await expect(context).toHaveCSS("position", "static");
-    for (const control of [help, files, close]) {
-      const box = (await control.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(44);
-      expect(box.width).toBeGreaterThanOrEqual(44);
-    }
-    expect(await header.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
-      false,
-    );
+    await expect(surface.locator(".chat-pane-header")).toHaveCount(0);
+    await expect(more).toBeVisible();
+    const help = (await info.boundingBox())!;
+    const options = (await more.boundingBox())!;
+    expect(help.width).toBeGreaterThanOrEqual(44);
+    expect(options.height).toBeGreaterThanOrEqual(44);
+    expect(help.y).toBeCloseTo(options.y, 0);
+    expect(help.x + help.width).toBeLessThanOrEqual(options.x);
     await expect(request).toHaveValue(
       "Keep my draft while the layout changes.",
     );
   }
   await preview.setViewportSize({ width: 320, height: 844 });
-  await expect(title).toHaveAttribute("tabindex", "0");
-  await title.focus();
-  await expect(header.locator(".full-title")).toBeVisible();
-  await expect(header.locator(".full-title")).toHaveText(/notes/i);
-  const nextControl = browserName === "webkit" ? "Alt+Tab" : "Tab";
-  await preview.keyboard.press(nextControl);
-  await expect(help).toBeFocused();
-  await preview.keyboard.press(nextControl);
-  await expect(files).toBeFocused();
-  await preview.keyboard.press(nextControl);
-  await expect(close).toBeFocused();
-  for (const direction of ["ltr", "rtl"]) {
-    await preview.evaluate((value) => {
-      document.documentElement.dir = value;
-    }, direction);
-    const name = (await title.boundingBox())!;
-    const info = (await help.boundingBox())!;
-    if (direction === "rtl")
-      expect(info.x + info.width).toBeLessThanOrEqual(name.x + 1);
-    else expect(info.x).toBeGreaterThanOrEqual(name.x + name.width - 1);
-    expect(await header.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
-      false,
-    );
-  }
   await preview.evaluate(() => {
-    document.documentElement.dir = "ltr";
-    document.documentElement.style.zoom = "2";
+    document.documentElement.dir = "rtl";
   });
-  await preview.setViewportSize({ width: 750, height: 1000 });
-  expect(await header.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
-    false,
-  );
-  const headerBox = (await header.boundingBox())!;
-  for (const control of [help, files, close]) {
-    const box = (await control.boundingBox())!;
-    expect(box.x).toBeGreaterThanOrEqual(headerBox.x);
-    expect(box.x + box.width).toBeLessThanOrEqual(
-      headerBox.x + headerBox.width,
-    );
-    expect(box.y + box.height).toBeLessThanOrEqual(
-      headerBox.y + headerBox.height,
-    );
-  }
+  const help = (await info.boundingBox())!;
+  const options = (await more.boundingBox())!;
+  expect(options.x + options.width).toBeLessThanOrEqual(help.x);
+  await more.press("ArrowDown");
+  const menu = preview.getByRole("menu", { name: "Chat actions" });
+  await expect(
+    menu.getByRole("menuitem", { name: "Switch to chat" }),
+  ).toBeDisabled();
+  await menu.press("Escape");
+  await expect(more).toBeFocused();
 });
 
-test("mode help sits beside its label, explains development and preserves the draft", async ({
+test("help next to the development label preserves the draft", async ({
   page,
 }) => {
   const preview = await open(page);
   const request = preview.getByLabel("Your request", { exact: true });
   await request.fill("Connect my reading list.");
-  const help = preview
-    .locator(".chat-context")
-    .getByRole("button", { name: "About plugin development", exact: true });
+  const help = preview.getByRole("button", {
+    name: "About plugin development",
+    exact: true,
+  });
+  const label = preview.locator(".development-mode-label");
+  await expect(label).toHaveText("Plugin development");
   await expect(preview.locator(".chat-composer details")).toHaveCount(0);
   for (const width of [1440, 375, 320]) {
     await preview.setViewportSize({ width, height: 844 });
-    const label = (await preview
-      .locator(".chat-context > span")
-      .boundingBox())!;
+    const text = (await label.boundingBox())!;
     const icon = (await help.boundingBox())!;
-    expect(icon.x).toBeGreaterThanOrEqual(label.x + label.width - 1);
+    expect(text.x + text.width).toBeLessThanOrEqual(icon.x);
     expect(icon.width).toBeGreaterThanOrEqual(44);
     await help.focus();
     await help.press("Enter");
@@ -338,7 +278,10 @@ test("file paths open unified diffs and preserve search, focus and drafts at eve
   const preview = await open(page, "plugins-development-changes");
   const panel = preview.locator(".assignment-files");
   const request = preview.getByLabel("Your request", { exact: true });
-  const toggle = preview.getByRole("button", { name: "Changes", exact: true });
+  const toggle = preview.getByRole("button", {
+    name: "Chat actions",
+    exact: true,
+  });
   const file = ".situate/plugins/notes/code/src/index.ts";
   await request.fill("Keep this draft while I inspect.");
   await expect(
@@ -383,7 +326,7 @@ test("file paths open unified diffs and preserve search, focus and drafts at eve
   await expect(toggle).toBeFocused();
   for (const width of [1440, 1000, 840, 768, 390, 320]) {
     await preview.setViewportSize({ width, height: 900 });
-    await toggle.click();
+    await toggleChanges(preview);
     await expect(
       panel.getByRole("heading", { name: file, exact: true }),
     ).toBeFocused();
@@ -551,8 +494,8 @@ test("long names, large lists and an iOS layout study preserve the draft", async
   await scroll.evaluate((el) => {
     el.scrollTop = 500;
   });
-  await preview.getByRole("button", { name: "Changes", exact: true }).click();
-  await preview.getByRole("button", { name: "Changes", exact: true }).click();
+  await toggleChanges(preview);
+  await toggleChanges(preview);
   await expect
     .poll(() => scroll.evaluate((el) => el.scrollTop))
     .toBeGreaterThan(400);
@@ -561,7 +504,7 @@ test("long names, large lists and an iOS layout study preserve the draft", async
   });
   await selectOption(page.getByLabel("Platform profile"), "ios");
   await preview.setViewportSize({ width: 390, height: 844 });
-  await preview.getByRole("button", { name: "Changes", exact: true }).click();
+  await toggleChanges(preview);
   await page.getByLabel("Keyboard occlusion").check();
   await expect(request).toHaveValue("Keep the recorded revisions.");
   await expect(
