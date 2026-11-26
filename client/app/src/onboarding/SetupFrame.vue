@@ -304,12 +304,12 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--situate-space-4);
 }
 .frame-identity {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: var(--situate-space-6);
   min-width: 0;
 }
 .frame-identity img {
@@ -318,7 +318,7 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   flex: none;
 }
 .frame-eyebrow {
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   color: var(--situate-muted);
   font-weight: 600;
 }
@@ -328,7 +328,7 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
 .frame-stage {
   max-width: 1280px;
   min-height: calc(100% - 72px);
-  margin: 24px auto 0;
+  margin: var(--situate-space-6) auto 0;
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   gap: clamp(24px, 5vw, 72px);
@@ -353,11 +353,11 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
 }
 .frame-stage.managed-progress {
   align-items: start;
-  margin-top: 24px;
+  margin-top: var(--situate-space-6);
 }
 @media (min-width: 701px) {
   .progress-content :deep(.setup-steps) {
-    padding-bottom: 12px;
+    padding-bottom: var(--situate-space-3);
   }
 }
 .frame-art {
@@ -365,14 +365,14 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   align-self: start;
   position: sticky;
   top: 24px;
-  margin-top: 16px;
+  margin-top: var(--situate-space-4);
 }
 .setup-panel {
   container: setup-task / inline-size;
   min-width: 0;
   background: var(--situate-surface);
   border: 1px solid var(--situate-line);
-  border-radius: 28px;
+  border-radius: var(--situate-radius-card);
   padding: clamp(24px, 3vw, 40px);
 }
 @media (min-width: 701px) {
@@ -401,20 +401,21 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
 @media (max-width: 850px) {
   .frame-stage {
     grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr);
-    gap: 20px;
+    gap: var(--situate-space-5);
   }
 }
 @media (max-width: 700px) {
   .setup-frame {
-    padding: 16px 16px 28px;
+    padding: var(--situate-space-4) var(--situate-space-4)
+      var(--situate-space-7);
   }
   .frame-stage,
   .frame-stage.with-progress,
   .frame-stage.managed-progress {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
-    margin-top: 16px;
-    gap: 16px;
+    margin-top: var(--situate-space-4);
+    gap: var(--situate-space-4);
   }
   .frame-art {
     position: static;
@@ -424,14 +425,14 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   }
   .frame-identity {
     flex-wrap: wrap;
-    gap: 4px 16px;
+    gap: var(--situate-space-1) var(--situate-space-4);
   }
   .frame-eyebrow {
     display: none;
   }
   .setup-panel {
-    padding: 24px 20px;
-    border-radius: 24px;
+    padding: var(--situate-space-6) var(--situate-space-5);
+    border-radius: var(--situate-radius-dialog);
   }
 }
 @media (max-height: 500px) and (max-width: 700px) {
@@ -469,10 +470,10 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   pointer-events: none;
 }
 .finale-copy p {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 550;
   max-width: min(480px, 85%);
-  margin: 0 auto 12px;
+  margin: 0 auto var(--situate-space-3);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -494,7 +495,7 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
 }
 .finale-compact .finale-copy {
   top: 12px;
@@ -526,7 +527,7 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   height: 100%;
 }
 .setup-frame.focused-chat {
-  padding: 16px;
+  padding: var(--situate-space-4);
   overflow: hidden;
 }
 .focused-chat .frame-header,
@@ -545,7 +546,7 @@ html[data-workspace-accent]:not([data-workspace-accent="violet"]) .setup-frame {
   height: 100%;
   padding: 0;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: var(--situate-radius-panel-large);
 }
 @media (max-width: 700px), (max-height: 500px) {
   .setup-frame.focused-chat {

@@ -12,6 +12,8 @@ For external access, reuse a suitable connection or create one. Put chat tools, 
 
 When changing a view or its text, read `read_plugin_design` resources `visual-direction` and `voice`; use `components` for the shared controls. Build around the user's content and the next useful action. Make hierarchy clear through placement and spacing; use Situate's typography, tokens and controls. Fit the available pane.
 
+When asked to create a theme or change Situate's own appearance, read `read_plugin_design` with `resource: "themes"`. Use the supported variables and return the theme from the plugin's UI entry so it appears under Settings → Appearance → Theme. Leave selection to the user.
+
 Name actions by what they do. Keep text that explains a choice, consequence or recovery step; remove text that repeats what the interface already shows.
 
 ## Check and finish

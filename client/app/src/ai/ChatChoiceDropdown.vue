@@ -120,11 +120,11 @@ watch(
 .choice-trigger {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--situate-space-1);
   min-width: 0;
   max-width: 240px;
   min-height: 44px;
-  padding: 4px 6px;
+  padding: var(--situate-space-1) var(--situate-space-1-5);
   border: 0;
   border-radius: var(--situate-radius-control);
   color: var(--situate-muted);
@@ -157,21 +157,21 @@ watch(
   outline-offset: var(--situate-focus-offset);
 }
 .choice-options {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .choice-options button {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--situate-space-3);
   width: 100%;
   min-height: 44px;
-  padding: 10px 12px;
+  padding: var(--situate-space-2-5) var(--situate-space-3);
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   text-align: start;
   cursor: pointer;
   overflow-wrap: anywhere;
@@ -183,7 +183,7 @@ watch(
 }
 .choice-options small {
   display: block;
-  margin-top: 4px;
+  margin-top: var(--situate-space-1);
   color: var(--situate-muted);
 }
 </style>

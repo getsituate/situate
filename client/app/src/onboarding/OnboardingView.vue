@@ -234,17 +234,17 @@ function input(event: Event) {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 .starting-details,
 .setup-access-panel,
 .setup-message {
   display: grid;
-  gap: 20px;
+  gap: var(--situate-space-5);
   min-width: 0;
 }
 .starting-details {
-  gap: 28px;
+  gap: var(--situate-space-7);
 }
 .method-introduction,
 .conversation-explanation,
@@ -252,31 +252,31 @@ function input(event: Event) {
 .method-preferences,
 .setup-next {
   display: grid;
-  gap: 12px;
+  gap: var(--situate-space-3);
   min-width: 0;
 }
 .method-introduction p {
   max-width: 55ch;
-  font-size: 16px;
+  font-size: var(--situate-text-body);
 }
 .conversation-explanation {
-  padding: 16px 18px;
-  border-radius: 12px;
+  padding: var(--situate-space-4) var(--situate-space-4-5);
+  border-radius: var(--situate-radius-control);
   background: var(--situate-accent-soft, var(--situate-paper));
-  gap: 6px;
+  gap: var(--situate-space-1-5);
 }
 .conversation-explanation h2 {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: var(--situate-text-control);
+  line-height: var(--situate-leading-compact);
 }
 .method-preferences {
-  gap: 16px;
+  gap: var(--situate-space-4);
 }
 .setup-next {
   border-top: 1px solid var(--situate-line);
-  padding-top: 20px;
-  gap: 16px;
+  padding-top: var(--situate-space-5);
+  gap: var(--situate-space-4);
 }
 .starting-details p,
 .starting-details h1,
@@ -290,20 +290,20 @@ h1 {
   margin: 0;
 }
 p {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   line-height: 1.6;
   margin: 0;
 }
 .starting-details label {
   display: grid;
-  gap: 8px;
-  font-size: 14px;
+  gap: var(--situate-space-2);
+  font-size: var(--situate-text-small);
   font-weight: 600;
 }
 .starting-details .fresh-choice {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   font-weight: 400;
 }
 fieldset {
@@ -312,20 +312,20 @@ fieldset {
   margin: 0;
   min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 legend {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: var(--situate-space-2-5);
 }
 .starting-details .intent-choice {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   border: 1px solid var(--situate-line);
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: var(--situate-radius-control);
+  padding: var(--situate-space-3);
   min-height: 48px;
   font-weight: 400;
 }
@@ -335,7 +335,7 @@ legend {
 }
 .hint {
   color: var(--situate-muted);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   line-height: 1.5;
 }
 .with-conversation {
@@ -379,10 +379,10 @@ legend {
   }
 }
 .setup-error {
-  padding: 12px 20px;
+  padding: var(--situate-space-3) var(--situate-space-5);
   flex: none;
 }
 .setup-error p {
-  margin-bottom: 8px;
+  margin-bottom: var(--situate-space-2);
 }
 </style>

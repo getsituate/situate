@@ -66,7 +66,7 @@ defineExpose({ focusTitle: () => heading.value?.focus() });
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 16px;
+  gap: var(--situate-space-4);
   min-height: 80px;
   padding: max(16px, var(--app-safe-area-top, env(safe-area-inset-top, 0px)))
     24px 16px 30px;
@@ -75,7 +75,7 @@ defineExpose({ focusTitle: () => heading.value?.focus() });
 .pane-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   min-width: 0;
 }
 .chat-icon {
@@ -90,7 +90,7 @@ defineExpose({ focusTitle: () => heading.value?.focus() });
   white-space: nowrap;
   font-size: var(--situate-text-small);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: var(--situate-leading-compact);
   letter-spacing: normal;
 }
 .pane-title:focus:where(html:not([data-input-modality="pointer"]) *) {
@@ -105,12 +105,12 @@ defineExpose({ focusTitle: () => heading.value?.focus() });
   z-index: 5;
   width: fit-content;
   max-width: calc(100% - 24px);
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 1px solid var(--situate-control-line);
   border-radius: var(--situate-radius-small);
   background: var(--situate-surface);
   color: var(--situate-ink);
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   overflow-wrap: anywhere;
   pointer-events: none;
 }
@@ -126,14 +126,14 @@ defineExpose({ focusTitle: () => heading.value?.focus() });
   align-items: center;
   flex-shrink: 0;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   line-height: 1.5;
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
 .pane-tools {
   margin-inline-start: auto;
   display: flex;
-  gap: 4px;
+  gap: var(--situate-space-1);
   flex-shrink: 0;
 }
 @container (max-width: 600px) {
@@ -141,10 +141,10 @@ defineExpose({ focusTitle: () => heading.value?.focus() });
     min-height: 60px;
     padding: max(8px, var(--app-safe-area-top, env(safe-area-inset-top, 0px)))
       12px 8px;
-    gap: 4px;
+    gap: var(--situate-space-1);
   }
   .pane-heading {
-    gap: 8px;
+    gap: var(--situate-space-2);
   }
   .chat-icon {
     display: none;

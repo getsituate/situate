@@ -4,6 +4,7 @@ import {
   SituateRadio,
   SituateDialog,
   SituateIcon,
+  SituateInfoButton,
   SituateLoading,
 } from "@situate/ui";
 import {
@@ -23,6 +24,7 @@ import {
   companionAccents,
   type Accent,
 } from "./accents";
+import type { WorkspaceTheme } from "./theme-tokens";
 
 const props = defineProps<{
   accent: Accent;
@@ -34,8 +36,16 @@ const props = defineProps<{
   available: boolean;
   writable: boolean;
   error: MessageKey | "";
+  workspaceThemes?: boolean;
+  themes?: readonly WorkspaceTheme[];
+  selectedTheme?: string;
+  themeBusy?: boolean;
 }>();
-const emit = defineEmits<{ select: [accent: Accent]; retry: [] }>();
+const emit = defineEmits<{
+  select: [accent: Accent];
+  theme: [key: string];
+  retry: [];
+}>();
 const recoveryId = useId();
 const dismissed = ref(false);
 let lastChosenColor: Accent | undefined;
@@ -60,6 +70,19 @@ const saveFailure = computed(
 function select(color: Accent) {
   lastChosenColor = color;
   emit("select", color);
+  if (props.themes?.length) void restoreCheckedChoice();
+}
+async function restoreCheckedChoice() {
+  await nextTick();
+  for (const input of colors.value?.querySelectorAll<HTMLInputElement>(
+    'input[type="radio"]',
+  ) ?? []) {
+    input.checked = input.value === (props.selectedTheme ?? props.accent);
+  }
+}
+function selectTheme(key: string) {
+  emit("theme", key);
+  void restoreCheckedChoice();
 }
 async function dismissRecovery() {
   dismissed.value = true;
@@ -104,6 +127,14 @@ watch(
 onBeforeUnmount(() => {
   mounted = false;
 });
+function previewColor(theme: WorkspaceTheme): string | undefined {
+  return (
+    theme.preview?.color ??
+    theme.variables["--situate-accent"] ??
+    theme.variables["--situate-accent-strong"] ??
+    theme.variables["--situate-ink"]
+  );
+}
 function colorName(color: Accent): string {
   const key: MessageKey = accentLabels[color];
   return t(key);
@@ -165,11 +196,30 @@ function colorName(color: Accent): string {
     ref="colors"
     class="appearance-colors"
     :class="{ compact, swatches }"
-    :aria-describedby="swatches ? undefined : `${id}-accent-help`"
-    :disabled="loading || !writable"
+    :aria-labelledby="workspaceThemes ? `${id}-theme-title` : undefined"
+    :aria-describedby="
+      workspaceThemes || swatches ? undefined : `${id}-accent-help`
+    "
+    :disabled="loading || (!writable && !themes?.length)"
+    :aria-busy="themeBusy || undefined"
   >
-    <legend>{{ t("settings.appearance.accentColor") }}</legend>
-    <p v-if="!swatches" :id="`${id}-accent-help`" class="settings-section-help">
+    <legend v-if="workspaceThemes" class="appearance-theme-legend">
+      <span class="appearance-theme-heading">
+        <span :id="`${id}-theme-title`">{{
+          t("settings.appearance.theme")
+        }}</span>
+        <SituateInfoButton
+          :label="t('settings.appearance.themeInfo')"
+          :text="t('settings.appearance.themeDevice')"
+        />
+      </span>
+    </legend>
+    <legend v-else>{{ t("settings.appearance.accentColor") }}</legend>
+    <p
+      v-if="!workspaceThemes && !swatches"
+      :id="`${id}-accent-help`"
+      class="settings-section-help"
+    >
       <slot name="help">{{
         t("settings.appearance.help", { workspace: workspaceName })
       }}</slot>
@@ -194,7 +244,8 @@ function colorName(color: Accent): string {
           type="radio"
           :name="`${id}-workspace-accent`"
           :value="color"
-          :checked="accent === color"
+          :disabled="!writable && (!selectedTheme || accent !== color)"
+          :checked="!selectedTheme && accent === color"
           :aria-description="
             t('settings.appearance.companion', {
               color: colorName(companionAccents[color]),
@@ -205,7 +256,7 @@ function colorName(color: Accent): string {
         <span class="appearance-option-content">
           <span class="appearance-swatch" aria-hidden="true"></span>
           <SituateIcon
-            v-if="accent === color"
+            v-if="!selectedTheme && accent === color"
             name="check"
             class="appearance-selected"
           />
@@ -214,6 +265,53 @@ function colorName(color: Accent): string {
             <small v-if="color === 'violet'">{{
               t("settings.appearance.default")
             }}</small>
+          </span>
+        </span>
+      </label>
+      <label
+        v-for="(theme, index) in themes"
+        :key="theme.key"
+        :for="`${id}-theme-${index}`"
+        class="appearance-option appearance-plugin-option"
+        :style="{ '--appearance-preview-color': previewColor(theme) }"
+      >
+        <SituateRadio
+          :id="`${id}-theme-${index}`"
+          appearance="plain"
+          type="radio"
+          :name="`${id}-workspace-accent`"
+          :value="theme.key"
+          :checked="selectedTheme === theme.key"
+          @change="selectTheme(theme.key)"
+        />
+        <span class="appearance-option-content">
+          <span class="appearance-theme-swatch" aria-hidden="true">
+            <svg
+              v-if="typeof theme.preview?.icon === 'object'"
+              class="appearance-theme-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path :d="theme.preview.icon.path" />
+            </svg>
+            <SituateIcon
+              v-else
+              :name="theme.preview?.icon ?? 'plugins'"
+              class="appearance-theme-icon"
+            />
+          </span>
+          <SituateIcon
+            v-if="selectedTheme === theme.key"
+            name="check"
+            class="appearance-selected"
+          />
+          <span class="appearance-color-name">
+            <span data-localization-content="user">{{ theme.title }}</span>
+            <small data-localization-content="user">{{ theme.provider }}</small>
           </span>
         </span>
       </label>
@@ -230,20 +328,28 @@ function colorName(color: Accent): string {
 }
 .appearance-colors legend {
   padding: 0;
-  font-size: 16px;
+  font-size: var(--situate-text-body);
   font-weight: 650;
 }
+.appearance-theme-legend {
+  margin-block-end: var(--situate-space-3);
+}
+.appearance-theme-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--situate-space-1);
+}
 .appearance-colors .settings-section-help {
-  margin: 8px 0 24px;
+  margin: var(--situate-space-2) 0 var(--situate-space-6);
   max-width: 48ch;
   color: var(--situate-muted);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   line-height: 1.6;
 }
 .appearance-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 .appearance-option {
   position: relative;
@@ -264,11 +370,11 @@ function colorName(color: Accent): string {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   min-height: 132px;
-  padding: 20px 8px 16px;
+  padding: var(--situate-space-5) var(--situate-space-2) var(--situate-space-4);
   border: 1px solid var(--situate-control-line);
-  border-radius: 16px;
+  border-radius: var(--situate-radius-panel);
   background: var(--situate-surface);
 }
 .appearance-option input:checked + .appearance-option-content {
@@ -300,13 +406,44 @@ function colorName(color: Accent): string {
   );
   border: 1px solid var(--situate-control-line);
 }
+.appearance-plugin-option {
+  --appearance-check-color: var(--situate-ink);
+  --appearance-swatch-color: var(
+    --appearance-preview-color,
+    var(--situate-ink)
+  );
+  --appearance-swatch-surface: color-mix(
+    in srgb,
+    var(--appearance-swatch-color) 12%,
+    var(--situate-surface)
+  );
+}
+.appearance-plugin-option input:checked + .appearance-option-content {
+  background: var(--appearance-swatch-surface);
+  border-color: var(--appearance-swatch-color);
+}
+.appearance-theme-swatch {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: 1px solid var(--appearance-swatch-color);
+  border-radius: 50%;
+  background: var(--appearance-swatch-surface);
+  color: var(--appearance-swatch-color);
+}
+.appearance-theme-icon {
+  width: 24px;
+  height: 24px;
+}
 .appearance-selected {
   position: absolute;
   inset-block-start: 10px;
   inset-inline-end: 10px;
   width: 16px;
   height: 16px;
-  color: var(--situate-accent-strong);
+  color: var(--appearance-check-color, var(--situate-accent-strong));
   pointer-events: none;
 }
 .compact .appearance-selected {
@@ -314,16 +451,16 @@ function colorName(color: Accent): string {
   inset-inline-end: 6px;
 }
 .appearance-color-name {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
   text-align: center;
-  line-height: 1.4;
+  line-height: var(--situate-leading-compact);
   min-height: 38px;
   overflow-wrap: anywhere;
 }
 .appearance-color-name small {
   display: block;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   font-weight: 400;
   color: var(--situate-muted);
 }
@@ -332,12 +469,12 @@ function colorName(color: Accent): string {
 }
 .compact .appearance-options {
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 .compact .appearance-option-content {
   min-height: 104px;
-  padding: 12px 8px;
-  gap: 8px;
+  padding: var(--situate-space-3) var(--situate-space-2);
+  gap: var(--situate-space-2);
 }
 .compact .appearance-option input:checked + .appearance-option-content {
   padding: 11px 7px;
@@ -347,7 +484,7 @@ function colorName(color: Accent): string {
   height: 32px;
 }
 .compact .appearance-color-name {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 @media (max-width: 700px) {
   .compact .appearance-options {
@@ -366,10 +503,11 @@ function colorName(color: Accent): string {
 }
 .swatches .appearance-options {
   display: flex;
-  gap: 4px;
+  gap: var(--situate-space-1);
   overflow-x: auto;
-  padding: 4px;
-  margin: 8px -4px -4px;
+  padding: var(--situate-space-1);
+  margin: var(--situate-space-2) calc(-1 * var(--situate-space-1))
+    calc(-1 * var(--situate-space-1));
 }
 .swatches .appearance-option {
   flex: 0 0 44px;
@@ -378,7 +516,7 @@ function colorName(color: Accent): string {
 .swatches .appearance-option-content,
 .swatches .appearance-option input:checked + .appearance-option-content {
   min-height: 44px;
-  padding: 4px;
+  padding: var(--situate-space-1);
   border-radius: var(--situate-radius-small);
 }
 .swatches .appearance-selected {

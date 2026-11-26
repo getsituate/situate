@@ -63,7 +63,7 @@ body {
 .callback-header {
   position: relative;
   z-index: 2;
-  padding: 32px 48px;
+  padding: var(--situate-space-8) var(--situate-space-12);
 }
 .callback-header img {
   display: block;
@@ -78,7 +78,7 @@ body {
   gap: clamp(24px, 4vw, 64px);
   width: min(1100px, calc(100% - 96px));
   margin: auto;
-  padding-block: 24px 48px;
+  padding-block: var(--situate-space-6) var(--situate-space-12);
 }
 .callback-art {
   position: relative;
@@ -100,9 +100,9 @@ body {
 .callback-status {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   margin: 0 0 23px;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   font-weight: 600;
 }
 .callback-status-icon {
@@ -141,13 +141,13 @@ h1 {
   max-width: 36ch;
   font-size: 17px;
   line-height: 1.65;
-  margin: 0 0 20px;
+  margin: 0 0 var(--situate-space-5);
 }
 .callback-next {
   color: var(--situate-muted);
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   line-height: 1.6;
-  margin: 0 0 18px;
+  margin: 0 0 var(--situate-space-4-5);
 }
 .callback-help {
   max-width: 100%;
@@ -156,16 +156,16 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--situate-space-5);
   min-height: 46px;
-  padding: 0 10px;
+  padding: 0 var(--situate-space-2-5);
   border: 0;
   border-bottom: 1px solid var(--situate-control-line);
   border-radius: 0;
   color: var(--situate-ink);
   background: transparent;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
   cursor: pointer;
 }
@@ -182,12 +182,12 @@ details[open] .callback-help svg {
 }
 .callback-help-body {
   max-width: 37ch;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   line-height: 1.6;
-  padding: 16px 0 0;
+  padding: var(--situate-space-4) 0 0;
 }
 .callback-help-body p {
-  margin: 0 0 10px;
+  margin: 0 0 var(--situate-space-2-5);
 }
 .callback-footer {
   position: relative;
@@ -196,14 +196,14 @@ details[open] .callback-help svg {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 14px;
-  padding: 24px 24px 32px;
+  gap: var(--situate-space-3-5);
+  padding: var(--situate-space-6) var(--situate-space-6) var(--situate-space-8);
   color: var(--situate-muted);
 }
 .callback-footer p {
   background: var(--situate-paper);
   box-shadow: 0 0 0 8px var(--situate-paper);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   line-height: 1.6;
   margin: 0;
 }
@@ -214,7 +214,7 @@ details[open] .callback-help svg {
 }
 @media (max-width: 700px) {
   .callback-header {
-    padding: 24px;
+    padding: var(--situate-space-6);
   }
   .callback-header img {
     width: 112px;
@@ -223,37 +223,37 @@ details[open] .callback-help svg {
     width: min(440px, calc(100% - 48px));
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
-    padding-block: 0 24px;
+    padding-block: 0 var(--situate-space-6);
   }
   .callback-art {
     width: min(100%, 350px);
-    margin: 0 auto 4px;
+    margin: 0 auto var(--situate-space-1);
   }
   .callback-copy {
     max-width: none;
   }
   .callback-status {
-    margin-bottom: 18px;
+    margin-bottom: var(--situate-space-4-5);
   }
   h1 {
     font-size: clamp(40px, 8vw, 52px);
-    margin-bottom: 18px;
+    margin-bottom: var(--situate-space-4-5);
   }
   .callback-body {
-    font-size: 16px;
-    margin-bottom: 16px;
+    font-size: var(--situate-text-body);
+    margin-bottom: var(--situate-space-4);
   }
   .callback-footer {
-    padding-bottom: 24px;
+    padding-bottom: var(--situate-space-6);
     justify-content: flex-start;
   }
 }
 @media (max-height: 600px) and (min-width: 701px) {
   .callback-header {
-    padding-block: 20px;
+    padding-block: var(--situate-space-5);
   }
   .callback-main {
-    padding-block: 8px 24px;
+    padding-block: var(--situate-space-2) var(--situate-space-6);
   }
   .callback-art {
     max-width: 390px;
@@ -268,6 +268,6 @@ details[open] .callback-help svg {
     width: min(62%, 230px);
   }
   .callback-header {
-    padding-block: 18px;
+    padding-block: var(--situate-space-4-5);
   }
 }

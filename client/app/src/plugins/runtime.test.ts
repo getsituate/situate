@@ -164,6 +164,45 @@ afterEach(() => {
   for (const runtime of instances.splice(0)) runtime.dispose();
 });
 
+it("publishes themes under their installation identity and keeps the previous theme if a staged replacement fails", async () => {
+  let variable = "--situate-text-body";
+  mocks.importModule.mockImplementation(async () => ({
+    default: (host: PluginUiHost) =>
+      host.themeApi === 1
+        ? {
+            themes: [
+              {
+                id: "read",
+                title: "Reading",
+                variables: { [variable]: "18px" },
+              },
+            ],
+          }
+        : {},
+  }));
+  const { runtime } = setup();
+  await runtime.ready;
+  expect(runtime.themes).toEqual([
+    {
+      id: "read",
+      provider: "demo",
+      title: "Reading",
+      key: '["demo","inc-demo","read"]',
+      variables: { "--situate-text-body": "18px" },
+    },
+  ]);
+  variable = "--situate-target-min";
+  await expect(runtime.refreshGroup(["demo"])).rejects.toThrow();
+  expect(runtime.themes[0]?.variables).toEqual({
+    "--situate-text-body": "18px",
+  });
+  mocks.recovery = true;
+  expect(runtime.themes).toEqual([]);
+  mocks.recovery = false;
+  runtime.dispose();
+  expect(runtime.themes).toEqual([]);
+});
+
 describe("document source runtime", () => {
   const details = "documentLibraryDetails";
   const readOriginal = "documentLibraryReadOriginal";

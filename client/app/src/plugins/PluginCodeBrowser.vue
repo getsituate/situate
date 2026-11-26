@@ -206,7 +206,9 @@ defineExpose({ showTree });
             v-for="row in rows"
             :key="row.path"
             class="code-entry"
-            :style="{ paddingInlineStart: `${8 + row.depth * 12}px` }"
+            :style="{
+              paddingInlineStart: `calc(var(--situate-space-2) + ${row.depth} * var(--situate-space-3))`,
+            }"
             :aria-expanded="row.folder ? row.expanded : undefined"
             :aria-current="
               !row.folder && row.path === state.selected ? 'true' : undefined
@@ -322,29 +324,29 @@ defineExpose({ showTree });
   border-right: 1px solid var(--situate-line);
 }
 .code-tree-header {
-  padding: 6px 16px;
+  padding: var(--situate-space-1-5) var(--situate-space-4);
   min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
+  gap: var(--situate-space-2);
+  font-size: var(--situate-text-label);
   color: var(--situate-muted);
 }
 .code-filter {
   min-width: 0;
   min-height: 44px;
-  margin: 0 16px 16px;
-  padding: 10px;
+  margin: 0 var(--situate-space-4) var(--situate-space-4);
+  padding: var(--situate-space-2-5);
   border: 1px solid var(--situate-control-line);
   border-radius: var(--situate-radius-small);
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .code-sidebar .code-filter {
-  margin-top: 16px;
-  font-size: 16px;
+  margin-top: var(--situate-space-4);
+  font-size: var(--situate-text-body);
 }
 .code-sidebar .code-layout {
   grid-template-columns: minmax(0, 1fr);
@@ -366,7 +368,7 @@ defineExpose({ showTree });
   overflow: auto;
   flex: 1;
   min-height: 0;
-  padding: 0 10px 24px;
+  padding: 0 var(--situate-space-2-5) var(--situate-space-6);
 }
 .code-entry {
   display: flex;
@@ -374,15 +376,15 @@ defineExpose({ showTree });
   gap: 7px;
   width: 100%;
   min-height: 44px;
-  padding: 8px;
-  margin-block: 2px;
+  padding: var(--situate-space-2);
+  margin-block: var(--situate-space-0-5);
   border: 0;
   border-radius: var(--situate-radius-small);
   background: transparent;
   color: var(--situate-muted);
   text-align: start;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .code-entry svg {
   flex-shrink: 0;
@@ -406,7 +408,7 @@ defineExpose({ showTree });
 }
 .code-chevron {
   width: 10px;
-  font-size: 18px;
+  font-size: var(--situate-text-subheading);
   flex-shrink: 0;
 }
 .code-chevron.expanded {
@@ -422,9 +424,9 @@ defineExpose({ showTree });
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
+  gap: var(--situate-space-2) var(--situate-space-4);
   min-height: 56px;
-  padding: 6px 16px;
+  padding: var(--situate-space-1-5) var(--situate-space-4);
   border-bottom: 1px solid var(--situate-line);
 }
 .code-location {
@@ -433,23 +435,23 @@ defineExpose({ showTree });
 }
 .code-location p {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   color: var(--situate-muted);
 }
 .code-location h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .code-mobile-button {
   min-height: 44px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   background: transparent;
-  padding: 8px 12px;
+  padding: var(--situate-space-2) var(--situate-space-3);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   color: var(--situate-muted);
 }
 .code-mobile-button {
@@ -461,16 +463,17 @@ defineExpose({ showTree });
   flex: 1;
 }
 .plugin-code-browser .code-source {
-  font: 13px/1.7 var(--situate-font-mono);
+  font: var(--situate-text-caption)/var(--situate-leading-reading)
+    var(--situate-font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0;
-  padding: 24px;
+  padding: var(--situate-space-6);
 }
 .code-feedback,
 .code-empty {
-  padding: 24px;
-  font-size: 14px;
+  padding: var(--situate-space-6);
+  font-size: var(--situate-text-small);
   color: var(--situate-muted);
 }
 :is(button, input, [tabindex]):focus:where(

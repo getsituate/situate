@@ -111,10 +111,10 @@ onBeforeUnmount(() => request?.abort());
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 16px;
+  padding: var(--situate-space-4);
   resize: none;
   border: 1px solid var(--situate-control-line);
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   background: var(--situate-surface);
   color: var(--situate-ink);
   font: inherit;
@@ -125,13 +125,13 @@ onBeforeUnmount(() => request?.abort());
 .licenses-dialog :deep(.situate-dialog-actions) {
   margin-top: auto;
   flex-shrink: 0;
-  padding-top: 20px;
+  padding-top: var(--situate-space-5);
 }
 @media (max-width: 600px) {
   .licenses-dialog,
   .licenses-dialog.has-notices[open] {
     width: calc(100% - 24px);
-    padding: 20px;
+    padding: var(--situate-space-5);
   }
 }
 </style>

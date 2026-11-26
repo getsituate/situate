@@ -147,22 +147,22 @@ async function followLink(event: MouseEvent): Promise<void> {
 .message {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--situate-space-3-5);
   min-width: 0;
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: var(--situate-text-body);
+  line-height: var(--situate-leading-reading);
   overflow-wrap: anywhere;
 }
 .message.user {
   align-self: flex-end;
   max-width: 92%;
-  margin-inline-start: 48px;
-  padding: 18px 22px;
+  margin-inline-start: var(--situate-space-12);
+  padding: var(--situate-space-4-5) 22px;
   border-radius: 22px 22px 5px 22px;
   background: var(--situate-accent-soft, var(--situate-lilac));
 }
 .message.user a {
-  color: var(--situate-cobalt);
+  color: var(--situate-link);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -172,15 +172,15 @@ p {
   overflow-wrap: anywhere;
 }
 .retained-question {
-  padding: 16px;
+  padding: var(--situate-space-4);
   border: 1px solid var(--situate-line);
-  border-radius: 14px;
+  border-radius: var(--situate-radius-panel-compact);
 }
 .history-reasoning {
   color: var(--situate-muted);
-  font-size: 13px;
-  line-height: 1.7;
-  margin: 12px 0;
+  font-size: var(--situate-text-caption);
+  line-height: var(--situate-leading-reading);
+  margin: var(--situate-space-3) 0;
   overflow-wrap: anywhere;
 }
 .history-reasoning :deep(strong),
@@ -202,38 +202,38 @@ p {
   min-width: 0;
 }
 .history-reasoning :deep(p) {
-  margin: 0 0 10px;
+  margin: 0 0 var(--situate-space-2-5);
 }
 .history-reasoning :deep(:is(h1, h2, h3, h4, h5, h6)) {
   line-height: inherit;
-  margin: 18px 0 8px;
+  margin: var(--situate-space-4-5) 0 var(--situate-space-2);
 }
 .history-reasoning :deep(:is(ul, ol)) {
-  margin: 8px 0 12px;
+  margin: var(--situate-space-2) 0 var(--situate-space-3);
   padding-inline-start: 22px;
 }
 .history-reasoning :deep(li) {
-  margin-block: 4px;
+  margin-block: var(--situate-space-1);
 }
 .history-reasoning :deep(blockquote) {
-  margin: 12px 0;
-  padding-inline-start: 14px;
+  margin: var(--situate-space-3) 0;
+  padding-inline-start: var(--situate-space-3-5);
   border-inline-start: 2px solid var(--situate-line);
   color: inherit;
 }
 .history-failure {
   color: var(--situate-muted);
-  font-size: 13px;
-  line-height: 1.7;
-  margin: 12px 0;
+  font-size: var(--situate-text-caption);
+  line-height: var(--situate-leading-reading);
+  margin: var(--situate-space-3) 0;
 }
 @container (max-width:540px) {
   .message {
-    font-size: 15px;
+    font-size: var(--situate-text-control);
   }
   .message.user {
     margin-inline-start: 22px;
-    padding: 16px;
+    padding: var(--situate-space-4);
   }
 }
 </style>

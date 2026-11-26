@@ -213,9 +213,9 @@ pub fn definitions(development: Option<&Development>, conversation: &str) -> Vec
         ),
         definition(
             "read_plugin_design",
-            "Read offline Situate design references without workspace effects. Choose overview, visual-direction, voice, components, accessibility or platform-context.",
+            "Read offline Situate design references without workspace effects. Choose overview, visual-direction, voice, components, accessibility, platform-context, or themes for workspace theme registration and supported CSS variables.",
             object(
-                json!({"resource":{"type":"string","enum":["overview","visual-direction","voice","components","accessibility","platform-context"]}}),
+                json!({"resource":{"type":"string","enum":["overview","visual-direction","voice","components","accessibility","platform-context","themes"]}}),
                 &["resource"],
             ),
         ),
@@ -306,6 +306,37 @@ fn decode<T: DeserializeOwned>(value: Value) -> Result<T, String> {
 fn encode(value: impl serde::Serialize) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|_| "native.plugins.hostFailed".into())
 }
+fn theme_design_reference() -> Result<String, String> {
+    let contract: Value = serde_json::from_str(include_str!(
+        "../../src/ai/plugin-design/theme-variables.json"
+    ))
+    .map_err(|_| "native.plugins.hostFailed")?;
+    let brand: std::collections::BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("../../../../design/brand/tokens.json"))
+            .map_err(|_| "native.plugins.hostFailed")?;
+    let mut defaults = serde_json::Map::new();
+    for group in contract["groups"]
+        .as_object()
+        .ok_or("native.plugins.hostFailed")?
+        .values()
+    {
+        for name in group["names"]
+            .as_array()
+            .ok_or("native.plugins.hostFailed")?
+        {
+            let name = name.as_str().ok_or("native.plugins.hostFailed")?;
+            if let Some(value) = brand.values().find_map(|group| group.get(name)) {
+                defaults.insert(name.into(), value.clone());
+            }
+        }
+    }
+    let catalog = json!({"contract":contract,"brandDefaults":defaults});
+    Ok(format!(
+        "{}\n\n```json\n{catalog}\n```",
+        include_str!("../../src/ai/plugin-design/themes.md").trim_end()
+    ))
+}
+
 fn design(args: Value) -> Result<ToolResult, String> {
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -313,6 +344,7 @@ fn design(args: Value) -> Result<ToolResult, String> {
         resource: String,
     }
     let args: Args = decode(args)?;
+    let generated;
     let content = match args.resource.as_str() {
         "overview" => include_str!("../../src/ai/plugin-design/overview.md"),
         "visual-direction" => include_str!("../../src/ai/plugin-design/visual-direction.md"),
@@ -320,6 +352,10 @@ fn design(args: Value) -> Result<ToolResult, String> {
         "components" => include_str!("../../src/ai/plugin-design/components.json"),
         "accessibility" => include_str!("../../src/ai/plugin-design/accessibility.md"),
         "platform-context" => include_str!("../../src/ai/plugin-design/platform-context.md"),
+        "themes" => {
+            generated = theme_design_reference()?;
+            &generated
+        }
         _ => return Err("native.plugins.invalidPath".into()),
     };
     Ok(ToolResult {

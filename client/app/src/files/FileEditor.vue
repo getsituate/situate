@@ -1487,7 +1487,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               type="button"
               :title="t('files.pathLabel', { path: entry.path })"
               :style="{
-                paddingInlineStart: `${8 + (query ? 0 : entry.path.split('/').length - 1) * 12}px`,
+                paddingInlineStart: `calc(var(--situate-space-2) + ${query ? 0 : entry.path.split('/').length - 1} * var(--situate-space-3))`,
               }"
               :aria-current="
                 !entry.isDirectory && selected === entry.path

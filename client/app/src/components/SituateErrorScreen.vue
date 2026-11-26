@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, useId, useTemplateRef } from "vue";
+import { inject, onMounted, useId, useTemplateRef } from "vue";
+import { protectedThemeStyle } from "../settings/theme-context";
 import ErrorActions from "../errors/ErrorActions.vue";
 defineProps<{ message: string; title?: string }>();
 const id = useId();
+const themeStyle = inject(protectedThemeStyle, undefined);
 const heading = useTemplateRef<HTMLHeadingElement>("heading");
 onMounted(() => heading.value?.focus());
 </script>
@@ -10,6 +12,8 @@ onMounted(() => heading.value?.focus());
 <template>
   <div
     class="situate-error-screen"
+    :data-theme-defaults="themeStyle ? '' : undefined"
+    :style="themeStyle"
     :role="title ? 'region' : undefined"
     :aria-labelledby="title ? `${id}-title` : undefined"
   >
@@ -31,7 +35,7 @@ onMounted(() => heading.value?.focus());
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--situate-space-3);
   flex: none;
   min-width: 0;
   min-height: 0;
@@ -52,7 +56,7 @@ onMounted(() => heading.value?.focus());
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 .situate-error-screen p {
   max-width: 40rem;

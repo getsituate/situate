@@ -28,11 +28,11 @@ defineExpose({
 .situate-filter-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   min-width: 44px;
   min-height: 44px;
   max-width: 100%;
-  padding: 6px 12px;
+  padding: var(--situate-space-1-5) var(--situate-space-3);
   border: 1px solid var(--situate-control-line);
   border-radius: var(--situate-radius-pill);
   background: var(--situate-accent-soft, var(--situate-lilac));

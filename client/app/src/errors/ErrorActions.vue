@@ -31,6 +31,6 @@ function open(page: "report" | "repair") {
 .error-actions {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 </style>

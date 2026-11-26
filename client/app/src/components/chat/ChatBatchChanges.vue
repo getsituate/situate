@@ -139,22 +139,22 @@ ul {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--situate-space-3);
   width: 100%;
   min-height: 44px;
-  padding: 10px 14px;
+  padding: var(--situate-space-2-5) var(--situate-space-3-5);
   border: 0;
   background: transparent;
   color: var(--situate-ink);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   text-align: start;
   cursor: pointer;
 }
 .completed-files ul {
   display: grid;
-  gap: 4px;
-  padding: 6px;
+  gap: var(--situate-space-1);
+  padding: var(--situate-space-1-5);
 }
 .completed-files .batch-file {
   border-radius: var(--situate-radius-control);
@@ -171,7 +171,7 @@ ul {
   overflow-wrap: anywhere;
 }
 .batch-more {
-  margin: 4px 14px 12px;
+  margin: var(--situate-space-1) var(--situate-space-3-5) var(--situate-space-3);
 }
 .batch-preview {
   min-width: 0;

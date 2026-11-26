@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: var(--situate-space-0-5);
   color: var(--situate-accent-strong, var(--situate-violet-deep));
   overflow: hidden;
 }
@@ -170,7 +170,7 @@ onBeforeUnmount(() => {
   background: currentColor;
 }
 .transcribing {
-  gap: 4px;
+  gap: var(--situate-space-1);
 }
 .processing-dot {
   width: 5px;

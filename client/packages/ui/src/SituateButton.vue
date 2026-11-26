@@ -93,7 +93,7 @@ defineExpose({
 }
 .situate-button--small {
   min-height: var(--situate-target-min);
-  padding: 10px 20px;
+  padding: var(--situate-space-2-5) var(--situate-space-5);
   font-size: var(--situate-text-caption);
   font-weight: 600;
 }

@@ -4,6 +4,11 @@ import type { Component } from "vue";
 import { validCombination } from "../layout/shortcut-keys";
 import type { PluginShortcutDefinition } from "./layout-actions";
 import type { PluginUiContributions, PluginToolDescriptor } from "./types";
+import {
+  parseThemeVariables,
+  type ThemeDefinition,
+  type ThemePreview,
+} from "../settings/theme-tokens";
 
 function invalid(): never {
   throw new Error("plugins.invalidContributions");
@@ -133,10 +138,38 @@ export function validateToolDescriptors(
 function component(value: unknown): value is Component {
   return object(value) || typeof value === "function";
 }
+function themePreview(value: unknown): ThemePreview | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !object(value) ||
+    Object.keys(value).some((name) => name !== "color" && name !== "icon")
+  )
+    invalid();
+  const preview: ThemePreview = {};
+  if (value.color !== undefined) {
+    if (typeof value.color !== "string" || !value.color.trim()) invalid();
+    preview.color = value.color;
+  }
+  if (value.icon !== undefined) {
+    if (isIconName(value.icon)) preview.icon = value.icon;
+    else {
+      const icon = value.icon;
+      if (
+        !object(icon) ||
+        typeof icon.path !== "string" ||
+        !/^[Mm][\d\s.,+eEaAcChHlLmMqQsStTvVzZ-]+$/.test(icon.path.trim())
+      )
+        invalid();
+      preview.icon = { path: icon.path.trim() };
+    }
+  }
+  return preview;
+}
 function hasPluginUi(value: PluginUiContributions): boolean {
   return !!(
     value.views?.length ||
     value.shortcuts?.length ||
+    value.themes?.length ||
     Object.keys(value.components ?? {}).length
   );
 }
@@ -151,9 +184,14 @@ export function validateUiContributions(
   if (
     Object.keys(value).some(
       (key) =>
-        !["views", "settings", "dispose", "components", "shortcuts"].includes(
-          key,
-        ),
+        ![
+          "views",
+          "settings",
+          "dispose",
+          "components",
+          "shortcuts",
+          "themes",
+        ].includes(key),
     )
   )
     invalid();
@@ -231,7 +269,44 @@ export function validateUiContributions(
         : undefined,
     };
   }
+  const themeIds = new Set<string>();
+  if (
+    value.themes !== undefined &&
+    (!Array.isArray(value.themes) || value.themes.length > 16)
+  )
+    invalid();
+  const themes = Array.from(value.themes ?? [], (theme): ThemeDefinition => {
+    if (
+      !object(theme) ||
+      typeof theme.id !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,64}$/.test(theme.id) ||
+      themeIds.has(theme.id) ||
+      typeof theme.title !== "string" ||
+      !theme.title.trim() ||
+      theme.title.length > 128
+    )
+      invalid();
+    const variables = parseThemeVariables(theme.variables);
+    if (!variables) invalid();
+    const preview = themePreview(theme.preview);
+    const { brandAssets } = theme;
+    if (
+      brandAssets !== undefined &&
+      brandAssets !== "on-light" &&
+      brandAssets !== "on-dark"
+    )
+      invalid();
+    themeIds.add(theme.id);
+    return {
+      id: theme.id,
+      title: theme.title.trim(),
+      variables,
+      ...(preview ? { preview } : {}),
+      ...(brandAssets ? { brandAssets } : {}),
+    };
+  });
   const contributions = {
+    ...(themes.length ? { themes } : {}),
     ...(value.shortcuts === undefined
       ? {}
       : { shortcuts: Array.from(value.shortcuts, validateShortcut) }),

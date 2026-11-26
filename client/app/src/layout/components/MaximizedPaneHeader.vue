@@ -157,7 +157,7 @@ onBeforeUnmount(() => dialog.value?.close());
 .maximized-pane-header {
   flex: 0 0 auto;
   min-width: 0;
-  padding: 4px;
+  padding: var(--situate-space-1);
   background: color-mix(
     in srgb,
     var(--situate-accent-soft, var(--situate-lilac)) 60%,
@@ -168,23 +168,23 @@ onBeforeUnmount(() => dialog.value?.close());
 .maximized-pane-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--situate-space-1);
   min-width: 0;
 }
 .restore-pane,
 .switch-pane {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   min-height: 44px;
   min-width: 44px;
-  padding: 8px;
+  padding: var(--situate-space-2);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   color: var(--situate-ink);
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .switch-pane {
   flex: 1;
@@ -210,8 +210,8 @@ onBeforeUnmount(() => dialog.value?.close());
   width: 44px;
   height: 44px;
   flex-basis: 44px;
-  padding: 12px;
-  border-radius: 8px;
+  padding: var(--situate-space-3);
+  border-radius: var(--situate-radius-small);
 }
 @media (hover: hover) {
   .switch-pane:hover,
@@ -233,17 +233,17 @@ onBeforeUnmount(() => dialog.value?.close());
   margin: 0;
 }
 .maximized-pane-list li + li {
-  margin-top: 8px;
+  margin-top: var(--situate-space-2);
 }
 .maximized-pane-list button {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   width: 100%;
   min-height: 56px;
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 1px solid var(--situate-line);
-  border-radius: 12px;
+  border-radius: var(--situate-radius-control);
   color: var(--situate-ink);
   background: var(--situate-paper);
   font: inherit;
@@ -263,6 +263,6 @@ onBeforeUnmount(() => dialog.value?.close());
   font-variant-numeric: tabular-nums;
 }
 .maximized-pane-list small {
-  font-size: 12px;
+  font-size: var(--situate-text-label);
 }
 </style>

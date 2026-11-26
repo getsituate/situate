@@ -157,7 +157,7 @@ function activate() {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--situate-line);
-  border-radius: 12px;
+  border-radius: var(--situate-radius-control);
   background: var(--situate-surface);
 }
 .pane-tile:not(.compact) {
@@ -187,7 +187,7 @@ function activate() {
   gap: 0;
   flex: 0 0 auto;
   align-items: center;
-  padding: 4px 8px;
+  padding: var(--situate-space-1) var(--situate-space-2);
   border-bottom: 1px solid var(--situate-line);
   border-radius: 11px 11px 0 0;
   background: var(--situate-paper);
@@ -204,8 +204,8 @@ function activate() {
   width: var(--pane-control-size);
   height: var(--pane-control-size);
   flex: 0 0 var(--pane-control-size);
-  padding: 8px;
-  border-radius: 8px;
+  padding: var(--situate-space-2);
+  border-radius: var(--situate-radius-small);
 }
 .pane-grip {
   display: grid;
@@ -217,16 +217,16 @@ function activate() {
 }
 .pane-title {
   display: flex;
-  gap: 8px;
+  gap: var(--situate-space-2);
   align-items: center;
   flex: 1;
   min-width: 0;
   height: var(--pane-control-size);
-  padding: 0 6px;
+  padding: 0 var(--situate-space-1-5);
   border: 0;
   background: transparent;
   text-align: start;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   font-weight: 600;
 }
 .pane-title span {
@@ -257,18 +257,18 @@ function activate() {
   display: grid;
   grid-template-columns: 1fr 1.5fr 1fr;
   grid-template-rows: 1fr 1fr 1fr;
-  gap: 4px;
-  padding: 8px;
+  gap: var(--situate-space-1);
+  padding: var(--situate-space-2);
   background: color-mix(in srgb, var(--situate-surface) 92%, transparent);
 }
 .drop-targets div {
   display: grid;
   place-items: center;
   border: 2px dashed var(--situate-accent-strong, var(--situate-violet-deep));
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   color: var(--situate-accent-strong, var(--situate-violet-deep));
   background: var(--situate-accent-soft, var(--situate-lilac));
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 .drop-left {
   grid-area: 2 / 1;

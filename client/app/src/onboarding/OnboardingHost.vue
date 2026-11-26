@@ -594,10 +594,10 @@ defineExpose({ cancelAndWait, flush: session.flush });
 .setup-access-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 .setup-recovery {
-  padding: 4px 16px;
+  padding: var(--situate-space-1) var(--situate-space-4);
   flex: none;
 }
 .setup-reader {
@@ -607,14 +607,14 @@ defineExpose({ cancelAndWait, flush: session.flush });
 .setup-access :deep(.ai-content) {
   max-width: none;
   margin: 0;
-  gap: 24px;
+  gap: var(--situate-space-6);
 }
 .setup-access :deep(.ai-provider-grid) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   max-height: 360px;
   overflow: auto;
-  padding: 4px;
-  margin: -4px;
+  padding: var(--situate-space-1);
+  margin: calc(-1 * var(--situate-space-1));
 }
 .setup-model {
   display: grid;
@@ -629,7 +629,7 @@ defineExpose({ cancelAndWait, flush: session.flush });
 }
 .setup-check-status {
   min-height: 3.2em;
-  padding: 12px 16px;
+  padding: var(--situate-space-3) var(--situate-space-4);
   border-radius: var(--situate-radius-control);
   background: var(--situate-accent-soft, var(--situate-lilac));
   display: grid;

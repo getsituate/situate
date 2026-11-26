@@ -16,27 +16,27 @@
 }
 .settings-categories {
   overflow-y: auto;
-  padding: 32px 16px;
+  padding: var(--situate-space-8) var(--situate-space-4);
   border-right: 1px solid var(--situate-line);
 }
 .settings-categories h1 {
-  margin: 0 12px 28px;
-  font-size: 24px;
+  margin: 0 var(--situate-space-3) var(--situate-space-7);
+  font-size: var(--situate-text-heading);
   letter-spacing: -0.035em;
 }
 .settings-categories button {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: 10px;
-  padding: 14px 12px;
-  margin-bottom: 4px;
+  border-radius: var(--situate-radius-inset);
+  padding: var(--situate-space-3-5) var(--situate-space-3);
+  margin-bottom: var(--situate-space-1);
   min-height: 48px;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 .settings-categories button[aria-current="page"] {
   background: var(--situate-accent-soft, var(--situate-lilac));
@@ -44,7 +44,7 @@
   font-weight: 650;
 }
 .category-symbol {
-  font-size: 18px;
+  font-size: var(--situate-text-subheading);
   width: 24px;
   flex-shrink: 0;
   text-align: center;
@@ -69,34 +69,34 @@
   font-size: 30px;
   letter-spacing: -0.04em;
   line-height: 1.15;
-  margin: 0 0 12px;
+  margin: 0 0 var(--situate-space-3);
 }
 .settings-page-heading.shortcut-heading {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 20px;
+  gap: var(--situate-space-1);
+  margin-bottom: var(--situate-space-5);
 }
 .shortcut-heading h2 {
   margin-bottom: 0;
 }
 .settings-view h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--situate-text-body);
   font-weight: 650;
 }
 .settings-group {
   margin-bottom: 36px;
 }
 .privacy-analytics h3 {
-  margin-bottom: 16px;
+  margin-bottom: var(--situate-space-4);
 }
 .setting-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 20px 0;
+  gap: var(--situate-space-6);
+  padding: var(--situate-space-5) 0;
   border-bottom: 1px solid var(--situate-line);
 }
 .setting-row > div:first-child {
@@ -104,14 +104,14 @@
   flex: 1;
 }
 .setting-row label {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
 }
 .setting-row p {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   color: var(--situate-muted);
   line-height: 1.5;
-  margin: 6px 0 0;
+  margin: var(--situate-space-1-5) 0 0;
   max-width: 36ch;
 }
 .setting-row > .situate-select {
@@ -132,11 +132,11 @@
 .settings-error button.situate-button {
   font-weight: inherit;
   min-height: 44px;
-  padding: 8px 14px;
+  padding: var(--situate-space-2) var(--situate-space-3-5);
   border: 1px solid var(--situate-control-line);
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   background: var(--situate-surface);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .settings-view
   :is(button, select):focus:where(html:not([data-input-modality="pointer"]) *) {
@@ -160,16 +160,16 @@
   .settings-categories {
     height: 100%;
     border: 0;
-    padding: 24px 16px;
+    padding: var(--situate-space-6) var(--situate-space-4);
   }
   .settings-categories button {
-    gap: 16px;
+    gap: var(--situate-space-4);
     min-height: 60px;
   }
   .category-arrow {
     display: block;
     margin-left: auto;
-    font-size: 24px;
+    font-size: var(--situate-text-heading);
   }
   .settings-content {
     display: none;
@@ -182,35 +182,35 @@
     display: block;
   }
   .settings-content-inner {
-    padding: 12px 24px 40px;
+    padding: var(--situate-space-3) var(--situate-space-6) 40px;
   }
   .settings-back {
     display: block;
     border: 0;
     background: transparent;
-    padding: 12px 0;
-    margin-bottom: 16px;
+    padding: var(--situate-space-3) 0;
+    margin-bottom: var(--situate-space-4);
     min-height: 44px;
     color: var(--situate-accent-strong, var(--situate-violet-deep));
-    font-size: 14px;
+    font-size: var(--situate-text-small);
   }
   .settings-page-heading h2 {
     font-size: 27px;
   }
   .settings-page-heading {
-    margin-bottom: 28px;
+    margin-bottom: var(--situate-space-7);
   }
 }
 @container settings (max-width: 480px) {
   .setting-row {
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--situate-space-3);
   }
   .setting-row > .situate-select {
     width: 100%;
     max-width: 100%;
   }
   .settings-content-inner {
-    padding-inline: 20px;
+    padding-inline: var(--situate-space-5);
   }
 }

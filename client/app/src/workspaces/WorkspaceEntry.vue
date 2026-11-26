@@ -747,8 +747,9 @@ defineExpose({ back });
 .setup-create :deep(.entry-layout) {
   display: block;
   overflow: auto;
-  padding: 6px;
-  margin: -6px -6px 0;
+  padding: var(--situate-space-1-5);
+  margin: calc(-1 * var(--situate-space-1-5))
+    calc(-1 * var(--situate-space-1-5)) 0;
 }
 .setup-create :deep(.creation) {
   padding: 0;
@@ -757,25 +758,25 @@ defineExpose({ back });
 .setup-create :deep(.creation h1) {
   font-size: clamp(28px, 3vw, 40px);
   line-height: 1.12;
-  margin: 8px 0;
+  margin: var(--situate-space-2) 0;
 }
 .setup-create :deep(.entry-eyebrow) {
   color: var(--situate-muted);
 }
 .setup-create :deep(.appearance-colors) {
-  margin: 0 0 8px;
+  margin: 0 0 var(--situate-space-2);
 }
 .setup-create :deep(.directory-field) {
   margin-bottom: 0;
 }
 .setup-create :deep(.entry-help) {
-  margin-bottom: 12px;
+  margin-bottom: var(--situate-space-3);
 }
 .setup-create :deep(.appearance-option) {
   margin: 0;
 }
 .setup-create :deep(.form-actions) {
-  padding: 12px 0 0;
+  padding: var(--situate-space-3) 0 0;
   margin-top: 0;
 }
 .setup-create :deep(.form-actions .entry-primary) {
@@ -807,16 +808,16 @@ defineExpose({ back });
 }
 @container (max-height: 500px) {
   .setup-entry-host > .setup-entry-destination {
-    padding-block: 12px;
+    padding-block: var(--situate-space-3);
   }
   .setup-entry-destination :deep(.frame-stage) {
-    margin-top: 12px;
+    margin-top: var(--situate-space-3);
   }
   .setup-entry-destination :deep(.setup-panel) {
-    padding: 12px;
+    padding: var(--situate-space-3);
   }
   .setup-entry-destination :deep(.setup-steps) {
-    margin-top: 12px;
+    margin-top: var(--situate-space-3);
     padding-bottom: 0;
   }
 }

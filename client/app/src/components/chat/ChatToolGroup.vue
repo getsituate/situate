@@ -97,20 +97,20 @@ const state = computed(() =>
 </template>
 <style scoped>
 .history-tools {
-  margin: 4px 0;
+  margin: var(--situate-space-1) 0;
   min-width: 0;
   color: var(--situate-muted);
 }
 .history-tools > :deep(summary) {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   min-height: 44px;
   list-style: none;
-  border-radius: 6px;
-  padding: 4px 6px;
+  border-radius: var(--situate-radius-tight);
+  padding: var(--situate-space-1) var(--situate-space-1-5);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   overflow-wrap: anywhere;
 }
 .history-tools > :deep(summary::-webkit-details-marker) {
@@ -121,9 +121,9 @@ const state = computed(() =>
 }
 .history-chevron {
   display: inline-block;
-  font-size: 18px;
+  font-size: var(--situate-text-subheading);
   line-height: 1;
-  margin-inline-start: 2px;
+  margin-inline-start: var(--situate-space-0-5);
 }
 @media (prefers-reduced-motion: no-preference) {
   .history-chevron {
@@ -141,12 +141,12 @@ const state = computed(() =>
 }
 .history-calls {
   margin-inline-start: 22px;
-  padding-inline-start: 12px;
+  padding-inline-start: var(--situate-space-3);
   border-inline-start: 1px solid var(--situate-line);
 }
 .group-state {
   margin-inline-start: auto;
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
 }
 @media (hover: hover) {
   .history-tools > :deep(summary:hover) {
@@ -156,6 +156,6 @@ const state = computed(() =>
 .history-tools > :deep(summary):focus-visible {
   outline: var(--situate-stroke-focus) solid var(--situate-cobalt);
   outline-offset: var(--situate-focus-offset);
-  border-radius: 6px;
+  border-radius: var(--situate-radius-tight);
 }
 </style>

@@ -106,12 +106,12 @@ const activation = (i: number) =>
 .setup-steps {
   container: setup-progress / inline-size;
   max-width: 1280px;
-  margin: 28px auto 0;
+  margin: var(--situate-space-7) auto 0;
 }
 ol {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--situate-space-6);
   list-style: none;
   padding: 0;
   margin: 0;
@@ -119,9 +119,9 @@ ol {
 li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  line-height: 1.4;
+  gap: var(--situate-space-2-5);
+  font-size: var(--situate-text-caption);
+  line-height: var(--situate-leading-compact);
   color: var(--situate-muted);
 }
 .step-label {
@@ -205,11 +205,11 @@ li {
   ol {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 16px;
+    gap: var(--situate-space-4);
   }
   li {
     flex-direction: column;
-    gap: 8px;
+    gap: var(--situate-space-2);
   }
   .step-label {
     white-space: normal;
@@ -219,10 +219,10 @@ li {
 }
 @container setup-progress (max-width: 500px) {
   ol {
-    gap: 8px;
+    gap: var(--situate-space-2);
   }
   li {
-    font-size: 11px;
+    font-size: var(--situate-text-fine);
   }
   .step-label {
     position: absolute;
@@ -241,7 +241,7 @@ li {
 }
 @media (max-width: 500px) {
   .setup-steps {
-    margin-top: 18px;
+    margin-top: var(--situate-space-4-5);
   }
 }
 </style>

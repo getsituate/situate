@@ -140,18 +140,18 @@ defineExpose({
 
 <style>
 .situate-menu {
-  padding: 4px;
+  padding: var(--situate-space-1);
 }
 .situate-menu [role^="menuitem"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--situate-space-3);
   width: 100%;
   min-height: 44px;
-  padding: 10px 12px;
+  padding: var(--situate-space-2-5) var(--situate-space-3);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -179,7 +179,7 @@ defineExpose({
 }
 .situate-menu [role="separator"] {
   height: 1px;
-  margin: 4px 8px;
+  margin: var(--situate-space-1) var(--situate-space-2);
   background: var(--situate-line);
 }
 @media (hover: hover) {

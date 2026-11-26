@@ -372,17 +372,17 @@ async function clear() {
   pointer-events: none;
 }
 .shortcut-search :deep(input) {
-  padding-block: 8px;
+  padding-block: var(--situate-space-2);
   padding-inline-start: 38px;
   background: var(--situate-paper);
   font-size: var(--situate-text-small);
 }
 .shortcut-group {
-  margin-top: 24px;
+  margin-top: var(--situate-space-6);
 }
 .shortcut-group ul {
   list-style: none;
-  margin: 6px 0 0;
+  margin: var(--situate-space-1-5) 0 0;
   padding: 0;
 }
 .shortcut-group li + li {
@@ -398,8 +398,8 @@ async function clear() {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 16px;
-  padding: 8px;
+  gap: var(--situate-space-1-5) var(--situate-space-4);
+  padding: var(--situate-space-2);
   text-align: start;
   font: inherit;
   font-size: var(--situate-text-small);
@@ -420,13 +420,13 @@ async function clear() {
 }
 .shortcut-binding {
   display: flex;
-  gap: 4px;
+  gap: var(--situate-space-1);
   flex-wrap: wrap;
   align-items: center;
   margin-inline-start: auto;
 }
 .shortcut-binding small {
-  margin-inline-end: 8px;
+  margin-inline-end: var(--situate-space-2);
 }
 .shortcut-name small,
 .shortcut-binding small {
@@ -445,13 +445,13 @@ async function clear() {
 }
 label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: var(--situate-space-2);
 }
 .shortcut-draft-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--situate-space-1);
   flex-wrap: wrap;
-  margin: 6px 0 12px;
+  margin: var(--situate-space-1-5) 0 var(--situate-space-3);
 }
 .shortcut-draft-actions button {
   text-decoration: underline;
