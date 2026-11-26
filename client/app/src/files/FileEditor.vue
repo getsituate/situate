@@ -110,17 +110,14 @@ const filterControl =
   useTemplateRef<InstanceType<typeof SituateInput>>("filterControl");
 const viewedFile = shallowRef<FileSession>();
 const selectedPath = ref("");
-const selected = computed(() =>
-  props.target === undefined
-    ? session.value.selected
-    : (viewedFile.value?.path ?? selectedPath.value),
-);
-const file = computed(() => {
+const selected = computed(() => {
+  if (props.target === undefined) return session.value.selected;
   const retained = viewedFile.value;
-  const candidate =
-    retained && session.value.files[retained.path] === retained
-      ? retained
-      : session.value.files[selected.value];
+  if (!retained) return selectedPath.value;
+  return session.value.files[retained.path] === retained ? retained.path : "";
+});
+const file = computed(() => {
+  const candidate = session.value.files[selected.value];
   const reference = !props.target?.revision
     ? viewState.value.reference
     : undefined;

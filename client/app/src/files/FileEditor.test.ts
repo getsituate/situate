@@ -905,7 +905,7 @@ describe("file panes", () => {
     );
     expect(file.base?.text).toBe("# Submitted");
   });
-  it("updates both loaded identities after a rename and retains text after delete", async () => {
+  it("updates both loaded identities after a rename", async () => {
     const { wrapper, session } = await setup();
     wrapper.unmount();
     const first = await pane(session.id, "Notes/Garden.md");
@@ -929,19 +929,31 @@ describe("file panes", () => {
     expect(session.files["Notes/Plants.md"]?.text).toBe(
       "# Saved before moving",
     );
+  });
+  it("closes an intentionally deleted file in both panes without offering draft recovery", async () => {
+    const { wrapper, session } = await setup();
+    wrapper.unmount();
+    const first = await pane(session.id, "Notes/Garden.md");
+    const second = await pane(session.id, "Notes/Garden.md");
     await choose(first, "⟦files.fileActions⟧", "⟦files.deleteDetail⟧");
-    await first.get("form").trigger("submit");
+    const confirmation = first.get("form");
+    confirmation
+      .get<HTMLButtonElement>('button[type="submit"]')
+      .element.focus();
+    await confirmation.trigger("submit");
     await flushPromises();
-    expect(first.emitted("identity")?.at(-1)).toEqual([
-      { workspaceId: session.id, kind: "delete", path: "Notes/Plants.md" },
+
+    expect(first.emitted("identity")).toEqual([
+      [{ workspaceId: session.id, kind: "delete", path: "Notes/Garden.md" }],
     ]);
-    expect(session.files["Notes/Plants.md"]?.text).toBe(
-      "# Saved before moving",
-    );
-    expect(session.files["Notes/Plants.md"]?.outcome?.status).toBe("deleted");
-    expect(second.text()).toContain(
-      "⟦files.theFileWasDeletedYourTextIsRetained⟧",
-    );
+    for (const editor of [first, second]) {
+      expect(editor.find("dialog[open]").exists()).toBe(false);
+      expect(editor.find('[role="alert"]').exists()).toBe(false);
+      expect(editor.get(".empty-document").text()).toContain(
+        "⟦files.chooseATextFileToReadOrEdit⟧",
+      );
+      expect(editor.text()).not.toContain("Garden.md");
+    }
   });
   it("emits live and exact historical references without creating chats", async () => {
     const { wrapper, session } = await setup();
