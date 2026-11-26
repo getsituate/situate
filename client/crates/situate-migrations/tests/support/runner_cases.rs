@@ -122,12 +122,12 @@ fn assert_final(root: &Path) {
 fn skipped_steps_are_ordered_and_failure_restores_the_whole_starting_state() {
     let root = root();
     fail("step-applied", 2);
-    let error = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap_err();
+    let error = runner::prepare_with(root.path(), CHAIN).unwrap_err();
     assert_eq!(error.kind(), MigrationErrorKind::MigrationFailed);
     assert_original(root.path());
-    let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap();
+    let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert_final(root.path());
-    assert!(runner::prepare_with(root.path(), "0.1.3", CHAIN).is_ok());
+    assert!(runner::prepare_with(root.path(), CHAIN).is_ok());
     drop(lease);
 }
 #[test]
@@ -146,9 +146,7 @@ fn plugin_manifest_upgrade_rolls_back_and_reopens_after_a_failed_write() {
     fs::write(&draft, original).unwrap();
     fail("replace-rename", 2);
     assert_eq!(
-        crate::prepare(temp.path(), env!("CARGO_PKG_VERSION"))
-            .unwrap_err()
-            .kind(),
+        crate::prepare(temp.path()).unwrap_err().kind(),
         MigrationErrorKind::MigrationFailed
     );
     assert_eq!(fs::read(&source).unwrap(), original);
@@ -165,7 +163,7 @@ fn plugin_manifest_upgrade_rolls_back_and_reopens_after_a_failed_write() {
     assert_ne!(fs::read(&source).unwrap(), original);
     assert_eq!(fs::read(managed.join("migrations.json")).unwrap(), metadata);
     for _ in 0..2 {
-        let lease = crate::prepare(temp.path(), env!("CARGO_PKG_VERSION")).unwrap();
+        let lease = crate::prepare(temp.path()).unwrap();
         for path in [&source, &draft] {
             let value: serde_json::Value =
                 serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
@@ -179,22 +177,24 @@ fn plugin_manifest_upgrade_rolls_back_and_reopens_after_a_failed_write() {
 }
 
 #[test]
-fn reopening_a_migrated_workspace_requires_the_first_supported_release() {
-    let temp = root();
-    let mut chain = registry::MIGRATIONS.to_vec();
-    chain[2].release_assigned_minimum = false;
-    chain[2].minimum_app_version = Some("2026.12.3");
-    drop(runner::prepare_with(temp.path(), "2026.12.8", &chain).unwrap());
-    let managed = temp.path().join(".situate");
-    let migrated = fs::read(managed.join("migrations.json")).unwrap();
-    let value: serde_json::Value = serde_json::from_slice(&migrated).unwrap();
-    assert_eq!(value["minimumAppVersion"], "2026.12.3");
-    let error =
-        runner::prepare_with(temp.path(), "2026.11.14", &registry::MIGRATIONS[..2]).unwrap_err();
-    assert_eq!(error.kind(), MigrationErrorKind::UpdateRequired);
-    assert_eq!(error.required_app_version(), Some("2026.12.3"));
-    drop(runner::prepare_with(temp.path(), "2026.12.3", &chain).unwrap());
-    assert_eq!(fs::read(managed.join("migrations.json")).unwrap(), migrated);
+fn a_reader_without_the_required_epoch_refuses_legacy_and_explicit_metadata() {
+    for bytes in [
+        br#"{"minimumAppVersion":"2026.11.27","lastAppliedMigration":3}"#.as_slice(),
+        br#"{"minimumAppVersion":"2026.11.27","lastAppliedMigration":3,"minimumReaderEpoch":3}"#,
+    ] {
+        let temp = root();
+        let managed = temp.path().join(".situate");
+        let path = managed.join("migrations.json");
+        fs::write(&path, bytes).unwrap();
+        let error = runner::prepare_with(temp.path(), &registry::MIGRATIONS[..2]).unwrap_err();
+        assert!(matches!(
+            error.kind(),
+            MigrationErrorKind::UpdateRequired | MigrationErrorKind::ReaderUpdateRequired
+        ));
+        assert!(!managed.join(".migrations").exists());
+        drop(crate::prepare(temp.path()).unwrap());
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
 }
 
 #[test]
@@ -218,31 +218,28 @@ fn registry_rejects_duplicate_missing_reordered_and_invalid_version_entries() {
     assert!(registry::validate(CHAIN).is_ok());
 }
 #[test]
-fn only_declared_minimum_increases_are_published_with_the_completed_chain() {
+fn compatible_steps_preserve_the_reader_requirement_for_an_older_reader() {
     let root = root();
     let mut chain = CHAIN.to_vec();
     chain[1].minimum_app_version = Some("0.3.0");
-    chain[2].minimum_app_version = Some("0.2.0");
-    let lease = runner::prepare_with(root.path(), "0.3.0", &chain).unwrap();
+    drop(runner::prepare_with(root.path(), &chain).unwrap());
     let path = root.path().join(".situate/migrations.json");
     let bytes = fs::read(&path).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(value["minimumAppVersion"], "0.3.0");
+    assert_eq!(value["minimumReaderEpoch"], 2);
     assert_eq!(value["lastAppliedMigration"], 3);
-    assert_eq!(
-        crate::prepare(root.path(), "0.2.0").unwrap_err().kind(),
-        MigrationErrorKind::UpdateRequired
-    );
-    assert_eq!(fs::read(&path).unwrap(), bytes);
-    drop(lease);
+    assert!(runner::prepare_with(root.path(), &chain[..2]).is_ok());
+    assert_eq!(fs::read(path).unwrap(), bytes);
 }
+
 #[test]
 fn rolled_back_incompatible_conversion_does_not_report_update_required_parameters() {
     let root = root();
     let mut chain = CHAIN.to_vec();
     chain[1].minimum_app_version = Some("0.2.0");
     fail("step-applied", 1);
-    let error = runner::prepare_with(root.path(), "0.2.0", &chain).unwrap_err();
+    let error = runner::prepare_with(root.path(), &chain).unwrap_err();
     assert_eq!(error.kind(), MigrationErrorKind::MigrationFailed);
     assert_eq!(error.required_app_version(), None);
     assert_original(root.path());
@@ -264,7 +261,7 @@ fn filesystem_cause_survives_migration_failure_classification() {
     }
     let root = root();
     let chain = [CHAIN[0], MigrationDescriptor::of::<Fails>()];
-    let error = runner::prepare_with(root.path(), "0.1.6", &chain).unwrap_err();
+    let error = runner::prepare_with(root.path(), &chain).unwrap_err();
     assert_eq!(error.kind(), MigrationErrorKind::MigrationFailed);
     assert_eq!(
         error
@@ -282,7 +279,7 @@ fn filesystem_cause_survives_migration_failure_classification() {
 fn incomplete_copy_is_never_used_as_recovery_source() {
     let root = root();
     fail("copy-entry", 1);
-    assert!(runner::prepare_with(root.path(), "0.1.3", CHAIN).is_err());
+    assert!(runner::prepare_with(root.path(), CHAIN).is_err());
     assert_original(root.path());
     assert!(
         root.path()
@@ -290,7 +287,7 @@ fn incomplete_copy_is_never_used_as_recovery_source() {
             .join(backup::TEMPORARY)
             .is_file()
     );
-    let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap();
+    let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert_final(root.path());
     drop(lease);
 }
@@ -303,9 +300,7 @@ fn restoration_failure_preserves_the_complete_backup_and_next_open_recovers() {
     fs::write(root.path().join(".situate/counter"), "changed").unwrap();
     fail("restore-empty", 1);
     assert_eq!(
-        runner::prepare_with(root.path(), "0.1.3", CHAIN)
-            .unwrap_err()
-            .kind(),
+        runner::prepare_with(root.path(), CHAIN).unwrap_err().kind(),
         MigrationErrorKind::RestorationFailed
     );
     assert!(
@@ -315,7 +310,7 @@ fn restoration_failure_preserves_the_complete_backup_and_next_open_recovers() {
             .is_file()
     );
     assert_eq!(archived(root.path(), "payload/counter"), b"0");
-    let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap();
+    let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert_final(root.path());
     drop(lease);
 }
@@ -323,7 +318,7 @@ fn restoration_failure_preserves_the_complete_backup_and_next_open_recovers() {
 fn cleanup_failure_does_not_restore_a_retired_backup() {
     let root = root();
     fail("cleanup-start", 1);
-    let error = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap_err();
+    let error = runner::prepare_with(root.path(), CHAIN).unwrap_err();
     assert_eq!(error.kind(), MigrationErrorKind::CleanupFailed);
     assert_eq!(
         std::error::Error::source(&error)
@@ -337,24 +332,22 @@ fn cleanup_failure_does_not_restore_a_retired_backup() {
         fs::read(root.path().join(".situate/counter")).unwrap(),
         b"1"
     );
-    let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap();
+    let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert_final(root.path());
     drop(lease);
 }
 #[test]
 fn shared_session_blocks_pending_conversion_but_not_current_openers() {
     let root = root();
-    let first = runner::prepare_with(root.path(), "0.1.3", &CHAIN[..1]).unwrap();
-    assert!(runner::prepare_with(root.path(), "0.1.3", &CHAIN[..1]).is_ok());
+    let first = runner::prepare_with(root.path(), &CHAIN[..1]).unwrap();
+    assert!(runner::prepare_with(root.path(), &CHAIN[..1]).is_ok());
     assert_eq!(
-        runner::prepare_with(root.path(), "0.1.3", CHAIN)
-            .unwrap_err()
-            .kind(),
+        runner::prepare_with(root.path(), CHAIN).unwrap_err().kind(),
         MigrationErrorKind::Busy
     );
     assert_original(root.path());
     drop(first);
-    let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap();
+    let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
     assert_final(root.path());
     drop(lease);
 }
@@ -362,12 +355,12 @@ fn shared_session_blocks_pending_conversion_but_not_current_openers() {
 fn fresh_private_marker_initializes_latest_without_legacy_conversion() {
     let root = tempfile::tempdir().unwrap();
     let managed = Dir::open_ambient_dir(root.path(), ambient_authority()).unwrap();
-    runner::initialize_fresh(&managed, "0.1.6").unwrap();
+    runner::initialize_fresh(&managed).unwrap();
     assert_eq!(
         metadata::load(&managed).unwrap().unwrap()["lastAppliedMigration"],
         3
     );
-    assert!(runner::initialize_fresh(&managed, "0.1.6").is_err());
+    assert!(runner::initialize_fresh(&managed).is_err());
 }
 #[test]
 fn restricted_migration_access_rejects_escapes_and_runner_owned_paths() {
@@ -427,13 +420,10 @@ fn write_flush_rename_and_delete_failures_remain_recoverable() {
     ] {
         let root = root();
         fail(point, count);
-        assert!(
-            runner::prepare_with(root.path(), "0.1.3", CHAIN).is_err(),
-            "{point}"
-        );
+        assert!(runner::prepare_with(root.path(), CHAIN).is_err(), "{point}");
         FAILURE.with_borrow_mut(|f| *f = None);
-        let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN)
-            .unwrap_or_else(|e| panic!("{point}: {e}"));
+        let lease =
+            runner::prepare_with(root.path(), CHAIN).unwrap_or_else(|e| panic!("{point}: {e}"));
         assert_final(root.path());
         drop(lease);
     }
@@ -611,7 +601,7 @@ fn corrupt_or_truncated_archives_do_not_replace_live_state() {
             }
         }
         fs::write(&path, bytes).unwrap();
-        assert!(runner::prepare_with(root.path(), "0.1.6", CHAIN).is_err());
+        assert!(runner::prepare_with(root.path(), CHAIN).is_err());
         assert_original(root.path());
         assert!(path.is_file());
     }
@@ -681,7 +671,7 @@ fn archive_compatibility_is_checked_before_restoring_older_live_metadata() {
     let control = filesystem::ensure_child(&managed, filesystem::CONTROL).unwrap();
     backup::create(&managed, &control).unwrap();
     fs::write(&metadata_path, &compatible).unwrap();
-    let error = runner::prepare_with(root.path(), "0.1.6", CHAIN).unwrap_err();
+    let error = runner::prepare_with(root.path(), CHAIN).unwrap_err();
     assert_eq!(error.kind(), MigrationErrorKind::UpdateRequired);
     assert_eq!(error.required_app_version(), Some("9999.0.0"));
     assert_original(root.path());
@@ -735,17 +725,17 @@ fn archive_and_restoration_are_private_and_preserve_normal_file_modes() {
     fs::set_permissions(nested, fs::Permissions::from_mode(0o700)).unwrap();
 }
 #[test]
-fn position_zero_metadata_preserves_its_minimum_and_opaque_fields() {
+fn position_zero_metadata_preserves_opaque_fields() {
     let root = root();
     let path = root.path().join(".situate/migrations.json");
     fs::write(
         &path,
-        r#"{"minimumAppVersion":"0.1.2","lastAppliedMigration":0,"future":{"retain":true}}"#,
+        r#"{"minimumAppVersion":"0.0.0","lastAppliedMigration":0,"future":{"retain":true}}"#,
     )
     .unwrap();
-    let _lease = runner::prepare_with(root.path(), "0.1.3", &CHAIN[..1]).unwrap();
+    let _lease = runner::prepare_with(root.path(), &CHAIN[..1]).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    assert_eq!(value["minimumAppVersion"], "0.1.2");
+    assert_eq!(value["minimumReaderEpoch"], 0);
     assert_eq!(value["lastAppliedMigration"], 1);
     assert_eq!(value["future"]["retain"], true);
 }
@@ -755,9 +745,9 @@ fn crash_child() {
         return;
     };
     let _lease = if std::env::var_os("SITUATE_MIGRATION_TEST_USE_REGISTRY").is_some() {
-        crate::prepare(Path::new(&root), env!("CARGO_PKG_VERSION")).unwrap()
+        crate::prepare(Path::new(&root)).unwrap()
     } else {
-        runner::prepare_with(Path::new(&root), "0.1.3", CHAIN).unwrap()
+        runner::prepare_with(Path::new(&root), CHAIN).unwrap()
     };
 }
 #[test]
@@ -788,8 +778,8 @@ fn process_exit_at_each_publication_boundary_recovers_without_duplicate_conversi
             .status()
             .unwrap();
         assert_eq!(status.code(), Some(73), "checkpoint {point}");
-        let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN)
-            .unwrap_or_else(|e| panic!("{point}: {e}"));
+        let lease =
+            runner::prepare_with(root.path(), CHAIN).unwrap_or_else(|e| panic!("{point}: {e}"));
         assert_final(root.path());
         drop(lease);
     }
@@ -815,7 +805,7 @@ fn process_exit_during_restoration_retries_from_immutable_source() {
             .status()
             .unwrap();
         assert_eq!(status.code(), Some(73));
-        let lease = runner::prepare_with(root.path(), "0.1.3", CHAIN).unwrap();
+        let lease = runner::prepare_with(root.path(), CHAIN).unwrap();
         assert_final(root.path());
         drop(lease);
     }

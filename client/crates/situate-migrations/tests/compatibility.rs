@@ -9,23 +9,35 @@ fn workspace(metadata: Option<&str>) -> tempfile::TempDir {
     root
 }
 #[test]
-fn refuses_update_before_any_write() {
+fn refuses_unknown_legacy_floor_before_any_write() {
     let root = workspace(Some(
-        r#"{"minimumAppVersion":"0.1.10","lastAppliedMigration":1}"#,
+        r#"{"minimumAppVersion":"2026.11.28","lastAppliedMigration":3}"#,
     ));
-    let error = prepare(root.path(), "0.1.9").unwrap_err();
+    let error = prepare(root.path()).unwrap_err();
     assert_eq!(error.kind(), MigrationErrorKind::UpdateRequired);
-    assert_eq!(error.required_app_version(), Some("0.1.10"));
+    assert_eq!(error.required_app_version(), Some("2026.11.28"));
     assert!(!root.path().join(".situate/.migrations").exists());
-    assert!(prepare(root.path(), "0.1.10").is_ok());
 }
 #[test]
-fn later_position_and_unknown_fields_are_preserved_byte_for_byte() {
+fn opens_published_migration_three_metadata_without_release_build_inputs() {
     let bytes =
-        r#"{"minimumAppVersion":"0.1.0","lastAppliedMigration":43,"future":{"opaque":true}}"#;
+        r#"{"minimumAppVersion":"2026.11.27","lastAppliedMigration":3,"future":{"opaque":true}}"#;
     let root = workspace(Some(bytes));
-    let first = prepare(root.path(), "0.1.3").unwrap();
-    let second = prepare(root.path(), "0.1.3").unwrap();
+    for _ in 0..2 {
+        drop(prepare(root.path()).unwrap());
+        assert_eq!(
+            fs::read(root.path().join(".situate/migrations.json")).unwrap(),
+            bytes.as_bytes()
+        );
+    }
+}
+
+#[test]
+fn later_position_and_unknown_fields_are_preserved_byte_for_byte() {
+    let bytes = r#"{"minimumAppVersion":"2026.11.27","minimumReaderEpoch":3,"lastAppliedMigration":43,"future":{"opaque":true}}"#;
+    let root = workspace(Some(bytes));
+    let first = prepare(root.path()).unwrap();
+    let second = prepare(root.path()).unwrap();
     assert_eq!(
         fs::read_to_string(root.path().join(".situate/migrations.json")).unwrap(),
         bytes
@@ -43,7 +55,7 @@ fn rejects_corruption_without_initializing_or_resetting() {
     ] {
         let root = workspace(Some(bytes));
         assert_eq!(
-            prepare(root.path(), "0.1.3").unwrap_err().kind(),
+            prepare(root.path()).unwrap_err().kind(),
             MigrationErrorKind::InvalidMetadata
         );
         assert_eq!(
@@ -59,7 +71,7 @@ fn duplicate_metadata_fields_are_not_interpreted_as_a_lower_minimum() {
         r#"{"minimumAppVersion":"0.9.0","minimumAppVersion":"0.0.0","lastAppliedMigration":1}"#;
     let root = workspace(Some(bytes));
     assert_eq!(
-        prepare(root.path(), "0.1.3").unwrap_err().kind(),
+        prepare(root.path()).unwrap_err().kind(),
         MigrationErrorKind::InvalidMetadata
     );
     assert!(!root.path().join(".situate/.migrations").exists());
@@ -69,22 +81,43 @@ fn duplicate_metadata_fields_are_not_interpreted_as_a_lower_minimum() {
     );
 }
 #[test]
-fn semantic_version_precedence_ignores_build_metadata() {
-    let root = workspace(Some(
-        r#"{"minimumAppVersion":"0.1.3+new","lastAppliedMigration":3}"#,
-    ));
-    assert!(prepare(root.path(), "0.1.3+old").is_ok());
+fn unknown_reader_epoch_refuses_opening_without_writing() {
+    let bytes =
+        r#"{"minimumAppVersion":"2026.12.1","lastAppliedMigration":4,"minimumReaderEpoch":4}"#;
+    let root = workspace(Some(bytes));
     assert_eq!(
-        prepare(root.path(), "0.1.3-alpha").unwrap_err().kind(),
-        MigrationErrorKind::UpdateRequired
+        prepare(root.path()).unwrap_err().kind(),
+        MigrationErrorKind::ReaderUpdateRequired
     );
+    assert!(!root.path().join(".situate/.migrations").exists());
+    assert_eq!(
+        fs::read_to_string(root.path().join(".situate/migrations.json")).unwrap(),
+        bytes
+    );
+}
+
+#[test]
+fn explicit_reader_metadata_cannot_lower_the_guard_for_legacy_clients() {
+    for bytes in [
+        r#"{"minimumAppVersion":"0.1.6","lastAppliedMigration":3,"minimumReaderEpoch":3}"#,
+        r#"{"minimumAppVersion":"0.1.6","lastAppliedMigration":3,"minimumReaderEpoch":2}"#,
+        r#"{"minimumAppVersion":"2026.11.27","lastAppliedMigration":2,"minimumReaderEpoch":3}"#,
+        r#"{"minimumAppVersion":"2026.11.27","lastAppliedMigration":3,"minimumReaderEpoch":null}"#,
+    ] {
+        let root = workspace(Some(bytes));
+        assert_eq!(
+            prepare(root.path()).unwrap_err().kind(),
+            MigrationErrorKind::InvalidMetadata
+        );
+        assert!(!root.path().join(".situate/.migrations").exists());
+    }
 }
 #[test]
 fn retained_lease_prevents_or_rejects_marker_replacement() {
     let root = workspace(Some(
-        r#"{"minimumAppVersion":"0.0.0","lastAppliedMigration":3}"#,
+        r#"{"minimumAppVersion":"2026.11.27","lastAppliedMigration":3}"#,
     ));
-    let lease = prepare(root.path(), "0.1.3").unwrap();
+    let lease = prepare(root.path()).unwrap();
     lease.validate().unwrap();
     let moved = root.path().join(".situate-original");
     let rename = fs::rename(root.path().join(".situate"), &moved);
@@ -112,18 +145,6 @@ fn retained_lease_prevents_or_rejects_marker_replacement() {
             .exists()
     );
 }
-#[test]
-fn invalid_app_version_does_not_touch_data() {
-    let root = workspace(None);
-    assert_eq!(
-        prepare(root.path(), "not-semver").unwrap_err().kind(),
-        MigrationErrorKind::InvalidAppVersion
-    );
-    assert_eq!(
-        fs::read_dir(root.path().join(".situate")).unwrap().count(),
-        0
-    );
-}
 #[cfg(unix)]
 #[test]
 fn refuses_marker_and_metadata_symlinks_without_touching_the_target() {
@@ -131,7 +152,7 @@ fn refuses_marker_and_metadata_symlinks_without_touching_the_target() {
     let root = tempfile::tempdir().unwrap();
     let outside = tempfile::tempdir().unwrap();
     symlink(outside.path(), root.path().join(".situate")).unwrap();
-    assert!(prepare(root.path(), "0.1.3").is_err());
+    assert!(prepare(root.path()).is_err());
     assert_eq!(fs::read_dir(outside.path()).unwrap().count(), 0);
     fs::remove_file(root.path().join(".situate")).unwrap();
     fs::create_dir(root.path().join(".situate")).unwrap();
@@ -141,7 +162,7 @@ fn refuses_marker_and_metadata_symlinks_without_touching_the_target() {
         root.path().join(".situate/migrations.json"),
     )
     .unwrap();
-    assert!(prepare(root.path(), "0.1.3").is_err());
+    assert!(prepare(root.path()).is_err());
     assert_eq!(
         fs::read_to_string(outside.path().join("metadata")).unwrap(),
         "untouched"

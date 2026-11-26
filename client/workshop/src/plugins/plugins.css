@@ -264,6 +264,24 @@
 .plugin-card-actions {
   min-width: 0;
 }
+.plugin-card-actions-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--situate-space-2);
+  margin-block-start: var(--situate-space-4);
+  padding-block-start: var(--situate-space-2);
+  border-block-start: 1px solid var(--situate-line);
+}
+.plugin-card-actions-compact :is(.plugin-row-links, .plugin-card-footer) {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.plugin-card-actions-compact .plugin-action-help {
+  flex-basis: 100%;
+}
 .plugin-action-help {
   font-size: 14px;
   color: var(--situate-muted);
@@ -420,18 +438,66 @@
   color: var(--situate-muted);
   margin: 16px 0 24px;
 }
-.plugin-card {
-  background: var(--situate-surface);
-  border: 1px solid var(--situate-line);
-  padding: 28px;
-  border-radius: 24px;
+.plugin-settings-view .plugin-main {
+  max-inline-size: 52rem;
+}
+.plugin-settings-header {
+  display: grid;
+  gap: var(--situate-space-6);
+  margin-block-end: var(--situate-space-6);
+}
+.plugin-settings-toolbar,
+.plugin-settings-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--situate-space-2);
+}
+.plugin-settings-toolbar {
+  padding-block-end: var(--situate-space-2);
+  border-block-end: 1px solid var(--situate-line);
+}
+.plugin-settings-toolbar > :first-child {
+  margin-inline-start: calc(-1 * var(--situate-space-2));
+}
+.plugin-settings-workspace {
+  min-inline-size: 0;
+  margin-inline-start: auto;
+  text-align: end;
+  color: var(--situate-muted);
+  font-size: var(--situate-text-small);
+  overflow-wrap: anywhere;
+}
+.plugin-settings-title {
+  gap: var(--situate-space-3);
+}
+.plugin-settings-content {
+  display: grid;
+  gap: var(--situate-space-6);
+}
+.plugin-settings-content > .plugin-muted {
+  margin: 0;
+}
+.plugin-title-note {
+  display: inline-block;
+  color: var(--situate-muted);
+  font-size: var(--situate-text-small);
+  line-height: 1.4;
+  font-weight: 400;
+  letter-spacing: normal;
+  white-space: nowrap;
+}
+.plugin-row h3 .plugin-title-note {
+  margin-inline-start: var(--situate-space-2);
 }
 .plugin-setting {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
-  margin-top: 24px;
+  gap: var(--situate-space-4);
+  margin-block-start: var(--situate-space-3);
+  padding-block: var(--situate-space-2);
+  border-block: 1px solid var(--situate-line);
 }
 .plugin-retained-row {
   padding: 24px 0;

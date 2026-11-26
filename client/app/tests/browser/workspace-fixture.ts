@@ -220,6 +220,15 @@ interface FixtureOptions {
   appearanceSaveThenFail?: boolean;
   localization?: LocalizationSnapshot;
   localizationByScope?: Record<string, LocalizationSnapshot>;
+  gmailUpdateAvailable?: boolean;
+  gmailGrant?: {
+    id: string;
+    email: string;
+    permissions: string[];
+    missing: string[];
+    partial: boolean;
+    reconnect: boolean;
+  };
 }
 export async function workspaceFixture(
   page: Page,
@@ -1400,6 +1409,13 @@ export async function workspaceFixture(
         return structuredClone(recovery);
       };
       let callbackId = 0;
+      const pluginUpdates = new Set<number>();
+      const gmailAccounts = new Map<
+        string,
+        NonNullable<FixtureOptions["gmailGrant"]>[]
+      >();
+      const gmailSelections = new Map<string, string | null>();
+      const gmailUpdated = new Set<string>();
       const appearanceChanged = (scope: string) => {
         for (const id of appearanceListeners)
           callbacks.get(id)?.({
@@ -1480,6 +1496,8 @@ export async function workspaceFixture(
                 recoveryListeners.add(Number(args.handler));
               if (args.event === "appearance-changed")
                 appearanceListeners.add(Number(args.handler));
+              if (args.event === "plugin-executor-updated")
+                pluginUpdates.add(Number(args.handler));
               return Number(args.handler);
             }
             if (command === "plugin:event|unlisten") {
@@ -1487,6 +1505,7 @@ export async function workspaceFixture(
               appearanceListeners.delete(Number(args.eventId));
               recoveryListeners.delete(Number(args.eventId));
               dictationListeners.delete(Number(args.eventId));
+              pluginUpdates.delete(Number(args.eventId));
               return;
             }
             if (command === "dictation_snapshot")
@@ -1601,6 +1620,58 @@ export async function workspaceFixture(
               appearanceChanged(scope);
               return structuredClone(value);
             }
+            if (command === "gmail_experiment") {
+              if (typeof args.enabled === "boolean")
+                localStorage.setItem(
+                  "gmail-experiment-fixture",
+                  String(args.enabled),
+                );
+              return (
+                localStorage.getItem("gmail-experiment-fixture") === "true"
+              );
+            }
+            if (command === "gmail_install") {
+              if (localStorage.getItem("gmail-experiment-fixture") !== "true")
+                throw "native.gmail.paused";
+              const scope = String(args.scope);
+              const state = pluginsFor(scope);
+              if (args.update === true) {
+                const available =
+                  options.gmailUpdateAvailable === true &&
+                  !gmailUpdated.has(scope) &&
+                  state.plugins.some(
+                    (plugin) => plugin.id === "situate-gmail" && plugin.enabled,
+                  );
+                if (args.install !== true) return available;
+                if (!available) throw "native.plugins.stateConflict";
+                gmailUpdated.add(scope);
+                return true;
+              }
+              if (args.install !== true)
+                return state.plugins.some(
+                  (plugin) => plugin.id === "situate-gmail",
+                );
+              const manifest =
+                options.pluginSources?.["situate-gmail"]?.manifest;
+              if (!manifest) throw "native.plugins.unavailable";
+              if (state.plugins.some((plugin) => plugin.id === manifest.id))
+                throw "native.gmail.packageExists";
+              state.plugins.push({
+                id: manifest.id,
+                enabled: true,
+                error: null,
+                incarnation: crypto.randomUUID(),
+                manifest,
+              });
+              state.revision = `plugins-${++pluginRevision}`;
+              for (const id of pluginUpdates)
+                callbacks.get(id)?.({
+                  event: "plugin-executor-updated",
+                  id,
+                  payload: { scope, pluginIds: [manifest.id] },
+                });
+              return true;
+            }
             if (command === "localization_snapshot")
               return structuredClone(
                 preferences.get(String(args.scope)) ?? defaultPreferences,
@@ -1635,6 +1706,8 @@ export async function workspaceFixture(
                 pluginId?: string;
                 exportName?: string;
                 generation?: number;
+                dependency?: string;
+                args?: { accountId?: string | null };
               };
               if (request.operation === "pendingPersistences") return [];
               if (
@@ -1675,18 +1748,63 @@ export async function workspaceFixture(
                     plugin.pluginId === request.pluginId &&
                     plugin.generation === request.generation,
                 );
-                const values =
-                  options.pluginExportResults?.[String(request.pluginId)];
-                if (
-                  !plugin ||
-                  !plugin.exports.includes(String(request.exportName)) ||
-                  !values ||
-                  !Object.hasOwn(values, String(request.exportName))
-                )
+                if (!plugin) throw "native.plugins.unavailable";
+                const target = request.dependency
+                  ? plugins.find(
+                      (candidate) =>
+                        candidate.pluginId === request.dependency &&
+                        plugin.source.manifest?.dependencies?.includes(
+                          candidate.pluginId,
+                        ),
+                    )
+                  : plugin;
+                const name = String(request.exportName);
+                if (!target?.exports.includes(name))
+                  throw "native.plugins.unavailable";
+                if (target.pluginId === "situate-gmail") {
+                  const key = `${scope}:${plugin.pluginId}`;
+                  const accounts = gmailAccounts.get(scope) ?? [];
+                  let value: unknown = null;
+                  switch (name) {
+                    case "listAccounts":
+                      value = structuredClone(accounts);
+                      break;
+                    case "authorize": {
+                      if (
+                        localStorage.getItem("gmail-experiment-fixture") !==
+                        "true"
+                      )
+                        throw "native.gmail.paused";
+                      const grant = structuredClone(options.gmailGrant);
+                      if (!grant) throw "native.gmail.denied";
+                      gmailAccounts.set(scope, [grant]);
+                      value = grant;
+                      break;
+                    }
+                    case "disconnect":
+                      gmailAccounts.set(scope, []);
+                      break;
+                    case "selectedAccount":
+                      value =
+                        accounts.find(
+                          (account) => account.id === gmailSelections.get(key),
+                        ) ?? null;
+                      break;
+                    case "selectAccount":
+                      value = request.args?.accountId ?? null;
+                      gmailSelections.set(key, request.args?.accountId ?? null);
+                      break;
+                    default:
+                      throw "native.plugins.unavailable";
+                  }
+                  return { outcome: "completed", value };
+                }
+                const values = options.pluginExportResults?.[target.pluginId];
+                if (!values || !Object.hasOwn(values, name))
                   throw "native.plugins.unavailable";
                 return {
                   outcome: "completed",
-                  value: structuredClone(values[String(request.exportName)]),
+                  value: structuredClone(values[name]),
                 };
               }
               throw "native.plugins.unavailable";

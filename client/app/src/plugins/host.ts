@@ -82,6 +82,10 @@ export function createInvocationContext(
       invoke: (pluginId: string, exportName: string, args: unknown) =>
         call({ operation: "dependenciesInvoke", pluginId, exportName, args }),
     }),
+    gmail: Object.freeze({
+      invoke: (name: string, args: unknown) =>
+        call({ operation: "gmailInvoke", name, args }),
+    }),
     preview: Object.freeze({
       open: (request: unknown) => call({ operation: "previewOpen", request }),
       step: (request: unknown) => call({ operation: "previewStep", request }),

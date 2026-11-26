@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isMessageKey } from "@situate/localization";
 import { createFailureReporter } from "../diagnostics/failures";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { readonly, shallowReactive, watch } from "vue";
@@ -9,6 +10,7 @@ import {
   pluginMayExecute,
   resumePlugins,
 } from "../recovery";
+import { gmailRequestError } from "./gmail-errors";
 import { importPluginModule, loadHostModules } from "./module";
 import { pluginLayout } from "./layout-actions";
 import { observeManualPersistence } from "./manual-persistence";
@@ -75,6 +77,8 @@ function safeError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : error;
   return typeof message === "string" &&
     (nativeErrors.has(message) ||
+      gmailRequestError(message) ||
+      (message.startsWith("native.gmail.") && isMessageKey(message)) ||
       [
         "plugins.invalidContributions",
         "plugins.providerContributions",
@@ -538,7 +542,6 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
               provider:
                 | {
                     exports: string[];
-                    executorGeneration: number;
                     isAvailable(): boolean;
                   }
                 | undefined,
@@ -559,10 +562,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
                   scope: options.scope,
                   request: {
                     operation: "invoke",
-                    pluginId: id,
+                    pluginId: plugin.id,
                     exportName: name,
                     args,
-                    generation: provider.executorGeneration,
+                    generation: definition.generation,
+                    ...(id === plugin.id ? {} : { dependency: id }),
                   },
                 });
                 return await persistence.unwrap(reply, id);
@@ -592,7 +596,6 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
                 invoke: (name, args) =>
                   invokeExport(plugin.id, name, args, {
                     exports: exported,
-                    executorGeneration: definition.generation,
                     isAvailable: guard.isCurrent,
                   }),
               },

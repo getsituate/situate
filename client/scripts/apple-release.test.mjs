@@ -538,9 +538,15 @@ test("GitHub releases stop before compilation when the PostHog token is missing"
 test("generated version replaces committed version without source edits and migration ancestry remains mandatory", async (t) => {
   const fixture = buildFixture(t);
   let migrations = 0;
+  let gmailInput;
   await assert.rejects(
     buildAppleRelease({
       ...fixture,
+      environment: {
+        ...fixture.environment,
+        SITUATE_GMAIL_TEST_CLIENT_ID: "synthetic.apps.googleusercontent.com",
+        SITUATE_GMAIL_TEST_CLIENT_SECRET: "synthetic-desktop",
+      },
       qualifyMigrations: async (root, options) => {
         migrations++;
         assert.equal(root, dirname(fixture.root));
@@ -561,6 +567,13 @@ test("generated version replaces committed version without source edits and migr
             fixture.evidence.buildNumber,
           );
           assert.equal(options.env.TAURI_SIGNING_PRIVATE_KEY, undefined);
+          assert.equal(options.env.SITUATE_GMAIL_TEST_CLIENT_SECRET, undefined);
+          gmailInput = options.env.SITUATE_GMAIL_BUILD_INPUT;
+          assert.deepEqual(JSON.parse(readFileSync(gmailInput, "utf8")), [
+            "synthetic.apps.googleusercontent.com",
+            "synthetic-desktop",
+          ]);
+          assert.equal(options.env.RUSTC_WRAPPER, "");
           throw new Error("synthetic pre-sign build stop");
         }
         return fixture.execute(command, args, options);
@@ -569,6 +582,7 @@ test("generated version replaces committed version without source edits and migr
     /synthetic pre-sign build stop/,
   );
   assert.equal(migrations, 1);
+  assert.equal(existsSync(gmailInput), false);
   assert.equal(
     JSON.parse(
       readFileSync(join(fixture.root, "app/src-tauri/tauri.conf.json")),

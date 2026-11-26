@@ -16,7 +16,7 @@ fn migrated_runtime_opaque_fields_remain_available_after_typed_projection_and_wr
         serde_json::to_vec(&source).unwrap(),
     )
     .unwrap();
-    let lease = situate_migrations::prepare(root.path(), "0.1.6").unwrap();
+    let lease = situate_migrations::prepare(root.path()).unwrap();
     let store = Storage::open(root.path(), "synthetic").unwrap();
     let record = store.read_conversation("compatibility").unwrap().unwrap();
     assert_eq!(
@@ -64,7 +64,7 @@ fn migrated_runtime_opaque_fields_remain_available_after_typed_projection_and_wr
     assert_eq!(fs::read(&path).unwrap(), bytes);
     drop(store);
     drop(lease);
-    let _lease = situate_migrations::prepare(root.path(), "0.1.6").unwrap();
+    let _lease = situate_migrations::prepare(root.path()).unwrap();
     let store = Storage::open(root.path(), "synthetic").unwrap();
     assert_eq!(
         store
@@ -93,7 +93,7 @@ fn public_release_conversations_drafts_and_queues_survive_migration_and_reopen()
             )
             .unwrap();
         }
-        let lease = situate_migrations::prepare(root.path(), "0.1.6").unwrap();
+        let lease = situate_migrations::prepare(root.path()).unwrap();
         let metadata = fs::read(managed.join("migrations.json")).unwrap();
         let store = Storage::open(root.path(), "synthetic-qualification").unwrap();
         let record = store.read_conversation("compatibility").unwrap().unwrap();
@@ -140,16 +140,10 @@ fn public_release_conversations_drafts_and_queues_survive_migration_and_reopen()
         assert!(fs::read(&history_path).unwrap().starts_with(&history));
         drop(store);
         drop(lease);
-        let before_refusal = fs::read(&history_path).unwrap();
-        let error = situate_migrations::prepare(root.path(), version).unwrap_err();
-        assert_eq!(
-            error.kind(),
-            situate_migrations::MigrationErrorKind::UpdateRequired
-        );
-        assert_eq!(error.required_app_version(), Some("0.1.6"));
-        assert_eq!(fs::read(&history_path).unwrap(), before_refusal);
-        assert_eq!(fs::read(managed.join("migrations.json")).unwrap(), metadata);
-        let _reopened = situate_migrations::prepare(root.path(), "0.1.6").unwrap();
+        let state: serde_json::Value = serde_json::from_slice(&metadata).unwrap();
+        assert_eq!(state["minimumAppVersion"], "2026.11.27");
+        assert_eq!(state["minimumReaderEpoch"], 3);
+        let _reopened = situate_migrations::prepare(root.path()).unwrap();
         let store = Storage::open(root.path(), "synthetic-qualification").unwrap();
         let record = store.read_conversation("compatibility").unwrap().unwrap();
         assert_eq!(record.draft, "edited after migration");

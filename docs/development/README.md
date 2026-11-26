@@ -318,6 +318,8 @@ The architecture's [conversation tool matrix](../architecture/05-building-block-
 
 The [architecture documentation](../architecture/index.adoc) describes workspace ownership, file/history storage, conversation execution and UI coordination. The [workspace view API](workspace-views.md) covers registration, navigation lifetimes and file-reference capture for client integrations. The [Git-derived file-reference concept](../architecture/08-cross-cutting-concepts/git-derived-file-references.adoc) describes identity and interruption behavior. Changes to published formats require [release compatibility verification](testing.md#release-compatibility-verification).
 
+For Gmail test access and plugin examples, see the [Gmail connection guide](gmail-connection.md).
+
 ## Run the requirements viewer
 
 ```sh

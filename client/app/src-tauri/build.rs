@@ -1,3 +1,5 @@
+mod gmail_build;
+
 use std::time::Instant;
 
 fn report_native_phase(release: bool, phase: &str, arch: &str, started: Instant) {
@@ -11,6 +13,7 @@ fn report_native_phase(release: bool, phase: &str, arch: &str, started: Instant)
 }
 
 fn main() {
+    gmail_build::write_config();
     println!("cargo:rerun-if-env-changed=SITUATE_MODELS_DEV_RELEASE_INPUT");
     println!("cargo:rerun-if-env-changed=SITUATE_POSTHOG_TOKEN");
     if let Ok(token) = std::env::var("SITUATE_POSTHOG_TOKEN") {

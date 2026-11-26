@@ -18,19 +18,19 @@ See link:{architecture-repository-root}/requirements/data/requirements/REQ-0069-
 
 ==== Compatibility boundary and migration position
 
-The mixed-version compatibility boundary covers synchronizable workspace data, whether or not synchronization is currently enabled. Device-local layout, settings and provider connections are excluded; upgrades must preserve them through migration where needed, but older apps need not read their upgraded formats. A device-local format change alone must not raise the portable workspace's `minimumAppVersion`. Public plugin-interface compatibility remains governed by REQ-0070.
+The mixed-version compatibility boundary covers synchronizable workspace data, whether or not synchronization is currently enabled. Device-local layout, settings and provider connections are excluded; upgrades must preserve them through migration where needed, but older apps need not read their upgraded formats. A device-local format change alone must not raise the portable workspace's required reader epoch. Public plugin-interface compatibility remains governed by REQ-0070.
 
-Persist two values centrally in `.situate`; no separate core format version or target-format setting is needed.
-The values live in `.situate/migrations.json`.
-The first migration creates this file without changing other managed records or increasing their minimum app version.
+The workspace records its migration position and minimum reader epoch in `.situate/migrations.json`. The build derives the reader epochs it supports from its migration registry, independently of its app version. Metadata written by the runner also retains the compatibility field used by older releases.
 
 [cols="1,3",options="header"]
 |===
 |Field |Meaning
-|`minimumAppVersion`
-|Lowest app release that can safely open and edit this workspace. Compare semantic versions, not strings. Migration does not automatically raise it; an incompatible change raises it deliberately.
 |`lastAppliedMigration`
-|Stable ID of the last successful migration in one linear sequence. No per-step execution history is required. An explicit initial position represents a workspace with no applied migrations.
+|ID of the last successful migration in the linear sequence. Zero means no migrations have run.
+|`minimumReaderEpoch`
+|ID of the latest applied migration that introduced an incompatible format. Zero means no such migration has run. A compatible migration does not advance this epoch.
+|`minimumAppVersion`
+|Legacy guard for released readers that do not understand epochs. New metadata projects the fixed legacy guard for its epoch. Modern readers check that the two values agree; they do not compare the guard with their own app version.
 |===
 
 The app owns one central, ordered registry of migration IDs and implementations.
@@ -39,13 +39,13 @@ Corrections normally require a new migration. The only exception is the validati
 Release verification accepts only the exact original-to-corrected implementation bytes at that path.
 
 .Compatibility gate for valid metadata, with no recovery or cleanup pending.
-image::{architecture-diagrams-root}/workspace-compatibility.svg["An app below minimumAppVersion refuses opening. A compatible app migrates a known earlier position, or preserves a current or valid later position before opening the core.",width=700]
+image::{architecture-diagrams-root}/workspace-compatibility.svg["An app first checks the required reader epoch. If supported, it migrates a known earlier position or preserves a current or compatible later position before opening the core.",width=700]
 
-An app below `minimumAppVersion` refuses normal opening before processing workspace content or writing it and requests an update.
-Other workspaces remain usable.
-An app meeting the minimum applies its remaining migrations before opening.
-When a compatible older app encounters a valid later migration ID outside its registry, it preserves that position: it neither downgrades the workspace nor repeats its own earlier migrations.
-Malformed metadata or a missing required migration path is an error, not an initial workspace.
+An unsupported epoch keeps the workspace closed and prompts for an update. Malformed or conflicting metadata keeps it closed without resetting it. When a compatible app encounters a later migration position, it leaves the position and unknown fields untouched. Other workspaces remain usable.
+
+For metadata without an epoch, the reader checks the legacy guard against the migration position. The recorded guards are `0.0.0` before migration 2, `0.1.6` for migration 2, and `2026.11.27` for migration 3. Development builds before the first release of migration 3 could record `0.1.6` at position 3. An unrecognized guard is not evidence of compatibility. Opening an already-current workspace does not rewrite its metadata.
+
+Legacy guards must increase at each incompatible boundary while published readers still rely on them. Verify refusal in those older releases before publishing another incompatible format. Historical release metadata retains the guard assigned when migration 3 first shipped.
 
 Keep old and new representations compatible wherever practical.
 Older writers must preserve unknown information; when two fields represent the same value, define which is authoritative and how later edits from older apps are reconciled.
@@ -71,7 +71,7 @@ Do not modify or restore user files outside `.situate`, device-local app setting
 Migration must not execute plugins, resume conversations or replay tools.
 
 For a chain `M001 -> M002 -> M003`, failure in the final step restores the state before `M002`, including its original migration position, rather than retaining a partially upgraded workspace.
-After successful validation, persist the new migration position and any deliberate minimum-version increase before completing the attempt.
+After successful validation, persist the migration position, reader epoch and legacy guard together before completing the attempt.
 Delete the backup before normal opening.
 
 .Backup states and recovery. Solid arrows change state; dashed arrows show the action on the next open.

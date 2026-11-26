@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "reopen-conversations-with-unanswered-questions",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "reopen-conversations-with-unanswered-questions",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Unanswered questions",
+          "paragraphs": [
+            "Conversations with an unanswered question now reopen after restarting or updating Situate."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "reopen-conversations-with-unanswered-questions",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Unbeantwortete Fragen",
+          "paragraphs": [
+            "Unterhaltungen mit einer unbeantworteten Frage lassen sich nach einem Neustart oder Update von Situate wieder öffnen."
+          ]
+        }
+      ]
+    }
+  }
+}

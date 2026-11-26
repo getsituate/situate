@@ -1,5 +1,5 @@
 use serde_json::Value;
-use situate_migrations::{MigrationErrorKind, prepare};
+use situate_migrations::prepare;
 use std::{fs, path::Path};
 
 #[test]
@@ -20,7 +20,7 @@ fn public_release_conversations_keep_original_messages_drafts_and_waiting_input(
             }
             fs::write(managed.join(name), bytes).unwrap();
         }
-        let _lease = prepare(root.path(), "0.1.6").unwrap();
+        let _lease = prepare(root.path()).unwrap();
         let metadata: Value = serde_json::from_slice(
             &fs::read(managed.join("conversations/compatibility/metadata.json")).unwrap(),
         )
@@ -48,7 +48,7 @@ fn public_release_conversations_keep_original_messages_drafts_and_waiting_input(
 }
 
 #[test]
-fn numbered_conversion_matches_independent_fixture_and_requires_the_new_app() {
+fn numbered_conversion_matches_independent_fixture_and_reopens_without_repeating() {
     let root = tempfile::tempdir().unwrap();
     let managed = root.path().join(".situate");
     fs::create_dir(&managed).unwrap();
@@ -58,7 +58,7 @@ fn numbered_conversion_matches_independent_fixture_and_requires_the_new_app() {
         managed.join("native-conversation-one.json"),
     )
     .unwrap();
-    let lease = prepare(root.path(), "0.1.6").unwrap();
+    let lease = prepare(root.path()).unwrap();
     let actual: Value =
         serde_json::from_slice(&fs::read(managed.join("conversations/one/metadata.json")).unwrap())
             .unwrap();
@@ -81,11 +81,7 @@ fn numbered_conversion_matches_independent_fixture_and_requires_the_new_app() {
     assert!(!managed.join("native-conversation-one.json").exists());
     drop(lease);
     let before = fs::read(managed.join("conversations/one/history.jsonl")).unwrap();
-    assert_eq!(
-        prepare(root.path(), "0.1.5").unwrap_err().kind(),
-        MigrationErrorKind::UpdateRequired
-    );
-    let _lease = prepare(root.path(), "0.1.6").unwrap();
+    let _lease = prepare(root.path()).unwrap();
     assert_eq!(
         fs::read(managed.join("conversations/one/history.jsonl")).unwrap(),
         before
