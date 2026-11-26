@@ -73,6 +73,6 @@ const outcome = computed(() =>
 <style scoped>
 p {
   line-height: 1.6;
-  margin: 20px 0;
+  margin: var(--situate-space-5) 0;
 }
 </style>

@@ -10,9 +10,9 @@ defineProps<{ message: string; label: string }>();
 
 <style scoped>
 .chat-system-message {
-  margin: 20px 0;
+  margin: var(--situate-space-5) 0;
   color: var(--situate-muted);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   line-height: 1.65;
   overflow-wrap: anywhere;
 }

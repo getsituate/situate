@@ -55,7 +55,7 @@ watch(
 
 <style scoped>
 .chat-image {
-  margin: 12px 0;
+  margin: var(--situate-space-3) 0;
   min-width: 0;
 }
 img {
@@ -63,7 +63,7 @@ img {
   max-width: 100%;
   max-height: 480px;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
 }
 figcaption,
 p {

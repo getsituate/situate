@@ -1614,6 +1614,19 @@ export async function workspaceFixture(
               keyboardShortcuts.set(scope, next);
               return structuredClone(next);
             }
+            if (command === "workspace_theme_selection") {
+              const key = `theme-fixture:${String(args.scope)}`;
+              const request = args.request as {
+                operation: string;
+                selection?: string | null;
+              };
+              if (request.operation === "save") {
+                if (request.selection)
+                  sessionStorage.setItem(key, request.selection);
+                else sessionStorage.removeItem(key);
+              }
+              return sessionStorage.getItem(key);
+            }
             if (command === "appearance_snapshot") {
               if (options.appearanceLoadError)
                 throw "native.appearance.invalid";

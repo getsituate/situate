@@ -104,10 +104,10 @@ const previews = computed(() =>
 .change-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: var(--situate-space-2);
+  padding: var(--situate-space-3) var(--situate-space-3-5);
   background: var(--situate-paper);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   border-bottom: 1px solid var(--situate-line);
 }
 .change-header.created-file {
@@ -126,20 +126,20 @@ const previews = computed(() =>
 .change-content {
   max-height: 360px;
   overflow: auto;
-  padding: 8px;
+  padding: var(--situate-space-2);
 }
 .change-content section {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
-  gap: 4px;
-  padding: 8px;
+  gap: var(--situate-space-1);
+  padding: var(--situate-space-2);
 }
 .change-content pre {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   line-height: 1.6;
 }
 .newline-note {

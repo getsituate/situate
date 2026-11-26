@@ -13,6 +13,10 @@ func attribute(_ element: AXUIElement, _ key: String) -> CFTypeRef? {
     switch status {
     case .success: return result
     case .noValue, .attributeUnsupported: return nil
+    case .cannotComplete, .invalidUIElement:
+        // WebKit can replace nodes or stall AX while the page is updating.
+        print("temporarily-unavailable")
+        exit(0)
     default:
         print("blocked-\(key)-\(status.rawValue)")
         exit(0)

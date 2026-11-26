@@ -71,7 +71,7 @@ const detail = computed(() => {
   );
 }
 p {
-  margin: 20px 0;
+  margin: var(--situate-space-5) 0;
   line-height: 1.6;
 }
 </style>

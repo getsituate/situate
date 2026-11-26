@@ -306,8 +306,9 @@ function keydown(event: KeyboardEvent): void {
 .input-line {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 6px 6px 6px 12px;
+  gap: var(--situate-space-2);
+  padding: var(--situate-space-1-5) var(--situate-space-1-5)
+    var(--situate-space-1-5) var(--situate-space-3);
   border: 1px solid var(--situate-control-line);
   border-radius: var(--situate-radius-control);
   background: var(--situate-surface);
@@ -327,7 +328,7 @@ textarea {
   max-height: 160px;
   resize: none;
   border: 0;
-  padding: 10px 0;
+  padding: var(--situate-space-2-5) 0;
   background: transparent;
   color: var(--situate-ink);
   font: inherit;
@@ -346,7 +347,7 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
 }
 .input-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--situate-space-1);
   flex-shrink: 0;
 }
 .stop-action {
@@ -368,8 +369,8 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
 .composer-bottom {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--situate-space-2);
+  margin-top: var(--situate-space-1);
   min-width: 0;
 }
 .composer-selectors {
@@ -422,7 +423,8 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
   align-items: center;
   gap: var(--situate-space-2);
   min-width: 0;
-  padding: 6px 0 6px 12px;
+  padding-block: var(--situate-space-1-5);
+  padding-inline-start: var(--situate-space-3);
   overflow-wrap: anywhere;
   font-weight: 600;
 }

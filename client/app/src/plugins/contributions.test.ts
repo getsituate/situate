@@ -77,6 +77,52 @@ describe("plugin contribution boundaries", () => {
     }
   });
 
+  const theme = {
+    id: "paper",
+    title: "Paper",
+    variables: { "--situate-paper": "white" },
+  };
+
+  it.each(["folder", { path: "M5 4H19V20H5ZM8 8H16" }])(
+    "publishes theme preview color and an optional %j icon",
+    (icon) => {
+      const entry = {
+        ...theme,
+        preview: { color: "oklch(70% 0.15 150)", icon },
+      };
+      expect(
+        validateUiContributions(
+          { themes: [entry, { ...theme, id: "plain" }] },
+          "demo",
+        ).themes,
+      ).toEqual([entry, { ...theme, id: "plain" }]);
+    },
+  );
+
+  it.each([
+    { color: " " },
+    { icon: "unknown" },
+    { icon: { path: '<svg onload="run()"/>' } },
+  ])("rejects malformed theme preview metadata: %j", (preview) => {
+    expect(() =>
+      validateUiContributions({ themes: [{ ...theme, preview }] }, "demo"),
+    ).toThrow("plugins.invalidContributions");
+  });
+
+  it("preserves the brand artwork choice without changing themes that omit it", () => {
+    const dark = { ...theme, id: "dark", brandAssets: "on-dark" };
+    const light = { ...theme, id: "light", brandAssets: "on-light" };
+    expect(
+      validateUiContributions({ themes: [theme, dark, light] }, "demo").themes,
+    ).toEqual([theme, dark, light]);
+    expect(() =>
+      validateUiContributions(
+        { themes: [{ ...theme, brandAssets: "auto" }] },
+        "demo",
+      ),
+    ).toThrow("plugins.invalidContributions");
+  });
+
   it("preserves ordinary views, settings and explicit component exports", () => {
     const component = { render: () => null };
     const dispose = vi.fn();

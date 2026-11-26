@@ -1140,7 +1140,7 @@ defineExpose({
 
 <style scoped>
 .chat-load-error {
-  padding: 16px;
+  padding: var(--situate-space-4);
   flex: none;
 }
 .question-preview-dialog {
@@ -1180,7 +1180,7 @@ defineExpose({
   flex-direction: column;
   min-height: 0;
   width: 100%;
-  padding: 20px;
+  padding: var(--situate-space-5);
   border: 1px solid
     color-mix(
       in srgb,
@@ -1226,16 +1226,16 @@ defineExpose({
 }
 .question-summary {
   padding-inline-end: 44px;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   color: var(--situate-muted);
 }
 .question-dock :deep(.chat-composer) {
   flex-shrink: 0;
-  margin-top: 16px;
+  margin-top: var(--situate-space-4);
 }
 @container (max-width: 540px) {
   .question-dock {
-    padding: 16px;
+    padding: var(--situate-space-4);
   }
 }
 @media (max-height: 480px) {
@@ -1250,17 +1250,17 @@ defineExpose({
 }
 @media (max-height: 700px) {
   .has-history .transcript-scroll {
-    padding-block: 8px;
+    padding-block: var(--situate-space-2);
   }
   .chat-pane .chat-footer.has-question-dock {
     max-height: 100%;
   }
   .question-dock {
-    padding: 12px;
+    padding: var(--situate-space-3);
     border-radius: var(--situate-radius-note);
   }
   .question-dock :deep(.chat-composer) {
-    margin-top: 8px;
+    margin-top: var(--situate-space-2);
   }
 }
 
@@ -1284,7 +1284,7 @@ defineExpose({
   background: transparent;
 }
 .development-chat .transcript-scroll {
-  padding: 32px 32px 40px;
+  padding: var(--situate-space-8) var(--situate-space-8) 40px;
 }
 .development-chat .transcript-scroll :deep(.messages) {
   max-width: 688px;
@@ -1297,8 +1297,8 @@ defineExpose({
 .content-references {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-block: 8px;
+  gap: var(--situate-space-1-5);
+  margin-block: var(--situate-space-2);
 }
 .earlier-messages-loading {
   position: sticky;
@@ -1319,12 +1319,12 @@ defineExpose({
   color: var(--situate-ink);
   font: inherit;
   font-size: var(--situate-text-caption);
-  padding: 6px 10px;
+  padding: var(--situate-space-1-5) var(--situate-space-2-5);
 }
 .reference-open {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--situate-space-1-5);
   align-items: center;
   overflow-wrap: anywhere;
   min-width: 0;
@@ -1359,8 +1359,8 @@ defineExpose({
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--situate-space-3);
+  margin-bottom: var(--situate-space-3);
 }
 .save-recovery p {
   margin: 0;
@@ -1371,7 +1371,7 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  gap: 16px;
+  gap: var(--situate-space-4);
   min-height: 80px;
   padding: max(16px, env(safe-area-inset-top, 0px)) 24px 16px 30px;
   border-bottom: 1px solid var(--situate-line);
@@ -1379,7 +1379,7 @@ defineExpose({
 .pane-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   min-width: 0;
 }
 .chat-icon {
@@ -1398,7 +1398,7 @@ h1:focus:where(html:not([data-input-modality="pointer"]) *) {
 }
 .pane-tools {
   display: flex;
-  gap: 4px;
+  gap: var(--situate-space-1);
   flex-shrink: 0;
 }
 .pane-tools button {
@@ -1407,7 +1407,7 @@ h1:focus:where(html:not([data-input-modality="pointer"]) *) {
   border-radius: var(--situate-radius-control);
   background: var(--situate-paper);
   color: var(--situate-ink);
-  padding: 8px;
+  padding: var(--situate-space-2);
 }
 .open-navigation {
   display: none;
@@ -1451,7 +1451,7 @@ h1:focus:where(html:not([data-input-modality="pointer"]) *) {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 28px 38px;
+  padding: var(--situate-space-7) 38px;
 }
 .transcript-scroll :deep(.messages) {
   max-width: 640px;
@@ -1528,24 +1528,25 @@ h1:focus:where(html:not([data-input-modality="pointer"]) *) {
     padding: 0 !important;
   }
   .transcript-scroll {
-    padding: 20px;
+    padding: var(--situate-space-5);
   }
   .has-history .chat-footer {
-    padding-inline: 20px;
+    padding-inline: var(--situate-space-5);
   }
   .chat-scroll-to-end {
     inset-inline-end: 20px;
   }
   .empty-chat {
-    padding: 24px;
+    padding: var(--situate-space-6);
   }
 }
 @container development (max-width: 540px) {
   .development-chat .transcript-scroll {
-    padding: 24px 18px;
+    padding: var(--situate-space-6) var(--situate-space-4-5);
   }
   .development-chat.has-history .chat-footer {
-    padding: 10px 16px 16px;
+    padding: var(--situate-space-2-5) var(--situate-space-4)
+      var(--situate-space-4);
   }
   .development-chat .chat-scroll-to-end {
     inset-inline-end: 16px;
@@ -1553,11 +1554,11 @@ h1:focus:where(html:not([data-input-modality="pointer"]) *) {
 }
 @container (max-width: 359px) {
   .empty-chat {
-    padding: 20px;
+    padding: var(--situate-space-5);
   }
   .pane-header {
-    padding-inline: 8px;
-    gap: 8px;
+    padding-inline: var(--situate-space-2);
+    gap: var(--situate-space-2);
   }
 }
 @media (max-height: 480px) {
@@ -1572,10 +1573,10 @@ h1:focus:where(html:not([data-input-modality="pointer"]) *) {
     max-height: 35vh;
   }
   .has-history .chat-footer {
-    padding-bottom: 12px;
+    padding-bottom: var(--situate-space-3);
   }
   .empty-chat {
-    padding-block: 12px;
+    padding-block: var(--situate-space-3);
   }
   .welcome {
     padding-bottom: 0;

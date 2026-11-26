@@ -118,8 +118,8 @@ const emit = defineEmits<{
 <style scoped>
 .plugin-consumers {
   margin: 0;
-  padding-inline-start: 20px;
-  font-size: 14px;
+  padding-inline-start: var(--situate-space-5);
+  font-size: var(--situate-text-small);
   color: var(--situate-muted);
   overflow-wrap: anywhere;
 }

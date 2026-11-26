@@ -88,6 +88,6 @@ onMounted(async () => {
   border-color: var(--situate-violet-deep);
 }
 .finale-skip span {
-  margin-left: 12px;
+  margin-left: var(--situate-space-3);
 }
 </style>

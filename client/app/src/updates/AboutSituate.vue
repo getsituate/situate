@@ -28,10 +28,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 .about-situate > p {
-  margin: 0 0 24px;
+  margin: 0 0 var(--situate-space-6);
   color: var(--situate-muted);
   font-variant-numeric: tabular-nums;
 }

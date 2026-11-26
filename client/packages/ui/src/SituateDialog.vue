@@ -91,8 +91,8 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: var(--situate-space-4);
+  margin-bottom: var(--situate-space-4);
 }
 .situate-dialog
   :deep(
@@ -108,7 +108,7 @@ defineExpose({
 }
 .situate-dialog
   :deep(p:not(:where([data-dialog-document], [data-dialog-document] *))) {
-  margin-block: 12px;
+  margin-block: var(--situate-space-3);
 }
 .situate-dialog
   :deep(
@@ -116,17 +116,17 @@ defineExpose({
       :where([data-dialog-document], [data-dialog-document] *)
     )
   ) {
-  margin-block: 20px 8px;
+  margin-block: var(--situate-space-5) var(--situate-space-2);
   font-family: var(--situate-font-body);
   font-size: var(--situate-text-body);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: var(--situate-leading-compact);
   letter-spacing: normal;
 }
 .situate-dialog :deep(> :is(h2, h3)),
 .situate-dialog .situate-dialog__header :deep(:is(h1, h2, h3)),
 .situate-dialog :deep([data-dialog-title]) {
-  margin: 0 0 16px;
+  margin: 0 0 var(--situate-space-4);
   font-family: var(--situate-font-body);
   font-size: var(--situate-text-lead);
   font-weight: 650;

@@ -398,7 +398,7 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
   flex: 0 0 44px;
   width: 44px;
   height: 44px;
-  padding: 10px;
+  padding: var(--situate-space-2-5);
   border: 0;
   border-radius: var(--situate-radius-control);
   color: var(--situate-muted);
@@ -453,7 +453,7 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
   position: sticky;
   top: -24px;
   background: var(--situate-surface);
-  padding-block: 8px;
+  padding-block: var(--situate-space-2);
 }
 :is(button, [tabindex]):focus:where(
     html:not([data-input-modality="pointer"]) *

@@ -1236,8 +1236,8 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 8px 16px;
+  gap: var(--situate-space-1) var(--situate-space-3);
+  padding: var(--situate-space-2) var(--situate-space-4);
   border-bottom: 1px solid var(--situate-line);
   background: var(--situate-surface);
   font-size: var(--situate-text-caption);
@@ -1256,7 +1256,7 @@ onBeforeUnmount(() => {
 }
 .workspace-notice button {
   min-height: 48px;
-  padding: 10px 12px;
+  padding: var(--situate-space-2-5) var(--situate-space-3);
   border: 0;
   border-radius: var(--situate-radius-control);
   background: transparent;
@@ -1272,8 +1272,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px;
+  gap: var(--situate-space-2);
+  padding: var(--situate-space-3);
   background: var(--situate-paper);
   border: 1px solid var(--situate-line);
   border-radius: var(--situate-radius-control);

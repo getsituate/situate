@@ -133,13 +133,13 @@ function openDocument(document: DocumentReference) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 4px 6px;
+  gap: var(--situate-space-2);
+  padding: var(--situate-space-1) var(--situate-space-1-5);
   cursor: pointer;
   min-height: 44px;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   color: var(--situate-muted);
-  border-radius: 6px;
+  border-radius: var(--situate-radius-tight);
   list-style: none;
 }
 .call-details > :deep(summary::-webkit-details-marker) {
@@ -153,9 +153,9 @@ function openDocument(document: DocumentReference) {
   flex: none;
   width: 18px;
   text-align: center;
-  font-size: 18px;
+  font-size: var(--situate-text-subheading);
   line-height: 1;
-  margin-inline-start: 2px;
+  margin-inline-start: var(--situate-space-0-5);
 }
 @media (prefers-reduced-motion: no-preference) {
   .history-chevron {
@@ -174,17 +174,17 @@ function openDocument(document: DocumentReference) {
   margin-inline-start: auto;
   color: var(--situate-muted);
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
 }
 .plugin-name {
   color: var(--situate-muted);
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   overflow-wrap: anywhere;
   max-width: 100%;
 }
 .batch-technical {
-  padding: 8px 14px;
-  font-size: 12px;
+  padding: var(--situate-space-2) var(--situate-space-3-5);
+  font-size: var(--situate-text-label);
   color: var(--situate-muted);
 }
 .batch-technical :deep(.tool-content) {
@@ -198,7 +198,7 @@ function openDocument(document: DocumentReference) {
 }
 .change-card {
   border: 1px solid var(--situate-line);
-  border-radius: 12px;
+  border-radius: var(--situate-radius-control);
   background: var(--situate-surface);
   overflow: hidden;
 }

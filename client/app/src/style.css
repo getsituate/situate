@@ -9,6 +9,13 @@
   background: var(--situate-paper);
   color-scheme: light;
 }
+[data-theme-surface],
+[data-theme-defaults] {
+  color: var(--situate-ink);
+  font-family: var(--situate-font-body);
+  font-size: var(--situate-text-body);
+  line-height: var(--situate-leading-body);
+}
 html,
 body {
   height: 100%;

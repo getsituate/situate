@@ -51,7 +51,7 @@ const files = computed(() =>
 ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--situate-space-1-5);
   list-style: none;
   padding: 0;
   margin: 0;
@@ -63,10 +63,10 @@ li {
 .imported-file {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   max-width: 100%;
   min-height: 44px;
-  padding: 6px 10px;
+  padding: var(--situate-space-1-5) var(--situate-space-2-5);
   border: 1px solid var(--situate-line);
   border-radius: var(--situate-radius-control);
   background: var(--situate-content-tint, var(--situate-paper));

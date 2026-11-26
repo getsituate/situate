@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "./test";
+import type { PluginSource } from "../../src/plugins/types";
+import type { ThemeDefinition } from "../../src/settings/theme-tokens";
 import {
   workspaceFixture,
   shellState,
@@ -128,6 +130,265 @@ test("all six accents have readable controls and leave the wordmark unchanged", 
     );
   }
   await expect(page.getByRole("button", { name: /^Save/ })).toHaveCount(0);
+});
+
+async function themeFixture(
+  page: Page,
+  title: string,
+  variables: Record<string, string>,
+  metadata: Pick<ThemeDefinition, "preview" | "brandAssets"> = {},
+  options: Parameters<typeof workspaceFixture>[2] = {},
+) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const source: PluginSource = {
+    manifest: {
+      schemaVersion: 3,
+      id: "aurora",
+      name: "Theme Lab",
+      description: "",
+      uiEntry: "ui.js",
+      skills: [],
+    },
+    serviceEntry: null,
+    uiEntry: `export default (host) => host.themeApi === 1 ? (${JSON.stringify({ themes: [{ id: "paper", title, variables, ...metadata }] })}) : ({})`,
+    skills: [],
+    modules: {},
+  };
+  await workspaceFixture(page, shellState, {
+    ...options,
+    installedPlugins: [
+      {
+        id: "aurora",
+        incarnation: "first-installation",
+        enabled: true,
+        error: null,
+        manifest: source.manifest,
+      },
+    ],
+    pluginSources: { aurora: source },
+  });
+  await page.goto("/");
+  await openAppearance(page);
+}
+
+test("applies a low-contrast plugin theme and keeps the built-in theme choice usable", async ({
+  page,
+}) => {
+  await themeFixture(page, "Mist", {
+    "--situate-ink": "#e0e0e0",
+    "--situate-surface": "#f0f6ff",
+  });
+  const custom = page.getByRole("radio", { name: /Mist.*Theme Lab/ });
+  await expect(custom).toBeVisible();
+  await custom.click();
+  await expect(custom).toBeChecked();
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "color",
+    "rgb(224, 224, 224)",
+  );
+  await expect(page.locator(".settings-view")).toHaveCSS(
+    "color",
+    "rgb(224, 224, 224)",
+  );
+  await expect(
+    page.locator(".appearance-plugin-option .appearance-option-content"),
+  ).toHaveCSS("border-top-color", "rgb(224, 224, 224)");
+  const themedSurface = "rgb(240, 246, 255)";
+  await expect(page.locator(".settings-view")).toHaveCSS(
+    "background-color",
+    themedSurface,
+  );
+  await page.locator(".desktop-sidebar .plugins-action").click();
+  await expect(page.locator(".plugin-view")).toHaveCSS(
+    "background-color",
+    themedSurface,
+  );
+  await openAppearance(page);
+  await page.getByRole("radio", { name: /^Violet/ }).click();
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "color",
+    "rgb(48, 32, 62)",
+  );
+});
+
+test("plugin themes appear under Theme and can be replaced by a built-in theme @visual-desktop", async ({
+  page,
+  visual,
+}) => {
+  const iconPath = "M5 4H19V20H5ZM8 8H16M8 12H16M8 16H13";
+  await themeFixture(
+    page,
+    "Cool Paper",
+    {
+      "--situate-paper": "#edf4ff",
+      "--situate-text-body": "18px",
+      "--situate-space-3": "14px",
+      "--situate-radius-control": "8px",
+    },
+    { preview: { color: "#337658", icon: { path: iconPath } } },
+  );
+  const choices = page.getByRole("group", { name: "Theme", exact: true });
+  const custom = choices.getByRole("radio", { name: /Cool Paper.*Theme Lab/ });
+  const builtin = choices.getByRole("radio", { name: "Cobalt", exact: true });
+  await expect(choices.getByRole("radio")).toHaveCount(7);
+  await expect(custom).not.toBeChecked();
+  await expect(page.locator(".app-shell")).not.toHaveAttribute(
+    "data-theme-surface",
+    "",
+  );
+  const swatch = choices.locator(".appearance-theme-swatch");
+  await expect(swatch.locator("path")).toHaveAttribute("d", iconPath);
+  await expect(swatch).toHaveCSS("color", "rgb(51, 118, 88)");
+  await expect(choices.getByText(/Choose a theme for/)).toHaveCount(0);
+  const info = choices.getByRole("button", { name: "About plugin themes" });
+  const deviceNote = page.getByText("Plugin themes apply only on this device.");
+  await expect(deviceNote).not.toBeVisible();
+  await visual.capture("appearance.plugin-theme-available");
+  await info.click();
+  await expect(deviceNote).toBeVisible();
+  await visual.capture("appearance.plugin-theme-info");
+  await page.keyboard.press("Escape");
+  await expect(deviceNote).not.toBeVisible();
+  await custom.click();
+  await expect(custom).toBeChecked();
+  await expect(page.locator(".app-shell")).toHaveCSS("font-size", "18px");
+  const settings = page.locator(".settings-view");
+  await expect(settings).toHaveCSS("font-size", "18px");
+  await expect(
+    choices.locator(".appearance-plugin-option .appearance-option-content"),
+  ).toHaveCSS("border-top-color", "rgb(51, 118, 88)");
+  await visual.capture("appearance.plugin-theme-selected");
+  await expect(page.locator(".desktop-sidebar")).toHaveCSS(
+    "--situate-paper",
+    "#edf4ff",
+  );
+  await page
+    .getByRole("button", { name: "Back in this pane", exact: true })
+    .click();
+  await expect(page.locator(".chat-pane")).toHaveCSS("font-size", "18px");
+  await visual.capture("appearance.plugin-theme-chat");
+  await page
+    .getByRole("button", { name: "Workspace menu", exact: true })
+    .click();
+  const workspaceMenu = page.getByRole("menu", {
+    name: "Workspace",
+    exact: true,
+  });
+  await expect(workspaceMenu).toBeVisible();
+  await expect(workspaceMenu).toHaveCSS("--situate-paper", "#edf4ff");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Files", exact: true }).click();
+  await expect(page.locator(".files-pane")).toHaveCSS(
+    "--situate-space-3",
+    "14px",
+  );
+  await page.reload();
+  await expect(page.locator(".app-shell")).toHaveCSS("font-size", "18px");
+  await openAppearance(page);
+  await expect(custom).toBeChecked();
+  await builtin.click();
+  await expect(builtin).toBeChecked();
+  await expect(page.locator(".app-shell")).toHaveCSS("font-size", "16px");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-workspace-accent",
+    "cobalt",
+  );
+  await custom.click();
+  await expect(custom).toBeChecked();
+  await page.locator(".desktop-sidebar .plugins-action").click();
+  const plugins = page.locator(".plugin-view");
+  await expect(plugins).toHaveCSS("font-size", "18px");
+  const plugin = plugins.getByRole("article", {
+    name: "Theme Lab",
+    exact: true,
+  });
+  await expect(plugin).toBeVisible();
+  await visual.capture("appearance.plugin-theme-management");
+  await plugin.getByRole("button", { name: "Disable", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Disable", exact: true })
+    .click();
+  await expect(page.locator(".app-shell")).toHaveCSS("font-size", "16px");
+  await openAppearance(page);
+  await expect(custom).toHaveCount(0);
+  await expect(builtin).toBeChecked();
+});
+
+test("dark theme selects legible brand artwork and restores the default artwork @visual-desktop", async ({
+  page,
+  visual,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await themeFixture(
+    page,
+    "Green terminal",
+    {
+      "--situate-paper": "#0e1a13",
+      "--situate-surface": "#14241b",
+      "--situate-ink": "#c6f5d4",
+      "--situate-muted": "#9dbba6",
+      "--situate-line": "#435d4c",
+      "--situate-control-line": "#698777",
+      "--situate-accent-soft": "#254435",
+      "--situate-accent-strong": "#a7eab8",
+    },
+    { brandAssets: "on-dark" },
+    {
+      aiConnection: {
+        provider: "openai",
+        endpoint: null,
+        connectionId: "personal",
+        label: "Personal",
+      },
+      aiModel: "gpt-5.4",
+      aiHoldPartialResponse: true,
+    },
+  );
+  const wordmark = page.getByAltText("Situate", { exact: true });
+  await expect(wordmark).toBeVisible();
+  const standardWordmark = (await wordmark.getAttribute("src"))!;
+  const back = page.getByRole("button", {
+    name: "Back in this pane",
+    exact: true,
+  });
+  await page.getByRole("radio", { name: /Green terminal.*Theme Lab/ }).click();
+  await expect(wordmark).not.toHaveAttribute("src", standardWordmark);
+  await expect(wordmark).toHaveAttribute("src", /%23fffefa|wordmark-light/);
+  await back.click();
+  const depth = page.locator('.welcome-bend [data-bend-part="depth"]');
+  await expect(depth).toBeVisible();
+  await expect(depth).toHaveCSS("fill", "rgb(134, 81, 237)");
+  await visual.capture("appearance.brand-on-dark");
+
+  await page
+    .getByRole("textbox", { name: "Message", exact: true })
+    .fill("Hello");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  const mini = page.locator(".bend-toggle .mini-bend-playful path").first();
+  await expect(mini).toBeVisible();
+  await expect(mini).toHaveCSS("stroke", "rgb(217, 198, 255)");
+  await page
+    .getByRole("button", { name: "Pause animation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Resume animation", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await visual.capture("appearance.brand-on-dark-working");
+  await openAppearance(page);
+  await page.getByRole("radio", { name: /^Violet/ }).click();
+  await expect(wordmark).toHaveAttribute("src", standardWordmark);
+  await back.click();
+  await expect(mini).toHaveCSS("stroke", "rgb(98, 50, 188)");
+  await page
+    .getByRole("button", { name: "Stop response", exact: true })
+    .click();
+  await page.evaluate(() => Reflect.get(window, "__finishResponse")());
+  await expect(
+    page.getByRole("button", { name: "Stop response", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await expect(depth).toHaveCSS("fill", "rgb(86, 50, 155)");
 });
 
 test("selection survives navigation, reload and workspace switches without discarding the chat draft", async ({
