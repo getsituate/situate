@@ -180,10 +180,12 @@ const historyLoading = ref(false);
 const historical = ref<FileDocument | null>(null);
 const selectedRevision = ref("");
 const selectedVersion = ref<HistoryEntry | null>(null);
-const historyToggleControl = useTemplateRef<InstanceType<typeof SituateButton>>(
-  "historyToggleControl",
-);
-const historyToggle = computed(() => historyToggleControl.value?.element);
+const documentActionsControl = useTemplateRef<
+  InstanceType<typeof SituateIconButton>
+>("documentActionsControl");
+const closeHistoryControl = useTemplateRef<
+  InstanceType<typeof SituateIconButton>
+>("closeHistoryControl");
 const historicalContext = useTemplateRef<HTMLDivElement>("historicalContext");
 const comparison = ref(false);
 const deletedOpen = ref(false);
@@ -230,10 +232,18 @@ const isMarkdown = computed(() =>
 );
 const documentScrollLabel = computed(() => {
   if (comparison.value) return t("files.compareWithCurrent");
-  if (!historicalDeleted.value && mode.value !== "source" && !isMarkdown.value)
-    return t("files.textSource");
-  return undefined;
+  if (historicalDeleted.value || mode.value === "source") return undefined;
+  return t(isMarkdown.value ? "files.readingView" : "files.textSource");
 });
+const modeAction = computed(() =>
+  t(
+    mode.value === "source"
+      ? "files.read"
+      : live.value && writable.value
+        ? "files.editSource"
+        : "files.viewSource",
+  ),
+);
 const wordCount = computed(() => markdownWordCount(displayedText.value));
 const tokens = computed(() =>
   highlightSource(displayedText.value, documentPath.value),
@@ -601,8 +611,8 @@ function publishPresentation(): void {
   emit("presentation", presentation);
 }
 function rememberScroll(): void {
-  if (documentScroll.value)
-    viewState.value.readScrollTop = documentScroll.value.scrollTop;
+  if (mode.value !== "read" || !documentScroll.value) return;
+  viewState.value.readScrollTop = documentScroll.value.scrollTop;
   publishPresentation();
 }
 function navigate(
@@ -744,6 +754,19 @@ async function sourceMode(): Promise<void> {
     source.value.scrollTop = viewState.value.scrollTop;
   }
 }
+async function switchDocumentMode(nextMode: "read" | "source"): Promise<void> {
+  if (nextMode === "source") {
+    await sourceMode();
+    source.value?.focus({ preventScroll: true });
+  } else {
+    rememberSelection();
+    mode.value = "read";
+    await nextTick();
+    if (!documentScroll.value) return;
+    documentScroll.value.scrollTop = viewState.value.readScrollTop;
+    documentScroll.value.focus({ preventScroll: true });
+  }
+}
 async function returnToCurrent(): Promise<void> {
   if (props.target !== undefined) {
     const presentation = {
@@ -770,7 +793,7 @@ async function returnToCurrent(): Promise<void> {
   historyOpen.value = false;
   await nextTick();
   if (mode.value === "source") await sourceMode();
-  historyToggle.value?.focus();
+  documentActionsControl.value?.focus({ preventScroll: true });
 }
 function versionDate(version: HistoryEntry): string {
   return formatDateTime(new Date(version.timestamp * 1000));
@@ -934,11 +957,14 @@ async function chooseMenu(
     return;
   }
   if (command === "history") {
-    await showHistory(
+    const loading = showHistory(
       path,
       !!target.documentContext && !live.value && historyExactPath.value,
       target.documentContext && !live.value ? historySeed.value : undefined,
     );
+    await nextTick();
+    closeHistoryControl.value?.focus({ preventScroll: true });
+    await loading;
     return;
   }
   if (command === "read" || command === "source") {
@@ -952,13 +978,7 @@ async function chooseMenu(
       (!target.documentContext && selected.value !== path)
     )
       return;
-    if (command === "source") {
-      await sourceMode();
-      source.value?.focus();
-    } else {
-      mode.value = "read";
-      rememberSelection();
-    }
+    await switchDocumentMode(command);
     return;
   }
   startAction(
@@ -968,16 +988,6 @@ async function chooseMenu(
     false,
     command === "move" || command === "rename" ? command : undefined,
   );
-}
-async function editSource(offset: number): Promise<void> {
-  if (!live.value || !writable.value || !file.value) return;
-  const current = generation;
-  await sourceMode();
-  if (current !== generation || !source.value) return;
-  const position = Math.max(0, Math.min(file.value.text.length, offset));
-  source.value.focus();
-  source.value.setSelectionRange(position, position);
-  rememberSelection();
 }
 function incompleteAction(reply: FilesReply): unknown[] {
   return [
@@ -1126,6 +1136,13 @@ async function runAction(): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+async function closeHistory(): Promise<void> {
+  historyOpen.value = false;
+  await nextTick();
+  (documentActionsControl.value?.element ?? documentTitle.value)?.focus({
+    preventScroll: true,
+  });
 }
 async function showHistory(
   path: string,
@@ -1575,23 +1592,18 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             </h3>
           </div>
           <SituateButton
+            v-if="
+              !documentLoading && !comparison && ((live && file) || historical)
+            "
+            class="document-mode text-button"
             variant="ghost"
             size="small"
-            v-if="documentPath && !pluginId"
-            ref="historyToggleControl"
-            type="button"
-            class="text-button history-toggle"
-            :aria-expanded="historyOpen"
-            :aria-label="t('files.versionHistory')"
-            @click="
-              historyOpen
-                ? (historyOpen = false)
-                : !live
-                  ? showHistory(historyPath, historyExactPath, historySeed)
-                  : showHistory(selected)
-            "
+            :title="modeAction"
+            :aria-label="modeAction"
+            @click="switchDocumentMode(mode === 'read' ? 'source' : 'read')"
           >
-            <SituateIcon name="history" /><span>{{ t("files.history") }}</span>
+            <SituateIcon :name="mode === 'read' ? 'code' : 'notes'" />
+            <span>{{ modeAction }}</span>
           </SituateButton>
           <div class="document-actions">
             <SituateIconButton
@@ -1612,13 +1624,11 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               @click="reference"
             /><SituateIconButton
               v-if="documentPath"
+              ref="documentActionsControl"
               icon="more"
               :label="t('files.fileActions')"
               aria-haspopup="menu"
-              :aria-expanded="
-                menu?.anchor.getAttribute('aria-label') ===
-                t('files.fileActions')
-              "
+              :aria-expanded="!!menu?.documentContext"
               @click="openMenu($event, documentPath, false, true)"
             /><SituateIconButton
               icon="close"
@@ -1744,7 +1754,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               size="small"
               class="text-button"
               type="button"
-              @click="sourceMode"
+              @click="switchDocumentMode('source')"
             >
               {{ t("files.inspectSource") }}
             </SituateButton>
@@ -1826,8 +1836,6 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               :text="displayedText"
               :document="historical ?? file?.document ?? null"
               :historical="!!historical"
-              :editable="live && writable"
-              @edit-source="editSource"
               @navigate="select"
             />
           </div>
@@ -1875,9 +1883,10 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             <h3 data-localization-content="user">{{ historyPath }}</h3>
           </div>
           <SituateIconButton
+            ref="closeHistoryControl"
             icon="close"
             :label="t('files.closeHistory')"
-            @click="historyOpen = false"
+            @click="closeHistory"
           />
         </header>
         <p class="history-help">

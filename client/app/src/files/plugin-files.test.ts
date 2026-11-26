@@ -115,9 +115,7 @@ for (const pluginId of [undefined, "sample"]) {
     expect(wrapper.findAll(".tree-row")).toHaveLength(0);
     expect(wrapper.text()).toContain("⟦files.noMatchingFiles⟧");
     if (pluginId) {
-      expect(wrapper.find(".history-toggle, .document-chat").exists()).toBe(
-        false,
-      );
+      expect(wrapper.find(".document-chat").exists()).toBe(false);
       expect(
         wrapper.find('[aria-label="⟦files.newFileOrFolder⟧"]').exists(),
       ).toBe(false);

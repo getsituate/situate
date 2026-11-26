@@ -9,14 +9,11 @@ const props = defineProps<{
   text: string;
   document: FileDocument | null;
   historical?: boolean;
-  editable?: boolean;
 }>();
 const emit = defineEmits<{
   navigate: [path: string];
-  editSource: [offset: number];
 }>();
 const html = ref("");
-const renderedSource = ref<string | null>(null);
 const content = useTemplateRef<HTMLElement>("content");
 const error = ref<unknown>("");
 let generation = 0;
@@ -53,29 +50,6 @@ const allowed = new Set([
   "DIV",
   "SPAN",
 ]);
-const sourceBlocks = new Set([
-  "H1",
-  "H2",
-  "H3",
-  "H4",
-  "H5",
-  "H6",
-  "P",
-  "PRE",
-  "LI",
-  "BLOCKQUOTE",
-]);
-function validOffset(value: string | null): number | null {
-  if (value === null || !/^(0|[1-9]\d*)$/u.test(value)) return null;
-  const offset = Number(value);
-  if (!Number.isSafeInteger(offset) || offset >= props.text.length) return null;
-  const unit = props.text.charCodeAt(offset);
-  if (unit >= 0xdc00 && unit <= 0xdfff && offset > 0) {
-    const previous = props.text.charCodeAt(offset - 1);
-    if (previous >= 0xd800 && previous <= 0xdbff) return null;
-  }
-  return offset;
-}
 function passiveHtml(value: string): string {
   const parsed = new DOMParser().parseFromString(value, "text/html");
   for (const element of Array.from(parsed.body.querySelectorAll("*"))) {
@@ -83,9 +57,6 @@ function passiveHtml(value: string): string {
       element.replaceWith(parsed.createTextNode(element.textContent ?? ""));
       continue;
     }
-    const offset = sourceBlocks.has(element.tagName)
-      ? validOffset(element.getAttribute("data-source-offset"))
-      : null;
     const anchor =
       element.getAttribute("id") ??
       (/^H[1-6]$/u.test(element.tagName)
@@ -110,8 +81,6 @@ function passiveHtml(value: string): string {
       )
         element.removeAttribute(attribute.name);
     }
-    if (offset !== null)
-      element.setAttribute("data-source-offset", String(offset));
     if (anchor) element.setAttribute("data-file-anchor", anchor);
     if (element.tagName === "INPUT") {
       element.setAttribute("type", "checkbox");
@@ -149,10 +118,8 @@ watch(
     const current = ++generation;
     clearTimeout(timer);
     error.value = "";
-    renderedSource.value = null;
     if (props.historical || props.document?.version.text === props.text) {
       html.value = props.document?.html ?? "";
-      renderedSource.value = props.document?.version.text ?? null;
       return;
     }
     html.value = "";
@@ -173,7 +140,6 @@ watch(
             reply.message ?? "files.thePreviewCouldNotBeRendered",
           );
         html.value = reply.document.html;
-        renderedSource.value = requestedText;
       } catch (reason) {
         if (current === generation) error.value = reason;
       }
@@ -181,47 +147,6 @@ watch(
   },
   { immediate: true, flush: "sync" },
 );
-let pointerStart: { x: number; y: number } | null = null;
-let dragged = false;
-function startPointer(event: PointerEvent): void {
-  pointerStart = { x: event.clientX, y: event.clientY };
-  dragged = false;
-}
-function movePointer(event: PointerEvent): void {
-  if (
-    pointerStart &&
-    Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) >
-      4
-  )
-    dragged = true;
-}
-function cancelPointer(): void {
-  dragged = true;
-}
-function editSource(event: MouseEvent): void {
-  if (
-    !props.editable ||
-    props.historical ||
-    renderedSource.value !== props.text ||
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey ||
-    dragged
-  )
-    return;
-  if (window.getSelection()?.isCollapsed === false) return;
-  const target = event.target instanceof Element ? event.target : null;
-  if (!target || target.closest("a, img, input")) return;
-  const block = target.closest(
-    "h1, h2, h3, h4, h5, h6, p, pre, li, blockquote",
-  );
-  if (!block || !content.value?.contains(block)) return;
-  const offset = validOffset(block.getAttribute("data-source-offset"));
-  if (offset !== null) emit("editSource", offset);
-}
 async function follow(event: MouseEvent): Promise<void> {
   const anchor = (event.target as Element).closest("a");
   if (!anchor) return;
@@ -273,10 +198,6 @@ onBeforeUnmount(() => {
     data-localization-content="user"
     @click.capture="follow"
     @auxclick.capture="follow"
-    @click="editSource"
-    @pointerdown="startPointer"
-    @pointermove="movePointer"
-    @pointercancel="cancelPointer"
     v-html="safeHtml"
   />
 </template>

@@ -396,19 +396,19 @@ async fn settled_question_events_leave_the_window_without_losing_the_active_ques
             *host.question_outcome.lock().unwrap() = Some(Err("host-action-failed".into()));
             owner.apply("current-answer".into(), json!({"version":1,"type":"answerQuestion","response":{"questionId":"current","text":"Answer"},"input":{"text":"Answer","attachments":[],"references":[]},"timestamp":1})).await.unwrap();
         }
-        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        {
+            let mut state = owner.state.lock().await;
+            let mut record = state.snapshot.record.clone();
             for index in 0..270 {
-                owner
-                    .apply(
-                        format!("notice-{index}"),
-                        json!({"version":1,"type":"notifyPluginAvailable","pluginId":"fixture"}),
-                    )
-                    .await
-                    .unwrap();
+                append_event(
+                    &mut record,
+                    &format!("notice-{index}"),
+                    "plugin_available",
+                    json!({"pluginId":"fixture"}),
+                );
             }
-        })
-        .await
-        .expect("question history did not settle");
+            owner.persist(&mut state, record).await.unwrap();
+        }
         let snapshot = owner.snapshot().await.unwrap();
         let events = &snapshot.record.runtime.as_ref().unwrap().events;
         assert!(

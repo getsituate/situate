@@ -118,6 +118,11 @@ export function fileMenu(options: {
   const entries: FileMenuEntry[] = [];
   const active = path === selected && (live || options.documentContext);
   if (!plus && path && !directory) {
+    const history = {
+      action: "history",
+      label: t("files.versionHistory"),
+    } as const;
+    if (options.documentContext) entries.push(history);
     if (options.text ?? /\.(?:md|markdown)$/iu.test(path))
       entries.push(
         {
@@ -134,7 +139,8 @@ export function fileMenu(options: {
           checked: !!active && mode === "source",
         },
       );
-    entries.push({ action: "history", label: t("files.versionHistory") }, null);
+    if (!options.documentContext) entries.push(history);
+    entries.push(null);
   }
   entries.push(
     { action: "create", label: t("files.newFileDetail"), disabled: !writable },
