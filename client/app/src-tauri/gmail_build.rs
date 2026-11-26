@@ -8,7 +8,10 @@ pub fn write_config() {
     for key in ["CI", ID, SECRET, INPUT] {
         println!("cargo:rerun-if-env-changed={key}");
     }
-    let pair = if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+    let pair = if matches!(
+        env::var("CARGO_CFG_TARGET_OS").as_deref(),
+        Ok("macos" | "windows")
+    ) {
         let [id, secret] = build_inputs();
         if id.is_empty() && secret.is_empty() {
             None

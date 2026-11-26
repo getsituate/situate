@@ -195,6 +195,38 @@ fn design_resources_are_offline_and_exactly_selected() {
 }
 
 #[test]
+fn design_tool_ships_the_theme_catalog_and_registration_guide() {
+    let development: Development = serde_json::from_value(json!({"version":2})).unwrap();
+    let tools = definitions(Some(&development), "00000000-0000-4000-8000-000000000001");
+    let definition = tools
+        .iter()
+        .find(|tool| tool["name"] == "read_plugin_design")
+        .unwrap();
+    assert!(
+        definition["parameters"]["properties"]["resource"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("themes"))
+    );
+    let result = design(json!({"resource":"themes"})).unwrap();
+    assert_eq!(result.details, json!({"resource":"themes"}));
+    let content = result.content[0]["text"].as_str().unwrap();
+    assert!(content.contains("Settings → Appearance → Theme"));
+    assert!(content.contains("host.themeApi"));
+    let (_, json) = content.split_once("\n```json\n").unwrap();
+    let catalog: Value = serde_json::from_str(json.strip_suffix("\n```").unwrap()).unwrap();
+    let shared: Value = serde_json::from_str(include_str!(
+        "../../src/ai/plugin-design/theme-variables.json"
+    ))
+    .unwrap();
+    assert_eq!(catalog["contract"], shared);
+    assert_eq!(catalog["brandDefaults"]["space-3"], "12px");
+    assert_eq!(catalog["brandDefaults"]["text-body"], "1rem");
+    assert!(catalog["brandDefaults"].get("target-min").is_none());
+    assert!(!result.is_error);
+}
+
+#[test]
 fn source_structure_operations_are_advertised_only_in_development() {
     let development: Development = serde_json::from_value(json!({"version":2})).unwrap();
     for (mode, expected) in [(None, false), (Some(&development), true)] {

@@ -164,6 +164,45 @@ afterEach(() => {
   for (const runtime of instances.splice(0)) runtime.dispose();
 });
 
+it("publishes themes under their installation identity and keeps the previous theme if a staged replacement fails", async () => {
+  let variable = "--situate-text-body";
+  mocks.importModule.mockImplementation(async () => ({
+    default: (host: PluginUiHost) =>
+      host.themeApi === 1
+        ? {
+            themes: [
+              {
+                id: "read",
+                title: "Reading",
+                variables: { [variable]: "18px" },
+              },
+            ],
+          }
+        : {},
+  }));
+  const { runtime } = setup();
+  await runtime.ready;
+  expect(runtime.themes).toEqual([
+    {
+      id: "read",
+      provider: "demo",
+      title: "Reading",
+      key: '["demo","inc-demo","read"]',
+      variables: { "--situate-text-body": "18px" },
+    },
+  ]);
+  variable = "--situate-target-min";
+  await expect(runtime.refreshGroup(["demo"])).rejects.toThrow();
+  expect(runtime.themes[0]?.variables).toEqual({
+    "--situate-text-body": "18px",
+  });
+  mocks.recovery = true;
+  expect(runtime.themes).toEqual([]);
+  mocks.recovery = false;
+  runtime.dispose();
+  expect(runtime.themes).toEqual([]);
+});
+
 describe("document source runtime", () => {
   const details = "documentLibraryDetails";
   const readOriginal = "documentLibraryReadOriginal";
@@ -495,6 +534,32 @@ describe("plugin UI runtime", () => {
     });
     expect(mocks.importModule).toHaveBeenCalledExactlyOnceWith("demo:ui");
   });
+
+  it.each([false, true])(
+    "uses the verified Gmail bundle and its consumers on Windows only when available (%s)",
+    async (bundledGmailAvailable) => {
+      definitions = [
+        definition("situate-gmail", [], ["macos"]),
+        definition("mail-briefing", ["situate-gmail"]),
+        definition("mac-only", [], ["macos"]),
+      ];
+      const native = mocks.invoke.getMockImplementation()!;
+      mocks.invoke.mockImplementation(async (command, args) => {
+        const reply = await native(command, args);
+        if (command === "plugin_runtime" && args.request.operation === "list")
+          return { ...reply, platform: "windows", bundledGmailAvailable };
+        return reply;
+      });
+
+      const { runtime } = setup();
+      await runtime.ready;
+      expect(mocks.importModule.mock.calls).toEqual(
+        bundledGmailAvailable
+          ? [["situate-gmail:ui"], ["mail-briefing:ui"]]
+          : [],
+      );
+    },
+  );
 
   it.each([false, true])(
     "loads a general plugin with retained tools and exports (source: %s)",

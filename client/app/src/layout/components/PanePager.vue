@@ -246,13 +246,13 @@ onBeforeUnmount(() => {
   flex: 0 0 50%;
   min-width: 0;
   min-height: 44px;
-  gap: 6px;
-  padding: 8px;
+  gap: var(--situate-space-1-5);
+  padding: var(--situate-space-2);
   border: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   color: var(--situate-muted);
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
 }
 .pager-track button[aria-current="true"] {
   color: var(--situate-ink);
@@ -269,7 +269,7 @@ onBeforeUnmount(() => {
 .pager-position {
   flex: 0 0 auto;
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   text-align: center;
   color: var(--situate-muted);
   font-variant-numeric: tabular-nums;

@@ -1200,8 +1200,8 @@ defineExpose({
   align-items: center;
   flex: 0 0 auto;
   min-height: 56px;
-  padding: 0 12px;
-  gap: 4px;
+  padding: 0 var(--situate-space-3);
+  gap: var(--situate-space-1);
   border-bottom: 1px solid var(--situate-line);
   background: var(--situate-surface);
 }
@@ -1214,7 +1214,7 @@ defineExpose({
 .tab-navigation {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--situate-space-1);
 }
 .mobile-tabs {
   display: flex;
@@ -1231,15 +1231,15 @@ defineExpose({
   overflow-x: auto;
   min-width: 0;
   flex: 1;
-  gap: 4px;
-  padding: 2px;
+  gap: var(--situate-space-1);
+  padding: var(--situate-space-0-5);
 }
 .surface-pane-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding-inline-start: 8px;
-  margin-inline-start: 8px;
+  gap: var(--situate-space-1);
+  padding-inline-start: var(--situate-space-2);
+  margin-inline-start: var(--situate-space-2);
   border-inline-start: 1px solid var(--situate-line);
 }
 .topic-tab {
@@ -1249,21 +1249,22 @@ defineExpose({
   min-width: 0;
   max-width: 260px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   color: var(--situate-muted);
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   position: relative;
 }
 .topic-tab-select {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   flex: 1;
   min-width: 0;
   min-height: 44px;
-  padding: 8px 12px 8px 16px;
+  padding: var(--situate-space-2) var(--situate-space-3) var(--situate-space-2)
+    var(--situate-space-4);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -1306,10 +1307,10 @@ defineExpose({
   flex: 0 0 32px;
   width: 32px;
   height: 32px;
-  margin-inline-end: 4px;
+  margin-inline-end: var(--situate-space-1);
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   color: inherit;
   background: transparent;
 }
@@ -1340,7 +1341,7 @@ defineExpose({
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px 18px;
+  padding: var(--situate-space-3) var(--situate-space-4-5);
 }
 .layout-canvas {
   height: 100%;
@@ -1350,33 +1351,33 @@ defineExpose({
   width: 100%;
 }
 .move-pane-source {
-  margin: 0 0 24px;
-  font-size: 14px;
+  margin: 0 0 var(--situate-space-6);
+  font-size: var(--situate-text-small);
   overflow-wrap: anywhere;
 }
 .topic-dialog form > label:not(.sr-only) {
   display: block;
-  margin: 16px 0 8px;
-  font-size: 14px;
+  margin: var(--situate-space-4) 0 var(--situate-space-2);
+  font-size: var(--situate-text-small);
 }
 .topic-dialog input {
   display: block;
   width: 100%;
   min-height: 48px;
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: var(--situate-space-2) var(--situate-space-3);
+  border-radius: var(--situate-radius-inset);
 }
 .all-tab-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--situate-space-1);
 }
 .tab-sheet-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding-inline-end: 4px;
-  border-radius: 10px;
+  gap: var(--situate-space-1);
+  padding-inline-end: var(--situate-space-1);
+  border-radius: var(--situate-radius-inset);
 }
 .tab-sheet-row--current {
   background: var(--situate-accent-soft, var(--situate-lilac));
@@ -1384,14 +1385,14 @@ defineExpose({
 .tab-sheet-select {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   flex: 1;
   min-width: 0;
   min-height: 64px;
-  padding: 10px 12px;
+  padding: var(--situate-space-2-5) var(--situate-space-3);
   text-align: start;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   background: transparent;
   color: var(--situate-ink);
 }
@@ -1403,7 +1404,7 @@ defineExpose({
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  gap: 2px;
+  gap: var(--situate-space-0-5);
   overflow-wrap: anywhere;
 }
 .tab-sheet-title {
@@ -1417,7 +1418,7 @@ defineExpose({
 }
 .tab-sheet-meta {
   color: var(--situate-muted);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   font-weight: 400;
   line-height: 1.5;
 }
@@ -1431,22 +1432,22 @@ defineExpose({
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 16px;
+  gap: var(--situate-space-2);
+  margin-top: var(--situate-space-3);
+  padding-top: var(--situate-space-4);
   border-top: 1px solid var(--situate-line);
 }
 .tab-overview-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 .sheet-reopen-tab {
   min-height: 44px;
-  padding: 8px;
+  padding: var(--situate-space-2);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   background: transparent;
   color: var(--situate-muted);
   font-size: var(--situate-text-small);
@@ -1470,8 +1471,8 @@ defineExpose({
   align-items: center;
   flex: 0 0 auto;
   min-height: 48px;
-  padding: 0 6px;
-  gap: 4px;
+  padding: 0 var(--situate-space-1-5);
+  gap: var(--situate-space-1);
   border-bottom: 1px solid var(--situate-line);
 }
 .mobile-tab-trigger {
@@ -1480,12 +1481,12 @@ defineExpose({
   min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   border: 0;
-  padding: 8px 4px;
+  padding: var(--situate-space-2) var(--situate-space-1);
   background: transparent;
   text-align: start;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
 }
 .mobile-tab-trigger > span:first-child {
@@ -1495,7 +1496,7 @@ defineExpose({
 }
 .mobile-tab-trigger > small {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   color: var(--situate-muted);
   font-weight: 400;
 }
@@ -1522,7 +1523,7 @@ defineExpose({
   background: var(--situate-surface);
 }
 .mobile-topbar .surface-pane-actions {
-  padding-inline-start: 4px;
+  padding-inline-start: var(--situate-space-1);
   margin-inline-start: 0;
 }
 .topic-dialog.mobile-sheet[open] {
@@ -1533,11 +1534,11 @@ defineExpose({
   width: min(100%, 520px);
   max-width: 100%;
   max-height: max(0px, calc(var(--app-viewport-height, 100dvh) - 12px));
-  padding: 24px;
+  padding: var(--situate-space-6);
   padding-bottom: max(
     24px,
     var(--app-safe-area-bottom, env(safe-area-inset-bottom, 0px))
   );
-  border-radius: 24px 24px 0 0;
+  border-radius: var(--situate-radius-dialog) var(--situate-radius-dialog) 0 0;
 }
 </style>

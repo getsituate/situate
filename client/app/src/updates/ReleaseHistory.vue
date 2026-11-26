@@ -124,7 +124,7 @@ const date = computed(
 .release-entries h3 {
   margin: 0 0 0.25rem;
   font-size: 1rem;
-  line-height: 1.4;
+  line-height: var(--situate-leading-compact);
   font-weight: 600;
 }
 .release-entries p {

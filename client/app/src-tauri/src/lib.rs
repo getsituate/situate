@@ -11,6 +11,7 @@ mod appearance;
 mod auth_callback;
 mod change_history;
 mod keyboard_shortcuts;
+mod theme_selection;
 
 mod conversation_projection;
 mod device_locale;
@@ -97,6 +98,7 @@ macro_rules! application_handler {
             crate::gmail::installation::gmail_install,
             crate::appearance::appearance_snapshot,
             crate::appearance::appearance_update,
+            crate::theme_selection::workspace_theme_selection,
             crate::keyboard_shortcuts::keyboard_shortcuts_snapshot,
             crate::keyboard_shortcuts::keyboard_shortcuts_update,
             crate::keyboard_shortcuts::keyboard_shortcuts_plugins,

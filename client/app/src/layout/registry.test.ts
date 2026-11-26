@@ -76,6 +76,7 @@ async function setup() {
     coordinator,
     titleFor: () => "Test",
     plugins: undefined,
+    themes: [],
     shortcuts: createWorkspaceShortcuts(session.workspaceId),
     dispose: () => {},
   };

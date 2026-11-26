@@ -95,6 +95,12 @@ export default function createUi(host) {
 
 Workspace overrides are in `.situate/keyboard-shortcuts.json`. The version 1 `bindings` object maps `macos` and `windows` to action IDs and key strings. A missing entry uses the default; `null` removes the binding. Use logical key names with modifiers in `Control`, `Alt`, `Shift`, `Meta` order. Settings edit only the current platform; the agent's shortcut tools can change a named platform on request. The file travels with the workspace directory, independently of its content Git history and device-local layout. Transport support for copying workspace configuration is separate from the binding format.
 
+## Plugin themes
+
+An enabled workspace plugin can offer themes alongside the built-in options in **Settings → Appearance → Theme**. Selection is per workspace and device. If the provider is disabled or Situate starts in recovery, it uses the last built-in theme.
+
+See the [theme registration example and rules](../../client/app/src/ai/plugin-design/themes.md) and the [public variable catalog](../../client/app/src/ai/plugin-design/theme-variables.json). In a plugin development chat, `read_plugin_design({ resource: "themes" })` returns both together, with the applicable [brand defaults](../../design/brand/tokens.json).
+
 ## File references
 
 [ADR-0012](../architecture/09-architecture-decisions/ADR-0012-unify-git-anchored-file-references.adoc) selects Git-anchored live references for every file, extending [ADR-0010](../architecture/09-architecture-decisions/ADR-0010-git-authoritative-file-history.adoc). Markdown and other files use the same anchored selectors. Unsupported stored formats fail closed and retain overwrite protection. The original no-conversion exception applies only to formats verified never to have shipped publicly; later changes follow [released-version compatibility](../../requirements/data/requirements/REQ-0069-preserve-workspace-version-compatibility.md). Format mismatch never authorizes workspace cleanup, reset or deletion.

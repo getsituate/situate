@@ -217,6 +217,9 @@ function createWorkspaceUi(workspaceId: string) {
     coordinator,
     shortcuts,
     plugins,
+    get themes() {
+      return pluginRuntime.value?.themes ?? [];
+    },
     titleFor,
     dispose() {
       current = false;

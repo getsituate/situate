@@ -23,10 +23,10 @@ onErrorCaptured(() => {
   position: fixed;
   inset: auto 16px 16px;
   z-index: 100;
-  padding: 24px;
+  padding: var(--situate-space-6);
   background: var(--situate-surface);
   color: var(--situate-ink);
   border: 1px solid var(--situate-control-line);
-  border-radius: 24px;
+  border-radius: var(--situate-radius-dialog);
 }
 </style>

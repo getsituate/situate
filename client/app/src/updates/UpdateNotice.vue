@@ -99,12 +99,12 @@ onBeforeUnmount(() => {
   width: max-content;
   max-width: calc(100vw - 32px);
   box-sizing: border-box;
-  padding: 0 48px 0 16px;
+  padding: 0 var(--situate-space-12) 0 var(--situate-space-4);
   border: 1px solid var(--situate-line);
   border-radius: var(--situate-radius-pill);
   background: var(--situate-paper);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--situate-ink) 8%, transparent);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   font-weight: 600;
   white-space: nowrap;
   opacity: 0;

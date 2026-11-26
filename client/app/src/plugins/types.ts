@@ -31,6 +31,7 @@ export interface InstalledPlugin {
 }
 export interface PluginList {
   platform?: "macos" | "ios" | "windows";
+  bundledGmailAvailable?: boolean;
   plugins: InstalledPlugin[];
   revision: string | null;
 }
@@ -249,6 +250,7 @@ export type PluginDocumentOriginal = {
     | "too-large";
 };
 export interface PluginUiHost {
+  readonly themeApi?: 1;
   readonly localization: {
     text: typeof import("@situate/localization").t;
     error: typeof import("@situate/localization").localizeError;
@@ -290,6 +292,7 @@ export interface PluginUiContributions {
   components?: Record<string, Vue.Component>;
   views?: ViewDefinition[];
   shortcuts?: PluginShortcutDefinition[];
+  themes?: import("../settings/theme-tokens").ThemeDefinition[];
   settings?: ViewDefinition;
   dispose?: () => void | Promise<void>;
 }

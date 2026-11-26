@@ -652,7 +652,7 @@ function thinking(event: Event): void {
 
 <style scoped>
 .advanced-settings > :deep(summary) {
-  padding: 20px 0;
+  padding: var(--situate-space-5) 0;
   cursor: pointer;
   font-weight: 600;
   min-height: 44px;
@@ -663,16 +663,16 @@ function thinking(event: Event): void {
 }
 .thinking-explanation {
   color: var(--situate-muted);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   line-height: 1.6;
 }
 .model-list-label {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
 }
 .model-discovery > p {
   color: var(--situate-muted);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   line-height: 1.6;
 }
 .refresh-models-button {
@@ -687,7 +687,7 @@ function thinking(event: Event): void {
 }
 .ai-settings input:not([type="checkbox"]) {
   max-width: 100%;
-  padding: 8px;
+  padding: var(--situate-space-2);
 }
 .ai-settings button:not(.refresh-models-button) {
   border: 0;

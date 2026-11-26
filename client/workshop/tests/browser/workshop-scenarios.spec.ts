@@ -331,7 +331,7 @@ test("conversation list loading stays within navigation and keeps the open chat 
   await expect(draft).toHaveValue("Can we plant the herbs on Sunday?");
 });
 
-test("document tasks have one starting state and changing layout preserves the draft", async ({
+test("document tasks have one starting state and resizing preserves the draft", async ({
   page,
 }) => {
   const preview = await open(page, "documents-find");
@@ -348,7 +348,7 @@ test("document tasks have one starting state and changing layout preserves the d
     (await selectOptions(states))
       .filter((option) => option.value.startsWith("documents-gather"))
       .map((option) => option.label),
-  ).toEqual(["Gather tax documents"]);
+  ).toEqual(["Gather course receipts"]);
   await expect(
     (await selectOptions(states)).filter((option) =>
       option.value.endsWith("-focused"),
@@ -356,18 +356,9 @@ test("document tasks have one starting state and changing layout preserves the d
   ).toHaveLength(0);
   const query = preview.locator("#doc-query");
   await query.fill("Keep this unfinished search");
-  const approach = page.getByLabel("Navigation approach", { exact: true });
-  await selectOption(approach, "focused");
-  await expect(preview.locator(".documents-view")).toHaveClass(
-    /documents-focused/,
-  );
+  await preview.setViewportSize({ width: 820, height: 700 });
   await expect(query).toHaveValue("Keep this unfinished search");
   await expect(states).toHaveAttribute("data-value", "documents-find");
-  await selectOption(approach, "library");
-  await expect(preview.locator(".documents-view")).not.toHaveClass(
-    /documents-focused/,
-  );
-  await expect(query).toHaveValue("Keep this unfinished search");
 });
 
 for (const task of ["find", "gather"]) {
@@ -385,20 +376,11 @@ for (const task of ["find", "gather"]) {
         option.value.endsWith("-focused"),
       ),
     ).toHaveLength(0);
-    await expect(
-      page.getByLabel("Navigation approach", { exact: true }),
-    ).toHaveAttribute("data-value", "focused");
-    await expect(preview.locator(".documents-view")).toHaveClass(
-      /documents-focused/,
-    );
     await expect(preview.locator(".doc-result")).toHaveCount(
-      task === "find" ? 10 : 5,
+      task === "find" ? 10 : 1,
     );
     await page.reload();
     await expect(states).toHaveAttribute("data-value", `documents-${task}`);
-    await expect(
-      page.getByLabel("Navigation approach", { exact: true }),
-    ).toHaveAttribute("data-value", "focused");
   });
 }
 
@@ -417,7 +399,7 @@ test("live controls still follow preview navigation rather than the chosen start
     page.getByRole("group", { name: "Card appearance", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByLabel("Navigation approach", { exact: true }),
+    page.getByLabel("Search result state", { exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByLabel("Starting state", { exact: true }),

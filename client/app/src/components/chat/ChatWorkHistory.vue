@@ -117,7 +117,7 @@ const elapsed = computed(() =>
   flex-direction: column;
   gap: var(--chat-block-gap);
   min-width: 0;
-  margin: 0 0 6px;
+  margin: 0 0 var(--situate-space-1-5);
 }
 .work-history-heading {
   border-bottom: 1px solid var(--situate-line);
@@ -126,19 +126,19 @@ const elapsed = computed(() =>
 .work-history-time {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   min-height: 44px;
   border: 0;
-  padding: 6px 0;
+  padding: var(--situate-space-1-5) 0;
   margin: 0;
   background: transparent;
   color: var(--situate-muted);
-  font: 14px/1.5 var(--situate-font-body);
+  font: var(--situate-text-small)/1.5 var(--situate-font-body);
   text-align: start;
 }
 .work-history-toggle {
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--situate-radius-tight);
 }
 .work-history-heading :deep(.duration) {
   margin: 0;
@@ -166,11 +166,11 @@ const elapsed = computed(() =>
   flex-direction: column;
 }
 .history-detail {
-  padding-inline-start: 12px;
+  padding-inline-start: var(--situate-space-3);
 }
 @container (max-width:540px) {
   .history-detail {
-    padding-inline-start: 4px;
+    padding-inline-start: var(--situate-space-1);
   }
 }
 </style>

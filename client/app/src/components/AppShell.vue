@@ -16,6 +16,7 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
+  provide,
   ref,
   useId,
   useTemplateRef,
@@ -42,6 +43,9 @@ import type { NavigationTicket } from "../layout/session";
 import type { LayoutAction, LayoutActionResult } from "../layout/actions";
 import { keyCombination } from "../layout/shortcut-keys";
 import type { Accent, AppearanceSnapshot } from "../settings/accents";
+import { themeDefaults } from "../settings/theme-tokens";
+import { useThemeSelection } from "../settings/useThemeSelection";
+import { protectedThemeStyle } from "../settings/theme-context";
 import type { Workspace } from "../workspaces/api";
 import { workspaceUi } from "../layout/runtime";
 import {
@@ -94,6 +98,20 @@ const emit = defineEmits<{
 const ui = computed(() =>
   props.currentWorkspaceId ? workspaceUi(props.currentWorkspaceId) : undefined,
 );
+const themeOptions = computed(() => ui.value?.themes ?? []);
+const themeAccent = computed(() => props.accent ?? "violet");
+const theme = useThemeSelection(
+  computed(() => props.currentWorkspaceId),
+  themeOptions,
+);
+const { selected: selectedTheme, busy: themeBusy, error: themeError } = theme;
+const baseThemeStyle = computed(() =>
+  selectedTheme.value ? themeDefaults(themeAccent.value) : undefined,
+);
+provide(protectedThemeStyle, baseThemeStyle);
+async function chooseAccent(accent: Accent) {
+  if (await theme.select(null)) emit("accent", accent);
+}
 const conversations = computed(() =>
   props.currentWorkspaceId
     ? workspaceConversations(props.currentWorkspaceId)
@@ -548,6 +566,7 @@ onBeforeUnmount(() => {
   closeNavigation();
 });
 const sidebar = computed(() => ({
+  brandAssets: selectedTheme.value?.brandAssets,
   workspaceName: props.workspaceName,
   openWorkspaces: props.openWorkspaces,
   currentWorkspaceId: props.currentWorkspaceId,
@@ -613,6 +632,9 @@ const sidebarActions = {
     ref="shell"
     class="app-shell"
     :class="{ 'sidebar-collapsed': wide && sidebarCollapsed }"
+    :data-theme-surface="selectedTheme ? '' : undefined"
+    :data-brand-assets="selectedTheme?.brandAssets"
+    :style="selectedTheme?.variables"
   >
     <aside
       v-if="wide && !sidebarCollapsed"
@@ -746,13 +768,17 @@ const sidebarActions = {
                 :appearance-loading="appearanceLoading"
                 :appearance-saving="appearanceSaving"
                 :appearance-error="appearanceError"
+                :themes="themeOptions"
+                :selected-theme="selectedTheme?.key"
+                :theme-busy="themeBusy"
                 :snapshot="localization ?? null"
                 :loading="localizationLoading ?? false"
                 :saving="localizationSaving ?? false"
                 :error="localizationError ?? ''"
                 :presentation="entry.presentation"
                 @presentation="retain"
-                @accent="emit('accent', $event)"
+                @accent="chooseAccent"
+                @theme="theme.select($event)"
                 @retry-appearance="emit('retryAppearance')"
                 @plugins="showPlugins(undefined, ticket)"
                 @connect="emit('connect')"
@@ -802,6 +828,11 @@ const sidebarActions = {
           </ViewHost>
         </template>
       </WorkspaceLayout>
+      <ErrorDialog
+        :open="!!themeError"
+        :message="themeError ? localizeError(themeError) : ''"
+        @dismiss="themeError = ''"
+      />
       <SituateDialog
         ref="reloadDialogControl"
         class="layout-confirmation"
@@ -858,6 +889,15 @@ const sidebarActions = {
   min-width: 0;
   flex: 1;
 }
+.app-shell[data-brand-assets="on-dark"] {
+  --chat-bend-depth: var(--situate-violet);
+  --chat-mini-bend-ink: var(--situate-bend-highlight);
+  --chat-mini-bend-paused-surface: color-mix(
+    in srgb,
+    var(--chat-mini-bend-ink) 12%,
+    var(--situate-surface)
+  );
+}
 .desktop-sidebar {
   position: relative;
   flex: 0 0 300px;
@@ -885,8 +925,8 @@ const sidebarActions = {
 .layout-notice {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
+  gap: var(--situate-space-3);
+  padding: var(--situate-space-2) var(--situate-space-4);
   flex-wrap: wrap;
 }
 .navigation-drawer {

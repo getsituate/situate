@@ -213,14 +213,14 @@ defineExpose({ element, dismiss });
   box-sizing: border-box;
   width: 280px;
   margin: 0;
-  padding: 8px;
+  padding: var(--situate-space-2);
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--situate-line);
-  border-radius: 12px;
+  border-radius: var(--situate-radius-control);
   background: var(--situate-surface);
   color: var(--situate-ink);
-  font: 14px/1.5 var(--situate-font-body);
+  font: var(--situate-text-small)/1.5 var(--situate-font-body);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--situate-ink) 10%, transparent);
 }
 @media (prefers-reduced-motion: no-preference) {

@@ -392,11 +392,11 @@ async function save() {
 .conversation-destination {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   flex: 1;
   min-width: 0;
   min-height: var(--situate-row-compact);
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 0;
   background: transparent;
   text-align: left;
@@ -459,17 +459,18 @@ async function save() {
 .title-entry {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--situate-space-0-5);
   min-width: 0;
   min-height: var(--situate-row-compact);
-  padding: 2px 4px 2px 12px;
+  padding: var(--situate-space-0-5) var(--situate-space-1)
+    var(--situate-space-0-5) var(--situate-space-3);
 }
 .title-entry input {
   flex: 1;
   width: 0;
   min-width: 0;
   height: var(--situate-target-min);
-  padding: 6px 8px;
+  padding: var(--situate-space-1-5) var(--situate-space-2);
 }
 .save-title:not(:disabled) {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
@@ -480,6 +481,6 @@ async function save() {
 }
 .title-error {
   margin: 0;
-  padding: 4px 12px 12px;
+  padding: var(--situate-space-1) var(--situate-space-3) var(--situate-space-3);
 }
 </style>

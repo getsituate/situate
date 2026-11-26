@@ -18,6 +18,7 @@ import {
   resumePlugins,
 } from "../recovery";
 import { gmailRequestError } from "./gmail-errors";
+import type { WorkspaceTheme } from "../settings/theme-tokens";
 import { importPluginModule, loadHostModules } from "./module";
 import { pluginLayout } from "./layout-actions";
 import { observeManualPersistence } from "./manual-persistence";
@@ -125,6 +126,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
   const pendingHosts = new Set<() => void>();
   const contributionCleanups = new Set<() => void>();
   const loaded = new Map<string, LoadedPlugin>();
+  const themes = shallowReactive(new Map<string, WorkspaceTheme[]>());
   const activeActions = shallowReactive(new Map<string, number>());
   const retiring = new Map<{ runs: number; close: () => void }, string>();
   function closeWhenIdle(
@@ -253,6 +255,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
   })();
   void updatesReady.catch(() => undefined);
   function release(id: string) {
+    themes.delete(id);
     for (const unregister of registrations.get(id) ?? []) unregister();
     registrations.delete(id);
     options.registry.removePlugin(id);
@@ -394,12 +397,15 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
           return false;
         }
         visiting.add(plugin.id);
+        const currentPlatform = result.platform ?? options.platform ?? "macos";
         const platform =
           !plugin.manifest?.platforms ||
           plugin.manifest.platforms.some(
-            (allowed) =>
-              allowed === (result.platform ?? options.platform ?? "macos"),
-          );
+            (allowed) => allowed === currentPlatform,
+          ) ||
+          (currentPlatform === "windows" &&
+            plugin.id === "situate-gmail" &&
+            result.bundledGmailAvailable === true);
         if (!platform)
           plugin.blockedBy = { reason: "platform", pluginId: plugin.id };
         const usable =
@@ -590,6 +596,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
             };
             const host: PluginUiHost = {
               ...modules,
+              themeApi: 1,
               layout: pluginLayout(
                 options.coordinator,
                 options.shortcuts,
@@ -702,6 +709,17 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
               );
             registrations.set(plugin.id, releases);
             loaded.set(plugin.id, instance);
+            const incarnation = plugin.incarnation;
+            if (incarnation && validated.themes?.length) {
+              themes.set(
+                plugin.id,
+                validated.themes.map((theme) => ({
+                  ...theme,
+                  provider: source.manifest.name,
+                  key: JSON.stringify([plugin.id, incarnation, theme.id]),
+                })),
+              );
+            } else themes.delete(plugin.id);
             if (options.shortcuts && validated.shortcuts?.length) {
               const id = plugin.id;
               const available = () =>
@@ -1375,6 +1393,9 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
   void refresh();
   return {
     state: readonly(state),
+    get themes(): readonly WorkspaceTheme[] {
+      return recoveryMode() ? [] : [...themes.values()].flat();
+    },
     get ready() {
       return latestReady;
     },

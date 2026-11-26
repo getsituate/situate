@@ -809,10 +809,13 @@ fn native_tool_capture_respects_platforms_and_complete_acyclic_dependencies() {
         incarnation: None,
     });
     assert_eq!(
-        supported_plugins(&Listing {
-            plugins: entries,
-            revision: None
-        }),
+        supported_plugins(
+            &Listing {
+                plugins: entries,
+                revision: None
+            },
+            false
+        ),
         HashSet::from(["base".into(), "consumer".into()])
     );
 }

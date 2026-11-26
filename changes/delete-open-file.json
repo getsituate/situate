@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "delete-open-file",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "delete-open-file",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Deleting an open file",
+          "paragraphs": [
+            "Deleting an open file closes it without offering to recover a draft when there are no unsaved edits."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "delete-open-file",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Offene Dateien löschen",
+          "paragraphs": [
+            "Wenn du eine offene Datei löschst, wird sie geschlossen. Ohne ungespeicherte Änderungen erscheint kein Dialog zur Wiederherstellung eines Entwurfs."
+          ]
+        }
+      ]
+    }
+  }
+}

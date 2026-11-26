@@ -286,16 +286,16 @@ async function install(
 }
 .update-scope {
   color: var(--situate-muted);
-  font-size: 13px;
-  margin: -8px 0 32px;
+  font-size: var(--situate-text-caption);
+  margin: calc(-1 * var(--situate-space-2)) 0 var(--situate-space-8);
 }
 .installed-version {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--situate-space-3);
   color: var(--situate-muted);
-  font-size: 14px;
-  padding-bottom: 18px;
+  font-size: var(--situate-text-small);
+  padding-bottom: var(--situate-space-4-5);
   border-bottom: 1px solid var(--situate-line);
 }
 .installed-version strong {
@@ -305,11 +305,11 @@ async function install(
 }
 .update-status {
   display: flex;
-  gap: 18px;
-  margin: 28px 0 38px;
+  gap: var(--situate-space-4-5);
+  margin: var(--situate-space-7) 0 38px;
   padding: 26px;
   border: 1px solid var(--situate-line);
-  border-radius: 20px;
+  border-radius: var(--situate-radius-panel-large);
   background: var(--situate-paper);
 }
 .status-symbol {
@@ -318,7 +318,7 @@ async function install(
   flex: none;
   width: 42px;
   height: 42px;
-  border-radius: 14px;
+  border-radius: var(--situate-radius-panel-compact);
   color: var(--situate-accent-strong);
   background: var(--situate-accent-soft);
 }
@@ -328,18 +328,18 @@ async function install(
 }
 h3 {
   margin: 0;
-  font-size: 18px;
-  line-height: 1.4;
+  font-size: var(--situate-text-subheading);
+  line-height: var(--situate-leading-compact);
   font-weight: 600;
 }
 .status-body p {
-  margin: 8px 0 0;
+  margin: var(--situate-space-2) 0 0;
   color: var(--situate-muted);
   max-width: 48ch;
 }
 .status-body p:not(:where(.situate-dialog *)) {
   line-height: 1.65;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 .status-body .target-version {
   color: var(--situate-ink);
@@ -347,36 +347,36 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 .status-body .target-version:not(:where(.situate-dialog *)) {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .status-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: var(--situate-space-3-5);
   margin-top: 22px;
 }
 .last-check {
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   color: var(--situate-muted);
 }
 .download-progress {
-  margin-top: 24px;
+  margin-top: var(--situate-space-6);
 }
 .progress-meta {
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   font-variant-numeric: tabular-nums;
   color: var(--situate-muted);
 }
 @media (max-width: 600px) {
   .update-status {
-    padding: 18px;
-    gap: 12px;
+    padding: var(--situate-space-4-5);
+    gap: var(--situate-space-3);
   }
   .status-symbol {
     width: 32px;
     height: 32px;
-    border-radius: 10px;
+    border-radius: var(--situate-radius-inset);
   }
 }
 </style>

@@ -11,13 +11,11 @@ import {
 import { preferences, t } from "@situate/localization";
 import {
   SituateButton,
-  SituateDialog,
   SituateDisclosure,
   SituateEmptyState,
   SituateIcon,
   SituateIconButton,
   SituateInput,
-  SituateResizeHandle,
 } from "@situate/ui";
 import {
   LIBRARY_DETAILS_EXPORT,
@@ -79,28 +77,11 @@ const inventory = computed(() =>
   ),
 );
 const busy = ref(false);
-const browse = ref(false);
 const searchInput = ref<InstanceType<typeof SituateInput>>();
 const previewHeading = ref<HTMLElement>();
-const browseButton = ref<InstanceType<typeof SituateButton>>();
 const root = ref<HTMLElement>();
 const results = ref<HTMLElement>();
-const unavailableId = useId();
-const sidebarId = useId();
 const queryId = useId();
-const width = ref(272);
-const availableWidth = ref(1160);
-const sidebarMax = computed(() =>
-  Math.max(224, Math.min(480, availableWidth.value - 700)),
-);
-watch(root, (element, _, onCleanup) => {
-  if (!element || typeof ResizeObserver === "undefined") return;
-  const observer = new ResizeObserver(([entry]) => {
-    if (entry) availableWidth.value = entry.contentRect.width;
-  });
-  observer.observe(element);
-  onCleanup(() => observer.disconnect());
-});
 const initial =
   props.presentation &&
   typeof props.presentation === "object" &&
@@ -304,6 +285,10 @@ function search(term = draft.value.trim()) {
   retain();
   void load(false, true);
 }
+function clearSearch() {
+  search("");
+  searchInput.value?.focus({ preventScroll: true });
+}
 
 async function openDocument(userAction = false) {
   const turn = ++openTurn;
@@ -409,10 +394,6 @@ function sources(id?: string) {
   retain();
   emit("sources", id);
 }
-function closeBrowse() {
-  browse.value = false;
-  void nextTick(() => browseButton.value?.focus({ preventScroll: true }));
-}
 let loadedInventory: string | undefined;
 watch(
   [inventory, () => runtime.value?.state.status, runtimeFailed],
@@ -486,45 +467,6 @@ onUnmounted(() => {
     tabindex="-1"
   >
     <div v-if="candidates.length || selection" class="doc-shell">
-      <aside
-        :id="sidebarId"
-        class="doc-navigation"
-        :style="{ flexBasis: `${Math.min(width, sidebarMax)}px` }"
-      >
-        <div class="doc-browse">
-          <section>
-            <div class="doc-navigation-heading">
-              <h2>{{ t("documents.tags") }}</h2>
-              <SituateIconButton
-                icon="plus"
-                disabled
-                :label="t('documents.addTag')"
-                :aria-describedby="unavailableId"
-              />
-            </div>
-            <p :id="unavailableId" class="doc-muted">
-              {{ t("documents.later") }}
-            </p>
-          </section>
-          <section>
-            <h2>{{ t("documents.pinned") }}</h2>
-            <p class="doc-muted">{{ t("documents.later") }}</p>
-          </section>
-          <section>
-            <h2>{{ t("documents.saved") }}</h2>
-            <p class="doc-muted">{{ t("documents.later") }}</p>
-          </section>
-        </div>
-        <SituateResizeHandle
-          :model-value="Math.min(width, sidebarMax)"
-          :min="224"
-          :max="sidebarMax"
-          :reset-value="272"
-          :label="t('documents.resize')"
-          :controls="sidebarId"
-          @update:model-value="width = $event"
-        />
-      </aside>
       <section class="doc-collection">
         <div class="doc-search-area">
           <form class="doc-search" role="search" @submit.prevent="search()">
@@ -544,49 +486,25 @@ onUnmounted(() => {
                 :placeholder="t('documents.searchHint')"
               />
               <SituateButton
+                v-if="query || draft"
+                variant="plain"
+                type="button"
+                tabindex="0"
+                :aria-label="t('documents.clear')"
+                @click="clearSearch"
+              >
+                <SituateIcon name="close" />
+              </SituateButton>
+              <SituateButton
                 variant="plain"
                 type="submit"
+                tabindex="0"
                 :aria-label="t('documents.search')"
-                ><SituateIcon name="search"
-              /></SituateButton>
+              >
+                <SituateIcon name="search" />
+              </SituateButton>
             </div>
-            <SituateButton
-              ref="browseButton"
-              variant="plain"
-              class="doc-browse-trigger"
-              @click="browse = true"
-              >{{ t("documents.browse") }}</SituateButton
-            >
           </form>
-          <div class="doc-filters">
-            <SituateButton
-              variant="plain"
-              disabled
-              :aria-describedby="`${unavailableId}-filters`"
-              >{{ t("documents.addTag") }}</SituateButton
-            >
-            <SituateButton
-              variant="plain"
-              disabled
-              :aria-describedby="`${unavailableId}-filters`"
-              >{{ t("documents.tagMatching") }}</SituateButton
-            >
-            <SituateButton
-              v-if="query || draft"
-              variant="plain"
-              @click="search('')"
-              >{{ t("documents.clear") }}</SituateButton
-            >
-            <SituateButton
-              variant="plain"
-              disabled
-              :aria-describedby="`${unavailableId}-filters`"
-              >{{ t("documents.save") }}</SituateButton
-            >
-            <span :id="`${unavailableId}-filters`" class="doc-muted">{{
-              t("documents.later")
-            }}</span>
-          </div>
         </div>
         <div class="doc-results-heading">
           <div>
@@ -604,17 +522,6 @@ onUnmounted(() => {
                 t("documents.incomplete")
               }}</SituateButton
             >
-          </div>
-          <div class="doc-sort">
-            <SituateButton
-              variant="plain"
-              disabled
-              :aria-describedby="`${unavailableId}-sort`"
-              >{{ t("documents.sort") }}</SituateButton
-            >
-            <span :id="`${unavailableId}-sort`" class="doc-muted">{{
-              t("documents.later")
-            }}</span>
           </div>
         </div>
         <div ref="results" class="doc-results" :aria-busy="busy">
@@ -734,20 +641,11 @@ onUnmounted(() => {
             :mime-type="preview?.document.mimeType ?? selection.mimeType"
             @failed="previewFailed()"
           />
-          <section class="doc-metadata">
-            <div class="doc-navigation-heading">
-              <h3>{{ t("documents.tags") }}</h3>
-              <SituateButton
-                variant="plain"
-                disabled
-                :aria-describedby="`${unavailableId}-edit`"
-                >{{ t("documents.editTags") }}</SituateButton
-              >
-            </div>
-            <p :id="`${unavailableId}-edit`" class="doc-muted">
-              {{ t("documents.later") }}
-            </p>
-            <SituateDisclosure v-if="fileFormat || detailFields.length" open>
+          <section
+            v-if="fileFormat || detailFields.length"
+            class="doc-metadata"
+          >
+            <SituateDisclosure open>
               <template #label>{{ t("documents.details") }}</template>
               <dl>
                 <template v-if="fileFormat">
@@ -825,34 +723,5 @@ onUnmounted(() => {
         >
       </template>
     </SituateEmptyState>
-    <SituateDialog
-      v-if="browse"
-      :open="true"
-      :aria-label="t('documents.browse')"
-      @close="closeBrowse"
-      @cancel="closeBrowse"
-    >
-      <template #header
-        ><h2>{{ t("documents.browse") }}</h2>
-        <SituateIconButton
-          icon="close"
-          :label="t('documents.closeBrowse')"
-          @click="closeBrowse"
-      /></template>
-      <div class="doc-browse">
-        <section>
-          <h2>{{ t("documents.tags") }}</h2>
-          <p>{{ t("documents.later") }}</p>
-        </section>
-        <section>
-          <h2>{{ t("documents.pinned") }}</h2>
-          <p>{{ t("documents.later") }}</p>
-        </section>
-        <section>
-          <h2>{{ t("documents.saved") }}</h2>
-          <p>{{ t("documents.later") }}</p>
-        </section>
-      </div>
-    </SituateDialog>
   </main>
 </template>

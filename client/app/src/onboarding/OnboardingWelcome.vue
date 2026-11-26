@@ -464,7 +464,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 .closing-title p {
-  margin: 0 0 14px;
+  margin: 0 0 var(--situate-space-3-5);
   font-size: clamp(26px, 3.2vw, 44px);
   line-height: 1.12;
   letter-spacing: -0.045em;
@@ -472,7 +472,7 @@ onBeforeUnmount(() => {
 }
 .closing-title span {
   display: block;
-  font-size: 16px;
+  font-size: var(--situate-text-body);
   line-height: 1.6;
   white-space: pre-line;
   color: var(--situate-muted);
@@ -484,20 +484,20 @@ onBeforeUnmount(() => {
   right: 24px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 .playback button {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   min-height: 44px;
-  padding: 10px 16px;
+  padding: var(--situate-space-2-5) var(--situate-space-4);
   border: 1px solid var(--situate-control-line);
-  border-radius: 99px;
+  border-radius: var(--situate-radius-pill);
   color: var(--situate-ink);
   background: var(--situate-paper);
-  font: 500 13px var(--situate-font-body);
+  font: 500 var(--situate-text-caption) var(--situate-font-body);
   cursor: pointer;
 }
 .playback button:hover {
@@ -513,7 +513,7 @@ onBeforeUnmount(() => {
   fill: currentColor;
 }
 .skip span {
-  font-size: 18px;
+  font-size: var(--situate-text-subheading);
   line-height: 1;
 }
 .sr-only {
@@ -642,7 +642,7 @@ onBeforeUnmount(() => {
   font-size: 26px;
 }
 .compact .closing-title span {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 @media (max-height: 620px) {
   .compact .intro-title {
@@ -653,10 +653,10 @@ onBeforeUnmount(() => {
   }
   .compact .closing-title p {
     font-size: 22px;
-    margin-bottom: 8px;
+    margin-bottom: var(--situate-space-2);
   }
   .compact .closing-title span {
-    font-size: 12px;
+    font-size: var(--situate-text-label);
   }
   .compact .playback {
     bottom: 14px;

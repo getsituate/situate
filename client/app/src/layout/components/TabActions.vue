@@ -189,8 +189,8 @@ defineExpose({ back });
   width: 44px;
   height: 44px;
   border: 0;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: var(--situate-radius-inset);
+  padding: var(--situate-space-3);
   color: var(--situate-muted);
   background: transparent;
 }
@@ -204,19 +204,19 @@ defineExpose({ back });
 }
 .action-separator {
   height: 1px;
-  margin: 4px 8px;
+  margin: var(--situate-space-1) var(--situate-space-2);
   background: var(--situate-line);
 }
 .tab-action-menu button {
   display: block;
   width: 100%;
   min-height: 44px;
-  padding: 10px 12px;
+  padding: var(--situate-space-2-5) var(--situate-space-3);
   text-align: start;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   background: transparent;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 .tab-action-menu button:disabled {
   color: var(--situate-muted);

@@ -1,0 +1,93 @@
+{
+  "prefix": "--situate-",
+  "groups": {
+    "color": {
+      "example": "oklch(95% 0.02 260)",
+      "names": [
+        "paper",
+        "surface",
+        "ink",
+        "muted",
+        "line",
+        "control-line",
+        "link",
+        "accent",
+        "accent-on",
+        "accent-strong",
+        "accent-edge",
+        "accent-soft",
+        "content-accent",
+        "content-tint",
+        "content-wash"
+      ]
+    },
+    "font": {
+      "example": "'Avenir Next', system-ui, sans-serif",
+      "names": ["font-body", "font-display", "font-mono"]
+    },
+    "textSize": {
+      "example": "1.125rem",
+      "names": [
+        "text-fine",
+        "text-label",
+        "text-caption",
+        "text-small",
+        "text-control",
+        "text-body",
+        "text-subheading",
+        "text-lead",
+        "text-heading",
+        "text-title"
+      ]
+    },
+    "lineHeight": {
+      "example": "1.5",
+      "names": ["leading-body", "leading-compact", "leading-reading"]
+    },
+    "spacing": {
+      "example": "clamp(8px, 2vw, 24px)",
+      "names": [
+        "space-0-5",
+        "space-1",
+        "space-1-5",
+        "space-2",
+        "space-2-5",
+        "space-3",
+        "space-3-5",
+        "space-4",
+        "space-4-5",
+        "space-5",
+        "space-6",
+        "space-7",
+        "space-8",
+        "space-12",
+        "space-16",
+        "space-20",
+        "space-25"
+      ]
+    },
+    "radius": {
+      "example": "6px",
+      "names": [
+        "radius-tight",
+        "radius-small",
+        "radius-inset",
+        "radius-control",
+        "radius-panel-compact",
+        "radius-note",
+        "radius-panel",
+        "radius-panel-large",
+        "radius-dialog",
+        "radius-card"
+      ]
+    },
+    "shadow": {
+      "example": "0 8px 30px rgb(0 0 0 / 20%)",
+      "names": ["shadow-popover"]
+    },
+    "duration": {
+      "example": "0.4s",
+      "names": ["duration-press", "duration-release", "duration-feedback"]
+    }
+  }
+}

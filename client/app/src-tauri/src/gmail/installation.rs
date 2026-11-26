@@ -46,6 +46,29 @@ pub(crate) fn bundled(source: &serde_json::Value) -> bool {
     current_bundle(source) || previous_bundle(source)
 }
 
+fn active_package(
+    listing: &situate_core::plugins::runtime::Listing,
+) -> Option<sources::PackageRevision> {
+    let plugin = listing
+        .plugins
+        .iter()
+        .find(|plugin| plugin.id == ID && plugin.enabled && plugin.error.is_none())?;
+    Some(sources::PackageRevision {
+        plugin_id: plugin.id.clone(),
+        revision: plugin.revision.clone()?,
+        incarnation: Some(plugin.incarnation.clone()?),
+    })
+}
+
+// Recognize the published package without changing its synchronized manifest.
+pub(crate) fn active_bundle(
+    root: &Path,
+    listing: &situate_core::plugins::runtime::Listing,
+) -> Option<sources::PackageRevision> {
+    let revision = active_package(listing)?;
+    bundled(&package(root, &revision).ok()?).then_some(revision)
+}
+
 fn install_package(
     root: &Path,
     bind: impl FnOnce(String) -> Result<(), String>,
@@ -147,7 +170,7 @@ pub(crate) async fn gmail_install(
     install: bool,
     update: Option<bool>,
 ) -> Result<bool, String> {
-    if !cfg!(target_os = "macos") {
+    if !cfg!(any(target_os = "macos", target_os = "windows")) {
         return Err(UNAVAILABLE.into());
     }
     let owner = Owner::new(app, &window, scope)?;
@@ -156,18 +179,7 @@ pub(crate) async fn gmail_install(
             let root = crate::files::local_root(&owner.app, location)?.ok_or(UNAVAILABLE)?;
             if update == Some(true) {
                 let listing = situate_core::plugins::runtime::list(&root)?;
-                let active = listing
-                    .plugins
-                    .into_iter()
-                    .find(|plugin| plugin.id == ID && plugin.enabled)
-                    .and_then(|plugin| {
-                        Some(sources::PackageRevision {
-                            plugin_id: plugin.id,
-                            revision: plugin.revision?,
-                            incarnation: Some(plugin.incarnation?),
-                        })
-                    });
-                let Some(active) = active else {
+                let Some(active) = active_package(&listing) else {
                     return unavailable_update(install);
                 };
                 let owned = access(&owner.app, |state| {
@@ -203,6 +215,14 @@ pub(crate) async fn gmail_install(
                 });
             }
             owner.enabled()?;
+            let listing = situate_core::plugins::runtime::list(&root)?;
+            if let Some(active) = active_bundle(&root, &listing) {
+                let incarnation = active.incarnation.ok_or(UNAVAILABLE)?;
+                access(&owner.app, |state| {
+                    bind_synced_bundle(state, &owner.scope, incarnation)
+                })?;
+                return Ok(true);
+            }
             install_package(&root, |incarnation| {
                 access(&owner.app, |state| {
                     state.workspaces.insert(
@@ -227,6 +247,27 @@ pub(crate) async fn gmail_install(
     })
     .await
     .map_err(|_| STORAGE)?
+}
+
+fn bind_synced_bundle(
+    state: &mut super::Device,
+    scope: &str,
+    incarnation: String,
+) -> Result<((), bool), String> {
+    if state.owns(scope, &incarnation) {
+        return Ok(((), false));
+    }
+    if state.workspaces.contains_key(scope) {
+        return Err("native.gmail.packageExists".into());
+    }
+    state.workspaces.insert(
+        scope.to_owned(),
+        super::Workspace {
+            incarnation: Some(incarnation),
+            ..Default::default()
+        },
+    );
+    Ok(((), true))
 }
 
 #[cfg(test)]
@@ -364,6 +405,24 @@ mod tests {
         let runtime = plugins::runtime::list(root.path()).unwrap();
         assert!(runtime.plugins[0].enabled);
         assert_eq!(authorized, runtime.plugins[0].incarnation);
+        let active = active_bundle(root.path(), &runtime).unwrap();
+        assert_eq!(active.incarnation, authorized);
+        assert_eq!(
+            listed_as_windows_bundle(root.path()),
+            cfg!(target_os = "windows")
+        );
+        let mut other_device = super::super::Device::default();
+        let incarnation = active.incarnation.unwrap();
+        assert_eq!(
+            bind_synced_bundle(&mut other_device, "scope", incarnation.clone()),
+            Ok(((), true))
+        );
+        assert!(other_device.owns("scope", &incarnation));
+        assert_eq!(
+            bind_synced_bundle(&mut other_device, "scope", "another".into()),
+            Err("native.gmail.packageExists".into())
+        );
+        assert!(other_device.owns("scope", &incarnation));
         let mut source =
             serde_json::to_value(plugins::runtime::load(root.path(), ID).unwrap()).unwrap();
         assert!(bundled(&source));
@@ -407,5 +466,41 @@ mod tests {
             .unwrap_err(),
             "native.gmail.packageExists"
         );
+
+        let ui = sources::read(root.path(), ID, "ui.js").unwrap();
+        assert!(matches!(
+            sources::write(
+                root.path(),
+                ID,
+                "ui.js",
+                &format!("{}\n// Local edit\n", ui.text),
+                Some(&ui.revision)
+            )
+            .unwrap(),
+            SaveOutcome::Saved { .. }
+        ));
+        let modified = sources::snapshot(root.path(), ID).unwrap();
+        let checked =
+            publication::checked_closure(root.path(), std::slice::from_ref(&modified)).unwrap();
+        publication_result(
+            publication::replace_active(root.path(), &revision, &modified, &checked).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            active_bundle(root.path(), &plugins::runtime::list(root.path()).unwrap()).is_none()
+        );
+        assert!(!listed_as_windows_bundle(root.path()));
+    }
+
+    fn listed_as_windows_bundle(root: &Path) -> bool {
+        use crate::plugin_runtime::{Reply, Request, dispatch};
+        let Reply::List {
+            bundled_gmail_available,
+            ..
+        } = dispatch(root, false, Request::List {}).unwrap()
+        else {
+            panic!("expected plugin runtime inventory");
+        };
+        bundled_gmail_available
     }
 }

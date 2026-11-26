@@ -303,8 +303,9 @@ function selected(event: Event): void {
 .input-line {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 6px 6px 6px 12px;
+  gap: var(--situate-space-2);
+  padding: var(--situate-space-1-5) var(--situate-space-1-5)
+    var(--situate-space-1-5) var(--situate-space-3);
   border: 1px solid var(--situate-control-line);
   border-radius: var(--situate-radius-control);
   background: var(--situate-surface);
@@ -324,7 +325,7 @@ textarea {
   max-height: 160px;
   resize: none;
   border: 0;
-  padding: 10px 0;
+  padding: var(--situate-space-2-5) 0;
   background: transparent;
   color: var(--situate-ink);
   font: inherit;
@@ -343,7 +344,7 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
 }
 .input-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--situate-space-1);
   flex-shrink: 0;
 }
 .stop-action {
@@ -365,8 +366,8 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
 .composer-bottom {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--situate-space-2);
+  margin-top: var(--situate-space-1);
   min-width: 0;
 }
 .composer-selectors {
@@ -401,20 +402,20 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
 .draft-attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 8px;
+  gap: var(--situate-space-1-5);
+  margin: 0 0 var(--situate-space-2);
 }
 .draft-attachment {
   display: flex;
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  gap: 4px;
-  padding-inline-start: 10px;
+  gap: var(--situate-space-1);
+  padding-inline-start: var(--situate-space-2-5);
   border: 1px solid var(--situate-line);
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   background: var(--situate-content-wash, var(--situate-paper));
-  font-size: 12px;
+  font-size: var(--situate-text-label);
 }
 .draft-attachment > span {
   min-width: 0;

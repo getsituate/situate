@@ -12,7 +12,7 @@ goals: [GOAL-0001]
 
 Deferred from initial delivery under [document source navigation](../foundations.md#deferred-document-source-navigation). The behavior below remains an approved should-have; a concrete user need must be established before revisiting delivery.
 
-Where a connector exposes the source's organizational structure, Situate should offer it as supplementary navigation. A folder-based source can retain its folder navigation without requiring every other source to become a folder tree. The common [tag-based document view](REQ-0058-browse-document-collection.md) remains usable independently of this capability.
+Where a connector exposes the source's organizational structure, Situate should offer it as supplementary navigation. A folder-based source can retain its folder navigation without requiring every other source to become a folder tree. The common [document view](REQ-0058-browse-document-collection.md) remains usable independently of this capability.
 
 ## Rationale
 
@@ -32,6 +32,6 @@ Private document-navigation scope clarification; date not recorded, transcript n
 
 ## Open questions
 
-- Which recurring document-finding task cannot be adequately served by the common collection, content search and tags, and would justify source navigation?
+- Which recurring document-finding task cannot be adequately served by the common collection and content search, and would justify source navigation?
 
 - Which non-folder source structures should be represented, and how are connector navigation capabilities declared?

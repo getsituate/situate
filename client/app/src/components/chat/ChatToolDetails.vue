@@ -43,26 +43,26 @@ function resultText(text: string): string {
 
 <style scoped>
 .tool-content {
-  padding: 12px;
-  margin: 4px 0 12px;
-  border-radius: 8px;
+  padding: var(--situate-space-3);
+  margin: var(--situate-space-1) 0 var(--situate-space-3);
+  border-radius: var(--situate-radius-small);
   background: var(--situate-paper);
   color: var(--situate-muted);
   overflow-wrap: anywhere;
 }
 .tool-identifier {
-  font: 12px var(--situate-font-mono);
+  font: var(--situate-text-label) var(--situate-font-mono);
 }
 h4 {
   font-weight: 500;
   color: var(--situate-muted);
-  font-size: 11px;
-  margin: 12px 0 5px;
+  font-size: var(--situate-text-fine);
+  margin: var(--situate-space-3) 0 5px;
 }
 pre {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: 12px/1.6 var(--situate-font-mono);
+  font: var(--situate-text-label)/1.6 var(--situate-font-mono);
 }
 </style>

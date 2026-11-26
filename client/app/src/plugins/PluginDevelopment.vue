@@ -409,8 +409,8 @@ defineExpose({ focusTitle: () => actions.value?.focus() });
 .chat-corners {
   position: absolute;
   z-index: 2;
-  inset-block-start: 8px;
-  inset-inline: 8px;
+  inset-block-start: var(--situate-space-2);
+  inset-inline: var(--situate-space-2);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -478,7 +478,7 @@ defineExpose({ focusTitle: () => actions.value?.focus() });
   position: sticky;
   top: -24px;
   background: var(--situate-surface);
-  padding-block: 8px;
+  padding-block: var(--situate-space-2);
 }
 :is(button, [tabindex]):focus:where(
     html:not([data-input-modality="pointer"]) *

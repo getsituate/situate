@@ -115,6 +115,6 @@ const controlAttrs = computed(() => ({
   flex: none;
   width: 18px;
   height: 18px;
-  margin-top: 2px;
+  margin-top: var(--situate-space-0-5);
 }
 </style>

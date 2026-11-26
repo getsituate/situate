@@ -13,11 +13,14 @@ import {
   type IconName,
 } from "@situate/ui";
 import wordmark from "../../../../design/brand/assets/wordmark.svg";
+import lightWordmark from "../../../../design/brand/assets/wordmark-light.svg";
+import type { BrandAssets } from "../settings/theme-tokens";
 import { displayWorkspaceName, type Workspace } from "../workspaces/api";
 
 const props = withDefaults(
   defineProps<{
     drawer?: boolean;
+    brandAssets?: BrandAssets;
     workspaceName?: string;
     openWorkspaces?: Workspace[];
     currentWorkspaceId?: string;
@@ -179,7 +182,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
           @keydown.up.prevent="showMenu(true)"
         >
           <img
-            :src="wordmark"
+            :src="brandAssets === 'on-dark' ? lightWordmark : wordmark"
             width="104"
             height="32"
             :alt="t('navigation.situate')"
@@ -547,6 +550,17 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   flex: 1;
   min-width: 0;
 }
+@media (hover: hover) and (pointer: fine) {
+  .view-pin {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .pinnable-view:hover .view-pin,
+  .pinnable-view:has(:focus-visible) .view-pin {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .view-pin[aria-pressed="true"] {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
@@ -574,16 +588,16 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin: 0 4px 20px;
+  gap: var(--situate-space-2);
+  margin: 0 var(--situate-space-1) var(--situate-space-5);
 }
 .workspace-menu {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: var(--situate-space-4-5);
   min-width: 0;
   min-height: 44px;
-  padding: 4px 8px;
+  padding: var(--situate-space-1) var(--situate-space-2);
   border: 0;
   background: transparent;
 }
@@ -592,7 +606,8 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   min-width: 0;
 }
 .workspace-context {
-  margin: -12px 12px 20px;
+  margin: calc(-1 * var(--situate-space-3)) var(--situate-space-3)
+    var(--situate-space-5);
 }
 .workspace-name {
   margin: 0;
@@ -610,10 +625,10 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
+  gap: var(--situate-space-3);
   width: 100%;
   min-height: var(--situate-target-min);
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 0;
   border-radius: var(--situate-radius-small);
   background: transparent;
@@ -626,23 +641,23 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
 }
 .workspace-actions small {
   display: block;
-  margin-top: 2px;
+  margin-top: var(--situate-space-0-5);
   color: var(--situate-muted);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
 }
 .workspace-menu-label {
-  margin: 8px 4px 4px;
-  padding: 16px 8px 4px;
+  margin: var(--situate-space-2) var(--situate-space-1) var(--situate-space-1);
+  padding: var(--situate-space-4) var(--situate-space-2) var(--situate-space-1);
   border-top: 1px solid var(--situate-line);
   color: var(--situate-muted);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
 }
 .current-workspace {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
 .workspace-close {
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: var(--situate-space-2);
+  padding-top: var(--situate-space-2);
   border-top: 1px solid var(--situate-line);
 }
 .workspace-menu {
@@ -681,9 +696,9 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   margin: -5px;
 }
 .section-label {
-  margin: 0 12px 8px;
+  margin: 0 var(--situate-space-3) var(--situate-space-2);
   color: var(--situate-muted);
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -696,10 +711,10 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
 .nav-destination {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   width: 100%;
   min-height: var(--situate-row-compact);
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 0;
   border-radius: var(--situate-radius-control);
   background: transparent;
@@ -758,9 +773,10 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
 .more-views-content {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--situate-space-1-5);
   min-height: 32px;
-  padding: 4px 10px 4px 12px;
+  padding: var(--situate-space-1) var(--situate-space-2-5)
+    var(--situate-space-1) var(--situate-space-3);
   border-radius: inherit;
 }
 .more-views .situate-icon {
@@ -804,8 +820,8 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
 .conversation-archive > :deep(summary) {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-inline: 12px;
+  gap: var(--situate-space-2);
+  padding-inline: var(--situate-space-3);
   color: var(--situate-muted);
   font-size: var(--situate-text-small);
 }
@@ -814,7 +830,7 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   margin: 0;
 }
 .conversation-archive .nav-list {
-  padding-inline-start: 12px;
+  padding-inline-start: var(--situate-space-3);
 }
 .section-heading {
   display: flex;
@@ -828,10 +844,10 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
 .conversation-loading:not(:empty) {
-  margin: 8px 12px 16px;
+  margin: var(--situate-space-2) var(--situate-space-3) var(--situate-space-4);
 }
 .empty-conversations {
-  margin: 8px 12px 16px;
+  margin: var(--situate-space-2) var(--situate-space-3) var(--situate-space-4);
   color: var(--situate-muted);
   font-size: var(--situate-text-caption);
 }
@@ -840,17 +856,17 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   flex-wrap: wrap;
   justify-content: space-between;
   flex-shrink: 0;
-  gap: 4px;
-  margin-top: 20px;
-  padding-top: 12px;
+  gap: var(--situate-space-1);
+  margin-top: var(--situate-space-5);
+  padding-top: var(--situate-space-3);
   border-top: 1px solid var(--situate-line);
 }
 .footer-action {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   min-height: 44px;
-  padding: 8px 10px;
+  padding: var(--situate-space-2) var(--situate-space-2-5);
   border: 0;
   background: transparent;
   color: var(--situate-muted);

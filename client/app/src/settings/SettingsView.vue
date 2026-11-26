@@ -37,6 +37,7 @@ import ModelDiagnosticsSettings from "./ModelDiagnosticsSettings.vue";
 import { analyticsPreference } from "../analytics/runtime";
 import UpdateSymbol from "../updates/UpdateSymbol.vue";
 import type { Accent, AppearanceSnapshot } from "./accents";
+import type { WorkspaceTheme } from "./theme-tokens";
 import type { WorkspaceAiSettings } from "../ai/settings";
 import "./settings.css";
 const AiSettings = defineAsyncComponent(() => import("./AiSettings.vue"));
@@ -50,6 +51,9 @@ const props = defineProps<{
   appearanceLoading?: boolean;
   appearanceSaving?: boolean;
   appearanceError?: MessageKey | "";
+  themes?: readonly WorkspaceTheme[];
+  selectedTheme?: string;
+  themeBusy?: boolean;
   snapshot: LocalizationSnapshot | null;
   loading: boolean;
   saving: boolean;
@@ -59,6 +63,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   change: [value: Preferences];
   accent: [value: Accent];
+  theme: [key: string];
   retryAppearance: [];
   "ai-settings-saved": [settings: WorkspaceAiSettings];
   retry: [];
@@ -462,7 +467,12 @@ function change(field: "language" | keyof Formats, event: Event): void {
             :loading="appearanceLoading ?? false"
             :saving="appearanceSaving ?? false"
             :error="appearanceError ?? ''"
+            workspace-themes
+            :themes="themes"
+            :selected-theme="selectedTheme"
+            :theme-busy="themeBusy"
             @select="emit('accent', $event)"
+            @theme="emit('theme', $event)"
             @retry="emit('retryAppearance')"
           />
           <template v-else-if="page === 'formats'">

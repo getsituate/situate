@@ -293,8 +293,6 @@ export const scenarioAliases = {
   "ai-chat-disconnected": "ai-chat-unconfigured",
   "documents-find-focused": "documents-find",
   "documents-gather-focused": "documents-gather",
-  "documents-missing-tag": "documents-tag-removed",
-  "documents-repair-view": "documents-tag-removed",
 } as const satisfies Record<string, RegisteredScenario>;
 export type Scenario = RegisteredScenario | keyof typeof scenarioAliases;
 export function canonicalScenario(id: Scenario): RegisteredScenario {
@@ -503,7 +501,7 @@ export function createSimulation(
     components: createComponentLibraryState(scenario),
     tabs: createTabsState(scenario),
     tabsByWorkspace: {},
-    documents: createDocumentsState(scenario),
+    documents: createDocumentsState(canonicalScenario(scenario)),
     documentsByWorkspace: {},
     setupConversation: createSetupConversation(
       scenario.startsWith("setup-conversation-") ? scenario : undefined,
@@ -1509,7 +1507,6 @@ export function reduceSimulation(
     state.documents =
       (workspace && state.documentsByWorkspace[workspace]) ||
       createDocumentsState();
-    state.documents.dialog = null;
     state.onboarding =
       (workspace && state.onboardingByWorkspace[workspace]) ||
       createOnboardingState("onboarding-manual");

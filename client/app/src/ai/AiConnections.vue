@@ -503,11 +503,11 @@ const confirmationTitle = computed(() => {
   height: 16px;
 }
 h3 {
-  font-size: 16px;
+  font-size: var(--situate-text-body);
   margin: 0;
 }
 ul {
-  margin: 16px 0 32px;
+  margin: var(--situate-space-4) 0 var(--situate-space-8);
   padding: 0;
   list-style: none;
 }
@@ -515,8 +515,8 @@ li {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 20px 0;
+  gap: var(--situate-space-4);
+  padding: var(--situate-space-5) 0;
   border-bottom: 1px solid var(--situate-line);
 }
 .provider-icon {
@@ -525,12 +525,12 @@ li {
 }
 .connection-description {
   display: grid;
-  gap: 6px;
+  gap: var(--situate-space-1-5);
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 .connection-description span {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   color: var(--situate-muted);
 }
 p,
@@ -541,13 +541,13 @@ strong {
 .connection-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 :is(.connection-actions button, .connection-retry) {
   min-height: 44px;
-  padding: 4px;
+  padding: var(--situate-space-1);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   border: 0;
   color: inherit;
   background: transparent;
@@ -564,12 +564,12 @@ strong {
   outline-offset: var(--situate-focus-offset);
 }
 .chat-connection h3 {
-  margin-bottom: 12px;
+  margin-bottom: var(--situate-space-3);
 }
 input {
   width: 100%;
-  margin-top: 8px;
-  padding: 8px;
+  margin-top: var(--situate-space-2);
+  padding: var(--situate-space-2);
 }
 @media (max-width: 700px) {
   li {

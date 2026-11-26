@@ -48,8 +48,6 @@ export const scenarioBrowser = {
     tabs: "Arrange tabs and panes",
     collection: "Document collection",
     reading: "Read a document",
-    createTag: "Create a tag",
-    deleteTag: "Delete a tag",
     chat: "Conversation",
     dictation: dictationCopy.chatScenario,
     dictationDownload: dictationCopy.settingsScenario,

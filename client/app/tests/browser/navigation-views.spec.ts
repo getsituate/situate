@@ -139,7 +139,7 @@ for (const locale of ["en", "de"] as const) {
       test(
         `view navigation groups and persists pins at ${viewport.width}px`,
         { tag: viewport.width < 600 ? "@visual-mobile" : "@visual-desktop" },
-        async ({ page, visual }, info) => {
+        async ({ page, visual, hasTouch, browserName }, info) => {
           await page.setViewportSize(viewport);
           let sidebar = await setup(page, viewport.width < 600);
           let more = sidebar.getByRole("button", {
@@ -153,17 +153,43 @@ for (const locale of ["en", "de"] as const) {
           await expect(more).toHaveText(copy["navigation.more"]);
           await expect(more).toHaveAttribute("aria-expanded", "false");
           await expect(group).not.toBeVisible();
-          await expect(
-            sidebar.getByRole("button", {
-              name: pinLabel(copy["navigation.files"], true),
-              exact: true,
-            }),
-          ).toHaveAttribute("aria-pressed", "true");
-          const pin = sidebar.locator('[data-view-pin="files"] svg');
+          const filesPin = sidebar.getByRole("button", {
+            name: pinLabel(copy["navigation.files"], true),
+            exact: true,
+          });
+          await expect(filesPin).toHaveAttribute("aria-pressed", "true");
           expect(
-            await pin.evaluate((node) => getComputedStyle(node).fill),
+            await filesPin
+              .locator("svg")
+              .evaluate((node) => getComputedStyle(node).fill),
           ).not.toBe("none");
+          await expect(filesPin).toHaveCSS("opacity", hasTouch ? "1" : "0");
+          if (!hasTouch) {
+            await sidebar
+              .getByRole("button", {
+                name: copy["navigation.files"],
+                exact: true,
+              })
+              .hover();
+            await expect(filesPin).toHaveCSS("opacity", "1");
+            await page.mouse.move(0, 0);
+            await expect(filesPin).toHaveCSS("opacity", "0");
+          }
           await visual.capture("navigation.views.collapsed");
+          if (!hasTouch) {
+            const tab =
+              process.platform === "darwin" && browserName === "webkit"
+                ? "Alt+Tab"
+                : "Tab";
+            await sidebar
+              .getByRole("button", {
+                name: copy["navigation.files"],
+                exact: true,
+              })
+              .press(tab);
+            await expect(filesPin).toBeFocused();
+            await expect(filesPin).toHaveCSS("opacity", "1");
+          }
           await more.focus();
           await more.press("Enter");
           await expect(more).toBeFocused();
@@ -172,12 +198,12 @@ for (const locale of ["en", "de"] as const) {
             copy["documents.title"],
             ...views.map((view) => view.title),
           ]);
-          await expect(
-            group.getByRole("button", {
-              name: pinLabel("Calendar"),
-              exact: true,
-            }),
-          ).toHaveAttribute("aria-pressed", "false");
+          const calendarPin = group.getByRole("button", {
+            name: pinLabel("Calendar"),
+            exact: true,
+          });
+          await expect(calendarPin).toHaveAttribute("aria-pressed", "false");
+          await expect(calendarPin).toHaveCSS("opacity", hasTouch ? "1" : "0");
           await expect(group.locator("svg").last()).toHaveCSS("fill", "none");
           await visual.capture("navigation.views.expanded");
           await page.screenshot({
@@ -187,8 +213,9 @@ for (const locale of ["en", "de"] as const) {
           await expect(group).not.toBeVisible();
           await more.click();
           await group
-            .getByRole("button", { name: pinLabel("Calendar"), exact: true })
-            .click();
+            .getByRole("button", { name: "Calendar", exact: true })
+            .hover();
+          await calendarPin.click();
           await expect(
             sidebar.getByRole("button", {
               name: pinLabel("Calendar", true),
@@ -216,6 +243,9 @@ for (const locale of ["en", "de"] as const) {
             copy["documents.title"],
             ...views.slice(1).map((view) => view.title),
           ]) {
+            await group
+              .getByRole("button", { name: title, exact: true })
+              .hover();
             await sidebar
               .getByRole("button", { name: pinLabel(title), exact: true })
               .click();
@@ -229,6 +259,9 @@ for (const locale of ["en", "de"] as const) {
             }),
           ).toBeFocused();
           await visual.capture("navigation.views.all-pinned");
+          await sidebar
+            .getByRole("button", { name: "Calendar", exact: true })
+            .hover();
           await sidebar
             .getByRole("button", {
               name: pinLabel("Calendar", true),
@@ -247,6 +280,9 @@ for (const locale of ["en", "de"] as const) {
             copy["documents.title"],
             ...views.slice(1).map((view) => view.title),
           ]) {
+            await sidebar
+              .getByRole("button", { name: title, exact: true })
+              .hover();
             await sidebar
               .getByRole("button", { name: pinLabel(title, true), exact: true })
               .click();

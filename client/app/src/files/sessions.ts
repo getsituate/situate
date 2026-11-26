@@ -134,8 +134,12 @@ export function request(
             if (session.selected === previous) session.selected = file.path;
           } else {
             stopTimers(file);
-            file.outcome = { status: "deleted" };
-            file.error = "files.theFileWasDeletedYourTextIsRetained";
+            if (file.dirty) {
+              file.outcome = { status: "deleted" };
+              file.error = "files.theFileWasDeletedYourTextIsRetained";
+            } else {
+              delete session.files[previous];
+            }
             if (session.selected === previous) session.selected = "";
           }
         }

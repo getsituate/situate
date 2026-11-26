@@ -383,7 +383,7 @@ async function repair() {
   bottom: max(16px, env(safe-area-inset-bottom));
   z-index: 20;
   display: flex;
-  gap: 8px;
+  gap: var(--situate-space-2);
   flex-wrap: wrap;
   max-width: calc(100% - 32px);
 }
@@ -394,25 +394,25 @@ async function repair() {
 }
 .incident-options,
 .report-details {
-  margin-top: 24px;
+  margin-top: var(--situate-space-6);
 }
 .recovery-links {
   display: flex;
-  gap: 8px;
+  gap: var(--situate-space-2);
   flex-wrap: wrap;
 }
 .incident-dialog :deep(.situate-dialog-actions) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--situate-space-2-5);
 }
 .incident-dialog :deep(.situate-dialog-actions .situate-button) {
   min-width: 0;
-  padding-inline: 12px;
+  padding-inline: var(--situate-space-3);
 }
 label + textarea {
   width: 100%;
-  margin-top: 8px;
+  margin-top: var(--situate-space-2);
 }
 .report-text {
   min-height: 240px;
@@ -421,10 +421,10 @@ label + textarea {
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   line-height: 1.6;
   background: var(--situate-paper);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: var(--situate-radius-control);
+  padding: var(--situate-space-4);
 }
 </style>

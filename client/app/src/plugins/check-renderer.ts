@@ -151,6 +151,7 @@ export function startCheckRenderer(
               };
               const host: PluginUiHost = {
                 ...modules,
+                themeApi: 1,
                 layout: pluginLayout(),
                 navigation: owned.preview.navigation,
                 service: { invoke: (name, args) => call(name, args) },

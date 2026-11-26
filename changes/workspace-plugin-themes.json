@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "workspace-plugin-themes",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "workspace-plugin-themes",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Workspace themes from plugins",
+          "paragraphs": [
+            "In Settings → Appearance → Theme, choose a built-in theme or one provided by a plugin. Plugin themes can change colors, typography, and spacing. Your selection applies on this device."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "workspace-plugin-themes",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Workspace-Themes von Plugins",
+          "paragraphs": [
+            "Unter Einstellungen → Erscheinungsbild → Theme kannst du ein mitgeliefertes Theme oder eines von einem Plugin wählen. Plugin-Themes können Farben, Schrift und Abstände ändern. Deine Auswahl gilt auf diesem Gerät."
+          ]
+        }
+      ]
+    }
+  }
+}

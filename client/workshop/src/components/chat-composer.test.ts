@@ -1,9 +1,9 @@
+import "../ui/popover-test-environment";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import ChatComposer from "./ChatComposer.vue";
 import NavigationComposer from "../navigation/NavigationComposer.vue";
 import ChatPane from "./ChatPane.vue";
-import ChatPaneHeader from "./ChatPaneHeader.vue";
 
 describe("shared chat UI", () => {
   it("uses the same composer in the chat shell and navigation", () => {
@@ -14,7 +14,6 @@ describe("shared chat UI", () => {
       props: { modelValue: "Keep this draft" },
     });
     expect(shell.findComponent(ChatComposer).exists()).toBe(true);
-    expect(shell.findComponent(ChatPaneHeader).exists()).toBe(true);
     expect(navigation.findComponent(ChatComposer).exists()).toBe(true);
     expect(navigation.get("textarea").element.value).toBe("Keep this draft");
     shell.unmount();

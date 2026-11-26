@@ -64,6 +64,6 @@ function choose(action: FileAction): void {
 <style scoped>
 .file-action-items {
   display: grid;
-  gap: 2px;
+  gap: var(--situate-space-0-5);
 }
 </style>

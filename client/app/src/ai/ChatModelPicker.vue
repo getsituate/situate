@@ -605,7 +605,7 @@ async function retry(): Promise<void> {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--situate-space-0-5);
   min-width: 0;
   max-width: 100%;
 }
@@ -625,7 +625,7 @@ input {
 }
 button:not(.situate-button) {
   cursor: pointer;
-  padding: 6px;
+  padding: var(--situate-space-1-5);
 }
 button:not(.situate-button):hover:not(:disabled) {
   background: var(--situate-accent-soft, var(--situate-lilac));
@@ -643,7 +643,7 @@ button:not(.situate-button):hover:not(:disabled) {
 .manual-trigger {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--situate-space-1);
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -653,7 +653,7 @@ button:not(.situate-button):hover:not(:disabled) {
 .manual-trigger.field-trigger {
   box-sizing: border-box;
   min-height: 50px;
-  padding: 12px 16px;
+  padding: var(--situate-space-3) var(--situate-space-4);
   border: 1px solid var(--situate-control-line);
   border-radius: var(--situate-radius-control);
   background: var(--situate-paper);
@@ -680,12 +680,12 @@ button:not(.situate-button):hover:not(:disabled) {
 }
 form {
   display: grid;
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 input {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--situate-control-line);
-  padding: 8px;
+  padding: var(--situate-space-2);
 }
 </style>

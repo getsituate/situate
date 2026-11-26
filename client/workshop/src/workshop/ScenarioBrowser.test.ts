@@ -157,7 +157,7 @@ describe("scenario catalog", () => {
       { id: "documents-find", label: "Find a document" },
     ]);
     expect(states.filter((s) => s.id.startsWith("documents-gather"))).toEqual([
-      { id: "documents-gather", label: "Gather tax documents" },
+      { id: "documents-gather", label: "Gather course receipts" },
     ]);
     expect(scenarios.some((s) => s.id.endsWith("-focused"))).toBe(false);
   });
@@ -167,10 +167,7 @@ describe("scenario catalog", () => {
       expect(isScenario(alias)).toBe(true);
       const id = canonicalScenario(alias);
       const state = createSimulation(alias);
-      expect(state.documents.layout).toBe("focused");
-      expect({ ...state.documents, layout: "library" }).toEqual(
-        createSimulation(id).documents,
-      );
+      expect(state.documents).toEqual(createSimulation(id).documents);
       const view = mount(ScenarioBrowser, { props: { selected: alias } });
       expect(
         view.get<HTMLSelectElement>("#scenario-state + select").element.value,
@@ -211,16 +208,6 @@ describe("scenario catalog", () => {
       "setup-conversation-brief",
       "chat-work-history",
     ]);
-    expect(
-      matchingScenarios("saved search tag removed").map((s) => s.id),
-    ).toEqual(["documents-find"]);
-    expect(scenarioForState("documents-repair-view")).toBe(
-      scenarioForState("documents-find"),
-    );
-    expect(scenarioForState("documents-missing-tag")).toBe(
-      scenarioForState("documents-find"),
-    );
-    expect(scenarioCatalog.some((s) => /repair/i.test(s.label))).toBe(false);
     expect(matchingScenarios("no-such-scenario")).toEqual([]);
   });
 });

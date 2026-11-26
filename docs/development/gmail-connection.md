@@ -1,21 +1,25 @@
 # Gmail connection for plugins
 
-The Gmail experiment uses a macOS desktop OAuth client. It has no built-in inbox. Plugins that declare a dependency on the installed `situate-gmail` connection can use a Gmail account the user selects in that plugin’s settings. An account connected in one workspace is not available in another, and its credentials do not sync.
+The Gmail experiment uses a Google Desktop app OAuth client on macOS and Windows. It has no built-in inbox. Plugins that declare a dependency on the installed `situate-gmail` connection can use a Gmail account the user selects in that plugin’s settings. An account connected in one workspace is not available in another, and its credentials do not sync.
 
 ## Test access
 
 Use a separate Google Cloud project with the Gmail API enabled. Set its consent screen to Testing, add the synthetic Google accounts as test users, and create a **Desktop app** OAuth client.
 
-Provide `SITUATE_GMAIL_TEST_CLIENT_ID` and `SITUATE_GMAIL_TEST_CLIENT_SECRET` **only when building the macOS app**. The running app does not read them from the environment.
+Provide `SITUATE_GMAIL_TEST_CLIENT_ID` and `SITUATE_GMAIL_TEST_CLIENT_SECRET` **only when building the desktop app**. The running app does not read them from the environment.
 
 - **Local build:** Put both values in the Git-ignored repository-root `.env` (permissions `0600`), or set them in the environment of the build command. Explicit environment values take precedence, including empty values.
-- **GitHub Actions:** In the `macos-release` environment, set `SITUATE_GMAIL_TEST_CLIENT_ID` as a variable and `SITUATE_GMAIL_TEST_CLIENT_SECRET` as a secret. Only the release build step receives them.
+- **GitHub Actions:** In each of the `macos-release` and `windows-release` environments, set `SITUATE_GMAIL_TEST_CLIENT_ID` as a variable and `SITUATE_GMAIL_TEST_CLIENT_SECRET` as a secret. Only the release build steps receive them. Both Windows installer architectures and the GitHub macOS release build require both values.
 
-The values are embedded in the native executable. Testers do not need a `.env` or any environment variables. A build with both values absent or empty cannot connect to Gmail; supplying only one value fails the build. Rebuild the app to change the credentials. A desktop OAuth client secret can be extracted from the executable, so use only the dedicated desktop client for the test project. Never supply server credentials or OAuth tokens. There is no production Gmail client configuration.
+The values are embedded in the native executable. Testers do not need a `.env` or any environment variables. A local build with both values absent or empty cannot connect to Gmail; supplying only one value fails the build. Rebuild the app to change the credentials. A desktop OAuth client secret can be extracted from the executable, so use only the dedicated desktop client for the test project. Never supply server credentials or OAuth tokens. There is no production Gmail client configuration.
 
-On the Mac, open **Settings → Experimental features** and enable Gmail. Choose **Install Gmail in this workspace** for each workspace where you want to use it. Then open **Plugins → Connections → Gmail → Settings** to connect an account and choose permissions. Use a synthetic mailbox for tests. Google test access expires after seven days. Reducing permissions revokes the previous Google grant before the next authorization; revocation can also affect the same Google account connected in other workspaces. Check access in the Google Account if Google does not confirm revocation.
+Open **Settings → Experimental features** and enable Gmail. Choose **Install Gmail in this workspace** for each workspace where you want to use it. Then open **Plugins → Connections → Gmail → Settings** to connect an account and choose permissions. If a synced workspace already contains the bundled connection, **Install Gmail in this workspace** enables its use on the current device without replacing the shared package. Connect the account separately on each device. Use a synthetic mailbox for tests. Google test access expires after seven days. Reducing permissions revokes the previous Google grant before the next authorization; revocation can also affect the same Google account connected in other workspaces. Check access in the Google Account if Google does not confirm revocation.
 
 If **Update Gmail settings** appears under **Settings → Experimental features**, it updates the installed connection’s settings without changing its accounts or account selections. It does not overwrite local source edits.
+
+## Verify the Windows installer
+
+On a native Windows desktop, install the release candidate with a fresh Situate profile and open a disposable workspace. Enable and install Gmail, then connect a test account from the Google Cloud consent screen's test-user list. Confirm that the default browser opens, the sign-in returns to Situate, and the account appears in Gmail settings. Use the `gmail-inbox` example below to select the account and read subjects from the synthetic mailbox. Reopen Situate and repeat the read to check that the connection survives a restart. Record the installer version, architecture, and Windows version with the result. The automated installer launch check does not exercise Google sign-in.
 
 ## Use the connection
 
