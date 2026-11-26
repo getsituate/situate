@@ -36,7 +36,7 @@ defineExpose({
   flex-shrink: 0;
   margin: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   background: transparent;
   cursor: pointer;
   position: relative;
@@ -46,7 +46,7 @@ defineExpose({
   position: absolute;
   inset: 8px 0;
   border: 1px solid var(--situate-control-line);
-  border-radius: 20px;
+  border-radius: var(--situate-radius-panel-large);
   background: var(--situate-paper);
 }
 .situate-switch::before {

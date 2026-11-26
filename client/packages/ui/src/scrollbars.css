@@ -24,7 +24,7 @@
   .situate-scrollbars::-webkit-scrollbar-thumb,
   .situate-scrollbars *::-webkit-scrollbar-thumb {
     background: var(--situate-scrollbar-thumb);
-    border-radius: 8px;
+    border-radius: var(--situate-radius-small);
   }
   .situate-scrollbars::-webkit-scrollbar-track,
   .situate-scrollbars *::-webkit-scrollbar-track,

@@ -30,6 +30,13 @@ test("authoring defers technical contracts to the matching task", () => {
   expect(prompt).toContain(
     'Read `read_plugin_development` with `resource: "checks"` before checking or activating',
   );
+  expect(prompt).toContain(
+    'When asked to create a theme or change Situate\'s own appearance, read `read_plugin_design` with `resource: "themes"`',
+  );
+  expect(prompt).toContain(
+    "Settings → Appearance → Theme. Leave selection to the user.",
+  );
+  expect(prompt).not.toContain("--situate-");
   expect(prompt).not.toContain("schemaVersion");
   expect(prompt).not.toContain("context.process.run");
 });

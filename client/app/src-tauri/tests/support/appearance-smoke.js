@@ -36,15 +36,42 @@ window.runAppearanceSmoke = async () => {
       throw new Error("Provider appearance accepted an unsupported write");
     return;
   }
+  const selectedTheme = JSON.stringify([
+    "fixture",
+    "first-installation",
+    "paper",
+  ]);
+  const themeSelection = (request, target = scope) =>
+    invoke("workspace_theme_selection", { scope: target, request });
+  let blockedThemeWrite = false;
+  try {
+    await themeSelection(
+      { operation: "save", selection: selectedTheme },
+      `unowned-${scope}`,
+    );
+  } catch {
+    blockedThemeWrite = true;
+  }
+  if (!blockedThemeWrite)
+    throw new Error("Theme selection accepted an unowned workspace");
   const marker = `native-appearance:${scope}`;
   const phase = await invoke("smoke_phase");
   if (phase.restart || sessionStorage.getItem(marker)) {
     if (initial.accent !== "lemon" || !initial.revision)
       throw new Error("Appearance did not survive workspace restoration");
+    if ((await themeSelection({ operation: "load" })) !== selectedTheme)
+      throw new Error("Theme selection did not survive workspace restoration");
     return;
   }
   if (initial.accent !== "violet" || initial.revision !== null)
     throw new Error("New workspace inherited another workspace's appearance");
+  if ((await themeSelection({ operation: "load" })) !== null)
+    throw new Error(
+      "New workspace inherited another workspace's theme selection",
+    );
+  await themeSelection({ operation: "save", selection: selectedTheme });
+  if ((await themeSelection({ operation: "load" })) !== selectedTheme)
+    throw new Error("Theme selection did not persist through native IPC");
   const saved = await invoke("appearance_update", {
     scope,
     accent: "cobalt",

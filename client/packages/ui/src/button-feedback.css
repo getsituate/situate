@@ -18,10 +18,11 @@
   }
 
   @media (forced-colors: none) and (prefers-reduced-motion: no-preference) {
-    transition: box-shadow 80ms var(--situate-ease-settle);
+    transition: box-shadow var(--situate-duration-press)
+      var(--situate-ease-settle);
 
     &:where(:active) {
-      transition: box-shadow 100ms linear;
+      transition: box-shadow var(--situate-duration-release) linear;
     }
   }
 
@@ -37,7 +38,8 @@
 @media (prefers-reduced-motion: no-preference) {
   .situate-icon-button:where(:enabled:not([data-press-feedback="none"])) > svg,
   .situate-filter-chip:where(:enabled) > .filter-chip-remove {
-    transition: translate 80ms var(--situate-ease-settle);
+    transition: translate var(--situate-duration-press)
+      var(--situate-ease-settle);
   }
 
   .situate-icon-button:where(:enabled:active:not([data-press-feedback="none"]))

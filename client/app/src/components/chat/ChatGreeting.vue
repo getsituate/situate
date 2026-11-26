@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
   text-align: center;
   margin-bottom: var(--situate-space-8);
 }
@@ -173,6 +173,9 @@ onBeforeUnmount(() => {
 .welcome-bend :deep(svg) {
   width: 100%;
   height: 100%;
+}
+.welcome-bend :deep([data-bend-part="depth"]) {
+  fill: var(--chat-bend-depth, var(--situate-bend-depth));
 }
 .greeting h2 {
   margin: 0;

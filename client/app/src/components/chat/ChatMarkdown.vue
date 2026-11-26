@@ -62,9 +62,9 @@ const configureMarkdown: NodeRendererProps["customMarkdownIt"] = (md) =>
 .chat-markdown :deep(pre) {
   max-width: 100%;
   overflow-x: auto;
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 1px solid var(--situate-line);
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   background: var(--situate-paper);
   white-space: pre;
 }
@@ -72,7 +72,7 @@ const configureMarkdown: NodeRendererProps["customMarkdownIt"] = (md) =>
   font-family: var(--situate-font-mono, monospace);
 }
 .chat-markdown :deep(a) {
-  color: var(--situate-cobalt);
+  color: var(--situate-link);
   text-decoration: underline;
   text-underline-offset: 3px;
 }

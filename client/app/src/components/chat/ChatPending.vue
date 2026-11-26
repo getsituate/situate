@@ -111,9 +111,9 @@ watch(
 
 <style scoped>
 .pending {
-  margin-bottom: 10px;
+  margin-bottom: var(--situate-space-2-5);
   border: 1px solid var(--situate-line);
-  border-radius: 14px;
+  border-radius: var(--situate-radius-panel-compact);
   background: var(--situate-paper);
   overflow: hidden;
 }
@@ -121,14 +121,14 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 2px 8px;
+  gap: var(--situate-space-2);
+  padding: var(--situate-space-0-5) var(--situate-space-2);
 }
 button {
   min-height: 44px;
   border: 0;
-  padding: 8px;
-  border-radius: 8px;
+  padding: var(--situate-space-2);
+  border-radius: var(--situate-radius-small);
   background: transparent;
   font: inherit;
   font-size: var(--situate-text-caption);
@@ -151,15 +151,15 @@ button {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
 .pending-list {
-  padding: 0 14px 12px;
+  padding: 0 var(--situate-space-3-5) var(--situate-space-3);
 }
 .pending-group + .pending-group {
-  margin-top: 14px;
+  margin-top: var(--situate-space-3-5);
 }
 h3 {
-  margin: 6px 0;
+  margin: var(--situate-space-1-5) 0;
   color: var(--situate-muted);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   font-weight: 600;
 }
 .pending-items {
@@ -167,7 +167,7 @@ h3 {
   overflow: auto;
 }
 .pending-message {
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   background: var(--situate-surface);
   margin: 5px 0;
 }
@@ -175,10 +175,10 @@ h3 {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   min-height: 44px;
-  padding: 9px 10px;
-  font-size: 13px;
+  padding: 9px var(--situate-space-2-5);
+  font-size: var(--situate-text-caption);
 }
 .pending-preview {
   white-space: nowrap;
@@ -190,11 +190,11 @@ h3 {
 .attachment-count {
   flex: none;
   color: var(--situate-muted);
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
 }
 .pending-body {
-  padding: 0 10px 12px;
-  font-size: 13px;
+  padding: 0 var(--situate-space-2-5) var(--situate-space-3);
+  font-size: var(--situate-text-caption);
 }
 .pending-body p {
   white-space: pre-wrap;
@@ -204,9 +204,9 @@ h3 {
   display: inline-block;
   max-width: 100%;
   overflow-wrap: anywhere;
-  padding: 4px 8px;
+  padding: var(--situate-space-1) var(--situate-space-2);
   border: 1px solid var(--situate-line);
-  border-radius: 6px;
+  border-radius: var(--situate-radius-tight);
   background: var(--situate-content-wash, var(--situate-paper));
 }
 button:focus:where(html:not([data-input-modality="pointer"]) *),

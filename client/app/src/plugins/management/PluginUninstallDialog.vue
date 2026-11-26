@@ -110,6 +110,6 @@ function close() {
 
 <style scoped>
 .plugin-uninstall-blocker {
-  margin-block: 20px;
+  margin-block: var(--situate-space-5);
 }
 </style>

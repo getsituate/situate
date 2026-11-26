@@ -118,11 +118,11 @@ function change(event: Event): void {
 <style scoped>
 .model-diagnostics {
   border-top: 1px solid var(--situate-line);
-  padding-top: 20px;
+  padding-top: var(--situate-space-5);
 }
 .model-diagnostics h3 {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 </style>

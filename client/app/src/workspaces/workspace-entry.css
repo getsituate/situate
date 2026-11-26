@@ -5,7 +5,7 @@
     env(safe-area-inset-left, 0px);
   background: var(--situate-surface);
   color: var(--situate-ink);
-  font: 16px/1.55 var(--situate-font-body);
+  font: var(--situate-text-body)/1.55 var(--situate-font-body);
 }
 .workspace-entry button:not(:where(.situate-dialog button)),
 .workspace-entry input {
@@ -17,7 +17,7 @@
   min-height: 44px;
   border: 1px solid var(--situate-control-line);
   border-radius: var(--situate-radius-pill);
-  padding: 10px 20px;
+  padding: var(--situate-space-2-5) var(--situate-space-5);
   background: var(--situate-surface);
   font-weight: 600;
 }
@@ -44,13 +44,13 @@
   margin-top: 0;
 }
 .workspace-entry h1 {
-  font: 600 32px/1.15 var(--situate-font-display);
+  font: 600 var(--situate-text-title)/1.15 var(--situate-font-display);
   letter-spacing: -0.045em;
-  margin-bottom: 16px;
+  margin-bottom: var(--situate-space-4);
   overflow-wrap: anywhere;
 }
 .workspace-entry h2 {
-  font-size: 18px;
+  font-size: var(--situate-text-subheading);
   line-height: 1.3;
 }
 .workspace-entry p {
@@ -71,8 +71,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 0 32px;
+  gap: var(--situate-space-4);
+  padding: 0 var(--situate-space-8);
   border-bottom: 1px solid var(--situate-line);
 }
 .entry-titlebar img {
@@ -82,13 +82,13 @@
 .entry-titlebar-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 .workspace-entry .entry-back {
   border: 0;
   background: transparent;
-  padding-inline: 8px;
-  font-size: 13px;
+  padding-inline: var(--situate-space-2);
+  font-size: var(--situate-text-caption);
 }
 .workspace-entry .entry-app-menu[aria-expanded="true"] {
   background: var(--situate-paper);
@@ -106,24 +106,24 @@
 }
 .workspace-lists {
   min-width: 0;
-  padding: 32px 20px;
+  padding: var(--situate-space-8) var(--situate-space-5);
   background: var(--situate-paper);
   border-right: 1px solid var(--situate-line);
   display: flex;
   flex-direction: column;
 }
 .workspace-lists section + section {
-  margin-top: 28px;
+  margin-top: var(--situate-space-7);
 }
 .list-heading {
-  padding: 0 12px 24px;
+  padding: 0 var(--situate-space-3) var(--situate-space-6);
 }
 .list-heading h2 {
-  margin-bottom: 4px;
+  margin-bottom: var(--situate-space-1);
 }
 .list-heading > span,
 .workspace-entry .entry-help {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   color: var(--situate-muted);
 }
 .workspace-lists ul {
@@ -135,8 +135,8 @@
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--situate-line);
-  padding: 8px 0;
-  gap: 4px;
+  padding: var(--situate-space-2) 0;
+  gap: var(--situate-space-1);
 }
 .workspace-entry .workspace-select {
   flex: 1;
@@ -144,28 +144,28 @@
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: var(--situate-radius-control);
+  padding: var(--situate-space-3);
 }
 .workspace-select strong {
   display: block;
-  font-size: 15px;
+  font-size: var(--situate-text-control);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .workspace-select .location {
   display: block;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   font-weight: 400;
   color: var(--situate-muted);
   overflow-wrap: anywhere;
 }
 .workspace-select .workspace-state {
   display: block;
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   font-weight: 600;
   color: var(--situate-violet-deep);
-  margin-top: 6px;
+  margin-top: var(--situate-space-1-5);
 }
 .workspace-row-actions {
   position: relative;
@@ -176,7 +176,7 @@
   background: transparent;
   padding: 0;
   width: 44px;
-  font-size: 24px;
+  font-size: var(--situate-text-heading);
 }
 .workspace-entry .row-actions[aria-expanded="true"] {
   background: var(--situate-lilac);
@@ -187,28 +187,28 @@
   top: calc(100% + 4px);
   z-index: 2;
   width: 190px;
-  padding: 4px;
+  padding: var(--situate-space-1);
   background: var(--situate-surface);
   border: 1px solid var(--situate-control-line);
-  border-radius: 12px;
+  border-radius: var(--situate-radius-control);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--situate-ink) 10%, transparent);
 }
 .workspace-entry .row-menu button {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   text-align: left;
-  font-size: 14px;
-  padding: 10px 12px;
+  font-size: var(--situate-text-small);
+  padding: var(--situate-space-2-5) var(--situate-space-3);
 }
 .entry-content {
   min-width: 0;
-  padding: 38px 40px 24px;
+  padding: 38px 40px var(--situate-space-6);
 }
 .entry-welcome {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   min-height: 162px;
 }
 .compact-entry .entry-welcome {
@@ -220,50 +220,50 @@
 }
 .entry-welcome p:not(.entry-eyebrow) {
   max-width: 390px;
-  font-size: 15px;
-  margin-bottom: 24px;
+  font-size: var(--situate-text-control);
+  margin-bottom: var(--situate-space-6);
 }
 .workspace-entry .entry-eyebrow {
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--situate-violet-deep);
-  margin-bottom: 12px;
+  margin-bottom: var(--situate-space-3);
 }
 .entry-welcome img {
   width: 128px;
   height: 128px;
-  margin-right: -16px;
+  margin-right: calc(-1 * var(--situate-space-4));
 }
 .entry-actions {
   display: grid;
-  gap: 12px;
+  gap: var(--situate-space-3);
 }
 .workspace-entry .entry-action {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 20px;
-  gap: 16px;
+  gap: var(--situate-space-4);
   align-items: center;
   text-align: left;
   min-height: 96px;
-  border-radius: 16px;
+  border-radius: var(--situate-radius-panel);
   border-color: var(--situate-line);
-  padding: 16px 20px;
+  padding: var(--situate-space-4) var(--situate-space-5);
 }
 .entry-action strong {
   display: block;
-  font-size: 16px;
+  font-size: var(--situate-text-body);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .entry-action small {
   display: block;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   line-height: 1.5;
   color: var(--situate-muted);
   font-weight: 400;
-  margin-top: 4px;
+  margin-top: var(--situate-space-1);
 }
 .entry-action .action-icon {
   font-size: 28px;
@@ -285,7 +285,7 @@
 }
 .workspace-entry .form-actions .entry-primary {
   min-height: 44px;
-  padding: 10px 20px;
+  padding: var(--situate-space-2-5) var(--situate-space-5);
   font: inherit;
   font-weight: 600;
   border-width: 1px;
@@ -306,7 +306,7 @@
   color: var(--situate-muted);
 }
 .workspace-entry .creation {
-  padding: 28px 40px;
+  padding: var(--situate-space-7) 40px;
   grid-column: 1/-1;
   max-width: 680px;
   width: 100%;
@@ -314,26 +314,26 @@
   min-width: 0;
 }
 .creation > p:not(.entry-eyebrow) {
-  font-size: 15px;
-  margin-bottom: 24px;
+  font-size: var(--situate-text-control);
+  margin-bottom: var(--situate-space-6);
 }
 .creation label {
   display: block;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: var(--situate-space-2);
 }
 .workspace-entry input {
   width: 100%;
   min-height: 48px;
   border-radius: var(--situate-radius-small);
-  padding: 10px 14px;
+  padding: var(--situate-space-2-5) var(--situate-space-3-5);
 }
 .workspace-entry input[aria-invalid="true"]:not([data-field-tone]) {
   border: 2px solid var(--situate-ink);
 }
 .creation .entry-help {
-  margin: 8px 0 24px;
+  margin: var(--situate-space-2) 0 var(--situate-space-6);
 }
 .creation .workspace-name-field {
   margin-bottom: var(--situate-space-3);
@@ -342,14 +342,14 @@
   margin-bottom: 0;
 }
 .creation .directory-field {
-  margin-bottom: 20px;
+  margin-bottom: var(--situate-space-5);
 }
 .directory-field {
   display: flex;
-  gap: 8px;
+  gap: var(--situate-space-2);
 }
 .directory-field input {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   min-width: 0;
 }
 .directory-field button {
@@ -357,15 +357,15 @@
 }
 .path-preview {
   background: var(--situate-lilac);
-  padding: 16px 20px;
-  border-radius: 12px;
-  margin-top: 24px;
+  padding: var(--situate-space-4) var(--situate-space-5);
+  border-radius: var(--situate-radius-control);
+  margin-top: var(--situate-space-6);
 }
 .path-preview > span {
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   color: var(--situate-muted);
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: var(--situate-space-1-5);
 }
 .path-preview.has-error {
   background: var(--situate-paper);
@@ -373,26 +373,26 @@
 }
 .path-preview output {
   display: block;
-  font: 13px/1.65 var(--situate-font-mono);
+  font: var(--situate-text-caption)/1.65 var(--situate-font-mono);
   overflow-wrap: anywhere;
 }
 .creation-error {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--situate-space-3);
   border-top: 1px solid var(--situate-line);
-  margin-top: 16px;
-  padding-top: 16px;
-  font-size: 13px;
+  margin-top: var(--situate-space-4);
+  padding-top: var(--situate-space-4);
+  font-size: var(--situate-text-caption);
 }
 .creation-error strong {
   display: block;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
   line-height: 1.5;
 }
 .creation-error p {
-  margin: 4px 0 0;
+  margin: var(--situate-space-1) 0 0;
   line-height: 1.55;
   max-width: 52ch;
 }
@@ -405,7 +405,7 @@
   margin-top: 1px;
   border: 1.5px solid currentColor;
   border-radius: 50%;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   font-weight: 600;
   line-height: 1;
 }
@@ -413,10 +413,10 @@
   display: block;
   max-width: 100%;
   min-height: 44px;
-  margin: 4px 0 -4px;
-  padding: 10px 0;
+  margin: var(--situate-space-1) 0 calc(-1 * var(--situate-space-1));
+  padding: var(--situate-space-2-5) 0;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   font-weight: 600;
   line-height: 1.5;
   border: 0;
@@ -428,7 +428,7 @@
 }
 .workspace-entry .form-actions {
   flex: none;
-  padding: 12px 24px;
+  padding: var(--situate-space-3) var(--situate-space-6);
   margin: 0;
   border-top: 1px solid var(--situate-line);
   background: var(--situate-surface);
@@ -436,7 +436,7 @@
 .workspace-entry .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--situate-space-3);
   flex-wrap: wrap;
 }
 .workspace-entry .entry-error:not(:where(dialog *)) {
@@ -444,15 +444,15 @@
 }
 .workspace-entry .entry-error {
   background: var(--situate-note);
-  padding: 16px 20px;
-  margin-top: 16px;
-  font-size: 14px;
+  padding: var(--situate-space-4) var(--situate-space-5);
+  margin-top: var(--situate-space-4);
+  font-size: var(--situate-text-small);
   overflow-wrap: anywhere;
 }
 .workspace-entry .operation-status {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   margin: 0;
-  padding: 0 32px;
+  padding: 0 var(--situate-space-8);
   color: var(--situate-violet-deep);
 }
 .workspace-entry .operation-status:empty {
@@ -460,48 +460,48 @@
 }
 .workspace-entry .operation-status:not(:empty) {
   flex: none;
-  padding-bottom: 16px;
+  padding-bottom: var(--situate-space-4);
 }
 .restore-failures {
-  margin-top: 24px;
-  padding: 16px;
+  margin-top: var(--situate-space-6);
+  padding: var(--situate-space-4);
   border: 1px solid var(--situate-line);
-  border-radius: 12px;
-  font-size: 14px;
+  border-radius: var(--situate-radius-control);
+  font-size: var(--situate-text-small);
   overflow-wrap: anywhere;
 }
 .restore-failures h2 {
-  font-size: 16px;
+  font-size: var(--situate-text-body);
 }
 .restore-failures summary {
   min-height: 44px;
-  padding-block: 10px;
+  padding-block: var(--situate-space-2-5);
   cursor: pointer;
 }
 .restore-failure {
-  padding-block: 16px;
+  padding-block: var(--situate-space-4);
 }
 .restore-failure .location {
-  font-size: 12px;
+  font-size: var(--situate-text-label);
 }
 .restore-failure button {
-  margin: 4px;
+  margin: var(--situate-space-1);
 }
 @media (max-width: 850px) {
   .entry-layout {
     grid-template-columns: 270px minmax(0, 1fr);
   }
   .entry-content {
-    padding: 32px 24px;
+    padding: var(--situate-space-8) var(--situate-space-6);
   }
   .entry-welcome img {
     width: 96px;
     height: 96px;
   }
   .workspace-entry .entry-action {
-    gap: 12px;
+    gap: var(--situate-space-3);
     grid-template-columns: 32px minmax(0, 1fr) 16px;
-    padding: 16px;
+    padding: var(--situate-space-4);
   }
   .workspace-entry h1 {
     font-size: 28px;
@@ -517,13 +517,13 @@
     border-bottom-left-radius: 0;
   }
   .entry-content {
-    padding: 28px 24px;
+    padding: var(--situate-space-7) var(--situate-space-6);
   }
   .entry-welcome img {
     display: none;
   }
   .entry-titlebar {
-    padding: 0 24px;
+    padding: 0 var(--situate-space-6);
   }
   .directory-field {
     flex-wrap: wrap;
@@ -537,7 +537,7 @@
 }
 @media (max-width: 600px) {
   .workspace-entry .creation {
-    padding: 20px 18px;
+    padding: var(--situate-space-5) var(--situate-space-4-5);
   }
   .workspace-entry .creation h1 {
     font-size: 26px;
@@ -546,21 +546,21 @@
     display: none;
   }
   .entry-titlebar {
-    padding-inline: 18px;
+    padding-inline: var(--situate-space-4-5);
     height: 58px;
   }
   .workspace-entry footer.form-actions {
-    gap: 8px;
+    gap: var(--situate-space-2);
   }
   .workspace-entry .form-actions :is(button, .entry-primary) {
-    padding-inline: 14px;
+    padding-inline: var(--situate-space-3-5);
   }
   .workspace-entry .workspace-create-actions button {
     min-inline-size: min-content;
     overflow-wrap: normal;
   }
   .workspace-entry input {
-    font-size: 16px;
+    font-size: var(--situate-text-body);
   }
 }
 @media (forced-colors: active) {

@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { useId } from "vue";
+import { inject, useId } from "vue";
+import { protectedThemeStyle } from "../settings/theme-context";
 import { t } from "@situate/localization";
 import { SituateButton, SituateDialog } from "@situate/ui";
 defineProps<{ open: boolean; message: string }>();
 const emit = defineEmits<{ dismiss: [] }>();
 const id = useId();
+const themeStyle = inject(protectedThemeStyle, undefined);
 </script>
 
 <template>
   <SituateDialog
     v-if="open"
     class="error-dialog"
+    :data-theme-defaults="themeStyle ? '' : undefined"
+    :style="themeStyle"
     :open="open"
     :aria-labelledby="`${id}-title`"
     :aria-describedby="`${id}-message`"

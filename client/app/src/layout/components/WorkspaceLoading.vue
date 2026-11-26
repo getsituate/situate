@@ -40,8 +40,8 @@ withDefaults(defineProps<{ pending?: boolean }>(), { pending: true });
 
 <style scoped>
 .workspace-loading[data-pending] {
-  padding: 24px 16px;
-  gap: 8px;
+  padding: var(--situate-space-6) var(--situate-space-4);
+  gap: var(--situate-space-2);
   background: var(--situate-paper);
   color: var(--situate-ink);
   font-size: var(--situate-text-lead);

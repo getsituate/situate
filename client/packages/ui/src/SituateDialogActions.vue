@@ -10,8 +10,8 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 12px;
-  margin-top: 24px;
+  gap: var(--situate-space-3);
+  margin-top: var(--situate-space-6);
 }
 .situate-dialog-actions :deep(> *) {
   max-width: 100%;

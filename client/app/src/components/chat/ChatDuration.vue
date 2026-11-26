@@ -46,9 +46,9 @@ function duration(milliseconds: number) {
 
 <style scoped>
 .duration {
-  margin: 8px 0 0;
+  margin: var(--situate-space-2) 0 0;
   color: var(--situate-muted);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   line-height: 1.5;
 }
 .duration[role="timer"] {

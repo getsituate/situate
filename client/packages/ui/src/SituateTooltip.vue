@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { popupBounds } from "./popup-bounds";
+import { themePopupHost } from "./theme-popup-host";
 
 defineOptions({ inheritAttrs: false });
 const props = withDefaults(
@@ -11,9 +12,10 @@ const emit = defineEmits<{ describe: [id: string | undefined] }>();
 const id = useId();
 const element = ref<HTMLElement>();
 const visible = ref(false);
-const popupHost = computed(
-  () => (props.anchor ?? activeAnchor.value)?.closest("dialog") ?? "body",
-);
+const popupHost = computed(() => {
+  const anchor = props.anchor ?? activeAnchor.value;
+  return anchor?.closest("dialog") ?? themePopupHost(anchor) ?? "body";
+});
 watch(visible, (value) => emit("describe", value ? id : undefined));
 const activeAnchor = ref<HTMLElement>();
 let timer: ReturnType<typeof setTimeout> | undefined;

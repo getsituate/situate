@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .openai-browser-login {
   display: grid;
-  gap: 16px;
+  gap: var(--situate-space-4);
   color: var(--situate-ink);
 }
 p {
@@ -139,11 +139,11 @@ p {
 .sign-in-panel {
   display: grid;
   justify-items: start;
-  gap: 16px;
-  padding: 24px;
+  gap: var(--situate-space-4);
+  padding: var(--situate-space-6);
   background: var(--situate-surface);
   border: 1px solid var(--situate-control-line);
-  border-radius: 20px;
+  border-radius: var(--situate-radius-panel-large);
 }
 .sign-in-status {
   font-weight: 600;

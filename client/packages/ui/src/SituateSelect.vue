@@ -15,6 +15,7 @@ import {
 import SituateIcon from "./SituateIcon.vue";
 import { t } from "@situate/localization";
 import { selectEnvironment } from "./select-context";
+import { themePopupHost } from "./theme-popup-host";
 import "./select.css";
 
 defineOptions({ inheritAttrs: false });
@@ -49,6 +50,7 @@ const popupId = `choices-${generatedId}`;
 const native = ref<HTMLSelectElement>();
 const trigger = ref<HTMLButtonElement>();
 const popup = ref<HTMLDialogElement>();
+const themedHost = shallowRef<HTMLElement | null>();
 const list = ref<HTMLElement>();
 const options = shallowRef<
   {
@@ -175,6 +177,7 @@ async function show() {
     ? selected.value
     : (enabled.value[0] ?? -1);
   prefix = "";
+  themedHost.value = themePopupHost(trigger.value);
   open.value = true;
   await nextTick();
   popup.value?.showModal();
@@ -402,7 +405,7 @@ defineExpose({
       role="alert"
       >{{ c.required }}</span
     >
-    <Teleport :to="environment?.popupTarget?.value ?? 'body'">
+    <Teleport :to="environment?.popupTarget?.value ?? themedHost ?? 'body'">
       <dialog
         v-if="open"
         :id="popupId"

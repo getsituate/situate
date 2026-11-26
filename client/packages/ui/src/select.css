@@ -12,19 +12,20 @@
   appearance: none;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   position: relative;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   min-height: 48px;
-  padding: 12px 56px 12px 16px;
+  padding: var(--situate-space-3) 56px var(--situate-space-3)
+    var(--situate-space-4);
   border: 1px solid var(--situate-control-line);
-  border-radius: 12px;
+  border-radius: var(--situate-radius-control);
   background: var(--situate-paper);
   color: var(--situate-ink);
-  font: 500 14px/1.5 var(--situate-font-body);
+  font: 500 var(--situate-text-small)/1.5 var(--situate-font-body);
   font-variant-numeric: tabular-nums;
   text-align: start;
   cursor: pointer;
@@ -82,12 +83,13 @@
   background: var(--situate-accent-soft, var(--situate-lilac));
 }
 .situate-select-toolbar > .situate-select-trigger {
-  padding: 10px 32px 10px 10px;
+  padding: var(--situate-space-2-5) var(--situate-space-8)
+    var(--situate-space-2-5) var(--situate-space-2-5);
   border-color: transparent;
   background: transparent;
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
 }
 .situate-select-toolbar .select-chevron {
   width: 16px;
@@ -102,23 +104,23 @@
 .select-validation {
   color: var(--situate-ink);
   background: var(--situate-note);
-  font-size: 14px;
-  padding: 8px;
+  font-size: var(--situate-text-small);
+  padding: var(--situate-space-2);
 }
 .situate-select-popup {
   box-sizing: border-box;
   position: fixed;
   inset: auto;
   margin: 0;
-  padding: 8px;
+  padding: var(--situate-space-2);
   max-width: none;
   border: 1px solid var(--situate-line);
-  border-radius: 14px;
+  border-radius: var(--situate-radius-panel-compact);
   background: var(--situate-surface);
   color: var(--situate-ink);
-  font: 400 16px/1.5 var(--situate-font-body);
+  font: 400 var(--situate-text-body)/1.5 var(--situate-font-body);
   text-align: start;
-  box-shadow: 0 16px 48px #30203e26;
+  box-shadow: var(--situate-shadow-popover);
   overflow: hidden;
   transform: none;
 }
@@ -130,7 +132,8 @@
   background: transparent;
 }
 .situate-select-popup.select-sheet {
-  border-radius: 20px 20px 0 0;
+  border-radius: var(--situate-radius-panel-large)
+    var(--situate-radius-panel-large) 0 0;
   padding: max(12px, env(safe-area-inset-top, 0px))
     max(12px, env(safe-area-inset-right, 0px))
     max(16px, var(--app-safe-area-bottom, env(safe-area-inset-bottom, 0px)))
@@ -143,12 +146,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--situate-space-3);
   flex-shrink: 0;
-  padding: 0 4px 8px 12px;
+  padding: 0 var(--situate-space-1) var(--situate-space-2)
+    var(--situate-space-3);
 }
 .select-popup-header h2 {
-  font: 600 16px/1.4 var(--situate-font-body);
+  font: 600 var(--situate-text-body)/var(--situate-leading-compact)
+    var(--situate-font-body);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -158,9 +163,9 @@
   flex-shrink: 0;
   width: 48px;
   height: 48px;
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   color: var(--situate-muted);
   background: transparent;
   cursor: pointer;
@@ -174,7 +179,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 4px;
+  padding: var(--situate-space-1);
   scroll-padding: 4px;
 }
 .select-options:focus:where(html:not([data-input-modality="pointer"]) *):where(
@@ -183,17 +188,17 @@
   ) {
   outline: 2px solid var(--situate-cobalt);
   outline-offset: var(--situate-focus-offset);
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
 }
 .select-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--situate-space-4);
   min-height: 48px;
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--situate-radius-small);
   cursor: pointer;
   overflow-wrap: anywhere;
   touch-action: manipulation;
@@ -227,8 +232,8 @@
 .select-option-group,
 .select-empty {
   color: var(--situate-muted);
-  font-size: 14px;
-  margin: 8px 12px;
+  font-size: var(--situate-text-small);
+  margin: var(--situate-space-2) var(--situate-space-3);
 }
 @media (hover: hover) and (pointer: fine) {
   .situate-select > .situate-select-trigger:hover:not(:disabled) {
@@ -246,7 +251,7 @@
 }
 @media (max-width: 480px) {
   .situate-select > .situate-select-trigger {
-    font-size: 16px;
+    font-size: var(--situate-text-body);
   }
 }
 @media (forced-colors: active) {

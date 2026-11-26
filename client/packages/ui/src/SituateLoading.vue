@@ -86,7 +86,7 @@ watch(mark, (element, _, onCleanup) => {
   flex-direction: column;
   align-items: center;
   justify-content: safe center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   min-width: 0;
   color: var(--situate-muted);
   font-size: var(--situate-text-small);
@@ -112,13 +112,13 @@ watch(mark, (element, _, onCleanup) => {
   min-block-size: 0;
   box-sizing: border-box;
   overflow: auto;
-  padding: 16px;
+  padding: var(--situate-space-4);
 }
 .situate-loading--inline[data-pending] {
   flex-direction: row;
   justify-content: flex-start;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--situate-space-2);
   text-align: start;
 }
 .situate-loading--inline .loading-art {

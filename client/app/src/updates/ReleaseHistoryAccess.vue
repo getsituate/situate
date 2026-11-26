@@ -72,13 +72,13 @@ async function show(event: MouseEvent) {
 }
 .release-dialog :deep(.situate-dialog-actions) {
   flex-shrink: 0;
-  padding-top: 20px;
+  padding-top: var(--situate-space-5);
   border-top: 1px solid var(--situate-line);
 }
 @media (max-width: 600px) {
   .release-dialog {
     width: calc(100% - 24px);
-    padding: 20px;
+    padding: var(--situate-space-5);
   }
 }
 </style>

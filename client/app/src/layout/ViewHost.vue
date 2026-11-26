@@ -374,21 +374,21 @@ const viewProps = computed(() => {
   overflow: auto;
   overscroll-behavior: contain;
   display: flex;
-  padding: 32px 24px;
+  padding: var(--situate-space-8) var(--situate-space-6);
 }
 .chooser-content {
   width: min(440px, 100%);
   margin: auto;
 }
 .chooser-content h2 {
-  margin: 0 0 24px;
-  font-size: 24px;
+  margin: 0 0 var(--situate-space-6);
+  font-size: var(--situate-text-heading);
   line-height: 1.25;
   letter-spacing: var(--situate-tracking-heading);
 }
 .chooser-content h3 {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 0 var(--situate-space-2);
+  font-size: var(--situate-text-caption);
   font-weight: 500;
   color: var(--situate-muted);
 }
@@ -397,11 +397,11 @@ const viewProps = computed(() => {
   align-items: center;
   width: 100%;
   min-height: 56px;
-  gap: 12px;
-  padding: 12px 16px;
-  margin-bottom: 32px;
+  gap: var(--situate-space-3);
+  padding: var(--situate-space-3) var(--situate-space-4);
+  margin-bottom: var(--situate-space-8);
   border: 1px solid var(--situate-control-line);
-  border-radius: 12px;
+  border-radius: var(--situate-radius-control);
   background: var(--situate-surface);
   color: var(--situate-accent-strong, var(--situate-violet-deep));
   text-align: start;
@@ -413,18 +413,18 @@ const viewProps = computed(() => {
 .view-choice {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--situate-space-1);
 }
 .choose-view {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   min-width: 0;
   flex: 1;
   min-height: 52px;
-  padding: 12px;
+  padding: var(--situate-space-3);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   background: transparent;
   text-align: start;
 }
@@ -436,7 +436,7 @@ const viewProps = computed(() => {
   color: var(--situate-muted);
 }
 .chooser-content button {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 .chooser-content button:hover {
   background: var(--situate-accent-soft, var(--situate-lilac));
@@ -445,30 +445,30 @@ const viewProps = computed(() => {
 .chooser-back {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   min-height: 44px;
   border: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: var(--situate-space-2) var(--situate-space-3);
+  border-radius: var(--situate-radius-inset);
   background: transparent;
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
 .all-views {
-  margin-top: 16px;
+  margin-top: var(--situate-space-4);
 }
 .chooser-back {
-  margin-bottom: 16px;
+  margin-bottom: var(--situate-space-4);
 }
 .chooser-content p {
-  font-size: 14px;
-  margin: 8px 0;
+  font-size: var(--situate-text-small);
+  margin: var(--situate-space-2) 0;
 }
 .chooser-help {
   color: var(--situate-muted);
 }
 @container pane (max-width: 360px) {
   .view-chooser {
-    padding: 24px 20px;
+    padding: var(--situate-space-6) var(--situate-space-5);
   }
   .chooser-content h2 {
     font-size: 21px;
@@ -477,11 +477,11 @@ const viewProps = computed(() => {
 
 .view-message {
   margin: auto;
-  padding: 24px;
+  padding: var(--situate-space-6);
   max-width: 480px;
 }
 .view-message button {
-  margin: 8px;
+  margin: var(--situate-space-2);
   min-height: 44px;
 }
 </style>

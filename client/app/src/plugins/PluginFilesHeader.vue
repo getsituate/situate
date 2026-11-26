@@ -27,26 +27,26 @@ defineExpose({ focusTitle: () => heading.value?.focus() });
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  gap: 12px;
+  gap: var(--situate-space-3);
   min-height: 64px;
-  padding: 8px 16px;
+  padding: var(--situate-space-2) var(--situate-space-4);
   border-bottom: 1px solid var(--situate-line);
 }
 .plugin-files-header h2 {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
 }
 .files-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--situate-space-1-5);
   min-height: 44px;
-  padding: 8px;
+  padding: var(--situate-space-2);
   border: 0;
   border-radius: var(--situate-radius-control);
   background: transparent;
   color: var(--situate-accent-strong, var(--situate-violet-deep));
   font: inherit;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .files-back:hover {
   background: var(--situate-accent-soft, var(--situate-lilac));

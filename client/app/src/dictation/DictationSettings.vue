@@ -67,33 +67,33 @@ p {
 .scope,
 .privacy {
   color: var(--situate-muted);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
 }
 .scope {
-  margin-bottom: 16px;
+  margin-bottom: var(--situate-space-4);
 }
 .download-state {
-  font-size: 16px;
+  font-size: var(--situate-text-body);
   font-weight: 600;
 }
 .download-help {
-  margin-top: 8px;
+  margin-top: var(--situate-space-2);
 }
 .progress-row {
   display: flex;
-  gap: 12px;
+  gap: var(--situate-space-3);
   align-items: center;
   font-variant-numeric: tabular-nums;
-  margin-top: 12px;
+  margin-top: var(--situate-space-3);
 }
 .progress-row :deep(.situate-progress) {
   flex: 1;
   min-width: 0;
 }
 .download-status button {
-  margin-top: 12px;
+  margin-top: var(--situate-space-3);
 }
 .privacy {
-  margin-top: 20px;
+  margin-top: var(--situate-space-5);
 }
 </style>

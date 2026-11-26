@@ -154,7 +154,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: var(--situate-space-1-5);
   min-height: 44px;
 }
 .bend-toggle {
@@ -165,13 +165,16 @@ onBeforeUnmount(() => {
   height: 44px;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--situate-radius-inset);
   background: transparent;
-  color: var(--situate-violet-deep);
+  color: var(--chat-mini-bend-ink, var(--situate-violet-deep));
   --mini-bend-playful-size: 28px;
 }
 .bend-toggle[aria-pressed="true"] {
-  background: var(--situate-accent-soft, var(--situate-lilac));
+  background: var(
+    --chat-mini-bend-paused-surface,
+    var(--situate-accent-soft, var(--situate-lilac))
+  );
 }
 .bend-toggle:focus:where(html:not([data-input-modality="pointer"]) *) {
   outline: var(--situate-stroke-focus) solid
@@ -194,7 +197,7 @@ onBeforeUnmount(() => {
 .activity-comment {
   position: relative;
   display: block;
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   line-height: 1.45;
   color: var(--situate-muted);
   white-space: nowrap;

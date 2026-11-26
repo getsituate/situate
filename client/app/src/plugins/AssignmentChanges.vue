@@ -686,25 +686,26 @@ defineExpose({ focusTitle, showList: showTree });
   background: var(--situate-surface);
   color: var(--situate-ink);
   font-family: var(--situate-font-body);
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   line-height: 1.5;
 }
 .inspection-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--situate-space-3);
   min-height: 56px;
-  padding: 6px 12px 6px 16px;
+  padding: var(--situate-space-1-5) var(--situate-space-3)
+    var(--situate-space-1-5) var(--situate-space-4);
   border-bottom: 1px solid var(--situate-line);
 }
 h3 {
-  font-size: 14px;
+  font-size: var(--situate-text-small);
   font-weight: 600;
   margin: 0;
 }
 .change-count {
   color: var(--situate-muted);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
   flex: 1;
 }
 .inspection-body {
@@ -739,10 +740,10 @@ h3 {
   display: flex;
 }
 .inspection-tools {
-  padding: 12px;
+  padding: var(--situate-space-3);
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--situate-space-1);
 }
 .inspection-tools input {
   width: 100%;
@@ -757,19 +758,19 @@ h3 {
 .file-list {
   list-style: none;
   margin: 0;
-  padding: 0 4px 8px;
+  padding: 0 var(--situate-space-1) var(--situate-space-2);
 }
 .file-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--situate-space-2-5);
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   width: 100%;
   min-height: 48px;
-  padding: 6px 12px;
+  padding: var(--situate-space-1-5) var(--situate-space-3);
   text-align: start;
   cursor: pointer;
   border-radius: var(--situate-radius-small);
@@ -782,7 +783,7 @@ h3 {
 }
 .file-status {
   flex: 0 0 14px;
-  font: 600 12px var(--situate-font-mono);
+  font: 600 var(--situate-text-label) var(--situate-font-mono);
   color: var(--situate-muted);
 }
 .file-status.added,
@@ -800,14 +801,14 @@ h3 {
   flex-direction: column;
 }
 .file-name strong {
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .file-directory {
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   color: var(--situate-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -817,7 +818,7 @@ h3 {
 }
 .record-range {
   color: var(--situate-muted);
-  font: 11px var(--situate-font-mono);
+  font: var(--situate-text-fine) var(--situate-font-mono);
   overflow-wrap: anywhere;
 }
 .uncertain-mark {
@@ -828,15 +829,15 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: var(--situate-space-1) var(--situate-space-2);
   border-top: 1px solid var(--situate-line);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
 }
 .diff-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: var(--situate-space-1);
+  padding: var(--situate-space-1) var(--situate-space-2);
   border-bottom: 1px solid var(--situate-line);
 }
 .back {
@@ -846,10 +847,10 @@ h3 {
   font: inherit;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--situate-space-1-5);
   cursor: pointer;
   min-height: 44px;
-  padding: 6px 8px;
+  padding: var(--situate-space-1-5) var(--situate-space-2);
 }
 .back :deep(svg) {
   width: 16px;
@@ -857,32 +858,32 @@ h3 {
 }
 .change-position {
   margin-inline-start: auto;
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   color: var(--situate-muted);
 }
 .diff-heading {
-  padding: 14px 16px;
+  padding: var(--situate-space-3-5) var(--situate-space-4);
   border-bottom: 1px solid var(--situate-line);
 }
 h4 {
   margin: 0;
-  font: 500 12px/1.6 var(--situate-font-mono);
+  font: 500 var(--situate-text-label)/1.6 var(--situate-font-mono);
   overflow-wrap: anywhere;
 }
 .renamed-path {
-  font-size: 11px;
+  font-size: var(--situate-text-fine);
   color: var(--situate-muted);
   overflow-wrap: anywhere;
-  margin: 8px 0;
+  margin: var(--situate-space-2) 0;
 }
 .diff-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
-  font-size: 11px;
+  gap: var(--situate-space-2);
+  font-size: var(--situate-text-fine);
   color: var(--situate-muted);
-  margin-top: 8px;
+  margin-top: var(--situate-space-2);
 }
 .added-count,
 .removed-count {
@@ -894,9 +895,9 @@ h4 {
   font-family: var(--situate-font-mono);
 }
 .feedback {
-  padding: 16px;
+  padding: var(--situate-space-4);
   margin: 0;
-  font-size: 13px;
+  font-size: var(--situate-text-caption);
   overflow-wrap: anywhere;
 }
 .choose-file {
@@ -904,10 +905,10 @@ h4 {
   color: var(--situate-muted);
 }
 .change-notice {
-  padding: 12px 16px;
+  padding: var(--situate-space-3) var(--situate-space-4);
   margin: 0;
   border-bottom: 1px solid var(--situate-line);
-  font-size: 12px;
+  font-size: var(--situate-text-label);
 }
 .diff-scroll {
   flex: 1;
@@ -918,7 +919,7 @@ h4 {
 .diff-lines {
   border-collapse: collapse;
   width: 100%;
-  font: 12px/1.8 var(--situate-font-mono);
+  font: var(--situate-text-label)/1.8 var(--situate-font-mono);
 }
 .diff-line td {
   padding: 0;
@@ -927,7 +928,7 @@ h4 {
 .line-number {
   min-width: 34px;
   width: 34px;
-  padding-inline: 6px !important;
+  padding-inline: var(--situate-space-1-5) !important;
   text-align: right;
   color: var(--situate-muted);
   user-select: none;
@@ -939,7 +940,7 @@ h4 {
   user-select: none;
 }
 .line-content {
-  padding-inline: 4px 20px !important;
+  padding-inline: var(--situate-space-1) var(--situate-space-5) !important;
   white-space: pre;
 }
 .line-content code {
@@ -965,22 +966,22 @@ h4 {
   background: var(--situate-paper);
 }
 .diff-gap button {
-  padding: 8px 16px;
+  padding: var(--situate-space-2) var(--situate-space-4);
   min-height: var(--situate-target-min);
   background: transparent;
   color: var(--situate-muted);
   border: 0;
-  font: 12px var(--situate-font-body);
+  font: var(--situate-text-label) var(--situate-font-body);
   cursor: pointer;
   text-align: start;
 }
 .newline-note td {
-  padding: 4px 16px;
-  font: 11px var(--situate-font-body);
+  padding: var(--situate-space-1) var(--situate-space-4);
+  font: var(--situate-text-fine) var(--situate-font-body);
   color: var(--situate-muted);
 }
 .more-lines {
-  margin: 12px;
+  margin: var(--situate-space-3);
 }
 :is(button, input, [tabindex]):focus:where(
     html:not([data-input-modality="pointer"]) *
