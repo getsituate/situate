@@ -271,11 +271,15 @@ impl Cache {
         };
         if !expired(entry.used, now)
             && entry.bytes <= MAX_IMAGE
-            && let Ok(file) = File::open(self.directory.join(key))
+            && let Ok(file) = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(self.directory.join(key))
         {
             let mut bytes = Vec::new();
             (&file).take(MAX_IMAGE + 1).read_to_end(&mut bytes)?;
             if is_jpeg(&bytes) {
+                // Windows requires write access to update the last-use timestamp.
                 file.set_modified(now)?;
                 entry.used = now;
                 reply.jpeg = Some(STANDARD.encode(bytes));

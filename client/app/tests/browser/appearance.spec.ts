@@ -1,3 +1,4 @@
+import type { LayoutDocument } from "../../src/layout/storage";
 import { test, expect, type Page } from "./test";
 import {
   workspaceFixture,
@@ -177,11 +178,18 @@ test("selection survives navigation, reload and workspace switches without disca
   ).toBeChecked();
   await expect
     .poll(async () =>
-      page.evaluate(async () =>
-        JSON.stringify((await window.__layoutTest.stored("garden")).data),
-      ),
+      page.evaluate(async () => {
+        const { data } = await window.__layoutTest.stored("garden");
+        const layout = (data as LayoutDocument | null)?.layout;
+        const tab = layout?.tabs.find(({ id }) => id === layout.activeTabId);
+        const pane = tab?.panes.find(({ id }) => id === tab.activePaneId);
+        return pane?.navigation.entries[pane.navigation.cursor];
+      }),
     )
-    .toContain('"presentation":{"page":"appearance","detail":true}');
+    .toMatchObject({
+      target: { kind: "view", viewId: "settings" },
+      presentation: { page: "appearance", detail: true },
+    });
   await page.reload();
   await expect(
     page.getByRole("radio", { name: "Cobalt", exact: true }),
