@@ -1,6 +1,6 @@
 import { selectScenario } from "./scenarios";
 import { expect, test, type Page } from "./test";
-import { selectOption, selectOptions } from "./select";
+import { selectOption } from "./select";
 
 async function open(page: Page, scenario: string, mobile: boolean) {
   await page.goto(
@@ -16,14 +16,6 @@ async function open(page: Page, scenario: string, mobile: boolean) {
   await expect(preview.locator(".documents-view, .plugin-view")).toBeVisible();
   return preview;
 }
-async function browse(preview: Page) {
-  const button = preview.getByRole("button", { name: "Browse", exact: true });
-  if (await button.isVisible()) {
-    await button.click();
-    return preview.getByRole("dialog");
-  }
-  return preview.locator(".doc-library-navigation");
-}
 async function fits(page: Page) {
   expect(
     await page.evaluate(
@@ -33,215 +25,117 @@ async function fits(page: Page) {
   const rect = await page.locator(".documents-view").boundingBox();
   expect(rect!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
 }
-async function layout(controls: Page, preview: Page, focused: boolean) {
-  await selectOption(
-    controls.getByLabel("Navigation approach", { exact: true }),
-    focused ? "focused" : "library",
-  );
-  if (focused)
-    await expect(preview.locator(".documents-view")).toHaveClass(
-      /documents-focused/,
-    );
-  else
-    await expect(preview.locator(".documents-view")).not.toHaveClass(
-      /documents-focused/,
-    );
-}
 for (const mobile of [false, true]) {
-  for (const focused of [false, true]) {
-    const suffix = `${mobile ? "mobile" : "desktop"} · ${focused ? "search" : "library"}`;
-    test(`find a document by description, identifier and typo without choosing a mode · ${suffix}`, async ({
-      page,
-    }, info) => {
-      const preview = await open(page, "documents-find", mobile);
-      await layout(page, preview, focused);
-      const errors: string[] = [];
-      preview.on("pageerror", (e) => errors.push(e.message));
-      const centers = await preview
-        .locator(".doc-search-box")
-        .evaluate((element) => {
-          const input = element.querySelector("input")!.getBoundingClientRect();
-          const button = element
-            .querySelector("button")!
-            .getBoundingClientRect();
-          const icon = element
-            .querySelector("button svg")!
-            .getBoundingClientRect();
-          return {
-            inputY: input.y + input.height / 2,
-            buttonX: button.x + button.width / 2,
-            iconX: icon.x + icon.width / 2,
-            iconY: icon.y + icon.height / 2,
-          };
-        });
-      expect(centers.iconY).toBeCloseTo(centers.inputY, 1);
-      expect(centers.iconX).toBeCloseTo(centers.buttonX, 1);
-      await preview.getByRole("searchbox").fill("bicycle repair");
-      await preview.getByRole("searchbox").press("Enter");
-      await expect(preview.locator(".doc-result")).toHaveCount(1);
-      await expect(preview.locator(".doc-excerpt")).toContainText("VE-2048");
-      await preview.locator('[data-document="bike"]').click();
-      await expect(preview.locator(".doc-paper")).toContainText("€86.00");
-      await preview
-        .getByRole("button", { name: "Next page", exact: true })
-        .click();
-      await expect(preview.locator(".doc-paper")).toContainText(
-        "Service record",
-      );
-      await info.attach(`find-${suffix}`, {
-        body: await preview.screenshot(),
-        contentType: "image/png",
-      });
-      await fits(preview);
-      const close = preview.getByRole("button", {
-        name: mobile ? "Back to documents" : "Close document",
-        exact: true,
-      });
-      await close.click();
-      await expect(preview.locator('[data-document="bike"]')).toBeFocused();
-      await expect(
-        preview.getByRole("combobox", { name: "Search by", exact: true }),
-      ).toHaveCount(0);
-      for (const query of ["VE-2048", "bicycel repair", "bicyle repair"]) {
-        await preview.getByRole("searchbox").fill(query);
-        await preview.getByRole("searchbox").press("Enter");
-        await expect(preview.locator(".doc-result")).toHaveCount(1);
-        await expect(preview.locator('[data-document="bike"]')).toBeVisible();
-      }
-      await preview.getByRole("searchbox").fill("VE-2049");
-      await preview.getByRole("searchbox").press("Enter");
-      await expect(preview.locator(".doc-result")).toHaveCount(0);
-      expect(errors).toEqual([]);
-    });
-
-    test(`gather, save and refresh a dynamic document selection · ${suffix}`, async ({
-      page,
-    }, info) => {
-      const preview = await open(page, "documents-gather", mobile);
-      await layout(page, preview, focused);
-      await expect(preview.locator(".doc-result")).toHaveCount(5);
-      await expect(preview.locator('[data-document="internet"]')).toHaveCount(
-        0,
-      );
-      await expect(preview.locator('[data-document="personal"]')).toHaveCount(
-        1,
-      );
-      await expect(
-        preview.getByLabel("Documents with", { exact: true }),
-      ).toHaveAttribute("data-value", "all");
-      await expect(
-        preview.getByRole("button", {
-          name: "Remove tag filter: Tax",
-          exact: true,
-        }),
-      ).toBeVisible();
-      await expect(preview.getByRole("dialog")).toHaveCount(0);
-      await info.attach(`filters-${suffix}`, {
-        body: await preview.screenshot(),
-        contentType: "image/png",
-      });
-      await preview
-        .getByRole("button", { name: "Save search", exact: true })
-        .click();
-      await expect(
-        preview.getByRole("dialog", { name: "Save this search", exact: true }),
-      ).toBeVisible();
-      await preview.getByLabel("Name", { exact: true }).fill("Tax 2025");
-      await preview.getByRole("button", { name: "Save", exact: true }).click();
-      await expect(
-        preview.getByRole("heading", { name: "Tax 2025", exact: true }),
-      ).toBeVisible();
-      await expect(
-        preview.getByText("Search saved.", { exact: true }),
-      ).toBeVisible();
-      await preview
-        .getByRole("button", {
-          name: "Not fully up to date. Review sources.",
-          exact: true,
-        })
-        .click();
-      const drive = preview.locator(".plugin-sources .plugin-row").filter({
-        has: preview.getByRole("heading", {
-          name: "Cloud drive",
-          exact: true,
-        }),
-      });
-      await drive.getByRole("button", { name: "Refresh", exact: true }).click();
-      await preview
-        .getByRole("button", { name: "Back to documents", exact: false })
-        .click();
-      await preview
-        .getByRole("button", { name: "Clear search and filters", exact: true })
-        .click();
-      const navigation = await browse(preview);
-      await navigation
-        .getByRole("button", { name: "Tax 2025", exact: true })
-        .click();
-      await expect(preview.locator(".doc-result")).toHaveCount(6);
-      await expect(
-        preview.locator('[data-document="new-invoice"]'),
-      ).toBeVisible();
-      await info.attach(`gather-${suffix}`, {
-        body: await preview.screenshot(),
-        contentType: "image/png",
-      });
-      await fits(preview);
-    });
-  }
-
-  test(`inline tags default to any, switch to all and clear without a dialog · ${mobile ? "mobile" : "desktop"}`, async ({
+  const suffix = mobile ? "mobile" : "desktop";
+  test(`find a document by description, identifier and typo without choosing a mode · ${suffix}`, async ({
     page,
   }, info) => {
     const preview = await open(page, "documents-find", mobile);
-    const add = preview.getByLabel("Add tags", { exact: true });
-    const initialCount = await preview.locator(".doc-result").count();
-    await selectOption(add, "tax");
-    const match = preview.getByLabel("Documents with", { exact: true });
-    await expect(match).toHaveAttribute("data-value", "any");
-    await selectOption(add, "2025");
-    await expect(preview.locator('[data-document="internet"]')).toHaveCount(1);
-    await expect(preview.locator('[data-document="bike"]')).toHaveCount(1);
-    const anyCount = await preview.locator(".doc-result").count();
-    await selectOption(match, "all");
-    await expect(preview.locator(".doc-result")).toHaveCount(5);
-    await expect(preview.locator('[data-document="internet"]')).toHaveCount(0);
-    await expect(preview.locator('[data-document="personal"]')).toHaveCount(1);
-    await expect(preview.getByRole("dialog")).toHaveCount(0);
-    await expect(
-      preview.getByRole("button", { name: "Edit as text" }),
-    ).toHaveCount(0);
-    await info.attach("inline-tags", {
+    const errors: string[] = [];
+    preview.on("pageerror", (e) => errors.push(e.message));
+    const centers = await preview
+      .locator(".doc-search-box")
+      .evaluate((element) => {
+        const input = element.querySelector("input")!.getBoundingClientRect();
+        const button = element.querySelector("button")!.getBoundingClientRect();
+        const icon = element
+          .querySelector("button svg")!
+          .getBoundingClientRect();
+        return {
+          inputY: input.y + input.height / 2,
+          buttonX: button.x + button.width / 2,
+          iconX: icon.x + icon.width / 2,
+          iconY: icon.y + icon.height / 2,
+        };
+      });
+    expect(centers.iconY).toBeCloseTo(centers.inputY, 1);
+    expect(centers.iconX).toBeCloseTo(centers.buttonX, 1);
+    await preview.getByRole("searchbox").fill("bicycle repair");
+    await preview.getByRole("searchbox").press("Enter");
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
+    await expect(preview.locator(".doc-excerpt")).toContainText("VE-2048");
+    await preview.locator('[data-document="bike"]').click();
+    await expect(preview.locator(".doc-paper")).toContainText("€86.00");
+    await preview
+      .getByRole("button", { name: "Next page", exact: true })
+      .click();
+    await expect(preview.locator(".doc-paper")).toContainText("Service record");
+    await info.attach(`find-${suffix}`, {
       body: await preview.screenshot(),
       contentType: "image/png",
     });
-    await selectOption(match, "any");
-    await expect(preview.locator(".doc-result")).toHaveCount(anyCount);
+    await fits(preview);
+    const close = preview.getByRole("button", {
+      name: mobile ? "Back to documents" : "Close document",
+      exact: true,
+    });
+    await close.click();
+    await expect(preview.locator('[data-document="bike"]')).toBeFocused();
+    await expect(
+      preview.getByRole("combobox", { name: "Search by", exact: true }),
+    ).toHaveCount(0);
+    for (const query of ["VE-2048", "bicycel repair", "bicyle repair"]) {
+      await preview.getByRole("searchbox").fill(query);
+      await preview.getByRole("searchbox").press("Enter");
+      await expect(preview.locator(".doc-result")).toHaveCount(1);
+      await expect(preview.locator('[data-document="bike"]')).toBeVisible();
+    }
+    await preview.getByRole("searchbox").fill("VE-2049");
+    await preview.getByRole("searchbox").press("Enter");
+    await expect(preview.locator(".doc-result")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test(`refresh updates the current document search · ${suffix}`, async ({
+    page,
+  }, info) => {
+    const preview = await open(page, "documents-gather", mobile);
+    await expect(preview.getByRole("searchbox")).toHaveValue("course fee");
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
+    await expect(preview.locator('[data-document="course"]')).toBeVisible();
     await preview
       .getByRole("button", {
-        name: "Remove tag filter: Years / 2025",
+        name: "Not fully up to date. Review sources.",
         exact: true,
       })
       .click();
-    const removeTax = preview.getByRole("button", {
-      name: "Remove tag filter: Tax",
-      exact: true,
+    const drive = preview.locator(".plugin-sources .plugin-row").filter({
+      has: preview.getByRole("heading", {
+        name: "Cloud drive",
+        exact: true,
+      }),
     });
-    await expect(removeTax).toBeFocused();
-    await removeTax.press("Enter");
-    await expect(add).toBeFocused();
-    await expect(preview.locator(".doc-result")).toHaveCount(initialCount);
+    await drive.getByRole("button", { name: "Refresh", exact: true }).click();
+    await preview
+      .getByRole("button", { name: "Back to documents", exact: false })
+      .click();
+    await expect(preview.getByRole("searchbox")).toHaveValue("course fee");
+    await expect(preview.locator(".doc-result")).toHaveCount(2);
+    await expect(
+      preview.locator('[data-document="new-invoice"]'),
+    ).toBeVisible();
+    await info.attach(`gather-${suffix}`, {
+      body: await preview.screenshot(),
+      contentType: "image/png",
+    });
     await fits(preview);
   });
 }
 
 for (const mobile of [false, true]) {
-  test(`unified search preserves saved criteria and drafts through errors · ${mobile ? "mobile" : "desktop"}`, async ({
+  test(`search preserves the submitted query and drafts through errors · ${mobile ? "mobile" : "desktop"}`, async ({
     page,
   }) => {
     const preview = await open(page, "documents-find", mobile);
     const query = preview.getByRole("searchbox");
     await query.fill("bicycel repair");
     await query.press("Tab");
+    const clear = preview.getByRole("button", {
+      name: "Clear search",
+      exact: true,
+    });
+    await expect(clear).toBeFocused();
+    await clear.press("Tab");
     const submit = preview.getByRole("button", {
       name: "Search documents",
       exact: true,
@@ -249,26 +143,7 @@ for (const mobile of [false, true]) {
     await expect(submit).toBeFocused();
     await submit.press("Enter");
     await expect(preview.locator(".doc-result")).toHaveCount(1);
-    await selectOption(preview.getByLabel("Add tags", { exact: true }), "home");
-    await preview
-      .getByRole("button", { name: "Save search", exact: true })
-      .click();
-    await preview.getByLabel("Name", { exact: true }).fill("Bike repair");
-    await preview.getByRole("button", { name: "Save", exact: true }).click();
-    await preview
-      .getByRole("button", { name: "Clear search and filters", exact: true })
-      .click();
-    const navigation = await browse(preview);
-    await navigation
-      .getByRole("button", { name: "Bike repair", exact: true })
-      .click();
     await expect(query).toHaveValue("bicycel repair");
-    await expect(
-      preview.getByRole("button", {
-        name: "Remove tag filter: Home",
-        exact: true,
-      }),
-    ).toBeVisible();
     await expect(preview.locator(".doc-result")).toHaveCount(1);
     await selectOption(
       page.getByLabel("Search result state", { exact: true }),
@@ -276,7 +151,7 @@ for (const mobile of [false, true]) {
     );
     await expect(
       preview.getByText(
-        "Search could not be completed. Your search and filters have been kept.",
+        "Search could not be completed. Your search has been kept.",
         { exact: true },
       ),
     ).toBeVisible();
@@ -290,7 +165,7 @@ for (const mobile of [false, true]) {
     await expect(preview.locator('[data-document="bike"]')).toBeVisible();
     await fits(preview);
   });
-  test(`query, selection and result controls stay grouped through resizing · ${mobile ? "mobile" : "desktop"}`, async ({
+  test(`query and result controls stay grouped through resizing · ${mobile ? "mobile" : "desktop"}`, async ({
     page,
   }, info) => {
     const preview = await open(page, "documents-gather", mobile);
@@ -298,7 +173,7 @@ for (const mobile of [false, true]) {
     await query.fill("Unsubmitted description");
     for (const width of mobile ? [390, 320] : [1920, 1040, 768]) {
       await preview.setViewportSize({ width, height: mobile ? 844 : 900 });
-      const { field, submit, collection, controls } = await preview
+      const { field, submit, collection, view, controls } = await preview
         .locator(".doc-collection")
         .evaluate((element) => {
           const rect = (node: Element) => {
@@ -307,13 +182,17 @@ for (const mobile of [false, true]) {
           };
           return {
             field: rect(element.querySelector('[role="search"]')!),
-            submit: rect(element.querySelector(".doc-search-box button")!),
+            submit: rect(
+              element.querySelector('.doc-search-box button[type="submit"]')!,
+            ),
             collection: rect(element),
-            controls: ["#doc-add-tag", "#doc-tag-match", ".doc-sort"].map(
-              (selector) => rect(element.querySelector(selector)!),
+            view: rect(element.closest(".documents-view")!),
+            controls: [".doc-clear", ".doc-sort"].map((selector) =>
+              rect(element.querySelector(selector)!),
             ),
           };
         });
+      expect(collection.width).toBeCloseTo(view.width, 0);
       expect(submit.x).toBeGreaterThanOrEqual(field.x);
       expect(submit.y).toBeGreaterThanOrEqual(field.y);
       expect(submit.x + submit.width).toBeLessThanOrEqual(
@@ -327,40 +206,10 @@ for (const mobile of [false, true]) {
         expect(rect.x + rect.width).toBeLessThanOrEqual(
           collection.x + collection.width,
         );
-        expect(rect.height).toBeGreaterThanOrEqual(48);
-      }
-      if (width === 320) {
-        expect(controls[0]!.y).toBeCloseTo(controls[1]!.y, 0);
-        await selectOption(
-          preview.getByRole("combobox", {
-            name: "Documents with",
-            exact: true,
-          }),
-          "any",
-        );
-        const [addY, matchY] = await preview
-          .locator(".doc-inline-filters")
-          .evaluate((element) =>
-            ["#doc-add-tag", "#doc-tag-match"].map(
-              (selector) =>
-                element.querySelector(selector)!.getBoundingClientRect().y,
-            ),
-          );
-        expect(addY).toBeCloseTo(matchY!, 0);
-        await expect(preview.locator(".doc-result")).toHaveCount(8);
-        await selectOption(
-          preview.getByRole("combobox", {
-            name: "Documents with",
-            exact: true,
-          }),
-          "all",
-        );
+        expect(rect.height).toBeGreaterThanOrEqual(44);
       }
       await expect(query).toHaveValue("Unsubmitted description");
-      await expect(
-        preview.getByRole("combobox", { name: "Documents with", exact: true }),
-      ).toHaveAttribute("data-value", "all");
-      await expect(preview.locator(".doc-result")).toHaveCount(5);
+      await expect(preview.locator(".doc-result")).toHaveCount(1);
       await fits(preview);
       await info.attach(
         `document-header-${mobile ? "mobile" : "desktop"}-${width}`,
@@ -381,145 +230,83 @@ for (const mobile of [false, true]) {
       .click();
     await expect(query).toHaveValue("Unsubmitted description");
     await preview
-      .getByRole("button", { name: "Clear search and filters", exact: true })
+      .getByRole("button", { name: "Clear search", exact: true })
       .click();
     await expect(query).toBeFocused();
     await expect(query).toHaveValue("");
     await expect(
-      preview.getByRole("combobox", { name: "Documents with", exact: true }),
+      preview.getByRole("button", { name: "Clear search", exact: true }),
     ).toHaveCount(0);
-    await expect(
-      preview.getByRole("button", { name: "Save search", exact: true }),
-    ).toBeVisible();
+    await expect(preview.locator(".doc-result")).toHaveCount(10);
   });
 }
 
 for (const mobile of [false, true]) {
-  for (const focused of [false, true]) {
-    test(`document navigation uses tags and saved searches while sources manage connections · ${mobile ? "mobile" : "desktop"} · ${focused ? "search" : "library"}`, async ({
-      page,
-    }, info) => {
-      const preview = await open(page, "documents-gather", mobile);
-      await layout(page, preview, focused);
-      const query = preview.getByRole("searchbox");
-      await expect(preview.locator(".doc-result")).toHaveCount(5);
-      await query.fill("Unsubmitted description");
-      const navigation = await browse(preview);
-      await expect(
-        navigation.getByRole("heading", { name: "Tags", exact: true }),
-      ).toBeVisible();
-      await expect(
-        navigation.getByRole("button", { name: /^Home & repairs/ }),
-      ).toBeVisible();
-      await expect(
-        navigation.getByRole("heading", { name: "Sources", exact: true }),
-      ).toHaveCount(0);
-      for (const name of [
-        "Cloud drive",
-        "Paperless",
-        "Home computer",
-        "Document sources",
-        "Finance",
-      ]) {
-        await expect(
-          navigation.getByRole("button", { name: new RegExp(name) }),
-        ).toHaveCount(0);
-      }
-      if (await preview.getByRole("dialog").isVisible()) {
-        await preview.keyboard.press("Escape");
-        await expect(
-          preview.getByRole("button", { name: "Browse", exact: true }),
-        ).toBeFocused();
-      }
-      await expect(query).toHaveValue("Unsubmitted description");
-      await preview
-        .getByRole("button", {
-          name: "Not fully up to date. Review sources.",
-          exact: true,
-        })
-        .click();
-      await expect(
-        preview.getByRole("heading", { name: /^Sources/ }),
-      ).toBeVisible();
-      const sources = preview.locator(".plugin-sources .plugin-row");
-      await expect(sources).toHaveCount(3);
-      await expect(
-        sources.getByRole("button", { name: "Refresh", exact: true }),
-      ).toHaveCount(3);
-      await expect(
-        sources.getByRole("button", { name: /^Browse/ }),
-      ).toHaveCount(0);
-      const drive = sources.filter({
-        has: preview.getByRole("heading", { name: "Cloud drive", exact: true }),
-      });
-      await drive
-        .getByRole("button", { name: "Settings", exact: true })
-        .click();
-      await expect(
-        preview.getByText("Documents / Shared", { exact: true }),
-      ).toBeVisible();
-      await preview
-        .getByRole("button", { name: "Back to plugins", exact: true })
-        .click();
-      await preview
-        .getByRole("button", { name: /Back to documents/ })
-        .press("Enter");
-      await expect(preview.locator(".doc-result")).toHaveCount(5);
-      await expect(query).toHaveValue("Unsubmitted description");
-      await expect(preview.locator("[data-remove-tag]")).toHaveCount(2);
-      await expect(preview.locator(".doc-results-heading h2")).toHaveCount(0);
-      for (const width of mobile ? [390, 320] : [1920, 1040, 768]) {
-        await preview.setViewportSize({ width, height: mobile ? 844 : 900 });
-        await fits(preview);
-        await expect(query).toHaveValue("Unsubmitted description");
-        await expect(preview.locator(".doc-result")).toHaveCount(5);
-        await info.attach(`collection-${width}`, {
-          body: await preview.screenshot(),
-          contentType: "image/png",
-        });
-      }
-      await preview.locator('[data-document="course"]').click();
-      await expect(preview.locator(".doc-preview details")).toContainText(
-        "Cloud drive",
-      );
-      await expect(preview.locator(".doc-preview details")).toContainText(
-        "Finance / 2025",
-      );
-      await page
-        .getByRole("button", { name: "Reset scenario", exact: true })
-        .click();
-      await expect(query).toHaveValue("");
-      await expect(preview.locator(".doc-result")).toHaveCount(5);
-      await preview.reload();
-      await expect(preview.locator(".doc-result")).toHaveCount(5);
-    });
-  }
-}
-
-for (const scenario of ["documents-find", "documents-no-tags"]) {
-  test(`clearing untagged browsing restores all documents and keyboard focus · ${scenario}`, async ({
+  test(`source review preserves the document search · ${mobile ? "mobile" : "desktop"}`, async ({
     page,
-  }) => {
-    const preview = await open(page, scenario, true);
-    const count = await preview.locator(".doc-result").count();
+  }, info) => {
+    const preview = await open(page, "documents-gather", mobile);
     const query = preview.getByRole("searchbox");
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
     await query.fill("Unsubmitted description");
-    const navigation = await browse(preview);
-    await navigation.getByRole("button", { name: /^Without tags/ }).click();
-    await expect(preview.locator('[data-constraint="untagged"]')).toBeVisible();
-    await preview
-      .getByRole("button", { name: "Clear tag filter", exact: true })
-      .press("Enter");
-    await expect(
-      scenario === "documents-no-tags"
-        ? query
-        : preview.getByLabel("Add tags", { exact: true }),
-    ).toBeFocused();
-    await expect(preview.locator(".doc-result")).toHaveCount(count);
     await expect(query).toHaveValue("Unsubmitted description");
-    await expect(preview.locator('[data-constraint="untagged"]')).toHaveCount(
+    await preview
+      .getByRole("button", {
+        name: "Not fully up to date. Review sources.",
+        exact: true,
+      })
+      .click();
+    await expect(
+      preview.getByRole("heading", { name: /^Sources/ }),
+    ).toBeVisible();
+    const sources = preview.locator(".plugin-sources .plugin-row");
+    await expect(sources).toHaveCount(3);
+    await expect(
+      sources.getByRole("button", { name: "Refresh", exact: true }),
+    ).toHaveCount(3);
+    await expect(sources.getByRole("button", { name: /^Browse/ })).toHaveCount(
       0,
     );
+    const drive = sources.filter({
+      has: preview.getByRole("heading", { name: "Cloud drive", exact: true }),
+    });
+    await drive.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(
+      preview.getByText("Documents / Shared", { exact: true }),
+    ).toBeVisible();
+    await preview
+      .getByRole("button", { name: "Back to plugins", exact: true })
+      .click();
+    await preview
+      .getByRole("button", { name: /Back to documents/ })
+      .press("Enter");
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
+    await expect(query).toHaveValue("Unsubmitted description");
+    await expect(preview.locator(".doc-results-heading h2")).toHaveCount(0);
+    for (const width of mobile ? [390, 320] : [1920, 1040, 768]) {
+      await preview.setViewportSize({ width, height: mobile ? 844 : 900 });
+      await fits(preview);
+      await expect(query).toHaveValue("Unsubmitted description");
+      await expect(preview.locator(".doc-result")).toHaveCount(1);
+      await info.attach(`collection-${width}`, {
+        body: await preview.screenshot(),
+        contentType: "image/png",
+      });
+    }
+    await preview.locator('[data-document="course"]').click();
+    await expect(preview.locator(".doc-preview details")).toContainText(
+      "Cloud drive",
+    );
+    await expect(preview.locator(".doc-preview details")).toContainText(
+      "Finance / 2025",
+    );
+    await page
+      .getByRole("button", { name: "Reset scenario", exact: true })
+      .click();
+    await expect(query).toHaveValue("course fee");
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
+    await preview.reload();
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
   });
 }
 
@@ -550,8 +337,7 @@ for (const mobile of [false, true]) {
       .press("Enter");
     await expect(reviewSources).toBeFocused();
     await expect(query).toHaveValue("Unsubmitted description");
-    await expect(preview.locator("[data-remove-tag]")).toHaveCount(2);
-    await expect(preview.locator(".doc-result")).toHaveCount(5);
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
   });
 
   test(`an empty document collection keeps connection setup reachable · ${mobile ? "mobile" : "desktop"}`, async ({
@@ -580,137 +366,7 @@ for (const mobile of [false, true]) {
       preview.getByRole("textbox", { name: "Your request", exact: true }),
     ).toBeVisible();
   });
-
-  test(`document navigation highlights the selection without an underline · ${mobile ? "mobile" : "desktop"}`, async ({
-    page,
-  }, info) => {
-    const preview = await open(page, "documents-find", mobile);
-    for (const name of [
-      /^All documents/,
-      /^Home & repairs/,
-      /^Tax$/,
-      /^Without tags/,
-    ]) {
-      let navigation = await browse(preview);
-      const target = navigation.getByRole("button", { name });
-      await target.click();
-      navigation = await browse(preview);
-      const selected = navigation.getByRole("button", { name });
-      await expect(selected).toHaveAttribute("aria-current", "page");
-      await expect(selected).toHaveCSS("font-weight", "600");
-      await expect(selected).toHaveCSS("text-decoration-line", "none");
-      await expect(selected).not.toHaveCSS(
-        "background-color",
-        "rgba(0, 0, 0, 0)",
-      );
-      await selected.focus();
-      await expect(selected).toBeFocused();
-      await info.attach("document-selection", {
-        body: await preview.screenshot(),
-        contentType: "image/png",
-      });
-      if (mobile) await preview.keyboard.press("Escape");
-    }
-  });
 }
-
-test("tag navigation gives labels, counts and actions room without crowding the collection", async ({
-  page,
-}, info) => {
-  const preview = await open(page, "documents-find", false);
-  const sidebar = preview.locator(".doc-library-navigation");
-  await sidebar.getByRole("button", { name: "New tag", exact: true }).click();
-  const create = preview.getByRole("dialog", { name: "New tag", exact: true });
-  await create
-    .getByRole("textbox", { name: "Tag name", exact: true })
-    .fill("Annual maintenance and insurance records");
-  await selectOption(
-    create.getByRole("combobox", { name: "Parent tag", exact: true }),
-    "training",
-  );
-  await create.getByRole("button", { name: "Create tag", exact: true }).click();
-  await sidebar
-    .getByRole("button", { name: "All documents 10", exact: true })
-    .click();
-  const query = preview.getByRole("searchbox");
-  await query.fill("Unsubmitted description");
-  for (const width of [1440, 1040, 900]) {
-    await preview.setViewportSize({ width, height: 900 });
-    await expect(sidebar).toBeVisible();
-    await expect
-      .poll(() =>
-        sidebar.evaluate((element) => element.getBoundingClientRect().width),
-      )
-      .toBe(272);
-    expect(
-      (await preview.locator(".doc-collection").boundingBox())!.width,
-    ).toBeGreaterThanOrEqual(560);
-    expect(
-      await sidebar
-        .locator(".doc-sidebar-scroll")
-        .evaluate((element) => element.scrollWidth <= element.clientWidth),
-    ).toBe(true);
-    const spaced = await sidebar.locator(".doc-tag-row").evaluateAll((rows) =>
-      rows.every((row) => {
-        const label = row
-          .querySelector(".doc-tag-name")!
-          .getBoundingClientRect();
-        const count = row
-          .querySelector(".doc-tag-nav > span:last-child")!
-          .getBoundingClientRect();
-        const choice = row
-          .querySelector(".doc-tag-nav")!
-          .getBoundingClientRect();
-        const action = row
-          .querySelector("[data-tag-actions]")!
-          .getBoundingClientRect();
-        return (
-          count.left >= label.right + 7 &&
-          action.left >= choice.right + 7 &&
-          action.width >= 44 &&
-          action.height >= 44 &&
-          action.right <= row.getBoundingClientRect().right + 1
-        );
-      }),
-    );
-    expect(spaced).toBe(true);
-    await expect(query).toHaveValue("Unsubmitted description");
-    await fits(preview);
-    await info.attach(`tag-sidebar-${width}`, {
-      body: await preview.screenshot(),
-      contentType: "image/png",
-    });
-  }
-  await preview.setViewportSize({ width: 1440, height: 900 });
-  await preview.locator('[data-document="bike"]').click();
-  await expect(sidebar).toBeVisible();
-  expect(
-    (await preview.locator(".doc-preview").boundingBox())!.width,
-  ).toBeGreaterThanOrEqual(400);
-  await preview.setViewportSize({ width: 1080, height: 900 });
-  await expect(sidebar).toBeHidden();
-  await expect(preview.locator(".doc-preview")).toBeVisible();
-  await preview
-    .getByRole("button", { name: "Close document", exact: true })
-    .click();
-  for (const width of [800, 320]) {
-    await preview.setViewportSize({ width, height: 700 });
-    await expect(sidebar).toBeHidden();
-    await expect(query).toHaveValue("Unsubmitted description");
-    const navigation = await browse(preview);
-    await expect(navigation).toBeVisible();
-    expect(
-      await navigation
-        .locator(".doc-browse")
-        .evaluate((element) => element.scrollWidth <= element.clientWidth),
-    ).toBe(true);
-    await preview.keyboard.press("Escape");
-    await expect(
-      preview.getByRole("button", { name: "Browse", exact: true }),
-    ).toBeFocused();
-    await fits(preview);
-  }
-});
 
 test("document header reflows long labels and enlarged text without hiding actions", async ({
   page,
@@ -721,16 +377,15 @@ test("document header reflows long labels and enlarged text without hiding actio
     content: `
     .doc-search-box input { font-size: 32px; }
     .doc-results-summary { font-size: 24px; }
-    .doc-sort, .doc-inline-filters button { font-size: 28px; }
+    .doc-sort, .doc-freshness { font-size: 28px; }
   `,
   });
-  await preview.locator(".doc-save-view").evaluate((button) => {
-    button.textContent = "Save this document selection for later";
+  await preview.locator(".doc-freshness span").evaluate((label) => {
+    label.textContent = "Some sources haven’t finished updating";
   });
   for (const selector of [
     ".doc-collection",
     ".doc-search",
-    ".doc-inline-filters",
     ".doc-results-heading",
   ]) {
     expect(
@@ -741,10 +396,8 @@ test("document header reflows long labels and enlarged text without hiding actio
   }
   for (const selector of [
     "#doc-query",
-    "#doc-add-tag",
-    "#doc-tag-match",
     ".doc-clear",
-    ".doc-save-view",
+    '.doc-search-box button[type="submit"]',
     ".doc-sort",
     ".doc-freshness",
   ]) {
@@ -769,28 +422,6 @@ test("document header reflows long labels and enlarged text without hiding actio
     body: await preview.screenshot(),
     contentType: "image/png",
   });
-});
-
-test("all tag choices remain removable in a narrow mobile view", async ({
-  page,
-}) => {
-  const preview = await open(page, "documents-find", true);
-  await preview.setViewportSize({ width: 320, height: 568 });
-  const add = preview.getByLabel("Add tags", { exact: true });
-  const ids = (await selectOptions(add))
-    .map((option) => option.value)
-    .filter(Boolean);
-  await add.focus();
-  for (const id of ids) await selectOption(add, id);
-  await expect(add).toBeDisabled();
-  const last = preview.locator("[data-remove-tag]").last();
-  await expect(last).toBeFocused();
-  await last.press("Enter");
-  await expect(add).toBeEnabled();
-  await expect(preview.locator("[data-remove-tag]")).toHaveCount(
-    ids.length - 1,
-  );
-  await fits(preview);
 });
 
 test("preview tiles and touch-sized selects preserve document availability", async ({
@@ -869,85 +500,6 @@ test("failed thumbnail images keep their document readable", async ({
   );
 });
 
-test("inline filters survive mobile keyboard changes and reset with the scenario", async ({
-  page,
-}, info) => {
-  const preview = await open(page, "documents-gather", true);
-  const match = preview.getByLabel("Documents with", { exact: true });
-  await selectOption(match, "any");
-  await preview.getByRole("searchbox").fill("Unsent description");
-  await page.getByLabel("Keyboard occlusion").check();
-  await preview.setViewportSize({ width: 320, height: 568 });
-  await expect(match).toHaveAttribute("data-value", "any");
-  await expect(preview.getByRole("searchbox")).toHaveValue(
-    "Unsent description",
-  );
-  await match.scrollIntoViewIfNeeded();
-  await expect(match).toBeInViewport({ ratio: 1 });
-  await selectOption(match, "all");
-  await info.attach("compact-inline-filters", {
-    body: await preview.screenshot(),
-    contentType: "image/png",
-  });
-  await page.getByLabel("Keyboard occlusion").uncheck();
-  await preview.setViewportSize({ width: 390, height: 844 });
-  await page
-    .getByRole("button", { name: "Reset scenario", exact: true })
-    .click();
-  await expect(preview.getByRole("searchbox")).toHaveValue("");
-  await expect(match).toHaveAttribute("data-value", "all");
-  await expect(preview.locator(".doc-result")).toHaveCount(5);
-});
-
-test("tag navigation and inline choices share one selection and support empty recovery", async ({
-  page,
-}) => {
-  const preview = await open(page, "documents-gather", false);
-  const navigation = await browse(preview);
-  await navigation.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(
-    preview.getByRole("button", {
-      name: "Remove tag filter: Home",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
-    preview.getByRole("button", {
-      name: "Remove tag filter: Tax",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await selectOption(
-    preview.getByLabel("Add tags", { exact: true }),
-    "training",
-  );
-  await selectOption(
-    preview.getByLabel("Documents with", { exact: true }),
-    "all",
-  );
-  await expect(
-    preview.getByRole("heading", {
-      name: "No matching documents",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await preview
-    .getByRole("button", {
-      name: "Remove tag filter: Tax / Expenses / Training",
-      exact: true,
-    })
-    .click();
-  await expect(preview.locator('[data-document="bike"]')).toBeVisible();
-  await navigation.getByRole("button", { name: /^Without tags/ }).click();
-  await expect(preview.locator(".doc-result")).toHaveCount(1);
-  await expect(preview.locator('[data-document="untagged"]')).toBeVisible();
-  await selectOption(preview.getByLabel("Add tags", { exact: true }), "tax");
-  await expect(preview.locator('[data-document="course"]')).toBeVisible();
-  await expect(
-    preview.getByRole("button", { name: "Clear tag filter", exact: true }),
-  ).toHaveCount(0);
-});
-
 for (const mobile of [false, true]) {
   test(`search activity is subtle, respects reduced motion and ends with the search · ${mobile ? "mobile" : "desktop"}`, async ({
     page,
@@ -983,7 +535,7 @@ for (const mobile of [false, true]) {
     );
     await preview.emulateMedia({ reducedMotion: "no-preference" });
     await expect(spinner).toHaveCSS("animation-name", "doc-search-spin");
-    await preview.getByLabel("Add tags", { exact: true }).click();
+    await preview.getByLabel("Sort documents", { exact: true }).click();
     await expect(spinner).toHaveCSS("animation-play-state", "paused");
     await preview.keyboard.press("Escape");
     await expect(spinner).toHaveCSS("animation-play-state", "running");
@@ -1005,7 +557,7 @@ for (const mobile of [false, true]) {
       .click();
     await expect(spinner).toBeVisible();
     await preview
-      .getByRole("button", { name: "Clear search and filters", exact: true })
+      .getByRole("button", { name: "Clear search", exact: true })
       .click();
     await expect(spinner).toHaveCount(0);
     await expect(preview.locator(".doc-result")).toHaveCount(10);
@@ -1042,7 +594,7 @@ test("no matches, inaccessible original, held opening and reset remain distinct"
   await preview
     .locator(".doc-empty")
     .getByRole("button", {
-      name: "Clear search and filters",
+      name: "Clear search",
     })
     .click();
   await expect(preview.locator("#doc-query")).toBeFocused();
@@ -1070,7 +622,7 @@ test("no matches, inaccessible original, held opening and reset remain distinct"
   ).toHaveCount(0);
 });
 
-test("small mobile, keyboard occlusion and dialogs preserve drafts and focus", async ({
+test("mobile keyboard occlusion keeps the search draft and clear action reachable", async ({
   page,
 }, info) => {
   const preview = await open(page, "documents-gather", true);
@@ -1080,20 +632,14 @@ test("small mobile, keyboard occlusion and dialogs preserve drafts and focus", a
   await expect(preview.getByRole("searchbox")).toHaveValue(
     "Keep my search draft",
   );
+  const query = preview.getByRole("searchbox");
   await preview
-    .getByRole("button", { name: "Save search", exact: true })
+    .getByRole("button", { name: "Clear search", exact: true })
     .click();
-  await preview
-    .getByLabel("Name", { exact: true })
-    .fill("Tax documents for the coming appointment");
+  await expect(query).toBeFocused();
+  await expect(query).toHaveValue("");
   await page.getByLabel("Keyboard occlusion").uncheck();
-  await expect(preview.getByLabel("Name", { exact: true })).toHaveValue(
-    "Tax documents for the coming appointment",
-  );
-  await preview.keyboard.press("Escape");
-  await expect(
-    preview.getByRole("button", { name: "Save search", exact: true }),
-  ).toBeFocused();
+  await expect(preview.locator(".doc-result")).toHaveCount(10);
   await info.attach("small-mobile", {
     body: await preview.screenshot(),
     contentType: "image/png",
@@ -1101,19 +647,14 @@ test("small mobile, keyboard occlusion and dialogs preserve drafts and focus", a
   await fits(preview);
 });
 
-test("image reading, local tags and pinned searches stay usable on mobile", async ({
+test("image reading returns focus to the result on mobile", async ({
   page,
 }, info) => {
   const preview = await open(page, "documents-image", true);
   await expect(preview.locator(".doc-page-stage img")).toBeVisible();
-  await preview.getByRole("button", { name: "Edit tags", exact: true }).click();
-  await preview.getByRole("checkbox", { name: "Home", exact: true }).check();
-  await preview
-    .getByRole("button", { name: "Apply tags", exact: true })
-    .click();
-  await expect(
-    preview.locator(".doc-metadata .doc-chip").filter({ hasText: /^Home$/ }),
-  ).toBeVisible();
+  await expect(preview.locator(".doc-preview details")).toContainText(
+    "Paperless",
+  );
   await info.attach("mobile-receipt", {
     body: await preview.screenshot(),
     contentType: "image/png",
@@ -1121,28 +662,8 @@ test("image reading, local tags and pinned searches stay usable on mobile", asyn
   await preview
     .getByRole("button", { name: "Back to documents", exact: true })
     .click();
-  const navigation = await browse(preview);
-  await expect(
-    navigation.getByRole("heading", { name: "Pinned searches", exact: true }),
-  ).toBeVisible();
-  await navigation
-    .getByRole("button", { name: "Unpin Home & repairs", exact: true })
-    .click();
-  await expect(navigation.locator(".doc-saved-views summary")).toHaveText(
-    "Saved searches",
-  );
-  await expect(
-    navigation.getByRole("button", { name: "Pin Home & repairs", exact: true }),
-  ).toBeFocused();
-  await navigation
-    .getByRole("button", { name: "Pin Home & repairs", exact: true })
-    .click();
-  await expect(
-    navigation.getByRole("button", {
-      name: "Unpin Home & repairs",
-      exact: true,
-    }),
-  ).toBeFocused();
+  await expect(preview.locator('[data-document="receipt"]')).toBeFocused();
+  await expect(preview.getByRole("searchbox")).toBeVisible();
 });
 
 test("a waiting refresh does not turn opening into a false success", async ({

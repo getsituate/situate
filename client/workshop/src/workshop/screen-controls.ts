@@ -308,11 +308,7 @@ export function screenControls(state: Simulation) {
         state.firstEntry.created &&
         state.ai.screen === "success") ||
       screen === "tabs" ||
-      (screen === "documents" &&
-        (!!state.documents.dialog ||
-          !!state.documents.tagCreation ||
-          !!state.documents.tagDeletion ||
-          !state.documents.selected)) ||
+      (screen === "documents" && !state.documents.selected) ||
       (screen === "dictation" && !state.dictationNavigation) ||
       screen === "chat-queue" ||
       screen === "chat" ||

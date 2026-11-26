@@ -1,32 +1,14 @@
 <script setup lang="ts">
-import SituateMenu from "../ui/SituateMenu.vue";
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  shallowRef,
-  useId,
-  watch,
-} from "vue";
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from "vue";
 import {
   SituateIcon,
   SituateIconButton,
-  SituateResizeHandle,
   SituateButton,
   SituateInput,
-  SituateCheckbox,
   SituateEmptyState,
 } from "../ui";
 import SituateSelect from "../ui/SituateSelect.vue";
-import EditorDialog from "../editor/EditorDialog.vue";
-import DocumentBrowse from "./DocumentBrowse.vue";
 import DocumentPreview from "./DocumentPreview.vue";
-import DocumentFilters from "./DocumentFilters.vue";
-import DocumentTagCreate from "./DocumentTagCreate.vue";
-import DocumentTagDelete from "./DocumentTagDelete.vue";
-import { beginTagCreation } from "./tags";
 import DocumentThumbnail from "./DocumentThumbnail.vue";
 import { c } from "./content";
 import { workshopNavigation } from "../workshop/content";
@@ -35,14 +17,10 @@ import {
   clone,
   incomplete,
   results,
-  saveView,
   selectDocument,
-  tagPath,
-  type DocumentDialog,
   type DocumentsState,
 } from "./model";
 import "./documents.css";
-const fieldId = useId();
 const props = defineProps<{
   state: DocumentsState;
   mobile?: boolean;
@@ -56,55 +34,14 @@ const emit = defineEmits<{
   sources: [action: "list" | "create" | "detail", id?: string];
 }>();
 const state = shallowRef(props.state);
-const sidebarWidth = ref(props.state.sidebarWidth);
-const resizingSidebar = ref(false);
 watch(
   () => props.state,
   (s) => {
     state.value = s;
-    if (!resizingSidebar.value) sidebarWidth.value = s.sidebarWidth;
   },
   { flush: "sync" },
 );
 const root = ref<HTMLElement>();
-const resizeHandle = ref<InstanceType<typeof SituateResizeHandle>>();
-const availableWidth = ref(840);
-const sidebarMaximum = computed(() =>
-  Math.max(
-    224,
-    Math.min(
-      480,
-      Math.floor(availableWidth.value) - (state.value.selected ? 820 : 568),
-    ),
-  ),
-);
-const displayedSidebarWidth = computed(() =>
-  Math.max(224, Math.min(sidebarMaximum.value, sidebarWidth.value)),
-);
-let observer: ResizeObserver | undefined;
-function recoverSidebarFocus(lostFocus = false) {
-  const sidebar = root.value?.querySelector<HTMLElement>(
-    ".doc-library-navigation",
-  );
-  if (!sidebar || sidebar.getClientRects().length) return;
-  resizeHandle.value?.cancel();
-  if (lostFocus || sidebar.contains(document.activeElement)) {
-    const browse = root.value?.querySelector<HTMLElement>(
-      ".doc-browse-trigger",
-    );
-    (browse?.getClientRects().length
-      ? browse
-      : root.value?.querySelector<HTMLElement>("#doc-query")
-    )?.focus({ preventScroll: true });
-  }
-}
-function sidebarFocusOut(event: FocusEvent) {
-  if (
-    !event.relatedTarget &&
-    !(event.currentTarget as HTMLElement).getClientRects().length
-  )
-    void nextTick(() => recoverSidebarFocus(true));
-}
 onMounted(() => {
   void nextTick(() => {
     const results = root.value?.querySelector<HTMLElement>(".doc-results");
@@ -130,28 +67,7 @@ onMounted(() => {
       });
     }
   });
-  if (!root.value || typeof ResizeObserver === "undefined") return;
-  availableWidth.value = root.value.clientWidth;
-  observer = new ResizeObserver(([entry]) => {
-    if (entry) availableWidth.value = entry.contentRect.width;
-    void nextTick(recoverSidebarFocus);
-  });
-  observer.observe(root.value);
 });
-onBeforeUnmount(() => observer?.disconnect());
-watch(
-  () => [state.value.selected, state.value.layout, props.mobile],
-  () => void nextTick(recoverSidebarFocus),
-);
-function sidebarDragging(active: boolean) {
-  resizingSidebar.value = active;
-  if (!active) sidebarWidth.value = state.value.sidebarWidth;
-}
-function saveSidebarWidth(width: number) {
-  update((s) => {
-    s.sidebarWidth = width;
-  });
-}
 function change(s: DocumentsState) {
   state.value = s;
   emit("update:state", s);
@@ -162,17 +78,8 @@ function update(fn: (s: DocumentsState) => void) {
   change(s);
 }
 const matches = computed(() => results(state.value));
-const savedViewName = computed(
-  () =>
-    state.value.saved.find((view) => view.id === state.value.activeSaved)?.name,
-);
-const filtered = computed(
-  () =>
-    !!(
-      state.value.query ||
-      state.value.untagged ||
-      state.value.filter.tags.length
-    ),
+const hasQuery = computed(
+  () => !!(state.value.query || state.value.draftQuery),
 );
 const currentDoc = computed(() =>
   state.value.documents.find((d) => d.id === state.value.selected),
@@ -190,59 +97,10 @@ function search() {
     s.query = s.draftQuery;
     s.selected = null;
     s.opening = null;
-    s.activeSaved = null;
     s.searchState = "ready";
-    s.sort = "relevance";
+    s.sort = s.query.trim() ? "relevance" : "newest";
     s.notice = "";
   });
-}
-function dialog(kind: DocumentDialog, event: MouseEvent) {
-  (event.currentTarget as HTMLElement).focus();
-  update((s) => {
-    s.dialog = kind;
-    if (kind === "save") {
-      s.draftName = "";
-      s.query = s.draftQuery;
-      s.searchState = "ready";
-    }
-  });
-}
-function newTag(event: MouseEvent, forDocument = false) {
-  (event.currentTarget as HTMLElement).focus();
-  update((s) => beginTagCreation(s, forDocument));
-}
-function tagActions(id: string, event: MouseEvent) {
-  const button = event.currentTarget as HTMLElement;
-  button.focus();
-  const rect = button.getBoundingClientRect();
-  update((s) => {
-    s.tagMenu = { id, x: rect.left, y: rect.bottom };
-  });
-}
-function requestTagDeletion() {
-  update((s) => {
-    if (!s.tagMenu) return;
-    s.tagDeletion = { id: s.tagMenu.id, descendants: false, error: null };
-    s.tagMenu = null;
-  });
-}
-async function afterTagDeletion(id: string | null) {
-  await nextTick();
-  const selectors = [
-    id ? `[data-tag-actions="${CSS.escape(id)}"]` : "",
-    ".doc-tag-heading button",
-    ".doc-browse-trigger",
-    "#doc-query",
-  ].filter(Boolean);
-  for (const selector of selectors) {
-    const target = [
-      ...(root.value?.querySelectorAll<HTMLElement>(selector) ?? []),
-    ].find((element) => element.getClientRects().length);
-    if (target) {
-      target.focus();
-      break;
-    }
-  }
 }
 async function inspect(id: string) {
   update((s) => selectDocument(s, id));
@@ -282,7 +140,6 @@ function sources(action: "list" | "create" | "detail", id?: string) {
     class="documents-view"
     :class="{
       'documents-mobile': mobile,
-      'documents-focused': state.layout === 'focused',
       'documents-selected': !!state.selected,
     }"
     :aria-label="c.title"
@@ -317,33 +174,6 @@ function sources(action: "list" | "create" | "detail", id?: string) {
       </template>
     </SituateEmptyState>
     <div v-else class="doc-collection-shell">
-      <aside
-        id="doc-tag-sidebar"
-        class="doc-library-navigation"
-        :style="{ flexBasis: `${displayedSidebarWidth}px` }"
-        @focusout="sidebarFocusOut"
-      >
-        <div class="doc-sidebar-scroll">
-          <DocumentBrowse
-            :state="state"
-            @change="change"
-            @new-tag="newTag"
-            @tag-actions="tagActions"
-          />
-        </div>
-        <SituateResizeHandle
-          ref="resizeHandle"
-          :model-value="displayedSidebarWidth"
-          :min="224"
-          :max="sidebarMaximum"
-          :reset-value="272"
-          :label="c.resizeSidebar"
-          controls="doc-tag-sidebar"
-          @update:model-value="sidebarWidth = $event"
-          @change="saveSidebarWidth"
-          @dragging="sidebarDragging"
-        />
-      </aside>
       <section class="doc-collection">
         <div class="doc-search-area">
           <form class="doc-search" role="search" @submit.prevent="search">
@@ -378,7 +208,19 @@ function sources(action: "list" | "create" | "detail", id?: string) {
                     s.draftQuery = value($event);
                   })
                 "
-              /><SituateButton
+              />
+              <SituateButton
+                v-if="hasQuery"
+                variant="plain"
+                type="button"
+                class="doc-clear"
+                tabindex="0"
+                :aria-label="c.clear"
+                @click="clearSearch"
+              >
+                <SituateIcon name="close" />
+              </SituateButton>
+              <SituateButton
                 variant="plain"
                 type="submit"
                 tabindex="0"
@@ -387,41 +229,10 @@ function sources(action: "list" | "create" | "detail", id?: string) {
                 <SituateIcon name="enter" />
               </SituateButton>
             </div>
-            <SituateButton
-              variant="plain"
-              type="button"
-              class="doc-toolbar-button doc-browse-trigger"
-              @click="dialog('browse', $event)"
-            >
-              {{ c.browse }}
-            </SituateButton>
           </form>
-          <DocumentFilters :state="state" @change="change">
-            <div class="doc-filter-actions">
-              <SituateButton
-                variant="plain"
-                v-if="filtered"
-                class="doc-toolbar-button doc-clear"
-                type="button"
-                :aria-label="c.clear"
-                :title="c.clear"
-                @click="clearSearch"
-              >
-                {{ c.clearShort }}
-              </SituateButton>
-              <SituateButton
-                variant="plain"
-                class="doc-toolbar-button doc-save-view"
-                @click="dialog('save', $event)"
-              >
-                {{ c.save }}
-              </SituateButton>
-            </div>
-          </DocumentFilters>
         </div>
         <div class="doc-results-heading">
           <div class="doc-results-context">
-            <h2 v-if="savedViewName">{{ savedViewName }}</h2>
             <div class="doc-results-summary">
               <span role="status" class="doc-search-status">
                 <span
@@ -465,13 +276,6 @@ function sources(action: "list" | "create" | "detail", id?: string) {
             </option></SituateSelect
           >
         </div>
-        <p
-          v-if="state.notice === 'saved' || state.notice === 'tags'"
-          role="status"
-          class="doc-inline-status"
-        >
-          {{ state.notice === "saved" ? c.savedMessage : c.tagSaved }}
-        </p>
         <div class="doc-results" :aria-busy="state.searchState === 'loading'">
           <div
             v-if="state.searchState === 'loading'"
@@ -544,11 +348,6 @@ function sources(action: "list" | "create" | "detail", id?: string) {
                     v-if="state.query && doc.excerpt"
                     class="doc-excerpt"
                     >{{ doc.excerpt }}</span
-                  ><span class="doc-result-tags"
-                    ><span v-for="id in doc.tags.slice(0, 3)" :key="id">{{
-                      state.tags.find((t) => t.id === id)?.name
-                    }}</span
-                    ><span v-if="!doc.tags.length">{{ c.noTags }}</span></span
                   ><span
                     v-if="doc.availability !== 'available'"
                     class="doc-result-status"
@@ -580,185 +379,5 @@ function sources(action: "list" | "create" | "detail", id?: string) {
         @source="sources('detail', $event)"
       />
     </div>
-    <EditorDialog
-      v-if="state.dialog"
-      :title="
-        state.dialog === 'browse'
-          ? c.browseTitle
-          : state.dialog === 'save'
-            ? c.saveTitle
-            : c.tagTitle
-      "
-      class="doc-dialog"
-      @close="
-        update((s) => {
-          s.dialog = null;
-        })
-      "
-    >
-      <DocumentBrowse
-        v-if="state.dialog === 'browse'"
-        :state="state"
-        @change="change"
-        @new-tag="newTag"
-        @tag-actions="tagActions"
-      />
-      <form
-        v-else-if="state.dialog === 'save'"
-        @submit.prevent="update(saveView)"
-      >
-        <p>{{ c.viewHint }}</p>
-        <label for="doc-view-name">{{ c.viewName }}</label
-        ><SituateInput
-          id="doc-view-name"
-          autofocus
-          required
-          :value="state.draftName"
-          @input="
-            update((s) => {
-              s.draftName = value($event);
-            })
-          "
-        />
-        <label :for="`${fieldId}-pin-view`" class="doc-check"
-          ><SituateCheckbox
-            :id="`${fieldId}-pin-view`"
-            appearance="plain"
-            type="checkbox"
-            :checked="state.draftPinned"
-            @change="
-              update((s) => {
-                s.draftPinned = !s.draftPinned;
-              })
-            "
-          />{{ c.pin }}</label
-        >
-        <div class="doc-dialog-actions">
-          <SituateButton
-            variant="primary"
-            size="small"
-            type="submit"
-            :disabled="!state.draftName.trim()"
-          >
-            {{ c.saveConfirm }}</SituateButton
-          ><SituateButton
-            variant="ghost"
-            size="small"
-            type="button"
-            class="doc-text"
-            @click="
-              update((s) => {
-                s.dialog = null;
-              })
-            "
-          >
-            {{ c.cancel }}
-          </SituateButton>
-        </div>
-      </form>
-      <form
-        v-else-if="state.dialog === 'tags' && currentDoc"
-        @submit.prevent="
-          update((s) => {
-            const doc = s.documents.find((d) => d.id === s.selected)!;
-            doc.tags = [...s.draftTags];
-            s.dialog = null;
-            s.notice = 'tags';
-          })
-        "
-      >
-        <SituateButton
-          variant="secondary"
-          size="small"
-          type="button"
-          @click="newTag($event, true)"
-        >
-          <SituateIcon name="plus" />{{ c.newTag }}
-        </SituateButton>
-        <p
-          v-if="state.notice === 'tag-created' && state.createdTagId"
-          class="doc-muted"
-          role="status"
-        >
-          {{ c.tagCreated(tagPath(state.tags, state.createdTagId)) }}
-        </p>
-        <p v-if="!state.tags.length" class="doc-muted">
-          {{ c.noWorkspaceTags }}
-        </p>
-        <label
-          v-for="tag in state.tags"
-          :key="tag.id"
-          :for="`${fieldId}-tag-${tag.id}`"
-          class="doc-check"
-          ><SituateCheckbox
-            :id="`${fieldId}-tag-${tag.id}`"
-            appearance="plain"
-            type="checkbox"
-            :checked="state.draftTags.includes(tag.id)"
-            @change="
-              update((s) => {
-                s.draftTags = s.draftTags.includes(tag.id)
-                  ? s.draftTags.filter((t) => t !== tag.id)
-                  : [...s.draftTags, tag.id];
-              })
-            "
-          />{{ tagPath(state.tags, tag.id) }}</label
-        >
-        <div class="doc-dialog-actions">
-          <SituateButton variant="primary" size="small" type="submit">
-            {{ c.tagSave }}</SituateButton
-          ><SituateButton
-            variant="ghost"
-            size="small"
-            type="button"
-            class="doc-text"
-            @click="
-              update((s) => {
-                s.dialog = null;
-              })
-            "
-          >
-            {{ c.cancel }}
-          </SituateButton>
-        </div>
-      </form>
-    </EditorDialog>
-    <SituateMenu
-      v-if="state.tagMenu"
-      :label="c.tagActions(tagPath(state.tags, state.tagMenu.id))"
-      :open="true"
-      :close-on-select="false"
-      :point="state.tagMenu"
-      class="doc-tag-menu"
-      @close="
-        update((s) => {
-          s.tagMenu = null;
-        })
-      "
-    >
-      <div :aria-label="c.tagActions(tagPath(state.tags, state.tagMenu.id))">
-        <SituateButton
-          variant="plain"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          class="doc-nav-item"
-          @click="requestTagDeletion"
-        >
-          {{ c.deleteTag }}
-        </SituateButton>
-      </div>
-    </SituateMenu>
-    <DocumentTagDelete
-      v-if="state.tagDeletion"
-      :state="state"
-      @change="change"
-      @closed="afterTagDeletion"
-    />
-    <DocumentTagCreate
-      v-if="state.tagCreation"
-      :state="state"
-      @change="change"
-    />
   </main>
 </template>

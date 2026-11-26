@@ -28,20 +28,12 @@
       {
         "title": "Back returns to the right note",
         "text": "After following links in a split pane on macOS, Back now returns to the previous note in that pane."
-      },
-      {
-        "title": "Cleared tags stay cleared",
-        "text": "Changing the search text no longer brings back a tag filter you cleared."
       }
     ],
     "0.8.0": [
       {
         "title": "Keep a note beside its conversation",
         "text": "On macOS, you can split a tab and resize its panes. Each pane keeps its own Back and Forward history."
-      },
-      {
-        "title": "Combine document tags",
-        "text": "Choose Any to match at least one selected tag or All to match every tag. Saved searches keep their existing rule until you change it."
       }
     ],
     "0.7.2": [
@@ -62,8 +54,8 @@
     ],
     "0.7.0": [
       {
-        "title": "Filter documents by tag",
-        "text": "Choose a tag in Documents to narrow your results. Refresh an existing document source to load any tags it provides."
+        "title": "Preview documents",
+        "text": "Open PDFs and images from connected sources in Documents."
       }
     ]
   },

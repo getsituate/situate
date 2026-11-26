@@ -171,32 +171,12 @@ const definitions = [
       "documents-no-results",
       "documents-loading",
       "documents-error",
-      "documents-no-tags",
-      "documents-tag-removed",
     ],
   },
   {
     name: "reading",
     topic: "Documents",
     states: ["documents-preview", "documents-image", "documents-unavailable"],
-  },
-  {
-    name: "createTag",
-    topic: "Documents",
-    states: [
-      "documents-new-tag",
-      "documents-new-document-tag",
-      "documents-tag-duplicate",
-    ],
-  },
-  {
-    name: "deleteTag",
-    topic: "Documents",
-    states: [
-      "documents-delete-tag",
-      "documents-delete-branch",
-      "documents-tag-delete-conflict",
-    ],
   },
   {
     name: "chat",

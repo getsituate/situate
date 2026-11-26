@@ -1,17 +1,5 @@
-import type { DocumentItem, Source, Tag } from "./model";
+import type { DocumentItem, Source } from "./model";
 
-export const tagFixtures: Tag[] = [
-  { id: "years", name: "Years", parent: null },
-  { id: "2025", name: "2025", parent: "years" },
-  { id: "2024", name: "2024", parent: "years" },
-  { id: "tax", name: "Tax", parent: null },
-  { id: "expenses", name: "Expenses", parent: "tax" },
-  { id: "training", name: "Training", parent: "expenses" },
-  { id: "recurring", name: "Recurring", parent: null },
-  { id: "home", name: "Home", parent: null },
-  { id: "repairs", name: "Repairs", parent: "home" },
-  { id: "personal", name: "Personal only", parent: null },
-];
 export const sourceFixtures: Source[] = [
   {
     id: "paperless",
@@ -20,8 +8,7 @@ export const sourceFixtures: Source[] = [
     detail: "Personal archive",
     included: "Archive / Personal documents",
     excluded: "Shared archive",
-    rules:
-      "Keep the original title and correspondent. Map document types to tags in Situate.",
+    rules: "Keep the original title and correspondent.",
     checked: "Today, 09:40",
     status: "ready",
     pending: 0,
@@ -68,7 +55,6 @@ export const documentFixtures: DocumentItem[] = [
     title: "Velo Workshop · Service invoice",
     filename: "scan-017.pdf",
     date: "2025-10-14",
-    tags: ["2025", "repairs", "personal"],
     content:
       "Invoice VE-2048. Velo Workshop. City cycle maintenance. Replaced rear brake cable, adjusted gears, safety inspection. Total EUR 86.00.",
     concepts: [
@@ -89,9 +75,8 @@ export const documentFixtures: DocumentItem[] = [
     source: "drive",
     folder: "Finance/2025",
     date: "2025-11-03",
-    tags: ["2025", "training"],
     content:
-      "Professional course registration. Fee EUR 240.00. Invoice CP-510. Continuing education.",
+      "Professional course registration and course fee. Invoice CP-510. Continuing education. EUR 240.00.",
     concepts: ["tax work training education steuer fortbildung"],
     excerpt: "CP-510 · Continuing education course, €240.00.",
     pages: [
@@ -104,7 +89,6 @@ export const documentFixtures: DocumentItem[] = [
     title: "Internet service · Annual agreement",
     filename: "internet-agreement.pdf",
     date: "2024-04-01",
-    tags: ["recurring", "expenses"],
     content:
       "Annual internet service agreement. Home office plan. EUR 29.00 monthly. Contract NET-410.",
     concepts: ["tax recurring contract steuer vertrag"],
@@ -121,7 +105,6 @@ export const documentFixtures: DocumentItem[] = [
     filename: "receipt-office.svg",
     type: "Image",
     date: "2025-09-18",
-    tags: ["2025", "expenses"],
     content:
       "Office supplies. Receipt OS-812. Notebooks and printer paper EUR 42.50.",
     concepts: ["tax stationary receipt büro beleg"],
@@ -138,7 +121,6 @@ export const documentFixtures: DocumentItem[] = [
     source: "computer",
     folder: "Records/Insurance",
     date: "2025-01-08",
-    tags: ["home", "recurring"],
     availability: "other-device",
     thumbnail: "unavailable",
     content: "Home insurance policy HOME-880. Building and contents cover.",
@@ -153,7 +135,6 @@ export const documentFixtures: DocumentItem[] = [
     title: "Weekend pottery class",
     filename: "pottery-class.pdf",
     date: "2025-08-02",
-    tags: ["2025", "tax", "personal"],
     content: "Weekend pottery class. Personal leisure course. EUR 65.00.",
     concepts: ["course leisure pottery"],
     excerpt: "Weekend course, €65.00.",
@@ -169,7 +150,6 @@ export const documentFixtures: DocumentItem[] = [
     source: "drive",
     folder: "Finance/2024",
     date: "2024-05-15",
-    tags: ["2024", "training"],
     content: "Professional course registration 2024. EUR 180.00.",
     concepts: ["tax training"],
     excerpt: "Registration for the previous year's course.",
@@ -179,11 +159,10 @@ export const documentFixtures: DocumentItem[] = [
   },
   {
     ...base,
-    id: "untagged",
+    id: "warranty",
     title: "Appliance warranty",
     filename: "warranty.pdf",
     date: "2025-07-06",
-    tags: [],
     content: "Kettle warranty. Product K-740. Two-year warranty from purchase.",
     concepts: ["kitchen appliance guarantee garantie wasserkocher"],
     excerpt: "K-740 · Two-year warranty from purchase.",
@@ -200,7 +179,6 @@ export const documentFixtures: DocumentItem[] = [
     source: "drive",
     folder: "Finance/2025",
     date: "2025-10-30",
-    tags: ["2025", "expenses"],
     preparation: "pending",
     thumbnail: "pending",
     content: "Travel costs for professional course. Rail ticket EUR 48.00.",
@@ -219,7 +197,6 @@ export const documentFixtures: DocumentItem[] = [
     source: "drive",
     folder: "Finance/2025",
     date: "2025-12-01",
-    tags: ["2025", "tax"],
     preparation: "error",
     thumbnail: "unavailable",
     content: "Expense summary for 2025.",

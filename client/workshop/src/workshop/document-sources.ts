@@ -1,7 +1,6 @@
 import {
   clone,
   finishDocumentAction,
-  purgeDeletedTagReferences,
   type DocumentsState,
 } from "../documents/model";
 import { reconcile } from "./reconcile";
@@ -69,7 +68,6 @@ export function syncSourceState(
     }
     plugin.running = documents.pending?.id === plugin.id ? 1 : 0;
   }
-  purgeDeletedTagReferences(documents);
 }
 
 export function reconcileSourceDocuments(
@@ -100,7 +98,6 @@ export function reconcileSourceDocuments(
     candidate.notice = current.notice;
     candidate.nextOutcome = current.nextOutcome;
   }
-  purgeDeletedTagReferences(candidate);
   return candidate;
 }
 

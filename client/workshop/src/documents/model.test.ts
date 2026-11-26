@@ -2,14 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createSimulation, reduceSimulation } from "../workshop/simulation";
 import { screenControls } from "../workshop/screen-controls";
 import {
+  clearSelection,
   clone,
   createDocumentsState,
-  emptyFilter,
   finishDocumentAction,
-  hasTag,
-  openSaved,
   results,
-  saveView,
   selectDocument,
   startDocumentAction,
 } from "./model";
@@ -41,14 +38,6 @@ describe("document collection", () => {
     expect(s.notice).toBe("external");
     expect(s.pending?.kind).toBe("refresh");
   });
-  it("saves the visible search draft rather than a previous query", () => {
-    const s = createDocumentsState();
-    s.query = "old";
-    s.draftQuery = "VE-2048";
-    s.draftName = "Repair";
-    saveView(s);
-    expect(s.saved.at(-1)?.query).toBe("VE-2048");
-  });
   it("finds identifiers in content rather than relying on filenames", () => {
     const s = createDocumentsState();
     s.query = "VE-2048";
@@ -61,34 +50,15 @@ describe("document collection", () => {
     expect(results(s).map((d) => d.id)).toEqual(["bike"]);
     expect(results(s)[0]?.content).not.toContain("bicycle repair");
   });
-  it("restores a fuzzy query and its tag criteria without a saved search mode", () => {
-    const s = createDocumentsState();
-    s.draftQuery = "bicycel repair";
-    s.filter.tags = ["home"];
-    s.draftName = "Bike repair";
-    saveView(s);
-    const saved = clone(s.saved.at(-1)!);
-    expect(saved).not.toHaveProperty("mode");
-    expect(s).not.toHaveProperty("mode");
-    s.query = "VE-2049";
-    s.filter = emptyFilter();
-    openSaved(s, saved.id);
-    expect(s.query).toBe("bicycel repair");
-    expect(s.draftQuery).toBe(s.query);
-    expect(s.filter.tags).toEqual(["home"]);
-    expect(results(s).map((doc) => doc.id)).toEqual(["bike"]);
-  });
-  it("includes all descendants, but not sibling-only tags", () => {
-    const s = createDocumentsState();
-    const course = s.documents.find((d) => d.id === "course")!;
-    expect(hasTag(s, course, "tax")).toBe(true);
-    expect(hasTag(s, course, "expenses")).toBe(true);
-    expect(hasTag(s, course, "training")).toBe(true);
-    s.filter.tags = ["2024"];
-    expect(results(s).map((d) => d.id)).toEqual(["old-course"]);
-    s.filter = emptyFilter();
-    s.untagged = true;
-    expect(results(s).map((d) => d.id)).toEqual(["untagged"]);
+  it("clears both the submitted query and the draft to restore the collection", () => {
+    const s = createDocumentsState("documents-gather");
+    s.draftQuery = "unsent";
+    s.sort = "relevance";
+    clearSelection(s);
+    expect(s.query).toBe("");
+    expect(s.draftQuery).toBe("");
+    expect(s.sort).toBe("newest");
+    expect(results(s)).toHaveLength(s.documents.length);
   });
   it("keeps unknown content out of search without hiding it from browsing", () => {
     const s = createDocumentsState();
@@ -109,19 +79,12 @@ describe("document collection", () => {
     );
     expect(s.pending).toBeNull();
   });
-  it("saves a dynamic selection with its tags and matching mode intact", () => {
+  it("includes newly matching content in the current results after refresh", () => {
     const s = createDocumentsState("documents-gather");
-    s.draftName = "Tax 2025";
-    saveView(s);
-    const saved = clone(s.saved.at(-1)!);
-    const before = results(s).length;
-    s.filter = emptyFilter();
+    expect(results(s).map((d) => d.id)).toEqual(["course"]);
     startDocumentAction(s, "refresh", "drive");
-    openSaved(s, saved.id);
-    expect(s.filter).toEqual(saved.filter);
-    expect(results(s)).toHaveLength(before + 1);
-    expect(results(s).some((d) => d.id === "new-invoice")).toBe(true);
-    expect(s.saved.at(-1)).toEqual(saved);
+    expect(s.query).toBe("course fee");
+    expect(results(s).map((d) => d.id)).toEqual(["new-invoice", "course"]);
   });
   it("browses the agreed collection across sources and retains origin metadata", () => {
     const s = createDocumentsState();
@@ -134,10 +97,6 @@ describe("document collection", () => {
     );
     expect(s).not.toHaveProperty("source");
     expect(s).not.toHaveProperty("folder");
-    s.draftName = "All documents";
-    saveView(s);
-    expect(s.saved.at(-1)).not.toHaveProperty("source");
-    expect(s.saved.at(-1)).not.toHaveProperty("folder");
     s.sources = s.sources.filter((source) => source.id !== "drive");
     expect(results(s).some((doc) => doc.source === "drive")).toBe(false);
   });
@@ -199,10 +158,9 @@ describe("document workshop transitions", () => {
     expect(quit.documents.preview).toBe("error");
     expect(quit.documents.opening).toBeNull();
   });
-  it("preserves drafts and filter edits across platform and keyboard changes", () => {
+  it("preserves the query and draft across platform and keyboard changes", () => {
     const initial = createSimulation("documents-gather");
     initial.documents.draftQuery = "My unsent search";
-    initial.documents.filter.operator = "any";
     const changed = reduceSimulation(
       reduceSimulation(initial, { type: "platform", mobile: true }),
       { type: "environment", state: { profile: "ios", keyboardOpen: true } },
@@ -210,13 +168,11 @@ describe("document workshop transitions", () => {
     expect(changed.documents).toEqual(initial.documents);
     expect(changed.epoch).toBe(initial.epoch);
   });
-  it("resets pending work, new views and edits while preserving the environment", () => {
+  it("resets pending work and search edits while preserving the environment", () => {
     const initial = createSimulation("documents-gather");
     initial.documents.nextOutcome = "wait";
-    initial.documents.sidebarWidth = 400;
     startDocumentAction(initial.documents, "refresh", "drive");
-    initial.documents.draftName = "Tax";
-    saveView(initial.documents);
+    initial.documents.draftQuery = "Another search";
     const reset = reduceSimulation(initial, { type: "reset" });
     finishDocumentAction(reset.documents, true);
     expect(reset.documents).toEqual(createDocumentsState("documents-gather"));
@@ -239,31 +195,25 @@ describe("document workshop transitions", () => {
       sourceManagement: true,
     });
     s = reduceSimulation(s, { type: "feature", feature: "documents" });
-    s.documents.dialog = "save";
-    expect(screenControls(s).label).toBe("Documents · save");
+    expect(screenControls(s).label).toBe("Documents · collection");
     s = reduceSimulation(s, { type: "feature", feature: "editor" });
     expect(screenControls(s).controls).toEqual(["editor"]);
   });
-  it("keeps changed selections and saved searches local to their workspace", () => {
+  it("keeps submitted searches and drafts local to their workspace", () => {
     let s = createSimulation("documents-gather");
-    s.documents.draftName = "Tax 2025";
-    s.documents.sidebarWidth = 400;
-    saveView(s.documents);
+    s.documents.query = "VE-2048";
+    s.documents.draftQuery = "Something else";
     s = reduceSimulation(s, {
       type: "action",
       operation: { request: "other", action: "open", id: "sample-2" },
     });
-    expect(s.documents.saved.some((view) => view.name === "Tax 2025")).toBe(
-      false,
-    );
-    expect(s.documents.sidebarWidth).toBe(272);
+    expect(s.documents.query).toBe("");
+    expect(s.documents.draftQuery).toBe("");
     s = reduceSimulation(s, {
       type: "action",
       operation: { request: "return", action: "open", id: "sample-1" },
     });
-    expect(s.documents.saved.some((view) => view.name === "Tax 2025")).toBe(
-      true,
-    );
-    expect(s.documents.sidebarWidth).toBe(400);
+    expect(s.documents.query).toBe("VE-2048");
+    expect(s.documents.draftQuery).toBe("Something else");
   });
 });

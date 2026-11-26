@@ -24,7 +24,7 @@ Known prepared information remains usable during temporary outages with its last
 
 No automatic purge of prior technical metadata versions or existing conversations is promised. Historical data must not silently reenter the active collection. Devices apply confirmed removals when they receive them; unavailable devices cannot be assumed to have already purged local data.
 
-Content changes under a reliable identity refresh extraction and search data without reapplying initial tag rules. Interrupted processing resumes using completed work where still current.
+Content changes under a reliable identity refresh extraction and search data. Interrupted processing resumes using completed work where still current.
 
 ## Rationale
 
@@ -40,7 +40,7 @@ Private document-management elicitation and prioritization conversation; date no
 
 - Workspace opening, periodic processing and manual refresh detect changes when the connector can execute; closed workspaces do not process sources.
 - Temporary outages retain clearly marked prepared information; confirmed deletion, scope removal or explicit revocation removes it from active search and assistant retrieval and clears affected preview caches.
-- Changed content is re-extracted without replacing existing tag assignments.
+- Changed content is re-extracted and the searchable text is updated.
 - Restart continues incomplete work without unnecessarily reprocessing successfully completed current revisions.
 - A document added or changed directly in an included source is incorporated without a new user assignment once detection and processing can run.
 - A user can explicitly request a source refresh.

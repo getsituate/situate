@@ -22,7 +22,7 @@ Feature styles may size the outer `.situate-select` wrapper; the trigger and ope
 
 ## Review
 
-Open Documents and choose Add tags, Documents with or Sort documents. For other contexts, use Language & formats in Settings, the AI workspace selector, plugin schedule settings, or Folder inside the New file dialog. Check narrow portrait, landscape and keyboard-constrained sizes as well as desktop. Resetting the scenario closes an open chooser.
+Open Documents and choose Sort documents. For other contexts, use Language & formats in Settings, the AI workspace selector, plugin schedule settings, or Folder inside the New file dialog. Check narrow portrait, landscape and keyboard-constrained sizes as well as desktop. Resetting the scenario closes an open chooser.
 
 Browser tests exercise Chromium and WebKit, keyboard selection and cancellation, focus return and containment, nested dialogs, disabled fields, dynamic tag options and simulated iOS/Android bounds. Actual phone touch, native keyboard delivery and VoiceOver/TalkBack remain unverified. The sheet is app-rendered, not an emulation of an operating-system picker.
 
