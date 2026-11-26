@@ -394,12 +394,15 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
           return false;
         }
         visiting.add(plugin.id);
+        const currentPlatform = result.platform ?? options.platform ?? "macos";
         const platform =
           !plugin.manifest?.platforms ||
           plugin.manifest.platforms.some(
-            (allowed) =>
-              allowed === (result.platform ?? options.platform ?? "macos"),
-          );
+            (allowed) => allowed === currentPlatform,
+          ) ||
+          (currentPlatform === "windows" &&
+            plugin.id === "situate-gmail" &&
+            result.bundledGmailAvailable === true);
         if (!platform)
           plugin.blockedBy = { reason: "platform", pluginId: plugin.id };
         const usable =

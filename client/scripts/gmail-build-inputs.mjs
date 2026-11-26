@@ -21,6 +21,16 @@ export function gmailBuildInputs(repository, environment = process.env) {
   );
 }
 
+export function requireGmailBuildInputs(environment, releaseEnvironment) {
+  const inputs = credentialNames.map((name) => environment[name]);
+  if (inputs.some((value) => !value?.trim())) {
+    throw new Error(
+      `Gmail sign-in configuration is required. In the ${releaseEnvironment} environment, set ${credentialNames[0]} as a variable and ${credentialNames[1]} as a secret.`,
+    );
+  }
+  return inputs;
+}
+
 export async function withGmailBuildInputs(scratch, inputs, build) {
   const input = join(scratch, "gmail-build-input.json");
   writeFileSync(input, JSON.stringify(inputs), { mode: 0o600, flag: "wx" });

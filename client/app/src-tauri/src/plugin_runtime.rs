@@ -63,6 +63,8 @@ pub enum Reply {
         #[serde(flatten)]
         listing: Listing,
         platform: &'static str,
+        #[serde(rename = "bundledGmailAvailable")]
+        bundled_gmail_available: bool,
     },
     Load(Box<Sources>),
     Check {
@@ -104,6 +106,8 @@ pub(super) fn dispatch(
     }
     match request {
         Request::List {} => prepare_listing(|| runtime::prepare(root)).map(|listing| Reply::List {
+            bundled_gmail_available: cfg!(target_os = "windows")
+                && crate::gmail::installation::active_bundle(root, &listing).is_some(),
             listing,
             platform: std::env::consts::OS,
         }),

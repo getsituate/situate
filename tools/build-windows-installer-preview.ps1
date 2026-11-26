@@ -2,11 +2,11 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $target = $env:SITUATE_WINDOWS_INSTALLER_TARGET ?? 'x86_64-pc-windows-msvc'
 $version = $env:SITUATE_WINDOWS_RELEASE_VERSION
-$signer = @{}
+$releaseInputs = @{}
 if ($null -ne $version) {
     if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Expected a stable Windows release version' }
-    foreach ($name in 'TAURI_SIGNING_PRIVATE_KEY','TAURI_SIGNING_PRIVATE_KEY_PASSWORD') {
-        $signer[$name] = [Environment]::GetEnvironmentVariable($name)
+    foreach ($name in 'TAURI_SIGNING_PRIVATE_KEY','TAURI_SIGNING_PRIVATE_KEY_PASSWORD','SITUATE_GMAIL_TEST_CLIENT_ID','SITUATE_GMAIL_TEST_CLIENT_SECRET') {
+        $releaseInputs[$name] = [Environment]::GetEnvironmentVariable($name)
         [Environment]::SetEnvironmentVariable($name, $null)
     }
 }
@@ -22,10 +22,10 @@ Invoke-WebRequest -Uri $archives.sherpa.url -OutFile $sherpa
 Invoke-WebRequest -Uri $archives.onnx.url -OutFile $onnx
 if ($null -ne $version) {
     try {
-        foreach ($name in $signer.Keys) { [Environment]::SetEnvironmentVariable($name, $signer[$name]) }
+        foreach ($name in $releaseInputs.Keys) { [Environment]::SetEnvironmentVariable($name, $releaseInputs[$name]) }
         node client/scripts/windows-installer.mjs "--target=$Target" "--release-version=$version"
     } finally {
-        foreach ($name in $signer.Keys) { [Environment]::SetEnvironmentVariable($name, $null) }
+        foreach ($name in $releaseInputs.Keys) { [Environment]::SetEnvironmentVariable($name, $null) }
     }
     return
 }

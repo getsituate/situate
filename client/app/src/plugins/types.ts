@@ -31,6 +31,7 @@ export interface InstalledPlugin {
 }
 export interface PluginList {
   platform?: "macos" | "ios" | "windows";
+  bundledGmailAvailable?: boolean;
   plugins: InstalledPlugin[];
   revision: string | null;
 }

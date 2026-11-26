@@ -410,6 +410,8 @@ test("hosted builds register their isolated Keychain only for the build lifetime
         GITHUB_ACTIONS: "true",
         RUNNER_ENVIRONMENT: "github-hosted",
         SITUATE_POSTHOG_TOKEN: "phc_SyntheticReleaseBuildToken000",
+        SITUATE_GMAIL_TEST_CLIENT_ID: "synthetic.apps.googleusercontent.com",
+        SITUATE_GMAIL_TEST_CLIENT_SECRET: "synthetic-desktop",
         APPLE_API_KEY: "EXAMPLE1234",
         APPLE_API_ISSUER: "11111111-2222-3333-4444-555555555555",
         APPLE_API_PRIVATE_KEY: privateKey,
@@ -528,11 +530,39 @@ test("GitHub releases stop before compilation when the PostHog token is missing"
         ...fixture.environment,
         GITHUB_ACTIONS: "true",
         SITUATE_POSTHOG_TOKEN: "",
+        SITUATE_GMAIL_TEST_CLIENT_ID: "synthetic.apps.googleusercontent.com",
+        SITUATE_GMAIL_TEST_CLIENT_SECRET: "synthetic-desktop",
       },
     }),
     /GitHub macOS releases require SITUATE_POSTHOG_TOKEN/,
   );
   assert.ok(!existsSync(join(fixture.root, "artifacts")));
+});
+
+test("GitHub releases require both Gmail build inputs before signing or compilation", async (t) => {
+  for (const [id, secret] of [
+    [undefined, undefined],
+    ["", "synthetic-desktop"],
+    ["synthetic.apps.googleusercontent.com", "   "],
+  ]) {
+    const fixture = buildFixture(t);
+    await assert.rejects(
+      buildAppleRelease({
+        ...fixture,
+        environment: {
+          ...fixture.environment,
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          SITUATE_POSTHOG_TOKEN: "phc_SyntheticReleaseBuildToken000",
+          SITUATE_GMAIL_TEST_CLIENT_ID: id,
+          SITUATE_GMAIL_TEST_CLIENT_SECRET: secret,
+        },
+      }),
+      /Gmail sign-in configuration is required. In the macos-release environment/,
+    );
+    assert.deepEqual(fixture.calls, []);
+    assert.ok(!existsSync(join(fixture.root, "artifacts")));
+  }
 });
 
 test("generated version replaces committed version without source edits and migration ancestry remains mandatory", async (t) => {
