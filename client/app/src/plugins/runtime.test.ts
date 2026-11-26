@@ -497,6 +497,32 @@ describe("plugin UI runtime", () => {
   });
 
   it.each([false, true])(
+    "uses the verified Gmail bundle and its consumers on Windows only when available (%s)",
+    async (bundledGmailAvailable) => {
+      definitions = [
+        definition("situate-gmail", [], ["macos"]),
+        definition("mail-briefing", ["situate-gmail"]),
+        definition("mac-only", [], ["macos"]),
+      ];
+      const native = mocks.invoke.getMockImplementation()!;
+      mocks.invoke.mockImplementation(async (command, args) => {
+        const reply = await native(command, args);
+        if (command === "plugin_runtime" && args.request.operation === "list")
+          return { ...reply, platform: "windows", bundledGmailAvailable };
+        return reply;
+      });
+
+      const { runtime } = setup();
+      await runtime.ready;
+      expect(mocks.importModule.mock.calls).toEqual(
+        bundledGmailAvailable
+          ? [["situate-gmail:ui"], ["mail-briefing:ui"]]
+          : [],
+      );
+    },
+  );
+
+  it.each([false, true])(
     "loads a general plugin with retained tools and exports (source: %s)",
     async (source) => {
       const provider = definition();

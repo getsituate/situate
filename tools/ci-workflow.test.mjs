@@ -352,6 +352,10 @@ test("the desktop CD builds Windows for the reserved version before creating the
     build,
     /TAURI_SIGNING_PRIVATE_KEY:.*secrets\.TAURI_SIGNING_PRIVATE_KEY/,
   );
+  assert.match(
+    build,
+    /run: \.\/tools\/build-windows-installer-preview\.ps1\n {8}env:\n(?: {10}[^\n]+\n)*? {10}SITUATE_GMAIL_TEST_CLIENT_ID:.*vars\.SITUATE_GMAIL_TEST_CLIENT_ID.*\n {10}SITUATE_GMAIL_TEST_CLIENT_SECRET:.*secrets\.SITUATE_GMAIL_TEST_CLIENT_SECRET/,
+  );
   assert.doesNotMatch(build, /contents: write|SSH/);
   const qualification = job(workflow, "windows-qualification");
   assert.match(

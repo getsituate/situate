@@ -1637,7 +1637,14 @@ async fn workspace(context: &Context) -> Result<Arc<Workspace>, String> {
     Ok(opened)
 }
 
-fn supports_current_platform(manifest: &situate_core::plugins::PluginManifest) -> bool {
+fn supports_current_platform(
+    manifest: &situate_core::plugins::PluginManifest,
+    bundled_gmail: bool,
+) -> bool {
+    // Published macOS builds require the original packaged manifest, including its platform list.
+    if cfg!(target_os = "windows") && manifest.id == crate::gmail::ID && bundled_gmail {
+        return true;
+    }
     use situate_core::plugins::PluginPlatform;
     manifest.platforms.as_ref().is_none_or(|platforms| {
         let platform = match std::env::consts::OS {
@@ -1649,7 +1656,10 @@ fn supports_current_platform(manifest: &situate_core::plugins::PluginManifest) -
     })
 }
 
-fn supported_plugins(listing: &situate_core::plugins::runtime::Listing) -> HashSet<String> {
+fn supported_plugins(
+    listing: &situate_core::plugins::runtime::Listing,
+    bundled_gmail: bool,
+) -> HashSet<String> {
     let candidates = listing
         .plugins
         .iter()
@@ -1659,7 +1669,7 @@ fn supported_plugins(listing: &situate_core::plugins::runtime::Listing) -> HashS
                 && plugin
                     .manifest
                     .as_ref()
-                    .is_some_and(supports_current_platform)
+                    .is_some_and(|manifest| supports_current_platform(manifest, bundled_gmail))
         })
         .map(|plugin| plugin.id.clone())
         .collect::<HashSet<_>>();
@@ -1816,7 +1826,8 @@ pub async fn capture(
         crate::workspaces::with_retained_session(&context_clone.app,&context_clone.window,&context_clone.authorization,|location|{
             let root=crate::files::local_root(&context_clone.app,location)?.ok_or(UNAVAILABLE)?;
             let listing=situate_core::plugins::runtime::prepare(&root)?;
-            let supported=supported_plugins(&listing);
+            let bundled_gmail = cfg!(target_os = "windows") && crate::gmail::installation::active_bundle(&root, &listing).is_some();
+            let supported=supported_plugins(&listing, bundled_gmail);
             let mut sources=Vec::new();
             let mut unavailable=Vec::new();
             for plugin in listing.plugins.iter().filter(|plugin|plugin.enabled){
@@ -1830,8 +1841,12 @@ pub async fn capture(
                     let incarnation=incarnations.get(&plugin.id).cloned().ok_or(UNAVAILABLE)?;
                     let revision=revisions.get(&plugin.id).cloned().ok_or(UNAVAILABLE)?;
                     let source=if let Some(revision)=revision.as_ref(){situate_core::plugins::sources::at_revision(&root,&situate_core::plugins::sources::PackageRevision{plugin_id:plugin.id.clone(),revision:revision.clone(),incarnation:Some(incarnation.clone())})?}else{situate_core::plugins::runtime::load(&root,&plugin.id)?};
-                    if !supports_current_platform(&source.manifest){return Err(UNAVAILABLE.into());}
-                    Ok((serde_json::to_value(source).map_err(|_|UNAVAILABLE)?,revision,incarnation,revisions,incarnations))
+                    let platform_supported = supports_current_platform(&source.manifest, false);
+                    let source = serde_json::to_value(source).map_err(|_| UNAVAILABLE)?;
+                    if !platform_supported && !(bundled_gmail && crate::gmail::is_bundled(&source)) {
+                        return Err(UNAVAILABLE.into());
+                    }
+                    Ok((source,revision,incarnation,revisions,incarnations))
                 })();
                 match captured{
                     Ok(source)=>sources.push(source),

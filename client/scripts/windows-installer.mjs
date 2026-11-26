@@ -19,6 +19,10 @@ import {
 } from "../../tools/pipeline-environment.mjs";
 import { windowsTarget } from "../../tools/test-windows.mjs";
 import { prepareDependencies } from "../../tools/test.mjs";
+import {
+  requireGmailBuildInputs,
+  withGmailBuildInputs,
+} from "./gmail-build-inputs.mjs";
 import { updaterSigningConfiguration } from "./updater-signing.mjs";
 import {
   readWindowsInstaller,
@@ -181,6 +185,10 @@ async function main(args) {
   if (version !== undefined && values["update-test"]) {
     throw new Error("Choose either --release-version or --update-test.");
   }
+  const gmailInputs =
+    version === undefined
+      ? undefined
+      : requireGmailBuildInputs(process.env, "windows-release");
   if (
     process.platform !== "win32" ||
     !["x64", "arm64"].includes(process.arch)
@@ -197,7 +205,8 @@ async function main(args) {
   }
   const temporary = process.env.RUNNER_TEMP ?? "";
   if (!isAbsolute(temporary)) throw new Error("RUNNER_TEMP must be absolute.");
-  const release = version === undefined ? undefined : releaseInputs(version);
+  const release =
+    version === undefined ? undefined : releaseInputs(version, gmailInputs);
   const directory = join(temporary, values["update-test"] ? "swu" : "swp");
   const config = prepareInstaller(
     directory,
@@ -211,7 +220,7 @@ async function main(args) {
   });
   try {
     if (dependencies.failure) throw new Error(dependencies.failure.error);
-    if (release) buildRelease(directory, config, target, release);
+    if (release) await buildRelease(directory, config, target, release);
     else if (values["update-test"]) buildUpdatePair(directory, config, target);
     else buildInstaller(directory, config, target, buildEnvironment());
   } finally {
@@ -246,12 +255,15 @@ function buildInstaller(directory, config, target, environment) {
 function buildEnvironment() {
   return Object.fromEntries(
     Object.entries(process.env).filter(
-      ([key]) => !/^TAURI_SIGNING_PRIVATE_KEY(?:_PASSWORD)?$/iu.test(key),
+      ([key]) =>
+        !/^(?:TAURI_SIGNING_PRIVATE_KEY(?:_PASSWORD)?|SITUATE_GMAIL_(?:TEST_CLIENT_(?:ID|SECRET)|BUILD_INPUT))$/iu.test(
+          key,
+        ),
     ),
   );
 }
 
-function releaseInputs(version) {
+function releaseInputs(version, gmailInputs) {
   stableWindowsVersion(version);
   const root = resolve(client, "..");
   const git = (...args) =>
@@ -270,6 +282,7 @@ function releaseInputs(version) {
   return {
     source,
     version,
+    gmailInputs,
     updater: updaterSigningConfiguration(client, {
       ...process.env,
       SITUATE_UPDATER_ENDPOINT: windowsStableEndpoint,
@@ -279,7 +292,12 @@ function releaseInputs(version) {
 
 const windowsQualificationBaselineVersion = "0.1.6";
 
-function buildRelease(directory, config, target, { source, version, updater }) {
+async function buildRelease(
+  directory,
+  config,
+  target,
+  { source, version, updater, gmailInputs },
+) {
   const overlay = JSON.parse(readFileSync(config, "utf8"));
   overlay.identifier = "com.getsituate.app";
   overlay.productName = "Situate";
@@ -292,7 +310,17 @@ function buildRelease(directory, config, target, { source, version, updater }) {
     SITUATE_UPDATER_ENDPOINT: updater.public.endpoint,
     SITUATE_UPDATER_PUBLIC_KEY: updater.public.publicKey,
   };
-  buildInstaller(directory, config, target, environment);
+  const scratch = mkdtempSync(join(directory, "gmail-"));
+  try {
+    await withGmailBuildInputs(scratch, gmailInputs, (gmailEnv) =>
+      buildInstaller(directory, config, target, {
+        ...environment,
+        ...gmailEnv,
+      }),
+    );
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
   const built = join(directory, "target", target, "release");
   verifyApplicationMachine(
     readFileSync(join(built, "situate-client.exe")),
@@ -404,6 +432,8 @@ export function qualificationBaseline(version, environment) {
       SITUATE_DISTRIBUTION: "direct",
       SITUATE_UPDATER_PUBLIC_KEY: publicKey,
       SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
+      SITUATE_GMAIL_TEST_CLIENT_ID: "",
+      SITUATE_GMAIL_TEST_CLIENT_SECRET: "",
     },
   };
 }

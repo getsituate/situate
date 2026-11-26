@@ -1,14 +1,46 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   installerConfig,
   prepareInstaller,
   qualificationBaseline,
   runtimeArchives,
 } from "./windows-installer.mjs";
+
+test("stable installer builds reject missing Gmail inputs on both architectures", () => {
+  for (const [target, id, secret] of [
+    ["x86_64-pc-windows-msvc", "", "synthetic-secret"],
+    ["aarch64-pc-windows-msvc", "synthetic.apps.googleusercontent.com", " "],
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL("./windows-installer.mjs", import.meta.url)),
+        `--target=${target}`,
+        "--release-version=2026.11.20",
+      ],
+      {
+        env: {
+          ...process.env,
+          SITUATE_GMAIL_TEST_CLIENT_ID: id,
+          SITUATE_GMAIL_TEST_CLIENT_SECRET: secret,
+        },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /Gmail sign-in configuration is required. In the windows-release environment/,
+    );
+    assert.doesNotMatch(result.stderr, /synthetic/);
+  }
+});
 
 test("runtime downloads depend on the target, not the build machine", () => {
   const x64 = runtimeArchives("x86_64-pc-windows-msvc");
@@ -66,6 +98,8 @@ test("the qualification baseline shares the release identity but uses only the i
       SITUATE_DISTRIBUTION: "direct",
       SITUATE_UPDATER_PUBLIC_KEY: "fixture public key",
       SITUATE_UPDATER_ENDPOINT: "https://example.invalid/update.json",
+      SITUATE_GMAIL_TEST_CLIENT_ID: "",
+      SITUATE_GMAIL_TEST_CLIENT_SECRET: "",
     },
   });
   assert.throws(

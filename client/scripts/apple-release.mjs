@@ -59,6 +59,7 @@ import { canonical } from "../../tools/release-catalog.mjs";
 import { assertNoDictationTtsResources } from "./dictation-resources.mjs";
 import {
   gmailBuildInputs,
+  requireGmailBuildInputs,
   withGmailBuildInputs,
 } from "./gmail-build-inputs.mjs";
 
@@ -849,6 +850,9 @@ export async function runAppleRelease(options) {
 }
 
 export async function buildAppleRelease(options) {
+  const environment = options.environment ?? process.env;
+  if (environment.GITHUB_ACTIONS === "true")
+    requireGmailBuildInputs(environment, "macos-release");
   assertExpectedVersion(options);
   applePlan(options);
   verifyReleaseInputs(
@@ -870,9 +874,7 @@ export async function buildAppleRelease(options) {
     withSigningKeychain(
       {
         ...options,
-        registerSearchList: isHostedSigningEnvironment(
-          options.environment ?? process.env,
-        ),
+        registerSearchList: isHostedSigningEnvironment(environment),
       },
       (signingKeychain) =>
         buildResolvedAppleRelease({

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "id": "require-gmail-release-configuration",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": []
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": []
+    }
+  },
+  "emptyReason": "Enable the Gmail experiment on Windows and validate OAuth inputs for desktop release builds."
+}
