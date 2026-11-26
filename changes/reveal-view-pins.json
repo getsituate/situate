@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "reveal-view-pins",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "reveal-view-pins",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "View pins appear on hover",
+          "paragraphs": [
+            "In the sidebar, point to a view or move keyboard focus to it to show its pin button."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "reveal-view-pins",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Stecknadeln erscheinen beim Überfahren",
+          "paragraphs": [
+            "Zeige in der Seitenleiste mit der Maus auf eine Ansicht oder gehe mit der Tabulatortaste dorthin, um ihre Stecknadel einzublenden."
+          ]
+        }
+      ]
+    }
+  }
+}
