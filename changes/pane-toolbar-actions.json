@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "pane-toolbar-actions",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "pane-toolbar-actions",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Close panes directly",
+          "paragraphs": [
+            "In a split layout, each pane has a close button next to its menu. Pane options now open in a menu instead of a dialog."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "pane-toolbar-actions",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Bereiche direkt schließen",
+          "paragraphs": [
+            "In einer geteilten Ansicht hat jeder Bereich ein X direkt neben seinem Menü. Die Bereichsoptionen öffnen sich jetzt als Menü statt als Dialog."
+          ]
+        }
+      ]
+    }
+  }
+}
