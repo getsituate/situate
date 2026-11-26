@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "simplify-document-browsing",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "simplify-document-browsing",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "More room for documents",
+          "paragraphs": [
+            "Search connected sources from the full-width document list. Clear the search field to return to browsing, or open a document to see its preview and file details."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "simplify-document-browsing",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Mehr Platz für Dokumente",
+          "paragraphs": [
+            "Durchsuche verbundene Quellen in der Dokumentliste über die volle Breite. Leere das Suchfeld, um wieder alle Dokumente anzuzeigen, oder öffne ein Dokument, um seine Vorschau und Dateidetails zu sehen."
+          ]
+        }
+      ]
+    }
+  }
+}
