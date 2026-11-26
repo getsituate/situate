@@ -287,8 +287,12 @@ test("document highlights and shared select popovers inherit the workspace accen
     .locator('.footer-action[aria-current="page"]')
     .evaluate((n) => getComputedStyle(n).color);
   await preview.getByRole("button", { name: "Documents", exact: true }).click();
-  await expect(preview.locator(".documents-view")).toBeVisible();
-  await expect(preview.locator(".doc-heading-icon")).toHaveCSS("color", strong);
+  const library = preview.getByRole("main", { name: "Documents" });
+  await library.getByRole("searchbox").focus();
+  await expect(library.getByRole("search")).toHaveCSS(
+    "border-top-color",
+    strong,
+  );
   await preview.getByRole("button", { name: "Settings", exact: true }).click();
   await preview.getByRole("button", { name: /Language & formats/ }).click();
   const time = preview.getByRole("combobox", {

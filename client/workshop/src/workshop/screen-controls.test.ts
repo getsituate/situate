@@ -97,18 +97,6 @@ describe("screen controls", () => {
     });
   });
 
-  it("follows document actions and initializes the menu closed", () => {
-    const state = createSimulation("documents-find");
-    state.documents.collectionMenu = { x: 100, y: 60 };
-    expect(screenControls(state)).toMatchObject({
-      label: "Documents · actions",
-      controls: ["documents"],
-    });
-    expect(
-      createSimulation("documents-find").documents.collectionMenu,
-    ).toBeNull();
-  });
-
   it("follows settings and document-source navigation without replacing the tab starting state", () => {
     let state = createSimulation("tabs-new-chat");
     const tabs = state.tabs;

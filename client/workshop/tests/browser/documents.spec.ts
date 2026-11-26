@@ -155,10 +155,10 @@ for (const mobile of [false, true]) {
         preview.getByText("Search saved.", { exact: true }),
       ).toBeVisible();
       await preview
-        .getByRole("button", { name: "Document actions", exact: true })
-        .click();
-      await preview
-        .getByRole("menuitem", { name: "Sources", exact: true })
+        .getByRole("button", {
+          name: "Not fully up to date. Review sources.",
+          exact: true,
+        })
         .click();
       const drive = preview.locator(".plugin-sources .plugin-row").filter({
         has: preview.getByRole("heading", {
@@ -433,10 +433,10 @@ for (const mobile of [false, true]) {
       }
       await expect(query).toHaveValue("Unsubmitted description");
       await preview
-        .getByRole("button", { name: "Document actions", exact: true })
-        .click();
-      await preview
-        .getByRole("menuitem", { name: "Sources", exact: true })
+        .getByRole("button", {
+          name: "Not fully up to date. Review sources.",
+          exact: true,
+        })
         .click();
       await expect(
         preview.getByRole("heading", { name: /^Sources/ }),
@@ -459,7 +459,7 @@ for (const mobile of [false, true]) {
         preview.getByText("Documents / Shared", { exact: true }),
       ).toBeVisible();
       await preview
-        .getByRole("button", { name: "‹ Back to plugins", exact: true })
+        .getByRole("button", { name: "Back to plugins", exact: true })
         .click();
       await preview
         .getByRole("button", { name: /Back to documents/ })
@@ -524,82 +524,34 @@ for (const scenario of ["documents-find", "documents-no-tags"]) {
 }
 
 for (const mobile of [false, true]) {
-  test(`document actions open sources without losing the selection or draft · ${mobile ? "mobile" : "desktop"}`, async ({
+  test(`the collection opens without a duplicate heading and source review preserves the draft · ${mobile ? "mobile" : "desktop"}`, async ({
     page,
-  }, info) => {
+  }) => {
     const preview = await open(page, "documents-gather", mobile);
-    const query = preview.getByRole("searchbox");
-    await query.fill("Unsubmitted description");
-    const header = preview.locator(".doc-workspace-heading");
-    await expect(header).not.toContainText("Sources");
-    await expect(header).not.toContainText("3");
-    const trigger = header.getByRole("button", {
-      name: "Document actions",
-      exact: true,
-    });
-    await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
-    await expect(trigger).toHaveAttribute("aria-expanded", "false");
-    await trigger.press("ArrowDown");
-    const menu = preview.getByRole("menu", {
-      name: "Document actions",
-      exact: true,
-    });
-    const sources = menu.getByRole("menuitem", {
-      name: "Sources",
-      exact: true,
-    });
-    await expect(trigger).toHaveAttribute("aria-expanded", "true");
-    await expect(sources).toBeFocused();
+    const library = preview.getByRole("main", { name: "Documents" });
     await expect(
-      page.getByLabel("Navigation approach", { exact: true }),
+      library.getByRole("heading", { name: "Documents", exact: true }),
     ).toHaveCount(0);
-    await sources.press("End");
-    await expect(sources).toBeFocused();
-    await sources.press("Escape");
-    await expect(menu).toHaveCount(0);
-    await expect(trigger).toBeFocused();
-    await trigger.press("Space");
-    await preview.mouse.click(2, 2);
-    await expect(menu).toHaveCount(0);
-    await expect(trigger).toBeFocused();
-    await trigger.press("Enter");
-    for (const width of mobile ? [390, 320] : [1440, 768]) {
-      await preview.setViewportSize({ width, height: mobile ? 844 : 900 });
-      await expect(sources).toBeInViewport({ ratio: 1 });
-      await fits(preview);
-      await info.attach(`document-actions-${width}`, {
-        body: await preview.screenshot(),
-        contentType: "image/png",
-      });
-    }
-    await sources.press("Enter");
-    await expect(menu).toHaveCount(0);
+    await expect(
+      library.getByRole("button", { name: "Document actions", exact: true }),
+    ).toHaveCount(0);
+    const query = library.getByRole("searchbox");
+    await query.fill("Unsubmitted description");
+    const reviewSources = library.getByRole("button", {
+      name: "Not fully up to date. Review sources.",
+      exact: true,
+    });
+    await reviewSources.press("Enter");
     await expect(
       preview.getByRole("heading", { name: /^Sources/ }),
     ).toBeFocused();
     await preview
       .getByRole("button", { name: /Back to documents/ })
       .press("Enter");
-    await expect(trigger).toBeFocused();
+    await expect(reviewSources).toBeFocused();
     await expect(query).toHaveValue("Unsubmitted description");
     await expect(preview.locator("[data-remove-tag]")).toHaveCount(2);
     await expect(preview.locator(".doc-result")).toHaveCount(5);
-    await trigger.click();
-    await page
-      .getByRole("button", { name: "Reset scenario", exact: true })
-      .click();
-    await expect(menu).toHaveCount(0);
-    await expect(trigger).toHaveAttribute("aria-expanded", "false");
-    await expect(query).toHaveValue("");
-    await preview
-      .getByRole("button", {
-        name: "Not fully up to date. Review sources.",
-        exact: true,
-      })
-      .click();
-    await expect(
-      preview.getByRole("heading", { name: /^Sources/ }),
-    ).toBeVisible();
   });
 
   test(`an empty document collection keeps connection setup reachable · ${mobile ? "mobile" : "desktop"}`, async ({
@@ -611,13 +563,18 @@ for (const mobile of [false, true]) {
         .locator(".doc-empty-collection")
         .getByRole("button", { name: /Create a source/ }),
     ).toBeVisible();
-    await preview
-      .getByRole("button", { name: "Document actions", exact: true })
-      .click();
-    await preview
-      .getByRole("menuitem", { name: "Sources", exact: true })
-      .click();
-    await expect(preview.locator(".plugin-sources .plugin-row")).toHaveCount(0);
+    if (mobile) {
+      const navigation = preview.getByRole("button", {
+        name: "Open navigation",
+        exact: true,
+      });
+      await navigation.click();
+      await expect(
+        preview.getByRole("dialog", { name: "Workspace navigation" }),
+      ).toBeVisible();
+      await preview.keyboard.press("Escape");
+      await expect(navigation).toBeFocused();
+    }
     await preview.getByRole("button", { name: /Create a source/ }).click();
     await expect(
       preview.getByRole("textbox", { name: "Your request", exact: true }),
@@ -1026,9 +983,7 @@ for (const mobile of [false, true]) {
     );
     await preview.emulateMedia({ reducedMotion: "no-preference" });
     await expect(spinner).toHaveCSS("animation-name", "doc-search-spin");
-    await preview
-      .getByRole("button", { name: "Document actions", exact: true })
-      .click();
+    await preview.getByLabel("Add tags", { exact: true }).click();
     await expect(spinner).toHaveCSS("animation-play-state", "paused");
     await preview.keyboard.press("Escape");
     await expect(spinner).toHaveCSS("animation-play-state", "running");

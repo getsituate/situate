@@ -65,7 +65,7 @@ export interface TagDeletion {
 export interface DocumentsState extends Selection {
   layout: "library" | "focused";
   sidebarWidth: number;
-  returnFocus: "actions" | "preview" | "query" | null;
+  returnFocus: "freshness" | "preview" | "query" | null;
   scroll: { collection: number; results: number };
   documents: DocumentItem[];
   sources: Source[];
@@ -80,7 +80,6 @@ export interface DocumentsState extends Selection {
   draftTags: string[];
   tagCreation: TagCreation | null;
   createdTagId: string | null;
-  collectionMenu: { x: number; y: number } | null;
   tagMenu: { id: string; x: number; y: number } | null;
   tagDeletion: TagDeletion | null;
   deletedTags: Record<string, string>;
@@ -218,7 +217,6 @@ export function createDocumentsState(
     draftTags: [],
     tagCreation: null,
     createdTagId: null,
-    collectionMenu: null,
     tagMenu: null,
     tagDeletion: null,
     deletedTags: {},
@@ -556,7 +554,6 @@ export function selectDocument(s: DocumentsState, id: string) {
 export function documentScreenLabel(s: DocumentsState): string {
   if (s.tagDeletion) return "Documents · delete tag";
   if (s.tagMenu) return "Documents · tag actions";
-  if (s.collectionMenu) return "Documents · actions";
   if (s.tagCreation) return "Documents · new tag";
   if (s.dialog) return `Documents · ${s.dialog}`;
   return s.selected ? "Documents · preview" : "Documents · collection";

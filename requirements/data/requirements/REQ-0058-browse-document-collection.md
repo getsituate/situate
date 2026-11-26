@@ -16,7 +16,13 @@ Situate must provide a built-in document view for the configured collection, ind
 
 [Content search](REQ-0055-search-document-content.md) and [tag filtering](REQ-0057-organize-documents-with-hierarchical-tags.md) supply the common navigation. A universal folder tree is not required. Documents without tags remain findable through search and the document list. [Internal previews](REQ-0059-preview-pdf-and-image-documents.md), [saved searches](REQ-0060-save-document-searches.md) and [source structures](REQ-0061-browse-document-source-structures.md) are separate should-have capabilities. Source-specific document lists, source and folder filters, and source structures are [deferred from initial delivery](../foundations.md#deferred-document-source-navigation); connection management and source identification remain in scope.
 
-### Initial Library presentation and metadata
+### Library access before persistent preparation
+
+The first Library release uses a versioned profile on document source plugins to list, search and retrieve originals from connected sources on demand. Filename search is the minimum; a source can also supply its existing text search. PDF and supported image previews are available in the Library. Results identify their source and distinguish incomplete retrieval from a complete search with no matches.
+
+Use the Library layout below. Tag controls, saved searches and sort options that are not supported remain visible and inactive with an availability hint. Persistent preparation, index-based search, tag navigation and saved searches belong to the later collection delivery described below. Existing direct-access plugins and chat tools continue to work without the Library profile.
+
+### Prepared collection presentation and metadata
 
 The Library design is selected: persistent tag and saved-search navigation on large surfaces, compact navigation and separate reading on phones. Preview and saved-search capabilities are included in this delivery without changing their catalog priorities.
 

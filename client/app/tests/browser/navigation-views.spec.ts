@@ -168,9 +168,10 @@ for (const locale of ["en", "de"] as const) {
           await more.press("Enter");
           await expect(more).toBeFocused();
           await expect(more).toHaveAttribute("aria-expanded", "true");
-          await expect(group.locator(".nav-destination")).toHaveText(
-            views.map((view) => view.title),
-          );
+          await expect(group.locator(".nav-destination")).toHaveText([
+            copy["documents.title"],
+            ...views.map((view) => view.title),
+          ]);
           await expect(
             group.getByRole("button", {
               name: pinLabel("Calendar"),
@@ -211,13 +212,16 @@ for (const locale of ["en", "de"] as const) {
           });
           await expect(more).toHaveAttribute("aria-expanded", "false");
           await more.click();
-          for (const view of views.slice(1)) {
+          for (const title of [
+            copy["documents.title"],
+            ...views.slice(1).map((view) => view.title),
+          ]) {
             await sidebar
-              .getByRole("button", { name: pinLabel(view.title), exact: true })
+              .getByRole("button", { name: pinLabel(title), exact: true })
               .click();
           }
           await expect(more).toHaveCount(0);
-          await expect(sidebar.locator(".nav-destination")).toHaveCount(6);
+          await expect(sidebar.locator(".nav-destination")).toHaveCount(7);
           await expect(
             sidebar.getByRole("button", {
               name: pinLabel("Weekly review", true),
@@ -240,6 +244,7 @@ for (const locale of ["en", "de"] as const) {
           ).toBeFocused();
           for (const title of [
             copy["navigation.files"],
+            copy["documents.title"],
             ...views.slice(1).map((view) => view.title),
           ]) {
             await sidebar
@@ -247,7 +252,7 @@ for (const locale of ["en", "de"] as const) {
               .click();
           }
           await expect(more).toHaveCount(0);
-          await expect(sidebar.locator(".nav-destination")).toHaveCount(6);
+          await expect(sidebar.locator(".nav-destination")).toHaveCount(7);
           await expect(
             sidebar.locator(".view-pin[aria-pressed=true]"),
           ).toHaveCount(0);

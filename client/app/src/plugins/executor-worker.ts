@@ -13,7 +13,7 @@ export function startExecutorWorker(port: {
   let definitions: PluginServiceContributions | undefined;
   let sequence = 0;
   let skills: readonly Readonly<{ path: string; text: string }>[] = [];
-  const invocations = new Set<string>();
+  const invocations = new Map<string, AbortController>();
   const replies = new Map<
     string,
     {
@@ -37,8 +37,8 @@ export function startExecutorWorker(port: {
   async function invoke(command: Extract<ExecutorCommand, { type: "invoke" }>) {
     const { invocationId } = command;
     if (!definitions || invocations.has(invocationId)) return;
-    invocations.add(invocationId);
     const controller = new AbortController();
+    invocations.set(invocationId, controller);
     const context = createInvocationContext(
       invocationId,
       controller.signal,
@@ -78,9 +78,9 @@ export function startExecutorWorker(port: {
       return definitions!.exports![name](args, context);
     };
     try {
-      const result =
+      const run =
         command.kind === "check"
-          ? await runCheckScript(command.script ?? "", {
+          ? runCheckScript(command.script ?? "", {
               plugin: Object.freeze({
                 tools: descriptors(),
                 skills,
@@ -96,8 +96,18 @@ export function startExecutorWorker(port: {
               preview: context.preview,
             })
           : command.kind === "tool"
-            ? await invokeTool(command.name, command.args)
-            : await invokeExport(command.name, command.args);
+            ? invokeTool(command.name, command.args)
+            : invokeExport(command.name, command.args);
+      const result = await Promise.race([
+        run,
+        new Promise<never>((_, reject) => {
+          controller.signal.addEventListener(
+            "abort",
+            () => reject(new Error("native.plugins.hostCancelled")),
+            { once: true },
+          );
+        }),
+      ]);
       send({
         type: "result",
         generation: command.generation,
@@ -161,6 +171,8 @@ export function startExecutorWorker(port: {
     }
     if (command.generation !== generation) return;
     if (command.type === "invoke") void invoke(command);
+    if (command.type === "abort")
+      invocations.get(command.invocationId)?.abort();
     if (command.type === "hostReply") {
       const pending = replies.get(command.requestId);
       if (!pending || pending.invocationId !== command.invocationId) return;

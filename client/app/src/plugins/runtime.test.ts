@@ -164,6 +164,237 @@ afterEach(() => {
   for (const runtime of instances.splice(0)) runtime.dispose();
 });
 
+describe("document source runtime", () => {
+  const details = "documentLibraryDetails";
+  const readOriginal = "documentLibraryReadOriginal";
+  const original = { id: "synthetic-read", size: 1024 * 1024 + 2 };
+
+  beforeEach(() => {
+    const source = definition("archive");
+    source.source.manifest.kind = "source";
+    source.source.manifest.exports = source.exports = [
+      details,
+      readOriginal,
+      "internal",
+    ];
+    source.source.manifest.uiEntry = undefined;
+    source.source.uiEntry = null;
+    definitions.push(source);
+  });
+
+  function mockNativeRead() {
+    const fallback = mocks.invoke.getMockImplementation()!;
+    const reservation = vi
+      .fn<() => Promise<string>>()
+      .mockResolvedValue(original.id);
+    const invokeOriginal = vi.fn<() => Promise<unknown>>().mockResolvedValue({
+      outcome: "completed",
+      value: { original },
+    });
+    const release = vi
+      .fn<(id: string) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const chunk = vi.fn<(offset: number) => Promise<ArrayBuffer | number[]>>();
+    mocks.invoke.mockImplementation(async (command, args) => {
+      if (command === "plugin_document_chunk") return chunk(args.offset);
+      if (command === "plugin_executor") {
+        if (args.request.operation === "reserveDocumentRead")
+          return reservation();
+        if (args.request.operation === "cancelDocumentRead")
+          return release(args.request.readId);
+        if (args.request.exportName === readOriginal) return invokeOriginal();
+      }
+      return fallback(command, args);
+    });
+    return { chunk, invokeOriginal, release, reservation };
+  }
+
+  it("limits calls to advertised Library exports of document sources and does not reserve a read for details", async () => {
+    const { reservation } = mockNativeRead();
+    const { runtime } = setup();
+    await runtime.ready;
+    const args = { locale: "de" };
+    await expect(
+      runtime.invokeDocumentSource("archive", details, args),
+    ).resolves.toEqual({ done: args });
+    for (const [id, name] of [
+      ["demo", details],
+      ["archive", "internal"],
+      ["archive", "documentLibrarySearch"],
+      ["missing", details],
+      ["archive", readOriginal],
+    ]) {
+      await expect(
+        runtime.invokeDocumentSource(id, name, args),
+      ).rejects.toThrow("native.plugins.unavailable");
+    }
+    await runtime.withQuiescent(["archive"], async () => {
+      await expect(
+        runtime.invokeDocumentSource("archive", details, args),
+      ).rejects.toThrow("native.plugins.unavailable");
+    });
+    expect(reservation).not.toHaveBeenCalled();
+    expect(
+      mocks.invoke.mock.calls.filter(
+        ([, input]) => input.request?.operation === "invoke",
+      ),
+    ).toEqual([
+      [
+        "plugin_executor",
+        {
+          scope: "scope",
+          request: {
+            operation: "invoke",
+            pluginId: "archive",
+            exportName: details,
+            generation: 7,
+            args,
+          },
+        },
+      ],
+    ]);
+  });
+
+  it("keeps the original readable until cancellation and assembles bounded binary and array replies", async () => {
+    const { chunk, release } = mockNativeRead();
+    const first = new Uint8Array(1024 * 1024).fill(7);
+    chunk.mockResolvedValueOnce(first.buffer).mockResolvedValueOnce([21, 32]);
+    const { runtime } = setup();
+    await runtime.ready;
+    const abort = new AbortController();
+    const args = { ref: { id: "receipt" } };
+    await expect(
+      runtime.invokeDocumentSource("archive", readOriginal, args, abort.signal),
+    ).resolves.toEqual({ original });
+    expect(mocks.invoke).toHaveBeenCalledWith("plugin_executor", {
+      scope: "scope",
+      request: {
+        operation: "invoke",
+        pluginId: "archive",
+        exportName: readOriginal,
+        generation: 7,
+        args,
+        readId: original.id,
+      },
+    });
+    expect(release).not.toHaveBeenCalled();
+    const bytes = await runtime.readDocumentBytes(original, abort.signal);
+    expect(bytes.length).toBe(1024 * 1024 + 2);
+    expect(Array.from(bytes.slice(-3))).toEqual([7, 21, 32]);
+    expect(chunk.mock.calls).toEqual([[0], [1024 * 1024]]);
+    abort.abort();
+    expect(release).toHaveBeenCalledExactlyOnceWith(original.id);
+  });
+
+  it("rejects malformed chunk lengths and invalid handle sizes before returning bytes", async () => {
+    const { chunk } = mockNativeRead();
+    const { runtime } = setup();
+    await runtime.ready;
+    const { signal } = new AbortController();
+    for (const size of [1.5, 0, 32 * 1024 * 1024 + 1]) {
+      await expect(
+        runtime.readDocumentBytes({ id: original.id, size }, signal),
+      ).rejects.toThrow("native.plugins.tooLarge");
+    }
+    expect(chunk).not.toHaveBeenCalled();
+    chunk.mockResolvedValueOnce([7]);
+    await expect(
+      runtime.readDocumentBytes({ id: original.id, size: 2 }, signal),
+    ).rejects.toThrow("native.plugins.unavailable");
+  });
+
+  it("discards bytes that arrive after cancellation instead of asking for another chunk", async () => {
+    const { chunk } = mockNativeRead();
+    const { runtime } = setup();
+    await runtime.ready;
+    const abort = new AbortController();
+    chunk.mockImplementationOnce(async () => {
+      abort.abort();
+      return new ArrayBuffer(1024 * 1024);
+    });
+    await expect(
+      runtime.readDocumentBytes(original, abort.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    await expect(
+      runtime.readDocumentBytes(original, abort.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(chunk.mock.calls).toEqual([[0]]);
+  });
+
+  it("releases an original reserved after cancellation without dispatching the source invocation", async () => {
+    const { invokeOriginal, release, reservation } = mockNativeRead();
+    const { runtime } = setup();
+    await runtime.ready;
+    const abort = new AbortController();
+    reservation.mockImplementationOnce(async () => {
+      abort.abort();
+      return original.id;
+    });
+    await expect(
+      runtime.invokeDocumentSource("archive", readOriginal, {}, abort.signal),
+    ).rejects.toThrow("native.plugins.unavailable");
+    expect(release).toHaveBeenCalledExactlyOnceWith(original.id);
+    expect(invokeOriginal).not.toHaveBeenCalled();
+    await expect(
+      runtime.invokeDocumentSource("archive", readOriginal, {}, abort.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(reservation).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases a failed read and lets a waiting source update run only after it settles", async () => {
+    const { invokeOriginal, release } = mockNativeRead();
+    const { runtime } = setup();
+    await runtime.ready;
+    let fail!: (cause: Error) => void;
+    invokeOriginal.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+    );
+    const abort = new AbortController();
+    const opened = runtime.invokeDocumentSource(
+      "archive",
+      readOriginal,
+      {},
+      abort.signal,
+    );
+    await vi.waitFor(() => expect(invokeOriginal).toHaveBeenCalledTimes(1));
+    const update = vi.fn(async () =>
+      expect(release).toHaveBeenCalledExactlyOnceWith(original.id),
+    );
+    const drained = runtime.withQuiescent(["archive"], update);
+    expect(runtime.runningActions("archive")).toBe(1);
+    expect(update).not.toHaveBeenCalled();
+    fail(new Error("native.plugins.unavailable"));
+    await expect(opened).rejects.toThrow("native.plugins.unavailable");
+    await drained;
+    expect(update).toHaveBeenCalledTimes(1);
+    abort.abort();
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(runtime.runningActions("archive")).toBe(0);
+  });
+
+  it("rejects an original returned by a source that retired while the read was in progress", async () => {
+    const { invokeOriginal, release } = mockNativeRead();
+    const { runtime } = setup();
+    await runtime.ready;
+    invokeOriginal.mockImplementationOnce(async () => {
+      runtime.dispose();
+      return { outcome: "completed", value: { original } };
+    });
+    await expect(
+      runtime.invokeDocumentSource(
+        "archive",
+        readOriginal,
+        {},
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("native.plugins.unavailable");
+    expect(release).toHaveBeenCalledExactlyOnceWith(original.id);
+  });
+});
+
 describe("plugin UI runtime", () => {
   it("registers an available key without stealing an existing one, then composes host actions in the returned pane", async () => {
     const store = createWorkspaceShortcuts("scope", "windows");

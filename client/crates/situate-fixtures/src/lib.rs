@@ -36,8 +36,27 @@ pub fn create(scenario: &str, parent: &Path, name: &str) -> Result<Location, Str
     if scenario != "used-workspace" {
         return Err("Unknown workspace template".into());
     }
+    workspaces::validate_name(name)?;
+    let parent = workspaces::location(parent)?;
+    let parent = Path::new(&parent.handle);
+    let documents = parent.join(format!("{name} Documents"));
+    match std::fs::symlink_metadata(&documents) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(format!(
+                "Could not check document folder {}: {error}",
+                documents.display()
+            ));
+        }
+        Ok(_) => {
+            return Err(format!(
+                "Document folder already exists: {}",
+                documents.display()
+            ));
+        }
+    }
     let location = workspaces::create(parent, name)?;
-    full_workspace::seed(&location).map_err(|error| {
+    full_workspace::seed(&location, &documents).map_err(|error| {
         format!(
             "Workspace created at {}, but setup failed: {error}",
             location.handle
@@ -145,9 +164,49 @@ mod tests {
         let archive = runtime::load(root, "garden-archive").unwrap();
         assert_eq!(
             archive.manifest.exports.unwrap(),
-            ["documentSourceDescribe", "documentSourceList"]
+            [
+                "documentSourceDescribe",
+                "documentSourceList",
+                "documentLibraryDescribe",
+                "documentLibraryList",
+                "documentLibrarySearch",
+                "documentLibraryReadOriginal",
+                "documentLibraryDetails"
+            ]
         );
+        use situate_core::plugins::storage::{self, Area};
+        let cfg = storage::read(root, "garden-archive", Area::Config, "folder.json").unwrap();
+        let cfg: serde_json::Value = serde_json::from_str(&cfg.text).unwrap();
+        let documents = Path::new(cfg["folder"].as_str().unwrap());
+        assert_eq!(documents, root.with_file_name("Sample Documents"));
+        let welcome = fs::read(documents.join("Volunteer welcome pack.pdf")).unwrap();
+        let welcome = String::from_utf8(welcome).unwrap();
+        assert!(welcome.starts_with("%PDF-1.4"));
+        assert!(welcome.contains("/Count 2"));
+        assert!(welcome.contains("Welcome table checklist"));
+        assert!(
+            fs::read(documents.join("Garden bed map.png"))
+                .unwrap()
+                .starts_with(b"\x89PNG\r\n\x1a\n")
+        );
+        assert!(documents.join("Seed swap receipt.pdf").is_file());
+        assert!(!root.join("Volunteer welcome pack.pdf").exists());
         assert!(create("used-workspace", parent.path(), "Sample").is_err());
+    }
+
+    #[test]
+    fn fixture_does_not_reuse_an_existing_document_folder() {
+        let parent = tempfile::tempdir().unwrap();
+        let documents = parent.path().join("Sample Documents");
+        fs::create_dir(&documents).unwrap();
+        fs::write(documents.join("Keep.pdf"), b"existing").unwrap();
+        assert!(
+            create("used-workspace", parent.path(), "Sample")
+                .unwrap_err()
+                .contains("Document folder already exists")
+        );
+        assert!(!parent.path().join("Sample").exists());
+        assert_eq!(fs::read(documents.join("Keep.pdf")).unwrap(), b"existing");
     }
 
     #[test]

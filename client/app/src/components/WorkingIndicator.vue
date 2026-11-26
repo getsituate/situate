@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import "../../../../design/brand/bend/mini/mini.js";
 
-const props = defineProps<{ label: string }>();
+const props = defineProps<{ label?: string }>();
 const root = ref<HTMLElement>();
 const kit = (
   globalThis as typeof globalThis & {
@@ -52,7 +52,8 @@ onBeforeUnmount(() => {
   <span
     ref="root"
     class="working-indicator"
-    role="img"
+    :role="props.label ? 'img' : undefined"
+    :aria-hidden="props.label ? undefined : true"
     :aria-label="props.label"
     :title="props.label"
     v-html="kit.render()"

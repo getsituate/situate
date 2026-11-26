@@ -1,4 +1,8 @@
-# Document source authoring (version 1)
+# Document source authoring
+
+The [Library profile](#library-profile-version-2) supplies document browsing and previews. The direct-access convention below remains available for chat tools. A source may implement both using separate exports.
+
+## Direct access (version 1)
 
 A document source (`schemaVersion: 3`, `kind: "source"`) exposes the document service exports below. The document contract is a plugin convention, not a core document type. If chat needs access, register the chat tools in a separate plugin.
 
@@ -149,3 +153,30 @@ assert.equal(result.items[0].ref.id, "42");
 Pass this script through `check_plugin_changes` with exact synthetic HTTP/process/config fixtures on the package that performs access. If publishing a chat-tool plugin alongside the source, check both packages together. In the consumer's check script, call `plugin.invokeTool` and verify the validated result against the source fixture. Include at least one successful check API assertion against independently expected behavior. Check unavailable/denied/unsupported/empty/partial states, continuation mismatch, same IDs in different sources, malicious document text, secret locators, bounds and cancellation. Runtime fixtures do not prove real LLM authoring, live Paperless compatibility, installed folder access or iOS support. Do not access private archives or paid providers for conformance checks.
 
 External folders require an actually available, authorized process/host route, scope checks and platform qualification; `context.files` only queries workspace content. Do not install programs or change permissions automatically. Consult the general plugin resource for exact file/process limits. Direct access neither grants new permissions nor removes separately authorized source write operations; this read convention adds no universal write API.
+
+## Library profile (version 2)
+
+Declare all four exports below in the `kind: "source"` manifest and service. Their names are distinct from v1. Sources must enforce the configured account and scope on every request, including lookups by ID and continuation. The same source instance and document identity can be used in the two contracts when both refer to the same original.
+
+| Export                        | Request                       | Success payload                                                               |
+| ----------------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
+| `documentLibraryDescribe`     | `{}`                          | Descriptor: `{version:2,source,label,scope,limits:{maxItems},searchCoverage}` |
+| `documentLibraryList`         | `{limit,continuation?}`       | `{items,truncated,next?,reason?}`                                             |
+| `documentLibrarySearch`       | `{query,limit,continuation?}` | Same as list; the source searches filenames at minimum                        |
+| `documentLibraryReadOriginal` | `{ref}`                       | `{document,original}` for the exact requested reference and revision          |
+
+`source`, `scope`, document references and pagination follow the v1 rules, with one addition: Library references using path identity must supply a revision that can detect replacement. A reused path must not resolve to a different original. `searchCoverage` must include `filename`; add `text` only when the source searches document contents. An item or original descriptor is `{ref,title,mimeType}`. Use a lowercase media type without parameters, for example `application/pdf`. Search items may include `excerpt` (up to 1,024 characters) if `text` is declared. Items returned for listing and reading do not include excerpts.
+
+Use envelope version `2` for every operation except `describe`, with scope binding as in v1. The operation for original bytes is `readOriginal`. A failure envelope contains `{status:"error",error:{code}}` without a success payload or provider error body. Codes are `unsupported`, `permission`, `authentication`, `not-found`, `unavailable`, `cancelled` and `too-large`. Partial pages retain the v1 `truncated`, `reason` and `next` rules. No-match success does not conceal a denied or incomplete request.
+
+Use `context.documents.fromFile(path)` or `context.documents.fromHttp({url,headers})` within a Library original-reading invocation. After enforcing the agreed source scope and verifying the requested revision, return the successful host-issued `original: {id,size}` unchanged. A handle is valid only for this preview; do not persist it, invent one, or include it in chat or progress messages. Local paths and authenticated URLs belong only in the host request, not in a Library result. The host reads at most 32 MiB into a private temporary file; map `too-large` to the corresponding Library failure instead of truncating the original.
+
+Use `LIBRARY_EXPORTS`, `validateLibraryDescriptor`, `validateLibraryRequest` and `validateLibraryResult` from the same `document-source-contract` resource. Checks should invoke the actual exports with synthetic files and verify exact reference binding, scope rejection, continuation and unavailable or oversized originals. Existing v1 chat tools can return verified document references through `structuredContent`; a path-only reference needs a revision to be reopened from chat.
+
+### Optional document details
+
+Declare `documentLibraryDetails` (`LIBRARY_DETAILS_EXPORT`) in both the manifest and service to populate the Details section. The Library calls it separately from `documentLibraryReadOriginal`. A source can provide details without opening or downloading an original. Sources that do not declare it still work.
+
+The request is `{ref,locale}`, where `locale` is the interface language tag (for example `en` or `de`). Use the same success and failure envelopes as the other operations, with `operation: "details"`. A success payload is `{ref,fields}`: return the exact requested reference and revision after checking access and scope. Use `validateLibraryResult(descriptor, "details", args, result)` to check the response.
+
+Return up to 32 fields in display order. Each field has `{id,label,value}`. IDs must be unique within a response, stable for the same field, and contain only ASCII letters, digits, hyphens or underscores (64 characters maximum, starting with a letter or digit). The label (up to 128 characters) and value (up to 2,048 characters) are nonblank plain text. Localize labels and format values for the requested locale; omit unavailable values. Fields can differ by document. Do not return credentials, absolute local paths or authenticated URLs.

@@ -12,6 +12,7 @@ export type ExecutorCommand =
       script?: string;
     }
   | { type: "terminate"; generation: number }
+  | { type: "abort"; generation: number; invocationId: string }
   | {
       type: "hostReply";
       generation: number;

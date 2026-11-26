@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { AssistantMessage, ToolResultMessage } from "../../ai/contracts";
-import { transcriptBlocks, verifiedChange } from "./transcript";
+import { documentLinks, transcriptBlocks, verifiedChange } from "./transcript";
 
 function assistant(content: AssistantMessage["content"]): AssistantMessage {
   return {
@@ -34,6 +34,76 @@ function result(
     details,
   };
 }
+test("offers preview links only for source-bound document references", () => {
+  const source = { pluginId: "sample", instanceId: "archive" };
+  const ref = { source, id: "42", identity: "stable", revision: "r1" };
+  const structuredContent: ToolResultMessage["structuredContent"] = {
+    version: 1,
+    operation: "search",
+    status: "ok",
+    source,
+    items: [
+      { ref, title: "Receipt" },
+      { ref: { ...ref, source: { ...source, instanceId: "different" } } },
+      { ref: { source, id: "scan.pdf", identity: "path" } },
+      null,
+      { ref: { id: "unscoped" } },
+      { ref: { ...ref, source: { ...source, pluginId: "other-source" } } },
+    ],
+  };
+  const call = {
+    key: "one",
+    id: "one",
+    name: "find",
+    state: "completed",
+    result: { ...result("one", "find"), structuredContent },
+  };
+  expect(documentLinks(call)).toEqual([{ ref, title: "Receipt" }]);
+  expect(
+    documentLinks({ ...call, result: { ...call.result, isError: true } }),
+  ).toEqual([]);
+});
+
+test("opens the same stable reference from metadata, extracted content or an original result", () => {
+  const source = { pluginId: "sample", instanceId: "archive" };
+  const ref = { source, id: "scan.pdf", identity: "path", revision: "current" };
+  function links(operation: string, content: Record<string, unknown>) {
+    return documentLinks({
+      key: "one",
+      id: "one",
+      name: "find",
+      state: "completed",
+      result: {
+        ...result("one", "find"),
+        structuredContent: {
+          version: 1,
+          status: "partial",
+          operation,
+          source,
+          ...content,
+        },
+      },
+    });
+  }
+  expect(links("metadata", { document: { ref, title: "Scan" } })).toEqual([
+    { ref, title: "Scan" },
+  ]);
+  expect(links("content", { provenance: { ref } })).toEqual([{ ref }]);
+  expect(links("original", { original: { ref } })).toEqual([{ ref }]);
+  expect(
+    links("list", {
+      items: [
+        { ref, title: "Old title" },
+        { ref, title: "Scan" },
+      ],
+    }),
+  ).toEqual([{ ref, title: "Scan" }]);
+  expect(links("list", { items: { ref } })).toEqual([]);
+  expect(links("original", { source: null, original: { ref } })).toEqual([]);
+  expect(links("original", { status: "error", original: { ref } })).toEqual([]);
+  expect(links("unknown", { original: { ref } })).toEqual([]);
+});
+
 test("only presents valid live references from a successful import receipt", () => {
   const file = {
     kind: "live",
