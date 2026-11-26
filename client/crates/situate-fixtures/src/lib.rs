@@ -24,6 +24,7 @@ pub fn seed_conversation(
             draft.into(),
             Default::default(),
             None,
+            false,
         );
     }
     let mut record = storage.create_conversation(id, title)?;
@@ -129,11 +130,18 @@ mod tests {
             .unwrap();
         assert_eq!(record.step, Step::Complete);
         let storage = Storage::open(root, &location.id).unwrap();
-        assert_eq!(storage.list_conversations().unwrap().len(), 3);
-        let record = storage
-            .read_conversation("fixture-open-day")
-            .unwrap()
+        let chats = storage.list_conversations().unwrap();
+        assert_eq!(chats.len(), 3);
+        for chat in &chats {
+            let id = uuid::Uuid::parse_str(&chat.id).unwrap();
+            assert_eq!(id.to_string(), chat.id);
+            assert_eq!(id.get_version_num(), 4);
+        }
+        let open_day = chats
+            .iter()
+            .find(|chat| chat.title == "Spring open day")
             .unwrap();
+        let record = storage.read_conversation(&open_day.id).unwrap().unwrap();
         let messages = record.messages.as_array().unwrap();
         assert!(messages.len() >= 30);
         assert_eq!(messages.first().unwrap()["role"], "user");

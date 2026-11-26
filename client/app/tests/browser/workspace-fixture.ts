@@ -708,6 +708,10 @@ export async function workspaceFixture(
         string,
         Omit<ConversationSnapshot, "record">
       >(retainedNative?.owners ?? []);
+      const pausedDevelopment = new Map<
+        string,
+        NonNullable<ConversationRecord["development"]>
+      >();
       const nativeReceipts = new Map<string, string>(
         retainedNative?.receipts ?? [],
       );
@@ -1132,6 +1136,20 @@ export async function workspaceFixture(
             if (responseSaveBlocked) throw "native.ai.conversation.saveFailed";
             Object.assign(owner, { phase: "idle", error: null });
             break;
+          case "setDevelopmentMode": {
+            if (owner.taskActive || owner.questionBusy)
+              throw "pluginDevelopment.modeBusy";
+            const key = nativeKey(scope, id);
+            if (action.enabled)
+              record.development ??= pausedDevelopment.get(key) ?? {
+                version: 2,
+              };
+            else if (record.development) {
+              pausedDevelopment.set(key, record.development);
+              delete record.development;
+            }
+            break;
+          }
           case "renameTitle":
             if (record.title !== action.expected)
               throw "native.ai.conversation.conflict";
@@ -2515,6 +2533,7 @@ export async function workspaceFixture(
                     attachments?: AttachmentRef[];
                     references?: ContentReference[];
                     development?: ConversationRecord["development"];
+                    developmentPaused?: boolean;
                   }
                 | undefined;
               if (
@@ -2526,6 +2545,7 @@ export async function workspaceFixture(
                       "attachments",
                       "references",
                       "development",
+                      "developmentPaused",
                     ].includes(key),
                 )
               )
@@ -2550,9 +2570,17 @@ export async function workspaceFixture(
                   ? { development: initial.development }
                   : {}),
               };
+              const stored = structuredClone(record);
+              if (initial?.developmentPaused && record.development) {
+                pausedDevelopment.set(
+                  nativeKey(String(args.scope), record.id),
+                  record.development,
+                );
+                delete record.development;
+              }
               conversations.set(`${args.scope}:${args.id}`, record);
               persistNative();
-              return structuredClone(record);
+              return stored;
             }
             if (command === "ai_conversation")
               throw new Error("Unexpected IPC: ai_conversation");

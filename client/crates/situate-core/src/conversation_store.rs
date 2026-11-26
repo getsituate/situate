@@ -323,14 +323,23 @@ impl Storage {
         draft: String,
         runtime: crate::conversation_runtime::Runtime,
         development: Option<Development>,
+        development_paused: bool,
     ) -> Result<ConversationRecord, String> {
-        if development
-            .as_ref()
-            .is_some_and(|d| d.version != Some(2) || d.origin_conversation_id.is_some())
+        if (development_paused && development.is_none())
+            || development
+                .as_ref()
+                .is_some_and(|d| d.version != Some(2) || d.origin_conversation_id.is_some())
         {
             return Err(INVALID.into());
         }
-        self.create_prepared_conversation(id, title, None, draft, development, Some(runtime))
+        self.create_prepared_conversation(
+            id,
+            title,
+            None,
+            draft,
+            development.map(|assignment| (assignment, development_paused)),
+            Some(runtime),
+        )
     }
     pub fn create_development_conversation(
         &self,
@@ -353,11 +362,14 @@ impl Storage {
             } else {
                 format!("{assignment}\n\n{context}")
             },
-            Some(Development {
-                version: Some(2),
-                plugin_id: plugin_id.into(),
-                origin_conversation_id: origin_conversation_id.map(str::to_owned),
-            }),
+            Some((
+                Development {
+                    version: Some(2),
+                    plugin_id: plugin_id.into(),
+                    origin_conversation_id: origin_conversation_id.map(str::to_owned),
+                },
+                false,
+            )),
             None,
         )
     }
@@ -382,11 +394,14 @@ impl Storage {
             } else {
                 format!("{assignment}\n\n{context}")
             },
-            Some(Development {
-                version: Some(2),
-                plugin_id: initial_plugin_id.unwrap_or_default().into(),
-                origin_conversation_id: origin_conversation_id.map(str::to_owned),
-            }),
+            Some((
+                Development {
+                    version: Some(2),
+                    plugin_id: initial_plugin_id.unwrap_or_default().into(),
+                    origin_conversation_id: origin_conversation_id.map(str::to_owned),
+                },
+                false,
+            )),
             None,
         )
     }
@@ -396,11 +411,13 @@ impl Storage {
         title: &str,
         title_input: Option<String>,
         draft: String,
-        development: Option<Development>,
+        development: Option<(Development, bool)>,
         runtime: Option<crate::conversation_runtime::Runtime>,
     ) -> Result<ConversationRecord, String> {
         validate_id(id)?;
-        if let Some(d) = &development {
+        let mut metadata = ConversationMetadata::new(id, title);
+        metadata.title_input = title_input;
+        if let Some((d, paused)) = development {
             if d.version != Some(2)
                 || (!d.plugin_id.is_empty() && !crate::plugins::valid_id(&d.plugin_id))
                 || !Development::supports_conversation_id(id)
@@ -411,10 +428,11 @@ impl Storage {
             if let Some(origin) = &d.origin_conversation_id {
                 validate_id(origin)?;
             }
+            metadata.development = Some(d);
+            if paused {
+                metadata.set_active_development(None);
+            }
         }
-        let mut metadata = ConversationMetadata::new(id, title);
-        metadata.title_input = title_input;
-        metadata.development = development;
         let runtime = runtime.unwrap_or_default();
         if !runtime.pending.is_empty()
             || !runtime.events.is_empty()
@@ -526,6 +544,7 @@ mod tests {
                 "Unsent".into(),
                 Default::default(),
                 None,
+                false,
             )
             .unwrap();
         assert_eq!(record.draft, "Unsent");
@@ -660,7 +679,7 @@ mod tests {
         let mut entering = metadata.clone();
         entering.development = Some(Development {
             version: Some(2),
-            plugin_id: String::new(),
+            plugin_id: "sample".into(),
             origin_conversation_id: None,
         });
         assert_eq!(
@@ -694,6 +713,75 @@ mod tests {
         assert_eq!(record.title, "Garden");
         assert_eq!(record.development, entering.development);
         assert_eq!(record.messages[0]["content"], "Build it");
+    }
+    #[test]
+    fn creating_a_chat_with_a_paused_assignment_retains_its_named_plugin() {
+        let (_temp, storage) = workspace();
+        let id = "00000000-0000-4000-8000-000000000001";
+        let assignment = Development {
+            version: Some(2),
+            plugin_id: "sample".into(),
+            origin_conversation_id: None,
+        };
+        let record = storage
+            .create_conversation_with_draft(
+                id,
+                "Review",
+                "What does this plugin do?".into(),
+                Default::default(),
+                Some(assignment.clone()),
+                true,
+            )
+            .unwrap();
+        assert_eq!(record.development.as_ref(), Some(&assignment));
+        assert_eq!(record.draft, "What does this plugin do?");
+        let metadata = storage.read_conversation_metadata(id).unwrap().unwrap();
+        assert_eq!(metadata.development.as_ref(), Some(&assignment));
+        assert!(metadata.active_development().is_none());
+    }
+    #[test]
+    fn pausing_an_assignment_preserves_its_origin_and_plugin_through_reopen() {
+        let (_temp, storage) = workspace();
+        let id = "00000000-0000-4000-8000-000000000001";
+        storage.create_conversation("origin", "Garden").unwrap();
+        storage
+            .create_assignment_conversation(
+                id,
+                Some("sample"),
+                Some("origin"),
+                "Review",
+                "Make a view",
+                "",
+            )
+            .unwrap();
+        let mut metadata = storage.read_conversation_metadata(id).unwrap().unwrap();
+        metadata.set_active_development(None);
+        storage
+            .update_conversation_metadata(&metadata, metadata.revision)
+            .unwrap();
+
+        let mut reopened = storage.read_conversation_metadata(id).unwrap().unwrap();
+        assert!(reopened.active_development().is_none());
+        assert_eq!(
+            reopened.extra.get("pluginDevelopmentPaused"),
+            Some(&json!(true))
+        );
+        let assignment = storage
+            .read_conversation(id)
+            .unwrap()
+            .unwrap()
+            .development
+            .unwrap();
+        assert_eq!(assignment.plugin_id, "sample");
+        assert_eq!(assignment.origin_conversation_id.as_deref(), Some("origin"));
+
+        reopened.set_active_development(Some(assignment.clone()));
+        storage
+            .update_conversation_metadata(&reopened, reopened.revision)
+            .unwrap();
+        let resumed = storage.read_conversation_metadata(id).unwrap().unwrap();
+        assert_eq!(resumed.active_development(), Some(&assignment));
+        assert!(!resumed.extra.contains_key("pluginDevelopmentPaused"));
     }
     #[test]
     fn invalid_ids_and_development_metadata_do_not_create_paths() {

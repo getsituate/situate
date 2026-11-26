@@ -6,13 +6,14 @@ endif::[]
 ====== Conversation modes and tools
 
 This reference describes the tool surface of <<native-conversation-building-blocks,Agent Integration>> in the current native implementation, not platform or provider qualification.
-Situate has two fixed conversation types: *normal chat* and *plugin development*.
+A conversation can switch between *normal chat* and *plugin development* without losing its history or draft. A manual switch does not start a run and is unavailable during active work.
 Development adds assignment-specific instructions, not a separate workspace or a restriction to one plugin.
-Under the same workspace, device capabilities and recovery state, both types have the same workspace writes, navigation, available shell access and eligible plugin tools, as required by link:{architecture-repository-root}/requirements/data/requirements/REQ-0001-create-integrations.md[REQ-0001], AC-32.
+The conversation retains its assignment and origin when it returns to normal chat. Conversation metadata stores the paused mode separately from the assignment, so earlier clients that ignore the mode can still read and retain the assignment.
+Under the same workspace, device capabilities and recovery state, both modes have the same workspace writes, navigation, available shell access and eligible plugin tools, as required by link:{architecture-repository-root}/requirements/data/requirements/REQ-0001-create-integrations.md[REQ-0001], AC-32.
 Development-specific authoring tools and normal-chat handoff differ as shown below.
 
 The matrix assumes a writable native macOS workspace with history and conversation storage, outside guided onboarding.
-*Yes* means registered for that conversation type under those conditions, not guaranteed to execute successfully.
+*Yes* means registered for that conversation mode under those conditions, not guaranteed to execute successfully.
 *Conditional* means eligible plugin contributions must be available; *No* means not registered for that type.
 
 .Tool matrix

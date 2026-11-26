@@ -658,9 +658,9 @@ test("development shares the live composer, model and transcript", async () => {
   await vi.dynamicImportSettled();
   await flushPromises();
   expect(wrapper.find(".plugin-development .chat-pane-header").exists()).toBe(
-    true,
+    false,
   );
-  expect(wrapper.get(".chat-context").text()).toContain(
+  expect(wrapper.get(".development-mode-label").text()).toContain(
     "⟦pluginDevelopment.context⟧",
   );
   expect(wrapper.text()).not.toContain("draft-one");
@@ -707,7 +707,7 @@ test.each([false, true])(
     expect(wrapper.get(".chat-load-error").findAll("button")).toHaveLength(2);
     expect(wrapper.get(".empty-chat").isVisible()).toBe(true);
     if (development)
-      expect(wrapper.get(".chat-pane-header").isVisible()).toBe(true);
+      expect(wrapper.get(".development-mode-label").isVisible()).toBe(true);
     expect(chat.state.draft).toBe("Shared draft");
     expect(chat.state.transcript).toHaveLength(1);
     Object.assign(chat.state, { loadError: undefined });
@@ -819,7 +819,7 @@ test("development welcome and navigation remain available around a load error", 
   Object.assign(chat.state, { loadError: "references.unavailable" });
   await flushPromises();
   const navigation = wrapper.get(
-    '.chat-pane-header button[aria-label="⟦navigation.openNavigation⟧"]',
+    '.chat-corner-start button[aria-label="⟦navigation.openNavigation⟧"]',
   );
   expect(navigation.isVisible()).toBe(true);
   await navigation.trigger("click");

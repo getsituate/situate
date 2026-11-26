@@ -67,7 +67,7 @@ pub(crate) fn project(
         revision: metadata.revision,
         messages: json!([]),
         draft: String::new(),
-        development: metadata.development.clone(),
+        development: metadata.active_development().cloned(),
         runtime: Some(Runtime::default()),
     };
     let mut ids = Vec::new();
@@ -399,15 +399,17 @@ impl<H: Host> Owner<H> {
         state: &mut State,
         next: &mut ConversationRecord,
     ) -> Result<(), SaveFailure> {
-        if state.batch.is_none() && state.metadata.development != next.development {
+        if state.batch.is_none() && state.metadata.active_development() != next.development.as_ref()
+        {
             // Do not retain a successful tool result before the mode it reports.
             let mut metadata = state.metadata.clone();
-            metadata.development = next.development.clone();
+            metadata.set_active_development(next.development.clone());
             state.metadata = self
                 .host
                 .update_metadata(metadata, state.metadata.revision)
                 .await?;
         }
+        next.development = state.metadata.active_development().cloned();
         let mut delta = next.clone();
         if state.batch.is_none() {
             let receipts: Vec<String> = delta

@@ -107,6 +107,30 @@ pub struct ConversationMetadata {
     pub extra: BTreeMap<String, Value>,
 }
 impl ConversationMetadata {
+    pub fn active_development(&self) -> Option<&Development> {
+        if self
+            .extra
+            .get("pluginDevelopmentPaused")
+            .and_then(Value::as_bool)
+            == Some(true)
+        {
+            return None;
+        }
+        self.development.as_ref()
+    }
+
+    pub fn set_active_development(&mut self, active: Option<Development>) {
+        if active.is_some() {
+            if self.development.is_none() {
+                self.development = active;
+            }
+            self.extra.remove("pluginDevelopmentPaused");
+        } else if self.development.is_some() {
+            self.extra
+                .insert("pluginDevelopmentPaused".into(), Value::Bool(true));
+        }
+    }
+
     pub fn new(id: impl Into<String>, title: impl Into<String>) -> Self {
         Self {
             version: 3,
@@ -538,7 +562,6 @@ impl Storage {
             return Ok(desired);
         }
         let entering_development = old.development.is_none()
-            && old.message_count > 0
             && Development::supports_conversation_id(&value.id)
             && value.development.as_ref().is_some_and(|development| {
                 development.version == Some(2)

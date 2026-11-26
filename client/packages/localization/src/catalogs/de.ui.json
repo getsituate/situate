@@ -103,7 +103,7 @@
   "pluginDevelopment.welcome": "Was möchtest du ändern?",
   "pluginDevelopment.binaryFile": "Binärdatei",
   "pluginDevelopment.noFilePreview": "Für diesen Dateityp ist keine Vorschau verfügbar.",
-  "pluginDevelopment.context": "Entwicklung",
+  "pluginDevelopment.context": "Plugin-Entwicklung",
   "pluginDevelopment.help": "Über die Entwicklung",
   "pluginDevelopment.closeHelp": "Dialog schließen",
   "pluginDevelopment.files": "Dateien",
