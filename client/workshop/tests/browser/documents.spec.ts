@@ -459,7 +459,7 @@ for (const mobile of [false, true]) {
         preview.getByText("Documents / Shared", { exact: true }),
       ).toBeVisible();
       await preview
-        .getByRole("button", { name: "‹ Back to plugins", exact: true })
+        .getByRole("button", { name: "Back to plugins", exact: true })
         .click();
       await preview
         .getByRole("button", { name: /Back to documents/ })

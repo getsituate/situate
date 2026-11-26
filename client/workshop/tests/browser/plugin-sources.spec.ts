@@ -74,7 +74,7 @@ for (const mobile of [false, true]) {
       contentType: "image/png",
     });
     await preview
-      .getByRole("button", { name: "‹ Back to plugins", exact: true })
+      .getByRole("button", { name: "Back to plugins", exact: true })
       .click();
     await expect(
       sources.getByRole("heading", { name: /^Sources/ }),
