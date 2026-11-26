@@ -1,7 +1,7 @@
 ---
 id: REQ-0058
 type: requirement
-title: Browse and filter the common document collection
+title: Browse and search the common document collection
 status: approved
 priority: must
 area: Document management
@@ -12,23 +12,23 @@ goals: [GOAL-0001]
 
 Delivery: the behavior below belongs to the later document-collection increment. The first [direct-source-access iteration](REQ-0054-connect-document-sources.md#first-iteration-direct-source-access-through-chat) exposes source capabilities through chat without implementing this collection feature. Approval and priority remain unchanged; references to initial behavior below describe the first delivery of this feature, not the direct-access iteration.
 
-Situate must provide a built-in document view for the configured collection, independent of specialized plugin views. Users can search and filter without chat, browse hierarchical tags without a search phrase, inspect results and identify a document's source. They need not select a connector before searching.
+Situate must provide a built-in document view for the configured collection, independent of specialized plugin views. Users can browse and search without chat, inspect results and identify a document's source. They need not select a connector before searching.
 
-[Content search](REQ-0055-search-document-content.md) and [tag filtering](REQ-0057-organize-documents-with-hierarchical-tags.md) supply the common navigation. A universal folder tree is not required. Documents without tags remain findable through search and the document list. [Internal previews](REQ-0059-preview-pdf-and-image-documents.md), [saved searches](REQ-0060-save-document-searches.md) and [source structures](REQ-0061-browse-document-source-structures.md) are separate should-have capabilities. Source-specific document lists, source and folder filters, and source structures are [deferred from initial delivery](../foundations.md#deferred-document-source-navigation); connection management and source identification remain in scope.
+The document list and [content search](REQ-0055-search-document-content.md) provide access across sources. A universal folder tree is not required. [Internal previews](REQ-0059-preview-pdf-and-image-documents.md), [saved searches](REQ-0060-save-document-searches.md) and [source structures](REQ-0061-browse-document-source-structures.md) are separate should-have capabilities. Source-specific document lists, source and folder filters, and source structures are [deferred from initial delivery](../foundations.md#deferred-document-source-navigation); connection management and source identification remain in scope.
 
 ### Library access before persistent preparation
 
 The first Library release uses a versioned profile on document source plugins to list, search and retrieve originals from connected sources on demand. Filename search is the minimum; a source can also supply its existing text search. PDF and supported image previews are available in the Library. Results identify their source and distinguish incomplete retrieval from a complete search with no matches.
 
-Use the Library layout below. Tag controls, saved searches and sort options that are not supported remain visible and inactive with an availability hint. Persistent preparation, index-based search, tag navigation and saved searches belong to the later collection delivery described below. Existing direct-access plugins and chat tools continue to work without the Library profile.
+Use the Library layout below. Saved searches and sort options that are not supported remain visible and inactive with an availability hint. Persistent preparation, index-based search and saved searches belong to the later collection delivery described below. Existing direct-access plugins and chat tools continue to work without the Library profile.
 
 ### Prepared collection presentation and metadata
 
-The Library design is selected: persistent tag and saved-search navigation on large surfaces, compact navigation and separate reading on phones. Preview and saved-search capabilities are included in this delivery without changing their catalog priorities.
+The Library design is selected: persistent saved-search navigation on large surfaces, compact navigation and separate reading on phones. Preview and saved-search capabilities are included in this delivery without changing their catalog priorities.
 
-Without search text, order by collection admission time, newest first. With search text, default to full-text relevance and allow admission-time ordering. Load results in portions rather than rendering the entire collection. Returning from a document preserves query, filters and list position. Text searches show matching excerpts.
+Without search text, order by collection admission time, newest first. With search text, default to full-text relevance and allow admission-time ordering. Load results in portions rather than rendering the entire collection. Returning from a document preserves the query and list position. Text searches show matching excerpts.
 
-Core metadata comprises source identity, original reference and available path; filename, format, size and source timestamps; last successful preparation, freshness, original availability and errors; extracted text with page provenance where available; and tags. Arbitrary domain extraction fields such as invoice totals are deferred.
+Core metadata comprises source identity, original reference and available path; filename, format, size and source timestamps; last successful preparation, freshness, original availability and errors; and extracted text with page provenance where available. Arbitrary domain extraction fields such as invoice totals are deferred.
 
 ## Rationale
 
@@ -48,12 +48,10 @@ Private document-navigation scope clarification; date not recorded, transcript n
 - Browsing orders by admission time; text search defaults to relevance with admission-time ordering available.
 - Results load incrementally and returning from reading restores criteria and list position.
 - Results expose source provenance, availability and text excerpts without implying complete processing.
-- Valid external edits to authoritative workspace document records, tags and saved searches appear in the collection; invalid edits are reported and preserved rather than silently overwritten.
+- Valid external edits to authoritative workspace document records and saved searches appear in the collection; invalid edits are reported and preserved rather than silently overwritten.
 - Search indexes can be rebuilt from authoritative records and prepared content; document metadata remains openly readable without the index.
-- Users can search the configured collection and combine its filters without opening a chat or choosing a source first.
-- Users can navigate tags and inspect matching documents without typing a search query.
+- Users can browse and search the configured collection without opening a chat or choosing a source first.
 - Results identify their source and allow access to the original when reachable; unavailable originals follow REQ-0056.
-- Documents without assigned tags remain accessible through the list and content search.
 - The common view is supplied by Situate rather than requiring development of a custom view plugin.
 
 ## Open questions

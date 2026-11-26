@@ -4,12 +4,7 @@ import { computed } from "vue";
 import { SituateIconButton, SituateButton } from "../ui";
 import { c } from "./content";
 import receipt from "./assets/office-receipt.svg";
-import {
-  clone,
-  startDocumentAction,
-  tagPath,
-  type DocumentsState,
-} from "./model";
+import { clone, startDocumentAction, type DocumentsState } from "./model";
 const props = defineProps<{ state: DocumentsState }>();
 const emit = defineEmits<{
   change: [state: DocumentsState];
@@ -204,29 +199,6 @@ function update(fn: (s: DocumentsState) => void) {
         </div>
       </template>
       <section class="doc-metadata">
-        <div class="doc-section-heading">
-          <h3>{{ c.tags }}</h3>
-          <SituateButton
-            variant="ghost"
-            size="small"
-            type="button"
-            class="doc-text"
-            @click="
-              update((s) => {
-                s.draftTags = [...doc.tags];
-                s.dialog = 'tags';
-              })
-            "
-          >
-            {{ c.editTags }}
-          </SituateButton>
-        </div>
-        <div class="doc-chips">
-          <span v-for="id in doc.tags" :key="id" class="doc-chip">{{
-            tagPath(state.tags, id)
-          }}</span
-          ><span v-if="!doc.tags.length" class="doc-muted">{{ c.noTags }}</span>
-        </div>
         <SituateDisclosure open>
           <template #label>{{ c.details }}</template>
           <dl>

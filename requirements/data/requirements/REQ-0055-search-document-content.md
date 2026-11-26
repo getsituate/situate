@@ -22,11 +22,11 @@ Semantic search remains an approved later capability, not part of initial delive
 
 Situate supplies reusable local extraction and OCR implementations for source plugins. PDF and image processing form the initial baseline. Broader formats depend on technical qualification rather than a blanket support promise. There is no product-level language allowlist; actual OCR language, script and scan-quality support must be verified. Existing source text may be reused when it corresponds to the current document revision.
 
-Initial search covers title, filename and all successfully extracted text, case-insensitively. Multiple terms must all occur, possibly at different positions; quoted phrases require contiguous text. Textual identifiers remain findable. Search combines with tag filters. Automatic typo correction and meaning-based matching are deferred.
+Initial search covers title, filename and all successfully extracted text, case-insensitively. Multiple terms must all occur, possibly at different positions; quoted phrases require contiguous text. Textual identifiers remain findable. Automatic typo correction and meaning-based matching are deferred.
 
-Prepared text and metadata may be stored durably and synchronized across the user's devices under existing encryption boundaries, without copying every original. Extraction and OCR remain local with no external fallback. Authorized remote LLM categorization is separate under [tag organization](REQ-0057-organize-documents-with-hierarchical-tags.md).
+Prepared text and metadata may be stored durably and synchronized across the user's devices under existing encryption boundaries, without copying every original. Extraction and OCR remain local with no external fallback.
 
-Collections must accommodate tens of thousands of documents. Documents become visible and searchable incrementally; local extraction and categorization expose separate states. Successful preparation is retained across pauses and restart rather than unnecessarily repeated. The assistant and document view search the same collection. The assistant can use prepared text with source and available page provenance, without additional rights to originals.
+Collections must accommodate tens of thousands of documents. Documents become visible and searchable incrementally, with extraction progress and failures visible. Successful preparation is retained across pauses and restart rather than unnecessarily repeated. The assistant and document view search the same collection. The assistant can use prepared text with source and available page provenance, without additional rights to originals.
 
 ## Rationale
 
@@ -40,8 +40,7 @@ Private document-management elicitation and prioritization conversation; date no
 
 ## Acceptance criteria
 
-- Initial full-text search finds title, filename and OCR-text matches regardless of case, applies all query terms, supports quoted phrases and combines with tag filters.
-- Searchable extracted text remains available when categorization is pending or failed.
+- Initial full-text search finds title, filename and OCR-text matches regardless of case, applies all query terms and supports quoted phrases.
 - Prepared information is usable on another authorized device without downloading all originals; an unreachable original is not represented as available.
 - Initial delivery performs extraction and OCR locally and does not require embeddings or an external extraction fallback.
 - Qualification includes synthetic collections with tens of thousands of records and incremental, restartable preparation.

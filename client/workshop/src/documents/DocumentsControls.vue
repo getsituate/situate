@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import SituateDisclosure from "../ui/SituateDisclosure.vue";
 import { SituateSelect, SituateCheckbox, SituateButton } from "../ui";
-import { computed, useId } from "vue";
+import { useId } from "vue";
 import { c, dc } from "./content";
 import { clone, finishDocumentAction, type DocumentsState } from "./model";
 const fieldId = useId();
@@ -16,15 +16,6 @@ function update(fn: (s: DocumentsState) => void) {
   fn(s);
   emit("update:state", s);
 }
-const overlay = computed(
-  () =>
-    !!(
-      props.state.dialog ||
-      props.state.tagCreation ||
-      props.state.tagMenu ||
-      props.state.tagDeletion
-    ),
-);
 function value(event: Event) {
   return (event.target as HTMLSelectElement).value;
 }
@@ -32,64 +23,44 @@ function value(event: Event) {
 <template>
   <div class="document-controls">
     <p>{{ dc.proposal }}</p>
-    <p v-if="state.tagCreation">{{ dc.tagCreation }}</p>
-    <p v-if="state.tagMenu || state.tagDeletion">{{ dc.tagDeletion }}</p>
-    <template v-if="!sourceMode && !overlay">
-      <label for="document-layout">{{ dc.layouts }}</label>
+    <template v-if="!sourceMode && collectionVisible">
+      <label for="document-thumbnails">{{ c.thumbnails }}</label>
       <SituateSelect
-        id="document-layout"
-        :value="state.layout"
+        id="document-thumbnails"
+        :value="state.thumbnailMode"
         @change="
           update((s) => {
-            s.layout = value($event) as DocumentsState['layout'];
+            s.thumbnailMode = value($event) as DocumentsState['thumbnailMode'];
           })
         "
       >
-        <option value="library">{{ dc.library }}</option>
-        <option value="focused">{{ dc.focused }}</option>
+        <option value="fixture">{{ c.fixtureThumbnails }}</option>
+        <option value="pending">{{ c.pendingThumbnails }}</option>
+        <option value="unavailable">{{ c.missingThumbnails }}</option>
+        <option value="error">{{ c.failedThumbnails }}</option>
       </SituateSelect>
-      <template v-if="collectionVisible">
-        <label for="document-thumbnails">{{ c.thumbnails }}</label>
-        <SituateSelect
-          id="document-thumbnails"
-          :value="state.thumbnailMode"
-          @change="
-            update((s) => {
-              s.thumbnailMode = value(
-                $event,
-              ) as DocumentsState['thumbnailMode'];
-            })
-          "
-        >
-          <option value="fixture">{{ c.fixtureThumbnails }}</option>
-          <option value="pending">{{ c.pendingThumbnails }}</option>
-          <option value="unavailable">{{ c.missingThumbnails }}</option>
-          <option value="error">{{ c.failedThumbnails }}</option>
-        </SituateSelect>
-        <label for="document-search-state">{{ dc.searchState }}</label>
-        <SituateSelect
-          id="document-search-state"
-          :value="state.searchState"
-          @change="
-            update((s) => {
-              s.searchState = value($event) as DocumentsState['searchState'];
-            })
-          "
-        >
-          <option value="ready">{{ dc.ready }}</option>
-          <option value="loading">{{ dc.loading }}</option>
-          <option value="error">{{ dc.error }}</option>
-        </SituateSelect>
-      </template>
+      <label for="document-search-state">{{ dc.searchState }}</label>
+      <SituateSelect
+        id="document-search-state"
+        :value="state.searchState"
+        @change="
+          update((s) => {
+            s.searchState = value($event) as DocumentsState['searchState'];
+          })
+        "
+      >
+        <option value="ready">{{ dc.ready }}</option>
+        <option value="loading">{{ dc.loading }}</option>
+        <option value="error">{{ dc.error }}</option>
+      </SituateSelect>
     </template>
     <template
       v-if="
-        !overlay &&
-        (sourceMode ||
-          collectionVisible ||
-          state.documents.some(
-            (d) => d.id === state.selected && d.availability === 'available',
-          ))
+        sourceMode ||
+        collectionVisible ||
+        state.documents.some(
+          (d) => d.id === state.selected && d.availability === 'available',
+        )
       "
     >
       <label for="document-outcome">{{ dc.outcome }}</label>
@@ -123,10 +94,7 @@ function value(event: Event) {
       />{{ dc.addDocument }}</label
     >
     <div
-      v-if="
-        !overlay &&
-        (sourceMode ? state.pending : state.pending || state.opening)
-      "
+      v-if="sourceMode ? state.pending : state.pending || state.opening"
       class="document-control-actions"
     >
       <SituateButton
@@ -156,11 +124,6 @@ function value(event: Event) {
       <p>{{ dc.findTask }}</p>
       <p>{{ dc.gatherTask }}</p>
       <p>{{ dc.boundary }}</p>
-      <p>
-        Both navigation approaches support both tasks. On phones, Browse opens
-        tags and saved searches; document reading replaces the list while
-        preserving its selection. PDF pages and image receipts are synthetic.
-      </p>
       <p>{{ dc.searchBoundary }}</p>
     </SituateDisclosure>
   </div>

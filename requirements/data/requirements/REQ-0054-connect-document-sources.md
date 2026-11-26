@@ -18,7 +18,7 @@ Original files may remain in their sources, including shared repositories. Workf
 
 Deliver a plugin-defined source export convention with authoring guidance and conformance checks, using unchanged generic plugin registration and tool execution. Source implementations and consumers own domain validation; the core does not introduce a mandatory document-domain registration contract. The LLM creates concrete sources in situ; local-folder and Paperless implementations are qualification cases, not built-in connectors. Chat can invoke supported listing, source-native search, metadata/content reading and original access where available. Results identify their source and document, distinguish partial results from complete results and report unavailable or unsupported operations honestly.
 
-Reuse source-provided search and existing OCR/text without a Situate index or mandatory local extraction. A folder source can support metadata/text access without PDF OCR. The source declares its capabilities and device limitations. No common collection, automatic preparation/categorization, background refresh, Situate tags, saved searches, preview/Library UI or prepared-content synchronization is required for this iteration. Existing plugin configuration, credentials and conversation persistence remain applicable; do not create a hidden full-source mirror.
+Reuse source-provided search and existing OCR/text without a Situate index or mandatory local extraction. A folder source can support metadata/text access without PDF OCR. The source declares its capabilities and device limitations. No common collection, automatic preparation, background refresh, saved searches, preview/Library UI or prepared-content synchronization is required for this iteration. Existing plugin configuration, credentials and conversation persistence remain applicable; do not create a hidden full-source mirror.
 
 ### Library source profile
 
@@ -28,9 +28,9 @@ Sources can opt in to the [Library](REQ-0058-browse-document-collection.md#libra
 
 Collection qualification uses a local folder and Paperless contributing to the same collection through plugin-developed sources. It extends direct source access with persistent metadata, reusable processing and the Library UI. Contract-conformant synthetic sources support development but do not replace end-to-end verification. Originals remain in their sources. A device may admit a source only if it can access and locally prepare its supported content. Unsupported mobile-only sources are rejected with an explanation rather than silently transferred elsewhere. Per-document failures in an otherwise supported source remain visible and retryable.
 
-Reliable source identity preserves document references and local tags across moves, renames and content revisions. Copies, including cross-source copies, remain separate documents even when their bytes match. An ambiguous identity is not guessed: a newly discovered document is processed separately and the old reference may become unavailable.
+Reliable source identity preserves document references across moves, renames and content revisions. Copies, including cross-source copies, remain separate documents even when their bytes match. An ambiguous identity is not guessed: a newly discovered document is processed separately and the old reference may become unavailable.
 
-Source setup defines processing scope and initial categorization rules. It explicitly authorizes automatic transmission of extracted text to the user's configured, authorized model for categorization, including possible charges. New documents need no per-document approval. Progress is visible and processing can be paused; no fixed cost cap or universal price estimate is promised.
+Source setup defines the agreed processing scope. New documents within that scope are prepared without per-document approval. Progress is visible and preparation can be paused.
 
 A source integration does not need to implement a universal original-write API. Agents retain existing filesystem and installed-tool access within the user's request and configured access, without per-action approval; the document feature neither grants new permissions nor artificially restricts those existing capabilities. Account/provider authorization, OS permissions and destructive content protections remain separate.
 
@@ -56,11 +56,11 @@ Private document-management elicitation and prioritization conversation; date no
 
 ### Later collection delivery
 
-- Moving a document with reliable source identity preserves its tags and references; an ambiguous move never silently retargets an existing reference.
+- Moving a document with reliable source identity preserves references to it; an ambiguous move never silently retargets an existing reference.
 - Plugin-developed local-folder and Paperless sources contribute to one collection without transferring originals into Situate-managed storage.
 - The source contract defines capabilities, scope, identity/revisions, bounded discovery and completion evidence, optional prepared text, original retrieval, errors and lifecycle behavior. Shared conformance tests are usable during plugin development.
 - Source setup rejects a device that cannot locally prepare the source, while supported sources expose individual processing failures.
-- Source setup obtains categorization transmission and cost authorization once; automatic work is observable and pausable.
+- Automatic preparation is observable and pausable.
 - Two configured sources contribute their agreed subsets to the same workspace collection without mandatory migration of originals.
 - Setup establishes included and excluded subsets and source-specific filing rules with the user; documents outside that agreement are not automatically processed.
 - Different workflow plugins can reuse the same connector under REQ-0001.

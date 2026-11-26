@@ -78,12 +78,12 @@ for (const profile of ["ios", "android"]) {
   }, info) => {
     const preview = await open(page, "documents-gather", profile);
     const trigger = preview.getByRole("combobox", {
-      name: "Documents with",
+      name: "Sort documents",
       exact: true,
     });
     await trigger.click();
     const popup = preview.getByRole("dialog", {
-      name: "Documents with",
+      name: "Sort documents",
       exact: true,
     });
     await expect(popup).toHaveClass(/select-sheet/);
@@ -92,7 +92,7 @@ for (const profile of ["ios", "android"]) {
       0,
     );
     await expect(
-      popup.getByRole("option", { name: "All selected tags", exact: true }),
+      popup.getByRole("option", { name: "Newest first", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
     for (const option of await popup.getByRole("option").all())
       expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(48);
@@ -102,67 +102,18 @@ for (const profile of ["ios", "android"]) {
       contentType: "image/png",
     });
     await popup
-      .getByRole("option", { name: "Any selected tag", exact: true })
+      .getByRole("option", { name: "Best matches", exact: true })
       .click();
-    await expect(trigger).toHaveAttribute("data-value", "any");
+    await expect(trigger).toHaveAttribute("data-value", "relevance");
     await expect(trigger).toBeFocused();
-    await expect(preview.locator(".doc-result")).toHaveCount(8);
+    await expect(preview.locator(".doc-result")).toHaveCount(1);
     await trigger.click();
     await popup
       .getByRole("button", { name: "Close choices", exact: true })
       .click();
-    await expect(trigger).toHaveAttribute("data-value", "any");
+    await expect(trigger).toHaveAttribute("data-value", "relevance");
   });
 }
-
-test("long option lists scroll within safe areas and react to keyboard and rotation", async ({
-  page,
-}, info) => {
-  const preview = await open(page, "documents-find", "ios");
-  const trigger = preview.getByRole("combobox", {
-    name: "Add tags",
-    exact: true,
-  });
-  await trigger.click();
-  const popup = preview.getByRole("dialog", { name: "Add tags", exact: true });
-  await expect(
-    popup.getByRole("option", {
-      name: "Tax / Expenses / Training",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await preview.setViewportSize({ width: 320, height: 568 });
-  await page.getByLabel("Keyboard occlusion").check();
-  await expect
-    .poll(async () => (await popup.boundingBox())!.height)
-    .toBeLessThan(220);
-  await fits(preview);
-  await popup.getByRole("listbox").press("End");
-  await expect(
-    popup.getByRole("option", { name: "Personal only", exact: true }),
-  ).toBeInViewport({ ratio: 1 });
-  await info.attach("short-options", {
-    body: await preview.screenshot(),
-    contentType: "image/png",
-  });
-  await page.getByLabel("Keyboard occlusion").uncheck();
-  await preview.setViewportSize({ width: 844, height: 390 });
-  await expect(popup).toHaveClass(/select-sheet/);
-  await expect
-    .poll(async () => (await popup.boundingBox())!.y)
-    .toBeGreaterThanOrEqual(59);
-  await fits(preview);
-  await popup
-    .getByRole("option", { name: "Personal only", exact: true })
-    .click();
-  await expect(
-    preview.getByRole("button", {
-      name: "Remove tag filter: Personal only",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(trigger).toBeFocused();
-});
 
 test("settings share the sheet, trap focus, dismiss outside, and reset removes it", async ({
   page,

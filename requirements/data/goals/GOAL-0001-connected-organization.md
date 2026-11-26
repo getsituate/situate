@@ -46,7 +46,7 @@ Private document-management elicitation and prioritization conversation; date no
 - [Search document content across connected sources](../requirements/REQ-0055-search-document-content.md)
 - [Refresh document information and expose availability](../requirements/REQ-0056-refresh-document-collection.md)
 - [Organize and filter documents with hierarchical tags](../requirements/REQ-0057-organize-documents-with-hierarchical-tags.md)
-- [Browse and filter the common document collection](../requirements/REQ-0058-browse-document-collection.md)
+- [Browse and search the common document collection](../requirements/REQ-0058-browse-document-collection.md)
 - [Read PDF and image documents inside Situate](../requirements/REQ-0059-preview-pdf-and-image-documents.md)
 - [Save and pin document searches](../requirements/REQ-0060-save-document-searches.md)
 - [Browse source-provided document structures](../requirements/REQ-0061-browse-document-source-structures.md)

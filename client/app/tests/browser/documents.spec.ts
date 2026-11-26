@@ -273,12 +273,17 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   await page.goto("/");
   const library = page.getByRole("main", { name: "Documents" });
   const search = library.getByRole("searchbox", { name: "Search documents" });
-  await expect(
-    library.getByRole("button", { name: "Save search" }),
-  ).toBeDisabled();
-  await expect(library.getByText("Available later").first()).toBeVisible();
+  await expect(search).toBeVisible();
+  await expect(library.getByRole("complementary")).toHaveCount(0);
+  const clear = library.getByRole("button", { name: "Clear search" });
+  await expect(clear).toHaveCount(0);
   await search.fill("Receipt");
-  await search.press("Enter");
+  await search.press("Tab");
+  await expect(clear).toBeFocused();
+  await clear.press("Tab");
+  const submit = library.getByRole("button", { name: "Search documents" });
+  await expect(submit).toBeFocused();
+  await submit.press("Enter");
   const receipt = library.getByRole("button", {
     name: "Receipt Fixture folder",
   });
@@ -409,13 +414,7 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   await preview.getByRole("button", { name: "Close preview" }).click();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await library.getByRole("button", { name: "Browse", exact: true }).click();
-  const browse = page.getByRole("dialog", { name: "Browse" });
-  await expect(
-    browse.getByText("Saved searches", { exact: true }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(browse).toBeHidden();
+  await expect(search).toBeVisible();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await holdDocument("chunk", true);
   await library
@@ -444,7 +443,30 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
     .toBe(1);
   await expect(search).toBeHidden();
   await preview.getByRole("button", { name: "Back to results" }).click();
+  await expect(
+    library.getByRole("button", { name: "Receipt scan Fixture archive" }),
+  ).toBeFocused();
   await expect(search).toHaveValue("Receipt");
+
+  await clear.click();
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("");
+  await expect(clear).toHaveCount(0);
+  await expect(receipt).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            Reflect.get(window, "__ipcCalls") as {
+              args: { request?: { exportName?: string } };
+            }[]
+          ).filter(
+            ({ args }) => args.request?.exportName === "documentLibraryList",
+          ).length,
+      ),
+    )
+    .toBe(4);
 });
 
 test("a failed source does not hide results or details from other sources", async ({

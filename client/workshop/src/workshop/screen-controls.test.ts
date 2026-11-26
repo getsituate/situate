@@ -55,45 +55,17 @@ describe("screen controls", () => {
     },
   );
 
-  it("follows tag creation and exposes keyboard geometry even beside a selected document", () => {
-    const state = createSimulation("documents-new-tag");
-    state.documents.selected = "bike";
+  it("exposes keyboard geometry for the document search, not the preview", () => {
+    const state = createSimulation("documents-gather");
     expect(screenControls(state)).toMatchObject({
-      label: "Documents · new tag",
+      label: "Documents · collection",
       editing: true,
       controls: ["documents"],
     });
-    state.documents.tagCreation = null;
+    state.documents.selected = "course";
     expect(screenControls(state)).toMatchObject({
       label: "Documents · preview",
       editing: false,
-    });
-  });
-
-  it.each([
-    ["documents-delete-tag", "Documents · delete tag"],
-    ["documents-delete-branch", "Documents · delete tag"],
-    ["documents-tag-delete-conflict", "Documents · delete tag"],
-  ] as const)("exposes controls for %s", (scenario, label) => {
-    const state = createSimulation(scenario);
-    expect(screenControls(state)).toMatchObject({
-      label,
-      controls: ["documents"],
-      editing: true,
-      canSetOutcome: false,
-    });
-  });
-
-  it.each([
-    "documents-tag-removed",
-    "documents-repair-view",
-    "documents-missing-tag",
-  ] as const)("shows collection controls for %s", (scenario) => {
-    expect(screenControls(createSimulation(scenario))).toMatchObject({
-      label: "Documents · collection",
-      controls: ["documents"],
-      editing: true,
-      canSetOutcome: false,
     });
   });
 
