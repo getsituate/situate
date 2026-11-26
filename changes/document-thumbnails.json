@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "document-thumbnails",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "document-thumbnails",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Thumbnails in Documents",
+          "paragraphs": [
+            "See thumbnails for supported PDFs and images in the document grid and beside the open document."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "document-thumbnails",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Vorschaubilder für Dokumente",
+          "paragraphs": [
+            "Unterstützte PDFs und Bilder erhalten ein Vorschaubild in der Übersicht und in der Liste neben dem geöffneten Dokument."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -44,6 +44,7 @@ struct DocumentRead {
     window: String,
     scope: String,
     reserved_until: Option<Instant>,
+    limit: u64,
     cancel: CancellationToken,
     published: Option<PublishedOriginal>,
 }
@@ -1240,8 +1241,12 @@ impl CapturedPlugin {
             caller: caller.map(|(id, incarnation)| (id.into(), incarnation.into())),
             check_owner: check_owner.into(),
             original: slot.or_else(|| {
-                (kind == "check" && generation.test_id.is_some())
-                    .then(|| Arc::new(OriginalSlot::new(uuid::Uuid::new_v4().to_string())))
+                (kind == "check" && generation.test_id.is_some()).then(|| {
+                    Arc::new(OriginalSlot::new(
+                        uuid::Uuid::new_v4().to_string(),
+                        crate::document_original::MAX_BYTES,
+                    ))
+                })
             }),
             progress,
             operation_gate: tokio::sync::Mutex::new(()),
@@ -2233,7 +2238,10 @@ pub enum Request {
     Stop,
     Activity,
     PendingPersistences,
-    ReserveDocumentRead,
+    ReserveDocumentRead {
+        #[serde(default)]
+        thumbnail: bool,
+    },
     CancelDocumentRead {
         #[serde(rename = "readId")]
         read_id: String,
@@ -2281,7 +2289,7 @@ pub async fn plugin_executor(
         request,
         Request::Snapshot
             | Request::Invoke { .. }
-            | Request::ReserveDocumentRead
+            | Request::ReserveDocumentRead { .. }
             | Request::CancelDocumentRead { .. }
     );
     let existing = if fresh {
@@ -2314,11 +2322,18 @@ pub async fn plugin_executor(
     let mut read_lease = None;
     let mut document_read = None;
     match &request {
-        Request::ReserveDocumentRead => {
+        Request::ReserveDocumentRead { thumbnail } => {
             let mut reads = lock(&executors.reads)?;
             let now = Instant::now();
             reads.retain(|_, read| read.reserved_until.is_none_or(|deadline| deadline > now));
-            if reads.len() >= 16 {
+            if reads.len() >= 16
+                || (*thumbnail
+                    && reads
+                        .values()
+                        .filter(|read| read.limit == crate::document_original::THUMBNAIL_READ_BYTES)
+                        .count()
+                        >= 2)
+            {
                 return Err("native.plugins.stateBusy".into());
             }
             let id = uuid::Uuid::new_v4().to_string();
@@ -2328,6 +2343,11 @@ pub async fn plugin_executor(
                     scope: context.scope.clone(),
                     window: context.window.clone(),
                     reserved_until: Some(now + Duration::from_secs(30)),
+                    limit: if *thumbnail {
+                        crate::document_original::THUMBNAIL_READ_BYTES
+                    } else {
+                        crate::document_original::MAX_BYTES
+                    },
                     cancel: CancellationToken::new(),
                     published: None,
                 },
@@ -2368,7 +2388,7 @@ pub async fn plugin_executor(
             entry.reserved_until = None;
             document_read = Some((
                 entry.cancel.clone(),
-                Arc::new(OriginalSlot::new(read_id.clone())),
+                Arc::new(OriginalSlot::new(read_id.clone(), entry.limit)),
             ));
             read_lease = Some(ReadLease {
                 reads: &executors.reads,
@@ -2421,7 +2441,7 @@ pub async fn plugin_executor(
         | Request::Activity
         | Request::PendingPersistences
         | Request::RetryPersistence { .. }
-        | Request::ReserveDocumentRead
+        | Request::ReserveDocumentRead { .. }
         | Request::CancelDocumentRead { .. } => unreachable!(),
         Request::Snapshot => Ok(
             json!({"plugins":tools.plugins.iter().map(|p|p.generation.snapshot(&p.definitions)).collect::<Vec<_>>(),"unavailable":tools.unavailable()}),

@@ -4,6 +4,7 @@ import { t } from "@situate/localization";
 import { SituateButton } from "@situate/ui";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import WorkingIndicator from "../components/WorkingIndicator.vue";
+import { checkPreviewSignature, loadPdf } from "./document-preview";
 
 const props = defineProps<{
   bytes?: Uint8Array<ArrayBuffer>;
@@ -39,10 +40,11 @@ watch(
 watch(
   () => [props.bytes, props.mimeType] as const,
   async ([bytes, mimeType], _, onCleanup) => {
-    let current = true;
+    const controller = new AbortController();
+    const { signal } = controller;
     let dispose: (() => void) | undefined;
     onCleanup(() => {
-      current = false;
+      controller.abort();
       dispose?.();
     });
     pdf.value = undefined;
@@ -53,40 +55,25 @@ watch(
     loading.value = true;
     if (!bytes || !mimeType) return;
     try {
+      checkPreviewSignature(bytes, mimeType);
       if (mimeType !== "application/pdf") {
-        const signature =
-          mimeType === "image/png"
-            ? [137, 80, 78, 71, 13, 10, 26, 10]
-            : [255, 216, 255];
-        if (!signature.every((part, index) => bytes[index] === part))
-          throw new Error();
         const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
         image.value = url;
         dispose = () => URL.revokeObjectURL(url);
         return;
       }
-      if (new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-")
-        throw new Error();
-      const [{ getDocument, GlobalWorkerOptions }, { default: worker }] =
-        await Promise.all([
-          import("pdfjs-dist"),
-          import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
-        ]);
-      if (!current) return;
-      GlobalWorkerOptions.workerSrc = worker;
-      const task = getDocument({
-        data: bytes,
-        useWasm: false,
-        useWorkerFetch: false,
-        maxImageSize: 16_000_000,
-      });
+      const task = await loadPdf(bytes, signal);
       dispose = () => void task.destroy().catch(() => undefined);
+      if (signal.aborted) {
+        dispose();
+        return;
+      }
       const document = await task.promise;
-      if (!current) return;
+      if (signal.aborted) return;
       pdf.value = document;
       total.value = document.numPages;
     } catch {
-      if (current) emit("failed");
+      if (!signal.aborted) emit("failed");
     }
   },
   { immediate: true },

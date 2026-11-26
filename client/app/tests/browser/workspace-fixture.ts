@@ -173,6 +173,8 @@ interface FixtureOptions {
   pluginSources?: Record<string, PluginSource>;
   pluginExportResults?: Record<string, Record<string, unknown>>;
   documentOriginals?: Record<string, string>;
+  documentThumbnailCache?: boolean;
+  holdDocumentChunks?: boolean;
   pluginSourceFiles?: Record<string, Record<string, string>>;
   pluginListError?: string;
   pluginDisablePhase?: "waiting" | "failed" | "uncertain";
@@ -384,26 +386,28 @@ export async function workspaceFixture(
         string,
         { scope: string; base64?: string }
       >();
+      const missingDocuments = new Set<string>();
+      Reflect.set(window, "__removeSourceDocument", (plugin: string) =>
+        missingDocuments.add(plugin),
+      );
       const documentGates = new Map<
         string,
         { ready: Promise<void>; release: () => void }
       >();
-      Reflect.set(
-        window,
-        "__holdDocumentReply",
-        (key: string, hold: boolean) => {
-          if (hold && !documentGates.has(key)) {
-            let release!: () => void;
-            const ready = new Promise<void>((resolve) => {
-              release = resolve;
-            });
-            documentGates.set(key, { ready, release });
-          } else if (!hold) {
-            documentGates.get(key)?.release();
-            documentGates.delete(key);
-          }
-        },
-      );
+      function holdDocumentReply(key: string, hold: boolean) {
+        if (hold && !documentGates.has(key)) {
+          let release!: () => void;
+          const ready = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          documentGates.set(key, { ready, release });
+        } else if (!hold) {
+          documentGates.get(key)?.release();
+          documentGates.delete(key);
+        }
+      }
+      Reflect.set(window, "__holdDocumentReply", holdDocumentReply);
+      if (options.holdDocumentChunks) holdDocumentReply("chunk", true);
       const modelErrors = new Map<string, string>();
       const conversations = new Map<string, ConversationRecord>(
         (options.aiConversations ?? []).map((record) => [
@@ -1725,6 +1729,43 @@ export async function workspaceFixture(
               preferences.set(String(args.scope), value);
               return structuredClone(value);
             }
+            if (
+              command === "document_thumbnail" &&
+              options.documentThumbnailCache
+            ) {
+              const request = args.request as {
+                operation: string;
+                source: {
+                  pluginId: string;
+                  incarnation: string;
+                  instanceId: string;
+                  scopeId: string;
+                };
+                id?: string;
+                revision?: string;
+                jpeg?: string;
+              };
+              const prefix = [
+                "thumbnail",
+                String(args.scope),
+                request.source.pluginId,
+                request.source.incarnation,
+                request.source.instanceId,
+                request.source.scopeId,
+                request.id,
+              ].join(":");
+              const key = `${prefix}:${request.revision}`;
+              if (request.operation === "lookup")
+                return { epoch: "fixture", jpeg: sessionStorage.getItem(key) };
+              if (request.operation === "store" && request.jpeg)
+                sessionStorage.setItem(key, request.jpeg);
+              if (request.operation === "forget") {
+                for (const key of Object.keys(sessionStorage))
+                  if (key.startsWith(`${prefix}:`))
+                    sessionStorage.removeItem(key);
+              }
+              return null;
+            }
             if (command === "plugin_document_chunk") {
               await documentGates.get("chunk")?.ready;
               const read = documentReads.get(String(args.id));
@@ -1859,6 +1900,21 @@ export async function workspaceFixture(
                   request.exportName === "documentLibraryReadOriginal" &&
                   request.readId
                 ) {
+                  if (missingDocuments.has(target.pluginId)) {
+                    const { version, source, scopeId, operation } =
+                      value as Record<string, unknown>;
+                    return {
+                      outcome: "completed",
+                      value: {
+                        version,
+                        source,
+                        scopeId,
+                        operation,
+                        status: "error",
+                        error: { code: "not-found" },
+                      },
+                    };
+                  }
                   const read = documentReads.get(request.readId);
                   const result = value as { original?: { id: string } };
                   if (result.original) {
