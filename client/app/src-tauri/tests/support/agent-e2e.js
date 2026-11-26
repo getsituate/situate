@@ -556,19 +556,42 @@
       );
     });
   }
-  async function attach(file) {
-    const input = await wait("attachment-control", () =>
-      document.querySelector('.chat-pane input[type="file"]'),
+  async function attachRetained(conversation, name, mimeType, bytes) {
+    const reference = await invoke("ai_attachment_put", {
+      scope: info.scope,
+      name,
+      mimeType,
+      bytes: Array.from(bytes),
+    });
+    const { generation, record } = await wait(
+      "settled-draft-before-retained-attachment",
+      async () => {
+        const snapshot = await liveSnapshot(conversation);
+        return snapshot.record.draft === field()?.value && snapshot;
+      },
     );
-    const transfer = new DataTransfer();
-    transfer.items.add(file);
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    await wait("attachment-retained", () =>
-      [...document.querySelectorAll(".draft-attachment")].some(
-        (element) =>
-          visible(element) && element.textContent.includes(file.name),
-      ),
+    const expected = {
+      text: record.draft,
+      attachments: record.runtime?.draftAttachments ?? [],
+      references: record.runtime?.draftReferences ?? [],
+    };
+    await invoke("ai_conversation_action", {
+      scope: info.scope,
+      conversation,
+      generation,
+      actionId: crypto.randomUUID(),
+      action: {
+        version: 1,
+        type: "draft",
+        expected,
+        input: {
+          ...expected,
+          attachments: [...expected.attachments, reference],
+        },
+      },
+    });
+    await wait("retained-attachment-in-draft", () =>
+      button("Remove attachment " + name),
     );
   }
   async function onboardingJourney() {
@@ -1020,15 +1043,18 @@
       );
       await wait("onboarding-chat-available", () => field());
       assert(!button("Go to workspace"), "onboarding-finale-repeated");
-      await attach(
-        new File([originals.json.text], "tasks.json", {
-          type: "application/json",
-        }),
+      const encoder = new TextEncoder();
+      await attachRetained(
+        conversationId,
+        "tasks.json",
+        "text/plain",
+        encoder.encode(originals.json.text),
       );
-      await attach(
-        new File([originals.markdown.text], "notes.md", {
-          type: "text/markdown",
-        }),
+      await attachRetained(
+        conversationId,
+        "notes.md",
+        "text/plain",
+        encoder.encode(originals.markdown.text),
       );
       await send(
         "[e2e:onboarding-import] Import the attached JSON export and Markdown note into imported-tasks.md and imported-notes.md. The attachments are copies of external originals, which must stay unchanged. JSON tasks are commitments: done is completion, created is the creation date, and due is the deadline. Keep sourceId, created, due and routingCode under those exact field names inside each task's metadata comment, using a JSON object as valid YAML with situate-task-id: null task intent. Publish using write or create_batch so native storage assigns fresh task UUIDs. Preserve the supplied note and its attachments; the Markdown checkbox is an ordinary packing checklist. Follow confirmed .situate/working-method.md. Scope and mappings are fully specified; perform the import now, then show the persisted destination files.",
@@ -2081,7 +2107,7 @@
       ),
       (char) => char.charCodeAt(0),
     );
-    await attach(new File([png], "pixel.png", { type: "image/png" }));
+    await attachRetained(record.id, "pixel.png", "image/png", png);
     await send(
       "[e2e:image] A small image is attached. Acknowledge it briefly; do not change files or use shell.",
     );
@@ -2136,8 +2162,11 @@
     );
     if (info.mode === "fixture") {
       const contextText = "Bounded synthetic context. ".repeat(100000);
-      await attach(
-        new File([contextText], "context.txt", { type: "text/plain" }),
+      await attachRetained(
+        record.id,
+        "context.txt",
+        "text/plain",
+        new TextEncoder().encode(contextText),
       );
       await send(
         "[e2e:long] Retain this synthetic context and reply briefly. Do not change files.",

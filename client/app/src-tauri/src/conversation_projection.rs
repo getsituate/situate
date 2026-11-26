@@ -32,14 +32,10 @@ fn image_block(attachment: &situate_core::attachment::AttachmentRef) -> Option<s
         .then(|| json!({"type":"image","mimeType":attachment.mime_type,"data":format!("attachment:{}",attachment.id)}))
 }
 
-pub(crate) fn attachment_block(
-    storage: &Storage,
+fn attachment_content(
     attachment: &situate_core::attachment::AttachmentRef,
+    bytes: Vec<u8>,
 ) -> Result<serde_json::Value, String> {
-    let (retained, bytes) = storage.read_attachment(&attachment.id)?;
-    if retained != *attachment {
-        return Err("chat.attachmentUnsupported".into());
-    }
     if let Some(image) = image_block(attachment) {
         return Ok(image);
     }
@@ -49,6 +45,48 @@ pub(crate) fn attachment_block(
     Ok(
         json!({"type":"text","text":format!("{}\n{}",attachment.name,String::from_utf8(bytes).map_err(|_| "chat.attachmentEncoding")?)}),
     )
+}
+
+pub(crate) fn model_reference(
+    store: &situate_core::content::ContentStore,
+    reference: &situate_core::conversation_runtime::ContentReference,
+    scope: &str,
+) -> Result<serde_json::Value, String> {
+    use situate_core::conversation_runtime::ContentReference;
+    if reference.workspace_id() != scope || !reference.validate() {
+        return Err("native.content.reference.invalid".into());
+    }
+    match reference {
+        ContentReference::Live { .. } => {
+            let path = store
+                .resolve_reference_path(reference)
+                .map_err(|error| error.to_string())?
+                .ok_or("references.unavailable")?;
+            Ok(json!({"kind":"live","path":path}))
+        }
+        ContentReference::Historical { path, revision, .. } => {
+            Ok(json!({"kind":"historical","path":path,"revision":revision}))
+        }
+    }
+}
+
+pub(crate) fn model_attachment_block(
+    storage: &Storage,
+    attachment: &situate_core::attachment::AttachmentRef,
+    path: impl FnOnce() -> Result<Option<std::path::PathBuf>, String>,
+) -> Result<serde_json::Value, String> {
+    let (retained, bytes) = storage.read_attachment(&attachment.id)?;
+    if retained != *attachment {
+        return Err("chat.attachmentUnsupported".into());
+    }
+    if situate_core::attachment::is_path_attachment(attachment, &bytes) {
+        let target = match path()? {
+            Some(path) => json!({"kind":"external","path":path}),
+            None => json!({"kind":"external","name":attachment.name,"available":false}),
+        };
+        return Ok(json!({"type":"text","text":format!("Attached file (path data): {target}")}));
+    }
+    attachment_content(attachment, bytes)
 }
 
 pub(crate) fn hydrate_input(storage: &Storage, entry: &mut HistoryEntry) -> Result<(), String> {
@@ -79,7 +117,17 @@ pub(crate) fn hydrate_input(storage: &Storage, entry: &mut HistoryEntry) -> Resu
     };
     for attachment in attachments {
         let block = image_block(&attachment).unwrap_or_else(|| {
-            attachment_block(storage, &attachment)
+            storage
+                .read_attachment(&attachment.id)
+                .and_then(|(retained, bytes)| {
+                    if retained != attachment {
+                        return Err("chat.attachmentUnsupported".into());
+                    }
+                    if situate_core::attachment::is_path_attachment(&retained, &bytes) {
+                        return Ok(json!({"type":"text","text":retained.name}));
+                    }
+                    attachment_content(&retained, bytes)
+                })
                 .unwrap_or_else(|_| json!({"type":"text","text":attachment.name}))
         });
         blocks.push(block);
@@ -154,6 +202,88 @@ pub(crate) fn hydrate_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn live_binary_references_supply_the_current_relative_path_without_file_contents() {
+        use situate_core::content::ContentStore;
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().canonicalize().unwrap();
+        std::fs::create_dir(workspace.join(".situate")).unwrap();
+        let mut content = ContentStore::open(&workspace).unwrap();
+        std::fs::write(workspace.join("data.bin"), [0, 255]).unwrap();
+        let reference = content
+            .capture_reference("scope", "data.bin", None)
+            .unwrap();
+        content.move_entry("data.bin", "renamed.bin").unwrap();
+        assert_eq!(
+            model_reference(&content, &reference, "scope").unwrap(),
+            json!({"kind":"live","path":"renamed.bin"})
+        );
+        assert!(model_reference(&content, &reference, "different-scope").is_err());
+        let situate_core::conversation_runtime::ContentReference::Live {
+            anchor_revision, ..
+        } = reference
+        else {
+            unreachable!()
+        };
+        let historical = situate_core::conversation_runtime::ContentReference::Historical {
+            workspace_id: "scope".into(),
+            path: "data.bin".into(),
+            revision: anchor_revision.clone(),
+        };
+        assert_eq!(
+            model_reference(&content, &historical, "scope").unwrap(),
+            json!({"kind":"historical","path":"data.bin","revision":anchor_revision})
+        );
+    }
+
+    #[test]
+    fn external_attachments_supply_only_the_local_path_or_an_unavailable_reference() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let workspace = root.join("workspace");
+        let device = root.join("device");
+        std::fs::create_dir_all(workspace.join(".situate")).unwrap();
+        std::fs::create_dir(&device).unwrap();
+        let storage = Storage::open(&workspace, "scope")
+            .unwrap()
+            .with_device_store(&device)
+            .unwrap();
+        let source = root.join("report.xlsx");
+        std::fs::write(&source, b"Never sent as part of the initial request").unwrap();
+        let attachment = storage.put_path_attachment(&source).unwrap();
+        let block = model_attachment_block(&storage, &attachment, || {
+            storage.read_attachment_path(&attachment)
+        })
+        .unwrap();
+        let expected = format!(
+            "Attached file (path data): {}",
+            json!({"kind":"external","path":source})
+        );
+        assert_eq!(block, json!({"type":"text","text":expected}));
+        let fallback = model_attachment_block(&storage, &attachment, || Ok(None)).unwrap();
+        let target: serde_json::Value = serde_json::from_str(
+            fallback["text"]
+                .as_str()
+                .unwrap()
+                .strip_prefix("Attached file (path data): ")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            target,
+            json!({"available":false,"kind":"external","name":"report.xlsx"})
+        );
+
+        let old = storage
+            .put_attachment("text/plain", "old.txt", b"Retained input")
+            .unwrap();
+        assert_eq!(
+            model_attachment_block(&storage, &old, || panic!("old attachment has no path"))
+                .unwrap(),
+            json!({"type":"text","text":"old.txt\nRetained input"})
+        );
+    }
+
     fn attachment_fixture() -> (tempfile::TempDir, Storage) {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join(".situate")).unwrap();

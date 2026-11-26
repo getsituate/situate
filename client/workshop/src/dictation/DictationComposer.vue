@@ -79,7 +79,6 @@ defineExpose({ focus: () => composer.value?.focus() });
       :label="c.message"
       :placeholder="c.message"
       :send-label="draft.working ? c.queue : c.send"
-      compact
       @edit="emit('action', { type: 'edit', owner, ...$event })"
       @selection="
         emit('action', { type: 'selection', owner, selection: $event })

@@ -18,6 +18,7 @@ import {
 } from "../ui";
 import EditorChatPane from "./EditorChatPane.vue";
 import EditorDialog from "./EditorDialog.vue";
+import foldedMap from "../brand/assets/folded-map.svg";
 import SituateMenu from "../ui/SituateMenu.vue";
 import ConflictReview from "./ConflictReview.vue";
 import { conflictBlocksFile } from "./conflicts";
@@ -27,6 +28,7 @@ import { diffLines } from "./markdown";
 import {
   affectedFiles,
   applyItemAction,
+  attachmentKey,
   closePane,
   currentFile,
   deleteItem,
@@ -44,12 +46,19 @@ import {
   setMode,
   targetFolder,
   targetLabel,
+  type DraftAttachment,
   type EditorState,
   type FileReference,
+  type ImageAttachment,
   type ItemAction,
   type ItemTarget,
 } from "./model";
 import { useEditorState } from "./use-editor-state";
+
+const venueMap: ImageAttachment = {
+  name: "venue-map.svg",
+  previewUrl: foldedMap,
+};
 
 const props = withDefaults(
   defineProps<{
@@ -494,21 +503,16 @@ function discardChat() {
   update((next) => closePane(next, key));
   void nextTick(focusPane);
 }
-function attach(key: string) {
+function attach(attachment: DraftAttachment) {
   if (dialog.value?.kind !== "attach") return;
   const chatKey = dialog.value.key;
+  const key = attachmentKey(attachment);
   update((next) => {
-    flushSaves(next);
-    const chat = next.chats.find((item) => item.key === chatKey),
-      target = liveFiles(next).find((item) => item.key === key);
-    if (
-      chat &&
-      target &&
-      !chat.references.some(
-        (reference) => reference.fileKey === key && !reference.version,
-      )
-    )
-      chat.references.push({ fileKey: key, name: target.name, version: null });
+    const chat = next.chats.find((item) => item.key === chatKey);
+    if (chat && !chat.attachments.some((item) => attachmentKey(item) === key)) {
+      flushSaves(next);
+      chat.attachments.push(attachment);
+    }
   });
   dialog.value = null;
   void nextTick(focusPane);
@@ -530,9 +534,9 @@ function updateChat(key: string, value: string) {
     }
   });
 }
-function removeReference(key: string, index: number) {
+function removeAttachment(key: string, index: number) {
   update((next) => {
-    next.chats.find((item) => item.key === key)?.references.splice(index, 1);
+    next.chats.find((item) => item.key === key)?.attachments.splice(index, 1);
   });
 }
 function shortcut(event: KeyboardEvent) {
@@ -918,7 +922,7 @@ function shortcut(event: KeyboardEvent) {
               : undefined
           "
           @draft="updateChat(chat.key, $event)"
-          @remove="removeReference(chat.key, $event)"
+          @remove="removeAttachment(chat.key, $event)"
           @open="followReference"
           @attach="dialog = { kind: 'attach', key: chat.key }"
           @close="requestClose(chat.key)"
@@ -1275,11 +1279,13 @@ function shortcut(event: KeyboardEvent) {
           variant="plain"
           v-for="item in liveFiles(state)"
           :key="item.key"
-          @click="attach(item.key)"
+          @click="attach({ fileKey: item.key, name: item.name, version: null })"
         >
           {{ item.name }} · {{ item.folder || "Personal" }}
         </SituateButton>
-        <p v-if="!liveFiles(state).length">No files in this workspace.</p>
+        <SituateButton variant="plain" @click="attach(venueMap)">
+          {{ venueMap.name }}
+        </SituateButton>
       </div></EditorDialog
     >
   </section>

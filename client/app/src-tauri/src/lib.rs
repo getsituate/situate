@@ -10,6 +10,7 @@ mod analytics;
 mod appearance;
 mod auth_callback;
 mod change_history;
+mod chat_attachments;
 mod keyboard_shortcuts;
 
 mod conversation_projection;
@@ -150,6 +151,8 @@ macro_rules! application_handler {
             crate::ai_conversations::ai_model_check_cancel,
             crate::ai::ai_attachment_put,
             crate::ai::ai_attachment_read,
+            crate::chat_attachments::ai_attachment_pick,
+            crate::chat_attachments::ai_attachment_preview,
             crate::ai::ai_conversations,
             crate::ai::ai_conversation_read,
             crate::ai::ai_create_conversation,

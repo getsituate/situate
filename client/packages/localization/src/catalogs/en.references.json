@@ -1,4 +1,5 @@
 {
+  "references.tooMany": "You can attach up to 32 workspace files to one message.",
   "references.invalid": "This content reference does not belong to this workspace or is invalid.",
   "references.unavailable": "Referenced content could not be read. Check the reference or remove it before sending.",
   "references.tooLarge": "The referenced content is too large. Choose fewer or smaller files before sending.",

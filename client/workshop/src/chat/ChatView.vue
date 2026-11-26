@@ -410,7 +410,6 @@ onBeforeUnmount(() => clearInterval(timer));
           <slot name="composer"
             ><NavigationComposer
               ref="composer"
-              compact
               :working="state.phase === 'working'"
               :allow-followup="state.workTimeMs !== undefined"
               :label="dockedQuestion ? questionCopy.answerLabel : undefined"

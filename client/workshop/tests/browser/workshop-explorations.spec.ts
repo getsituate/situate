@@ -293,7 +293,7 @@ test("source edits autosave, protect IDs, survive reconnection and recover from 
   await expect(preview.locator(".save-state")).toHaveText("Saved");
 });
 
-test("file history is read-only and file chat keeps an attachment and draft", async ({
+test("file history is read-only and file chat shows draft attachments above the input", async ({
   page,
 }) => {
   const preview = await open(page, "files-history");
@@ -313,8 +313,51 @@ test("file history is read-only and file chat keeps an attachment and draft", as
     exact: true,
   });
   await message.fill("Discuss this note");
-  await expect(preview.locator(".attachment-chip")).toHaveCount(1);
-  await preview.locator(".attachment-link").click();
+  const attach = preview.locator(".input-line").getByRole("button", {
+    name: "Attach file",
+    exact: true,
+  });
+  await expect(attach).toHaveText("");
+  await attach.focus();
+  await preview.keyboard.press("Enter");
+  const picker = preview.getByRole("dialog", { name: "Attach a file" });
+  await expect(picker).toBeVisible();
+  await preview.keyboard.press("Escape");
+  await expect(attach).toBeFocused();
+  await attach.click();
+  await picker
+    .getByRole("button", { name: "venue-map.svg", exact: true })
+    .click();
+  await expect(message).toBeFocused();
+
+  const attachments = preview.getByRole("list", { name: "Attachments" });
+  await expect(attachments.getByRole("listitem")).toHaveCount(2);
+  await expect(attachments).toContainText("outline.md");
+  await expect(attachments).not.toContainText("venue-map.svg");
+  const thumbnail = attachments.getByRole("img", { name: "venue-map.svg" });
+  await expect(thumbnail).toBeVisible();
+  await expect(thumbnail).toHaveJSProperty("complete", true);
+  expect(
+    await thumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth),
+  ).toBeGreaterThan(0);
+  const items = attachments.getByRole("listitem");
+  const noteFill = await items
+    .filter({ hasText: "outline.md" })
+    .evaluate((item) => getComputedStyle(item).backgroundColor);
+  await expect(
+    items.filter({ has: preview.getByRole("img", { name: "venue-map.svg" }) }),
+  ).toHaveCSS("background-color", noteFill);
+  const listBox = (await attachments.boundingBox())!;
+  const inputBox = (await preview.locator(".input-line").boundingBox())!;
+  expect(listBox.y + listBox.height).toBeLessThan(inputBox.y);
+
+  await attachments
+    .getByRole("button", { name: "Remove attachment venue-map.svg" })
+    .click();
+  await expect(thumbnail).toHaveCount(0);
+  await expect(attachments.getByRole("listitem")).toHaveCount(1);
+  await expect(message).toBeFocused();
+  await attachments.getByRole("button", { name: /^Open outline\.md/ }).click();
   await expect(
     preview.getByRole("heading", { name: "outline.md", exact: true }),
   ).toBeVisible();

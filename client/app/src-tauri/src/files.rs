@@ -613,7 +613,7 @@ fn external_reference_path(
         .ok_or("native.files.provider.readOnly")?
         .resolve_reference_path(reference)
         .map_err(err)?
-        .ok_or_else(|| "native.files.external.openFailed".into())
+        .ok_or_else(|| "references.unavailable".into())
 }
 
 fn require_external_binary(path: &str, bytes: &[u8]) -> Result<(), String> {
@@ -1894,7 +1894,7 @@ fn relative_resource(document: &str, target: &str) -> Result<String, String> {
     safe_parts(&result)?;
     Ok(result)
 }
-fn read_local(root: &Path, path: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn read_local(root: &Path, path: &str) -> Result<Vec<u8>, String> {
     use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
     use std::io::Read;
     let parts = safe_parts(path)?;
@@ -1980,7 +1980,7 @@ fn image_data(
     let bytes = read_bytes(app, location, root, path)?;
     image_bytes(&bytes)
 }
-fn image_bytes(bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn image_bytes(bytes: &[u8]) -> Result<String, String> {
     let mime = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         "image/png"
     } else if bytes.starts_with(b"\xff\xd8\xff") {

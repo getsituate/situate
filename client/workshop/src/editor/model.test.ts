@@ -268,8 +268,13 @@ describe("independent chats and references", () => {
     first.draft = "Which part could be shorter?";
     selectFile(state, "preparation.md");
     openChat(state, referenceForCurrent(state));
-    expect(first.references[0].fileKey).toBe("outline.md");
-    expect(state.chats[1].references[0].fileKey).toBe("preparation.md");
+    const reference = first.attachments[0];
+    expect(reference).toMatchObject({ fileKey: "outline.md" });
+    expect(state.chats[1].attachments[0]).toMatchObject({
+      fileKey: "preparation.md",
+    });
+    if (!("fileKey" in reference))
+      throw new Error("Expected a file reference.");
     expect(state.chats[1].draft).toBe("");
     applyItemAction(
       state,
@@ -279,7 +284,7 @@ describe("independent chats and references", () => {
       "Projects/Autumn workshop",
     );
     applyItemAction(state, "move", outline, "workshop-plan.md", "Resources");
-    expect(resolveReference(state, first.references[0])).toEqual({
+    expect(resolveReference(state, reference)).toEqual({
       name: "workshop-plan.md",
       detail: "Resources",
       state: "ready",
@@ -288,7 +293,9 @@ describe("independent chats and references", () => {
   });
   it("shows pending, failed and missing states and opens the latest live draft", () => {
     const state = createEditorState("chat"),
-      reference = state.chats[0].references[0];
+      reference = state.chats[0].attachments[0];
+    if (!("fileKey" in reference))
+      throw new Error("Expected a file reference.");
     state.files[0].draft += "\nLater";
     expect(resolveReference(state, reference).state).toBe("saving");
     state.saveOutcome = "failure";
@@ -306,7 +313,7 @@ describe("independent chats and references", () => {
     const state = createEditorState("chat");
     state.chats[0].draft = "Keep this";
     openChat(state);
-    expect(state.chats[1].references).toEqual([]);
+    expect(state.chats[1].attachments).toEqual([]);
     closePane(state, state.chats[1].key);
     expect(state.chats[0].draft).toBe("Keep this");
     closePane(state, "files");

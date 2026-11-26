@@ -99,8 +99,13 @@ Compaction does not bound history bytes or individual results.
 
 Structured content references remain workspace-relative in storage.
 Native readers bind them to the authorized local workspace session without rewriting their selectors or embedded user text; see <<git-derived-file-references>>.
-Attachments retain their existing durable identities and storage boundary.
-Native presentation reconstructs attached text and image references from the saved input without adding resolved payload copies to history.
+Previously copied attachments retain their durable identities and storage boundary.
+An external file selected for chat uses the existing attachment record to retain its identity and name.
+The record does not contain the selected path or file contents.
+The absolute path is bound to that identity in the selecting device's workspace-specific store.
+Older readers can keep and display the attachment, and a device without the binding cannot reopen the original.
+The native owner includes the path in model requests but does not add it to the saved attachment or original user message.
+Native presentation reconstructs legacy attached text and image references without adding resolved payload copies to history.
 Credentials and operational AI settings remain device-local, outside portable conversation history.
 
 Migration 2 converts published version-2 conversations through the existing <<workspace-migrations,workspace migration runner>>, not a second backup or activation protocol.

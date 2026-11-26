@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
-import {
-  SituateIcon,
-  SituateIconButton,
-  SituateTextarea,
-  SituateButton,
-} from "../ui";
+import { computed, onMounted, ref } from "vue";
+import { SituateIcon, SituateIconButton, SituateButton } from "../ui";
+import ChatComposer from "../components/ChatComposer.vue";
 import ChatPaneHeader from "../components/ChatPaneHeader.vue";
 import ChatMessage from "../components/ChatMessage.vue";
 import FilePreviewButton from "../components/FilePreviewButton.vue";
 import bend from "../brand/bend/svg/wave-welcome.svg";
 import {
+  attachmentKey,
   resolveReference,
   type EditorChat,
   type EditorState,
@@ -32,34 +29,29 @@ const emit = defineEmits<{
   close: [];
   openNavigation: [event: MouseEvent];
 }>();
-const input = ref<InstanceType<typeof SituateTextarea>>();
-const references = computed(() =>
-  props.chat.references.map((reference) => ({
-    reference,
-    ...resolveReference(props.state, reference),
-  })),
+const composer = ref<InstanceType<typeof ChatComposer>>();
+const attachments = computed(() =>
+  props.chat.attachments.map((attachment) => {
+    const key = attachmentKey(attachment);
+    return "fileKey" in attachment
+      ? {
+          key,
+          kind: "reference" as const,
+          reference: attachment,
+          ...resolveReference(props.state, attachment),
+        }
+      : { key, kind: "image" as const, ...attachment };
+  }),
 );
 const replyFile = computed(() => {
   const exchange = props.chat.exchange;
   return exchange ? resolveReference(props.state, exchange.file) : null;
 });
-function fit() {
-  const element = input.value?.element;
-  if (element?.clientWidth) {
-    element.style.height = "44px";
-    element.style.height = `${element.scrollHeight}px`;
-  }
-}
-watch(
-  () => [props.chat.draft, props.visible],
-  () => nextTick(fit),
-);
 onMounted(() => {
-  if (props.visible && !props.chat.exchange) input.value?.element?.focus();
-  fit();
+  if (props.visible && !props.chat.exchange) focus();
 });
 function focus() {
-  input.value?.element?.focus();
+  composer.value?.focus();
 }
 defineExpose({ focus });
 </script>
@@ -116,80 +108,69 @@ defineExpose({ focus });
           <img :src="bend" width="128" height="128" alt="" />
           <h3>Good to see you.</h3>
         </div>
-        <div class="composer">
-          <div class="input-line">
-            <SituateTextarea
-              appearance="plain"
-              ref="input"
-              :value="chat.draft"
-              rows="1"
-              aria-label="Message"
-              placeholder="Message…"
-              spellcheck="false"
-              @input="
-                emit('draft', ($event.target as HTMLTextAreaElement).value)
-              "
-            />
-            <div class="input-actions">
-              <SituateIconButton
-                icon="mic"
-                label="Dictate text"
-                disabled
-                unavailable-reason="Dictation is not connected."
-              /><SituateIconButton
-                icon="arrow"
-                label="Send message"
-                variant="primary"
-                disabled
-                unavailable-reason="Chat processing is not connected."
-              />
-            </div>
-          </div>
-          <div class="composer-bottom">
-            <div
-              v-for="(item, index) in references"
-              :key="
-                item.reference.fileKey +
-                ':' +
-                (item.reference.version?.key || 'live')
-              "
-              class="attachment-chip"
-              :data-state="item.state"
+        <ChatComposer
+          ref="composer"
+          class="file-chat-composer"
+          :model-value="chat.draft"
+          :readonly="false"
+          attach-dialog
+          unavailable-reason="Chat processing is not connected."
+          @update:model-value="emit('draft', $event)"
+          @attach="emit('attach')"
+        >
+          <template #attachments>
+            <ul
+              v-if="attachments.length"
+              class="attachments"
+              aria-label="Attachments"
+              role="list"
             >
-              <SituateButton
-                variant="plain"
-                class="attachment-link"
-                type="button"
-                :disabled="item.state === 'missing'"
-                :title="item.name + ' — ' + item.detail"
-                :aria-label="'Open ' + item.name + ', ' + item.detail"
-                @click="emit('open', item.reference)"
+              <li
+                v-for="(item, index) in attachments"
+                :key="item.key"
+                class="attachment-chip"
+                :data-state="item.kind === 'reference' ? item.state : 'ready'"
               >
-                <SituateIcon name="notes" /><span
-                  ><strong>{{ item.name }}</strong
-                  ><small>{{ item.detail }}</small></span
+                <img
+                  v-if="item.kind === 'image'"
+                  class="attachment-preview"
+                  :src="item.previewUrl"
+                  :alt="item.name"
+                  :title="item.name"
+                />
+                <SituateButton
+                  v-else
+                  variant="plain"
+                  class="attachment-link"
+                  type="button"
+                  :disabled="item.state === 'missing'"
+                  :title="item.name + ' — ' + item.detail"
+                  :aria-label="'Open ' + item.name + ', ' + item.detail"
+                  @click="emit('open', item.reference)"
                 >
-              </SituateButton>
-              <SituateIconButton
-                class="remove-reference"
-                icon="close"
-                :label="'Remove reference to ' + item.name"
-                @click="
-                  emit('remove', index);
-                  focus();
-                "
-              />
-            </div>
-            <SituateButton
-              variant="plain"
-              class="attach-file"
-              type="button"
-              @click="emit('attach')"
-            >
-              <SituateIcon name="attach" />Attach file
-            </SituateButton>
-          </div>
-        </div>
+                  <SituateIcon name="notes" />
+                  <span>
+                    <strong>{{ item.name }}</strong>
+                    <small>{{ item.detail }}</small>
+                  </span>
+                </SituateButton>
+                <SituateIconButton
+                  class="remove-attachment"
+                  icon="close"
+                  :label="
+                    (item.kind === 'reference'
+                      ? 'Remove reference to '
+                      : 'Remove attachment ') + item.name
+                  "
+                  @click="
+                    emit('remove', index);
+                    focus();
+                  "
+                />
+              </li>
+            </ul>
+          </template>
+        </ChatComposer>
       </div>
     </div>
   </section>
@@ -255,36 +236,16 @@ defineExpose({ focus });
   font-weight: 600;
   letter-spacing: -0.04em;
 }
-.input-line {
-  display: flex;
-  align-items: flex-end;
-  padding: 8px;
-  border: 1px solid var(--situate-control-line);
-  border-radius: var(--situate-radius-control);
+.file-chat-composer {
+  margin-top: 0;
 }
-.input-line textarea {
-  flex: 1;
-  min-width: 0;
-  max-height: 35dvh;
-  resize: none;
-  border: 0;
-  outline: none;
-  padding: 12px 8px;
-  font: inherit;
-  background: transparent;
-  color: var(--situate-ink);
-}
-.input-actions {
-  display: flex;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-.composer-bottom {
+.attachments {
   display: flex;
   flex-wrap: wrap;
   gap: var(--situate-space-2);
-  align-items: stretch;
-  margin-top: var(--situate-space-2);
+  margin: 0 0 var(--situate-space-2);
+  padding: 0;
+  list-style: none;
 }
 .attachment-chip {
   display: flex;
@@ -330,26 +291,20 @@ defineExpose({ focus });
   line-height: 1.4;
   color: var(--situate-muted);
 }
-.remove-reference {
+.attachment-preview {
+  display: block;
+  width: 72px;
+  height: 50px;
+  object-fit: contain;
+  border-radius: calc(var(--situate-radius-control) - 1px) 0 0
+    calc(var(--situate-radius-control) - 1px);
+}
+.remove-attachment {
   height: auto;
   align-self: stretch;
   border-radius: 0 var(--situate-radius-control) var(--situate-radius-control) 0;
 }
-.attach-file {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 52px;
-  padding: 6px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--situate-radius-control);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-  background: transparent;
-  color: var(--situate-muted);
-}
-.composer-bottom :deep(svg) {
+.attachment-link :deep(svg) {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
@@ -367,8 +322,7 @@ button:focus-visible {
   background: var(--situate-note);
 }
 @media (hover: hover) {
-  .attachment-link:not(:disabled):hover,
-  .attach-file:hover {
+  .attachment-link:not(:disabled):hover {
     background: var(--situate-accent-soft, var(--situate-lilac));
     color: var(--situate-ink);
   }
@@ -380,9 +334,6 @@ button:focus-visible {
   .transcript,
   .chat-footer {
     padding-inline: 16px;
-  }
-  .input-actions {
-    flex-direction: column;
   }
 }
 </style>

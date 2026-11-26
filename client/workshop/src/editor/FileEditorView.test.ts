@@ -208,7 +208,9 @@ describe("file editor view", () => {
   });
   it("supports independent chats, attachments, missing references and close confirmation", async () => {
     const { wrapper, state } = view("chat");
-    await wrapper.get('[aria-label="Message"]').setValue("Keep my draft");
+    await wrapper
+      .get('[data-chat="chat-1"] textarea')
+      .setValue("Keep my draft");
     await button(wrapper, "New chat with this file");
     expect(state().chats).toHaveLength(2);
     expect(state().chats[0].draft).toBe("Keep my draft");
@@ -217,10 +219,28 @@ describe("file editor view", () => {
     await second
       .get('[aria-label="Remove reference to outline.md"]')
       .trigger("click");
-    expect(state().chats[1].references).toEqual([]);
-    await second.get(".attach-file").trigger("click");
+    expect(state().chats[1].attachments).toEqual([]);
+    const attach = second.get('.input-line [aria-label="Attach file"]');
+    await attach.trigger("click");
     await button(wrapper, "preparation.md · Projects/Autumn workshop");
-    expect(state().chats[1].references[0].fileKey).toBe("preparation.md");
+    await attach.trigger("click");
+    await button(wrapper, "venue-map.svg");
+    await attach.trigger("click");
+    await button(wrapper, "venue-map.svg");
+    expect(state().chats[1].attachments).toMatchObject([
+      { fileKey: "preparation.md" },
+      { name: "venue-map.svg" },
+    ]);
+    expect(second.get("img.attachment-preview").attributes("alt")).toBe(
+      "venue-map.svg",
+    );
+    await second
+      .get('[aria-label="Remove attachment venue-map.svg"]')
+      .trigger("click");
+    expect(second.find(".attachment-preview").exists()).toBe(false);
+    expect(state().chats[0].attachments).toMatchObject([
+      { fileKey: "outline.md" },
+    ]);
     await second.get(".attachment-link").trigger("click");
     expect(state().currentKey).toBe("preparation.md");
     await action(wrapper, "Delete…");

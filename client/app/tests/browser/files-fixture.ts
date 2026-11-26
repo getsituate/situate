@@ -386,10 +386,21 @@ export async function filesFixture(
               status: "ok",
               document: doc(path, "# Earlier garden\n\nA quiet corner."),
             };
-          case "openExternal":
-            return path.endsWith(".md")
-              ? { status: "ok", document: doc(path) }
+          case "openExternal": {
+            const reference = request.reference;
+            const resolved =
+              reference?.kind === "live"
+                ? capturedPaths.get(
+                    JSON.stringify([reference.path, reference.anchorRevision]),
+                  )
+                : path;
+            if (resolved === undefined || (reference && !(resolved in files))) {
+              throw new Error("references.unavailable");
+            }
+            return resolved.endsWith(".md")
+              ? { status: "ok", document: doc(resolved) }
               : reply;
+          }
           case "discard":
             delete drafts[path];
             return reply;

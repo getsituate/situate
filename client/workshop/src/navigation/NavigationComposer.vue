@@ -7,7 +7,6 @@ defineProps<{
   label?: string;
   showLabel?: boolean;
   description?: string;
-  compact?: boolean;
   working?: boolean;
   allowFollowup?: boolean;
   sendEnabled?: boolean;
@@ -29,7 +28,6 @@ defineExpose({ focus: () => composer.value?.focus() });
     :label="label"
     :show-label="showLabel"
     :description="description"
-    :compact="compact"
     :working="working"
     :enabled="sendEnabled && (!working || allowFollowup)"
     :unavailable-reason="sendUnavailableReason"

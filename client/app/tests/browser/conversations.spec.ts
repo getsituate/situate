@@ -10,6 +10,86 @@ import { emptyLayout, reduceLayout } from "../../src/layout/model";
 
 test.use({ localizationMode: "real" });
 
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+]) {
+  test(
+    `mixed file attachments show paths and thumbnails above the message at ${viewport.width}px`,
+    { tag: viewport.width < 600 ? "@visual-mobile" : "@visual-desktop" },
+    async ({ page, visual }) => {
+      await workspaceFixture(
+        page,
+        { ...shellState, mobile: viewport.width < 600 },
+        {
+          aiConversations: [{ id: "legacy", title: "Garden plans", draft: "" }],
+          aiFileSelection: {
+            attachments: [
+              {
+                id: "external-image",
+                name: "photo.png",
+                mimeType: "text/plain",
+                size: 127,
+              },
+            ],
+            references: ["Plans/garden.xlsx", "Images/map.png"].map((path) => ({
+              kind: "live",
+              workspaceId: "garden",
+              path,
+              anchorRevision: "a".repeat(40),
+            })),
+            failed: false,
+          },
+          aiAttachmentPreviews: {
+            "external-image":
+              "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAQCAIAAACDRijCAAAAYUlEQVR42mM4cOMdVRDDgBn063QyBFFkENwUTLNoaVDj7A4qGAQ0BYIoCiO4KfjNIhBraKaQahYDHlNIMosBvynEm8VA0BQizSLWoKCOYkxErEFYNeNCDJRoRjeIbM3ICABlqC8+ZphuLgAAAABJRU5ErkJggg==",
+            "Images/map.png":
+              "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA8AAAAYCAIAAACqZzA+AAAAaklEQVR42mO4cnApJioL2odVnAGIf7w8gYwgqtFELjy4BkS0Vk2807GbDSSRjSfgEuqpJt7pOM1GNp6wS0hTDVSKifC5G9Pp+FwCdwxR7qaGauKdTsBsiPHEuoRi1cQ7nbDZEOOJdQn5qgGAWVz82Sgg8gAAAABJRU5ErkJggg==",
+          },
+        },
+      );
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      const draft = page.getByRole("textbox", { name: "Message", exact: true });
+      await draft.fill("Keep the notes");
+      await page
+        .getByRole("button", { name: "Attach file", exact: true })
+        .click();
+
+      const attachments = page.getByRole("list", { name: "Attachments" });
+      const preview = attachments.getByRole("img", { name: "photo.png" });
+      const workspaceImage = page.getByRole("img", { name: "map.png" });
+      for (const image of [preview, workspaceImage]) {
+        await expect(image).toBeVisible();
+        await expect
+          .poll(() =>
+            image.evaluate((img) => (img as HTMLImageElement).naturalWidth),
+          )
+          .toBeGreaterThan(0);
+      }
+      await expect(attachments).not.toContainText("photo.png");
+      const workspaceReference = attachments.getByText("Plans/garden.xlsx", {
+        exact: true,
+      });
+      await expect(workspaceReference).toBeVisible();
+      const bounds = (await attachments.boundingBox())!;
+      expect(bounds.y + bounds.height).toBeLessThan(
+        (await draft.boundingBox())!.y,
+      );
+      await expect(attachments.getByRole("listitem")).toHaveCount(3);
+      await visual.capture("chat.composer.file-attachments");
+
+      await attachments
+        .getByRole("button", { name: "Remove attachment photo.png" })
+        .click();
+      await expect(preview).toHaveCount(0);
+      await expect(workspaceReference).toBeVisible();
+      await expect(draft).toBeFocused();
+      await expect(draft).toHaveValue("Keep the notes");
+    },
+  );
+}
+
 for (const target of [
   { kind: "conversation", conversationId: "deleted" },
   { kind: "view", viewId: "missing:board", contentId: "old-item" },

@@ -53,6 +53,10 @@ const fixtureMetadata = Object.fromEntries(
     ]),
 );
 import type { WorkspaceAiSettings } from "../../src/ai/settings";
+import type {
+  AttachmentPreviewTarget,
+  FileSelection,
+} from "../../src/ai/attachment-runtime";
 import type { ConversationRecord } from "../../src/ai/conversation-record";
 import type {
   ConversationSnapshot,
@@ -164,6 +168,8 @@ interface FixtureOptions {
   createError?: string;
   aiReason?: string;
   aiConversationTitle?: string;
+  aiFileSelection?: FileSelection;
+  aiAttachmentPreviews?: Record<string, string>;
   aiConversations?: (Pick<
     ConversationRecord,
     "id" | "title" | "draft" | "development"
@@ -2686,6 +2692,25 @@ export async function workspaceFixture(
               command === "ai_cancel_close"
             )
               return;
+            if (command === "ai_attachment_pick") {
+              return (
+                options.aiFileSelection ?? {
+                  attachments: [],
+                  references: [],
+                  failed: false,
+                }
+              );
+            }
+            if (command === "ai_attachment_preview") {
+              const target = args.target as AttachmentPreviewTarget;
+              const key =
+                target.kind === "attachment"
+                  ? target.id
+                  : target.reference.path;
+              const preview = options.aiAttachmentPreviews?.[key];
+              if (!preview) throw "chat.attachmentUnavailable";
+              return preview;
+            }
             if (command === "ai_attachment_put") {
               const reference: AttachmentRef = {
                 id: crypto.randomUUID(),

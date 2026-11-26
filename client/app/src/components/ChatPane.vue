@@ -39,6 +39,8 @@ import ChatSystemAnnouncement from "./chat/ChatSystemAnnouncement.vue";
 import ChatMarkdown from "./chat/ChatMarkdown.vue";
 import type { ConversationQuestion, QuestionResponse } from "../ai/question";
 import ChatComposer from "./ChatComposer.vue";
+import ChatAttachmentPreview from "./chat/ChatAttachmentPreview.vue";
+import { mayHaveImagePreview } from "../ai/attachment-runtime";
 import ChatModelPicker from "../ai/ChatModelPicker.vue";
 import { workspaceAiSettings } from "../ai/settings";
 import ChatTranscript from "./chat/ChatTranscript.vue";
@@ -488,8 +490,10 @@ async function recall(): Promise<void> {
   await chat.value?.recallPending();
   composer.value?.focus();
 }
-async function attach(files: File[]): Promise<void> {
-  for (const file of files) await chat.value?.addAttachment(file);
+async function attach(): Promise<void> {
+  const owner = chat.value;
+  await owner?.pickAttachments();
+  if (chat.value === owner) composer.value?.focus();
 }
 let referenceNavigation = 0;
 async function openReference(
@@ -545,6 +549,7 @@ async function removeReference(reference: ContentReference): Promise<void> {
   errorDismissed.value = false;
   try {
     await owner?.removeReference(reference);
+    if (chat.value === owner) composer.value?.focus();
   } catch (error) {
     if (chat.value === owner) actionError.value = error;
   }
@@ -891,41 +896,6 @@ defineExpose({
                 }}</span>
               </SituateButton>
             </div>
-            <div
-              v-if="chat?.state.draftReferences.length"
-              class="content-references draft-references"
-              :aria-label="t('references.draft')"
-            >
-              <span
-                v-for="reference in chat.state.draftReferences"
-                :key="referenceKey(reference)"
-                class="reference-chip"
-              >
-                <SituateButton
-                  variant="plain"
-                  type="button"
-                  class="reference-open"
-                  :aria-label="t('references.open', { path: reference.path })"
-                  @click="openReference(reference)"
-                >
-                  <span data-localization-content="user">{{
-                    reference.path
-                  }}</span>
-                  <span v-if="reference.kind === 'historical'">{{
-                    t("references.historical")
-                  }}</span>
-                </SituateButton>
-                <SituateButton
-                  variant="plain"
-                  type="button"
-                  class="reference-remove"
-                  :aria-label="t('references.remove', { path: reference.path })"
-                  @click="removeReference(reference)"
-                >
-                  <SituateIcon name="close" />
-                </SituateButton>
-              </span>
-            </div>
             <ChatSystemAnnouncement
               :id="chat?.state.questionAnnouncement?.id"
               :message="chat?.state.questionAnnouncement?.prompt ?? ''"
@@ -1004,6 +974,7 @@ defineExpose({
                   @dictate="dictate"
                   @stop-dictation="stopRecording"
                   :attachments="chat.state.draftAttachments"
+                  :attachment-scope="workspaceScope"
                   :attaching="chat.state.attachmentBusy"
                   :has-pending="!!pending.length"
                   :has-references="!!chat.state.draftReferences.length"
@@ -1035,6 +1006,50 @@ defineExpose({
                   @send="sendMessage"
                   @stop="chat.abort"
                 >
+                  <template #references>
+                    <li
+                      v-for="reference in chat.state.draftReferences"
+                      :key="referenceKey(reference)"
+                      class="draft-attachment"
+                    >
+                      <SituateButton
+                        variant="plain"
+                        type="button"
+                        class="reference-open"
+                        :aria-label="
+                          t('references.open', { path: reference.path })
+                        "
+                        @click="openReference(reference, true)"
+                      >
+                        <ChatAttachmentPreview
+                          :scope="workspaceScope"
+                          :enabled="mayHaveImagePreview(reference.path)"
+                          :target="{ kind: 'reference', reference }"
+                          :name="
+                            reference.path.split('/').at(-1) ?? reference.path
+                          "
+                        >
+                          <span class="draft-file">
+                            <SituateIcon name="notes" />
+                            <span data-localization-content="user">{{
+                              reference.path
+                            }}</span>
+                            <span v-if="reference.kind === 'historical'">{{
+                              t("references.historical")
+                            }}</span>
+                          </span>
+                        </ChatAttachmentPreview>
+                      </SituateButton>
+                      <SituateIconButton
+                        class="remove-attachment"
+                        icon="close"
+                        :label="
+                          t('references.remove', { path: reference.path })
+                        "
+                        @click="removeReference(reference)"
+                      />
+                    </li>
+                  </template>
                   <template #model
                     ><ChatModelPicker
                       v-if="showModel"
@@ -1294,10 +1309,6 @@ defineExpose({
 .earlier-messages-loading:not(:empty) > :deep(span) {
   align-self: flex-start;
   background: var(--situate-surface);
-}
-.reference-chip {
-  display: inline-flex;
-  max-width: 100%;
 }
 .content-references button,
 .inherit-model {

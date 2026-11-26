@@ -18,6 +18,7 @@
 mod file_kind;
 pub use file_kind::{FileContent, classify_file};
 mod import_batch;
+pub(crate) use import_batch::read_direct_source;
 pub use import_batch::{CreateBatchOutcome, CreatedFile, PreparedFile, is_batch_manifest_path};
 mod paths;
 pub use paths::{WORKING_METHOD_PATH, validate_portable_path, validate_provider_path};

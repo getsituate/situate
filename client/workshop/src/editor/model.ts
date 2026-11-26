@@ -39,12 +39,22 @@ export interface FileReference {
   name: string;
   version: Version | null;
 }
+export interface ImageAttachment {
+  name: string;
+  previewUrl: string;
+}
+export type DraftAttachment = FileReference | ImageAttachment;
+export function attachmentKey(attachment: DraftAttachment): string {
+  return "fileKey" in attachment
+    ? `file:${attachment.fileKey}:${attachment.version?.key ?? "live"}`
+    : `image:${attachment.name}`;
+}
 export type ReferenceAppearance = "neutral" | "icon" | "preview";
 export interface EditorChat {
   key: string;
   title: string;
   draft: string;
-  references: FileReference[];
+  attachments: DraftAttachment[];
   exchange?: {
     request: string;
     reply: string;
@@ -524,7 +534,7 @@ export function openChat(state: EditorState, reference?: FileReference): void {
     key,
     title: count === 1 ? "New chat" : `New chat ${count}`,
     draft: "",
-    references: reference ? [reference] : [],
+    attachments: reference ? [reference] : [],
   });
   state.activeChat = key;
   state.activePane = key;

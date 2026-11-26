@@ -89,7 +89,9 @@ test("an attachment-only draft can be submitted and each attachment can be remov
       draft: "",
       connected: true,
       modelSelected: true,
-      attachments: [{ id: "image", name: "Sketch.png" }],
+      attachments: [
+        { id: "image", name: "Sketch.png", mimeType: "image/png", size: 12 },
+      ],
     },
   });
   await wrapper
@@ -138,37 +140,6 @@ test("a reference-only draft sends through click and Enter while connection and 
     await wrapper.get("textarea").trigger("keydown", { key: "Enter" });
     expect(wrapper.emitted("send")).toHaveLength(2);
   }
-});
-
-test("the attachment picker accepts Markdown and JSON and emits the original files", async () => {
-  const wrapper = mount(ChatComposer, { props: { draft: "" } });
-  const picker = wrapper.get('input[type="file"]');
-  expect(picker.attributes("accept")!.split(",")).toEqual([
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "text/plain",
-    "text/markdown",
-    "application/json",
-    ".txt",
-    ".md",
-    ".markdown",
-    ".json",
-  ]);
-  const markdown = new File(["# Notes\n"], "Project.markdown", {
-    type: "text/markdown",
-  });
-  const json = new File(['{"tasks":[]}'], "tasks.json", {
-    type: "application/json",
-  });
-  Object.defineProperty(picker.element, "files", { value: [markdown, json] });
-  await picker.trigger("change");
-  const files = wrapper.emitted("attach")![0]![0] as File[];
-  expect(files).toHaveLength(2);
-  expect(files[0]).toBe(markdown);
-  expect(files[1]).toBe(json);
-  expect((picker.element as HTMLInputElement).value).toBe("");
 });
 
 test("pending input starts collapsed, expands by kind and exposes pointer recall without a mode selector", async () => {
