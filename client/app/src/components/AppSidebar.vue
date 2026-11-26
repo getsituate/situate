@@ -547,6 +547,17 @@ const views = computed<{ label: string; icon: IconName }[]>(() => [
   flex: 1;
   min-width: 0;
 }
+@media (hover: hover) and (pointer: fine) {
+  .view-pin {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .pinnable-view:hover .view-pin,
+  .pinnable-view:has(:focus-visible) .view-pin {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .view-pin[aria-pressed="true"] {
   color: var(--situate-accent-strong, var(--situate-violet-deep));
 }
