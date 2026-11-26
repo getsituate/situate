@@ -312,7 +312,6 @@ export function screenControls(state: Simulation) {
         (!!state.documents.dialog ||
           !!state.documents.tagCreation ||
           !!state.documents.tagDeletion ||
-          !!state.documents.collectionMenu ||
           !state.documents.selected)) ||
       (screen === "dictation" && !state.dictationNavigation) ||
       screen === "chat-queue" ||

@@ -192,6 +192,7 @@ it("registers the built-in views when plugins may execute", async () => {
   expect(runtime.state.plugins[0]?.status).toBe("loaded");
   expect([...ui.registry.definitions.keys()]).toEqual([
     "files",
+    "documents",
     "settings",
     "plugins",
     "conversation",
@@ -240,6 +241,7 @@ it("keeps built-in navigation available and suppresses plugins in every workspac
     ).toThrow("layoutHost.pluginUnavailable");
     expect([...ui.registry.definitions.keys()]).toEqual([
       "files",
+      "documents",
       "settings",
       "plugins",
       "conversation",

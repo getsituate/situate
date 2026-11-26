@@ -1285,6 +1285,7 @@ test(
     await expect(navigation.locator(".more-views")).toHaveCount(0);
     await expect(navigation.locator(".nav-destination")).toHaveText([
       t("navigation.files"),
+      t("documents.title"),
     ]);
     expect(await developmentCalls()).toHaveLength(1);
     expect(

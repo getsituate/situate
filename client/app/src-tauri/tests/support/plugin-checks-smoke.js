@@ -309,6 +309,8 @@ window.runPluginChecksSmoke = async () => {
     ];
   }
   async function qualify(script, names, values) {
+    require(typeof script === "string" &&
+      script.trim(), "Qualification script is missing");
     const Run = Object.getPrototypeOf(async function () {}).constructor;
     await new Run(...names, script)(...values);
   }

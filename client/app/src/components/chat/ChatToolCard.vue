@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { SituateDisclosure } from "@situate/ui";
+import { SituateButton, SituateDisclosure } from "@situate/ui";
 import { computed, ref, watch } from "vue";
 import { t } from "@situate/localization";
 import ChatToolDetails from "./ChatToolDetails.vue";
 import ChatFileChanges from "./ChatFileChanges.vue";
 import ChatBatchChanges from "./ChatBatchChanges.vue";
 import { toolCaption } from "./work-history";
+import { workspaceCoordinator } from "../../layout/registry";
+import type { DocumentReference } from "../../ai/document-sources/contract.js";
 
 import {
   verifiedChange,
+  documentLinks,
   importChangeReceipts,
   type ToolView,
 } from "./transcript";
@@ -36,6 +39,17 @@ function stateLabel(): string {
   return t("chat.interrupted");
 }
 const plugin = computed(() => props.call.pluginName);
+const links = computed(() =>
+  batchOpen.value ? documentLinks(props.call) : [],
+);
+function openDocument(document: DocumentReference) {
+  void workspaceCoordinator(props.scope)?.open(
+    { kind: "view", viewId: "documents" },
+    undefined,
+    undefined,
+    { document: { ...document } },
+  );
+}
 </script>
 
 <template>
@@ -92,6 +106,20 @@ const plugin = computed(() => props.call.pluginName);
         <template #label>{{ t("chat.technicalDetails") }}</template>
         <ChatToolDetails v-if="technicalOpen" :call="call" :scope="scope" />
       </SituateDisclosure>
+      <ul v-if="links.length">
+        <li v-for="{ ref, title } in links" :key="ref.id">
+          <SituateButton
+            type="button"
+            variant="ghost"
+            @click="openDocument(ref)"
+          >
+            <span v-if="title" data-localization-content="external">{{
+              title
+            }}</span>
+            <span v-else>{{ t("documents.openReference") }}</span>
+          </SituateButton>
+        </li>
+      </ul>
       <ChatToolDetails v-if="!isBatch" :call="call" :scope="scope" />
     </SituateDisclosure>
   </article>

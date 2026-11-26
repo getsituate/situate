@@ -159,6 +159,7 @@ fn synthetic_id(id: &Value) -> bool {
             "process-consumer",
             "document-source-local",
             "document-source-paperless",
+            "document-source-preview",
         ]
         .contains(&id)
     })
@@ -230,6 +231,9 @@ pub fn smoke_plugin_check_prepare(
                 for (name, bytes) in document_source_originals() {
                     fs::write(source_root.join(name), bytes).map_err(|e| e.to_string())?;
                 }
+                let mut preview = vec![42; 1024 * 1024];
+                preview.extend_from_slice(&[0, 255, 7]);
+                fs::write(source_root.join("preview.pdf"), preview).map_err(|e| e.to_string())?;
                 let outside = app_root.join("document-source-outside.txt");
                 require_absent(&outside)?;
                 fs::write(&outside, "Outside the selected source.\n").map_err(|e| e.to_string())?;

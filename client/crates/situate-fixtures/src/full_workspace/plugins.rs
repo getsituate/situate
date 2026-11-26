@@ -1,8 +1,14 @@
 use serde_json::{Value, json};
-use situate_core::plugins::runtime;
+use situate_core::{
+    content::SaveOutcome,
+    plugins::{
+        runtime,
+        storage::{self, Area},
+    },
+};
 use std::{fs, path::Path};
 
-pub(super) fn seed(root: &Path) -> Result<(), String> {
+pub(super) fn seed(root: &Path, archive: &Path) -> Result<(), String> {
     for (id, name, description, fields, path, contents) in [
         (
             "garden-review",
@@ -23,8 +29,8 @@ pub(super) fn seed(root: &Path) -> Result<(), String> {
         (
             "garden-archive",
             "Garden archive",
-            "Provides a sample document from the garden archive.",
-            json!({"kind":"source","serviceEntry":"service.js","exports":["documentSourceDescribe","documentSourceList"]}),
+            "Lists and opens documents from a local folder.",
+            json!({"kind":"source","serviceEntry":"service.js","exports":["documentSourceDescribe","documentSourceList","documentLibraryDescribe","documentLibraryList","documentLibrarySearch","documentLibraryReadOriginal","documentLibraryDetails"]}),
             "service.js",
             include_str!("archive.js"),
         ),
@@ -39,6 +45,16 @@ pub(super) fn seed(root: &Path) -> Result<(), String> {
     ] {
         install(root, id, name, description, fields, (path, contents))
             .map_err(|error| format!("Could not install {id}: {error}"))?;
+        if id == "garden-archive" {
+            let folder = archive.to_str().ok_or("Unsupported document folder path")?;
+            let config = json!({"folder":folder}).to_string();
+            if !matches!(
+                storage::write(root, id, Area::Config, "folder.json", &config, None)?,
+                SaveOutcome::Saved { .. }
+            ) {
+                return Err("Could not configure the garden archive".into());
+            }
+        }
         let listing = runtime::list(root)?;
         runtime::set_enabled(root, id, true, listing.revision.as_deref())
             .map_err(|error| format!("Could not enable {id}: {error}"))?;

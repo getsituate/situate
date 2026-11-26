@@ -74,7 +74,7 @@ for (const mobile of [false, true]) {
       contentType: "image/png",
     });
     await preview
-      .getByRole("button", { name: "‹ Back to plugins", exact: true })
+      .getByRole("button", { name: "Back to plugins", exact: true })
       .click();
     await expect(
       sources.getByRole("heading", { name: /^Sources/ }),
@@ -189,10 +189,9 @@ test("returning from empty-source development restores document focus", async ({
   const back = preview.getByRole("button", { name: /Back to documents/ });
   await expect(back).toBeInViewport({ ratio: 1 });
   await back.click();
-  await expect(preview.locator("[data-doc-title]")).toBeFocused();
   await expect(
     preview.getByRole("button", { name: /Create a source/ }),
-  ).toBeVisible();
+  ).toBeFocused();
 });
 
 test("source settings lead to adapting the same source in the plugin chat", async ({

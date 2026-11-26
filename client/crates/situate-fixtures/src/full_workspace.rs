@@ -1,3 +1,4 @@
+mod documents;
 mod plugins;
 
 use crate::FixtureConversations;
@@ -10,7 +11,7 @@ use situate_core::{
 };
 use std::path::Path;
 
-pub(super) fn seed(location: &Location) -> Result<(), String> {
+pub(super) fn seed(location: &Location, archive: &Path) -> Result<(), String> {
     let root = Path::new(&location.handle);
     let _lease = situate_migrations::prepare(root).map_err(|error| error.to_string())?;
     let mut files = ContentStore::open(root).map_err(|error| error.to_string())?;
@@ -83,7 +84,13 @@ pub(super) fn seed(location: &Location) -> Result<(), String> {
         },
     )?;
     seed_chats(&Storage::open(root, &location.id)?)?;
-    plugins::seed(root)
+    documents::seed(archive).map_err(|error| {
+        format!(
+            "Could not create document folder {}: {error}",
+            archive.display()
+        )
+    })?;
+    plugins::seed(root, archive)
 }
 
 fn seed_chats(storage: &Storage) -> Result<(), String> {

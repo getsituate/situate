@@ -711,6 +711,73 @@ fn requests_require_explicit_revision_and_validate_http_destinations() {
 }
 
 #[test]
+fn document_download_preserves_authenticated_bytes_and_rejects_oversized_bodies() {
+    tauri::async_runtime::block_on(async {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for oversized in [false, true] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let mut data = vec![42; document_original::CHUNK_BYTES];
+            data.extend_from_slice(&[0, 255, 1, 2]);
+            let response_size = if oversized {
+                document_original::MAX_BYTES + 1
+            } else {
+                data.len() as u64
+            };
+            let server = async {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    request.push(stream.read_u8().await.unwrap());
+                    assert!(request.len() < 8192);
+                }
+                let request = String::from_utf8(request).unwrap().to_lowercase();
+                assert!(request.starts_with("get /document http/1.1\r\n"));
+                assert!(request.contains("authorization: token synthetic\r\n"));
+                stream
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            response_size
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+                let _ = stream.write_all(&data).await;
+            };
+            let token = CancellationToken::new();
+            let (done, result) = tokio::join!(
+                tokio::time::timeout(Duration::from_secs(5), server),
+                http_original(
+                    format!("http://{addr}/document"),
+                    BTreeMap::from([("Authorization".into(), "Token synthetic".into())]),
+                    &token,
+                )
+            );
+            done.unwrap();
+            if oversized {
+                assert!(matches!(result, Err(error) if error == "native.plugins.tooLarge"));
+            } else {
+                let (status, original) = result.unwrap();
+                let original = original.unwrap();
+                assert_eq!(status, 200);
+                assert_eq!(
+                    original.chunk(0, &token).unwrap(),
+                    data[..document_original::CHUNK_BYTES]
+                );
+                assert_eq!(
+                    original
+                        .chunk(document_original::CHUNK_BYTES as u64, &token)
+                        .unwrap(),
+                    [0, 255, 1, 2]
+                );
+            }
+        }
+    });
+}
+
+#[test]
 fn http_write_methods_execute_once_without_an_execution_decision() {
     tauri::async_runtime::block_on(async {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};

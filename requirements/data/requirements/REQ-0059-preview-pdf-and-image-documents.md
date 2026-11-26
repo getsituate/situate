@@ -10,7 +10,7 @@ goals: [GOAL-0001]
 
 ## Description
 
-Delivery: the behavior below belongs to the later document-collection increment. The first [direct-source-access iteration](REQ-0054-connect-document-sources.md#first-iteration-direct-source-access-through-chat) exposes source capabilities through chat without implementing this collection feature. Approval and priority remain unchanged; references to initial behavior below describe the first delivery of this feature, not the direct-access iteration.
+Delivery: the [on-demand Library](REQ-0058-browse-document-collection.md#library-access-before-persistent-preparation) provides previews before persistent preparation. The first [direct-source-access iteration](REQ-0054-connect-document-sources.md#first-iteration-direct-source-access-through-chat) exposes source capabilities through chat without a preview.
 
 Users should be able to view PDF and image documents directly in Situate from the common document collection without launching another application. Other formats initially open in an appropriate external application. Previewing requires access to the original or an available local copy; metadata alone is not a preview.
 

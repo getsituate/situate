@@ -630,7 +630,7 @@ export function createSimulation(
   syncSourceState(state.documents, state.plugins);
   if (scenario === "documents-sources" || scenario === "documents-connect") {
     state.feature = "plugins";
-    state.documents.returnFocus = "actions";
+    state.documents.returnFocus = "query";
     openSourceWorkflow(
       state.plugins,
       scenario === "documents-connect" ? "create" : "list",
@@ -1499,7 +1499,6 @@ export function reduceSimulation(
       (workspace && state.documentsByWorkspace[workspace]) ||
       createDocumentsState();
     state.documents.dialog = null;
-    state.documents.collectionMenu = null;
     state.onboarding =
       (workspace && state.onboardingByWorkspace[workspace]) ||
       createOnboardingState("onboarding-manual");

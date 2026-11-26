@@ -22,7 +22,6 @@ const overlay = computed(
       props.state.dialog ||
       props.state.tagCreation ||
       props.state.tagMenu ||
-      props.state.collectionMenu ||
       props.state.tagDeletion
     ),
 );

@@ -490,6 +490,16 @@ fn validate_sources(
         manifest.kind,
         Some(PluginKind::Connection | PluginKind::Source)
     );
+    let exports = manifest.exports.as_deref().unwrap_or_default();
+    let describes_source = exports.iter().any(|name| name == "documentSourceDescribe")
+        || [
+            "documentLibraryDescribe",
+            "documentLibraryList",
+            "documentLibrarySearch",
+            "documentLibraryReadOriginal",
+        ]
+        .iter()
+        .all(|required| exports.iter().any(|name| name == required));
     if manifest.schema_version != 3
         || (provider
             && (!manifest.skills.is_empty()
@@ -497,12 +507,7 @@ fn validate_sources(
                     .components
                     .as_ref()
                     .is_some_and(|names| !names.is_empty())))
-        || (manifest.kind == Some(PluginKind::Source)
-            && !manifest
-                .exports
-                .iter()
-                .flatten()
-                .any(|name| name == "documentSourceDescribe"))
+        || (manifest.kind == Some(PluginKind::Source) && !describes_source)
         || manifest.id != id
         || !valid_id(&manifest.id)
         || manifest.name.trim().is_empty()

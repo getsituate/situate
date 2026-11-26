@@ -340,13 +340,14 @@ test(
       exact: true,
     });
     await expect(reader).toBeFocused();
-    await page.keyboard.press("PageDown");
+    const bottom = await reader.evaluate(
+      (node) => node.scrollHeight - node.clientHeight,
+    );
+    expect(bottom).toBeGreaterThan(0);
+    await page.keyboard.press("End");
     await expect
       .poll(() => reader.evaluate((node) => node.scrollTop))
-      .toBeGreaterThan(0);
-    await reader.hover();
-    await page.mouse.wheel(0, -1000);
-    await expect.poll(() => reader.evaluate((node) => node.scrollTop)).toBe(0);
+      .toBeCloseTo(bottom, 0);
 
     await page
       .getByRole("heading", { name: "A small garden", exact: true })
@@ -393,6 +394,9 @@ test(
     await expect
       .poll(() => reader.evaluate((node) => node.scrollTop))
       .toBe(readingPosition);
+    await reader.hover();
+    await page.mouse.wheel(0, -1000);
+    await expect.poll(() => reader.evaluate((node) => node.scrollTop)).toBe(0);
     expect(
       await page.evaluate(() =>
         window.__filesTest.calls.some((call) =>

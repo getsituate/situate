@@ -148,6 +148,50 @@ function load(serviceEntry: string) {
   };
 }
 
+it("aborts one invocation without stopping another invocation in the same worker", async () => {
+  const page = await setup();
+  try {
+    await dispatch(
+      page,
+      load(`export default () => ({exports: {
+      read: (_args, ctx) => ctx.documents.fromHttp({url: 'https://example.invalid/download'}),
+      browse: () => 'still available'
+    }})`),
+    );
+    await event(page, "ready");
+    await dispatch(page, {
+      type: "invoke",
+      generation: 1,
+      invocationId: "read",
+      kind: "export",
+      name: "read",
+      args: {},
+    });
+    await event(page, "host", "read");
+    await dispatch(page, {
+      type: "abort",
+      generation: 1,
+      invocationId: "read",
+    });
+    expect(await event(page, "error", "read")).toMatchObject({
+      error: "native.plugins.hostCancelled",
+    });
+    await dispatch(page, {
+      type: "invoke",
+      generation: 1,
+      invocationId: "browse",
+      kind: "export",
+      name: "browse",
+      args: {},
+    });
+    expect(await event(page, "result", "browse")).toMatchObject({
+      result: "still available",
+    });
+  } finally {
+    await page.close();
+  }
+});
+
 it("transports a throwing service factory error before supervisor termination", async () => {
   const page = await setup();
   try {

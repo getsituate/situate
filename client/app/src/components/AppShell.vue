@@ -760,11 +760,35 @@ const sidebarActions = {
                 @retry="emit('retryLocalization')"
               />
             </template>
+            <template #documents="{ component, entry, ticket, retain }">
+              <component
+                :is="component"
+                :plugins="ui.plugins"
+                :presentation="entry.presentation"
+                @presentation="retain"
+                @sources="
+                  (id?: string) =>
+                    open(
+                      { kind: 'view', viewId: 'plugins', contentId: id },
+                      ticket,
+                      id ? undefined : { section: 'sources' },
+                    )
+                "
+                @develop="developPlugin(ticket)"
+                @error="operationError = $event"
+              />
+            </template>
             <template #plugins="{ component, entry, ticket }">
               <component
                 :is="component"
                 :ui="ui"
                 :scope="ui.session.workspaceId"
+                :focus-sources="
+                  !!entry.presentation &&
+                  typeof entry.presentation === 'object' &&
+                  'section' in entry.presentation &&
+                  entry.presentation.section === 'sources'
+                "
                 :selected-plugin="
                   entry.target.kind === 'view'
                     ? entry.target.contentId

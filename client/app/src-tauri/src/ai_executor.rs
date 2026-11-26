@@ -1,3 +1,4 @@
+use crate::document_original::{Original, OriginalSlot};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use situate_agent::{Progress, ProgressSink, ToolOutcome, ToolRequest, ToolResult};
@@ -5,10 +6,10 @@ use situate_core::plugins::action_store::{Record as ActionRecord, Status as Acti
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, Weak,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::Manager;
 use tauri_plugin_executor_platform::{
@@ -37,6 +38,33 @@ pub struct Executors {
     closing: Mutex<HashSet<String>>,
     dispatched: Mutex<HashSet<(String, String, String)>>,
     unavailable: Mutex<HashMap<String, HashMap<String, Unavailable>>>,
+    reads: Mutex<HashMap<String, DocumentRead>>,
+}
+struct DocumentRead {
+    window: String,
+    scope: String,
+    reserved_until: Option<Instant>,
+    cancel: CancellationToken,
+    published: Option<PublishedOriginal>,
+}
+struct PublishedOriginal {
+    expires: Instant,
+    generation: Weak<Generation>,
+    file: Arc<Original>,
+}
+struct ReadLease<'a> {
+    reads: &'a Mutex<HashMap<String, DocumentRead>>,
+    id: &'a str,
+    keep: bool,
+}
+impl Drop for ReadLease<'_> {
+    fn drop(&mut self) {
+        if !self.keep
+            && let Ok(mut reads) = self.reads.lock()
+        {
+            reads.remove(self.id);
+        }
+    }
 }
 #[derive(Clone)]
 struct Unavailable {
@@ -83,6 +111,7 @@ struct Invocation {
     id: String,
     run_id: String,
     cancel: CancellationToken,
+    original: Option<Arc<OriginalSlot>>,
     progress: Option<ProgressSink>,
     caller: Option<(String, String)>,
     interactive: bool,
@@ -202,6 +231,7 @@ struct InvocationRequest<'a> {
     name: &'a str,
     args: Value,
     script: Option<CheckScript<'a>>,
+    document_read: Option<(CancellationToken, Arc<OriginalSlot>)>,
 }
 struct CheckScript<'a> {
     source: &'a str,
@@ -379,6 +409,22 @@ impl Workspace {
     fn revoke(&self, generation: &Generation) {
         if !generation.revoke() {
             return;
+        }
+        if let Some(executors) = self.context.app.try_state::<Executors>()
+            && let Ok(mut reads) = executors.reads.lock()
+        {
+            reads.retain(|_, read| {
+                if read
+                    .published
+                    .as_ref()
+                    .and_then(|original| original.generation.upgrade())
+                    .is_some_and(|owner| owner.id == generation.id)
+                {
+                    read.cancel.cancel();
+                    return false;
+                }
+                true
+            });
         }
         if let Ok(platform) = self.platform.lock()
             && let Some(handle) = platform.clone()
@@ -668,6 +714,7 @@ impl Workspace {
                     name: export,
                     args: request["args"].clone(),
                     script: None,
+                    document_read: None,
                 },
                 invocation.progress.clone(),
                 invocation.cancel.child_token(),
@@ -738,6 +785,7 @@ impl Workspace {
             uuid::Uuid::new_v4().to_string(),
             parsed,
             invocation.cancel.clone(),
+            invocation.original.clone(),
         )
         .await;
         let _ = crate::plugin_host::close_native(&self.context.app, &self.context.window, &host);
@@ -1077,6 +1125,8 @@ fn effectful(request: &Value) -> bool {
                 | "filesSearch"
                 | "filesReadMany"
                 | "credentialGet"
+                | "documentFromHttp"
+                | "documentFromFile"
                 | "processCapability"
         )
     )
@@ -1161,9 +1211,15 @@ impl CapturedPlugin {
             name,
             args,
             script,
+            document_read,
         } = request;
         let generation = &self.generation;
-        if cancel.is_cancelled() {
+        let (read_cancel, slot) = document_read.unzip();
+        if cancel.is_cancelled()
+            || read_cancel
+                .as_ref()
+                .is_some_and(CancellationToken::is_cancelled)
+        {
             return Err(ToolOutcome::Failed(CANCELLED.into()));
         }
         if generation.revoked.load(Ordering::Acquire) {
@@ -1183,6 +1239,10 @@ impl CapturedPlugin {
             interactive,
             caller: caller.map(|(id, incarnation)| (id.into(), incarnation.into())),
             check_owner: check_owner.into(),
+            original: slot.or_else(|| {
+                (kind == "check" && generation.test_id.is_some())
+                    .then(|| Arc::new(OriginalSlot::new(uuid::Uuid::new_v4().to_string())))
+            }),
             progress,
             operation_gate: tokio::sync::Mutex::new(()),
             ledger: tokio::sync::Mutex::new(None),
@@ -1318,6 +1378,10 @@ impl CapturedPlugin {
             tokio::select! {
                 _ = changed => {},
                 _ = cancel.cancelled(), if !generation.revoked.load(Ordering::Acquire) => { self.workspace.revoke(generation); }
+                _ = async { if let Some(token) = &read_cancel { token.cancelled().await; } }, if read_cancel.is_some() && !invocation.cancel.is_cancelled() => {
+                    invocation.cancel.cancel();
+                    let _ = self.workspace.send(json!({"type":"abort","generation":generation.id,"invocationId":invocation.id})).await;
+                }
             }
         };
         if generation.revoked.load(Ordering::Acquire) {
@@ -1332,6 +1396,12 @@ impl CapturedPlugin {
         retire_invocation(&self.workspace, generation, &invocation)
             .await
             .map_err(ToolOutcome::Failed)?;
+        if read_cancel
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
+        {
+            return Err(ToolOutcome::Failed(CANCELLED.into()));
+        }
         result
     }
 }
@@ -1468,6 +1538,7 @@ impl CapturedTools {
                             name,
                             args: request.arguments,
                             script: None,
+                            document_read: None,
                         },
                         Some(progress),
                         cancel,
@@ -2100,6 +2171,7 @@ pub(crate) async fn check_inner(
                         source: &script,
                         require_view_icons,
                     }),
+                    document_read: None,
                 },
                 progress,
                 check_cancel.clone(),
@@ -2146,6 +2218,11 @@ pub enum Request {
     Stop,
     Activity,
     PendingPersistences,
+    ReserveDocumentRead,
+    CancelDocumentRead {
+        #[serde(rename = "readId")]
+        read_id: String,
+    },
     RetryPersistence {
         #[serde(rename = "invocationId")]
         invocation_id: String,
@@ -2158,6 +2235,8 @@ pub enum Request {
         args: Value,
         generation: u64,
         dependency: Option<String>,
+        #[serde(rename = "readId")]
+        read_id: Option<String>,
     },
 }
 impl Request {
@@ -2183,7 +2262,13 @@ pub async fn plugin_executor(
     request: Request,
 ) -> Result<Value, String> {
     let window = window.label().to_owned();
-    let fresh = matches!(request, Request::Snapshot | Request::Invoke { .. });
+    let fresh = matches!(
+        request,
+        Request::Snapshot
+            | Request::Invoke { .. }
+            | Request::ReserveDocumentRead
+            | Request::CancelDocumentRead { .. }
+    );
     let existing = if fresh {
         None
     } else {
@@ -2210,7 +2295,72 @@ pub async fn plugin_executor(
         }
     };
     context.validate()?;
+    let executors = context.app.state::<Executors>();
+    let mut read_lease = None;
+    let mut document_read = None;
     match &request {
+        Request::ReserveDocumentRead => {
+            let mut reads = lock(&executors.reads)?;
+            let now = Instant::now();
+            reads.retain(|_, read| read.reserved_until.is_none_or(|deadline| deadline > now));
+            if reads.len() >= 16 {
+                return Err("native.plugins.stateBusy".into());
+            }
+            let id = uuid::Uuid::new_v4().to_string();
+            reads.insert(
+                id.clone(),
+                DocumentRead {
+                    scope: context.scope.clone(),
+                    window: context.window.clone(),
+                    reserved_until: Some(now + Duration::from_secs(30)),
+                    cancel: CancellationToken::new(),
+                    published: None,
+                },
+            );
+            return Ok(json!(id));
+        }
+        Request::CancelDocumentRead { read_id } => {
+            let mut reads = lock(&executors.reads)?;
+            if reads
+                .get(read_id)
+                .is_some_and(|read| read.scope == context.scope && read.window == context.window)
+                && let Some(read) = reads.remove(read_id)
+            {
+                read.cancel.cancel();
+            }
+            return Ok(Value::Null);
+        }
+        Request::Invoke {
+            export_name,
+            dependency,
+            read_id: Some(read_id),
+            ..
+        } => {
+            if export_name != "documentLibraryReadOriginal" || dependency.is_some() {
+                return Err(INVALID.into());
+            }
+            let mut reads = lock(&executors.reads)?;
+            let entry = reads
+                .get_mut(read_id)
+                .filter(|read| {
+                    read.scope == context.scope
+                        && read.window == context.window
+                        && read
+                            .reserved_until
+                            .is_some_and(|deadline| deadline > Instant::now())
+                })
+                .ok_or(CANCELLED)?;
+            entry.reserved_until = None;
+            document_read = Some((
+                entry.cancel.clone(),
+                Arc::new(OriginalSlot::new(read_id.clone())),
+            ));
+            read_lease = Some(ReadLease {
+                reads: &executors.reads,
+                id: read_id,
+                keep: false,
+            });
+        }
         Request::PendingPersistences => return pending_persistences(&context).await,
         Request::RetryPersistence { invocation_id } => {
             return retry_persistence(&context, invocation_id).await;
@@ -2251,11 +2401,13 @@ pub async fn plugin_executor(
         return Ok(json!({"runningActions":if matches!(request,Request::Stop){0}else{running}}));
     }
     let tools = capture(&context, CancellationToken::new()).await?;
-    match request {
+    match &request {
         Request::Stop
         | Request::Activity
         | Request::PendingPersistences
-        | Request::RetryPersistence { .. } => unreachable!(),
+        | Request::RetryPersistence { .. }
+        | Request::ReserveDocumentRead
+        | Request::CancelDocumentRead { .. } => unreachable!(),
         Request::Snapshot => Ok(
             json!({"plugins":tools.plugins.iter().map(|p|p.generation.snapshot(&p.definitions)).collect::<Vec<_>>(),"unavailable":tools.unavailable()}),
         ),
@@ -2265,13 +2417,14 @@ pub async fn plugin_executor(
             args,
             generation,
             dependency,
+            ..
         } => {
             let origin = tools
                 .plugins
                 .iter()
-                .find(|p| p.generation.plugin_id == plugin_id && p.generation.id == generation)
+                .find(|p| p.generation.plugin_id == *plugin_id && p.generation.id == *generation)
                 .ok_or(UNAVAILABLE)?;
-            let plugin = if let Some(id) = &dependency {
+            let plugin = if let Some(id) = dependency {
                 if !declares_dependency(&origin.generation, id) {
                     return Err(INVALID.into());
                 }
@@ -2288,7 +2441,10 @@ pub async fn plugin_executor(
             } else {
                 origin
             };
-            if !plugin.definitions.exports.contains(&export_name) {
+            if !plugin.definitions.exports.contains(export_name)
+                || (document_read.is_some()
+                    && plugin.generation.source["manifest"]["kind"] != "source")
+            {
                 return Err(UNAVAILABLE.into());
             }
             let _origin_action = if dependency.is_some() {
@@ -2310,9 +2466,10 @@ pub async fn plugin_executor(
                     InvocationRequest {
                         run_id: &run_id,
                         kind: "export",
-                        name: &export_name,
-                        args,
+                        name: export_name,
+                        args: args.clone(),
                         script: None,
+                        document_read: document_read.clone(),
                     },
                     None,
                     CancellationToken::new(),
@@ -2327,7 +2484,32 @@ pub async fn plugin_executor(
                 )
                 .await;
             match result {
-                Ok(value) => Ok(json!({"outcome":"completed","value":value})),
+                Ok(value) => {
+                    if let (Some(lease), Some((_, slot))) = (read_lease.as_mut(), document_read)
+                        && value["status"] == "ok"
+                    {
+                        let original = lock(&slot.file)?.take().ok_or(INVALID)?;
+                        if value["original"] != original.descriptor(&slot.id) {
+                            return Err(INVALID.into());
+                        }
+                        let expires = Instant::now() + Duration::from_secs(30);
+                        {
+                            let mut reads = lock(&executors.reads)?;
+                            if plugin.generation.revoked.load(Ordering::Acquire) {
+                                return Err(CANCELLED.into());
+                            }
+                            reads.get_mut(lease.id).ok_or(CANCELLED)?.published =
+                                Some(PublishedOriginal {
+                                    expires,
+                                    generation: Arc::downgrade(&plugin.generation),
+                                    file: Arc::new(original),
+                                });
+                        }
+                        lease.keep = true;
+                        expire_original(context.app.clone(), slot.id.clone(), expires);
+                    }
+                    Ok(json!({"outcome":"completed","value":value}))
+                }
                 Err(outcome) => {
                     let invocation = lock(&plugin.generation.invocations)?
                         .values()
@@ -2346,6 +2528,67 @@ pub async fn plugin_executor(
             }
         }
     }
+}
+
+fn expire_original(app: tauri::AppHandle, id: String, expires: Instant) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep_until(expires.into()).await;
+        if let Ok(mut reads) = app.state::<Executors>().reads.lock()
+            && let Some(read) = reads.remove(&id)
+        {
+            read.cancel.cancel();
+        }
+    });
+}
+
+#[tauri::command]
+pub async fn plugin_document_chunk(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    scope: String,
+    id: String,
+    offset: u64,
+) -> Result<tauri::ipc::Response, String> {
+    let authorization = crate::workspaces::authorization_session(&app, window.label(), &scope)?;
+    let context = Context {
+        app,
+        window: window.label().into(),
+        scope,
+        authorization,
+    };
+    context.validate()?;
+    let (file, cancel, generation) = {
+        let state = context.app.state::<Executors>();
+        let reads = lock(&state.reads)?;
+        let read = reads
+            .get(&id)
+            .filter(|read| read.window == context.window && read.scope == context.scope)
+            .ok_or(UNAVAILABLE)?;
+        let original = read
+            .published
+            .as_ref()
+            .filter(|original| original.expires > Instant::now())
+            .ok_or(UNAVAILABLE)?;
+        let generation = original.generation.upgrade().ok_or(UNAVAILABLE)?;
+        if generation.revoked.load(Ordering::Acquire)
+            || crate::plugin_recovery::blocked(&context.app, &context.scope, &generation.plugin_id)
+        {
+            return Err(UNAVAILABLE.into());
+        }
+        (original.file.clone(), read.cancel.clone(), generation)
+    };
+    let chunk_cancel = cancel.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || file.chunk(offset, &chunk_cancel))
+        .await
+        .map_err(|_| UNAVAILABLE)??;
+    context.validate()?;
+    if cancel.is_cancelled()
+        || generation.revoked.load(Ordering::Acquire)
+        || crate::plugin_recovery::blocked(&context.app, &context.scope, &generation.plugin_id)
+    {
+        return Err(UNAVAILABLE.into());
+    }
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 fn manual_invocations(context: &Context) -> Result<Vec<ManualInvocationOwners>, String> {
@@ -2549,6 +2792,17 @@ pub(crate) async fn abort_all(app: &tauri::AppHandle, scope: &str) -> Result<(),
 
 pub(crate) fn invalidate_scope<R: tauri::Runtime>(app: &tauri::AppHandle<R>, scope: &str) {
     if let Some(executors) = app.try_state::<Executors>()
+        && let Ok(mut reads) = executors.reads.lock()
+    {
+        reads.retain(|_, read| {
+            if read.scope != scope {
+                return true;
+            }
+            read.cancel.cancel();
+            false
+        });
+    }
+    if let Some(executors) = app.try_state::<Executors>()
         && let Ok(mut workspaces) = executors.workspaces.lock()
         && workspaces
             .get(scope)
@@ -2688,6 +2942,7 @@ pub(crate) async fn preview_service(
                     name: export_name,
                     args,
                     script: None,
+                    document_read: None,
                 },
                 invocation.progress.clone(),
                 invocation.cancel.child_token(),

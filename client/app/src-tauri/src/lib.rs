@@ -16,6 +16,7 @@ mod conversation_projection;
 mod device_locale;
 mod diagnostics;
 mod dictation;
+mod document_original;
 mod experimental;
 mod external_links;
 mod file_tool;
@@ -84,6 +85,7 @@ macro_rules! application_handler {
             crate::onboarding::onboarding_development_prepare,
             crate::plugin_development::plugin_development_create,
             crate::ai_executor::plugin_executor,
+            crate::ai_executor::plugin_document_chunk,
             crate::plugin_disable::plugin_disable,
             crate::plugin_changes::plugin_changes_check,
             crate::change_history::change_revision,

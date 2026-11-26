@@ -40,9 +40,9 @@ The tag column starts at 272 pixels and can be resized between 224 and 480 pixel
 
 `SituateScrollbars` is mounted once around the workshop application in `main.ts`. It covers the entire window, including nested scrolling areas, dialogs and teleported choices, without adding a layout wrapper or replacing native scrolling. Only a moving area's thumb becomes visible; it hides after 900 milliseconds without scrolling. A held pointer keeps that area's thumb visible, but does not extend visibility in other areas. Thumb visibility does not change the space reserved for it. Forced-color mode keeps native scrollbar colors. These browser behaviors still need physical-device and assistive-technology checks.
 
-### Collection header
+### Search and filters
 
-The Documents header has a three-dot actions menu containing Sources, without a connection count. Source management in Plugins is secondary to finding documents; the freshness link remains a direct route when the collection is incomplete.
+The collection opens directly at search and filters. Manage sources in Plugins, or follow the freshness link when the collection is incomplete.
 
 One search field accepts textual identifiers, descriptions and spelling errors without a mode choice. The selection toolbar below contains tag criteria, the tag matching choice, Clear and Save search. Selected tags and Without tags use removable chips. Only a named saved search adds a heading above the result summary, which contains the count, freshness and sort order. Browse remains available beside the query when the tag sidebar is hidden. Selection controls wrap without hiding active criteria.
 
@@ -54,7 +54,7 @@ Sources have their own section alongside Tools and Connections, using the same c
 
 `plugins-sources` and `plugins-sources-empty` expose the list states. `plugins-source-detail` shows the included and excluded scope, filing rules, preparation and refresh status. Scope is an example summary; Adapt plugin opens the development conversation rather than a universal configuration form. `plugins-source-disabled`, `plugins-source-create`, `plugins-source-error` and `plugins-source-success` expose disabled access and development outcomes directly.
 
-Sources in the Documents menu and the freshness link lead to that section. An unavailable original links to its own source settings. The empty collection opens source development. Returning preserves document criteria, unsent text, preview and scroll position. Disabling a source leaves known documents and tags in the collection but pauses refresh and original access; this simulation does not model cached originals. The shared disable dialog distinguishes finishing existing work from explicitly aborting it.
+The freshness link opens Sources in Plugins. An unavailable original links to its own source settings. The empty collection opens source development. Returning preserves document criteria, unsent text, preview and scroll position. Disabling a source leaves known documents and tags in the collection but pauses refresh and original access; this simulation does not model cached originals. The shared disable dialog distinguishes finishing existing work from explicitly aborting it.
 
 ### Tag creation
 

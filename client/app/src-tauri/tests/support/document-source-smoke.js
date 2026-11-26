@@ -254,4 +254,127 @@ require(lost.error.code === "authentication" &&
   ), "Changed credentials did not fail safely");
 await call(paperless, "configureFixture", {});
 await invoke("smoke_document_source_verify", { scope });
+
+const previewId = "document-source-preview";
+const previewExport = "documentLibraryReadOriginal";
+const download = `${base}/api/documents/1/download/`;
+const localPreview = `${fixture.documentSourceRoot}/preview.pdf`;
+await sourceRequest({ operation: "create", pluginId: previewId });
+await sourceWrite(
+  assignment,
+  previewId,
+  "plugin.json",
+  JSON.stringify({
+    schemaVersion: 3,
+    id: previewId,
+    name: "Preview fixtures",
+    description: "Read synthetic originals.",
+    kind: "source",
+    serviceEntry: "service.js",
+    platforms: ["macos"],
+    exports: [
+      "documentLibraryDescribe",
+      "documentLibraryList",
+      "documentLibrarySearch",
+      previewExport,
+      "configure",
+    ],
+  }),
+  true,
+);
+await sourceWrite(
+  assignment,
+  previewId,
+  "service.js",
+  `export default ({pluginId}) => {
+  const source = {pluginId,instanceId:'preview-instance'};
+  const scope = {id:'preview-fixture',included:['Synthetic originals'],excluded:[],constraints:[]};
+  const docs = ['local','http'].map(id => ({ref:{source,id,identity:'stable'},title:id+'.pdf',mimeType:'application/pdf'}));
+  const page = (operation,items) => ({version:2,source,scopeId:scope.id,operation,status:'ok',truncated:false,items});
+  return {exports:{
+    documentLibraryDescribe: () => ({version:2,source,scope,label:'Preview fixtures',searchCoverage:['filename'],limits:{maxItems:2}}),
+    documentLibraryList: () => page('list',docs),
+    documentLibrarySearch: ({query}) => page('search',docs.filter(doc => doc.title.includes(query))),
+    configure: (_args,ctx) => ctx.credentials.set('token','source-fixture-token'),
+    ${previewExport}: async ({ref},ctx) => {
+      const base = {version:2,source,scopeId:'preview-fixture',operation:'readOriginal'};
+      const document = {ref,title:'Synthetic original',mimeType:'application/pdf'};
+      if (ref.id === 'forged') return {...base,status:'ok',document,original:{id:ref.id,size:1}};
+      if (ref.source.pluginId !== pluginId || ref.source.instanceId !== source.instanceId || !['local','http'].includes(ref.id)) {
+        return {...base,status:'error',error:{code:'permission'}};
+      }
+      const reply = ref.id === 'local'
+        ? await ctx.documents.fromFile(${JSON.stringify(localPreview)})
+        : await ctx.documents.fromHttp({url:${JSON.stringify(download)},headers:{Authorization:'Token '+await ctx.credentials.get('token')}});
+      return reply.original
+        ? {...base,status:'ok',document,original:reply.original}
+        : {...base,status:'error',error:{code:reply.error ?? 'unavailable'}};
+    }
+  }};
+};`,
+  true,
+);
+const previewRef = (id) => ({
+  source: { pluginId: previewId, instanceId: "preview-instance" },
+  id,
+  identity: "stable",
+});
+const previewCheck = await checkChanges(assignment, {
+  changes: [{ pluginId: previewId }],
+  checks: [
+    {
+      pluginId: previewId,
+      fixtures: { credentials: { token: "source-fixture-token" } },
+      responses: { [`GET ${download}`]: { status: 200, body: "AP8H" } },
+      script: `const result=await plugin.invokeExport('${previewExport}',{ref:${JSON.stringify(previewRef("http"))}});
+assert.equal(result.status,'ok');assert.equal(result.original.size,3);assert.ok(!('base64' in result));`,
+    },
+  ],
+});
+require(previewCheck.passed, "Original handle check failed");
+await assertPublished(await activateGroup(assignment, previewCheck));
+const executor = (request) => invoke("plugin_executor", { scope, request });
+const snapshot = await executor({ operation: "snapshot" });
+const generation = snapshot.plugins.find(
+  (plugin) => plugin.pluginId === previewId,
+).generation;
+const run = (exportName, args, readId) =>
+  executor({
+    operation: "invoke",
+    pluginId: previewId,
+    exportName,
+    args,
+    generation,
+    ...(readId ? { readId } : {}),
+  });
+await run("configure", {});
+const chunk = async (id, offset) => {
+  const value = await invoke("plugin_document_chunk", { scope, id, offset });
+  return value instanceof ArrayBuffer
+    ? new Uint8Array(value)
+    : Uint8Array.from(value);
+};
+for (const kind of ["local", "http"]) {
+  const id = await executor({ operation: "reserveDocumentRead" });
+  const reply = await run(previewExport, { ref: previewRef(kind) }, id);
+  require(reply.value.original.id === id &&
+    reply.value.original.size === 1048579 &&
+    !("base64" in reply.value), "Wrong original descriptor");
+  const start = await chunk(id, 0);
+  const end = await chunk(id, 1048576);
+  require(start.length === 1048576 &&
+    start.every((byte) => byte === 42), "Wrong first binary chunk");
+  require(end.join(",") === "0,255,7", "Wrong final binary chunk");
+  await executor({ operation: "cancelDocumentRead", readId: id });
+  require(await chunk(id, 0).then(
+    () => false,
+    () => true,
+  ), "Released original remained readable");
+}
+const unused = await executor({ operation: "reserveDocumentRead" });
+require(await run(previewExport, { ref: previewRef("forged") }, unused).then(
+  () => false,
+  () => true,
+), "Forged original handle was accepted");
+await invoke("smoke_progress", { stage: "document-originals-transferred" });
 await invoke("smoke_progress", { stage: "document-sources-offline-qualified" });

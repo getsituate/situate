@@ -94,7 +94,7 @@ function recoverSidebarFocus(lostFocus = false) {
     );
     (browse?.getClientRects().length
       ? browse
-      : root.value?.querySelector<HTMLElement>("[data-doc-title]")
+      : root.value?.querySelector<HTMLElement>("#doc-query")
     )?.focus({ preventScroll: true });
   }
 }
@@ -115,14 +115,15 @@ onMounted(() => {
     if (state.value.returnFocus) {
       const selector = state.value.selected
         ? "[data-document-heading]"
-        : state.value.returnFocus === "actions"
-          ? ".doc-header-action"
+        : state.value.returnFocus === "freshness"
+          ? ".doc-freshness"
           : "#doc-query";
       const target =
         root.value?.querySelector<HTMLElement>(selector) ??
         root.value?.querySelector<HTMLElement>(
-          ".doc-empty-collection button, [data-doc-title]",
-        );
+          "#doc-query, .doc-empty-collection button",
+        ) ??
+        root.value;
       target?.focus({ preventScroll: true });
       update((s) => {
         s.returnFocus = null;
@@ -210,14 +211,6 @@ function newTag(event: MouseEvent, forDocument = false) {
   (event.currentTarget as HTMLElement).focus();
   update((s) => beginTagCreation(s, forDocument));
 }
-function collectionActions(event: MouseEvent | KeyboardEvent) {
-  const button = event.currentTarget as HTMLElement;
-  button.focus();
-  const rect = button.getBoundingClientRect();
-  update((s) => {
-    s.collectionMenu = { x: rect.left, y: rect.bottom };
-  });
-}
 function tagActions(id: string, event: MouseEvent) {
   const button = event.currentTarget as HTMLElement;
   button.focus();
@@ -239,7 +232,7 @@ async function afterTagDeletion(id: string | null) {
     id ? `[data-tag-actions="${CSS.escape(id)}"]` : "",
     ".doc-tag-heading button",
     ".doc-browse-trigger",
-    "[data-doc-title]",
+    "#doc-query",
   ].filter(Boolean);
   for (const selector of selectors) {
     const target = [
@@ -267,11 +260,10 @@ async function closePreview() {
 }
 function sources(action: "list" | "create" | "detail", id?: string) {
   update((s) => {
-    s.collectionMenu = null;
     s.returnFocus = s.selected
       ? "preview"
       : action === "list"
-        ? "actions"
+        ? "freshness"
         : "query";
     s.scroll = {
       collection:
@@ -293,30 +285,18 @@ function sources(action: "list" | "create" | "detail", id?: string) {
       'documents-focused': state.layout === 'focused',
       'documents-selected': !!state.selected,
     }"
+    :aria-label="c.title"
+    tabindex="-1"
   >
-    <div class="doc-workspace-heading">
-      <SituateIconButton
-        v-if="showNavigation"
-        icon="menu"
-        :label="workshopNavigation.openNavigation"
-        :aria-controls="navigationId"
-        :aria-expanded="navigationOpen"
-        @click="emit('openNavigation', $event)"
-      />
-      <SituateIcon name="notes" class="doc-heading-icon" />
-      <h1 tabindex="-1" data-doc-title>{{ c.title }}</h1>
-      <SituateIconButton
-        icon="more"
-        :label="c.collectionActions"
-        class="doc-header-action"
-        aria-haspopup="menu"
-        :aria-expanded="!!state.collectionMenu"
-        :aria-controls="state.collectionMenu ? 'doc-actions-menu' : undefined"
-        @click="collectionActions"
-        @keydown.down.prevent="collectionActions"
-        @keydown.up.prevent="collectionActions"
-      />
-    </div>
+    <SituateIconButton
+      v-if="showNavigation && !state.sources.length"
+      class="doc-empty-navigation"
+      icon="menu"
+      :label="workshopNavigation.openNavigation"
+      :aria-controls="navigationId"
+      :aria-expanded="navigationOpen"
+      @click="emit('openNavigation', $event)"
+    />
     <SituateEmptyState
       v-if="!state.sources.length"
       class="doc-empty-collection"
@@ -367,6 +347,14 @@ function sources(action: "list" | "create" | "detail", id?: string) {
       <section class="doc-collection">
         <div class="doc-search-area">
           <form class="doc-search" role="search" @submit.prevent="search">
+            <SituateIconButton
+              v-if="showNavigation"
+              icon="menu"
+              :label="workshopNavigation.openNavigation"
+              :aria-controls="navigationId"
+              :aria-expanded="navigationOpen"
+              @click="emit('openNavigation', $event)"
+            />
             <label for="doc-query" class="sr-only">{{ c.search }}</label>
             <div class="doc-search-box">
               <svg
@@ -735,32 +723,6 @@ function sources(action: "list" | "create" | "detail", id?: string) {
         </div>
       </form>
     </EditorDialog>
-    <SituateMenu
-      v-if="state.collectionMenu"
-      id="doc-actions-menu"
-      :label="c.collectionActions"
-      :open="true"
-      :close-on-select="false"
-      :point="state.collectionMenu"
-      @close="
-        update((s) => {
-          s.collectionMenu = null;
-        })
-      "
-    >
-      <div>
-        <SituateButton
-          variant="plain"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          class="doc-nav-item doc-collection-action"
-          @click="sources('list')"
-        >
-          {{ c.sources }}
-        </SituateButton>
-      </div>
-    </SituateMenu>
     <SituateMenu
       v-if="state.tagMenu"
       :label="c.tagActions(tagPath(state.tags, state.tagMenu.id))"

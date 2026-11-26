@@ -1,3 +1,7 @@
+import {
+  validateLibraryReference,
+  type DocumentReference,
+} from "../../ai/document-sources/contract.js";
 import type { ActiveWorkBlock, WorkBlock } from "../../ai/work-blocks";
 import {
   mergeReferences,
@@ -69,6 +73,58 @@ export type TranscriptBlock = (
   | { key: string; kind: "tools"; calls: ToolView[] }
   | { key: string; kind: "change" | "call"; call: ToolView }
 ) & { messageIndex?: number };
+
+export function documentLinks(call: ToolView) {
+  const asRecord = (value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
+  const value = asRecord(call.result?.structuredContent);
+  if (
+    call.result?.isError ||
+    value?.version !== 1 ||
+    (value.status !== "ok" && value.status !== "partial")
+  )
+    return [];
+  const source = asRecord(value.source);
+  if (!source) return [];
+  const candidates =
+    value.operation === "search" || value.operation === "list"
+      ? Array.isArray(value.items)
+        ? value.items.slice(0, 100)
+        : []
+      : value.operation === "metadata"
+        ? [value.document]
+        : value.operation === "content"
+          ? [value.provenance]
+          : value.operation === "original"
+            ? [value.original]
+            : [];
+  const links = new Map<string, { ref: DocumentReference; title?: string }>();
+  for (const candidate of candidates) {
+    const item = asRecord(candidate);
+    if (!item) continue;
+    try {
+      const ref = validateLibraryReference(item.ref);
+      if (
+        ref.source.pluginId !== source.pluginId ||
+        ref.source.instanceId !== source.instanceId ||
+        (ref.identity === "path" && !ref.revision)
+      )
+        continue;
+      links.set(ref.id, {
+        ref,
+        title:
+          typeof item.title === "string"
+            ? item.title.slice(0, 2048)
+            : undefined,
+      });
+    } catch {
+      continue;
+    }
+  }
+  return [...links.values()];
+}
 
 export function verifiedChange(call: ToolView): VerifiedChange | undefined {
   if (

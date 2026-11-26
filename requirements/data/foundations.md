@@ -414,11 +414,15 @@ This iteration does not create a document collection, local index, extraction/OC
 
 Source: Private direct-source-access delivery clarification; transcript not included. The narrower iteration defers collection delivery without rejecting its approved requirements.
 
+### On-demand Library access
+
+Before persistent preparation, the [Library](requirements/REQ-0058-browse-document-collection.md#library-access-before-persistent-preparation) can browse and search compatible sources on demand and show a PDF or image preview. Sources can implement the Library profile alongside direct chat access. The Library does not require an index, local OCR, synchronized prepared text or Situate tags for this delivery.
+
 ### Planned document collection and data ownership
 
 The later collection delivery provides a Library view over connected sources, local text extraction/OCR, full-text search, hierarchical tags, PDF/image previews and saved searches. Originals remain in their sources. Semantic search, embeddings and specialized classifier models are deferred. Source categorization may use the user's configured, authorized external LLM; this is distinct from local-only extraction and OCR. Source setup authorizes automatic categorization and its possible charges within the agreed scope. See [source access](requirements/REQ-0054-connect-document-sources.md), [search](requirements/REQ-0055-search-document-content.md) and [categorization](requirements/REQ-0057-organize-documents-with-hierarchical-tags.md).
 
-Sources are implemented in situ by the LLM through plugin development, not supplied as prepared local-folder or Paperless connectors. Direct access establishes the source contract and uses existing plugin development and chat. The collection increment later adds persistent preparation and the Library UI. Synthetic sources support contract tests but do not replace end-to-end authoring and use.
+Sources are implemented in situ by the LLM through plugin development, not supplied as prepared local-folder or Paperless connectors. Direct access establishes the source contract and uses existing plugin development and chat. On-demand Library access precedes the increment that adds persistent preparation. Synthetic sources support contract tests but do not replace end-to-end authoring and use.
 
 Document metadata, source references, tags and saved-search definitions have an openly readable and editable file representation in a separate area of the workspace, rather than a database-only authority. Prepared text may persist and synchronize across devices. Search indexes are reconstructible from authoritative records and prepared content. External edits by users, agents or other programs are incorporated; invalid changes are reported and preserved rather than silently overwritten. Access stays within the user's request and configured access without per-action approval. Account/provider authorization, OS permissions and destructive content protections remain distinct.
 

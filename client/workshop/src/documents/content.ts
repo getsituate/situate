@@ -4,8 +4,6 @@ export const c = {
   browse: "Browse",
   browseTitle: "Browse documents",
   resizeSidebar: "Resize tag sidebar",
-  collectionActions: "Document actions",
-  sources: "Sources",
   sourcePaused: "Document access is paused while this source is disabled.",
   tags: "Tags",
   noTags: "Without tags",

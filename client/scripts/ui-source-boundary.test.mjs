@@ -30,17 +30,18 @@ function imports(text, file) {
 }
 
 function resolveImport(specifier, file) {
-  if (specifier.startsWith(".")) return resolve(dirname(file), specifier);
+  const request = specifier.split("?")[0];
+  if (request.startsWith(".")) return resolve(dirname(file), request);
   return (
     ts.resolveModuleName(
-      specifier,
+      request,
       file,
       {
         module: ts.ModuleKind.ESNext,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
       },
       ts.sys,
-    ).resolvedModule?.resolvedFileName ?? createRequire(file).resolve(specifier)
+    ).resolvedModule?.resolvedFileName ?? createRequire(file).resolve(request)
   );
 }
 
@@ -60,6 +61,22 @@ test("public Vue component exports resolve without bypassing UI boundaries", () 
   assert.throws(() =>
     resolveImport("@situate/ui/components/DoesNotExist", file),
   );
+});
+
+test("asset queries still resolve and enforce the boundary of the underlying module", () => {
+  const file = join(client, "app/src/documents/DocumentReading.vue");
+  const worker = resolveImport("pdfjs-dist/build/pdf.worker.min.mjs?url", file);
+  assert.equal(
+    worker,
+    join(client, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"),
+  );
+  assert.throws(
+    () => assertUiModule(worker, [join(client, "app")]),
+    /crosses the application boundary/,
+  );
+  assert.throws(() => resolveImport("pdfjs-dist/build/missing.mjs?url", file), {
+    code: "MODULE_NOT_FOUND",
+  });
 });
 
 test("UI source boundaries include type-only and test imports", () => {
