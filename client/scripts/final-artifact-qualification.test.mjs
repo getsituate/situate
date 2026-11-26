@@ -130,8 +130,22 @@ test("window text assertions require an exact match from the native AX query", a
       expected,
     );
   }
+  const observations = ["temporarily-unavailable", "matched"];
+  const pending = [];
+  const execute = async () => observations.shift();
+  assert.equal(
+    await checkAccessibilityAction(123, action, {
+      execute,
+      pending: (observation) => pending.push(observation),
+    }),
+    false,
+  );
+  assert.deepEqual(pending, [{ accessibilityObservation: "ax_unavailable" }]);
+  assert.equal(await checkAccessibilityAction(123, action, { execute }), true);
   await assert.rejects(
-    checkAccessibilityAction(123, action, { execute: async () => "unknown" }),
+    checkAccessibilityAction(123, action, {
+      execute: async () => "blocked-AXWindows--25211",
+    }),
     /Native text observation unavailable/,
   );
 });

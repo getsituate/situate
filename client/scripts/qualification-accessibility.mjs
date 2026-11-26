@@ -218,13 +218,16 @@ export async function checkAccessibilityAction(
       ],
       options,
     );
+    if (result === "matched") return true;
     assert(
-      result === "matched" || result === "unmatched",
+      result === "unmatched" || result === "temporarily-unavailable",
       "Native text observation unavailable",
     );
-    if (result === "unmatched")
-      pending({ accessibilityObservation: "ax_target_missing" });
-    return result === "matched";
+    pending({
+      accessibilityObservation:
+        result === "unmatched" ? "ax_target_missing" : "ax_unavailable",
+    });
+    return false;
   }
   try {
     await execute("osascript", ["-e", script], options);
