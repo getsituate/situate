@@ -118,7 +118,7 @@ function service() {
     retryQuestionAction: vi.fn(),
     abort: vi.fn(),
     recallPending: vi.fn(),
-    addAttachment: vi.fn(),
+    pickAttachments: vi.fn(),
     retrySave: vi.fn(),
   };
 }
@@ -408,6 +408,19 @@ function pane(props: Record<string, unknown> = {}, stubTranscript = true) {
     });
   return wrapper;
 }
+
+test("choosing an attachment returns focus to the draft without sending", async () => {
+  const wrapper = pane();
+  await flushPromises();
+  const chat = services.get("one:topic")!;
+  const button = wrapper.get<HTMLButtonElement>(".attach-action");
+  button.element.focus();
+  await button.trigger("click");
+  await flushPromises();
+  expect(chat.pickAttachments).toHaveBeenCalledOnce();
+  expect(chat.send).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(wrapper.get("textarea").element);
+});
 
 test("two presentations of one draft show one recovery dialog", async () => {
   const first = pane();

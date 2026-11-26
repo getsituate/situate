@@ -5,6 +5,9 @@ import {
   garden,
   reading,
 } from "./workspace-fixture";
+import { selectedTab } from "../../src/layout/model";
+import { currentEntry } from "../../src/layout/navigation";
+import type { LayoutDocument } from "../../src/layout/storage";
 
 test.use({ localizationMode: "real" });
 async function openAppearance(page: Page) {
@@ -176,12 +179,20 @@ test("selection survives navigation, reload and workspace switches without disca
     page.getByRole("radio", { name: "Cobalt", exact: true }),
   ).toBeChecked();
   await expect
-    .poll(async () =>
-      page.evaluate(async () =>
-        JSON.stringify((await window.__layoutTest.stored("garden")).data),
-      ),
-    )
-    .toContain('"presentation":{"page":"appearance","detail":true}');
+    .poll(async () => {
+      const { data } = await page.evaluate(() =>
+        window.__layoutTest.stored("garden"),
+      );
+      const saved = data as LayoutDocument | null;
+      const tab = saved && selectedTab(saved.layout);
+      const pane =
+        tab && tab.panes.find((item) => item.id === tab.activePaneId);
+      return pane && currentEntry(pane.navigation);
+    })
+    .toMatchObject({
+      target: { kind: "view", viewId: "settings" },
+      presentation: { page: "appearance", detail: true },
+    });
   await page.reload();
   await expect(
     page.getByRole("radio", { name: "Cobalt", exact: true }),
