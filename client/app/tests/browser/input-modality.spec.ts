@@ -1,6 +1,5 @@
 import { expect, test } from "./test";
 import { shellState, workspaceFixture } from "./workspace-fixture";
-import { expectDialogTypography } from "./dialog-typography";
 
 test.use({ localizationMode: "real" });
 test.beforeEach(async ({ page }) => {
@@ -14,43 +13,43 @@ test.beforeEach(async ({ page }) => {
 
 test("pane layout retains automatic focus but shows outlines only during keyboard navigation @visual-desktop", async ({
   page,
-  browserName,
   visual,
 }) => {
-  const tab =
-    process.platform === "darwin" && browserName === "webkit"
-      ? "Alt+Tab"
-      : "Tab";
   const trigger = page.locator(".surface-pane-options");
   await trigger.click();
-  const dialog = page.getByRole("dialog", { name: "Pane layout", exact: true });
-  const first = dialog.locator(".pane-actions button").first();
+  const menu = page.getByRole("menu", { name: "Pane layout", exact: true });
+  const first = menu.getByRole("menuitem", { name: "Add pane to the right" });
+  const second = menu.getByRole("menuitem", { name: "Add pane below" });
   await expect(first).toBeFocused();
   await expect(first).toHaveCSS("outline-style", "none");
-  await expectDialogTypography(dialog);
   await visual.capture("focus.pane-layout.pointer");
 
-  await page.keyboard.press(tab);
-  const focused = dialog.locator(":focus");
-  await expect(focused).toHaveCount(1);
-  await expect(focused).toHaveCSS("outline-style", "solid");
-  await page.keyboard.press(`Shift+${tab}`);
+  await page.keyboard.press("ArrowDown");
+  await expect(second).toBeFocused();
+  await expect(second).toHaveCSS("outline-style", "solid");
+  await page.keyboard.press("ArrowUp");
   await expect(first).toBeFocused();
   await expect(first).toHaveCSS("outline-style", "solid");
   await visual.capture("focus.pane-layout.keyboard");
 
   await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await expect(trigger).toHaveCSS("outline-style", "solid");
+  await trigger.press("ArrowUp");
+  await expect(
+    menu.getByRole("menuitem", { name: "Close pane" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
   await trigger.click();
   await expect(first).toBeFocused();
   await expect(first).toHaveCSS("outline-style", "none");
 });
 
 for (const width of [1440, 390]) {
-  test(`pane actions retain alignment, contrast and dialog insets at ${width}px`, async ({
+  test(`pane options open a text-only menu within the viewport at ${width}px`, async ({
     page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.reload();
     await expect(
@@ -64,35 +63,28 @@ for (const width of [1440, 390]) {
     } else {
       await page.locator(".surface-pane-options").click();
     }
-    const dialog = page.getByRole("dialog", {
-      name: "Pane layout",
-      exact: true,
-    });
-    const actions = dialog.locator(".pane-actions button");
+    const menu = page.getByRole("menu", { name: "Pane layout", exact: true });
+    const actions = menu.getByRole("menuitem");
+    await expect(actions).toHaveText([
+      "Add pane to the right",
+      "Add pane below",
+      "Close pane",
+    ]);
+    await expect(menu.locator("svg")).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Pane layout" })).toHaveCount(
+      0,
+    );
+    const box = (await menu.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
     const first = actions.first();
-    const insets = await dialog.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return [
-        style.paddingTop,
-        style.paddingRight,
-        style.paddingBottom,
-        style.paddingLeft,
-      ];
-    });
-    expect(new Set(insets).size).toBe(1);
-    const iconPositions: number[] = [];
-    for (const action of await actions.all()) {
-      await expect(action).toHaveCSS("justify-content", "flex-start");
-      iconPositions.push((await action.locator("svg").boundingBox())!.x);
-    }
-    expect(new Set(iconPositions).size).toBe(1);
     await first.hover();
     const colors = await first.evaluate((element) => {
       const style = getComputedStyle(element);
       return {
         foreground: style.color,
         background: style.backgroundColor,
-        ink: getComputedStyle(element.closest("dialog")!).color,
+        ink: getComputedStyle(element.closest('[role="menu"]')!).color,
       };
     });
     await expect(first).toHaveCSS("color", colors.ink);
@@ -115,8 +107,6 @@ for (const width of [1440, 390]) {
     expect(
       (Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05),
     ).toBeGreaterThanOrEqual(4.5);
-    await expectDialogTypography(dialog);
-    await dialog.screenshot({ path: testInfo.outputPath("pane-actions.png") });
   });
 }
 

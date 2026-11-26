@@ -49,18 +49,21 @@ async function newTab(page: Page) {
 }
 async function paneOptions(page: Page) {
   const trigger = page.locator(
-    ".surface-pane-options, .mobile-pane-header > button, .maximized-pane-toolbar > .situate-icon-button",
+    [
+      ".surface-pane-options",
+      ".mobile-pane-header > [aria-haspopup='menu']",
+      ".maximized-pane-toolbar > [aria-haspopup='menu']",
+      ".pane-tile.active .pane-toolbar > [aria-expanded][aria-haspopup='menu']",
+    ].join(", "),
   );
   if (await trigger.isVisible()) await trigger.click();
-  else if (await page.locator(".pane-tile.active .pane-title").isVisible())
-    await page.locator(".pane-tile.active .pane-title").click();
   else {
     await page.locator(".tab-header .tab-actions-trigger").click();
     await page
       .getByRole("menuitem", { name: "Pane layout", exact: true })
       .click();
   }
-  return page.getByRole("dialog", { name: "Pane layout", exact: true });
+  return page.getByRole("menu", { name: "Pane layout", exact: true });
 }
 test("settings and plugins open in the chosen pane without replacing another pane @visual-desktop", async ({
   page,
@@ -192,7 +195,7 @@ for (const width of [1440, 390]) {
       const options = await paneOptions(page);
       await expect(options.getByText(/Up to 6 panes/)).toHaveCount(0);
       await visual.capture("layout.capacity.pane-options");
-      const split = options.getByRole("button", {
+      const split = options.getByRole("menuitem", {
         name: "Add pane to the right",
         exact: true,
       });
@@ -203,15 +206,20 @@ for (const width of [1440, 390]) {
       await visual.capture("layout.capacity.pane-rejected");
       await page.keyboard.press("Escape");
       await expect(error).not.toBeVisible();
-      await expect(options).toBeVisible();
-      await expect(split).toBeFocused();
-      await options
-        .getByRole("button", { name: "Add pane below", exact: true })
+      await expect(options).not.toBeVisible();
+      const trigger = page.locator(
+        width < 600
+          ? ".mobile-pane-header > [aria-haspopup='menu']"
+          : ".pane-tile.active .pane-toolbar > [aria-expanded][aria-haspopup='menu']",
+      );
+      await expect(trigger).toBeFocused();
+      await (
+        await paneOptions(page)
+      )
+        .getByRole("menuitem", { name: "Add pane below", exact: true })
         .click();
       await expect(error).toBeVisible();
       await dismiss.click();
-      await page.keyboard.press("Escape");
-      await expect(options).not.toBeVisible();
 
       await newTab(page);
       await expect(error).toContainText("Up to 20 tabs can be open.");
@@ -364,8 +372,8 @@ test("the first send lists the conversation before its response and keeps the cu
     .click();
 });
 
-async function expectCenteredCloseIcon(close: Locator) {
-  const offset = await close.evaluate((button) => {
+async function expectCenteredIcon(control: Locator) {
+  const offset = await control.evaluate((button) => {
     const target = button.getBoundingClientRect();
     const icon = button.querySelector("svg")!.getBoundingClientRect();
     return {
@@ -429,7 +437,7 @@ for (const viewport of [
         await (
           await paneOptions(page)
         )
-          .getByRole("button", { name: "Add pane to the right", exact: true })
+          .getByRole("menuitem", { name: "Add pane to the right", exact: true })
           .click();
         await page
           .locator(".pane-tile")
@@ -444,6 +452,16 @@ for (const viewport of [
         await expect
           .poll(async () => (await stored(page))?.layout.tabs[0]?.panes.length)
           .toBe(2);
+        const iconButtons = page.locator(
+          ".pane-tile.active .pane-toolbar button:has(> svg)",
+        );
+        await expect(iconButtons).toHaveCount(5);
+        for (const control of await iconButtons.all()) {
+          const size = viewport.touch ? "44px" : "36px";
+          await expect(control).toHaveCSS("width", size);
+          await expect(control).toHaveCSS("height", size);
+          await expectCenteredIcon(control);
+        }
         await expect(page.locator(".topic-panel > footer")).toHaveCount(0);
         await expect(page.locator(".layout-scroll")).toHaveCSS(
           "padding-bottom",
@@ -474,11 +492,11 @@ for (const viewport of [
         await page
           .getByRole("textbox", { name: "Message", exact: true })
           .focus();
-        const maximize = (await paneOptions(page)).getByRole("button", {
+        const maximize = (await paneOptions(page)).getByRole("menuitem", {
           name: "Maximize pane",
           exact: true,
         });
-        const maximizeIcon = await maximize.locator("path").getAttribute("d");
+        await expect(maximize.locator("svg")).toHaveCount(0);
         await maximize.click();
         await page.setViewportSize(viewport);
         if (viewport.width < 660)
@@ -498,7 +516,6 @@ for (const viewport of [
         );
         const restoreIcon = await restore.locator("path").getAttribute("d");
         expect(restoreIcon).toBeTruthy();
-        expect(restoreIcon).not.toBe(maximizeIcon);
         await expect(page.locator(".pane-tile")).toHaveCount(1);
         await expect(page.locator(".pane-toolbar, .layout-footer")).toHaveCount(
           0,
@@ -508,7 +525,7 @@ for (const viewport of [
           const close = page.locator(".topic-tab.selected .tab-close");
           await expect(close).toHaveCSS("width", "44px");
           await expect(close).toHaveCSS("height", "44px");
-          await expectCenteredCloseIcon(close);
+          await expectCenteredIcon(close);
         }
         if (viewport.touch)
           expect(
@@ -581,23 +598,12 @@ for (const viewport of [
           .click();
         if (viewport.width >= 660) {
           const options = await paneOptions(page);
-          const menuRestore = options.getByRole("button", {
+          const menuRestore = options.getByRole("menuitem", {
             name: "Restore arrangement",
             exact: true,
           });
           await expect(menuRestore).toBeVisible();
-          await expect(menuRestore).toHaveText("Restore arrangement");
-          await expect(menuRestore.locator("path")).toHaveAttribute(
-            "d",
-            restoreIcon!,
-          );
-          const split = options.getByRole("button", {
-            name: "Add pane to the right",
-            exact: true,
-          });
-          expect(await split.locator("path").getAttribute("d")).not.toBe(
-            restoreIcon,
-          );
+          await expect(options.locator("svg")).toHaveCount(0);
           await visual.capture("layout.panes.restore-menu");
           await page.keyboard.press("Escape");
         }
@@ -620,7 +626,7 @@ for (const viewport of [
         await (
           await paneOptions(page)
         )
-          .getByRole("button", { name: "Move pane", exact: true })
+          .getByRole("menuitem", { name: "Move pane", exact: true })
           .click();
         const move = page.getByRole("dialog", {
           name: "Move pane",
@@ -916,15 +922,15 @@ for (const viewport of [
           .all()) {
           await expect(control).toHaveCSS("opacity", "1");
           await expect(control).toHaveCSS("pointer-events", "auto");
-          await expectCenteredCloseIcon(control);
+          await expectCenteredIcon(control);
         }
         const tabWidth = (await other.boundingBox())!.width;
         await visual.capture("layout.tabs.close-controls-visible");
         await close.hover();
         await expect(page.getByRole("tooltip")).toHaveText("Close tab");
         expect((await other.boundingBox())!.width).toBe(tabWidth);
-        await expectCenteredCloseIcon(close);
-        await expectCenteredCloseIcon(
+        await expectCenteredIcon(close);
+        await expectCenteredIcon(
           page.locator(".topic-tab.selected .tab-close"),
         );
         await visual.capture("layout.tabs.close-button-hover");
@@ -1228,6 +1234,60 @@ test("opening a new chat from the empty pane focuses its composer on first load"
   await expect(composer).toHaveValue("A first message");
 });
 
+test("each tiled pane can be closed directly and its toolbar clears the divider", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await workspaceFixture(page, shellState);
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message", exact: true });
+  await composer.fill("Keep this draft");
+  await (
+    await paneOptions(page)
+  )
+    .getByRole("menuitem", { name: "Add pane to the right", exact: true })
+    .click();
+
+  const panes = page.locator(".pane-tile");
+  await expect(panes).toHaveCount(2);
+  const left = panes.first();
+  const right = panes.last();
+  for (const pane of [left, right]) {
+    const more = pane.locator(
+      '.pane-toolbar > [aria-expanded][aria-haspopup="menu"]',
+    );
+    const close = pane.getByRole("button", { name: "Close pane", exact: true });
+    await expect(more).toBeVisible();
+    await expect(close).toBeVisible();
+    const menuBox = (await more.boundingBox())!;
+    const closeBox = (await close.boundingBox())!;
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(closeBox.x);
+    await close.hover({
+      position: { x: closeBox.width - 1, y: closeBox.height / 2 },
+    });
+    await expect(close).toHaveCSS("cursor", "pointer");
+    await expect(close).toHaveCSS(
+      "background-color",
+      /^(?!rgba\(0, 0, 0, 0\))/,
+    );
+  }
+
+  const more = left.locator(
+    '.pane-toolbar > [aria-expanded][aria-haspopup="menu"]',
+  );
+  await more.click();
+  const menu = page.getByRole("menu", { name: "Pane layout", exact: true });
+  await expect(menu).toBeVisible();
+  await more.click();
+  await expect(menu).not.toBeVisible();
+  await right.getByRole("button", { name: "Close pane", exact: true }).click();
+  await expect(panes).toHaveCount(1);
+  await expect(composer).toHaveValue("Keep this draft");
+  await expect(
+    panes.getByRole("button", { name: "Close pane", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("pane grips move between all four edges with real pointer gestures", async ({
   page,
 }) => {
@@ -1240,7 +1300,7 @@ test("pane grips move between all four edges with real pointer gestures", async 
   await (
     await paneOptions(page)
   )
-    .getByRole("button", { name: "Add pane to the right", exact: true })
+    .getByRole("menuitem", { name: "Add pane to the right", exact: true })
     .click();
   await expect(
     page.locator(".pane-tile.active .view-chooser").getByRole("button", {
@@ -1339,7 +1399,7 @@ test("mouse history buttons navigate the focused pane, not the pane under the po
   await (
     await paneOptions(page)
   )
-    .getByRole("button", { name: "Add pane to the right", exact: true })
+    .getByRole("menuitem", { name: "Add pane to the right", exact: true })
     .click();
   await expect(panes).toHaveCount(2);
   await message.focus();
@@ -1379,7 +1439,7 @@ test(
     await (
       await paneOptions(page)
     )
-      .getByRole("button", { name: "Add pane to the right", exact: true })
+      .getByRole("menuitem", { name: "Add pane to the right", exact: true })
       .click();
     const panes = page.locator(".pane-tile");
     await expect(panes).toHaveCount(2);
@@ -1505,7 +1565,7 @@ test(
     await (
       await paneOptions(page)
     )
-      .getByRole("button", { name: "Add pane to the right", exact: true })
+      .getByRole("menuitem", { name: "Add pane to the right", exact: true })
       .click();
     const panes = page.locator(".pane-tile");
     await panes
@@ -1612,7 +1672,7 @@ test(
     await (
       await paneOptions(page)
     )
-      .getByRole("button", { name: "Add pane to the right", exact: true })
+      .getByRole("menuitem", { name: "Add pane to the right", exact: true })
       .click();
     const panes = page.locator(".pane-tile");
     await panes
@@ -1808,7 +1868,7 @@ test("Files navigation restores each pane's own file and folder state after rest
   await (
     await paneOptions(page)
   )
-    .getByRole("button", { name: "Add pane to the right", exact: true })
+    .getByRole("menuitem", { name: "Add pane to the right", exact: true })
     .click();
   const panes = page.locator(".pane-tile");
   await panes
@@ -2246,7 +2306,7 @@ for (const viewport of [
       await (
         await paneOptions(page)
       )
-        .getByRole("button", { name: "Add pane below", exact: true })
+        .getByRole("menuitem", { name: "Add pane below", exact: true })
         .click();
       await expect(
         page.locator(
