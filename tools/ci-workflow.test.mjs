@@ -39,7 +39,54 @@ function job(workflow, id) {
   return body;
 }
 
-test("workflows use the shared CLI and pinned checkout, cache and evidence actions", () => {
+const workflowActions = new Map([
+  [
+    "deploy-architecture",
+    ["actions/upload-pages-artifact", "actions/deploy-pages"],
+  ],
+  ["deploy-hosting", ["hashicorp/setup-terraform"]],
+  ["deploy-website", ["actions/upload-artifact"]],
+  ["publish-macos", ["./.github/workflows/slack-notify.yml"]],
+  [
+    "release-macos",
+    [
+      "actions/cache/restore",
+      "actions/cache/save",
+      "actions/upload-artifact",
+      "./.github/workflows/slack-notify.yml",
+    ],
+  ],
+  ["sonarcloud", ["SonarSource/sonarqube-scan-action"]],
+  ["verify", ["actions/upload-artifact", "actions/attest-build-provenance"]],
+  ["verify-hosting", ["hashicorp/setup-terraform"]],
+]);
+
+function isAllowedAction(workflow, reference) {
+  const allowed = workflowActions.get(workflow) ?? [];
+  if (reference.startsWith("./")) return allowed.includes(reference);
+  const match = /^([^@]+)@[0-9a-f]{40}$/i.exec(reference);
+  return (
+    match !== null &&
+    (match[1] === "actions/checkout" || allowed.includes(match[1]))
+  );
+}
+
+test("workflow Action updates retain the allowlist and require full commit SHAs", () => {
+  const sha = "0".repeat(40);
+  const action = "actions/cache/save";
+  const local = "./.github/workflows/slack-notify.yml";
+  for (const pin of [sha, "a".repeat(40)])
+    assert.ok(isAllowedAction("release-macos", `${action}@${pin}`));
+  for (const ref of ["main", "v5", "abc1234", "z".repeat(40)])
+    assert.equal(isAllowedAction("release-macos", `${action}@${ref}`), false);
+  assert.equal(isAllowedAction("verify", `${action}@${sha}`), false);
+  assert.equal(isAllowedAction("verify", `example/unknown@${sha}`), false);
+  assert.ok(isAllowedAction("release-macos", local));
+  assert.equal(isAllowedAction("release-macos", `${local}@${sha}`), false);
+  assert.equal(isAllowedAction("verify", local), false);
+});
+
+test("workflows use the shared CLI and pinned actions", () => {
   assert.deepEqual(
     readdirSync(new URL("../.github/workflows/", import.meta.url)).sort(),
     [...pipelineWorkflows, "notify-slack", "slack-notify"]
@@ -56,41 +103,8 @@ test("workflows use the shared CLI and pinned checkout, cache and evidence actio
   );
   for (const name of pipelineWorkflows) {
     const workflow = read(name);
-    const allowed = new Set([
-      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-      ...(name === "release-macos"
-        ? [
-            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-            "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-          ]
-        : []),
-      ...(["deploy-hosting", "verify-hosting"].includes(name)
-        ? ["hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd"]
-        : []),
-      ...(name === "deploy-architecture"
-        ? [
-            "actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
-            "actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
-          ]
-        : []),
-      ...(["deploy-website", "release-macos"].includes(name)
-        ? ["actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"]
-        : []),
-      ...(name === "verify"
-        ? [
-            "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-            "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
-          ]
-        : []),
-    ]);
-    if (["publish-macos", "release-macos"].includes(name))
-      allowed.add("./.github/workflows/slack-notify.yml");
-    if (name === "sonarcloud")
-      allowed.add(
-        "SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4",
-      );
     for (const match of workflow.matchAll(/uses: (\S+)/g))
-      assert(allowed.has(match[1]), match[1]);
+      assert(isAllowedAction(name, match[1]), `${name}: ${match[1]}`);
     for (const step of workflow.split(/\n {6}- /).slice(1))
       if (step.includes("continue-on-error: true"))
         assert.match(step, /release-build-cache\.mjs|actions\/cache\//);
