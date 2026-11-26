@@ -945,8 +945,9 @@ describe("workspace view host", () => {
     conversationRunning = true;
     await chat.refresh();
     await settleViews();
-    await wrapper.get(`[data-pane="${other}"] .pane-title`).trigger("click");
-    await hostButton(wrapper, "⟦layoutUi.closePane⟧").trigger("click");
+    await wrapper
+      .get(`[data-pane="${other}"] [aria-label="⟦layoutUi.closePane⟧"]`)
+      .trigger("click");
     await settleViews();
     expect(ui.session.state.document!.layout.tabs[0]!.panes).toHaveLength(1);
     expect(workspaceChat("garden", "legacy").state).toBe(shared);

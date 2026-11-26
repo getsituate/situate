@@ -15,15 +15,20 @@ const props = defineProps<{
   dragging: string | null;
   maximized: boolean;
   compact?: boolean;
+  optionsId?: string;
+  optionsOpen?: boolean;
 }>();
 defineSlots<{
   pane(props: { pane: Pane; tab: TopicTab; active: boolean }): unknown;
 }>();
 const emit = defineEmits<{
   intent: [intent: LayoutIntent];
-  options: [id: string, event: MouseEvent];
+  options: [id: string, event: Event];
   drag: [id: string | null];
 }>();
+function showOptions(event: Event) {
+  emit("options", props.pane.id, event);
+}
 const title = computed(() =>
   props.titleFor(currentEntry(props.pane.navigation).target),
 );
@@ -71,7 +76,11 @@ function activate() {
         :title="t('layoutUi.drag')"
         @dragstart="dragStart"
         @dragend="emit('drag', null)"
-        @click="emit('options', pane.id, $event)"
+        aria-haspopup="menu"
+        :popovertarget="optionsId"
+        @click.prevent="showOptions"
+        @keydown.down.exact.prevent="showOptions"
+        @keydown.up.exact.prevent="showOptions"
       >
         <SituateIcon name="grip" />
       </SituateButton>
@@ -90,14 +99,30 @@ function activate() {
         variant="plain"
         class="pane-title"
         :title="t('layoutUi.title', { title })"
-        @click="emit('options', pane.id, $event)"
+        aria-haspopup="menu"
+        :popovertarget="optionsId"
+        @click.prevent="showOptions"
+        @keydown.down.exact.prevent="showOptions"
+        @keydown.up.exact.prevent="showOptions"
       >
         <span data-localization-content="user">{{ title }}</span>
       </SituateButton>
       <SituateIconButton
         icon="more"
         :label="t('layoutUi.namedPaneOptions', { title })"
-        @click="emit('options', pane.id, $event)"
+        aria-haspopup="menu"
+        :aria-expanded="optionsOpen"
+        :popovertarget="optionsId"
+        @click.prevent="showOptions"
+        @keydown.down.exact.prevent="showOptions"
+        @keydown.up.exact.prevent="showOptions"
+      />
+      <SituateIconButton
+        icon="close"
+        :label="t('layoutUi.closePane')"
+        @click="
+          emit('intent', { type: 'close-pane', tabId: tab.id, paneId: pane.id })
+        "
       />
     </header>
     <div class="pane-body">
@@ -157,11 +182,12 @@ function activate() {
   box-shadow: none;
 }
 .pane-toolbar {
+  --pane-control-size: 36px;
   display: flex;
   gap: 0;
   flex: 0 0 auto;
   align-items: center;
-  padding: 4px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--situate-line);
   border-radius: 11px 11px 0 0;
   background: var(--situate-paper);
@@ -173,21 +199,18 @@ function activate() {
     var(--situate-surface)
   );
 }
-.pane-toolbar :deep(.situate-icon-button) {
-  width: 32px;
-  height: 36px;
-  flex-basis: 32px;
+.pane-toolbar :deep(.situate-icon-button),
+.pane-grip {
+  width: var(--pane-control-size);
+  height: var(--pane-control-size);
+  flex: 0 0 var(--pane-control-size);
   padding: 8px;
   border-radius: 8px;
 }
 .pane-grip {
   display: grid;
   place-items: center;
-  width: 26px;
-  flex: 0 0 26px;
-  height: 36px;
   border: 0;
-  padding: 4px;
   background: transparent;
   color: var(--situate-muted);
   cursor: grab;
@@ -198,7 +221,7 @@ function activate() {
   align-items: center;
   flex: 1;
   min-width: 0;
-  height: 36px;
+  height: var(--pane-control-size);
   padding: 0 6px;
   border: 0;
   background: transparent;
@@ -264,14 +287,8 @@ function activate() {
   color: var(--situate-surface);
 }
 @media (pointer: coarse) {
-  .pane-toolbar :deep(.situate-icon-button),
-  .pane-title,
-  .pane-grip {
-    height: 44px;
-  }
-  .pane-toolbar :deep(.situate-icon-button) {
-    width: 44px;
-    flex-basis: 44px;
+  .pane-toolbar {
+    --pane-control-size: var(--situate-target-min);
   }
 }
 </style>

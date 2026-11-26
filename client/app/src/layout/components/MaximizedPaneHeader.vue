@@ -19,12 +19,14 @@ import type { Pane } from "../model";
 const props = defineProps<{
   pane: Pane;
   panes: { id: string; title: string }[];
+  optionsId: string;
+  optionsOpen: boolean;
 }>();
 const emit = defineEmits<{
   select: [id: string];
   restore: [];
   history: [delta: -1 | 1];
-  options: [event: MouseEvent];
+  options: [event: Event];
 }>();
 const dialogControl =
   useTemplateRef<InstanceType<typeof SituateDialog>>("dialogControl");
@@ -107,7 +109,12 @@ onBeforeUnmount(() => dialog.value?.close());
       <SituateIconButton
         icon="more"
         :label="t('layoutUi.namedPaneOptions', { title })"
-        @click="emit('options', $event)"
+        aria-haspopup="menu"
+        :aria-expanded="optionsOpen"
+        :popovertarget="optionsId"
+        @click.prevent="emit('options', $event)"
+        @keydown.down.exact.prevent="emit('options', $event)"
+        @keydown.up.exact.prevent="emit('options', $event)"
       />
     </div>
     <SituateDialog

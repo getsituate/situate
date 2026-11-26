@@ -262,21 +262,20 @@ describe("workspace layout rendering", () => {
         () => `id-${++next}`,
       );
     const wrapper = render(state);
-    await wrapper.findAll(".pane-title")[0]!.trigger("click");
+    const trigger = wrapper.findAll(".pane-title")[0]!;
     expect(wrapper.find(".layout-limit").exists()).toBe(false);
     expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
     for (const key of ["splitRight", "splitBelow"]) {
+      await trigger.trigger("click");
       expect(button(wrapper, key).attributes("disabled")).toBeUndefined();
       await button(wrapper, key).trigger("click");
       const error = wrapper.get("dialog.error-dialog[open]");
       expect(error.text()).toContain("⟦layoutUi.paneLimit");
       expect(error.text()).toContain("6");
-      expect(wrapper.get(".pane-actions").text()).not.toContain("paneLimit");
+      expect(wrapper.find('[role="menu"]:popover-open').exists()).toBe(false);
       await error.trigger("cancel");
       expect(wrapper.find("dialog.error-dialog[open]").exists()).toBe(false);
-      expect(wrapper.get(".pane-actions").element.closest("dialog")?.open).toBe(
-        true,
-      );
+      expect(document.activeElement).toBe(trigger.element);
     }
     expect(wrapper.props("state").tabs[0]?.panes).toHaveLength(6);
     expect(
@@ -716,6 +715,50 @@ describe("workspace layout rendering", () => {
       false,
     );
   });
+  it("opens pane options from the narrow tab menu and returns focus on Back", async () => {
+    const wrapper = render(fixture(false), true);
+    const trigger = wrapper.get(".tab-actions-trigger");
+    await trigger.trigger("click");
+    await button(wrapper, "paneOptions").trigger("click");
+    await flushPromises();
+    const menu = wrapper.get(
+      '[role="menu"][aria-label="⟦layoutUi.paneOptions⟧"]',
+    );
+    expect(menu.element.matches(":popover-open")).toBe(true);
+    const first = menu.get('[role="menuitem"]');
+    expect(first.text()).toBe("⟦layoutUi.splitRight⟧");
+    expect(document.activeElement).toBe(first.element);
+
+    expect(wrapper.vm.back()).toBe(true);
+    await flushPromises();
+    expect(menu.element.matches(":popover-open")).toBe(false);
+    expect(document.activeElement).toBe(trigger.element);
+  });
+  it("focuses the last pane option on ArrowUp and dismisses the menu if its pane closes", async () => {
+    const wrapper = render();
+    const trigger = wrapper.get(
+      '[data-pane="A"] .pane-toolbar [aria-expanded]',
+    );
+    await trigger.trigger("keydown", { key: "ArrowUp" });
+    await flushPromises();
+    const menu = wrapper.get(
+      '[role="menu"][aria-label="⟦layoutUi.paneOptions⟧"]',
+    );
+    const last = menu.findAll('[role="menuitem"]').at(-1)!;
+    expect(last.text()).toBe("⟦layoutUi.closePane⟧");
+    expect(document.activeElement).toBe(last.element);
+
+    await wrapper.setProps({
+      state: reduceLayout(
+        wrapper.props("state"),
+        { type: "close-pane", tabId: "topic", paneId: "A" },
+        () => "unused",
+      ),
+    });
+    await flushPromises();
+    expect(menu.element.matches(":popover-open")).toBe(false);
+    expect(wrapper.vm.back()).toBe(false);
+  });
   it("provides a keyboard move alternative and non-destructive maximize", async () => {
     const wrapper = render();
     await wrapper.get('[data-pane="A"] .pane-title').trigger("click");
@@ -965,9 +1008,13 @@ describe("workspace layout rendering", () => {
     expect(wrapper.findAll(".pane-tile")).toHaveLength(2);
     const added = wrapper.props("state").tabs[0]!.panes[1]!;
     expect(added.navigation.entries[0]!.target).toEqual({ kind: "empty" });
-    await wrapper.findAll(".pane-title")[1]!.trigger("click");
-    await button(wrapper, "closePane").trigger("click");
+    await wrapper
+      .get(`[data-pane="${added.id}"] [aria-label="⟦layoutUi.closePane⟧"]`)
+      .trigger("click");
     expect(wrapper.findAll(".pane-tile")).toHaveLength(1);
+    expect(wrapper.find('[aria-label="⟦layoutUi.closePane⟧"]').exists()).toBe(
+      false,
+    );
     await wrapper.get(".surface-pane-options").trigger("click");
     await button(wrapper, "closePane").trigger("click");
     expect(wrapper.findAll('[role="tab"]')).toHaveLength(1);
