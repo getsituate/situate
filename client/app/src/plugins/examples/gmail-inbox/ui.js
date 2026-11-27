@@ -15,38 +15,57 @@ export default (host) => ({
       component: host.vue.defineComponent({
         setup() {
           const messages = host.vue.ref([]);
-          const error = host.vue.ref("");
+          const error = host.vue.ref();
           const busy = host.vue.ref(false);
           const invoke = (name, args) =>
             host.dependencies.invoke("situate-gmail", name, args);
           async function load() {
             busy.value = true;
-            error.value = "";
+            error.value = undefined;
             try {
-              const account = await invoke("selectedAccount", {});
-              if (!account) {
-                error.value = "Select a Gmail account in the plugin settings.";
+              const [accounts, preference] = await Promise.all([
+                invoke("listAccounts", {}),
+                invoke("selectedAccount", {}),
+              ]);
+              const readable = accounts.filter(
+                ({ id, permissions, reconnect }) =>
+                  (!preference || preference.id === id) &&
+                  !reconnect &&
+                  permissions.includes("metadata"),
+              );
+              if (!readable.length) {
+                messages.value = [];
+                error.value = host.localization.text(
+                  accounts.length
+                    ? "gmail.noReadableAccounts"
+                    : "gmail.noAccounts",
+                );
                 return;
               }
-              const { messages: found = [] } = await invoke("listMetadata", {
-                accountId: account.id,
-              });
-              messages.value = await Promise.all(
-                found.slice(0, 5).map(async ({ id }) => {
-                  const detail = await invoke("getMetadata", {
-                    accountId: account.id,
-                    input: { id },
-                  });
-                  return (
-                    detail.payload?.headers?.find(
-                      (header) => header.name.toLowerCase() === "subject",
-                    )?.value || "(No subject)"
+              const mailboxes = await Promise.all(
+                readable.map(async ({ id: accountId, email }) => {
+                  const { messages: found = [] } = await invoke(
+                    "listMetadata",
+                    { accountId },
+                  );
+                  return Promise.all(
+                    found.slice(0, 5).map(async ({ id }) => {
+                      const detail = await invoke("getMetadata", {
+                        accountId,
+                        input: { id },
+                      });
+                      const subject =
+                        detail.payload?.headers?.find(
+                          (header) => header.name.toLowerCase() === "subject",
+                        )?.value || "(No subject)";
+                      return `${email}: ${subject}`;
+                    }),
                   );
                 }),
               );
-            } catch {
-              error.value =
-                "Messages could not be opened. Check the Gmail permissions in the plugin settings.";
+              messages.value = mailboxes.flat();
+            } catch (failure) {
+              error.value = host.localization.error(failure);
             } finally {
               busy.value = false;
             }
@@ -60,7 +79,13 @@ export default (host) => ({
                 "Load messages",
               ),
               error.value
-                ? host.vue.h("p", { role: "alert" }, error.value)
+                ? host.vue.h(host.ui.SituateErrorDialog, {
+                    open: true,
+                    message: error.value,
+                    onDismiss: () => {
+                      error.value = undefined;
+                    },
+                  })
                 : null,
               host.vue.h(
                 "ul",

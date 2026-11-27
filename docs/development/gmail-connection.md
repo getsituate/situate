@@ -1,6 +1,6 @@
 # Gmail connection for plugins
 
-The Gmail experiment uses a Google Desktop app OAuth client on macOS and Windows. It has no built-in inbox. Plugins that declare a dependency on the installed `situate-gmail` connection can use a Gmail account the user selects in that plugin’s settings. An account connected in one workspace is not available in another, and its credentials do not sync.
+The Gmail experiment uses a Google Desktop app OAuth client on macOS and Windows. It has no built-in inbox. Plugins that declare a dependency on the installed `situate-gmail` connection can use any connected Gmail account in the current workspace, subject to its permissions. No account selection in the consumer’s settings is required. An account connected in one workspace is not available in another, and its credentials do not sync.
 
 ## Test access
 
@@ -19,25 +19,25 @@ If **Update Gmail settings** appears under **Settings → Experimental features*
 
 ## Verify the Windows installer
 
-On a native Windows desktop, install the release candidate with a fresh Situate profile and open a disposable workspace. Enable and install Gmail, then connect a test account from the Google Cloud consent screen's test-user list. Confirm that the default browser opens, the sign-in returns to Situate, and the account appears in Gmail settings. Use the `gmail-inbox` example below to select the account and read subjects from the synthetic mailbox. Reopen Situate and repeat the read to check that the connection survives a restart. Record the installer version, architecture, and Windows version with the result. The automated installer launch check does not exercise Google sign-in.
+On a native Windows desktop, install the release candidate with a fresh Situate profile and open a disposable workspace. Enable and install Gmail, then connect a test account from the Google Cloud consent screen's test-user list. Confirm that the default browser opens, the sign-in returns to Situate, and the account appears in Gmail settings. Use the `gmail-inbox` example below to read subjects from the synthetic mailbox without choosing an account in the plugin’s settings. Reopen Situate and repeat the read to check that the connection survives a restart. Record the installer version, architecture, and Windows version with the result. The automated installer launch check does not exercise Google sign-in.
 
 ## Use the connection
 
 In a Plugin Development Chat, ask for the Gmail workflow you want. The chat can inspect the installed connection and read its `README.md` without being given the package ID. It does not need a second connection or Google sign-in.
 
-Add `"dependencies": ["situate-gmail"]` to the consumer manifest. In the consumer’s settings, use `host.dependencies.invoke` to call `listAccounts` and save the user’s selection with `selectAccount({ accountId })`. In a service, use `context.dependencies.invoke`. The [package guide](../../client/app/src-tauri/plugins/gmail/README.md) includes synthetic fixtures for consumer checks.
+Add `"dependencies": ["situate-gmail"]` to the consumer manifest. Use `listAccounts` through `context.dependencies.invoke` in services or chat tools, or through `host.dependencies.invoke` in views. The [package guide](../../client/app/src-tauri/plugins/gmail/README.md) includes synthetic fixtures for consumer checks.
 
 ```js
 const gmail = (name, args) =>
   context.dependencies.invoke("situate-gmail", name, args);
-const account = await gmail("selectedAccount", {});
-if (account) {
+for (const account of await gmail("listAccounts", {})) {
+  if (account.reconnect || !account.permissions.includes("metadata")) continue;
   const page = await gmail("listMetadata", { accountId: account.id });
   // Use page.messages and page.nextPageToken. No message bodies are available here.
 }
 ```
 
-`selectedAccount` returns `null` or `{ id, email, permissions, missing, partial, reconnect }`. Gmail operations take `{ accountId, input? }`, require the selected account, and fail if the user’s selection or Google’s grant does not allow the operation. `input` is an object; omit it for operations that take no fields. List operations that read mail or drafts accept `pageToken?`, and only `listMessages` and `listThreads` accept `query?`. `listMessages` also accepts `maxResults` (1–50, default 50). Use the same query and page size with the next page token. Successful operations return the corresponding Gmail v1 resource or list; deletes with no response body return `null`.
+`listAccounts` returns `{ id, email, permissions, missing, partial, reconnect }` for each connected account. Gmail operations take `{ accountId, input? }` and check that account’s permissions and Google grant. Use the account ID from `listAccounts`; there is no implicit default. `selectedAccount` and `selectAccount` remain available for consumers that save a preference. That preference does not restrict access to other connected accounts. `input` is an object; omit it for operations that take no fields. List operations that read mail or drafts accept `pageToken?`, and only `listMessages` and `listThreads` accept `query?`. `listMessages` also accepts `maxResults` (1–50, default 50). Use the same query and page size with the next page token. Successful operations return the corresponding Gmail v1 resource or list; deletes with no response body return `null`.
 
 | Permission     | Exports and input fields                                                                                  | Google scope family        |
 | -------------- | --------------------------------------------------------------------------------------------------------- | -------------------------- |
@@ -60,7 +60,7 @@ Google may cover several selected operations with one [scope](https://developers
 
 Copy the corresponding [example directory](../../client/app/src/plugins/examples/) into a plugin draft:
 
-- `gmail-inbox`: enable **Read message details** and load subjects from the synthetic mailbox.
-- `gmail-status-report`: enable **Send email** and ask a chat to send an explicitly addressed report to another synthetic inbox. Check the sender’s Sent folder and the recipient’s inbox before repeating a timed-out action.
+- `gmail-inbox`: enable **Read message details** and load subjects from all eligible synthetic mailboxes. You can optionally filter to one account in the plugin’s settings.
+- `gmail-status-report`: enable **Send email** and ask a chat to send an explicitly addressed report to another synthetic inbox. Specify the sender when more than one connected account can send. Check the sender’s Sent folder and the recipient’s inbox before repeating a timed-out action.
 
 These examples are not installed automatically. Do not use real mailbox data for qualification. No scope is approved for production use in this experiment. Before publicly enabling an OAuth client, review the proposed workflows, plugin reuse, and each transfer of Gmail data against the [Google Workspace user data policy](https://developers.google.com/workspace/workspace-api-user-data-developer-policy), including data sent to AI providers or retained in synchronized chat history. Review the [restricted-scope verification](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification) requirements separately.

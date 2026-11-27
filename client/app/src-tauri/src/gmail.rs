@@ -305,14 +305,19 @@ pub(crate) async fn invoke(
         session: context.authorization.clone(),
         incarnation: Some(incarnation.to_owned()),
     };
-    // Neither a package name nor a dependency declaration grants access to a saved account.
+    // A dependency declaration does not replace local authorization of the connection.
     owner.store(|_, _| Ok(((), false))).await?;
-    let consumer = caller.map(|(id, incarnation)| consumer_key(id, incarnation));
+    let consumer = || {
+        caller
+            .map(|(id, incarnation)| consumer_key(id, incarnation))
+            .ok_or(INVALID)
+    };
     match Call::parse(name, args)? {
-        Call::ListAccounts if interactive => {
-            serde_json::to_value(accounts(owner).await?).map_err(|_| STORAGE.into())
+        Call::ListAccounts if caller.is_some() || interactive => {
+            serde_json::to_value(accounts(owner, caller.is_some(), cancel).await?)
+                .map_err(|_| STORAGE.into())
         }
-        Call::SelectedAccount => selected_account(owner, consumer.ok_or(INVALID)?, cancel).await,
+        Call::SelectedAccount => selected_account(owner, consumer()?, cancel).await,
         Call::Authorize(input) if interactive && caller.is_none() => {
             serde_json::to_value(authorize(owner, input, cancel).await?).map_err(|_| STORAGE.into())
         }
@@ -325,10 +330,11 @@ pub(crate) async fn invoke(
             Ok(serde_json::Value::Null)
         }
         Call::SelectAccount(input) if interactive => {
-            select(owner, consumer.ok_or(INVALID)?, input.account_id).await
+            select(owner, consumer()?, input.account_id).await
         }
         Call::Mail(id, request) => {
-            operations::invoke(owner, consumer.ok_or(INVALID)?, id, request, cancel).await
+            caller.ok_or(INVALID)?;
+            operations::invoke(owner, id, request, cancel).await
         }
         _ => Err("native.gmail.permissionDenied".into()),
     }
@@ -486,9 +492,20 @@ impl Owner {
     }
 }
 
-async fn accounts(owner: Owner) -> Result<Vec<AccountSnapshot>, String> {
+async fn accounts(
+    owner: Owner,
+    consumer: bool,
+    cancel: CancellationToken,
+) -> Result<Vec<AccountSnapshot>, String> {
+    let gate = owner.clone();
     owner
-        .store(|device, scope| {
+        .store(move |device, scope| {
+            if cancel.is_cancelled() {
+                return Err(CANCELLED.into());
+            }
+            if consumer {
+                gate.enabled()?;
+            }
             Ok((
                 device
                     .workspaces

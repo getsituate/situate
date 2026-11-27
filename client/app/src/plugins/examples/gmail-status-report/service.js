@@ -13,40 +13,60 @@ export default () => ({
         properties: {
           recipient: { type: "string" },
           body: { type: "string" },
+          sender: {
+            type: "string",
+            description:
+              "A connected Gmail address. Required when more than one account can send.",
+          },
         },
       },
-      async execute({ recipient, body }, context) {
+      async execute({ recipient, body, sender }, context) {
         if (
           !/^[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(recipient) ||
           typeof body !== "string" ||
-          body.length > 4000
+          body.length > 4000 ||
+          (sender !== undefined && typeof sender !== "string")
         ) {
           return {
             isError: true,
             content: [
               {
                 type: "text",
-                text: "Provide one email address and a report of up to 4,000 characters.",
+                text: "Provide a recipient email address, a report of up to 4,000 characters, and optionally a sender email address.",
               },
             ],
           };
         }
-        const account = await context.dependencies.invoke(
+        const accounts = await context.dependencies.invoke(
           "situate-gmail",
-          "selectedAccount",
+          "listAccounts",
           {},
         );
-        if (!account) {
+        const eligible = accounts.filter(
+          ({ permissions, reconnect }) =>
+            !reconnect && permissions.includes("send"),
+        );
+        const matches =
+          sender === undefined
+            ? eligible
+            : eligible.filter(
+                ({ email }) => email.toLowerCase() === sender.toLowerCase(),
+              );
+        if (matches.length !== 1) {
           return {
             isError: true,
             content: [
               {
                 type: "text",
-                text: "Select an account in the plugin settings.",
+                text:
+                  matches.length > 1
+                    ? "Ask the user which connected Gmail address should send the report."
+                    : "No matching Gmail account can send email. Check the sender and the account’s permissions.",
               },
             ],
           };
         }
+        const [account] = matches;
         const mime = [
           `To: ${recipient}`,
           "Subject: Status report",

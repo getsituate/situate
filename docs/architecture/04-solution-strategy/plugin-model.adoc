@@ -26,8 +26,7 @@ See the link:{strategy-requirements-root}/data/foundations.md#plugin-trust-and-s
 Connections own external access and account configuration within their workspace and expose reusable service functions. Document sources are connections that implement a document service convention.
 Separate plugins compose those functions into workflows, chat tools, skills and workspace views. Connections can contribute access settings, but not those plugin contributions or reusable UI components.
 When upgrading packages from the previous manifest format, Situate assigns them the general plugin role. Package identity, settings, contributions and exports stay intact. The migration converts the active revision independently of editable code and retains the original in history.
-Each consuming plugin selects the accounts relevant to its purpose, rather than inheriting every newly connected account.
-This avoids duplicate connection setup without imposing the same account selection on unrelated workflows.
+A declared consumer can use the connected accounts without configuring a separate account selection. The connection enforces account permissions; the workflow decides which accounts to use for a task.
 
 The core supplies explicit exports, declared dependencies and invocation mechanisms, not domain contracts for mail, inbox entries or particular organizational methods.
 The development agent discovers existing integrations and their consumers within the workspace, designs reusable interfaces and extends them when necessary.

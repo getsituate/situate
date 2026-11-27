@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "gmail-inbox",
   "name": "Gmail inbox",
-  "description": "Look up recent message details in the selected Gmail account.",
+  "description": "Look up recent message details across Gmail accounts.",
   "dependencies": ["situate-gmail"],
   "uiEntry": "ui.js"
 }

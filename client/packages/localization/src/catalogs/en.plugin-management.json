@@ -6,6 +6,8 @@
   "gmail.reductionNotice": "Reducing permissions revokes the previous Google access and may require reconnecting this account in other workspaces.",
   "gmail.selectedAccount": "Gmail account",
   "gmail.noSelection": "No account selected",
+  "gmail.allAccounts": "All connected accounts",
+  "gmail.noReadableAccounts": "No Gmail account in this view can read message details. Check the permissions in Gmail settings.",
   "gmail.accounts": "Connected accounts",
   "gmail.noAccounts": "No Gmail accounts connected.",
   "gmail.connect": "Connect account",

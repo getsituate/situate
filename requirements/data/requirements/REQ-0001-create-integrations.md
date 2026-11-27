@@ -76,7 +76,7 @@ acceptanceCriteria:
     milestone: Workspace-wide development with reusable connections
     status: implemented
   - id: AC-21
-    text: "Each consumer can select different accounts; adding another integration account leaves existing selections unchanged."
+    text: "Consumers can keep different account preferences; connecting another account does not change a saved preference."
     milestone: Workspace-wide development with reusable connections
     status: implemented
   - id: AC-22
@@ -136,6 +136,10 @@ acceptanceCriteria:
     text: "On a supported desktop platform, a connection can execute local programs or scripts through a general process host without a service-specific core API. Required programs, OS permissions and account access remain explicit prerequisites; process availability alone does not establish usable integration access."
     milestone: Workspace-wide development with reusable connections
     status: implemented
+  - id: AC-38
+    text: "A consumer with a declared dependency can use multiple connected accounts in its workspace without separate account setup or selection in that consumer, subject to each account’s permissions."
+    milestone: Workspace-wide development with reusable connections
+    status: implemented
 ---
 
 ## Description
@@ -148,7 +152,7 @@ This requires technically usable access and the necessary permissions. Situate m
 
 Outside [recovery startup](REQ-0032-manage-plugin-status-and-disabling.md), within an explicit user request, Situate may activate and execute a newly generated integration or modify and execute an existing local plugin without a separate code-activation confirmation. These changes remain versioned and recoverable. This does not authorize unrelated modifications.
 
-Reusable integrations own external connections and accounts independently of individual workflow plugins, within their workspace. Plugins, accounts and dependency resolution are workspace-scoped under [REQ-0037](REQ-0037-keep-workspaces-independent.md); another open workspace does not automatically supply dependencies or connections. Consumers reuse those connections and each selects the relevant accounts. Adding an account to an integration does not automatically add it to an existing consumer's selection.
+Reusable integrations own external connections and accounts independently of individual workflow plugins, within their workspace. Plugins, accounts and dependency resolution are workspace-scoped under [REQ-0037](REQ-0037-keep-workspaces-independent.md); another open workspace does not automatically supply dependencies or connections. Consumers can use connected accounts without an additional setup step. A workflow can use one or several accounts as the task requires, subject to each account's permissions. It may also keep an account preference without changing which accounts the connection exposes.
 
 New connections and document sources expose service functions and may provide access settings. A separate plugin contributes chat tools, skills, workspace views and reusable UI components. Existing mixed packages retain their contributions, access configuration and dependency identity as general plugins under the published compatibility policy.
 

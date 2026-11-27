@@ -52,7 +52,7 @@ export function accountSettings(host) {
                 onChange: select,
               },
               [
-                h("option", { value: "" }, text("gmail.noSelection")),
+                h("option", { value: "" }, text("gmail.allAccounts")),
                 ...accounts.value.map((account) =>
                   h(
                     "option",
