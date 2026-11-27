@@ -317,23 +317,41 @@
   background: var(--situate-paper);
 }
 .doc-preview-heading {
-  position: relative;
-  padding: 20px 24px 12px;
+  padding: 16px 24px;
   background: var(--situate-surface);
 }
-.doc-preview-heading h2 {
-  padding-inline-end: 32px;
+.doc-preview-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--situate-space-4);
+}
+.doc-preview-identity {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.doc-preview-identity h2 {
   font-size: 20px;
 }
-.doc-preview-heading p {
+.doc-preview-identity p {
   margin-bottom: 0;
   font-size: 12px;
   color: var(--situate-muted);
 }
-.doc-preview-close {
-  position: absolute;
-  inset-inline-end: 8px;
-  top: 8px;
+.doc-open-external {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--situate-space-2);
+  flex-shrink: 0;
+}
+.doc-open-external .situate-icon {
+  width: 16px;
+  height: 16px;
+}
+.doc-open-external[aria-disabled="true"] {
+  cursor: default;
+  background: var(--situate-surface);
+  color: var(--situate-muted);
 }
 .doc-preview-back {
   display: none;
@@ -498,9 +516,6 @@
   }
   .doc-preview-close {
     display: none;
-  }
-  .doc-preview-heading h2 {
-    padding-inline-end: 0;
   }
   .doc-search-area {
     padding: 16px 16px 10px;

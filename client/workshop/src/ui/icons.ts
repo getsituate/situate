@@ -27,6 +27,8 @@ export const icons = {
   chat: "M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2ZM8 9h8m-8 4h5",
   split:
     "M6 4h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Zm6 0v16",
+  external:
+    "M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6M15 4h5v5m0-5-9 9",
   close: "m6 6 12 12M18 6 6 18",
   mic: "M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3ZM5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8",
   attach:

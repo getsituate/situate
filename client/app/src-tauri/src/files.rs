@@ -620,26 +620,12 @@ fn require_external_binary(path: &str, bytes: &[u8]) -> Result<(), String> {
     if text_from_bytes(bytes)?.is_some() {
         return Err("native.files.external.openFailed".into());
     }
-    let executable = [
-        b"MZ".as_slice(),
-        b"\x7fELF",
-        b"\xfe\xed\xfa\xce",
-        b"\xce\xfa\xed\xfe",
-        b"\xfe\xed\xfa\xcf",
-        b"\xcf\xfa\xed\xfe",
-        b"\xca\xfe\xba\xbe",
-        b"\xbe\xba\xfe\xca",
-        b"\xca\xfe\xba\xbf",
-        b"\xbf\xba\xfe\xca",
-    ]
-    .iter()
-    .any(|magic| bytes.starts_with(magic));
     let extension = Path::new(path)
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if executable
+    if crate::external_links::executable_signature(bytes)
         || matches!(
             extension.as_str(),
             "app"

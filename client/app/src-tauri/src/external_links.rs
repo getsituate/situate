@@ -12,6 +12,23 @@ pub(crate) fn web_url(target: &str) -> Result<url::Url, String> {
     Ok(url)
 }
 
+pub(crate) fn executable_signature(bytes: &[u8]) -> bool {
+    [
+        b"MZ".as_slice(),
+        b"\x7fELF",
+        b"\xfe\xed\xfa\xce",
+        b"\xce\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xcf",
+        b"\xcf\xfa\xed\xfe",
+        b"\xca\xfe\xba\xbe",
+        b"\xbe\xba\xfe\xca",
+        b"\xca\xfe\xba\xbf",
+        b"\xbf\xba\xfe\xca",
+    ]
+    .iter()
+    .any(|magic| bytes.starts_with(magic))
+}
+
 #[tauri::command]
 pub(crate) async fn open_web_link(href: String) -> Result<(), String> {
     let url = web_url(&href).map_err(|_| "native.files.link.httpOnly".to_string())?;

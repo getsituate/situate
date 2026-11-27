@@ -18,7 +18,7 @@ describe("document collection", () => {
     startDocumentAction(s, "refresh", "drive");
     selectDocument(s, "bike");
     expect(s.preview).toBe("loading");
-    expect(s.opening).toBe("bike");
+    expect(s.opening).toEqual({ kind: "open", id: "bike" });
     expect(s.pending).toEqual({ kind: "refresh", id: "drive" });
     finishDocumentAction(s, false, "opening");
     expect(s.preview).toBe("error");
@@ -32,11 +32,39 @@ describe("document collection", () => {
     s.nextOutcome = "wait";
     startDocumentAction(s, "refresh", "drive");
     selectDocument(s, "sheet");
-    startDocumentAction(s, "open", "sheet");
+    startDocumentAction(s, "open-external", "sheet");
     expect(s.notice).toBe("");
     finishDocumentAction(s, true, "opening");
     expect(s.notice).toBe("external");
     expect(s.pending?.kind).toBe("refresh");
+  });
+  it("keeps the current page and zoom when opening in another app fails", () => {
+    const s = createDocumentsState("documents-preview");
+    s.page = 1;
+    s.zoom = 120;
+    s.nextOutcome = "error";
+    startDocumentAction(s, "open-external", "bike");
+    expect(s).toMatchObject({
+      selected: "bike",
+      preview: "ready",
+      externalError: true,
+      opening: null,
+      page: 1,
+      zoom: 120,
+    });
+    selectDocument(s, "receipt");
+    expect(s.externalError).toBe(false);
+  });
+  it("does not open originals on another device or from a paused source", () => {
+    const s = createDocumentsState("documents-unavailable");
+    s.nextOutcome = "wait";
+    startDocumentAction(s, "open-external", "insurance");
+    expect(s.opening).toBeNull();
+    selectDocument(s, "sheet");
+    const sourceId = s.documents.find((d) => d.id === "sheet")!.source;
+    s.sources.find((source) => source.id === sourceId)!.paused = true;
+    startDocumentAction(s, "open-external", "sheet");
+    expect(s.opening).toBeNull();
   });
   it("finds identifiers in content rather than relying on filenames", () => {
     const s = createDocumentsState();

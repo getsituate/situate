@@ -8,7 +8,8 @@ import {
   useId,
   watch,
 } from "vue";
-import { preferences, t } from "@situate/localization";
+import { localizeError, preferences, t } from "@situate/localization";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   SituateButton,
@@ -130,6 +131,32 @@ const preview = shallowRef<{
 }>();
 const previewError = ref<LibraryError | "failed">();
 const opening = ref(false);
+const externalRequest = shallowRef<AbortController>();
+const showExternalOpening = ref(false);
+const externalSent = ref(false);
+watch(externalRequest, (request, _, onCleanup) => {
+  showExternalOpening.value = false;
+  if (!request) return;
+  const timer = setTimeout(() => {
+    showExternalOpening.value = true;
+  }, 200);
+  onCleanup(() => clearTimeout(timer));
+});
+const selectedSource = computed(() =>
+  candidates.value.find(
+    ({ id }) => id === selection.value?.ref.source.pluginId,
+  ),
+);
+const canOpenExternal = computed(
+  () =>
+    selectedSource.value?.status === "loaded" &&
+    selectedSource.value.manifest?.exports?.includes(
+      LIBRARY_EXPORTS.readOriginal,
+    ) &&
+    !["not-found", "permission", "authentication", "unavailable"].includes(
+      previewError.value ?? "",
+    ),
+);
 const detailFields = shallowRef<LibraryDetailField[]>([]);
 const thumbnails = documentThumbnails(() => runtime.value);
 const fileFormat = computed(() => {
@@ -203,22 +230,22 @@ let openTurn = 0;
 let controller: AbortController | undefined;
 let restore = true;
 let trigger: HTMLElement | null = null;
-function previewErrorText(code: LibraryError | "failed") {
+function previewErrorKey(code: LibraryError | "failed") {
   switch (code) {
     case "not-found":
-      return t("documents.notFound");
+      return "documents.notFound";
     case "permission":
-      return t("documents.permission");
+      return "documents.permission";
     case "authentication":
-      return t("documents.authentication");
+      return "documents.authentication";
     case "unsupported":
-      return t("documents.unsupported");
+      return "documents.unsupported";
     case "too-large":
-      return t("documents.tooLarge");
+      return "documents.tooLarge";
     case "failed":
-      return t("documents.failed");
+      return "documents.failed";
     default:
-      return t("documents.unavailable");
+      return "documents.unavailable";
   }
 }
 
@@ -382,9 +409,7 @@ async function openDocument(userAction = false) {
     return;
   }
   opening.value = true;
-  const plugin = candidates.value.find(
-    ({ id }) => id === target.ref.source.pluginId,
-  );
+  const plugin = selectedSource.value;
   if (
     !plugin &&
     !runtimeFailed.value &&
@@ -436,7 +461,7 @@ async function openDocument(userAction = false) {
       }
       previewError.value = result.error.code;
       if (userAction && result.error.code !== "cancelled")
-        emit("error", previewErrorText(result.error.code));
+        emit("error", previewErrorKey(result.error.code));
       return;
     }
     if (!canPreview(result.document.mimeType)) {
@@ -455,10 +480,78 @@ async function openDocument(userAction = false) {
     controllerForRead.abort();
   }
 }
+async function openInDefaultApp() {
+  const target = selection.value;
+  const active = runtime.value;
+  const plugin = selectedSource.value;
+  if (!target || !active || !plugin || opening.value || externalRequest.value)
+    return;
+  const request = new AbortController();
+  const { signal } = request;
+  externalRequest.value = request;
+  externalSent.value = false;
+  try {
+    const descriptor =
+      pages.value.find((source) => source.plugin === plugin.id)?.descriptor ??
+      (await describe(plugin));
+    signal.throwIfAborted();
+    if (descriptor.source.instanceId !== target.ref.source.instanceId) {
+      emit("error", "documents.notFound");
+      return;
+    }
+    const result = await readLibraryOriginal(
+      active,
+      descriptor,
+      target.ref,
+      signal,
+    );
+    if (result.status === "error") {
+      const code = result.error.code;
+      if (code !== "cancelled")
+        emit(
+          "error",
+          code === "too-large"
+            ? "documents.openTooLarge"
+            : code === "unsupported"
+              ? "documents.openUnsupported"
+              : previewErrorKey(code),
+        );
+      return;
+    }
+    signal.throwIfAborted();
+    await invoke("plugin_document_open", {
+      scope: active.scope,
+      id: result.original.id,
+    });
+    if (!signal.aborted) externalSent.value = true;
+  } catch (error) {
+    if (!signal.aborted)
+      emit(
+        "error",
+        error === "documents.openUnsupported" ||
+          error === "documents.openCopiesFull"
+          ? error
+          : "documents.openFailed",
+      );
+  } finally {
+    if (externalRequest.value === request) externalRequest.value = undefined;
+    request.abort();
+  }
+}
+watch(
+  [selection, inventory],
+  () => {
+    externalRequest.value?.abort();
+    externalRequest.value = undefined;
+    externalSent.value = false;
+  },
+  { flush: "sync" },
+);
+
 function previewFailed(notify = true) {
   preview.value = undefined;
   previewError.value = "failed";
-  if (notify) emit("error", t("documents.failed"));
+  if (notify) emit("error", "documents.failed");
 }
 async function select(item: LibraryDocument, event: Event) {
   trigger = event.currentTarget as HTMLElement;
@@ -568,6 +661,7 @@ onUnmounted(() => {
   ++listTurn;
   ++openTurn;
   controller?.abort();
+  externalRequest.value?.abort();
   thumbnails.close();
   void removeInvalidationListener.then((remove) => remove?.());
 });
@@ -709,31 +803,64 @@ onUnmounted(() => {
             @click="closePreview"
             >‹ {{ t("documents.back") }}</SituateButton
           >
-          <SituateIconButton
-            icon="close"
-            :label="t('documents.close')"
-            class="doc-preview-close"
-            @click="closePreview"
-          />
-          <h2 ref="previewHeading" tabindex="-1">
-            <span
-              v-if="preview || selection.title"
-              data-localization-content="external"
-              >{{ preview?.document.title ?? selection.title }}</span
+          <div class="doc-preview-title-row">
+            <div class="doc-preview-identity">
+              <h2 ref="previewHeading" tabindex="-1">
+                <span
+                  v-if="preview || selection.title"
+                  data-localization-content="external"
+                  >{{ preview?.document.title ?? selection.title }}</span
+                >
+                <span v-else>{{ t("documents.preview") }}</span>
+              </h2>
+              <p
+                v-if="sourceName"
+                class="doc-muted"
+                data-localization-content="identity"
+              >
+                {{ sourceName }}
+              </p>
+            </div>
+            <SituateButton
+              v-if="canOpenExternal"
+              variant="secondary"
+              size="small"
+              class="doc-open-external"
+              :class="{ 'doc-open-waiting': opening || showExternalOpening }"
+              :title="
+                !showExternalOpening ? t('documents.openCopy') : undefined
+              "
+              :aria-label="
+                !showExternalOpening ? t('documents.openExternal') : undefined
+              "
+              :aria-disabled="opening || !!externalRequest || undefined"
+              @click="openInDefaultApp"
             >
-            <span v-else>{{ t("documents.preview") }}</span>
-          </h2>
-          <p
-            v-if="sourceName"
-            class="doc-muted"
-            data-localization-content="identity"
-          >
-            {{ sourceName }}
-          </p>
+              {{
+                t(
+                  showExternalOpening
+                    ? "documents.openingExternal"
+                    : "documents.open",
+                )
+              }}
+              <SituateIcon name="external" />
+            </SituateButton>
+            <SituateIconButton
+              icon="close"
+              :label="t('documents.close')"
+              class="doc-preview-close"
+              @click="closePreview"
+            />
+          </div>
+          <div class="sr-only" role="status">
+            {{ externalSent ? t("documents.openSent") : "" }}
+          </div>
         </header>
         <div class="doc-preview-scroll">
           <div v-if="previewError" class="doc-status doc-preview-error">
-            <p role="status">{{ previewErrorText(previewError) }}</p>
+            <p role="status">
+              {{ localizeError(previewErrorKey(previewError)) }}
+            </p>
             <SituateButton
               v-if="previewError === 'unavailable' || previewError === 'failed'"
               variant="secondary"

@@ -15,6 +15,7 @@ import { workshopNavigation } from "../workshop/content";
 import {
   clearSelection,
   clone,
+  closeDocument,
   incomplete,
   results,
   selectDocument,
@@ -95,11 +96,9 @@ async function clearSearch() {
 function search() {
   update((s) => {
     s.query = s.draftQuery;
-    s.selected = null;
-    s.opening = null;
+    closeDocument(s);
     s.searchState = "ready";
     s.sort = s.query.trim() ? "relevance" : "newest";
-    s.notice = "";
   });
 }
 async function inspect(id: string) {
@@ -109,10 +108,7 @@ async function inspect(id: string) {
 }
 async function closePreview() {
   const id = state.value.selected;
-  update((s) => {
-    s.selected = null;
-    s.opening = null;
-  });
+  update(closeDocument);
   await nextTick();
   root.value?.querySelector<HTMLElement>(`[data-document="${id}"]`)?.focus();
 }

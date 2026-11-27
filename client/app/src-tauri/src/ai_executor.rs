@@ -39,6 +39,8 @@ pub struct Executors {
     dispatched: Mutex<HashSet<(String, String, String)>>,
     unavailable: Mutex<HashMap<String, HashMap<String, Unavailable>>>,
     reads: Mutex<HashMap<String, DocumentRead>>,
+    #[cfg(desktop)]
+    external_copies: crate::document_original::Copies,
 }
 struct DocumentRead {
     window: String,
@@ -52,6 +54,16 @@ struct PublishedOriginal {
     expires: Instant,
     generation: Weak<Generation>,
     file: Arc<Original>,
+    #[cfg(desktop)]
+    mime_type: String,
+}
+struct DocumentAccess {
+    expires: Instant,
+    cancel: CancellationToken,
+    generation: Arc<Generation>,
+    file: Arc<Original>,
+    #[cfg(desktop)]
+    mime_type: Option<String>,
 }
 struct ReadLease<'a> {
     reads: &'a Mutex<HashMap<String, DocumentRead>>,
@@ -2538,6 +2550,11 @@ pub async fn plugin_executor(
                                     expires,
                                     generation: Arc::downgrade(&plugin.generation),
                                     file: Arc::new(original),
+                                    #[cfg(desktop)]
+                                    mime_type: value["document"]["mimeType"]
+                                        .as_str()
+                                        .unwrap_or_default()
+                                        .to_owned(),
                                 });
                         }
                         lease.keep = true;
@@ -2576,6 +2593,63 @@ fn expire_original(app: tauri::AppHandle, id: String, expires: Instant) {
     });
 }
 
+fn document_access(
+    app: tauri::AppHandle,
+    window: &str,
+    scope: String,
+    id: &str,
+) -> Result<(Context, DocumentAccess), String> {
+    let authorization = crate::workspaces::authorization_session(&app, window, &scope)?;
+    let context = Context {
+        app,
+        window: window.into(),
+        scope,
+        authorization,
+    };
+    let access = {
+        let state = context.app.state::<Executors>();
+        let reads = lock(&state.reads)?;
+        let read = reads
+            .get(id)
+            .filter(|read| read.window == context.window && read.scope == context.scope)
+            .ok_or(UNAVAILABLE)?;
+        let original = read
+            .published
+            .as_ref()
+            .filter(|original| original.expires > Instant::now())
+            .ok_or(UNAVAILABLE)?;
+        DocumentAccess {
+            expires: original.expires,
+            cancel: read.cancel.clone(),
+            generation: original.generation.upgrade().ok_or(UNAVAILABLE)?,
+            file: original.file.clone(),
+            #[cfg(desktop)]
+            mime_type: (read.limit == crate::document_original::MAX_BYTES)
+                .then(|| original.mime_type.clone()),
+        }
+    };
+    access.validate(&context)?;
+    Ok((context, access))
+}
+
+impl DocumentAccess {
+    fn validate(&self, context: &Context) -> Result<(), String> {
+        context.validate()?;
+        if self.expires <= Instant::now()
+            || self.cancel.is_cancelled()
+            || self.generation.revoked.load(Ordering::Acquire)
+            || crate::plugin_recovery::blocked(
+                &context.app,
+                &context.scope,
+                &self.generation.plugin_id,
+            )
+        {
+            return Err(UNAVAILABLE.into());
+        }
+        Ok(())
+    }
+}
+
 #[tauri::command]
 pub async fn plugin_document_chunk(
     app: tauri::AppHandle,
@@ -2584,46 +2658,55 @@ pub async fn plugin_document_chunk(
     id: String,
     offset: u64,
 ) -> Result<tauri::ipc::Response, String> {
-    let authorization = crate::workspaces::authorization_session(&app, window.label(), &scope)?;
-    let context = Context {
-        app,
-        window: window.label().into(),
-        scope,
-        authorization,
-    };
-    context.validate()?;
-    let (file, cancel, generation) = {
-        let state = context.app.state::<Executors>();
-        let reads = lock(&state.reads)?;
-        let read = reads
-            .get(&id)
-            .filter(|read| read.window == context.window && read.scope == context.scope)
-            .ok_or(UNAVAILABLE)?;
-        let original = read
-            .published
-            .as_ref()
-            .filter(|original| original.expires > Instant::now())
-            .ok_or(UNAVAILABLE)?;
-        let generation = original.generation.upgrade().ok_or(UNAVAILABLE)?;
-        if generation.revoked.load(Ordering::Acquire)
-            || crate::plugin_recovery::blocked(&context.app, &context.scope, &generation.plugin_id)
-        {
-            return Err(UNAVAILABLE.into());
-        }
-        (original.file.clone(), read.cancel.clone(), generation)
-    };
-    let chunk_cancel = cancel.clone();
-    let bytes = tauri::async_runtime::spawn_blocking(move || file.chunk(offset, &chunk_cancel))
+    let (context, access) = document_access(app, window.label(), scope, &id)?;
+    let file = access.file.clone();
+    let cancel = access.cancel.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || file.chunk(offset, &cancel))
         .await
         .map_err(|_| UNAVAILABLE)??;
-    context.validate()?;
-    if cancel.is_cancelled()
-        || generation.revoked.load(Ordering::Acquire)
-        || crate::plugin_recovery::blocked(&context.app, &context.scope, &generation.plugin_id)
-    {
-        return Err(UNAVAILABLE.into());
-    }
+    access.validate(&context)?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
+pub async fn plugin_document_open(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    scope: String,
+    id: String,
+) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let (context, access) = document_access(app.clone(), window.label(), scope, &id)?;
+        let expires = tauri::async_runtime::spawn_blocking(move || {
+            let copies = &context.app.state::<Executors>().external_copies;
+            copies.open(
+                &access.file,
+                access.mime_type.as_deref().ok_or(UNAVAILABLE)?,
+                || access.validate(&context),
+                |path| situate_host::external::open(path.as_os_str()),
+            )
+        })
+        .await
+        .map_err(|_| UNAVAILABLE)??;
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep_until(expires.into()).await;
+            app.state::<Executors>().external_copies.expire();
+        });
+        Ok(())
+    }
+    #[cfg(mobile)]
+    {
+        let _ = (app, window, scope, id);
+        Err("documents.openUnsupported".into())
+    }
+}
+
+#[cfg(desktop)]
+impl Executors {
+    pub(crate) fn close_document_copies(&self) {
+        self.external_copies.clear();
+    }
 }
 
 fn manual_invocations(context: &Context) -> Result<Vec<ManualInvocationOwners>, String> {

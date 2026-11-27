@@ -604,6 +604,9 @@ test("no matches, inaccessible original, held opening and reset remain distinct"
   await expect(
     preview.getByRole("heading", { name: "On another device" }),
   ).toBeVisible();
+  await expect(
+    preview.getByRole("button", { name: "Open in default app" }),
+  ).toHaveCount(0);
   await expect(preview.locator(".doc-paper")).toHaveCount(0);
   await selectScenario(page, "documents-find");
   await selectOption(page.getByLabel("Next source or opening action"), "wait");
@@ -612,7 +615,12 @@ test("no matches, inaccessible original, held opening and reset remain distinct"
     preview.getByText("Opening document…", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Fail document action" }).click();
-  await expect(preview.getByRole("alert")).toContainText("could not be opened");
+  await expect(preview.getByRole("alert")).toContainText(
+    "couldn’t be previewed",
+  );
+  await expect(
+    preview.getByRole("button", { name: "Open in default app" }),
+  ).toBeEnabled();
   await preview.getByRole("button", { name: "Try again", exact: true }).click();
   await page
     .getByRole("button", { name: "Reset scenario", exact: true })
@@ -621,6 +629,65 @@ test("no matches, inaccessible original, held opening and reset remain distinct"
   await expect(
     page.getByRole("button", { name: "Complete document action" }),
   ).toHaveCount(0);
+});
+
+test("opens a PDF in the default app without disturbing the preview", async ({
+  page,
+}) => {
+  const preview = await open(page, "documents-preview", false);
+  const openExternal = preview.getByRole("button", {
+    name: "Open in default app",
+    exact: true,
+  });
+  await expect(openExternal).toHaveText("Open");
+  await openExternal.hover();
+  await expect(
+    preview.getByRole("tooltip").filter({ hasText: "Open in default app" }),
+  ).toBeVisible();
+  const documentPage = preview.locator(".doc-paper");
+  await preview.getByRole("button", { name: "Next page", exact: true }).click();
+  await preview.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(documentPage).toContainText("Service record");
+  await expect(preview.getByText("120%", { exact: true })).toBeVisible();
+
+  const outcome = page.getByLabel("Next source or opening action");
+  await selectOption(outcome, "wait");
+  await openExternal.focus();
+  await openExternal.press("Enter");
+  await expect(
+    preview.getByRole("button", { name: "Opening…", exact: true }),
+  ).toBeDisabled();
+  await expect(documentPage).toContainText("Service record");
+
+  await page.getByRole("button", { name: "Fail document action" }).click();
+  const dialog = preview.getByRole("dialog", {
+    name: "Couldn’t open in the default app",
+  });
+  await expect(dialog).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Close", exact: true })
+    .press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(openExternal).toBeFocused();
+  await expect(preview.getByText("120%", { exact: true })).toBeVisible();
+
+  await selectOption(outcome, "success");
+  await openExternal.click();
+  await expect(
+    preview.getByText("Opened in the default app.", { exact: true }),
+  ).toBeAttached();
+  await expect(documentPage).toContainText("Service record");
+  await fits(preview);
+});
+
+test("offers the same action for files without a preview", async ({ page }) => {
+  const preview = await open(page, "documents-find", false);
+  await preview.locator('[data-document="sheet"]').click();
+  await expect(preview.locator(".doc-page-stage")).toHaveCount(0);
+  await preview.getByRole("button", { name: "Open in default app" }).click();
+  await expect(
+    preview.getByText("Opened in the default app.", { exact: true }),
+  ).toBeAttached();
 });
 
 test("mobile keyboard occlusion keeps the search draft and clear action reachable", async ({
@@ -652,7 +719,23 @@ test("image reading returns focus to the result on mobile", async ({
   page,
 }, info) => {
   const preview = await open(page, "documents-image", true);
-  await expect(preview.locator(".doc-page-stage img")).toBeVisible();
+  const image = preview.locator(".doc-page-stage img");
+  await expect(image).toBeVisible();
+  const openExternal = preview.getByRole("button", {
+    name: "Open in default app",
+    exact: true,
+  });
+  await expect(openExternal).toHaveText("Open");
+  await preview.setViewportSize({ width: 320, height: 568 });
+  await expect(openExternal).toBeInViewport({ ratio: 1 });
+  await fits(preview);
+  await preview.setViewportSize({ width: 390, height: 844 });
+  await openExternal.click();
+  await preview.mouse.move(0, 0);
+  await expect(
+    preview.getByText("Opened in the default app.", { exact: true }),
+  ).toBeAttached();
+  await expect(image).toBeVisible();
   await expect(preview.locator(".doc-preview details")).toContainText(
     "Paperless",
   );
@@ -691,7 +774,9 @@ test("a waiting refresh does not turn opening into a false success", async ({
   await page
     .getByRole("button", { name: "Fail document action", exact: true })
     .click();
-  await expect(preview.getByRole("alert")).toContainText("could not be opened");
+  await expect(preview.getByRole("alert")).toContainText(
+    "couldn’t be previewed",
+  );
   await page
     .getByRole("button", { name: "Complete document action", exact: true })
     .click();
