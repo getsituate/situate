@@ -92,6 +92,67 @@ test("clearing an empty file search restores results and search focus", async ({
   ).toBeVisible();
 });
 
+test("clearing the file list selection makes new files go in the workspace root", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await filesFixture(page);
+  await enterFiles(page);
+  const list = page.locator(".file-tree");
+  const garden = list.getByRole("button", { name: "Garden.md", exact: true });
+  const notes = list.getByRole("button", { name: "Notes", exact: true });
+  const documentTitle = page.getByRole("heading", {
+    name: "Garden.md",
+    exact: true,
+  });
+  const search = page.getByRole("searchbox", {
+    name: keyLabel("files.findAFileDetail"),
+  });
+  const height = (await list.boundingBox())!.height;
+  const blank = { position: { x: 12, y: height - 12 } };
+
+  await expect(garden).toHaveAttribute("aria-current", "true");
+  await documentTitle.click();
+  await search.click();
+  await expect(garden).toHaveAttribute("aria-current", "true");
+  await list.click(blank);
+  await expect(list.locator('[aria-current="true"]')).toHaveCount(0);
+  await expect(documentTitle).toBeVisible();
+  await garden.click();
+  await expect(garden).toHaveAttribute("aria-current", "true");
+  await garden.press("Escape");
+  await expect(list.locator('[aria-current="true"]')).toHaveCount(0);
+
+  await notes.click();
+  await expect(notes).toHaveAttribute("aria-current", "true");
+  await list.click(blank);
+  await expect(list.locator('[aria-current="true"]')).toHaveCount(0);
+  await expect(documentTitle).toBeVisible();
+  await page
+    .getByRole("button", { name: keyLabel("files.newFileOrFolder") })
+    .click();
+  await page
+    .getByRole("menuitem", { name: keyLabel("files.newFileDetail") })
+    .click();
+  const dialog = page.getByRole("dialog", { name: keyLabel("files.newFile") });
+  await dialog
+    .getByRole("textbox", { name: keyLabel("files.fileName") })
+    .fill("Index");
+  await dialog
+    .getByRole("button", { name: keyLabel("files.createFile") })
+    .click();
+  await expect(
+    list.getByRole("button", { name: "Index.md", exact: true }),
+  ).toHaveAttribute("aria-current", "true");
+  expect(
+    await page.evaluate(
+      () =>
+        window.__filesTest.calls.find((call) => call.operation === "create")
+          ?.path,
+    ),
+  ).toBe("Index.md");
+});
+
 test("a save error can be dismissed and retried without losing the draft", async ({
   page,
 }) => {
@@ -181,15 +242,15 @@ for (const viewport of [
     await noOverflow(page);
   });
 
-  test(`new file names default to Markdown at ${viewport.width}px`, async ({
+  test(`creating a Markdown file keeps the browser open at ${viewport.width}px`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
     await filesFixture(page);
     await enterFiles(page);
     for (const [name, expected] of [
-      ["Planting plan", "Planting plan.md"],
-      ["Book list.markdown", "Book list.markdown"],
+      ["Planting plan", "Notes/Planting plan.md"],
+      ["Book list.markdown", "Notes/Book list.markdown"],
     ] as const) {
       await browse(page);
       await page
@@ -206,6 +267,8 @@ for (const viewport of [
         exact: true,
       });
       await expectDialogTypography(dialog);
+      await expect(dialog.locator("p")).toHaveCount(0);
+      await expect(dialog.locator("label")).toHaveClass("sr-only");
       await page.evaluate(() => {
         document.documentElement.style.fontSize = "32px";
       });
@@ -213,7 +276,6 @@ for (const viewport of [
       const filename = dialog.getByRole("textbox", {
         name: keyLabel("files.fileName"),
       });
-      await filename.focus();
       await expect(filename).toBeFocused();
       await expect(filename).toBeInViewport();
       expect(
@@ -242,6 +304,17 @@ for (const viewport of [
           ),
         )
         .toBe(expected);
+      await expect(
+        page.getByRole("button", {
+          name: expected.split("/").at(-1)!,
+          exact: true,
+        }),
+      ).toHaveAttribute("aria-current", "true");
+      const collapse = page.getByRole("button", {
+        name: keyLabel("files.collapseFileBrowser"),
+      });
+      await expect(collapse).toBeVisible();
+      if (viewport.width <= 560) await collapse.click();
       await expect(page.locator(".document-location h3")).toHaveText(
         expected.split("/").at(-1)!,
       );

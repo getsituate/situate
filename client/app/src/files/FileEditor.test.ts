@@ -672,38 +672,49 @@ describe("file panes", () => {
     await flushPromises();
     expect(wrapper.get(".file-browser").isVisible()).toBe(false);
   });
-  it("requests source presentation only when navigating to a newly created file", async () => {
-    const { wrapper, session } = await setup();
-    wrapper.unmount();
-    const editor = await pane(session.id, "Notes/Garden.md", {
-      mode: "read",
-      treeOpen: true,
-    });
-    await choose(editor, "⟦files.newFileOrFolder⟧", "⟦files.newFileDetail⟧");
-    await editor.get("input[autofocus]").setValue("Planting");
-    await editor.get("form").trigger("submit");
-    await flushPromises();
-    expect(editor.emitted("navigate")?.at(-1)).toEqual([
-      { kind: "view", viewId: "files", contentId: "Planting.md" },
-      { mode: "source" },
-    ]);
-    expect(editor.findComponent(RenderedFile).exists()).toBe(true);
-    expect(editor.get(".document-location h3").text()).toBe("Garden.md");
-    await editor.setProps({
-      target: { contentId: "Planting.md" },
-      presentation: { mode: "source" },
-    });
-    await flushPromises();
-    expect(editor.get<HTMLTextAreaElement>("textarea").element.value).toBe("");
-    await button(editor, "⟦files.expandFileBrowser⟧").trigger("click");
-    await button(editor, "Notes").trigger("click");
-    await button(editor, "Reading.md").trigger("click");
-    await flushPromises();
-    expect(editor.emitted("navigate")?.at(-1)).toEqual([
-      { kind: "view", viewId: "files", contentId: "Notes/Reading.md" },
-      { treeOpen: true, treeWidth: 228, expandedFolders: ["Notes"] },
-    ]);
-  });
+  it.each([true, false])(
+    "opens a new file in source mode with the browser's open state still %s",
+    async (treeOpen) => {
+      const { wrapper, session } = await setup();
+      wrapper.unmount();
+      const editor = await pane(session.id, "Notes/Garden.md", {
+        mode: "read",
+        treeOpen,
+        treeWidth: 320,
+        expandedFolders: ["Notes"],
+      });
+      await choose(
+        editor,
+        treeOpen ? "⟦files.newFileOrFolder⟧" : "⟦files.fileActions⟧",
+        "⟦files.newFileDetail⟧",
+      );
+      await editor.get("input[autofocus]").setValue("Planting");
+      await editor.get("form").trigger("submit");
+      await flushPromises();
+      const [target, presentation] = editor.emitted("navigate")!.at(-1)!;
+      expect(target).toEqual({
+        kind: "view",
+        viewId: "files",
+        contentId: "Notes/Planting.md",
+      });
+      expect(presentation).toEqual({
+        mode: "source",
+        treeOpen,
+        treeWidth: 320,
+        expandedFolders: ["Notes"],
+      });
+      expect(editor.get(".document-location h3").text()).toBe("Garden.md");
+      await editor.setProps({
+        target: target as FilePaneNavigation,
+        presentation: presentation as PresentationValue,
+      });
+      await flushPromises();
+      expect(editor.get(".file-browser").isVisible()).toBe(treeOpen);
+      expect(editor.get<HTMLTextAreaElement>("textarea").element.value).toBe(
+        "",
+      );
+    },
+  );
   it("keeps different targets and modes local and routes file and rendered links through navigation", async () => {
     const { wrapper, session } = await setup();
     wrapper.unmount();
@@ -1210,7 +1221,7 @@ describe("file editor actions", () => {
     expect(wrapper.emitted("leave")).toHaveLength(1);
   });
   it.each([
-    ["⟦files.newFileOrFolder⟧", "Planting", "Planting.md"],
+    ["⟦files.newFileOrFolder⟧", "Planting", "Notes/Planting.md"],
     [
       '⟦files.actionsFor:{"name":"Notes/Garden.md"}⟧',
       "Planting",
@@ -1227,6 +1238,27 @@ describe("file editor actions", () => {
       expected,
     );
     expect(wrapper.get(".document-location h3").text()).toBe("Planting.md");
+  });
+  it("creates in the selected subfolder without opening a different document first", async () => {
+    const { wrapper } = await setup(true, [
+      { path: "Notes/Ideas", isDirectory: true },
+    ]);
+    await button(wrapper, "Ideas").trigger("click");
+    expect(button(wrapper, "Ideas").attributes("aria-current")).toBe("true");
+    expect(
+      button(wrapper, "Garden.md").attributes("aria-current"),
+    ).toBeUndefined();
+    expect(wrapper.get(".document-location h3").text()).toBe("Garden.md");
+    await choose(wrapper, "⟦files.newFileOrFolder⟧", "⟦files.newFileDetail⟧");
+    await wrapper.get("input[autofocus]").setValue("Planting");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    expect(calls().find((call) => call.operation === "create")?.path).toBe(
+      "Notes/Ideas/Planting.md",
+    );
+    expect(button(wrapper, "Planting.md").attributes("aria-current")).toBe(
+      "true",
+    );
   });
   it.each([
     ["⟦files.renameDetail⟧", "Books.md", "rename", "Notes/Books.md"],

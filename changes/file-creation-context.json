@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "file-creation-context",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "file-creation-context",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Creating files in the right folder",
+          "paragraphs": [
+            "New files go in the selected folder or alongside the selected file. To create a file in the workspace root, click a blank area in the file list to clear the selection. The New File dialog is shorter, and creating a file no longer closes the file browser."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "file-creation-context",
+          "type": "fixed",
+          "platforms": ["macos"],
+          "title": "Dateien im richtigen Ordner erstellen",
+          "paragraphs": [
+            "Neue Dateien landen im markierten Ordner oder neben der markierten Datei. Klicke auf eine freie Fläche in der Dateiliste, um die Auswahl aufzuheben und eine Datei im Stammverzeichnis zu erstellen. Der Dialog ist kompakter, und der Dateibrowser schließt sich beim Erstellen nicht mehr."
+          ]
+        }
+      ]
+    }
+  }
+}
