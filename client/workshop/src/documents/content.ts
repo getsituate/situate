@@ -20,10 +20,15 @@ export const c = {
   preview: "Preview",
   details: "Details",
   original: "Original",
-  openExternal: "Open in another app",
-  externalOpened: "Opened in another app.",
-  openFailed:
-    "The original could not be opened. Check source access and try again.",
+  open: "Open",
+  openingExternal: "Opening…",
+  openExternal: "Open in default app",
+  externalOpened: "Opened in the default app.",
+  externalFailed: "Couldn’t open in the default app",
+  externalFailedHelp:
+    "Try again. If the problem continues, check that you have an app for this file type.",
+  close: "Close",
+  openFailed: "This document couldn’t be previewed.",
   opening: "Opening document…",
   retry: "Try again",
   otherDevice: "On another device",
@@ -88,7 +93,7 @@ export const dc = {
   loading: "Loading",
   error: "Error",
   proposal:
-    "Proposal · synthetic documents and simulated connections. No files, accounts, OCR or AI services are accessed.",
+    "Proposal · synthetic documents and simulated connections. No files or accounts are accessed, and no apps are opened.",
   findTask:
     "Find the bicycle repair document using VE-2048, bicycle repair or the typo bicycel repair. Inspect its contents and source.",
   searchBoundary:

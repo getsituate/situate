@@ -48,7 +48,8 @@ export interface DocumentsState {
   nextOutcome: "success" | "error" | "wait";
   pending: { kind: "refresh"; id: string } | null;
   sourceAction: { id: string; revision: number } | null;
-  opening: string | null;
+  opening: { kind: "open" | "open-external"; id: string } | null;
+  externalError: boolean;
   addOnRefresh: boolean;
 }
 
@@ -131,6 +132,7 @@ export function createDocumentsState(
     pending: null,
     sourceAction: null,
     opening: null,
+    externalError: false,
     nextOutcome: "success",
     addOnRefresh: true,
   };
@@ -181,15 +183,19 @@ export function incomplete(s: DocumentsState): boolean {
       source.paused || source.status !== "ready" || source.pending > 0,
   );
 }
+export function closeDocument(s: DocumentsState) {
+  s.selected = null;
+  s.opening = null;
+  s.externalError = false;
+  s.notice = "";
+}
 export function clearSelection(s: DocumentsState) {
+  closeDocument(s);
   Object.assign(s, {
     query: "",
     draftQuery: "",
-    selected: null,
-    opening: null,
     searchState: "ready",
     sort: "newest",
-    notice: "",
   });
 }
 export function finishDocumentAction(
@@ -198,11 +204,15 @@ export function finishDocumentAction(
   operation: "opening" | "source" = s.opening ? "opening" : "source",
 ) {
   if (operation === "opening") {
-    if (!s.opening) return;
-    const doc = s.documents.find((d) => d.id === s.opening);
+    const opening = s.opening;
+    if (!opening) return;
     s.opening = null;
-    s.preview = ok ? "ready" : "error";
-    if (ok && doc?.type === "Spreadsheet") s.notice = "external";
+    if (opening.kind === "open-external") {
+      s.externalError = !ok;
+      if (ok) s.notice = "external";
+    } else {
+      s.preview = ok ? "ready" : "error";
+    }
     return;
   }
   const pending = s.pending;
@@ -244,18 +254,21 @@ export function finishDocumentAction(
 }
 export function startDocumentAction(
   s: DocumentsState,
-  kind: "open" | "refresh",
+  kind: "open" | "open-external" | "refresh",
   id = "",
 ) {
-  if (kind === "open") {
+  if (kind !== "refresh") {
+    if (s.opening || s.selected !== id) return;
     const doc = s.documents.find((d) => d.id === id);
+    const source = s.sources.find((source) => source.id === doc?.source);
     if (!doc || doc.availability !== "available") return;
-    if (s.sources.find((source) => source.id === doc.source)?.paused) {
-      s.preview = "error";
+    if (!source || source.paused) {
+      if (kind === "open") s.preview = "error";
       return;
     }
-    s.preview = "loading";
-    s.opening = id;
+    if (kind === "open") s.preview = "loading";
+    s.externalError = false;
+    s.opening = { kind, id };
     s.notice = "";
     if (s.nextOutcome !== "wait")
       finishDocumentAction(s, s.nextOutcome === "success", "opening");
@@ -273,17 +286,15 @@ export function startDocumentAction(
     finishDocumentAction(s, s.nextOutcome === "success", "source");
 }
 export function interruptDocumentWork(s: DocumentsState) {
-  if (s.opening) s.preview = "error";
-  s.opening = null;
+  if (s.opening) finishDocumentAction(s, false, "opening");
   s.pending = null;
 }
 export function selectDocument(s: DocumentsState, id: string) {
-  s.opening = null;
+  closeDocument(s);
   s.selected = id;
   s.page = 0;
   s.zoom = 100;
   s.preview = "ready";
-  s.notice = "";
   const doc = s.documents.find((d) => d.id === id);
   if (doc?.availability === "available" && doc.type !== "Spreadsheet")
     startDocumentAction(s, "open", id);

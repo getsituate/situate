@@ -394,7 +394,7 @@ describe("document sources across workshop scenarios", () => {
     selectDocument(s.documents, "bike");
     startDocumentAction(s.documents, "refresh", "drive");
     finishDocumentAction(s.documents, true, "source");
-    expect(s.documents.opening).toBe("bike");
+    expect(s.documents.opening).toEqual({ kind: "open", id: "bike" });
     expect(s.documents.preview).toBe("loading");
     expect(s.documents.pending).toBeNull();
   });
