@@ -9,6 +9,7 @@ import {
   watch,
 } from "vue";
 import { preferences, t } from "@situate/localization";
+import { listen } from "@tauri-apps/api/event";
 import {
   SituateButton,
   SituateDisclosure,
@@ -33,6 +34,18 @@ import {
 import type { PluginRuntime } from "../plugins/runtime";
 import type { PresentationValue } from "../layout/navigation";
 import DocumentReading from "./DocumentReading.vue";
+import DocumentThumbnail from "./DocumentThumbnail.vue";
+import { previewFormats } from "./document-preview";
+import {
+  documentThumbnails,
+  forgetThumbnail,
+  invalidatesThumbnail,
+  readLibraryOriginal,
+  reconcileThumbnails,
+  type ThumbnailInvalidation,
+  type ThumbnailSource,
+  type ThumbnailTarget,
+} from "./document-thumbnails";
 import "./documents.css";
 
 const props = defineProps<{
@@ -118,20 +131,18 @@ const preview = shallowRef<{
 const previewError = ref<LibraryError | "failed">();
 const opening = ref(false);
 const detailFields = shallowRef<LibraryDetailField[]>([]);
-const familiarFormats: Record<string, string> = {
-  "application/pdf": "PDF",
-  "image/png": "PNG",
-  "image/jpeg": "JPEG",
-};
+const thumbnails = documentThumbnails(() => runtime.value);
 const fileFormat = computed(() => {
   const mimeType =
     preview.value?.document.mimeType ?? selection.value?.mimeType;
-  return mimeType && (familiarFormats[mimeType] ?? mimeType);
+  return mimeType && (previewFormats[mimeType] ?? mimeType);
 });
 
 interface SourcePage {
   plugin: string;
   descriptor?: LibraryDescriptor;
+  thumbnailSource?: ThumbnailSource;
+  thumbnailsReady?: Promise<unknown>;
   items: LibraryDocument[];
   next?: LibraryContinuation;
   incomplete?: boolean;
@@ -139,12 +150,27 @@ interface SourcePage {
 }
 const pages = shallowRef<SourcePage[]>([]);
 const rows = computed(() =>
-  pages.value.flatMap(({ descriptor, items }) =>
-    items.map((item) => ({
-      item,
-      label: descriptor?.label ?? "",
-      key: keyFor(item.ref),
-    })),
+  pages.value.flatMap(
+    ({ descriptor, thumbnailSource, thumbnailsReady, items, failed }) =>
+      items.map((item) => {
+        const imageKey = thumbnailKey(item, descriptor, thumbnailSource);
+        return {
+          item,
+          label: descriptor?.label ?? "",
+          key: keyFor(item.ref),
+          thumbnailKey: imageKey,
+          thumbnail:
+            descriptor && !failed && canPreview(item.mimeType)
+              ? ({
+                  item,
+                  descriptor,
+                  source: thumbnailSource,
+                  ready: thumbnailsReady,
+                  key: imageKey,
+                } satisfies ThumbnailTarget)
+              : undefined,
+        };
+      }),
   ),
 );
 const partial = computed(() =>
@@ -162,7 +188,16 @@ const sourceName = computed(
     )?.manifest?.name ??
     "",
 );
-const canPreview = (type: string) => Object.hasOwn(familiarFormats, type);
+const canPreview = (type: string) => Object.hasOwn(previewFormats, type);
+watch(
+  rows,
+  (values) =>
+    thumbnails.replace(
+      values.flatMap((row) => (row.thumbnail ? [row.thumbnail] : [])),
+    ),
+  { flush: "sync" },
+);
+watch(opening, (value) => thumbnails.pause(value), { flush: "sync" });
 let listTurn = 0;
 let openTurn = 0;
 let controller: AbortController | undefined;
@@ -189,6 +224,31 @@ function previewErrorText(code: LibraryError | "failed") {
 
 function keyFor(ref: DocumentReference) {
   return JSON.stringify([ref.source.pluginId, ref.source.instanceId, ref.id]);
+}
+function thumbnailSourceFor(
+  plugin: (typeof candidates.value)[number],
+  descriptor: LibraryDescriptor,
+): ThumbnailSource | undefined {
+  if (plugin.incarnation)
+    return {
+      ...descriptor.source,
+      incarnation: plugin.incarnation,
+      scopeId: descriptor.scope.id,
+    };
+}
+function thumbnailKey(
+  item: LibraryDocument,
+  descriptor?: LibraryDescriptor,
+  source?: ThumbnailSource,
+) {
+  return JSON.stringify([
+    keyFor(item.ref),
+    item.ref.identity,
+    item.ref.revision,
+    item.mimeType,
+    descriptor?.scope.id,
+    source?.incarnation,
+  ]);
 }
 function retain() {
   emit("presentation", {
@@ -217,9 +277,14 @@ async function fetchPage(
   term: string,
   previous?: SourcePage,
 ): Promise<SourcePage> {
-  const state = previous ?? { plugin: plugin.id, items: [] };
+  let state: SourcePage = previous ?? { plugin: plugin.id, items: [] };
   try {
     const descriptor = state.descriptor ?? (await describe(plugin));
+    state = {
+      ...state,
+      descriptor,
+      thumbnailSource: thumbnailSourceFor(plugin, descriptor),
+    };
     const operation = term ? "search" : "list";
     const args = {
       limit: Math.min(descriptor.limits.maxItems, 24),
@@ -237,8 +302,8 @@ async function fetchPage(
     const items = new Map(state.items.map((item) => [keyFor(item.ref), item]));
     for (const item of result.items) items.set(keyFor(item.ref), item);
     return {
-      plugin: plugin.id,
-      descriptor,
+      ...state,
+      failed: false,
       items: [...items.values()],
       next: result.next,
       incomplete:
@@ -265,6 +330,19 @@ async function load(append = false, action = false) {
     }),
   );
   if (turn !== listTurn) return;
+  const active = runtime.value;
+  if (active) {
+    const ready = Promise.all(
+      fetched.flatMap(({ thumbnailSource, thumbnailsReady }) =>
+        thumbnailSource && !thumbnailsReady
+          ? [reconcileThumbnails(active.scope, thumbnailSource)]
+          : [],
+      ),
+    );
+    for (const source of fetched) {
+      if (!source.thumbnailsReady) source.thumbnailsReady = ready;
+    }
+  }
   pages.value = fetched;
   busy.value = false;
   if (restore && sources.length) {
@@ -323,29 +401,39 @@ async function openDocument(userAction = false) {
       previewError.value = "unsupported";
       return;
     }
-    const descriptor =
-      pages.value.find((source) => source.plugin === plugin.id)?.descriptor ??
-      (await describe(plugin));
-    if (turn !== openTurn) return;
+    const page = pages.value.find((source) => source.plugin === plugin.id);
+    const descriptor = page?.descriptor ?? (await describe(plugin));
+    const active = runtime.value;
+    if (turn !== openTurn || !active) return;
     if (descriptor.source.instanceId !== target.ref.source.instanceId) {
       previewError.value = "not-found";
       return;
     }
-    const args = { ref: target.ref };
-    const value = await runtime.value?.invokeDocumentSource(
-      plugin.id,
-      LIBRARY_EXPORTS.readOriginal,
-      args,
+    const row = rows.value.find(({ key }) => key === keyFor(target.ref));
+    const expected =
+      row?.item.ref.revision === target.ref.revision
+        ? row?.thumbnail
+        : undefined;
+    const publishThumbnail = expected && thumbnails.prepare(expected.key);
+    const result = await readLibraryOriginal(
+      active,
+      descriptor,
+      target.ref,
       signal,
     );
     if (turn !== openTurn) return;
-    const result = validateLibraryResult(
-      descriptor,
-      "readOriginal",
-      args,
-      value,
-    );
     if (result.status === "error") {
+      if (
+        result.error.code === "unavailable" ||
+        result.error.code === "authentication" ||
+        invalidatesThumbnail(result.error.code)
+      ) {
+        thumbnails.forget(plugin.id, target.ref.id);
+      }
+      if (invalidatesThumbnail(result.error.code)) {
+        const source = thumbnailSourceFor(plugin, descriptor);
+        if (source) void forgetThumbnail(active.scope, source, target.ref.id);
+      }
       previewError.value = result.error.code;
       if (userAction && result.error.code !== "cancelled")
         emit("error", previewErrorText(result.error.code));
@@ -355,12 +443,11 @@ async function openDocument(userAction = false) {
       previewError.value = "unsupported";
       return;
     }
-    if (!runtime.value) throw new Error();
-    const bytes = await runtime.value.readDocumentBytes(
-      result.original,
-      signal,
-    );
-    if (turn === openTurn) preview.value = { document: result.document, bytes };
+    const bytes = await active.readDocumentBytes(result.original, signal);
+    if (turn !== openTurn) return;
+    if (expected?.item.mimeType === result.document.mimeType)
+      publishThumbnail?.(bytes);
+    preview.value = { document: result.document, bytes };
   } catch {
     if (turn === openTurn) previewFailed(userAction);
   } finally {
@@ -451,10 +538,38 @@ watch(
   },
   { immediate: true },
 );
+const removeInvalidationListener = listen<ThumbnailInvalidation>(
+  "document-thumbnails-invalidated",
+  ({ payload }) => {
+    if (payload.scope !== runtime.value?.scope) return;
+    thumbnails.forget(
+      payload.pluginId,
+      payload.document?.id,
+      payload.document?.source,
+    );
+    if (!payload.document) {
+      const selected = selection.value;
+      if (selected?.ref.source.pluginId !== payload.pluginId) {
+        void load();
+        return;
+      }
+      const turn = ++openTurn;
+      controller?.abort();
+      preview.value = undefined;
+      previewError.value = undefined;
+      opening.value = true;
+      void load().then(() => {
+        if (turn === openTurn) void openDocument();
+      });
+    }
+  },
+).catch(() => undefined);
 onUnmounted(() => {
   ++listTurn;
   ++openTurn;
   controller?.abort();
+  thumbnails.close();
+  void removeInvalidationListener.then((remove) => remove?.());
 });
 </script>
 
@@ -526,7 +641,7 @@ onUnmounted(() => {
         </div>
         <div ref="results" class="doc-results" :aria-busy="busy">
           <ul v-if="rows.length" class="doc-gallery">
-            <li v-for="{ item, label, key } in rows" :key="key">
+            <li v-for="{ item, label, key, thumbnailKey } in rows" :key="key">
               <SituateButton
                 variant="plain"
                 class="doc-result"
@@ -537,11 +652,12 @@ onUnmounted(() => {
                 "
                 @click="select(item, $event)"
               >
-                <span class="doc-thumbnail" aria-hidden="true"
-                  ><SituateIcon name="notes" /><span>{{
-                    item.mimeType.split("/")[1]?.toUpperCase()
-                  }}</span></span
-                >
+                <DocumentThumbnail
+                  :thumbnail-key="thumbnailKey"
+                  :format="item.mimeType.split('/')[1]?.toUpperCase() ?? ''"
+                  :image="thumbnails.images.get(thumbnailKey)"
+                  :observe="thumbnails.observe"
+                />
                 <span class="doc-result-content"
                   ><strong data-localization-content="external">{{
                     item.title

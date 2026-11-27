@@ -48,6 +48,7 @@ function source(
   mimeType: string,
   base64: string,
   fields?: { id: string; label: string; value: string }[],
+  revision: string | null = "r1",
 ) {
   const source = { pluginId, instanceId: "default" };
   const scope = {
@@ -59,7 +60,12 @@ function source(
   const document = {
     title,
     mimeType,
-    ref: { source, id: "42", identity: "stable", revision: "r1" },
+    ref: {
+      source,
+      id: "42",
+      identity: "stable",
+      ...(revision && { revision }),
+    },
   };
   const original = {
     id: randomUUID(),
@@ -303,6 +309,28 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
       .map((call) => call.args.request?.args?.query),
   );
   expect(searchRequests).toEqual(["Receipt", "Receipt"]);
+  const scan = library.getByRole("button", {
+    name: "Receipt scan Fixture archive",
+  });
+  const pdfThumbnail = receipt.locator(".doc-thumbnail img");
+  await expect(pdfThumbnail).toHaveJSProperty("naturalWidth", 320);
+  await expect(scan.locator(".doc-thumbnail img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
+  const imageUrl = await pdfThumbnail.getAttribute("src");
+  const chunkOffsets = () =>
+    page.evaluate(() =>
+      (
+        Reflect.get(window, "__ipcCalls") as {
+          command: string;
+          args: { offset: number };
+        }[]
+      )
+        .filter((call) => call.command === "plugin_document_chunk")
+        .map((call) => call.args.offset),
+    );
+  const chunksBeforeOpen = (await chunkOffsets()).length;
   await page.mouse.move(0, 0);
   await visual.capture("documents.library.results");
   const holdDocument = (key: string, hold: boolean) =>
@@ -318,6 +346,8 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   const opening = preview.getByText("Opening document…", { exact: true });
   await expect(opening).toBeVisible();
   await expect(stage).toHaveAttribute("aria-busy", "true");
+  await expect(pdfThumbnail).toBeVisible();
+  await expect(pdfThumbnail).toHaveAttribute("src", imageUrl!);
   await expect(preview.getByRole("button", { name: "Next page" })).toHaveCount(
     0,
   );
@@ -381,17 +411,10 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   await expect(
     preview.getByRole("button", { name: "Next page" }),
   ).toBeDisabled();
-  const offsets = await page.evaluate(() =>
-    (
-      Reflect.get(window, "__ipcCalls") as {
-        command: string;
-        args: { offset: number };
-      }[]
-    )
-      .filter((call) => call.command === "plugin_document_chunk")
-      .map((call) => call.args.offset),
-  );
-  expect(offsets).toEqual([0, 1024 * 1024]);
+  expect((await chunkOffsets()).slice(chunksBeforeOpen)).toEqual([
+    0,
+    1024 * 1024,
+  ]);
   await page.mouse.move(0, 0);
   await visual.capture("documents.library.pdf-page");
   await preview.getByRole("button", { name: "Zoom in" }).click();
@@ -467,6 +490,174 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
       ),
     )
     .toBe(4);
+});
+
+test("reuses revisioned thumbnails after reload and clears them when removal is confirmed", async ({
+  page,
+}) => {
+  const archived = source(
+    "test-archive",
+    "Archive",
+    "Archived scan",
+    "image/png",
+    png,
+  );
+  const jpeg = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    return canvas.toDataURL("image/jpeg").split(",")[1]!;
+  });
+  const live = source(
+    "test-live",
+    "Folder",
+    "Live scan",
+    "image/jpeg",
+    jpeg,
+    undefined,
+    null,
+  );
+  await workspaceFixture(page, shellState, {
+    layout: documentsLayout(),
+    installedPlugins: [archived.installed, live.installed],
+    pluginExportResults: {
+      [archived.installed.id]: archived.values,
+      [live.installed.id]: live.values,
+    },
+    documentOriginals: { ...archived.original, ...live.original },
+    documentThumbnailCache: true,
+  });
+  const archive = page.getByRole("button", { name: "Archived scan Archive" });
+  const current = page.getByRole("button", { name: "Live scan Folder" });
+  const originalRequests = () =>
+    page.evaluate(() =>
+      (
+        Reflect.get(window, "__ipcCalls") as {
+          args: { request?: { exportName?: string; pluginId: string } };
+        }[]
+      ).flatMap(({ args }) =>
+        args.request?.exportName === "documentLibraryReadOriginal"
+          ? [args.request.pluginId]
+          : [],
+      ),
+    );
+  await page.goto("/");
+  await expect(archive.locator(".doc-thumbnail img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
+  await expect(current.locator(".doc-thumbnail img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
+  expect((await originalRequests()).sort()).toEqual([
+    "test-archive",
+    "test-live",
+  ]);
+
+  await page.reload();
+  await expect(archive.locator(".doc-thumbnail img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
+  await expect(current.locator(".doc-thumbnail img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
+  expect(await originalRequests()).toEqual(["test-live"]);
+
+  await page.evaluate(() =>
+    Reflect.get(window, "__removeSourceDocument")("test-archive"),
+  );
+  await archive.click();
+  await expect(archive.locator(".doc-thumbnail img")).toHaveCount(0);
+  await expect(current.locator(".doc-thumbnail img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(sessionStorage).filter((key) =>
+          key.startsWith("thumbnail:"),
+        ),
+      ),
+    )
+    .toEqual([]);
+});
+
+test("bounds background original reads and cancels them when results scroll out of view", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 780, height: 500 });
+  const fixtures = Array.from({ length: 9 }, (_, index) =>
+    source(
+      `test-scan-${index}`,
+      `Folder ${index}`,
+      `Scan ${index}`,
+      "image/png",
+      png,
+    ),
+  );
+  await workspaceFixture(page, shellState, {
+    layout: documentsLayout(),
+    installedPlugins: fixtures.map(({ installed }) => installed),
+    pluginExportResults: Object.fromEntries(
+      fixtures.map(({ installed, values }) => [installed.id, values]),
+    ),
+    documentOriginals: Object.assign(
+      {},
+      ...fixtures.map(({ original }) => original),
+    ),
+    holdDocumentChunks: true,
+  });
+  await page.goto("/");
+  const last = page.getByRole("button", { name: "Scan 8 Folder 8" });
+  await expect(last).toBeAttached();
+  await expect(last).not.toBeInViewport();
+  const documentRequests = () =>
+    page.evaluate(() =>
+      (
+        Reflect.get(window, "__ipcCalls") as {
+          command: string;
+          args: {
+            request?: {
+              operation: string;
+              exportName?: string;
+              pluginId?: string;
+              readId?: string;
+            };
+          };
+        }[]
+      ).flatMap(({ command, args }) =>
+        command === "plugin_executor" && args.request ? [args.request] : [],
+      ),
+    );
+  const originals = async () =>
+    (await documentRequests()).filter(
+      (request) => request.exportName === "documentLibraryReadOriginal",
+    );
+  await expect.poll(async () => (await originals()).length).toBe(2);
+  const initial = await originals();
+  expect(initial.map(({ pluginId }) => pluginId)).not.toContain("test-scan-8");
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  await expect
+    .poll(
+      async () =>
+        (await documentRequests()).filter(
+          (request) =>
+            request.operation === "cancelDocumentRead" &&
+            initial.some(({ readId }) => readId === request.readId),
+        ).length,
+    )
+    .toBe(2);
+  await page.evaluate(() =>
+    Reflect.get(window, "__holdDocumentReply")("chunk", false),
+  );
+  await expect(last.locator(".doc-thumbnail img")).toHaveJSProperty(
+    "naturalWidth",
+    1,
+  );
 });
 
 test("a failed source does not hide results or details from other sources", async ({

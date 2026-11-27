@@ -295,7 +295,7 @@ await sourceWrite(
     documentLibraryDescribe: () => ({version:2,source,scope,label:'Preview fixtures',searchCoverage:['filename'],limits:{maxItems:2}}),
     documentLibraryList: () => page('list',docs),
     documentLibrarySearch: ({query}) => page('search',docs.filter(doc => doc.title.includes(query))),
-    configure: (_args,ctx) => ctx.credentials.set('token','source-fixture-token'),
+    configure: ({revoke},ctx) => revoke ? ctx.credentials.remove('token') : ctx.credentials.set('token','source-fixture-token'),
     ${previewExport}: async ({ref},ctx) => {
       const base = {version:2,source,scopeId:'preview-fixture',operation:'readOriginal'};
       const document = {ref,title:'Synthetic original',mimeType:'application/pdf'};
@@ -335,9 +335,9 @@ require(previewCheck.passed, "Original handle check failed");
 await assertPublished(await activateGroup(assignment, previewCheck));
 const executor = (request) => invoke("plugin_executor", { scope, request });
 const snapshot = await executor({ operation: "snapshot" });
-const generation = snapshot.plugins.find(
+const { generation, incarnation } = snapshot.plugins.find(
   (plugin) => plugin.pluginId === previewId,
-).generation;
+);
 const run = (exportName, args, readId) =>
   executor({
     operation: "invoke",
@@ -377,4 +377,37 @@ require(await run(previewExport, { ref: previewRef("forged") }, unused).then(
   () => true,
 ), "Forged original handle was accepted");
 await invoke("smoke_progress", { stage: "document-originals-transferred" });
+
+const thumbnail = (operation, fields = {}) =>
+  invoke("document_thumbnail", {
+    scope,
+    request: {
+      operation,
+      source: {
+        pluginId: previewId,
+        incarnation,
+        instanceId: "preview-instance",
+        scopeId: "preview-fixture",
+      },
+      ...fields,
+    },
+  });
+const canvas = document.createElement("canvas");
+canvas.width = canvas.height = 24;
+const drawing = canvas.getContext("2d");
+drawing.fillStyle = "#36005f";
+drawing.fillRect(0, 0, 24, 24);
+const jpeg = canvas.toDataURL("image/jpeg").split(",")[1];
+const thumbnailKey = { id: "http", revision: "stable:fixture-1" };
+await thumbnail("reconcile");
+const cacheMiss = await thumbnail("lookup", thumbnailKey);
+require(cacheMiss.jpeg === null, "Initial thumbnail lookup should miss");
+await thumbnail("store", { ...thumbnailKey, epoch: cacheMiss.epoch, jpeg });
+require((await thumbnail("lookup", thumbnailKey)).jpeg ===
+  jpeg, "Wrong cached thumbnail");
+await run("configure", { revoke: true });
+await thumbnail("reconcile");
+await thumbnail("store", { ...thumbnailKey, epoch: cacheMiss.epoch, jpeg });
+require((await thumbnail("lookup", thumbnailKey)).jpeg ===
+  null, "Credential removal left a cached thumbnail");
 await invoke("smoke_progress", { stage: "document-sources-offline-qualified" });

@@ -269,11 +269,15 @@ pub async fn plugin_runtime(
                 if preparing {
                     crate::plugin_host::prepare_credentials(&app, root, &scope)?;
                 }
+                if let Reply::List { listing, .. } = &reply {
+                    crate::document_thumbnails::retain_sources(&app, &scope, listing);
+                }
                 if let Some((id, enabled)) = changed {
                     if enabled {
                         crate::ai_executor::clear_unavailable(&app, &scope, Some(&id));
                         crate::plugin_recovery::resume(&app, &scope, Some(&id))?;
                     } else {
+                        crate::document_thumbnails::forget_source(&app, &label, &scope, &id);
                         crate::plugin_recovery::reconcile(&app)?;
                     }
                 }
