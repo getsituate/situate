@@ -1523,6 +1523,8 @@ pub struct InitialConversation {
     #[serde(default)]
     references: Vec<situate_core::conversation_runtime::ContentReference>,
     development: Option<situate_core::conversation_store::Development>,
+    #[serde(default)]
+    development_paused: bool,
 }
 
 #[tauri::command]
@@ -1553,6 +1555,7 @@ pub async fn ai_create_conversation(
                         ..Default::default()
                     },
                     initial.development,
+                    initial.development_paused,
                 ),
                 None => storage.create_conversation(&id, &title),
             }

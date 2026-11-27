@@ -496,7 +496,15 @@ onBeforeUnmount(() => {
       />
       <PluginsControls
         v-if="context.controls.includes('plugins')"
-        :state="state.plugins"
+        :state="
+          context.embeddedDevelopmentId
+            ? {
+                ...state.plugins,
+                screen: 'development',
+                developmentId: context.embeddedDevelopmentId,
+              }
+            : state.plugins
+        "
         @action="
           dispatch({
             type: 'plugin-action',

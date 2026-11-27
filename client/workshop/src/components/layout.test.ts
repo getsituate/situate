@@ -12,24 +12,15 @@ describe("empty chat", () => {
     const wrapper = mount(ChatPane, {
       props: { navigationId: "workspace-navigation", navigationOpen: false },
     });
-    const title = wrapper.get("h1");
     const input = wrapper.get("textarea");
 
-    expect(title.text()).toBe("New chat");
-    expect(wrapper.get("main").attributes("aria-labelledby")).toBe(
-      title.attributes("id"),
-    );
+    expect(wrapper.get("main").attributes("aria-label")).toBe("New chat");
     expect(wrapper.get("h2").text()).toBe("Good to see you.");
     expect(input.element.readOnly).toBe(true);
     expect(wrapper.get("label").attributes("for")).toBe(input.attributes("id"));
     expect(input.attributes("aria-describedby")).toBeUndefined();
     expect(wrapper.text()).not.toContain("Messaging is unavailable.");
-    for (const name of [
-      "Send message",
-      "Dictate text",
-      "Split pane",
-      "Close pane",
-    ]) {
+    for (const name of ["Send message", "Dictate text"]) {
       expect(
         wrapper.get<HTMLButtonElement>(`button[aria-label="${name}"]`).element
           .disabled,

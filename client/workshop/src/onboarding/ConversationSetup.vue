@@ -280,6 +280,8 @@ watch(
               />
               <ChatView
                 v-else-if="state.pane === 'new'"
+                mode-switch
+                mode-session="setup-other-chat"
                 :state="secondary"
                 :conversation="{
                   title: copy.newChat,
@@ -327,6 +329,9 @@ watch(
               </section>
               <ChatView
                 v-else
+                mode-switch
+                mode-session="setup-development-chat"
+                starts-in-development
                 :state="{ ...state.developmentChat, empty: false }"
                 :conversation="{
                   title: copy.developmentTitle,

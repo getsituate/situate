@@ -2,7 +2,9 @@
 import { computed, onMounted, ref } from "vue";
 import { SituateIcon, SituateIconButton, SituateButton } from "../ui";
 import ChatComposer from "../components/ChatComposer.vue";
-import ChatPaneHeader from "../components/ChatPaneHeader.vue";
+import ChatModeSurface from "../chat/ChatModeSurface.vue";
+import ChatTranscript from "../chat/ChatTranscript.vue";
+import type { Event } from "../chat/model";
 import ChatMessage from "../components/ChatMessage.vue";
 import FilePreviewButton from "../components/FilePreviewButton.vue";
 import bend from "../brand/bend/svg/wave-welcome.svg";
@@ -47,6 +49,24 @@ const replyFile = computed(() => {
   const exchange = props.chat.exchange;
   return exchange ? resolveReference(props.state, exchange.file) : null;
 });
+const events = computed<Event[]>(() =>
+  props.chat.exchange
+    ? [
+        {
+          kind: "message",
+          speaker: "user",
+          id: "editor-request",
+          text: props.chat.exchange.request,
+        },
+        {
+          kind: "message",
+          speaker: "assistant",
+          id: "editor-reply",
+          text: props.chat.exchange.reply,
+        },
+      ]
+    : [],
+);
 onMounted(() => {
   if (props.visible && !props.chat.exchange) focus();
 });
@@ -57,8 +77,19 @@ defineExpose({ focus });
 </script>
 <template>
   <section class="chat-pane" :aria-label="chat.title + ' pane'">
-    <ChatPaneHeader :title="chat.title">
-      <template #navigation>
+    <ChatModeSurface
+      :title="chat.title"
+      :session-key="`editor:${chat.key}`"
+      :draft="chat.draft"
+      :events="events"
+      :empty="!chat.exchange"
+      :close-label="'Close pane — ' + chat.title"
+      :navigation-open="navigationOpen"
+      content-selector=".transcript, .welcome"
+      @draft="emit('draft', $event)"
+      @close="emit('close')"
+    >
+      <template v-if="showNavigation" #navigation>
         <SituateIconButton
           v-if="showNavigation"
           icon="menu"
@@ -68,111 +99,128 @@ defineExpose({ focus });
           @click="emit('openNavigation', $event)"
         />
       </template>
-      <SituateIconButton
-        icon="split"
-        label="Split pane"
-        disabled
-        unavailable-reason="Pane resizing is not available."
-      />
-      <SituateIconButton
-        icon="close"
-        :label="'Close pane — ' + chat.title"
-        @click="emit('close')"
-      />
-    </ChatPaneHeader>
-    <div :class="chat.exchange ? 'active-chat' : 'empty-chat'">
-      <div v-if="chat.exchange && replyFile" class="transcript-scroll">
-        <div class="transcript">
-          <ChatMessage speaker="user" hide-speaker>
-            <p>{{ chat.exchange.request }}</p>
-          </ChatMessage>
-          <ChatMessage speaker="assistant" hide-speaker>
-            <p>{{ chat.exchange.reply }}</p>
-            <FilePreviewButton
-              class="reply-file"
-              :name="replyFile.name"
-              :appearance="chat.exchange.appearance"
-              :disabled="replyFile.state === 'missing'"
-              :excerpt="
-                replyFile.state === 'missing'
-                  ? replyFile.detail
-                  : chat.exchange.excerpt
-              "
-              @click="emit('open', chat.exchange.file)"
-            />
-          </ChatMessage>
-        </div>
-      </div>
-      <div :class="chat.exchange ? 'chat-footer' : 'welcome'">
-        <div v-if="!chat.exchange" class="greeting">
-          <img :src="bend" width="128" height="128" alt="" />
-          <h3>Good to see you.</h3>
-        </div>
-        <ChatComposer
-          ref="composer"
-          class="file-chat-composer"
-          :model-value="chat.draft"
-          :readonly="false"
-          attach-dialog
-          unavailable-reason="Chat processing is not connected."
-          @update:model-value="emit('draft', $event)"
-          @attach="emit('attach')"
+      <template #default="{ developmentEvents }">
+        <div
+          :class="
+            chat.exchange || developmentEvents.length
+              ? 'active-chat'
+              : 'empty-chat'
+          "
         >
-          <template #attachments>
-            <ul
-              v-if="attachments.length"
-              class="attachments"
-              aria-label="Attachments"
-              role="list"
+          <div
+            v-if="(chat.exchange && replyFile) || developmentEvents.length"
+            class="transcript-scroll"
+          >
+            <div class="transcript">
+              <template v-if="chat.exchange && replyFile">
+                <ChatMessage speaker="user" hide-speaker>
+                  <p>{{ chat.exchange.request }}</p>
+                </ChatMessage>
+                <ChatMessage speaker="assistant" hide-speaker>
+                  <p>{{ chat.exchange.reply }}</p>
+                  <FilePreviewButton
+                    class="reply-file"
+                    :name="replyFile.name"
+                    :appearance="chat.exchange.appearance"
+                    :disabled="replyFile.state === 'missing'"
+                    :excerpt="
+                      replyFile.state === 'missing'
+                        ? replyFile.detail
+                        : chat.exchange.excerpt
+                    "
+                    @click="emit('open', chat.exchange.file)"
+                  />
+                </ChatMessage>
+              </template>
+              <ChatTranscript
+                v-if="developmentEvents.length"
+                :events="developmentEvents"
+              />
+            </div>
+          </div>
+          <div
+            :class="
+              chat.exchange || developmentEvents.length
+                ? 'chat-footer'
+                : 'welcome'
+            "
+          >
+            <div
+              v-if="!chat.exchange && !developmentEvents.length"
+              class="greeting"
             >
-              <li
-                v-for="(item, index) in attachments"
-                :key="item.key"
-                class="attachment-chip"
-                :data-state="item.kind === 'reference' ? item.state : 'ready'"
-              >
-                <img
-                  v-if="item.kind === 'image'"
-                  class="attachment-preview"
-                  :src="item.previewUrl"
-                  :alt="item.name"
-                  :title="item.name"
-                />
-                <SituateButton
-                  v-else
-                  variant="plain"
-                  class="attachment-link"
-                  type="button"
-                  :disabled="item.state === 'missing'"
-                  :title="item.name + ' — ' + item.detail"
-                  :aria-label="'Open ' + item.name + ', ' + item.detail"
-                  @click="emit('open', item.reference)"
+              <img :src="bend" width="128" height="128" alt="" />
+              <h3>Good to see you.</h3>
+            </div>
+            <ChatComposer
+              ref="composer"
+              class="file-chat-composer"
+              :model-value="chat.draft"
+              :readonly="false"
+              attach-dialog
+              unavailable-reason="Chat processing is not connected."
+              @update:model-value="emit('draft', $event)"
+              @attach="emit('attach')"
+            >
+              <template #attachments>
+                <ul
+                  v-if="attachments.length"
+                  class="attachments"
+                  aria-label="Attachments"
+                  role="list"
                 >
-                  <SituateIcon name="notes" />
-                  <span>
-                    <strong>{{ item.name }}</strong>
-                    <small>{{ item.detail }}</small>
-                  </span>
-                </SituateButton>
-                <SituateIconButton
-                  class="remove-attachment"
-                  icon="close"
-                  :label="
-                    (item.kind === 'reference'
-                      ? 'Remove reference to '
-                      : 'Remove attachment ') + item.name
-                  "
-                  @click="
-                    emit('remove', index);
-                    focus();
-                  "
-                />
-              </li>
-            </ul>
-          </template>
-        </ChatComposer>
-      </div>
-    </div>
+                  <li
+                    v-for="(item, index) in attachments"
+                    :key="item.key"
+                    class="attachment-chip"
+                    :data-state="
+                      item.kind === 'reference' ? item.state : 'ready'
+                    "
+                  >
+                    <img
+                      v-if="item.kind === 'image'"
+                      class="attachment-preview"
+                      :src="item.previewUrl"
+                      :alt="item.name"
+                      :title="item.name"
+                    />
+                    <SituateButton
+                      v-else
+                      variant="plain"
+                      class="attachment-link"
+                      type="button"
+                      :disabled="item.state === 'missing'"
+                      :title="item.name + ' — ' + item.detail"
+                      :aria-label="'Open ' + item.name + ', ' + item.detail"
+                      @click="emit('open', item.reference)"
+                    >
+                      <SituateIcon name="notes" />
+                      <span>
+                        <strong>{{ item.name }}</strong>
+                        <small>{{ item.detail }}</small>
+                      </span>
+                    </SituateButton>
+                    <SituateIconButton
+                      class="remove-attachment"
+                      icon="close"
+                      :label="
+                        (item.kind === 'reference'
+                          ? 'Remove reference to '
+                          : 'Remove attachment ') + item.name
+                      "
+                      @click="
+                        emit('remove', index);
+                        focus();
+                      "
+                    />
+                  </li>
+                </ul>
+              </template>
+            </ChatComposer>
+          </div>
+        </div>
+      </template>
+    </ChatModeSurface>
   </section>
 </template>
 <style scoped>

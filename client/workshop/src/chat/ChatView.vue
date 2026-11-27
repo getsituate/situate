@@ -29,7 +29,7 @@ import NavigationComposer from "../navigation/NavigationComposer.vue";
 
 import ChatSystemAnnouncement from "../components/ChatSystemAnnouncement.vue";
 import { systemMessageCopy } from "./system-message";
-import ChatPaneHeader from "../components/ChatPaneHeader.vue";
+import ChatModeSurface from "./ChatModeSurface.vue";
 import ChatWorkingIndicator from "../components/ChatWorkingIndicator.vue";
 import ChatWelcome from "./ChatWelcome.vue";
 import { SituateButton, SituateIconButton } from "../ui";
@@ -45,6 +45,11 @@ const props = defineProps<{
   sendEnabled?: boolean;
   hideModelChoice?: boolean;
   hideHeader?: boolean;
+  modeSwitch?: boolean;
+  modeBlocked?: boolean;
+  modeSession?: string;
+  startsInDevelopment?: boolean;
+  extraEvents?: Event[];
   retryEnabled?: boolean;
   startAtLatest?: boolean;
   showNavigation?: boolean;
@@ -110,7 +115,17 @@ function submit() {
   emit("update:state", { ...props.state, ai });
 }
 const composer = ref<InstanceType<typeof NavigationComposer>>();
-const heading = ref<InstanceType<typeof ChatPaneHeader>>();
+const surface = ref<InstanceType<typeof ChatModeSurface>>();
+const title = computed(
+  () =>
+    props.conversation?.title ??
+    props.state.title ??
+    (props.state.transcript
+      ? systemMessageCopy[props.state.systemMessageLocale].title
+      : props.state.empty
+        ? "New chat"
+        : "A plan for Thursday"),
+);
 const history = ref<HTMLElement>();
 const thread = ref<HTMLElement>();
 const awayFromEnd = ref(false);
@@ -168,7 +183,7 @@ defineExpose({
   focusTitle: () =>
     props.hideHeader
       ? history.value?.focus({ preventScroll: true })
-      : heading.value?.focusTitle(),
+      : surface.value?.focus(),
 });
 function answer(response: QuestionResponse) {
   emit("answer", response);
@@ -198,22 +213,21 @@ onBeforeUnmount(() => clearInterval(timer));
 
 <template>
   <section class="chat-screen" aria-label="Conversation">
-    <ChatPaneHeader
-      v-if="!hideHeader"
-      ref="heading"
-      class="chat-heading"
-      :title="
-        conversation?.title ??
-        state.title ??
-        (state.transcript
-          ? systemMessageCopy[state.systemMessageLocale].title
-          : state.empty
-            ? 'New chat'
-            : 'A plan for Thursday')
-      "
-      :show-chat-icon="false"
+    <ChatModeSurface
+      ref="surface"
+      :title="title"
+      :session-key="modeSession"
+      :starts-in-development="startsInDevelopment"
+      :draft="state.draft"
+      :working="state.phase === 'working' || modeBlocked"
+      :empty="state.empty"
+      :fixed-mode="hideHeader || (!!conversation && !modeSwitch)"
+      :navigation-open="navigationOpen"
+      :events="transcript"
+      content-selector=".chat-thread, .welcome"
+      @draft="emit('update:state', { ...state, draft: $event })"
     >
-      <template #navigation>
+      <template v-if="!hideHeader && showNavigation" #navigation>
         <SituateIconButton
           v-if="showNavigation"
           icon="menu"
@@ -224,254 +238,254 @@ onBeforeUnmount(() => clearInterval(timer));
           @click="emit('open-navigation', $event)"
         />
       </template>
-      <slot name="actions"
-        ><div class="pane-tools">
-          <SituateIconButton
-            icon="split"
-            :label="`Split pane — ${state.empty ? 'New chat' : 'A plan for Thursday'}`"
-            disabled
-            unavailable-reason="Additional split panes are unavailable."
-          /><SituateIconButton
-            icon="close"
-            :label="`Close pane — ${state.empty ? 'New chat' : 'A plan for Thursday'}`"
-            disabled
-            unavailable-reason="Closing this preview pane is unavailable."
-          /></div
-      ></slot>
-    </ChatPaneHeader>
-    <ChatWelcome
-      v-if="state.empty"
-      :draft="state.draft"
-      :greeting="state.greeting"
-      :ai="state.ai"
-      :thinking="state.thinking"
-      :locale="state.composerLocale"
-      :covered="!!navigationOpen"
-      :send-enabled="!chatGuard(state.ai)"
-      :send-unavailable-reason="chatGuard(state.ai)"
-      @send="submit"
-      @draft="emit('update:state', { ...state, draft: $event })"
-      @ai="emit('update:state', { ...state, ai: $event })"
-      @thinking="emit('update:state', chooseThinking(state, $event))"
-    />
-    <div
-      v-else
-      ref="history"
-      class="chat-scroll"
-      role="region"
-      @scroll="trackScroll"
-      tabindex="0"
-      aria-label="Conversation history"
-    >
-      <div
-        ref="thread"
-        class="chat-thread"
-        :aria-live="conversation ? 'polite' : undefined"
-        aria-relevant="additions text"
-      >
-        <slot name="thread-start" />
-        <ConversationTranscript
-          v-if="
-            !conversation &&
-            (state.workHistory || state.transcriptStyle === 'history')
-          "
-          :events="transcriptEvents"
-          :history="state.workHistory"
-          :phase="state.phase"
-          :milliseconds="state.workTimeMs"
-          :started-at="state.workClockStartedAt"
-          :locale="
-            state.transcript?.some((event) => event.kind === 'system')
-              ? state.systemMessageLocale
-              : state.composerLocale
-          "
-          @file="emit('file', $event)"
+      <template v-if="!hideHeader && $slots.actions" #actions
+        ><slot name="actions"
+      /></template>
+      <template #default="{ developmentEvents }">
+        <h1 v-if="!hideHeader" class="sr-only">{{ title }}</h1>
+        <ChatWelcome
+          v-if="state.empty && !developmentEvents.length"
+          :draft="state.draft"
+          :greeting="state.greeting"
+          :ai="state.ai"
+          :thinking="state.thinking"
+          :locale="state.composerLocale"
+          :covered="!!navigationOpen"
+          :send-enabled="!chatGuard(state.ai)"
+          :send-unavailable-reason="chatGuard(state.ai)"
+          @send="submit"
+          @draft="emit('update:state', { ...state, draft: $event })"
+          @ai="emit('update:state', { ...state, ai: $event })"
+          @thinking="emit('update:state', chooseThinking(state, $event))"
         />
-        <ChatTranscript
-          v-else
-          :events="transcriptEvents"
-          :locale="
-            state.workTimeMs !== undefined
-              ? state.composerLocale
-              : state.systemMessageLocale
-          "
-          @file="emit('file', $event)"
-        />
-        <p
-          v-if="
-            state.phase === 'cancelled' &&
-            state.workTimeMs === undefined &&
-            !state.workHistory &&
-            state.transcriptStyle !== 'history'
-          "
-          class="chat-error"
-          role="status"
-        >
-          {{
-            conversation?.stopped ??
-            "Stopped. The note changes shown above were saved."
-          }}
-        </p>
-        <p
-          v-if="
-            state.phase === 'error' &&
-            state.workTimeMs === undefined &&
-            !state.workHistory &&
-            state.transcriptStyle !== 'history'
-          "
-          class="chat-error"
-          role="alert"
-        >
-          {{
-            conversation?.error ??
-            "The response was interrupted. The note changes shown above were saved."
-          }}
-        </p>
-        <SituateButton
-          v-if="retryEnabled && ['error', 'cancelled'].includes(state.phase)"
-          variant="secondary"
-          size="small"
-          @click="emit('retry')"
-          >{{ transcriptCopy.retry }}</SituateButton
-        >
-        <slot name="thread-end" />
-      </div>
-    </div>
-    <ChatSystemAnnouncement
-      :message="dockedQuestion?.text ?? state.systemAnnouncement"
-    />
-    <footer
-      v-if="!state.empty"
-      class="chat-footer"
-      :class="{
-        'has-question-dock': dockedQuestion,
-        'is-scrolled-back': awayFromEnd,
-      }"
-    >
-      <SituateIconButton
-        v-if="awayFromEnd"
-        class="chat-scroll-to-end"
-        :label="scrollCopy.toEnd"
-        @click="scrollToEnd"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="20"
-          height="20"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M12 5v14m-6-6 6 6 6-6" />
-        </svg>
-      </SituateIconButton>
-      <div
-        class="composer-area"
-        :class="{
-          'question-dock': dockedQuestion,
-          'question-dock--collapsed': dockedQuestion && questionCollapsed,
-        }"
-      >
-        <SituateIconButton
-          v-if="dockedQuestion"
-          class="question-disclosure"
-          icon="chevron"
-          :label="
-            questionCollapsed
-              ? questionCopy.showQuestion
-              : questionCopy.hideQuestion
-          "
-          :aria-expanded="!questionCollapsed"
-          :aria-controls="questionPanelId"
-          @click="questionCollapsed = !questionCollapsed"
-        />
-        <span
-          v-if="dockedQuestion && questionCollapsed"
-          class="question-summary"
-          >{{ questionCopy.pending }}</span
-        >
         <div
-          v-show="!dockedQuestion || !questionCollapsed"
-          :id="questionPanelId"
-          class="composer-body"
-          :class="{ 'question-body': dockedQuestion }"
+          v-else
+          ref="history"
+          class="chat-scroll"
+          role="region"
+          @scroll="trackScroll"
+          tabindex="0"
+          aria-label="Conversation history"
         >
-          <QuestionPrompt
-            v-if="dockedQuestion"
-            :key="dockedQuestion.id"
-            :question="dockedQuestion"
-            :text-id="questionTextId"
-            :enabled="state.phase !== 'working'"
-            @answer="answer"
-          />
-          <slot name="composer"
-            ><NavigationComposer
-              ref="composer"
-              :working="state.phase === 'working'"
-              :allow-followup="state.workTimeMs !== undefined"
-              :label="dockedQuestion ? questionCopy.answerLabel : undefined"
-              :show-label="!!dockedQuestion"
-              :description="dockedQuestion ? questionTextId : undefined"
-              :model-value="state.draft"
-              :placeholder="
-                dockedQuestion ? questionCopy.ownPlaceholder : undefined
-              "
-              :send-enabled="
-                dockedQuestion
-                  ? state.phase !== 'working'
-                  : conversation
-                    ? sendEnabled
-                    : state.workTimeMs !== undefined || !chatGuard(state.ai)
-              "
-              :send-unavailable-reason="
-                dockedQuestion || conversation || state.workTimeMs !== undefined
-                  ? undefined
-                  : chatGuard(state.ai)
-              "
-              @send="send"
-              @update:model-value="
-                emit('update:state', { ...state, draft: $event })
-              "
-              @stop="
-                conversation
-                  ? emit('stop')
-                  : emit(
-                      'update:state',
-                      state.workTimeMs !== undefined
-                        ? finishWorkTime(state, 'cancelled')
-                        : changePhase(state, 'cancelled'),
-                    )
-              "
-            />
-          </slot>
-          <ChatWorkingIndicator
-            v-if="hideModelChoice && state.phase === 'working'"
-            :comment="commentText"
-            :covered="!!navigationOpen"
-            :variant="state.motion"
-          />
-          <ChatModelChoice
-            v-if="!hideModelChoice"
-            :state="state.ai"
-            :thinking="state.thinking"
-            :locale="state.composerLocale"
-            @update:state="emit('update:state', { ...state, ai: $event })"
-            @thinking="emit('update:state', chooseThinking(state, $event))"
-            @focus-draft="composer?.focus()"
+          <div
+            ref="thread"
+            class="chat-thread"
+            :aria-live="conversation ? 'polite' : undefined"
+            aria-relevant="additions text"
           >
-            <ChatWorkingIndicator
-              v-if="state.phase === 'working'"
-              :comment="commentText"
-              :covered="!!navigationOpen"
-              :variant="state.motion"
+            <slot name="thread-start" />
+            <ConversationTranscript
+              v-if="
+                !conversation &&
+                (state.workHistory || state.transcriptStyle === 'history')
+              "
+              :events="transcriptEvents"
+              :history="state.workHistory"
+              :phase="state.phase"
+              :milliseconds="state.workTimeMs"
+              :started-at="state.workClockStartedAt"
+              :locale="
+                state.transcript?.some((event) => event.kind === 'system')
+                  ? state.systemMessageLocale
+                  : state.composerLocale
+              "
+              @file="emit('file', $event)"
             />
-          </ChatModelChoice>
+            <ChatTranscript
+              v-else
+              :events="transcriptEvents"
+              :locale="
+                state.workTimeMs !== undefined
+                  ? state.composerLocale
+                  : state.systemMessageLocale
+              "
+              @file="emit('file', $event)"
+            />
+            <p
+              v-if="
+                state.phase === 'cancelled' &&
+                state.workTimeMs === undefined &&
+                !state.workHistory &&
+                state.transcriptStyle !== 'history'
+              "
+              class="chat-error"
+              role="status"
+            >
+              {{
+                conversation?.stopped ??
+                "Stopped. The note changes shown above were saved."
+              }}
+            </p>
+            <p
+              v-if="
+                state.phase === 'error' &&
+                state.workTimeMs === undefined &&
+                !state.workHistory &&
+                state.transcriptStyle !== 'history'
+              "
+              class="chat-error"
+              role="alert"
+            >
+              {{
+                conversation?.error ??
+                "The response was interrupted. The note changes shown above were saved."
+              }}
+            </p>
+            <SituateButton
+              v-if="
+                retryEnabled && ['error', 'cancelled'].includes(state.phase)
+              "
+              variant="secondary"
+              size="small"
+              @click="emit('retry')"
+              >{{ transcriptCopy.retry }}</SituateButton
+            >
+            <ChatTranscript
+              v-if="developmentEvents.length || extraEvents?.length"
+              :events="[...(extraEvents ?? []), ...developmentEvents]"
+            />
+            <slot name="thread-end" />
+          </div>
         </div>
-      </div>
-    </footer>
+        <ChatSystemAnnouncement
+          :message="dockedQuestion?.text ?? state.systemAnnouncement"
+        />
+        <footer
+          v-if="!state.empty || developmentEvents.length"
+          class="chat-footer"
+          :class="{
+            'has-question-dock': dockedQuestion,
+            'is-scrolled-back': awayFromEnd,
+          }"
+        >
+          <SituateIconButton
+            v-if="awayFromEnd"
+            class="chat-scroll-to-end"
+            :label="scrollCopy.toEnd"
+            @click="scrollToEnd"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14m-6-6 6 6 6-6" />
+            </svg>
+          </SituateIconButton>
+          <div
+            class="composer-area"
+            :class="{
+              'question-dock': dockedQuestion,
+              'question-dock--collapsed': dockedQuestion && questionCollapsed,
+            }"
+          >
+            <SituateIconButton
+              v-if="dockedQuestion"
+              class="question-disclosure"
+              icon="chevron"
+              :label="
+                questionCollapsed
+                  ? questionCopy.showQuestion
+                  : questionCopy.hideQuestion
+              "
+              :aria-expanded="!questionCollapsed"
+              :aria-controls="questionPanelId"
+              @click="questionCollapsed = !questionCollapsed"
+            />
+            <span
+              v-if="dockedQuestion && questionCollapsed"
+              class="question-summary"
+              >{{ questionCopy.pending }}</span
+            >
+            <div
+              v-show="!dockedQuestion || !questionCollapsed"
+              :id="questionPanelId"
+              class="composer-body"
+              :class="{ 'question-body': dockedQuestion }"
+            >
+              <QuestionPrompt
+                v-if="dockedQuestion"
+                :key="dockedQuestion.id"
+                :question="dockedQuestion"
+                :text-id="questionTextId"
+                :enabled="state.phase !== 'working'"
+                @answer="answer"
+              />
+              <slot name="composer"
+                ><NavigationComposer
+                  ref="composer"
+                  :working="state.phase === 'working'"
+                  :allow-followup="state.workTimeMs !== undefined"
+                  :label="dockedQuestion ? questionCopy.answerLabel : undefined"
+                  :show-label="!!dockedQuestion"
+                  :description="dockedQuestion ? questionTextId : undefined"
+                  :model-value="state.draft"
+                  :placeholder="
+                    dockedQuestion ? questionCopy.ownPlaceholder : undefined
+                  "
+                  :send-enabled="
+                    dockedQuestion
+                      ? state.phase !== 'working'
+                      : conversation
+                        ? sendEnabled
+                        : state.workTimeMs !== undefined || !chatGuard(state.ai)
+                  "
+                  :send-unavailable-reason="
+                    dockedQuestion ||
+                    conversation ||
+                    state.workTimeMs !== undefined
+                      ? undefined
+                      : chatGuard(state.ai)
+                  "
+                  @send="send"
+                  @update:model-value="
+                    emit('update:state', { ...state, draft: $event })
+                  "
+                  @stop="
+                    conversation
+                      ? emit('stop')
+                      : emit(
+                          'update:state',
+                          state.workTimeMs !== undefined
+                            ? finishWorkTime(state, 'cancelled')
+                            : changePhase(state, 'cancelled'),
+                        )
+                  "
+                />
+              </slot>
+              <ChatWorkingIndicator
+                v-if="hideModelChoice && state.phase === 'working'"
+                :comment="commentText"
+                :covered="!!navigationOpen"
+                :variant="state.motion"
+              />
+              <ChatModelChoice
+                v-if="!hideModelChoice"
+                :state="state.ai"
+                :thinking="state.thinking"
+                :locale="state.composerLocale"
+                @update:state="emit('update:state', { ...state, ai: $event })"
+                @thinking="emit('update:state', chooseThinking(state, $event))"
+                @focus-draft="composer?.focus()"
+              >
+                <ChatWorkingIndicator
+                  v-if="state.phase === 'working'"
+                  :comment="commentText"
+                  :covered="!!navigationOpen"
+                  :variant="state.motion"
+                />
+              </ChatModelChoice>
+            </div>
+          </div>
+        </footer>
+      </template>
+    </ChatModeSurface>
   </section>
 </template>
 

@@ -46,6 +46,9 @@ import { workspaceAiSettings } from "../ai/settings";
 import ChatTranscript from "./chat/ChatTranscript.vue";
 import ChatPending from "./chat/ChatPending.vue";
 import ChatActivity from "./chat/ChatActivity.vue";
+import ChatActions from "./chat/ChatActions.vue";
+import { vChatCornerClearance } from "./chat/corner-clearance";
+import { developmentUuidPattern } from "../ai/conversation-record";
 import DictationNotice from "../dictation/DictationNotice.vue";
 import {
   dictation,
@@ -74,6 +77,7 @@ const props = withDefaults(
     focusComposerOnOpen?: boolean;
     embedded?: boolean;
     openingInHost?: boolean;
+    fixedChatMode?: boolean;
     presentation?: PresentationValue;
   }>(),
   { navigationOpen: false },
@@ -229,6 +233,26 @@ async function dismissNotice() {
   restoreSelection();
 }
 const development = computed(() => chat.value?.state.development);
+const canSwitchMode = computed(
+  () =>
+    !props.fixedChatMode &&
+    !!chat.value &&
+    new RegExp(developmentUuidPattern).test(props.conversationId ?? ""),
+);
+const modeUnavailable = computed(() => {
+  const state = chat.value?.state;
+  if (state?.unsaved || state?.loadError)
+    return t("pluginDevelopment.modeUnavailable");
+  if (
+    state?.running ||
+    state?.submitting ||
+    state?.questionBusy ||
+    state?.switchingMode ||
+    dictationPhase.value
+  )
+    return t("pluginDevelopment.modeBusy");
+  return undefined;
+});
 const developmentCovered = ref(false);
 const loadError = computed(() => chat.value?.state.loadError);
 const awaitingHistory = computed(
@@ -556,8 +580,34 @@ async function removeReference(reference: ContentReference): Promise<void> {
 }
 const titleId = useId();
 const title = useTemplateRef<HTMLElement>("title");
+const chatActions =
+  useTemplateRef<InstanceType<typeof ChatActions>>("chatActions");
+const focusModeMenu = ref(false);
+async function changeMode() {
+  const owner = chat.value;
+  if (!owner || modeUnavailable.value) return;
+  actionError.value = "";
+  try {
+    await owner.setDevelopmentMode(!development.value);
+    if (chat.value === owner) focusModeMenu.value = true;
+  } catch (error) {
+    if (chat.value === owner) actionError.value = error;
+  }
+}
 const developmentView =
   useTemplateRef<InstanceType<typeof PluginDevelopment>>("developmentView");
+watch(
+  [focusModeMenu, developmentView, chatActions],
+  () => {
+    if (!focusModeMenu.value) return;
+    if (development.value && developmentView.value)
+      developmentView.value.focusTitle();
+    else if (!development.value && chatActions.value) chatActions.value.focus();
+    else return;
+    focusModeMenu.value = false;
+  },
+  { flush: "post" },
+);
 defineExpose({
   focusTitle: () =>
     development.value
@@ -617,6 +667,7 @@ defineExpose({
     </header>
     <component
       :is="development ? PluginDevelopment : 'div'"
+      v-chat-corner-clearance="!development && canSwitchMode"
       ref="developmentView"
       :key="
         development
@@ -625,6 +676,7 @@ defineExpose({
       "
       class="chat-body"
       @covered="developmentCovered = $event"
+      @change-mode="changeMode"
       @presentation="
         developmentPresentation = $event;
         publishPresentation();
@@ -638,6 +690,8 @@ defineExpose({
               activity: chat?.state.toolActivity ?? [],
               presentation: developmentPresentation,
               failed: !!loadError,
+              canSwitch: canSwitchMode,
+              modeUnavailable,
             }
           : {}
       "
@@ -652,6 +706,14 @@ defineExpose({
           @click="$emit('openNavigation', $event)"
         />
       </template>
+      <ChatActions
+        v-if="!development && canSwitchMode && !awaitingHistory && !loadError"
+        ref="chatActions"
+        class="regular-chat-actions"
+        can-switch
+        :mode-unavailable="modeUnavailable"
+        @change-mode="changeMode"
+      />
       <SituateErrorScreen
         v-if="awaitingHistory && loadError && !development"
         :title="t('layoutHost.viewFailed')"
@@ -993,6 +1055,7 @@ defineExpose({
                     !!loadError ||
                     chat.state.questionBusy ||
                     chat.state.submitting ||
+                    !!chat.state.switchingMode ||
                     !!questionActionPending ||
                     (activeQuestion && chat.state.running) ||
                     chat.state.selectingModel ||
@@ -1140,6 +1203,7 @@ defineExpose({
 
 <style scoped>
 .chat-load-error {
+  margin-block-start: var(--chat-corner-clearance, 0px);
   padding: var(--situate-space-4);
   flex: none;
 }
@@ -1275,10 +1339,24 @@ defineExpose({
   background: var(--situate-surface);
 }
 .chat-body {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+.regular-chat-actions {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: var(--situate-space-2);
+  inset-inline-end: var(--situate-space-2);
+}
+.empty-chat:not(.has-history),
+.transcript-scroll {
+  margin-block-start: var(--chat-corner-clearance, 0px);
+}
+.chat-load-error ~ .empty-chat {
+  --chat-corner-clearance: 0px;
 }
 .development-chat {
   background: transparent;

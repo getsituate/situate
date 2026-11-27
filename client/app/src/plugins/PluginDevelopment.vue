@@ -10,10 +10,11 @@ import {
   watch,
 } from "vue";
 import { t } from "@situate/localization";
-import { SituateButton, SituateIcon, SituateIconButton } from "@situate/ui";
+import { SituateIconButton } from "@situate/ui";
 import type { ToolActivity } from "../components/chat/transcript";
 import type { PresentationValue } from "../layout/navigation";
-import DevelopmentChatHeader from "./DevelopmentChatHeader.vue";
+import ChatActions from "../components/chat/ChatActions.vue";
+import { vChatCornerClearance } from "../components/chat/corner-clearance";
 import DevelopmentHelpDialog from "./DevelopmentHelpDialog.vue";
 import AssignmentChanges from "./AssignmentChanges.vue";
 import {
@@ -37,12 +38,15 @@ const props = withDefaults(
     activity?: readonly ToolActivity[];
     presentation?: PresentationValue;
     failed?: boolean;
+    canSwitch?: boolean;
+    modeUnavailable?: string;
   }>(),
   { activity: () => [] },
 );
 const emit = defineEmits<{
   covered: [value: boolean];
   presentation: [value: PresentationValue];
+  changeMode: [];
 }>();
 const saved: Record<string, PresentationValue> =
   props.presentation &&
@@ -52,8 +56,7 @@ const saved: Record<string, PresentationValue> =
     : {};
 const id = useId();
 const root = ref<HTMLElement>();
-const header = ref<InstanceType<typeof DevelopmentChatHeader>>();
-const toggle = ref<InstanceType<typeof SituateButton>>();
+const actions = ref<InstanceType<typeof ChatActions>>();
 const changesView = ref<InstanceType<typeof AssignmentChanges>>();
 const changesOpen = ref(saved.open === true);
 const expanded = ref(saved.expanded === true);
@@ -257,7 +260,7 @@ async function closeChanges() {
   panel.value = "chat";
   publish();
   await nextTick();
-  toggle.value?.element?.focus();
+  actions.value?.focus();
 }
 onMounted(() => {
   if (typeof ResizeObserver !== "undefined") {
@@ -273,54 +276,54 @@ onBeforeUnmount(() => {
   generation++;
   observer?.disconnect();
 });
-defineExpose({ focusTitle: () => header.value?.focusTitle() });
+defineExpose({ focusTitle: () => actions.value?.focus() });
 </script>
 <template>
   <div
     ref="root"
     class="plugin-development"
     :class="{ failed }"
-    :aria-labelledby="`${id}-title`"
+    :aria-label="title"
   >
-    <DevelopmentChatHeader
-      ref="header"
-      :title="title"
-      :title-id="`${id}-title`"
-      :context="t('pluginDevelopment.context')"
-    >
-      <template #navigation><slot name="navigation" /></template>
-      <template #context-actions>
-        <SituateIconButton
-          class="development-help-trigger"
-          icon="info"
-          :label="t('pluginDevelopment.help')"
-          aria-haspopup="dialog"
-          :aria-expanded="helpOpen"
-          :aria-controls="helpOpen ? `${id}-help` : undefined"
-          @click="openHelp"
-        />
-      </template>
-      <SituateButton
-        v-show="!failed"
-        ref="toggle"
-        variant="plain"
-        class="development-changes-toggle"
-        :aria-label="t('assignmentChanges.title')"
-        :title="t('assignmentChanges.title')"
-        :aria-expanded="visible"
-        :aria-controls="`${id}-changes`"
-        @click="visible ? closeChanges() : showChanges()"
-        ><SituateIcon name="notes"
-      /></SituateButton>
-    </DevelopmentChatHeader>
     <div
+      v-chat-corner-clearance="true"
       class="development-layout"
+      :data-changes-only="
+        !failed && visible && (narrow || expanded) ? '' : undefined
+      "
       :class="{
         'changes-open': changesOpen,
         'changes-expanded': changesOpen && expanded && !narrow,
         'show-changes': panel === 'changes',
       }"
     >
+      <div class="chat-corners">
+        <div class="chat-corner-start">
+          <slot name="navigation" />
+          <span class="development-mode-label" role="status">{{
+            t("pluginDevelopment.context")
+          }}</span>
+          <SituateIconButton
+            class="development-help-trigger"
+            icon="info"
+            :label="t('pluginDevelopment.help')"
+            aria-haspopup="dialog"
+            :aria-expanded="helpOpen"
+            :aria-controls="helpOpen ? `${id}-help` : undefined"
+            @click="openHelp"
+          />
+        </div>
+        <ChatActions
+          v-if="!failed"
+          ref="actions"
+          development
+          :can-switch="!!canSwitch"
+          :mode-unavailable="modeUnavailable"
+          :changes-visible="visible"
+          @change-mode="emit('changeMode')"
+          @toggle-changes="visible ? closeChanges() : showChanges()"
+        />
+      </div>
       <section
         class="plugin-conversation"
         :aria-label="t('pluginDevelopment.chat')"
@@ -392,30 +395,49 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
     var(--situate-surface)
   );
 }
-.development-changes-toggle {
-  display: grid;
-  place-items: center;
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
-  padding: var(--situate-space-2-5);
-  border: 0;
-  border-radius: var(--situate-radius-control);
-  color: var(--situate-muted);
-  background: transparent;
-}
-.development-changes-toggle[aria-expanded="true"] {
-  background: var(--situate-accent-soft, var(--situate-lilac));
-  color: var(--situate-accent-strong, var(--situate-violet-deep));
-}
 .development-layout {
+  --changes-width: clamp(320px, 34%, 440px);
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
 .development-layout.changes-open {
-  grid-template-columns: minmax(0, 1fr) clamp(320px, 34%, 440px);
+  grid-template-columns: minmax(0, 1fr) var(--changes-width);
+}
+.chat-corners {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: var(--situate-space-2);
+  inset-inline: var(--situate-space-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+.chat-corners > * {
+  pointer-events: auto;
+}
+.chat-corners > .chat-corner-actions {
+  flex-shrink: 0;
+}
+.changes-open:not(.changes-expanded) .chat-corners {
+  inset-inline-end: calc(var(--changes-width) + 8px);
+}
+.chat-corner-start {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.development-mode-label {
+  padding-inline-start: 8px;
+  color: var(--situate-muted);
+  font-size: var(--situate-text-caption);
+  font-weight: 400;
+  overflow-wrap: anywhere;
 }
 .development-layout.changes-expanded {
   grid-template-columns: minmax(0, 1fr);
@@ -436,6 +458,9 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
 }
 .changes-open .development-changes {
   display: flex;
+}
+[data-changes-only] > .development-changes {
+  padding-block-start: var(--chat-corner-clearance, 0px);
 }
 .changes-expanded .plugin-conversation {
   display: none;
@@ -465,6 +490,9 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
   .development-layout.changes-open {
     grid-template-columns: minmax(0, 1fr);
   }
+  .changes-open:not(.changes-expanded) .chat-corners {
+    inset-inline-end: 8px;
+  }
   .development-changes,
   .changes-open .development-changes {
     display: none;
@@ -479,6 +507,9 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
 }
 .failed .development-layout {
   grid-template-columns: minmax(0, 1fr);
+}
+.failed .chat-corners {
+  inset-inline-end: 8px;
 }
 .failed .development-changes {
   display: none;

@@ -2,6 +2,9 @@
 import { computed } from "vue";
 import ViewChooser from "./ViewChooser.vue";
 import ConversationBody from "./ConversationBody.vue";
+import ChatModeSurface from "../chat/ChatModeSurface.vue";
+import ChatTranscript from "../chat/ChatTranscript.vue";
+import type { Event } from "../chat/model";
 import FilePreviewButton from "../components/FilePreviewButton.vue";
 import NavigationDashboard from "../navigation/NavigationDashboard.vue";
 import {
@@ -36,6 +39,28 @@ const dashboardView = computed(() => {
     : null;
 });
 const emit = defineEmits<{ action: [action: TabsAction] }>();
+const gardenEvents = computed<Event[]>(() => [
+  {
+    kind: "message",
+    id: "garden-request",
+    speaker: "user",
+    text: chat.request,
+  },
+  {
+    kind: "message",
+    id: "garden-reply",
+    speaker: "assistant",
+    text: [chat.response, ...chat.points.map((point) => `- ${point}`)].join(
+      "\n\n",
+    ),
+  },
+  ...(conversation.value?.messages ?? []).map((text, index): Event => ({
+    kind: "message",
+    id: `garden-message-${index}`,
+    speaker: "user",
+    text,
+  })),
+]);
 function send() {
   if (conversation.value)
     emit("action", { type: "send", id: conversation.value.id });
@@ -138,91 +163,112 @@ function send() {
     :active="active"
     @action="emit('action', $event)"
   />
-  <section v-else-if="conversation" class="chat-content">
-    <div class="chat-scroll pane-scroll">
-      <template v-if="conversation.id === 'garden'">
-        <div class="user-message">
-          <small>{{ copy.chatYou }}</small>
-          <p>{{ chat.request }}</p>
-        </div>
-        <div class="assistant-message">
-          <strong class="assistant-label"
-            ><SituateIcon name="chat" />{{ copy.chatAssistant }}</strong
+  <ChatModeSurface
+    v-else-if="conversation"
+    :title="conversation.title"
+    :session-key="`tabs:${conversation.id}`"
+    :draft="conversation.draft"
+    :working="conversation.activity === 'working'"
+    :events="gardenEvents"
+    content-selector=".chat-scroll"
+    @draft="
+      emit('action', { type: 'draft', id: conversation.id, value: $event })
+    "
+  >
+    <template #default="{ developmentEvents }">
+      <section class="chat-content">
+        <div class="chat-scroll pane-scroll">
+          <template v-if="conversation.id === 'garden'">
+            <div class="user-message">
+              <small>{{ copy.chatYou }}</small>
+              <p>{{ chat.request }}</p>
+            </div>
+            <div class="assistant-message">
+              <strong class="assistant-label"
+                ><SituateIcon name="chat" />{{ copy.chatAssistant }}</strong
+              >
+              <p>{{ chat.response }}</p>
+              <ul>
+                <li v-for="point in chat.points" :key="point">{{ point }}</li>
+              </ul>
+              <FilePreviewButton
+                :name="viewNames.note"
+                @click="
+                  emit('action', { type: 'open', id: pane.id, view: 'note' })
+                "
+              />
+            </div>
+          </template>
+          <div
+            v-for="(message, index) in conversation.messages"
+            :key="index"
+            class="user-message sent-message"
           >
-          <p>{{ chat.response }}</p>
-          <ul>
-            <li v-for="point in chat.points" :key="point">{{ point }}</li>
-          </ul>
-          <FilePreviewButton
-            :name="viewNames.note"
-            @click="emit('action', { type: 'open', id: pane.id, view: 'note' })"
+            <small>{{ copy.chatYou }}</small>
+            <p>{{ message }}</p>
+          </div>
+          <ChatTranscript
+            v-if="developmentEvents.length"
+            :events="developmentEvents"
           />
+          <p
+            v-if="conversation.activity === 'working'"
+            role="status"
+            class="work-status"
+          >
+            {{ conversation.id === "garden" ? copy.workingHelp : copy.working }}
+          </p>
         </div>
-      </template>
-      <div
-        v-for="(message, index) in conversation.messages"
-        :key="index"
-        class="user-message sent-message"
-      >
-        <small>{{ copy.chatYou }}</small>
-        <p>{{ message }}</p>
-      </div>
-      <p
-        v-if="conversation.activity === 'working'"
-        role="status"
-        class="work-status"
-      >
-        {{ conversation.id === "garden" ? copy.workingHelp : copy.working }}
-      </p>
-    </div>
-    <form class="chat-compose" @submit.prevent="send">
-      <label :for="`message-${pane.id}`" class="sr-only">{{
-        copy.reply
-      }}</label>
-      <SituateTextarea
-        appearance="plain"
-        :id="`message-${pane.id}`"
-        :value="conversation.draft"
-        :placeholder="copy.replyPlaceholder"
-        rows="2"
-        @input="
-          emit('action', {
-            type: 'draft',
-            id: conversation.id,
-            value: ($event.target as HTMLTextAreaElement).value,
-          })
-        "
-        @keydown.enter.exact.prevent="send"
-      />
-      <div class="composer-bottom">
-        <small>{{ copy.draftHelp }}</small>
-        <SituateButton
-          variant="secondary"
-          size="small"
-          v-if="conversation.activity === 'working'"
-          type="button"
-          @click="
-            emit('action', {
-              type: 'activity',
-              id: conversation.id,
-              value: 'ready',
-            })
-          "
-        >
-          {{ copy.stop }}
-        </SituateButton>
-        <SituateIconButton
-          v-else
-          icon="arrow"
-          :label="copy.send"
-          variant="primary"
-          :disabled="!conversation.draft.trim()"
-          :unavailable-reason="copy.replyPlaceholder"
-          @click="send"
-        />
-      </div>
-    </form>
-  </section>
+        <form class="chat-compose" @submit.prevent="send">
+          <label :for="`message-${pane.id}`" class="sr-only">{{
+            copy.reply
+          }}</label>
+          <SituateTextarea
+            appearance="plain"
+            :id="`message-${pane.id}`"
+            :value="conversation.draft"
+            :placeholder="copy.replyPlaceholder"
+            rows="2"
+            @input="
+              emit('action', {
+                type: 'draft',
+                id: conversation.id,
+                value: ($event.target as HTMLTextAreaElement).value,
+              })
+            "
+            @keydown.enter.exact.prevent="send"
+          />
+          <div class="composer-bottom">
+            <small>{{ copy.draftHelp }}</small>
+            <SituateButton
+              variant="secondary"
+              size="small"
+              v-if="conversation.activity === 'working'"
+              type="button"
+              @click="
+                emit('action', {
+                  type: 'activity',
+                  id: conversation.id,
+                  value: 'ready',
+                })
+              "
+            >
+              {{ copy.stop }}
+            </SituateButton>
+            <SituateIconButton
+              v-else
+              icon="arrow"
+              :label="copy.send"
+              variant="primary"
+              :disabled="!conversation.draft.trim()"
+              :unavailable-reason="copy.replyPlaceholder"
+              @click="send"
+            />
+          </div>
+        </form>
+      </section>
+    </template>
+  </ChatModeSurface>
 </template>
 
 <style scoped>

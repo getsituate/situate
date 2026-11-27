@@ -1,5 +1,12 @@
 {
   "native.plugins.retainedStorageFailed": "The temporary files could not be checked safely.",
+  "pluginDevelopment.chatActions": "Chat actions",
+  "pluginDevelopment.switchToChat": "Switch to chat",
+  "pluginDevelopment.switchToDevelopment": "Switch to plugin development",
+  "pluginDevelopment.showChanges": "Show changes",
+  "pluginDevelopment.hideChanges": "Hide changes",
+  "pluginDevelopment.modeBusy": "Wait for the current work to finish or stop it before switching modes.",
+  "pluginDevelopment.modeUnavailable": "The conversation mode can't be changed right now.",
   "pluginDevelopment.helpIntro": "Describe what you need. Situate can add or change tools (plugins), connections and files in this workspace.",
   "pluginDevelopment.helpLeaving": "Return to this chat from Conversations. Work continues when you close the chat. Closing the workspace or quitting Situate stops it. Send a message to continue interrupted work.",
   "pluginDevelopment.helpDraft": "Review changes",

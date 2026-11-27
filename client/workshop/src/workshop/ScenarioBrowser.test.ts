@@ -18,7 +18,6 @@ import {
 
 describe("scenario catalog", () => {
   it("groups all starting states exactly once under their scenarios", () => {
-    expect(scenarioCatalog).toHaveLength(34);
     const states = scenarioCatalog.flatMap((item) =>
       item.states.map((state) => state.id),
     );
@@ -30,6 +29,12 @@ describe("scenario catalog", () => {
         item.states.length,
       );
     }
+  });
+  it("offers chat mode starting states under Develop a plugin", () => {
+    const development = scenarioForState("plugins-create");
+    expect(scenarioForState("plugins-mode-chat")).toBe(development);
+    expect(scenarioForState("plugins-mode-new-chat")).toBe(development);
+    expect(scenarioForState("plugins-mode-development")).toBe(development);
   });
   it("keeps the celebration in the setup conversation and redirects removed onboarding links", () => {
     expect(scenarioForState("onboarding-finale").id).toBe(

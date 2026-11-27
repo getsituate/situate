@@ -621,6 +621,67 @@ async fn development_mode_applies_to_the_next_request_and_survives_reopen() {
 }
 
 #[tokio::test]
+async fn manual_development_mode_preserves_the_draft_and_resumes_automatically_after_reopen() {
+    let host = plugin_development_fixture();
+    let owner = Owner::open(host.clone()).await.unwrap();
+    let enable = json!({"version":1,"type":"setDevelopmentMode","enabled":true});
+    let disable = json!({"version":1,"type":"setDevelopmentMode","enabled":false});
+    owner.apply("draft-edit".into(), json!({"version":1,"type":"draft","expected":{"text":"","attachments":[],"references":[]},"input":{"text":"Keep this draft","attachments":[],"references":[]}})).await.unwrap();
+    let entered = owner.apply("enable".into(), enable.clone()).await.unwrap();
+    assert!(entered.record.development.is_some());
+    assert_eq!(entered.record.draft, "Keep this draft");
+    let paused = owner.apply("disable".into(), disable).await.unwrap();
+    assert!(paused.record.development.is_none());
+    assert_eq!(paused.record.draft, "Keep this draft");
+    assert!(host.durable().development.is_some());
+    assert_eq!(host.models.load(Ordering::SeqCst), 0);
+
+    let mut legacy = host
+        .storage
+        .read_conversation_metadata(&host.conversation)
+        .unwrap()
+        .unwrap();
+    legacy.title = "Renamed by another client".into();
+    host.storage
+        .update_conversation_metadata(&legacy, legacy.revision)
+        .unwrap();
+    let reopened = Owner::open(host.clone()).await.unwrap();
+    let snapshot = reopened.snapshot().await.unwrap();
+    assert_eq!(snapshot.record.title, "Renamed by another client");
+    assert!(snapshot.record.development.is_none());
+    let hold = host.gate.acquire_many(20).await.unwrap();
+    reopened
+        .submit("resume".into(), "Build a garden plugin".into(), 10)
+        .await
+        .unwrap();
+    host.entered.notified().await;
+    assert_eq!(
+        reopened
+            .apply("busy-switch".into(), enable)
+            .await
+            .unwrap_err(),
+        "pluginDevelopment.modeBusy"
+    );
+    drop(hold);
+    reopened.settled().await.unwrap();
+    assert!(
+        reopened
+            .snapshot()
+            .await
+            .unwrap()
+            .record
+            .development
+            .is_some()
+    );
+    let requests = host.requests.lock().unwrap();
+    assert!(requests[0].config.instructions.is_empty());
+    assert_eq!(
+        requests[1].config.instructions[0]["content"],
+        "Development mode"
+    );
+}
+
+#[tokio::test]
 async fn interrupted_result_write_retains_the_mode_without_replaying_the_tool() {
     let host = plugin_development_fixture();
     host.fail_at("result", false);

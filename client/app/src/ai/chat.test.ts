@@ -178,11 +178,18 @@ async function native(
       attachments?: ConversationInput["attachments"];
       references?: ConversationInput["references"];
       development?: ConversationRecord["development"];
+      developmentPaused?: boolean;
     };
     if (
       Object.keys(initial).some(
         (key) =>
-          !["draft", "attachments", "references", "development"].includes(key),
+          ![
+            "draft",
+            "attachments",
+            "references",
+            "development",
+            "developmentPaused",
+          ].includes(key),
       )
     )
       throw new Error("Unexpected initial conversation argument");
@@ -198,7 +205,9 @@ async function native(
           : {}),
       },
     });
-    return copy(value.record);
+    const stored = copy(value.record);
+    if (initial.developmentPaused) delete value.record.development;
+    return stored;
   }
   if (command === "ai_attachment_pick")
     return {
@@ -1052,6 +1061,40 @@ test("new chats remain temporary until the first submission", async () => {
   expect(mock.invoke).not.toHaveBeenCalled();
   expect(discardUnsentChat("scope", id!)).toBe(true);
 });
+test("switching a temporary chat keeps its draft and does not submit or create it", async () => {
+  const id = await workspaceConversations("scope").createDevelopment("sample");
+  const chat = workspaceChat("scope", id);
+  chat.state.draft = "Keep the draft";
+  await chat.setDevelopmentMode(false);
+  expect(chat.state.development).toBeUndefined();
+  expect(chat.state.ephemeral).toBe(true);
+  await chat.setDevelopmentMode(true);
+  expect(chat.state.development).toEqual({ version: 2, pluginId: "sample" });
+  expect(chat.state.draft).toBe("Keep the draft");
+  expect(actionCalls("submit")).toEqual([]);
+});
+
+test("a temporary assignment first sent in chat retains its plugin without entering development", async () => {
+  const id = await workspaceConversations("scope").createDevelopment("sample");
+  const chat = workspaceChat("scope", id);
+  await chat.setDevelopmentMode(false);
+  chat.state.draft = "What can this plugin do?";
+  const send = chat.send();
+  await started(send);
+  expect(mock.invoke).toHaveBeenCalledWith(
+    "ai_create_conversation",
+    expect.objectContaining({
+      initial: expect.objectContaining({
+        development: { version: 2, pluginId: "sample" },
+        developmentPaused: true,
+      }),
+    }),
+  );
+  expect(chat.state.development).toBeUndefined();
+  finish("scope", id);
+  await send;
+});
+
 test("a running conversation adopts development mode without opening another chat", async () => {
   const id = "00000000-0000-4000-8000-000000000001";
   const chat = await ready("scope", id);

@@ -294,13 +294,21 @@ test("selected development appears in its own ordinary conversation after setup"
     .locator(".desktop-sidebar")
     .getByRole("button", { name: copy.developmentTitle, exact: true })
     .click();
+  const development = preview.getByRole("main", {
+    name: copy.developmentTitle,
+    exact: true,
+  });
   await expect(
-    preview.getByRole("heading", { name: copy.developmentTitle, exact: true }),
+    development.getByRole("button", { name: "About plugin development" }),
   ).toBeVisible();
-  await expect(preview.locator(".chat-message.assistant")).toContainText(
+  await expect(development.locator(".chat-message.assistant")).toContainText(
     copy.developmentMessage,
   );
-  await draft(preview).fill("Keep this development draft.");
+  const request = development.getByRole("textbox", {
+    name: "Your request",
+    exact: true,
+  });
+  await request.fill("Keep this development draft.");
   await preview
     .locator(".setup-tabs")
     .getByRole("button", { name: copy.title, exact: true })
@@ -310,7 +318,7 @@ test("selected development appears in its own ordinary conversation after setup"
     .locator(".desktop-sidebar")
     .getByRole("button", { name: copy.developmentTitle, exact: true })
     .click();
-  await expect(draft(preview)).toHaveValue("Keep this development draft.");
+  await expect(request).toHaveValue("Keep this development draft.");
 });
 
 test("the existing finale plays through naturally on early app entry", async ({

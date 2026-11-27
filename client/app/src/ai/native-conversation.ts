@@ -30,6 +30,7 @@ export type ConversationAction = { version: 1 } & (
   | { type: "recall" }
   | { type: "cancel"; runId: string }
   | { type: "retryPersistence" }
+  | { type: "setDevelopmentMode"; enabled: boolean }
   | { type: "renameTitle"; expected: string; title: string }
   | { type: "presentQuestion"; question: ConversationQuestion }
   | {

@@ -277,13 +277,13 @@ export function leaves(node: Layout): string[] {
     ? [node.id]
     : [...leaves(node.first), ...leaves(node.second)];
 }
-export function tabName(tab: TopicTab): string {
+export function tabName(tab: TopicTab, state?: TabsState): string {
   const view = currentView(tab.panes[leaves(tab.layout)[0]!]!);
   return (
     tab.name ||
     (view === "empty"
       ? copy.newTab
-      : paneTitle(tab.panes[leaves(tab.layout)[0]!]!))
+      : paneTitle(tab.panes[leaves(tab.layout)[0]!]!, state))
   );
 }
 export function dimensions(node: Layout): { width: number; height: number } {
@@ -348,6 +348,24 @@ function addTab(state: TabsState, view: View = "empty", name = "") {
   state.tabs.push(tab);
   state.active = id;
   return tab;
+}
+export function createConversationTabs(id: string, title: string): TabsState {
+  const state = createTabsState("tabs-empty");
+  const tab = activeTab(state)!;
+  state.conversations = {
+    [id]: {
+      ...conversationPresentation(),
+      id,
+      title,
+      draft: "",
+      activity: "ready",
+      tabIds: [tab.id],
+      messages: [],
+      archived: false,
+    },
+  };
+  tab.panes[tab.active]!.history = [`conversation:${id}`];
+  return state;
 }
 export function createTabsState(scenario = "tabs-overview"): TabsState {
   const state: TabsState = {

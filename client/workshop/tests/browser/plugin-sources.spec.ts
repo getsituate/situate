@@ -1,3 +1,4 @@
+import { chatAction } from "./chat-actions";
 import { selectOption } from "./select";
 import { selectScenario } from "./scenarios";
 import { expect, test, type Page } from "./test";
@@ -165,9 +166,7 @@ for (const mobile of [false, true]) {
     });
     if (mobile)
       await page.getByLabel("Keyboard occlusion", { exact: true }).uncheck();
-    await preview
-      .getByRole("button", { name: "Close development view", exact: true })
-      .click();
+    await chatAction(preview, "Close development view");
     await expect(
       preview.getByRole("heading", { name: /^Sources/ }),
     ).toBeFocused();
@@ -183,9 +182,7 @@ test("returning from empty-source development restores document focus", async ({
 }) => {
   const preview = await open(page, "documents-empty", true);
   await preview.getByRole("button", { name: /Create a source/ }).click();
-  await preview
-    .getByRole("button", { name: "Close development view", exact: true })
-    .click();
+  await chatAction(preview, "Close development view");
   const back = preview.getByRole("button", { name: /Back to documents/ });
   await expect(back).toBeInViewport({ ratio: 1 });
   await back.click();
@@ -200,7 +197,7 @@ test("source settings lead to adapting the same source in the plugin chat", asyn
   const preview = await open(page, "plugins-source-detail", false);
   await preview.getByRole("button", { name: /Adapt plugin/ }).click();
   await expect(
-    preview.getByRole("heading", { name: "Cloud drive", exact: true }),
+    preview.getByRole("main", { name: "Cloud drive", exact: true }),
   ).toBeVisible();
   await expect(
     preview.getByRole("textbox", { name: "Your request", exact: true }),
@@ -236,9 +233,7 @@ test("source creation develops a connection and consumer without a type choice",
     "Actions finished; adopt checked changes",
   ])
     await page.getByRole("button", { name, exact: true }).click();
-  await preview
-    .getByRole("button", { name: "Close development view", exact: true })
-    .click();
+  await chatAction(preview, "Close development view");
   await expect(
     preview
       .getByRole("region", { name: "Sources", exact: true })

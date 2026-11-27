@@ -502,7 +502,13 @@ impl<H: Host> Owner<H> {
                         return Err("native.ai.response.stopped".into());
                     }
                     let mut prepared = config.clone();
-                    let development = self.state.lock().await.metadata.development.clone();
+                    let development = self
+                        .state
+                        .lock()
+                        .await
+                        .metadata
+                        .active_development()
+                        .cloned();
                     self.host
                         .prepare_model(&mut prepared, development, cancel.clone())
                         .await?;

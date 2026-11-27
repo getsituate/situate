@@ -5,6 +5,7 @@ import PaneTile from "./PaneTile.vue";
 import {
   dimensions,
   type Layout,
+  type Pane,
   type TabsAction,
   type TabsState,
   type TopicTab,
@@ -14,10 +15,13 @@ const props = defineProps<{
   tab: TopicTab;
   state: TabsState;
   dragging: string | null;
+  optionsId?: string;
+  optionsPaneId?: string;
 }>();
+defineSlots<{ pane?(props: { pane: Pane; active: boolean }): unknown }>();
 const emit = defineEmits<{
   action: [action: TabsAction];
-  options: [id: string, event: MouseEvent];
+  options: [id: string, event: MouseEvent | KeyboardEvent];
   drag: [id: string | null];
 }>();
 const root = ref<HTMLElement>();
@@ -137,10 +141,16 @@ function key(event: KeyboardEvent) {
     :active="tab.active === node.id"
     :dragging="dragging"
     :maximized="false"
+    :options-id="optionsId"
+    :options-open="optionsPaneId === node.id"
     @action="emit('action', $event)"
     @options="(id, event) => emit('options', id, event)"
     @drag="emit('drag', $event)"
-  />
+  >
+    <template v-if="$slots.pane" #pane="slotProps">
+      <slot name="pane" v-bind="slotProps" />
+    </template>
+  </PaneTile>
   <div
     v-else
     ref="root"
@@ -153,10 +163,16 @@ function key(event: KeyboardEvent) {
       :tab="tab"
       :state="state"
       :dragging="dragging"
+      :options-id="optionsId"
+      :options-pane-id="optionsPaneId"
       @action="emit('action', $event)"
       @options="(id, event) => emit('options', id, event)"
       @drag="emit('drag', $event)"
-    />
+    >
+      <template v-if="$slots.pane" #pane="slotProps">
+        <slot name="pane" v-bind="slotProps" />
+      </template>
+    </SplitLayout>
     <div
       class="split-handle"
       role="separator"
@@ -178,10 +194,16 @@ function key(event: KeyboardEvent) {
       :tab="tab"
       :state="state"
       :dragging="dragging"
+      :options-id="optionsId"
+      :options-pane-id="optionsPaneId"
       @action="emit('action', $event)"
       @options="(id, event) => emit('options', id, event)"
       @drag="emit('drag', $event)"
-    />
+    >
+      <template v-if="$slots.pane" #pane="slotProps">
+        <slot name="pane" v-bind="slotProps" />
+      </template>
+    </SplitLayout>
   </div>
 </template>
 

@@ -94,17 +94,18 @@ pub(super) fn seed(location: &Location, archive: &Path) -> Result<(), String> {
 }
 
 fn seed_chats(storage: &Storage) -> Result<(), String> {
-    for (index, (id, title, draft, turns)) in [
-        ("fixture-weekly-review", "Weekly review", "", &[
+    for (index, (title, draft, turns)) in [
+        ("Weekly review", "", &[
             ("What should I cover in my Friday review?", "Start with the open day plan. Printing the rain plan and finding a folding table are still open. Then decide whether the seed swap idea needs its own task."),
             ("Leave the seed swap in the inbox for now.", "That keeps the review short: check the two open tasks, then stop."),
         ][..]),
-        ("fixture-watering", "Watering the raised beds", "What about the seedlings by the gate?", &[
+        ("Watering the raised beds", "What about the seedlings by the gate?", &[
             ("Should I water the raised beds tonight?", "Check the soil a few centimetres down. If it is still damp, wait until morning and check again. Water at the roots rather than over the leaves."),
         ][..]),
-        ("fixture-open-day", "Spring open day", "Can you shorten the welcome sign?", OPEN_DAY_TURNS),
+        ("Spring open day", "Can you shorten the welcome sign?", OPEN_DAY_TURNS),
     ].into_iter().enumerate() {
-        let mut record = storage.create_conversation(id, title)?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let mut record = storage.create_conversation(&id, title)?;
         record.draft = draft.into();
         record.messages = json!(turns.iter().flat_map(|(question, answer)| [
             ("user", question), ("assistant", answer),

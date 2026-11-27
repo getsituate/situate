@@ -11,6 +11,8 @@ import {
 import { SituateButton, SituateIconButton, SituateDialog } from "../ui";
 import NavigationComposer from "./NavigationComposer.vue";
 import ChatPaneHeader from "../components/ChatPaneHeader.vue";
+import ChatModeSurface from "../chat/ChatModeSurface.vue";
+import ChatTranscript from "../chat/ChatTranscript.vue";
 import NavigationDashboard from "./NavigationDashboard.vue";
 import NavigationGreeting from "./NavigationGreeting.vue";
 import {
@@ -84,7 +86,7 @@ async function focusCurrent() {
   const target = root.value?.querySelector<HTMLElement>(
     single.value || chats.value.length > 1
       ? '[role="tab"][aria-selected="true"]'
-      : ".workarea:not([hidden]) .pane-title",
+      : ".workarea:not([hidden]) :is(.pane-title, .chat-corner-actions button)",
   );
   (
     target ?? root.value?.querySelector<HTMLElement>(".empty-tabs button")
@@ -243,8 +245,9 @@ defineExpose({ focusTitle: focusCurrent });
         @focusin="choose(tab.id)"
       >
         <ChatPaneHeader
+          v-if="tab.kind === 'view'"
           :title="tab.title"
-          :show-chat-icon="tab.kind === 'chat'"
+          :show-chat-icon="false"
           :title-id="`${id}-title-${tab.id}`"
         >
           <template #navigation>
@@ -278,22 +281,64 @@ defineExpose({ focusTitle: focusCurrent });
           :completed-tasks="state.completedTasks"
           @toggle-task="update(toggleTask(state, $event))"
         />
-        <div v-else class="empty-chat">
-          <div class="welcome">
-            <NavigationGreeting
-              :text="tab.greeting"
-              :active="visible(tab.id)"
-              :covered="navigationOpen || !!state.pendingClose"
-            /><NavigationComposer
-              :model-value="tab.draft"
-              @update:model-value="update(updateDraft(state, tab.id, $event))"
-              ><template #options
-                ><slot
-                  name="chat-options"
-                  :conversation-id="tab.id" /></template
-            ></NavigationComposer>
-          </div>
-        </div>
+        <ChatModeSurface
+          v-else
+          :title="tab.title"
+          :session-key="`navigation:${tab.id}`"
+          :draft="tab.draft"
+          empty
+          :close-label="`Close pane — ${tab.title}`"
+          :navigation-open="navigationOpen"
+          content-selector=".welcome"
+          @draft="update(updateDraft(state, tab.id, $event))"
+          @close="requestClose(tab.id)"
+        >
+          <template
+            v-if="
+              showNavigation &&
+              (single || tab.id === (view?.id ?? state.activeChat))
+            "
+            #navigation
+          >
+            <SituateIconButton
+              icon="menu"
+              label="Open navigation"
+              aria-haspopup="dialog"
+              :aria-controls="navigationId"
+              :aria-expanded="navigationOpen"
+              @click="emit('openNavigation', $event)"
+            />
+          </template>
+          <template #default="{ developmentEvents }">
+            <h1 :id="`${id}-title-${tab.id}`" class="sr-only">
+              {{ tab.title }}
+            </h1>
+            <div class="empty-chat">
+              <div class="welcome">
+                <ChatTranscript
+                  v-if="developmentEvents.length"
+                  :events="developmentEvents"
+                />
+                <NavigationGreeting
+                  v-else
+                  :text="tab.greeting"
+                  :active="visible(tab.id)"
+                  :covered="navigationOpen || !!state.pendingClose"
+                />
+                <NavigationComposer
+                  :model-value="tab.draft"
+                  @update:model-value="
+                    update(updateDraft(state, tab.id, $event))
+                  "
+                  ><template #options
+                    ><slot
+                      name="chat-options"
+                      :conversation-id="tab.id" /></template
+                ></NavigationComposer>
+              </div>
+            </div>
+          </template>
+        </ChatModeSurface>
       </section>
       <div v-if="!state.tabs.length" class="empty-tabs">
         <h2>No open tabs</h2>

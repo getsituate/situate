@@ -22,6 +22,7 @@ import {
   finishUninstallPlugin,
   currentDevelopment,
   developmentWorking,
+  type ChatModePlacement,
   type DevelopmentPhase,
   type PluginState,
 } from "./model";
@@ -40,6 +41,17 @@ const development = computed(() =>
   props.state.screen === "development"
     ? currentDevelopment(props.state)
     : undefined,
+);
+function placeModeSwitch(event: Event) {
+  const value = (event.target as HTMLSelectElement).value as ChatModePlacement;
+  if (!Object.hasOwn(c.chatMode.placements, value)) return;
+  update((s) => {
+    const mode = currentDevelopment(s)?.modeSwitch;
+    if (mode) mode.placement = value;
+  });
+}
+const inDevelopmentMode = computed(
+  () => development.value?.modeSwitch?.active !== "chat",
 );
 const connection = computed(() =>
   props.state.screen === "detail"
@@ -74,7 +86,9 @@ const fileBrowser = computed(() =>
     : undefined,
 );
 const inspection = computed(() =>
-  development.value?.filesOpen && development.value.panel === "files"
+  inDevelopmentMode.value &&
+  development.value?.filesOpen &&
+  development.value.panel === "files"
     ? development.value.inspection
     : undefined,
 );
@@ -137,6 +151,21 @@ function stressChanges() {
 </script>
 <template>
   <section class="plugin-controls">
+    <label v-if="development?.modeSwitch" class="mode-placement">
+      {{ c.chatMode.placement }}
+      <SituateSelect
+        :value="development.modeSwitch.placement"
+        @change="placeModeSwitch"
+      >
+        <option
+          v-for="(label, value) in c.chatMode.placements"
+          :key="value"
+          :value="value"
+        >
+          {{ label }}
+        </option>
+      </SituateSelect>
+    </label>
     <SituateButton
       v-if="!state.generalError && development"
       variant="secondary"
@@ -400,7 +429,7 @@ function stressChanges() {
           >{{ c.failConnection }}</SituateButton
         >
       </template>
-      <template v-if="development">
+      <template v-if="development && inDevelopmentMode">
         <h3>{{ c.controls }}</h3>
         <p>{{ outcomes.length ? c.controlsHelp : c.controlIdle }}</p>
         <SituateButton
@@ -521,6 +550,10 @@ button {
   width: 100%;
   margin: 8px 0;
   text-align: start;
+}
+.mode-placement {
+  display: grid;
+  gap: 6px;
 }
 fieldset {
   min-width: 0;

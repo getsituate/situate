@@ -156,10 +156,16 @@ export function screenControls(state: Simulation) {
     pane?.availability === "ready"
       ? state.tabs.conversations[conversationId(pane)]
       : undefined;
-  const modelChoices = !!conversation && conversation.id !== "garden";
+  const embeddedChat = state.plugins.developments.find(
+    (development) =>
+      development.modeSwitch && development.id === conversation?.id,
+  );
+  const modelChoices =
+    !embeddedChat && !!conversation && conversation.id !== "garden";
   return {
     ...screens[screen],
     dictationNotice: !!dictationNotice,
+    embeddedDevelopmentId: embeddedChat?.id,
     controls:
       screen === "setup-conversation" && state.setupConversation.readFile
         ? []
@@ -173,9 +179,11 @@ export function screenControls(state: Simulation) {
             !!state.dictationNavigation
               ? ["dictation" as const]
               : []),
-            ...(modelChoices
-              ? (["tabs", "tab-model"] as const)
-              : screens[screen].controls
+            ...(embeddedChat
+              ? (["tabs", "plugins"] as const)
+              : modelChoices
+                ? (["tabs", "tab-model"] as const)
+                : screens[screen].controls
             ).filter(
               (control) =>
                 !(
@@ -269,8 +277,16 @@ export function screenControls(state: Simulation) {
                     ? aiScreenLabel(conversation.ai)
                     : screen === "documents"
                       ? documentScreenLabel(state.documents)
-                      : screen === "plugins"
-                        ? pluginScreenLabel(state.plugins)
+                      : screen === "plugins" || embeddedChat
+                        ? pluginScreenLabel(
+                            embeddedChat
+                              ? {
+                                  ...state.plugins,
+                                  screen: "development",
+                                  developmentId: embeddedChat.id,
+                                }
+                              : state.plugins,
+                          )
                         : screen === "settings"
                           ? state.settings.page === "ai" && state.settings.setup
                             ? aiScreenLabel(state.settings.setup)

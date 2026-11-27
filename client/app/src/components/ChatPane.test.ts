@@ -1,3 +1,4 @@
+import "../ui/popover-test-environment";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { nextTick, shallowReactive } from "vue";
@@ -114,6 +115,9 @@ function service() {
       );
     }),
     send: vi.fn(),
+    setDevelopmentMode: vi.fn(async (enabled: boolean) => {
+      state.development = enabled ? { version: 2 } : undefined;
+    }),
     answerQuestion: vi.fn(),
     retryQuestionAction: vi.fn(),
     abort: vi.fn(),
@@ -657,6 +661,62 @@ test("save recovery takes precedence over a response error dialog", async () => 
   expect(wrapper.findAll("dialog[open]")).toHaveLength(1);
 });
 
+test("the chat menu blocks a busy switch, then switches modes and restores focus", async () => {
+  const chat = service();
+  chat.state.running = true;
+  mocks.chat.mockReturnValue(chat);
+  const wrapper = pane({
+    conversationId: "11111111-1111-4111-8111-111111111111",
+  });
+  const menu = () =>
+    wrapper.get('button[aria-label="⟦pluginDevelopment.chatActions⟧"]');
+  const switchItem = () => wrapper.get('[role="menuitem"]');
+  await menu().trigger("keydown", { key: "ArrowDown" });
+  expect(switchItem().attributes("aria-disabled")).toBe("true");
+  await switchItem().trigger("click");
+  expect(chat.setDevelopmentMode).not.toHaveBeenCalled();
+
+  chat.state.running = false;
+  await nextTick();
+  expect(switchItem().attributes("aria-disabled")).toBeUndefined();
+  await switchItem().trigger("click");
+  await vi.dynamicImportSettled();
+  await flushPromises();
+  expect(chat.setDevelopmentMode).toHaveBeenCalledExactlyOnceWith(true);
+  expect(document.activeElement).toBe(menu().element);
+  expect(wrapper.get("textarea").element.value).toBe("Shared draft");
+
+  await menu().trigger("keydown", { key: "ArrowUp" });
+  const returnItem = wrapper
+    .findAll('[role="menuitem"]')
+    .find((item) => item.text() === "⟦pluginDevelopment.switchToChat⟧")!;
+  await returnItem.trigger("click");
+  await flushPromises();
+  expect(chat.setDevelopmentMode.mock.calls).toEqual([[true], [false]]);
+  expect(document.activeElement).toBe(menu().element);
+});
+
+test("a failed mode switch keeps the draft and reports the error", async () => {
+  const chat = service();
+  chat.setDevelopmentMode.mockRejectedValueOnce(
+    "pluginDevelopment.modeUnavailable",
+  );
+  mocks.chat.mockReturnValue(chat);
+  const wrapper = pane({
+    conversationId: "11111111-1111-4111-8111-111111111111",
+  });
+  await wrapper
+    .get('button[aria-label="⟦pluginDevelopment.chatActions⟧"]')
+    .trigger("click");
+  await wrapper.get('[role="menuitem"]').trigger("click");
+  await flushPromises();
+  expect(wrapper.get("dialog[open]").text()).toContain(
+    "⟦pluginDevelopment.modeUnavailable⟧",
+  );
+  expect(wrapper.get("textarea").element.value).toBe("Shared draft");
+  expect(wrapper.find(".development-mode-label").exists()).toBe(false);
+});
+
 test("development shares the live composer, model and transcript", async () => {
   const wrapper = pane();
   await flushPromises();
@@ -671,9 +731,9 @@ test("development shares the live composer, model and transcript", async () => {
   await vi.dynamicImportSettled();
   await flushPromises();
   expect(wrapper.find(".plugin-development .chat-pane-header").exists()).toBe(
-    true,
+    false,
   );
-  expect(wrapper.get(".chat-context").text()).toContain(
+  expect(wrapper.get(".development-mode-label").text()).toContain(
     "⟦pluginDevelopment.context⟧",
   );
   expect(wrapper.text()).not.toContain("draft-one");
@@ -720,7 +780,7 @@ test.each([false, true])(
     expect(wrapper.get(".chat-load-error").findAll("button")).toHaveLength(2);
     expect(wrapper.get(".empty-chat").isVisible()).toBe(true);
     if (development)
-      expect(wrapper.get(".chat-pane-header").isVisible()).toBe(true);
+      expect(wrapper.get(".development-mode-label").isVisible()).toBe(true);
     expect(chat.state.draft).toBe("Shared draft");
     expect(chat.state.transcript).toHaveLength(1);
     Object.assign(chat.state, { loadError: undefined });
@@ -832,7 +892,7 @@ test("development welcome and navigation remain available around a load error", 
   Object.assign(chat.state, { loadError: "references.unavailable" });
   await flushPromises();
   const navigation = wrapper.get(
-    '.chat-pane-header button[aria-label="⟦navigation.openNavigation⟧"]',
+    '.chat-corner-start button[aria-label="⟦navigation.openNavigation⟧"]',
   );
   expect(navigation.isVisible()).toBe(true);
   await navigation.trigger("click");

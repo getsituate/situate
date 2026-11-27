@@ -204,10 +204,10 @@ describe("responsive layout and motion", () => {
     vi.stubGlobal(
       "ResizeObserver",
       class {
-        constructor(callback: () => void) {
-          resize = callback;
+        constructor(private callback: () => void) {}
+        observe(element: Element) {
+          if (element.matches(".navigation-view")) resize = this.callback;
         }
-        observe() {}
         disconnect = disconnect;
       },
     );
@@ -241,10 +241,10 @@ describe("responsive layout and motion", () => {
     vi.stubGlobal(
       "ResizeObserver",
       class {
-        constructor(callback: () => void) {
-          resize = callback;
+        constructor(private callback: () => void) {}
+        observe(element: Element) {
+          if (element.matches(".navigation-view")) resize = this.callback;
         }
-        observe() {}
         disconnect() {}
       },
     );

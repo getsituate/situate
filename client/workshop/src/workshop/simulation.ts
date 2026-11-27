@@ -71,12 +71,15 @@ import {
   startPluginDevelopment,
   sendPluginRequest,
   createPluginState,
+  currentDevelopment,
+  developmentWorking,
   interruptPluginWork,
   pluginScenarios,
   type PluginState,
 } from "../plugins/model";
 import type { Action, Snapshot, Workspace } from "../workspaces/api";
 import {
+  createConversationTabs,
   createTabsState,
   reduceTabs,
   tabScenarios,
@@ -614,6 +617,14 @@ export function createSimulation(
   if (settingsScenarios.some((item) => item.id === scenario))
     state.feature = "settings";
   if (scenario.startsWith("plugins-")) state.feature = "plugins";
+  const modeConversation = currentDevelopment(state.plugins);
+  if (modeConversation?.modeSwitch) {
+    state.feature = "tabs";
+    state.tabs = createConversationTabs(
+      modeConversation.id,
+      modeConversation.title,
+    );
+  }
   if (
     ["documents-empty", "plugins-sources-empty", "plugins-empty"].includes(
       scenario,
@@ -1542,6 +1553,20 @@ export function reduceSimulation(
   });
   state.onboarding.workspacePath =
     state.snapshot.current?.display ?? state.onboarding.workspacePath;
+  for (const development of state.plugins.developments) {
+    const chat = state.tabs.conversations[development.id];
+    if (!development.modeSwitch || !chat) continue;
+    const old = previous.plugins.developments.find(
+      (item) => item.id === development.id,
+    );
+    if (
+      old &&
+      old.title !== development.title &&
+      previousWorkspace === workspace
+    )
+      chat.title = development.title;
+    chat.activity = developmentWorking(development) ? "working" : "ready";
+  }
   syncSourceState(state.documents, state.plugins);
   return state;
 }

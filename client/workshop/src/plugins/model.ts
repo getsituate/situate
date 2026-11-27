@@ -41,7 +41,14 @@ import {
 } from "./fixtures";
 export type Plugin = (typeof pluginFixtures)[number];
 export type DevelopmentPhase = keyof typeof c.phases;
+export type ChatMode = "chat" | "development";
+export type ChatModePlacement = keyof typeof c.chatMode.placements;
 export interface Development {
+  modeSwitch?: {
+    active: ChatMode;
+    placement: ChatModePlacement;
+    chatTurns: { after: number; message: string; reply: string }[];
+  };
   id: string;
   pluginId?: string | null;
   kind?: PluginKind;
@@ -104,6 +111,16 @@ export const currentDevelopment = (s: PluginState) =>
   s.developments.find((d) => d.id === s.developmentId);
 export const developmentWorking = (d: Development) =>
   ["working", "checking", "waiting"].includes(d.phase);
+export function switchChatMode(s: PluginState, mode: ChatMode) {
+  const d = currentDevelopment(s);
+  if (!d || developmentWorking(d)) return;
+  d.modeSwitch ??= {
+    active: "development",
+    placement: "corner",
+    chatTurns: [],
+  };
+  d.modeSwitch.active = mode;
+}
 export const hasPluginWork = (s: PluginState) =>
   s.developments.some(developmentWorking);
 export const pluginDevelopmentTitle = (s: PluginState) =>
@@ -119,7 +136,9 @@ export const pluginScreenLabel = (s: PluginState) =>
       : s.screen === "files"
         ? c.files
         : s.screen === "development"
-          ? c.development
+          ? currentDevelopment(s)?.modeSwitch?.active === "chat"
+            ? c.chatMode.chat
+            : c.development
           : s.screen === "retained"
             ? c.retained
             : s.screen === "detail"
@@ -194,6 +213,20 @@ function setDevelopmentPhase(d: Development, phase: DevelopmentPhase) {
 export function sendPluginRequest(s: PluginState) {
   const d = currentDevelopment(s);
   if (!d || !d.draft.trim() || developmentWorking(d)) return;
+  if (d.modeSwitch?.active === "chat") {
+    const message = d.draft.trim();
+    if (message.toLowerCase() === c.chatMode.exampleRequest.toLowerCase()) {
+      switchChatMode(s, "development");
+    } else {
+      d.modeSwitch.chatTurns.push({
+        after: d.messages.length,
+        message,
+        reply: c.chatMode.exampleReply,
+      });
+      d.draft = "";
+      return;
+    }
+  }
   if (d.activation === "uncertain") {
     d.messages.push(d.draft.trim());
     d.draft = "";
@@ -379,15 +412,16 @@ export function applyPluginOutcome(s: PluginState, outcome: DevelopmentPhase) {
       d,
       d.packages.find((p) => p.change !== "unchanged")?.id,
     );
-  } else if (outcome === "interrupted") setDevelopmentPhase(d, "interrupted");
+  } else if (outcome === "interrupted") interruptDevelopment(d);
+}
+function interruptDevelopment(d: Development) {
+  if (!developmentWorking(d)) return;
+  if (d.check.status === "running") d.check = emptyAssignmentCheck();
+  setDevelopmentPhase(d, "interrupted");
 }
 export function interruptPluginWork(s: PluginState): void {
   s.connectionAttempt = null;
-  for (const d of s.developments)
-    if (developmentWorking(d)) {
-      if (d.check.status === "running") d.check = emptyAssignmentCheck();
-      setDevelopmentPhase(d, "interrupted");
-    }
+  s.developments.forEach(interruptDevelopment);
 }
 export const connectorDependencies = (s: PluginState, plugin: Plugin) =>
   s.plugins.filter(
@@ -600,6 +634,37 @@ export function createPluginState(scenario = "plugins-list"): PluginState {
     s.connectionAvailability.calendar = "ready";
   }
   if (scenario === "plugins-create") startPluginDevelopment(s);
+  if (
+    scenario === "plugins-mode-chat" ||
+    scenario === "plugins-mode-development" ||
+    scenario === "plugins-mode-new-chat"
+  ) {
+    const inChat = scenario !== "plugins-mode-development";
+    startPluginDevelopment(s, inChat ? "" : assignmentText.request);
+    const d = currentDevelopment(s)!;
+    d.modeSwitch = {
+      active: inChat ? "chat" : "development",
+      placement: "corner",
+      chatTurns: [],
+    };
+    if (inChat) {
+      d.title = c.chatMode.newChat;
+      d.filesOpen = false;
+      if (scenario === "plugins-mode-chat") {
+        d.title = c.chatMode.exampleTitle;
+        d.modeSwitch.chatTurns.push({
+          after: 0,
+          message: c.chatMode.exampleQuestion,
+          reply: c.chatMode.exampleReply,
+        });
+      }
+    } else {
+      initializeAssignment(s, d, "plugins-development-changes");
+      d.inspection = createAssignmentInspection("plugins-development-changes");
+      sendPluginRequest(s);
+      applyPluginOutcome(s, "failed");
+    }
+  }
   if (
     [
       "plugins-development",

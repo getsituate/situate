@@ -5,6 +5,7 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
+  useId,
   watch,
 } from "vue";
 import {
@@ -13,6 +14,7 @@ import {
   SituateButton,
   SituateDialog,
   SituateInput,
+  SituateMenu,
 } from "../ui";
 import SituateSelect from "../ui/SituateSelect.vue";
 import MaximizedPaneHeader from "./MaximizedPaneHeader.vue";
@@ -29,7 +31,7 @@ import {
   hasActivity as tabHasActivity,
   dimensions,
   leaves,
-  tabName,
+  tabName as titleForTab,
   viewIcons,
   type Edge,
   type Pane,
@@ -39,11 +41,16 @@ import {
 const props = defineProps<{
   state: TabsState;
   initialMove?: boolean;
+  paneOptionsMenu?: boolean;
   mobile: boolean;
   workspaceName: string;
   navigationId: string;
   navigationOpen: boolean;
   showNavigation: boolean;
+}>();
+defineSlots<{
+  pane?(props: { pane: Pane; active: boolean }): unknown;
+  "pane-actions"?(props: { pane: Pane }): unknown;
 }>();
 const emit = defineEmits<{
   action: [action: TabsAction];
@@ -52,6 +59,10 @@ const emit = defineEmits<{
 }>();
 const tab = computed(() => activeTab(props.state));
 const paneTitle = (pane: Pane) => titleForPane(pane, props.state);
+const tabName = (tab: Parameters<typeof titleForTab>[0]) =>
+  titleForTab(tab, props.paneOptionsMenu ? props.state : undefined);
+const paneMenuId = useId();
+const paneMenu = ref<{ id: string; anchor: HTMLElement }>();
 const root = ref<HTMLElement>();
 const tablist = ref<HTMLElement>();
 const tabNavigation = ref<HTMLElement>();
@@ -262,11 +273,19 @@ function focusDialog() {
 }
 function open(
   which: typeof mode.value,
-  event: MouseEvent | HTMLElement,
+  event: MouseEvent | KeyboardEvent | HTMLElement,
   pane = "",
 ) {
-  returnFocus =
+  const anchor =
     event instanceof HTMLElement ? event : (event.currentTarget as HTMLElement);
+  if (which === "pane" && props.paneOptionsMenu) {
+    const id = pane || tab.value?.active;
+    if (!id) return;
+    paneMenu.value =
+      paneMenu.value?.anchor === anchor ? undefined : { id, anchor };
+    return;
+  }
+  returnFocus = anchor;
   returnFocus.focus();
   mode.value = which;
   renameOrigin.value = "surface";
@@ -558,7 +577,13 @@ defineExpose({ focusPaneHeader });
           class="surface-pane-options"
           icon="split"
           :label="`${copy.paneOptions}: ${paneTitle(focusPane)}`"
-          @click="open('pane', $event, focusPane.id)"
+          :aria-haspopup="paneOptionsMenu ? 'menu' : undefined"
+          :aria-expanded="
+            paneOptionsMenu ? paneMenu?.id === focusPane.id : undefined
+          "
+          :popovertarget="paneOptionsMenu ? paneMenuId : undefined"
+          @click.prevent="open('pane', $event, focusPane.id)"
+          @keydown.down.prevent="open('pane', $event, focusPane.id)"
         />
       </div>
       <TabActions
@@ -628,7 +653,13 @@ defineExpose({ focusPaneHeader });
             class="mobile-pane-options"
             icon="more"
             :label="`${copy.paneOptions}: ${paneTitle(focusPane)}`"
-            @click="open('pane', $event, focusPane.id)"
+            :aria-haspopup="paneOptionsMenu ? 'menu' : undefined"
+            :aria-expanded="
+              paneOptionsMenu ? paneMenu?.id === focusPane.id : undefined
+            "
+            :popovertarget="paneOptionsMenu ? paneMenuId : undefined"
+            @click.prevent="open('pane', $event, focusPane.id)"
+            @keydown.down.prevent="open('pane', $event, focusPane.id)"
           />
         </div>
         <div class="layout-scroll">
@@ -650,21 +681,84 @@ defineExpose({ focusPaneHeader });
               :compact="narrow || lonePane || !!tab.maximized"
               @action="paneAction"
               @options="(id, event) => open('pane', event, id)"
-            />
+            >
+              <template v-if="$slots.pane" #pane="slotProps">
+                <slot name="pane" v-bind="slotProps" />
+              </template>
+            </PaneTile>
             <SplitLayout
               v-else
               :node="tab.layout"
               :tab="tab"
               :state="state"
               :dragging="dragging"
+              :options-id="paneOptionsMenu ? paneMenuId : undefined"
+              :options-pane-id="paneMenu?.id"
               @action="paneAction"
               @options="(id, event) => open('pane', event, id)"
               @drag="dragging = $event"
-            />
+            >
+              <template v-if="$slots.pane" #pane="slotProps">
+                <slot name="pane" v-bind="slotProps" />
+              </template>
+            </SplitLayout>
           </div>
         </div>
       </section>
     </div>
+    <SituateMenu
+      v-if="paneOptionsMenu"
+      :id="paneMenuId"
+      :label="copy.paneOptions"
+      :open="!!paneMenu"
+      :anchor="paneMenu?.anchor"
+      @close="paneMenu = undefined"
+    >
+      <template v-if="paneMenu">
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="act({ type: 'split', id: paneMenu.id, edge: 'right' })"
+          >{{ copy.splitRight }}</SituateButton
+        >
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="act({ type: 'split', id: paneMenu.id, edge: 'bottom' })"
+          >{{ copy.splitBelow }}</SituateButton
+        >
+        <SituateButton
+          v-if="!lonePane"
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="open('move', paneMenu.anchor, paneMenu.id)"
+          >{{ copy.movePane }}</SituateButton
+        >
+        <SituateButton
+          v-if="!lonePane && !narrow"
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="act({ type: 'maximize', id: paneMenu.id })"
+          >{{ tab?.maximized ? copy.restore : copy.maximize }}</SituateButton
+        >
+        <SituateButton
+          variant="plain"
+          role="menuitem"
+          tabindex="-1"
+          @click="act({ type: 'close-pane', id: paneMenu.id })"
+          >{{ copy.closePane }}</SituateButton
+        >
+        <slot
+          v-if="tab?.panes[paneMenu.id]"
+          name="pane-actions"
+          :pane="tab.panes[paneMenu.id]!"
+        />
+      </template>
+    </SituateMenu>
     <SituateDialog
       ref="dialog"
       id="topic-layout-dialog"

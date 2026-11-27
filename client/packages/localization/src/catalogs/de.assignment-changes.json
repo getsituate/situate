@@ -1,5 +1,12 @@
 {
   "native.plugins.retainedStorageFailed": "Die temporären Dateien konnten nicht sicher geprüft werden.",
+  "pluginDevelopment.chatActions": "Chat-Aktionen",
+  "pluginDevelopment.switchToChat": "Zum Chat wechseln",
+  "pluginDevelopment.switchToDevelopment": "Zur Plugin-Entwicklung wechseln",
+  "pluginDevelopment.showChanges": "Änderungen anzeigen",
+  "pluginDevelopment.hideChanges": "Änderungen ausblenden",
+  "pluginDevelopment.modeBusy": "Warte, bis die laufende Arbeit beendet ist, oder stoppe sie, bevor du den Modus wechselst.",
+  "pluginDevelopment.modeUnavailable": "Der Chatmodus kann gerade nicht gewechselt werden.",
   "pluginDevelopment.helpIntro": "Beschreibe, was du brauchst. Situate kann Werkzeuge (Plugins), Verbindungen und Dateien in diesem Arbeitsbereich hinzufügen oder ändern.",
   "pluginDevelopment.helpLeaving": "Du findest diesen Chat unter „Unterhaltungen“ wieder. Die Arbeit läuft weiter, wenn du den Chat schließt. Wenn du den Arbeitsbereich schließt oder Situate beendest, stoppt sie. Sende eine Nachricht, um unterbrochene Arbeit fortzusetzen.",
   "pluginDevelopment.helpDraft": "Änderungen prüfen",

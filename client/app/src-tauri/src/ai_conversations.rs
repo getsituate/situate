@@ -639,7 +639,7 @@ impl Host for NativeHost {
             run_id,
             main,
             small,
-            development: metadata.development,
+            development: metadata.active_development().cloned(),
             sequences: HashMap::new(),
         });
         Ok(config)
@@ -2337,7 +2337,14 @@ pub(crate) async fn ai_conversation_action(
 ) -> Result<Value, String> {
     let retained = matches!(
         action["type"].as_str(),
-        Some("draft" | "renameTitle" | "retryPersistence" | "cancel" | "supersedeQuestion")
+        Some(
+            "draft"
+                | "renameTitle"
+                | "retryPersistence"
+                | "cancel"
+                | "supersedeQuestion"
+                | "setDevelopmentMode"
+        )
     );
     let context = conversation_context(app.clone(), &window, scope, &conversation, retained)?;
     let admission = app.state::<Conversations>().admit(
