@@ -72,7 +72,7 @@
   "chat.history": "Conversation history",
   "chat.image": "Image",
   "chat.pendingRestored": "Pending messages restored to the draft.",
-  "chat.attachmentUnsupported": "This file type is not supported. Choose a PNG, JPEG, GIF, WebP, plain text, Markdown or JSON file.",
+  "chat.attachmentUnsupported": "This saved attachment cannot be used. Remove it and attach the original file again.",
   "chat.attachmentTooLarge": "The attachment is too large. Choose a file no larger than 8 MiB.",
   "chat.attachmentEncoding": "The text file is not valid UTF-8. Save a copy using UTF-8 encoding and attach it again. The original file has not been changed.",
   "chat.attachmentModelUnsupported": "The selected model cannot view images. Choose a model that supports images or remove the attachment.",

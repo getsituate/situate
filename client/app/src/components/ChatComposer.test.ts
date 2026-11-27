@@ -1,46 +1,26 @@
 import { mount } from "@vue/test-utils";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import ChatComposer from "./ChatComposer.vue";
 
 afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the leading attachment button opens the picker and restores the draft focus after selection", async () => {
+test("the leading attachment button requests native file selection without sending", async () => {
   const wrapper = mount(ChatComposer, {
-    attachTo: document.body,
     props: { draft: "Keep this draft", connected: true, modelSelected: true },
   });
   const attach = wrapper.get<HTMLButtonElement>(".attach-action");
-  const picker = wrapper.get<HTMLInputElement>('input[type="file"]');
-  const openPicker = vi.spyOn(picker.element, "click");
   expect(wrapper.get(".input-line").element.firstElementChild).toBe(
     attach.element,
   );
   expect(attach.attributes("aria-label")).toBe("⟦navigation.attachFile⟧");
   expect(attach.get("svg path").attributes("d")).toBe("M12 5v14M5 12h14");
-  expect(attach.attributes("aria-haspopup")).toBeUndefined();
-  expect(picker.element.multiple).toBe(true);
-  expect(picker.attributes("accept")).toBe(
-    "image/png,image/jpeg,image/gif,image/webp,text/plain,text/markdown,application/json,.txt,.md,.markdown,.json",
-  );
   await attach.trigger("click");
-  expect(openPicker).toHaveBeenCalledOnce();
-  const file = new File(["A note"], "note.md", { type: "text/markdown" });
-  Object.defineProperty(picker.element, "files", {
-    configurable: true,
-    value: [file],
-  });
-  await picker.trigger("change");
-  expect(wrapper.emitted("attach")).toEqual([[[file]]]);
-  expect(picker.element.value).toBe("");
-  expect(document.activeElement).toBe(wrapper.get("textarea").element);
+  expect(wrapper.emitted("attach")).toEqual([[]]);
   expect(wrapper.get<HTMLTextAreaElement>("textarea").element.value).toBe(
     "Keep this draft",
   );
-  Object.defineProperty(picker.element, "files", { value: [] });
-  await picker.trigger("change");
-  expect(wrapper.emitted("attach")).toHaveLength(1);
   expect(wrapper.emitted("send")).toBeUndefined();
   wrapper.unmount();
 });

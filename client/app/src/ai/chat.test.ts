@@ -209,12 +209,25 @@ async function native(
     if (initial.developmentPaused) delete value.record.development;
     return stored;
   }
-  if (command === "ai_attachment_put")
+  if (command === "ai_attachment_pick")
     return {
-      id: "stored-attachment",
-      name: args.name,
-      size: (args.bytes as number[]).length,
-      mimeType: args.mimeType,
+      attachments: [
+        {
+          id: "selected-attachment",
+          name: "report.pdf",
+          size: 67,
+          mimeType: "text/plain",
+        },
+      ],
+      references: [
+        {
+          kind: "live",
+          workspaceId: scope,
+          path: "files/report.xlsx",
+          anchorRevision: "a".repeat(40),
+        },
+      ],
+      failed: false,
     };
   if (command === "ai_conversation_ack") return;
   if (command === "ai_conversation_delete") {
@@ -1122,42 +1135,127 @@ test.each([undefined, "sample"])(
     await send;
   },
 );
-test("temporary attachments stage locally and import once at first submission", async () => {
+test("the first submission retains workspace and external selections without uploading files", async () => {
   const id = await workspaceConversations("scope").create();
   const chat = workspaceChat("scope", id);
-  const file = new File(["note"], "note.txt", { type: "text/plain" });
-  Object.defineProperty(file, "arrayBuffer", {
-    value: async () => new TextEncoder().encode("note").buffer,
+  await chat.pickAttachments();
+  expect(mock.invoke).toHaveBeenCalledExactlyOnceWith("ai_attachment_pick", {
+    scope: "scope",
   });
-  await chat.addAttachment(file);
-  expect(mock.invoke).not.toHaveBeenCalled();
+  expect(chat.state.ephemeral).toBe(true);
   chat.state.draft = "Read";
   const send = chat.send();
   await flushPromises();
-  expect(
-    mock.invoke.mock.calls.filter(
-      ([command]) => command === "ai_attachment_put",
-    ),
-  ).toHaveLength(1);
-  expect(actionCalls("submit")[0][1].action.input.attachments[0].id).toBe(
-    "stored-attachment",
-  );
+  const input = {
+    attachments: [
+      {
+        id: "selected-attachment",
+        name: "report.pdf",
+        size: 67,
+        mimeType: "text/plain",
+      },
+    ],
+    references: [
+      {
+        kind: "live",
+        workspaceId: "scope",
+        path: "files/report.xlsx",
+        anchorRevision: "a".repeat(40),
+      },
+    ],
+  };
   const creation = mock.invoke.mock.calls.find(
     ([command]) => command === "ai_create_conversation",
   )![1];
-  expect(Object.keys(creation.initial).sort()).toEqual([
-    "attachments",
-    "draft",
-    "references",
-  ]);
-  expect(creation.initial).toMatchObject({
-    draft: "Read",
-    attachments: [{ id: "stored-attachment" }],
-    references: [],
+  expect(creation.initial).toEqual({ draft: "Read", ...input });
+  expect(actionCalls("submit")[0][1].action.input).toEqual({
+    text: "Read",
+    ...input,
   });
   finish("scope", id);
   await send;
 });
+test("cancelling a shared file picker leaves the saved draft unchanged", async () => {
+  const chat = await ready();
+  chat.state.draft = "Keep this draft";
+  await chat.saveDraft();
+  let cancel!: (value: unknown) => void;
+  mock.invoke.mockImplementation((command, args) =>
+    command === "ai_attachment_pick"
+      ? new Promise((resolve) => {
+          cancel = resolve;
+        })
+      : native(command, args),
+  );
+  mock.invoke.mockClear();
+  const selection = chat.pickAttachments();
+  expect(chat.pickAttachments()).toBe(selection);
+  await flushPromises();
+  cancel({ attachments: [], references: [], failed: false });
+  await selection;
+  expect(mock.invoke).toHaveBeenCalledExactlyOnceWith("ai_attachment_pick", {
+    scope: "scope",
+  });
+  expect(chat.state.draft).toBe("Keep this draft");
+  expect(chat.state.attachmentBusy).toBe(false);
+});
+
+test.each([
+  { count: 0, failed: true, error: "chat.attachmentFailed" },
+  { count: 33, failed: false, error: "references.tooMany" },
+])(
+  "saves valid external selections when another attachment fails ($error)",
+  async ({ count, failed, error }) => {
+    const chat = await ready();
+    const attachment = {
+      id: "external",
+      name: "report.xlsx",
+      size: 127,
+      mimeType: "text/plain",
+    };
+    mock.invoke.mockImplementation((command, args) =>
+      command === "ai_attachment_pick"
+        ? Promise.resolve({
+            attachments: [attachment],
+            references: Array.from({ length: count }, (_, index) => ({
+              kind: "live",
+              workspaceId: "scope",
+              path: `report-${index}.xlsx`,
+              anchorRevision: "a".repeat(40),
+            })),
+            failed,
+          })
+        : native(command, args),
+    );
+    await chat.pickAttachments();
+    expect(ensure().record.runtime?.draftAttachments).toEqual([attachment]);
+    expect(chat.state.draftReferences).toEqual([]);
+    expect(chat.state.error).toBe(error);
+    expect(actionCalls("submit")).toHaveLength(0);
+  },
+);
+
+test.each([
+  ["native.workspace.session.inactive", "native.workspace.session.inactive"],
+  ["Unexpected picker failure", "chat.attachmentFailed"],
+])(
+  "reports a rejected picker without losing existing input (%s)",
+  async (rejection, error) => {
+    const chat = await ready();
+    chat.state.draft = "Keep this draft";
+    await chat.saveDraft();
+    mock.invoke.mockImplementation((command, args) =>
+      command === "ai_attachment_pick"
+        ? Promise.reject(rejection)
+        : native(command, args),
+    );
+    await chat.pickAttachments();
+    expect(chat.state.error).toBe(error);
+    expect(chat.state.draft).toBe("Keep this draft");
+    expect(chat.state.attachmentBusy).toBe(false);
+  },
+);
+
 test.each([false, true])(
   "first submission accepts an omitted empty runtime (lost creation receipt: %s)",
   async (lostReceipt) => {
@@ -1242,40 +1340,26 @@ test("uncertain conversation creation reads the canonical record without submitt
   finish("scope", id);
   await send;
 });
-test("a cancelled temporary attachment import never creates or submits afterward", async () => {
-  const id = await workspaceConversations("scope").create();
+test("a file selection that completes after an unsent chat is discarded never creates or submits", async () => {
+  const id = (await workspaceConversations("scope").create())!;
   const chat = workspaceChat("scope", id);
-  let importReply!: () => void;
-  const file = new File(["note"], "note.txt", { type: "text/plain" });
-  Object.defineProperty(file, "arrayBuffer", {
-    value: async () => new TextEncoder().encode("note").buffer,
-  });
-  await chat.addAttachment(file);
+  let reply!: () => void;
   mock.invoke.mockImplementation((command, args) =>
-    command === "ai_attachment_put"
+    command === "ai_attachment_pick"
       ? new Promise((resolve) => {
-          importReply = () =>
-            resolve({
-              id: "stored",
-              name: "note.txt",
-              mimeType: "text/plain",
-              size: 4,
-            });
+          reply = () =>
+            resolve({ attachments: [], references: [], failed: false });
         })
       : native(command, args),
   );
-  const send = chat.send();
+  const selection = chat.pickAttachments();
   await flushPromises();
-  chat.abort();
-  importReply();
-  await send;
-  expect(
-    mock.invoke.mock.calls.some(
-      ([command]) => command === "ai_create_conversation",
-    ),
-  ).toBe(false);
-  expect(actionCalls()).toEqual([]);
-  expect(chat.state.ephemeral).toBe(true);
+  expect(discardUnsentChat("scope", id)).toBe(true);
+  reply();
+  await selection;
+  expect(mock.invoke).toHaveBeenCalledExactlyOnceWith("ai_attachment_pick", {
+    scope: "scope",
+  });
 });
 test("native tool provenance and measured work periods render without recomputation or execution", async () => {
   const value = ensure();

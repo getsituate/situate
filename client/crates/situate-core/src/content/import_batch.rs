@@ -402,7 +402,7 @@ impl ContentStore {
     }
 }
 
-fn read_direct_source(path: &str, limit: u64) -> Result<(Vec<u8>, same_file::Handle)> {
+pub(crate) fn read_direct_source(path: &str, limit: u64) -> Result<(Vec<u8>, same_file::Handle)> {
     let source = Path::new(path);
     if !source.is_absolute()
         || path.len() > 4096

@@ -8,19 +8,14 @@ import {
   useId,
   watch,
 } from "vue";
-import {
-  SituateIcon,
-  SituateIconButton,
-  SituateTextarea,
-  SituateButton,
-} from "../ui";
+import { SituateIconButton, SituateTextarea, SituateButton } from "../ui";
 import { chatContent as c } from "./chat-content";
 const props = withDefaults(
   defineProps<{
     modelValue?: string;
     readonly?: boolean;
     enabled?: boolean;
-    compact?: boolean;
+    attachDialog?: boolean;
     working?: boolean;
     label?: string;
     showLabel?: boolean;
@@ -35,7 +30,6 @@ const props = withDefaults(
     modelValue: "",
     readonly: true,
     enabled: false,
-    compact: false,
     working: false,
     label: c.message,
     placeholder: c.placeholder,
@@ -47,6 +41,7 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
   send: [];
   stop: [];
+  attach: [];
   selection: [value: { start: number; end: number }];
   edit: [value: { text: string; selection: { start: number; end: number } }];
 }>();
@@ -137,16 +132,20 @@ defineExpose({
 </script>
 <template>
   <div class="chat-composer composer">
+    <slot name="attachments" />
     <label :class="showLabel ? 'composer-label' : 'sr-only'" :for="id">{{
       label
     }}</label>
     <div class="input-line">
       <SituateIconButton
-        v-if="compact"
         icon="plus"
         :label="c.attach"
-        disabled
-        :unavailable-reason="c.attachmentsUnavailable"
+        :aria-haspopup="attachDialog ? 'dialog' : undefined"
+        :disabled="!attachDialog"
+        :unavailable-reason="
+          attachDialog ? undefined : c.attachmentsUnavailable
+        "
+        @click="emit('attach')"
       />
       <SituateTextarea
         appearance="plain"
@@ -202,21 +201,7 @@ defineExpose({
         </slot>
       </div>
     </div>
-    <div
-      v-if="!compact || $slots.options"
-      class="composer-footer composer-bottom"
-    >
-      <SituateButton
-        variant="plain"
-        v-if="!compact"
-        type="button"
-        class="attach-action"
-        disabled
-        :title="c.attachmentsUnavailable"
-        :aria-description="c.attachmentsUnavailable"
-      >
-        <SituateIcon name="attach" />{{ c.attach }}
-      </SituateButton>
+    <div v-if="$slots.options" class="composer-footer composer-bottom">
       <slot name="options" />
     </div>
   </div>
@@ -301,17 +286,5 @@ textarea:focus-visible {
   height: 11px;
   border-radius: 2px;
   background: currentColor;
-}
-.attach-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  margin-top: 4px;
-  padding: 10px 8px;
-  border: 0;
-  background: transparent;
-  color: var(--situate-muted);
-  font-size: var(--situate-text-caption);
 }
 </style>

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "id": "chat-file-attachments",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "chat-file-attachments",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Attach any file type in chat",
+          "paragraphs": [
+            "Select any file type with the plus button. Attachments appear above the message field, with thumbnails for images Situate can preview.",
+            "Workspace attachments refer to the original file. Attachments outside the workspace are not copied and remain available only on the device where you selected them."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "chat-file-attachments",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Beliebige Dateitypen im Chat anhängen",
+          "paragraphs": [
+            "Über das Plus kannst du jeden Dateityp auswählen. Anhänge stehen über dem Nachrichtenfeld. Für Bilder, die Situate anzeigen kann, erscheint eine Vorschau.",
+            "Anhänge aus dem Arbeitsbereich verweisen auf die Originaldatei. Dateien außerhalb des Arbeitsbereichs werden nicht kopiert und sind nur auf dem Gerät verfügbar, auf dem du sie ausgewählt hast."
+          ]
+        }
+      ]
+    }
+  }
+}

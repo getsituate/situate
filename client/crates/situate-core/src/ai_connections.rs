@@ -873,7 +873,7 @@ impl Storage {
         }
         self.commit_connections(keys, Some(before), manifest, None)
     }
-    pub(super) fn read_workspace_preference(
+    pub(crate) fn read_workspace_preference(
         &self,
         name: &str,
         limit: u64,
@@ -883,7 +883,7 @@ impl Storage {
             limit,
         )
     }
-    pub(super) fn save_workspace_preference(&self, name: &str, bytes: &[u8]) -> Result<(), String> {
+    pub(crate) fn save_workspace_preference(&self, name: &str, bytes: &[u8]) -> Result<(), String> {
         publish(
             self.device()?,
             &format!("{}-{name}.json", self.workspace_identity()?),

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from "@situate/localization";
-import { computed, useTemplateRef, nextTick, ref, useId, watch } from "vue";
+import { computed, useTemplateRef, nextTick, useId, watch } from "vue";
 import {
   SituateTextarea,
   SituateButton,
@@ -8,7 +8,13 @@ import {
   SituateIconButton,
 } from "@situate/ui";
 
+import {
+  isImageAttachment,
+  mayHaveImagePreview,
+} from "../ai/attachment-runtime";
+import type { AttachmentRef } from "../ai/queue-runtime";
 import DictationActivity from "../dictation/DictationActivity.vue";
+import ChatAttachmentPreview from "./chat/ChatAttachmentPreview.vue";
 import type { Phase } from "../dictation/runtime";
 
 const props = defineProps<{
@@ -26,7 +32,8 @@ const props = defineProps<{
   modelSelected?: boolean;
   running?: boolean;
   busy?: boolean;
-  attachments?: { id: string; name: string }[];
+  attachments?: AttachmentRef[];
+  attachmentScope?: string;
   attaching?: boolean;
   hasPending?: boolean;
   hasReferences?: boolean;
@@ -38,13 +45,12 @@ const emit = defineEmits<{
   dictate: [];
   stopDictation: [];
   recall: [];
-  attach: [files: File[]];
+  attach: [];
   removeAttachment: [id: string];
 }>();
 const fieldControl =
   useTemplateRef<InstanceType<typeof SituateTextarea>>("fieldControl");
 const field = computed(() => fieldControl.value?.element);
-const picker = ref<HTMLInputElement>();
 const id = useId();
 const primaryDisabled = computed(
   () =>
@@ -100,13 +106,6 @@ function keydown(event: KeyboardEvent): void {
     submit(event.altKey ? "followUp" : "steering");
   }
 }
-function selected(event: Event): void {
-  const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []);
-  input.value = "";
-  if (files.length) emit("attach", files);
-  focus();
-}
 </script>
 
 <template>
@@ -117,30 +116,44 @@ function selected(event: Event): void {
       dictating: !!dictationPhase,
     }"
   >
-    <div
-      v-if="attachments?.length"
+    <ul
+      v-if="attachments?.length || (hasReferences && $slots.references)"
       class="draft-attachments"
+      :class="{ 'draft-references': hasReferences }"
+      role="list"
       :aria-label="t('chat.attachments')"
     >
-      <span
+      <slot name="references" />
+      <li
         v-for="attachment in attachments"
         :key="attachment.id"
         class="draft-attachment"
       >
-        <span data-localization-content="user">{{ attachment.name }}</span>
-        <SituateButton
-          variant="plain"
-          type="button"
-          :aria-label="t('chat.removeAttachment', { name: attachment.name })"
+        <ChatAttachmentPreview
+          :scope="attachmentScope"
+          :enabled="
+            isImageAttachment(attachment.mimeType) ||
+            mayHaveImagePreview(attachment.name)
+          "
+          :target="{ kind: 'attachment', id: attachment.id }"
+          :name="attachment.name"
+        >
+          <span class="draft-file">
+            <SituateIcon name="notes" />
+            <span data-localization-content="user">{{ attachment.name }}</span>
+          </span>
+        </ChatAttachmentPreview>
+        <SituateIconButton
+          class="remove-attachment"
+          icon="close"
+          :label="t('chat.removeAttachment', { name: attachment.name })"
           @click="
             emit('removeAttachment', attachment.id);
             focus();
           "
-        >
-          <SituateIcon name="close" />
-        </SituateButton>
-      </span>
-    </div>
+        />
+      </li>
+    </ul>
     <label :class="{ 'sr-only': !question }" :for="id">{{
       question ? t("chatQuestion.answer") : t("navigation.message")
     }}</label>
@@ -151,7 +164,7 @@ function selected(event: Event): void {
         :label="t('navigation.attachFile')"
         :disabled="draft === undefined || attaching"
         :aria-busy="attaching"
-        @click="picker?.click()"
+        @click="emit('attach')"
       />
       <SituateTextarea
         appearance="plain"
@@ -268,16 +281,6 @@ function selected(event: Event): void {
       >{{ dictationStatus }}</span
     >
     <div class="composer-bottom">
-      <input
-        ref="picker"
-        type="file"
-        class="file-input"
-        multiple
-        accept="image/png,image/jpeg,image/gif,image/webp,text/plain,text/markdown,application/json,.txt,.md,.markdown,.json"
-        tabindex="-1"
-        :aria-label="t('navigation.attachFile')"
-        @change="selected"
-      />
       <slot name="activity" />
       <div class="composer-selectors"><slot name="model" /></div>
     </div>
@@ -396,44 +399,65 @@ textarea:focus:where(html:not([data-input-modality="pointer"]) *) {
     max-width: min(100%, 260px);
   }
 }
-.file-input {
-  display: none;
-}
 .draft-attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--situate-space-1-5);
+  gap: var(--situate-space-2);
   margin: 0 0 var(--situate-space-2);
+  padding: 0;
+  list-style: none;
 }
-.draft-attachment {
+.draft-attachments :deep(.draft-attachment) {
   display: flex;
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  gap: var(--situate-space-1);
-  padding-inline-start: var(--situate-space-2-5);
+  min-height: 52px;
   border: 1px solid var(--situate-line);
-  border-radius: var(--situate-radius-inset);
+  border-radius: var(--situate-radius-control);
   background: var(--situate-content-wash, var(--situate-paper));
-  font-size: var(--situate-text-label);
+  font-size: var(--situate-text-caption);
 }
-.draft-attachment > span {
+.draft-attachments :deep(.draft-file) {
+  display: flex;
+  align-items: center;
+  gap: var(--situate-space-2);
   min-width: 0;
+  padding-block: var(--situate-space-1-5);
+  padding-inline-start: var(--situate-space-3);
   overflow-wrap: anywhere;
+  font-weight: 600;
 }
-.draft-attachment button {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  min-height: 44px;
-  flex: none;
+.draft-attachments :deep(.draft-file svg) {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.draft-attachments :deep(.reference-open) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  align-self: stretch;
+  padding: 0;
   border: 0;
+  border-radius: var(--situate-radius-control) 0 0 var(--situate-radius-control);
   background: transparent;
-  color: var(--situate-muted);
+  color: inherit;
+  font: inherit;
+  text-align: start;
 }
-.draft-attachment :deep(svg) {
-  width: 14px;
-  height: 14px;
+.draft-attachments :deep(.reference-open:hover) {
+  background: var(--situate-accent-soft, var(--situate-lilac));
+}
+.draft-attachments :deep(.reference-open:focus-visible) {
+  outline: var(--situate-stroke-focus) solid
+    var(--situate-accent-strong, var(--situate-cobalt));
+  outline-offset: var(--situate-focus-offset);
+}
+.draft-attachments :deep(.remove-attachment) {
+  align-self: stretch;
+  height: auto;
+  border-radius: 0 var(--situate-radius-control) var(--situate-radius-control) 0;
 }
 button:focus:where(html:not([data-input-modality="pointer"]) *) {
   outline: var(--situate-stroke-focus) solid

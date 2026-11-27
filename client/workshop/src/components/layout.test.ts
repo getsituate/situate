@@ -26,9 +26,11 @@ describe("empty chat", () => {
           .disabled,
       ).toBe(true);
     }
-    expect(
-      wrapper.get<HTMLButtonElement>(".attach-action").element.disabled,
-    ).toBe(true);
+    const attach = wrapper.get<HTMLButtonElement>(
+      '.input-line button[aria-label="Attach file"]',
+    );
+    expect(attach.element.disabled).toBe(true);
+    expect(attach.text()).not.toContain("Attach file");
     expect(wrapper.get("img").attributes("alt")).toBe("");
   });
 

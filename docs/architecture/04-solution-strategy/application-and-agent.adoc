@@ -51,7 +51,11 @@ Stable entry IDs and parent links permit shared ancestry without duplicating ori
 There is no fixed total conversation-size ceiling, compaction-based file rotation or separate pending-state file.
 Execution stays in memory; history reads and UI projections do not require loading the entire tree.
 Operational model and thinking settings remain device-local, outside portable conversation records.
-Attachments retain durable local identities as copied input, not live content references.
+Chat file selections inside a workspace and the Files view's chat action both use Git-anchored references.
+Model requests carry the resolved workspace-relative path, including the selected revision for historical references, rather than the file contents.
+Selections outside the workspace keep an absolute path on the selecting device without copying the file.
+The agent can read a referenced file with a suitable local tool when needed for the request.
+Previously copied attachments retain their durable identities and contents.
 
 The owner records effect intent before execution and observed completion afterward, preserving tool-call/result pairing and uncertain outcomes.
 Cancellation targets the captured run; late events cannot revive a replaced or closed owner.

@@ -716,7 +716,7 @@ fn storage(
     recover_storage(&storage, &OsKeys(app.clone()))?;
     Ok(storage)
 }
-fn unrecovered_storage(
+pub(crate) fn unrecovered_storage(
     app: &tauri::AppHandle,
     location: &situate_core::workspaces::Location,
 ) -> Result<Storage, String> {

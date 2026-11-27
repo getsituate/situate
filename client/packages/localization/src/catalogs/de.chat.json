@@ -72,7 +72,7 @@
   "chat.history": "Gesprächsverlauf",
   "chat.image": "Bild",
   "chat.pendingRestored": "Ausstehende Nachrichten wurden in den Entwurf übernommen.",
-  "chat.attachmentUnsupported": "Dieser Dateityp wird nicht unterstützt. Wähle eine PNG-, JPEG-, GIF-, WebP-, Klartext-, Markdown- oder JSON-Datei.",
+  "chat.attachmentUnsupported": "Dieser gespeicherte Anhang kann nicht verwendet werden. Entferne ihn und hänge die Originaldatei erneut an.",
   "chat.attachmentTooLarge": "Der Anhang ist zu groß. Wähle eine Datei mit höchstens 8 MiB.",
   "chat.attachmentEncoding": "Die Textdatei ist nicht gültig UTF-8-kodiert. Speichere eine Kopie mit UTF-8-Kodierung und hänge sie erneut an. Die Originaldatei wurde nicht verändert.",
   "chat.attachmentModelUnsupported": "Das ausgewählte Modell kann keine Bilder ansehen. Wähle ein Modell mit Bildunterstützung oder entferne den Anhang.",

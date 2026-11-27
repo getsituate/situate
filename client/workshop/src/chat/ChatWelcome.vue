@@ -39,7 +39,6 @@ defineExpose({ focus: () => composer.value?.focus() });
       />
       <NavigationComposer
         ref="composer"
-        compact
         :model-value="draft"
         :send-enabled="sendEnabled"
         :send-unavailable-reason="sendUnavailableReason"

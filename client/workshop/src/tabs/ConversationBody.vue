@@ -115,7 +115,6 @@ watch(empty, () => nextTick(focus));
             <div class="composer-area">
               <NavigationComposer
                 ref="composer"
-                compact
                 :working="conversation.activity === 'working'"
                 :model-value="conversation.draft"
                 :send-enabled="!guard"

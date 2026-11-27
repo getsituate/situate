@@ -30,7 +30,7 @@ import {
   type ToolActivity,
   type ConversationRuntime,
 } from "./queue-runtime";
-import { importAttachment, validateAttachment } from "./attachment-runtime";
+import type { FileSelection } from "./attachment-runtime";
 import { workspaceAiSettings } from "./settings";
 import { provisionalTitle } from "./title-runtime";
 import { modelRequestError } from "./request-errors";
@@ -130,7 +130,6 @@ interface Session {
   statusVersion: number;
   draftModel?: string | null;
   draftThinking?: string | null;
-  temporaryAttachments?: Map<string, File>;
   creationAttempted?: boolean;
   initialInput?: PendingInput;
   preparedSubmitted?: boolean;
@@ -832,13 +831,6 @@ export function workspaceChat(
     );
     current.stopWatching = () => effects.stop();
   }
-  function stageAttachment(file: File): AttachmentRef {
-    validateAttachment(file);
-    const id = crypto.randomUUID();
-    current.temporaryAttachments ??= new Map();
-    current.temporaryAttachments.set(id, file);
-    return { id, mimeType: file.type, size: file.size, name: file.name };
-  }
   async function startConversation(
     input?: PendingInput,
     canStart = live,
@@ -848,19 +840,6 @@ export function workspaceChat(
       current.initialInput ??= input;
       input = current.initialInput;
       await current.attachmentWrites;
-      for (const [id, file] of current.temporaryAttachments ?? []) {
-        if (!canStart()) break;
-        const stored = await importAttachment(scope, file);
-        if (!live()) return;
-        const replace = (item: AttachmentRef) =>
-          item.id === id ? stored : item;
-        current.restoringDraft = true;
-        current.state.draftAttachments =
-          current.state.draftAttachments.map(replace);
-        current.restoringDraft = false;
-        if (input) input.attachments = input.attachments.map(replace);
-        current.temporaryAttachments!.delete(id);
-      }
       if (!canStart()) {
         if (!current.creationAttempted) current.initialInput = undefined;
         return;
@@ -1162,7 +1141,6 @@ export function workspaceChat(
         current.disposed = true;
         current.client.dispose();
         current.stopWatching?.();
-        current.temporaryAttachments?.clear();
         owner.sessions.delete(conversation);
         owner.state.deletedConversationIds.add(conversation);
         ++owner.listVersion;
@@ -1423,26 +1401,43 @@ export function workspaceChat(
       );
       await saveDraft();
     },
-    addAttachment(file: File): Promise<void> {
+    pickAttachments(): Promise<void> {
+      if (current.state.attachmentBusy) return current.attachmentWrites;
       current.state.attachmentBusy = true;
       const task = current.attachmentWrites.then(async () => {
         try {
           await load();
-          const reference = current.state.ephemeral
-            ? stageAttachment(file)
-            : await importAttachment(scope, file);
-          if (live()) {
-            current.state.draftAttachments = [
-              ...current.state.draftAttachments,
-              reference,
-            ];
-            await saveDraft();
-          }
+          if (!live()) return;
+          const selection = await invoke<FileSelection>("ai_attachment_pick", {
+            scope,
+          });
+          if (!live()) return;
+          if (
+            !selection.references.length &&
+            !selection.attachments.length &&
+            !selection.failed
+          )
+            return;
+          const references = mergeReferences([
+            ...current.state.draftReferences,
+            ...selection.references,
+          ]);
+          const overLimit = references.length > 32;
+          if (!overLimit) current.state.draftReferences = references;
+          current.state.draftAttachments = [
+            ...current.state.draftAttachments,
+            ...selection.attachments,
+          ];
+          await saveDraft();
+          if (live() && (selection.failed || overLimit))
+            current.state.error = overLimit
+              ? "references.tooMany"
+              : "chat.attachmentFailed";
         } catch (error) {
           if (live())
             current.state.error =
-              error instanceof Error && error.message.startsWith("chat.")
-                ? error.message
+              typeof error === "string" && error.startsWith("native.")
+                ? error
                 : "chat.attachmentFailed";
         }
       });
@@ -1454,7 +1449,6 @@ export function workspaceChat(
       return task;
     },
     removeAttachment(id: string) {
-      current.temporaryAttachments?.delete(id);
       current.state.draftAttachments = current.state.draftAttachments.filter(
         (item) => item.id !== id,
       );
@@ -1652,7 +1646,6 @@ export function discardUnsentChat(
   session.client.dispose();
   clearTimeout(session.draftTimer);
   session.stopWatching?.();
-  session.temporaryAttachments?.clear();
   owner!.sessions.delete(conversation);
   return true;
 }

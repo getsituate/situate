@@ -27,17 +27,8 @@ const sharedRoles = new Set(["menu", "switch", "progressbar", "tooltip"]);
 
 function controls(node: RootNode | TemplateChildNode): string[] {
   const own: string[] = [];
-  if (node.type === NodeTypes.ELEMENT && nativeControls.has(node.tag)) {
-    const filePicker =
-      node.tag === "input" &&
-      node.props.some(
-        (prop) =>
-          prop.type === NodeTypes.ATTRIBUTE &&
-          prop.name === "type" &&
-          prop.value?.content === "file",
-      );
-    own.push(filePicker ? "input[type=file]" : node.tag);
-  }
+  if (node.type === NodeTypes.ELEMENT && nativeControls.has(node.tag))
+    own.push(node.tag);
   if (node.type === NodeTypes.ELEMENT && /^[a-z]/.test(node.tag)) {
     for (const prop of node.props) {
       if (prop.type !== NodeTypes.ATTRIBUTE) continue;
@@ -53,17 +44,15 @@ function controls(node: RootNode | TemplateChildNode): string[] {
 }
 
 describe("client UI boundary", () => {
-  it("uses the UI library except for the native attachment picker", () => {
-    const exceptions: string[] = [];
+  it("uses the UI library for interactive controls", () => {
+    const violations: string[] = [];
     for (const [path, source] of Object.entries(sources)) {
       const { descriptor, errors } = parseSfc(source);
       expect(errors, path).toEqual([]);
       if (!descriptor.template) continue;
       const found = controls(parse(descriptor.template.content));
-      if (found.length) exceptions.push(`${path}: ${found.join(", ")}`);
+      if (found.length) violations.push(`${path}: ${found.join(", ")}`);
     }
-    expect(exceptions).toEqual([
-      "../components/ChatComposer.vue: input[type=file]",
-    ]);
+    expect(violations).toEqual([]);
   });
 });

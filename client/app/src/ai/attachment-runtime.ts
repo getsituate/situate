@@ -1,6 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentMessage } from "./contracts";
 import type { AttachmentRef, PendingInput } from "./queue-runtime";
+import type { ContentReference } from "../files/content-reference";
+
+export interface FileSelection {
+  attachments: AttachmentRef[];
+  references: ContentReference[];
+  failed: boolean;
+}
+export type AttachmentPreviewTarget =
+  | { kind: "attachment"; id: string }
+  | { kind: "reference"; reference: ContentReference };
+export function mayHaveImagePreview(name: string): boolean {
+  return /\.(png|jpe?g|gif|webp)$/i.test(name);
+}
 const storedImages = new WeakMap<
   object,
   Promise<{ type: "image"; data: string; mimeType: string }>
@@ -11,32 +24,8 @@ const imageTypes = new Set([
   "image/gif",
   "image/webp",
 ]);
-function isTextAttachment(file: File): boolean {
-  return (
-    ["text/plain", "text/markdown", "application/json"].includes(file.type) ||
-    ((!file.type || file.type === "application/octet-stream") &&
-      /\.(md|markdown|json)$/i.test(file.name))
-  );
-}
-export function validateAttachment(file: File): void {
-  if (!imageTypes.has(file.type) && !isTextAttachment(file))
-    throw new Error("chat.attachmentUnsupported");
-  if (file.size > 8 * 1024 * 1024) throw new Error("chat.attachmentTooLarge");
-}
-export async function importAttachment(
-  scope: string,
-  file: File,
-): Promise<AttachmentRef> {
-  validateAttachment(file);
-  const text = isTextAttachment(file);
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (text) decodeText(bytes);
-  return invoke("ai_attachment_put", {
-    scope,
-    mimeType: text ? "text/plain" : file.type,
-    name: file.name,
-    bytes: [...bytes],
-  });
+export function isImageAttachment(mimeType: string): boolean {
+  return imageTypes.has(mimeType);
 }
 function decodeText(bytes: Uint8Array): string {
   try {

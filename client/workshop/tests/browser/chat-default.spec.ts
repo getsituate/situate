@@ -28,7 +28,9 @@ for (const width of [1280, 390, 320]) {
       preview.locator(".ai-view, .chat-layout, .model-recovery"),
     ).toHaveCount(0);
     await expect(
-      preview.getByRole("button", { name: "Attach file", exact: true }),
+      preview
+        .locator(".input-line")
+        .getByRole("button", { name: "Attach file", exact: true }),
     ).toBeVisible();
     await expect(model).toHaveAttribute(
       "aria-description",

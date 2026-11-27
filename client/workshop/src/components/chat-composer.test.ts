@@ -19,9 +19,9 @@ describe("shared chat UI", () => {
     shell.unmount();
     navigation.unmount();
   });
-  it("preserves compact chat controls, stopping and focus through the navigation wrapper", async () => {
+  it("preserves inline chat controls, stopping and focus through the navigation wrapper", async () => {
     const wrapper = mount(NavigationComposer, {
-      props: { modelValue: "Keep this draft", compact: true, working: true },
+      props: { modelValue: "Keep this draft", working: true },
       attachTo: document.body,
     });
     expect(wrapper.find(".composer-footer").exists()).toBe(false);

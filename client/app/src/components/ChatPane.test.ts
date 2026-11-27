@@ -122,7 +122,7 @@ function service() {
     retryQuestionAction: vi.fn(),
     abort: vi.fn(),
     recallPending: vi.fn(),
-    addAttachment: vi.fn(),
+    pickAttachments: vi.fn(),
     retrySave: vi.fn(),
   };
 }
@@ -412,6 +412,19 @@ function pane(props: Record<string, unknown> = {}, stubTranscript = true) {
     });
   return wrapper;
 }
+
+test("choosing an attachment returns focus to the draft without sending", async () => {
+  const wrapper = pane();
+  await flushPromises();
+  const chat = services.get("one:topic")!;
+  const button = wrapper.get<HTMLButtonElement>(".attach-action");
+  button.element.focus();
+  await button.trigger("click");
+  await flushPromises();
+  expect(chat.pickAttachments).toHaveBeenCalledOnce();
+  expect(chat.send).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(wrapper.get("textarea").element);
+});
 
 test("two presentations of one draft show one recovery dialog", async () => {
   const first = pane();
@@ -1011,7 +1024,7 @@ test("navigating a moved Git reference preserves the original anchor in presenta
   );
   expect(mocks.files).toHaveBeenCalledExactlyOnceWith({
     workspaceId: "one",
-    operation: "resolveReference",
+    operation: "openExternal",
     reference,
   });
 });
@@ -1152,9 +1165,9 @@ test("reference chips navigate live and historical targets, remove only drafts a
   expect(wrapper.get(".submitted-references .reference-open").text()).toContain(
     "old.md",
   );
-  expect(wrapper.find(".submitted-references .reference-remove").exists()).toBe(
-    false,
-  );
+  expect(
+    wrapper.find(".submitted-references .remove-attachment").exists(),
+  ).toBe(false);
   const buttons = wrapper.findAll(".draft-references .reference-open");
   await buttons[0]!.trigger("click");
   await vi.waitFor(() => expect(wrapper.emitted("navigate")).toHaveLength(1));
@@ -1173,27 +1186,31 @@ test("reference chips navigate live and historical targets, remove only drafts a
       },
     ],
   ]);
-  expect(wrapper.find(".pending-references .reference-remove").exists()).toBe(
+  expect(wrapper.find(".pending-references .remove-attachment").exists()).toBe(
     false,
   );
-  await wrapper.get(".draft-references .reference-remove").trigger("click");
+  await wrapper.get(".draft-references .remove-attachment").trigger("click");
   await flushPromises();
   expect(chat.removeReference).toHaveBeenCalledWith(live);
-  expect(wrapper.findAll(".draft-references .reference-chip")).toHaveLength(1);
+  expect(wrapper.findAll(".draft-references .draft-attachment")).toHaveLength(
+    1,
+  );
   expect(chat.send).not.toHaveBeenCalled();
 });
 test("an unresolved reference cannot navigate to a replacement at its old path", async () => {
   const wrapper = pane();
   await flushPromises();
   services.get("one:topic")!.state.draftReferences = [live];
-  mocks.files.mockResolvedValue({ status: "deleted" });
+  mocks.files.mockRejectedValue("references.unavailable");
   await flushPromises();
   await wrapper.get(".reference-open").trigger("click");
   await vi.waitFor(() =>
     expect(wrapper.get("[role=alert]").text()).toBe("⟦references.unavailable⟧"),
   );
   expect(wrapper.emitted("navigate")).toBeUndefined();
-  expect(wrapper.find(".reference-chip").exists()).toBe(true);
+  expect(wrapper.find(".draft-references .draft-attachment").exists()).toBe(
+    true,
+  );
 });
 
 test("a reference lookup cannot navigate a pane after its conversation changes", async () => {
@@ -1234,9 +1251,11 @@ test("failed reference removal retains the chip and reports the localized failur
     new Error("references.unavailable"),
   );
   await flushPromises();
-  await wrapper.get(".reference-remove").trigger("click");
+  await wrapper.get(".draft-references .remove-attachment").trigger("click");
   await flushPromises();
-  expect(wrapper.find(".reference-chip").exists()).toBe(true);
+  expect(wrapper.find(".draft-references .draft-attachment").exists()).toBe(
+    true,
+  );
   expect(wrapper.get("[role=alert]").text()).toBe("⟦references.unavailable⟧");
 });
 
