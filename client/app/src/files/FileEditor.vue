@@ -110,6 +110,7 @@ const filterControl =
   useTemplateRef<InstanceType<typeof SituateInput>>("filterControl");
 const viewedFile = shallowRef<FileSession>();
 const selectedPath = ref("");
+const browserSelectionOverride = ref<string | null>(null);
 const selected = computed(() => {
   if (props.target === undefined) return session.value.selected;
   const retained = viewedFile.value;
@@ -218,6 +219,12 @@ const documentFolder = computed(
     parentFolder(documentPath.value).split("/").join(" / ") ||
     props.workspaceName,
 );
+const browserSelection = computed(() => {
+  const override = browserSelectionOverride.value;
+  return override === "" || (override !== null && isDirectory(override))
+    ? override
+    : selected.value;
+});
 const fileCount = computed(
   () =>
     (session.value.snapshot?.entries ?? []).filter(
@@ -379,6 +386,7 @@ watch(
     stopObserving = observeFiles(session.value, () => selected.value);
     viewedFile.value = undefined;
     selectedPath.value = "";
+    browserSelectionOverride.value = null;
     documentLoading.value = false;
     deletedGeneration++;
     deletedOpen.value = false;
@@ -470,6 +478,7 @@ watch(
     cancelPress();
     viewedFile.value = undefined;
     selectedPath.value = "";
+    browserSelectionOverride.value = null;
     historical.value = null;
     historicalDeleted.value = "";
     historyOpen.value = false;
@@ -682,10 +691,17 @@ function rememberSelection(): void {
     publishPresentation();
   }
 }
-async function select(path: string): Promise<void> {
+function browserPresentation() {
+  return {
+    treeOpen: treeOpen.value,
+    treeWidth: treeWidth.value,
+    expandedFolders: [...viewState.value.expandedFolders],
+  };
+}
+async function select(path: string, keepTree = false): Promise<void> {
   rememberSelection();
   const previousTreeOpen = treeOpen.value;
-  if ((pane.value?.clientWidth || window.innerWidth) <= 560)
+  if (!keepTree && (pane.value?.clientWidth || window.innerWidth) <= 560)
     treeOpen.value = false;
   if (props.target !== undefined) {
     const current = generation;
@@ -701,12 +717,8 @@ async function select(path: string): Promise<void> {
       treeOpen.value = previousTreeOpen;
       return;
     }
-    navigate(path, undefined, {
-      treeOpen:
-        treeOpen.value && (pane.value?.clientWidth || window.innerWidth) > 560,
-      treeWidth: treeWidth.value,
-      expandedFolders: [...viewState.value.expandedFolders],
-    });
+    browserSelectionOverride.value = null;
+    navigate(path, undefined, browserPresentation());
     return;
   }
   const current = ++generation;
@@ -726,9 +738,8 @@ async function select(path: string): Promise<void> {
     treeOpen.value = previousTreeOpen;
     return;
   }
+  browserSelectionOverride.value = null;
   mode.value = "read";
-  if (file.value && (pane.value?.clientWidth || window.innerWidth) <= 560)
-    treeOpen.value = false;
   await nextTick();
   documentTitle.value?.focus();
   if (documentScroll.value) documentScroll.value.scrollTop = 0;
@@ -839,6 +850,7 @@ function input(event: Event): void {
     );
 }
 function toggleFolder(path: string): void {
+  browserSelectionOverride.value = path;
   const folders = viewState.value.expandedFolders;
   viewState.value.expandedFolders = folders.includes(path)
     ? folders.filter((folder) => folder !== path)
@@ -980,7 +992,7 @@ async function chooseMenu(
   }
   startAction(
     command === "move" ? "rename" : command,
-    path,
+    command === "create" && target.plus ? browserSelection.value : path,
     undefined,
     false,
     command === "move" || command === "rename" ? command : undefined,
@@ -1115,9 +1127,9 @@ async function runAction(): Promise<void> {
     if (target.operation === "create") {
       const path = reply.document?.path ?? creationPath;
       if (props.target !== undefined)
-        navigate(path, undefined, { mode: "source" });
+        navigate(path, undefined, { ...browserPresentation(), mode: "source" });
       else {
-        await select(path);
+        await select(path, true);
         await sourceMode();
       }
     } else await pollWorkspace(workspace);
@@ -1432,7 +1444,11 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             :aria-label="t('files.findAFileDetail')"
           />
         </div>
-        <div class="file-tree">
+        <div
+          class="file-tree"
+          @click.self="browserSelectionOverride = ''"
+          @keydown.esc="browserSelectionOverride = ''"
+        >
           <SituateLoading
             v-if="session.loading && !session.snapshot"
             placement="inline"
@@ -1459,7 +1475,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               <SituateButton
                 v-else-if="!pluginId && writable"
                 size="small"
-                @click="startAction('create')"
+                @click="startAction('create', browserSelection)"
               >
                 {{ t("files.newFileDetail") }}
               </SituateButton>
@@ -1472,7 +1488,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             :class="{
               'context-target': menu?.path === entry.path && !menu.plus,
             }"
-            :data-selected="selected === entry.path"
+            :data-selected="browserSelection === entry.path"
             @contextmenu="contextMenu($event, entry.path)"
             @pointerdown="pointerDown($event, entry.path)"
             @pointermove="pointerMove"
@@ -1490,9 +1506,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
                 paddingInlineStart: `calc(var(--situate-space-2) + ${query ? 0 : entry.path.split('/').length - 1} * var(--situate-space-3))`,
               }"
               :aria-current="
-                !entry.isDirectory && selected === entry.path
-                  ? 'true'
-                  : undefined
+                browserSelection === entry.path ? 'true' : undefined
               "
               :aria-expanded="
                 entry.isDirectory
@@ -1862,7 +1876,7 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
             class="primary-action"
             v-if="!pluginId"
             :disabled="!writable"
-            @click="startAction('create')"
+            @click="startAction('create', browserSelection)"
           >
             {{ t("files.newFileDetail") }}
           </SituateButton>
@@ -1994,7 +2008,11 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
       @dismiss="action = null"
     >
       <div class="dialog-body">
-        <p class="path" data-localization-content="user">
+        <p
+          v-if="action.operation !== 'create'"
+          class="path"
+          data-localization-content="user"
+        >
           {{ action.path || workspaceName }}
         </p>
         <form @submit.prevent="runAction">
@@ -2027,18 +2045,22 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
           <p v-if="action.operation === 'restore'">
             {{ t("files.restoreTheSameFileAndIdentityChooseAnotherLocation") }}
           </p>
-          <p v-if="['create', 'mkdir'].includes(action.operation)">
+          <p v-if="action.operation === 'mkdir'">
             {{ t("files.inFolder", { name: action.folder || workspaceName }) }}
           </p>
           <p v-if="action.kind === 'move'">
             {{ t("files.leaveTheFolderEmptyToMoveThisItemTo") }}
           </p>
-          <label
+          <div
             v-if="needsDestination"
-            class="destination-label"
-            :for="`${browserId}-destination`"
-            >{{ destinationLabel
-            }}<SituateInput
+            :class="{ 'destination-label': action.operation !== 'create' }"
+          >
+            <label
+              :class="{ 'sr-only': action.operation === 'create' }"
+              :for="`${browserId}-destination`"
+              >{{ destinationLabel }}</label
+            >
+            <SituateInput
               :id="`${browserId}-destination`"
               v-model="destination"
               autofocus
@@ -2046,7 +2068,8 @@ async function recoverDeleted(operation: "restore" | "create"): Promise<void> {
               :disabled="busy"
               :aria-invalid="!!actionError"
               :aria-describedby="actionError ? actionErrorId : undefined"
-          /></label>
+            />
+          </div>
           <p v-if="actionError" :id="actionErrorId" role="alert">
             {{ localizeFileError(actionError) }}
           </p>
