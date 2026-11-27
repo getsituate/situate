@@ -46,6 +46,6 @@ Plugins can also implement custom components and explicitly export reusable comp
 
 The User Interface and Agent Integration do not maintain parallel implementations of plugin integration logic.
 For example, a mail view and an agent tool use the same mail plugin functionality rather than each owning an independent mail connection layer.
-Reusable integration plugins define connections and account semantics, while consumers select which accounts to use.
+Reusable integration plugins own connected accounts and their permissions. Consumers decide which accounts to use without separate account setup.
 The Application Core stores the relevant configuration and credentials without imposing a universal mail or inbox domain model.
 See link:{architecture-repository-root}/requirements/data/requirements/REQ-0001-create-integrations.md[REQ-0001] and link:{architecture-repository-root}/requirements/data/requirements/REQ-0026-provide-plugin-defined-views.md[REQ-0026].

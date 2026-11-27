@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "gmail-connected-accounts",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "gmail-connected-accounts",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Use connected Gmail accounts directly",
+          "paragraphs": [
+            "Plugins that use the Gmail connection can access multiple accounts in the same workspace without a separate account selection. Each account’s permissions still apply."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "gmail-connected-accounts",
+          "type": "changed",
+          "platforms": ["macos"],
+          "title": "Verbundene Gmail-Konten direkt nutzen",
+          "paragraphs": [
+            "Plugins, die die Gmail-Verbindung nutzen, können ohne separate Auswahl auf mehrere Konten im selben Workspace zugreifen. Die Berechtigungen des jeweiligen Kontos gelten weiterhin."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -6,6 +6,8 @@
   "gmail.reductionNotice": "Wenn du Berechtigungen reduzierst, wird der bisherige Google-Zugriff widerrufen. Möglicherweise musst du dieses Konto auch in anderen Workspaces erneut verbinden.",
   "gmail.selectedAccount": "Gmail-Konto",
   "gmail.noSelection": "Kein Konto ausgewählt",
+  "gmail.allAccounts": "Alle verbundenen Konten",
+  "gmail.noReadableAccounts": "Kein Gmail-Konto in dieser Ansicht darf Nachrichtendetails lesen. Prüfe die Berechtigungen in den Gmail-Einstellungen.",
   "gmail.accounts": "Verbundene Konten",
   "gmail.noAccounts": "Keine Gmail-Konten verbunden.",
   "gmail.connect": "Konto verbinden",

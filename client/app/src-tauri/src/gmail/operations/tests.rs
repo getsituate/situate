@@ -56,7 +56,7 @@ fn read_permission_can_request_headers_without_the_full_message() {
 }
 
 #[test]
-fn every_operation_family_needs_both_user_selection_and_the_google_grant() {
+fn every_operation_family_needs_both_account_permission_and_the_google_grant() {
     let id = Uuid::new_v4();
     for (operation, permission, scope, input) in [
         ("listLabels", Permission::Labels, "gmail.labels", json!({})),
@@ -124,7 +124,6 @@ fn every_operation_family_needs_both_user_selection_and_the_google_grant() {
             format!("https://www.googleapis.com/auth/{scope}")
         };
         let mut workspace = Workspace::default();
-        workspace.selections.insert("plugin:first".into(), id);
         workspace
             .accounts
             .insert(id, account(id, BTreeSet::from([permission]), &[&scope]));
@@ -132,7 +131,6 @@ fn every_operation_family_needs_both_user_selection_and_the_google_grant() {
             authorize(
                 Ok(()),
                 Some(workspace),
-                "plugin:first",
                 id,
                 permission,
                 "synthetic-desktop-client",
@@ -155,24 +153,56 @@ fn every_operation_family_needs_both_user_selection_and_the_google_grant() {
 }
 
 #[test]
+fn either_workspace_account_can_be_used_without_changing_a_saved_preference() {
+    let mut workspace = Workspace::default();
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+    for id in [first, second] {
+        workspace.accounts.insert(
+            id,
+            account(
+                id,
+                BTreeSet::from([Permission::Read]),
+                &["https://www.googleapis.com/auth/gmail.readonly"],
+            ),
+        );
+    }
+    let read = |workspace: &Workspace, id| {
+        authorize(
+            Ok(()),
+            Some(workspace),
+            id,
+            Permission::Read,
+            "synthetic-desktop-client",
+            99,
+        )
+        .map(|account| account.id)
+    };
+    assert_eq!(read(&workspace, first), Ok(first));
+    assert_eq!(read(&workspace, second), Ok(second));
+    workspace.selections.insert("plugin:first".into(), first);
+    assert_eq!(read(&workspace, second), Ok(second));
+    assert_eq!(read(&Workspace::default(), second), Err(UNAVAILABLE.into()));
+    workspace.accounts.remove(&second);
+    assert_eq!(read(&workspace, second), Err(UNAVAILABLE.into()));
+}
+
+#[test]
 fn a_draft_grant_cannot_send_and_workspace_pause_and_expiry_fail_closed() {
     let id = Uuid::new_v4();
-    let mut ws = Workspace::default();
-    let mut other = Workspace::default();
-    let mut fixture = account(
+    let mut workspace = Workspace::default();
+    workspace.accounts.insert(
         id,
-        BTreeSet::from([Permission::Draft]),
-        &["https://www.googleapis.com/auth/gmail.compose"],
+        account(
+            id,
+            BTreeSet::from([Permission::Draft]),
+            &["https://www.googleapis.com/auth/gmail.compose"],
+        ),
     );
-    fixture.expires = 100;
-    ws.accounts.insert(id, fixture);
-    ws.selections.insert("plugin:first".into(), id);
-    other.selections.insert("plugin:first".into(), id);
-    let ask = |enabled, workspace, consumer, permission, time| {
+    let ask = |enabled, permission, time| {
         authorize(
             enabled,
-            Some(workspace),
-            consumer,
+            Some(&workspace),
             id,
             permission,
             "synthetic-desktop-client",
@@ -180,30 +210,10 @@ fn a_draft_grant_cannot_send_and_workspace_pause_and_expiry_fail_closed() {
         )
         .map(|_| ())
     };
+    assert_eq!(ask(Ok(()), Permission::Send, 99), Err(DENIED.into()));
+    assert_eq!(ask(Ok(()), Permission::Draft, 100), Err(RECONNECT.into()));
     assert_eq!(
-        ask(Ok(()), &ws, "plugin:first", Permission::Send, 99),
-        Err(DENIED.into())
-    );
-    assert_eq!(
-        ask(Ok(()), &ws, "plugin:replacement", Permission::Draft, 99),
-        Err(SELECT.into())
-    );
-    assert_eq!(
-        ask(Ok(()), &other, "plugin:first", Permission::Draft, 99),
-        Err(SELECT.into())
-    );
-    assert_eq!(
-        ask(Ok(()), &ws, "plugin:first", Permission::Draft, 100),
-        Err(RECONNECT.into())
-    );
-    assert_eq!(
-        ask(
-            Err(super::super::PAUSED.into()),
-            &ws,
-            "plugin:first",
-            Permission::Draft,
-            99
-        ),
+        ask(Err(super::super::PAUSED.into()), Permission::Draft, 99),
         Err(super::super::PAUSED.into())
     );
 }

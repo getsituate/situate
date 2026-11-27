@@ -2,8 +2,7 @@
   "schemaVersion": 2,
   "id": "gmail-status-report",
   "name": "Gmail status report",
-  "description": "Send a status report from the selected Gmail account.",
+  "description": "Send a status report from a connected Gmail account.",
   "dependencies": ["situate-gmail"],
-  "uiEntry": "ui.js",
   "serviceEntry": "service.js"
 }

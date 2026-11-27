@@ -16,7 +16,6 @@ const DENIED: &str = "native.gmail.permissionDenied";
 const FAILED: &str = "native.gmail.requestFailed";
 const UNKNOWN: &str = "native.gmail.outcomeUnknown";
 const RECONNECT: &str = "native.gmail.reconnectRequired";
-const SELECT: &str = "native.gmail.accountSelectionRequired";
 const SUMMARY: &str = "id,threadId,labelIds";
 const METADATA: &str = "id,threadId,labelIds,internalDate,payload(headers)";
 
@@ -404,7 +403,6 @@ pub(super) fn parse(name: &str, args: Value) -> Result<(Uuid, Request), String> 
 
 pub(super) async fn invoke(
     owner: Owner,
-    consumer: String,
     id: Uuid,
     request: Request,
     cancel: CancellationToken,
@@ -414,7 +412,6 @@ pub(super) async fn invoke(
         return Err(CANCELLED.into());
     }
     let gate = owner.clone();
-    let account_owner = consumer.clone();
     let permission = request.permission;
     let config = oauth::Config::load()?;
     let client_id = config.id.clone();
@@ -423,7 +420,6 @@ pub(super) async fn invoke(
             let account = authorize(
                 gate.enabled(),
                 device.workspaces.get(scope),
-                &consumer,
                 id,
                 permission,
                 &client_id,
@@ -476,13 +472,10 @@ pub(super) async fn invoke(
     let admission = owner.clone();
     owner
         .store(move |device, scope| {
-            let workspace = device.workspaces.get_mut(scope).ok_or(UNAVAILABLE)?;
-            if workspace.selections.get(&account_owner) != Some(&id) {
-                return Err(SELECT.into());
-            }
-            let account = workspace
-                .accounts
-                .get_mut(&id)
+            let account = device
+                .workspaces
+                .get_mut(scope)
+                .and_then(|workspace| workspace.accounts.get_mut(&id))
                 .filter(|a| a.version == version && a.expires > now())
                 .ok_or(UNAVAILABLE)?;
             let mut changed = false;
@@ -514,7 +507,6 @@ pub(super) async fn invoke(
 fn authorize<'a>(
     enabled: Result<(), String>,
     workspace: Option<&'a Workspace>,
-    consumer: &str,
     id: Uuid,
     permission: Permission,
     client: &str,
@@ -522,9 +514,8 @@ fn authorize<'a>(
 ) -> Result<&'a Account, String> {
     enabled?;
     let account = workspace
-        .and_then(|w| w.selected(consumer))
-        .filter(|a| a.id == id)
-        .ok_or(SELECT)?;
+        .and_then(|workspace| workspace.accounts.get(&id))
+        .ok_or(UNAVAILABLE)?;
     if !account.requested.contains(&permission) || !permission.granted(&account.scopes) {
         return Err(DENIED.into());
     }
