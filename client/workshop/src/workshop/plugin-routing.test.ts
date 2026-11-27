@@ -6,15 +6,17 @@ import {
 } from "./simulation";
 import { screenControls } from "./screen-controls";
 import {
+  currentDevelopment,
   hasPluginWork,
   pluginScenarios,
   startPluginDevelopment,
 } from "../plugins/model";
+import { activeTab, conversationId } from "../tabs/model";
 
 const clone = <T>(state: T): T => JSON.parse(JSON.stringify(state));
 
 describe("plugin workshop routing and lifecycle", () => {
-  it.each(pluginScenarios)(
+  it.each(pluginScenarios.filter(({ id }) => !id.startsWith("plugins-mode-")))(
     "opens $id with only its visible controls",
     ({ id }) => {
       const state = createSimulation(id as Scenario);
@@ -24,6 +26,20 @@ describe("plugin workshop routing and lifecycle", () => {
       expect(screenControls(state).canSetOutcome).toBe(false);
     },
   );
+  it.each([
+    "plugins-mode-chat",
+    "plugins-mode-new-chat",
+    "plugins-mode-development",
+  ] as const)("opens %s in a conversation pane", (scenario) => {
+    const state = createSimulation(scenario);
+    expect(state.feature).toBe("tabs");
+    expect(state.entryVisible).toBe(false);
+    const tab = activeTab(state.tabs)!;
+    expect(conversationId(tab.panes[tab.active]!)).toBe(
+      currentDevelopment(state.plugins)?.id,
+    );
+    expect(screenControls(state).controls).toEqual(["tabs", "plugins"]);
+  });
   it("keeps drafts and development state when the environment or visible feature changes", () => {
     const state = createSimulation("plugins-list");
     startPluginDevelopment(

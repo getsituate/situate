@@ -169,6 +169,7 @@ export const c = {
   friday: "Friday",
   saved: "Settings saved.",
   development: "Plugin development",
+  chatMode: developmentText.chatMode,
   developmentWelcome: "What would you like to change?",
   requestPending:
     "Wait for the current development to finish before sending another request.",

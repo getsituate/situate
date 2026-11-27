@@ -549,6 +549,7 @@ defineExpose({ cancelAndWait, flush: session.flush });
         :workspace-scope="scope"
         :conversation-id="conversationId"
         embedded
+        fixed-chat-mode
         @navigate="readTarget"
       >
         <template #error-actions>

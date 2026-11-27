@@ -40,6 +40,7 @@ import {
   readConversationRecord,
   conversationSummary,
   compareConversations,
+  developmentUuidPattern,
   type ConversationRecord,
   type ConversationSummary,
   type PluginDevelopment,
@@ -66,6 +67,7 @@ export interface ChatState extends DictationDraft {
   pluginNotices?: PluginNotice[];
   pluginNoticeAnnouncement?: PluginNotice;
   development?: PluginDevelopment;
+  switchingMode?: boolean;
   draftAttachments: AttachmentRef[];
   draftReferences: ContentReference[];
   readonly runReferences: readonly ContentReference[];
@@ -118,6 +120,7 @@ interface Session {
   questionSubmitting: boolean;
   actionError?: unknown;
   draftTitle?: string;
+  ephemeralDevelopment?: PluginDevelopment;
   submissionId?: string;
   submissionInput?: ConversationInput;
   submissionVersion?: number;
@@ -142,6 +145,7 @@ interface Session {
     draft: string;
     runtime: ConversationRuntime;
     development?: PluginDevelopment;
+    developmentPaused?: true;
   };
 }
 interface WorkspaceChats {
@@ -861,13 +865,16 @@ export function workspaceChat(
         if (!current.creationAttempted) current.initialInput = undefined;
         return;
       }
+      const development =
+        current.state.development ?? current.ephemeralDevelopment;
       current.initialConversation ??= {
         title:
           current.draftTitle ??
           provisionalTitle(input?.text ?? current.state.draft),
         draft: input?.text ?? current.state.draft,
-        ...(current.state.development
-          ? { development: current.state.development }
+        ...(development ? { development } : {}),
+        ...(development && !current.state.development
+          ? { developmentPaused: true }
           : {}),
         runtime: {
           ...emptyRuntime(),
@@ -883,7 +890,7 @@ export function workspaceChat(
             : {}),
         },
       };
-      const initial = current.initialConversation;
+      const { developmentPaused, ...initial } = current.initialConversation;
       if (!current.record) {
         ++owner.listVersion;
         owner.state.loading = false;
@@ -913,6 +920,7 @@ export function workspaceChat(
                   ...(initial.development
                     ? { development: initial.development }
                     : {}),
+                  ...(developmentPaused ? { developmentPaused } : {}),
                 },
               }),
               conversation,
@@ -961,6 +969,7 @@ export function workspaceChat(
         current.draftTitle = undefined;
       }
       current.initialConversation = undefined;
+      current.ephemeralDevelopment = undefined;
       current.initialInput = undefined;
       current.creationAttempted = undefined;
     } catch (error) {
@@ -1450,6 +1459,36 @@ export function workspaceChat(
         (item) => item.id !== id,
       );
     },
+    async setDevelopmentMode(enabled: boolean) {
+      const state = current.state;
+      if (
+        !live() ||
+        state.loadError ||
+        state.unsaved ||
+        !new RegExp(developmentUuidPattern).test(conversation)
+      )
+        throw new Error("pluginDevelopment.modeUnavailable");
+      if (
+        state.running ||
+        state.questionBusy ||
+        state.submitting ||
+        state.switchingMode
+      )
+        throw new Error("pluginDevelopment.modeBusy");
+      state.switchingMode = true;
+      try {
+        if (state.ephemeral && !current.initialConversation) {
+          current.ephemeralDevelopment ??= state.development;
+          state.development = enabled
+            ? (current.ephemeralDevelopment ?? Object.freeze({ version: 2 }))
+            : undefined;
+        } else {
+          await action({ version: 1, type: "setDevelopmentMode", enabled });
+        }
+      } finally {
+        state.switchingMode = false;
+      }
+    },
     send(kind: PendingKind = "steering"): Promise<void> {
       const settings = workspaceAiSettings(
         scope,
@@ -1457,6 +1496,7 @@ export function workspaceChat(
       ).state;
       if (
         blocked() ||
+        current.state.switchingMode ||
         settings.loading ||
         settings.saving ||
         settings.error ||

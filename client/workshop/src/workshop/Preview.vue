@@ -6,7 +6,9 @@ import {
   onMounted,
   provide,
   shallowRef,
+  shallowReactive,
   ref,
+  watch,
 } from "vue";
 import { isTauri } from "@tauri-apps/api/core";
 import { SituateButton, SituateIcon } from "../ui";
@@ -32,11 +34,14 @@ import SettingsView from "../settings/SettingsView.vue";
 import { accentStyle, contentAccentStyle } from "../settings/accents";
 import ChatModelPicker from "../settings/ChatModelPicker.vue";
 import ChatView from "../chat/ChatView.vue";
+import { chatModeSessions } from "../chat/mode-sessions";
+import type { PluginState } from "../plugins/model";
 import DictationView from "../dictation/DictationView.vue";
 import DictationDialog from "../dictation/DictationDialog.vue";
 import { copy as dictationCopy } from "../dictation/content";
 import QueueView from "../chat-queue/QueueView.vue";
 import TabsView from "../tabs/TabsView.vue";
+import { conversationId } from "../tabs/model";
 import tabCopy from "../localization/en.tabs.json";
 import NavigationView from "../navigation/NavigationView.vue";
 import NavigationSidebar from "../navigation/NavigationSidebar.vue";
@@ -47,6 +52,16 @@ import { workspaceFormServices } from "../workspaces/form-services";
 import { reduceSimulation, type Command, type Simulation } from "./simulation";
 import { connect, viewport, type Transport } from "./transport";
 import PluginView from "../plugins/PluginView.vue";
+import PluginDevelopment from "../plugins/PluginDevelopment.vue";
+import ChatModeAction from "../plugins/ChatModeAction.vue";
+import { c as pluginCopy } from "../plugins/content";
+import {
+  clonePluginState,
+  developmentWorking,
+  openPluginScreen,
+  switchChatMode,
+} from "../plugins/model";
+import SituateErrorScreen from "../ui/SituateErrorScreen.vue";
 import UpdateNotice from "../updates/UpdateNotice.vue";
 import UpdateDialogs from "../updates/UpdateDialogs.vue";
 import type { UpdateAction } from "../updates/model";
@@ -61,6 +76,59 @@ function navigateTopics() {
 }
 useVisualViewport();
 const state = shallowRef<Simulation | null>(null);
+const modeSessions = shallowReactive(new Map<string, PluginState>());
+watch(
+  () => state.value?.epoch,
+  () => modeSessions.clear(),
+  { flush: "sync" },
+);
+const sessionId = (id: string) =>
+  `${state.value?.snapshot.current?.id ?? ""}/${id}`;
+provide(chatModeSessions, {
+  get: (id) => modeSessions.get(sessionId(id)),
+  set: (id, session) => modeSessions.set(sessionId(id), session),
+});
+const modeConversation = computed(() =>
+  state.value?.scenario.startsWith("plugins-mode-")
+    ? state.value.plugins.developments.find((item) => item.modeSwitch)
+    : undefined,
+);
+const chatMode = computed(() => modeConversation.value?.modeSwitch);
+const modeWorking = computed(
+  () => !!modeConversation.value && developmentWorking(modeConversation.value),
+);
+const unlistedConversationId = computed(() => {
+  const chat = modeConversation.value;
+  return chat && !chat.messages.length && !chat.modeSwitch?.chatTurns.length
+    ? chat.id
+    : undefined;
+});
+function toggleChatMode() {
+  const current = state.value;
+  const chat = modeConversation.value;
+  const mode = chatMode.value;
+  if (!current || !chat || !mode || modeWorking.value) return;
+  const plugins = clonePluginState(current.plugins);
+  plugins.developmentId = chat.id;
+  switchChatMode(plugins, mode.active === "chat" ? "development" : "chat");
+  dispatch({ type: "plugins", state: plugins });
+}
+const tabScenario = computed(() => {
+  const scenario = state.value?.scenario;
+  return (
+    !!scenario &&
+    (scenario.startsWith("tabs-") || scenario.startsWith("plugins-mode-"))
+  );
+});
+function openPluginAccess(id: string) {
+  if (!state.value) return;
+  const plugins = clonePluginState(state.value.plugins);
+  plugins.selected = id;
+  plugins.connectionError = "";
+  openPluginScreen(plugins, "detail");
+  dispatch({ type: "plugins", state: plugins });
+  dispatch({ type: "feature", feature: "plugins" });
+}
 const onboardingSession = computed(
   () =>
     state.value?.firstEntry.created ||
@@ -551,6 +619,7 @@ function openImport() {
                 :key="state.snapshot.current?.id"
                 :state="state.tabs"
                 :initial-move="initialMove"
+                :pane-options-menu="!!modeConversation"
                 @initial-move-opened="initialMove = false"
                 :mobile="state.snapshot.mobile"
                 :workspace-name="state.snapshot.current?.name ?? 'Field notes'"
@@ -558,7 +627,68 @@ function openImport() {
                 :navigation-open="navigation.navigationOpen"
                 @action="dispatch({ type: 'tabs', action: $event })"
                 @open-navigation="navigation.openNavigation"
-              />
+              >
+                <template v-if="modeConversation" #pane="{ pane }">
+                  <template
+                    v-if="
+                      conversationId(pane) === modeConversation.id &&
+                      pane.availability === 'ready'
+                    "
+                  >
+                    <SituateErrorScreen
+                      v-if="state.plugins.generalError"
+                      :message="pluginCopy.generalError"
+                    />
+                    <PluginDevelopment
+                      v-else
+                      :key="modeConversation.id"
+                      embedded
+                      :title="
+                        state.tabs.conversations[modeConversation.id]?.title
+                      "
+                      :state="{
+                        ...state.plugins,
+                        developmentId: modeConversation.id,
+                      }"
+                      :navigation-open="navigation.navigationOpen"
+                      @update:state="
+                        dispatch({ type: 'plugins', state: $event })
+                      "
+                      @access="openPluginAccess"
+                    >
+                      <template
+                        v-if="chatMode?.placement === 'composer'"
+                        #composer-options
+                      >
+                        <ChatModeAction
+                          placement="composer"
+                          :mode="chatMode.active"
+                          :working="modeWorking"
+                          @change="toggleChatMode"
+                        />
+                      </template>
+                    </PluginDevelopment>
+                  </template>
+                </template>
+                <template #pane-actions="{ pane }">
+                  <template
+                    v-if="
+                      chatMode?.placement === 'pane' &&
+                      conversationId(pane) === modeConversation?.id &&
+                      pane.availability === 'ready' &&
+                      !state.plugins.generalError
+                    "
+                  >
+                    <div role="separator" />
+                    <ChatModeAction
+                      placement="pane"
+                      :mode="chatMode.active"
+                      :working="modeWorking"
+                      @change="toggleChatMode"
+                    />
+                  </template>
+                </template>
+              </TabsView>
               <OnboardingView
                 v-else-if="state.feature === 'onboarding' && !finaleActive"
                 :show-navigation="navigation.showNavigation"
@@ -682,6 +812,7 @@ function openImport() {
               <ChatView
                 v-else-if="state.feature === 'chat' || finaleActive"
                 ref="onboardingChat"
+                mode-session="workspace-chat"
                 :state="state.chat"
                 :show-navigation="navigation.showNavigation"
                 :navigation-id="navigation.navigationId"
@@ -715,9 +846,7 @@ function openImport() {
             >
               <SituateButton
                 variant="plain"
-                v-if="
-                  state.scenario.startsWith('tabs-') && state.feature !== 'tabs'
-                "
+                v-if="tabScenario && state.feature !== 'tabs'"
                 type="button"
                 class="feature-link"
                 @click="
@@ -729,7 +858,7 @@ function openImport() {
               </SituateButton>
               <SituateButton
                 variant="plain"
-                v-if="!state.scenario.startsWith('tabs-')"
+                v-if="!tabScenario"
                 type="button"
                 class="feature-link"
                 :aria-current="state.feature === 'editor' ? 'page' : undefined"
@@ -742,7 +871,7 @@ function openImport() {
               </SituateButton>
               <SituateButton
                 variant="plain"
-                v-if="!state.scenario.startsWith('tabs-')"
+                v-if="!tabScenario"
                 type="button"
                 class="feature-link"
                 :aria-current="
@@ -791,21 +920,31 @@ function openImport() {
               <NavigationSidebar
                 v-else
                 :state="state.navigation"
-                :topics="
-                  state.scenario.startsWith('tabs-') ? state.tabs : undefined
-                "
+                :topics="tabScenario ? state.tabs : undefined"
+                :unlisted-conversation-id="unlistedConversationId"
                 @topic-action="dispatch({ type: 'tabs', action: $event })"
-                :hidden-views="
-                  state.scenario.startsWith('tabs-') ? [] : ['documents']
-                "
+                :hidden-views="tabScenario ? [] : ['documents']"
                 @update:state="dispatch({ type: 'navigation', state: $event })"
                 @navigate="
-                  state.scenario.startsWith('tabs-')
-                    ? navigateTopics()
-                    : navigateShared();
+                  tabScenario ? navigateTopics() : navigateShared();
                   sidebar.closeNavigation();
                 "
               >
+                <template
+                  v-if="chatMode?.placement === 'conversation'"
+                  #conversation-actions="{ id, close }"
+                >
+                  <ChatModeAction
+                    v-if="id === modeConversation?.id"
+                    placement="conversation"
+                    :mode="chatMode.active"
+                    :working="modeWorking"
+                    @change="
+                      toggleChatMode();
+                      close();
+                    "
+                  />
+                </template>
                 <template #conversation-items>
                   <SituateButton
                     v-if="
@@ -840,6 +979,7 @@ function openImport() {
                   </SituateButton>
 
                   <PluginSidebar
+                    v-if="!modeConversation"
                     :state="state.plugins"
                     :active="state.feature === 'plugins'"
                     @update:state="dispatch({ type: 'plugins', state: $event })"

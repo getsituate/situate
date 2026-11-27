@@ -6,7 +6,9 @@ import {
   SituateTextarea,
   SituateButton,
 } from "../ui";
-import ChatPaneHeader from "../components/ChatPaneHeader.vue";
+import ChatModeSurface from "../chat/ChatModeSurface.vue";
+import ChatTranscript from "../chat/ChatTranscript.vue";
+import type { Event } from "../chat/model";
 import ChatMessage from "../components/ChatMessage.vue";
 import FilePreviewButton from "../components/FilePreviewButton.vue";
 import bend from "../brand/bend/svg/wave-welcome.svg";
@@ -43,6 +45,24 @@ const replyFile = computed(() => {
   const exchange = props.chat.exchange;
   return exchange ? resolveReference(props.state, exchange.file) : null;
 });
+const events = computed<Event[]>(() =>
+  props.chat.exchange
+    ? [
+        {
+          kind: "message",
+          speaker: "user",
+          id: "editor-request",
+          text: props.chat.exchange.request,
+        },
+        {
+          kind: "message",
+          speaker: "assistant",
+          id: "editor-reply",
+          text: props.chat.exchange.reply,
+        },
+      ]
+    : [],
+);
 function fit() {
   const element = input.value?.element;
   if (element?.clientWidth) {
@@ -65,8 +85,19 @@ defineExpose({ focus });
 </script>
 <template>
   <section class="chat-pane" :aria-label="chat.title + ' pane'">
-    <ChatPaneHeader :title="chat.title">
-      <template #navigation>
+    <ChatModeSurface
+      :title="chat.title"
+      :session-key="`editor:${chat.key}`"
+      :draft="chat.draft"
+      :events="events"
+      :empty="!chat.exchange"
+      :close-label="'Close pane — ' + chat.title"
+      :navigation-open="navigationOpen"
+      content-selector=".transcript, .welcome"
+      @draft="emit('draft', $event)"
+      @close="emit('close')"
+    >
+      <template v-if="showNavigation" #navigation>
         <SituateIconButton
           v-if="showNavigation"
           icon="menu"
@@ -76,122 +107,137 @@ defineExpose({ focus });
           @click="emit('openNavigation', $event)"
         />
       </template>
-      <SituateIconButton
-        icon="split"
-        label="Split pane"
-        disabled
-        unavailable-reason="Pane resizing is not available."
-      />
-      <SituateIconButton
-        icon="close"
-        :label="'Close pane — ' + chat.title"
-        @click="emit('close')"
-      />
-    </ChatPaneHeader>
-    <div :class="chat.exchange ? 'active-chat' : 'empty-chat'">
-      <div v-if="chat.exchange && replyFile" class="transcript-scroll">
-        <div class="transcript">
-          <ChatMessage speaker="user" hide-speaker>
-            <p>{{ chat.exchange.request }}</p>
-          </ChatMessage>
-          <ChatMessage speaker="assistant" hide-speaker>
-            <p>{{ chat.exchange.reply }}</p>
-            <FilePreviewButton
-              class="reply-file"
-              :name="replyFile.name"
-              :appearance="chat.exchange.appearance"
-              :disabled="replyFile.state === 'missing'"
-              :excerpt="
-                replyFile.state === 'missing'
-                  ? replyFile.detail
-                  : chat.exchange.excerpt
-              "
-              @click="emit('open', chat.exchange.file)"
-            />
-          </ChatMessage>
-        </div>
-      </div>
-      <div :class="chat.exchange ? 'chat-footer' : 'welcome'">
-        <div v-if="!chat.exchange" class="greeting">
-          <img :src="bend" width="128" height="128" alt="" />
-          <h3>Good to see you.</h3>
-        </div>
-        <div class="composer">
-          <div class="input-line">
-            <SituateTextarea
-              appearance="plain"
-              ref="input"
-              :value="chat.draft"
-              rows="1"
-              aria-label="Message"
-              placeholder="Message…"
-              spellcheck="false"
-              @input="
-                emit('draft', ($event.target as HTMLTextAreaElement).value)
-              "
-            />
-            <div class="input-actions">
-              <SituateIconButton
-                icon="mic"
-                label="Dictate text"
-                disabled
-                unavailable-reason="Dictation is not connected."
-              /><SituateIconButton
-                icon="arrow"
-                label="Send message"
-                variant="primary"
-                disabled
-                unavailable-reason="Chat processing is not connected."
+      <template #default="{ developmentEvents }">
+        <div
+          :class="
+            chat.exchange || developmentEvents.length
+              ? 'active-chat'
+              : 'empty-chat'
+          "
+        >
+          <div
+            v-if="(chat.exchange && replyFile) || developmentEvents.length"
+            class="transcript-scroll"
+          >
+            <div class="transcript">
+              <template v-if="chat.exchange && replyFile">
+                <ChatMessage speaker="user" hide-speaker>
+                  <p>{{ chat.exchange.request }}</p>
+                </ChatMessage>
+                <ChatMessage speaker="assistant" hide-speaker>
+                  <p>{{ chat.exchange.reply }}</p>
+                  <FilePreviewButton
+                    class="reply-file"
+                    :name="replyFile.name"
+                    :appearance="chat.exchange.appearance"
+                    :disabled="replyFile.state === 'missing'"
+                    :excerpt="
+                      replyFile.state === 'missing'
+                        ? replyFile.detail
+                        : chat.exchange.excerpt
+                    "
+                    @click="emit('open', chat.exchange.file)"
+                  />
+                </ChatMessage>
+              </template>
+              <ChatTranscript
+                v-if="developmentEvents.length"
+                :events="developmentEvents"
               />
             </div>
           </div>
-          <div class="composer-bottom">
+          <div
+            :class="
+              chat.exchange || developmentEvents.length
+                ? 'chat-footer'
+                : 'welcome'
+            "
+          >
             <div
-              v-for="(item, index) in references"
-              :key="
-                item.reference.fileKey +
-                ':' +
-                (item.reference.version?.key || 'live')
-              "
-              class="attachment-chip"
-              :data-state="item.state"
+              v-if="!chat.exchange && !developmentEvents.length"
+              class="greeting"
             >
-              <SituateButton
-                variant="plain"
-                class="attachment-link"
-                type="button"
-                :disabled="item.state === 'missing'"
-                :title="item.name + ' — ' + item.detail"
-                :aria-label="'Open ' + item.name + ', ' + item.detail"
-                @click="emit('open', item.reference)"
-              >
-                <SituateIcon name="notes" /><span
-                  ><strong>{{ item.name }}</strong
-                  ><small>{{ item.detail }}</small></span
-                >
-              </SituateButton>
-              <SituateIconButton
-                class="remove-reference"
-                icon="close"
-                :label="'Remove reference to ' + item.name"
-                @click="
-                  emit('remove', index);
-                  focus();
-                "
-              />
+              <img :src="bend" width="128" height="128" alt="" />
+              <h3>Good to see you.</h3>
             </div>
-            <SituateButton
-              variant="plain"
-              class="attach-file"
-              type="button"
-              @click="emit('attach')"
-            >
-              <SituateIcon name="attach" />Attach file
-            </SituateButton>
+            <div class="composer">
+              <div class="input-line">
+                <SituateTextarea
+                  appearance="plain"
+                  ref="input"
+                  :value="chat.draft"
+                  rows="1"
+                  aria-label="Message"
+                  placeholder="Message…"
+                  spellcheck="false"
+                  @input="
+                    emit('draft', ($event.target as HTMLTextAreaElement).value)
+                  "
+                />
+                <div class="input-actions">
+                  <SituateIconButton
+                    icon="mic"
+                    label="Dictate text"
+                    disabled
+                    unavailable-reason="Dictation is not connected."
+                  /><SituateIconButton
+                    icon="arrow"
+                    label="Send message"
+                    variant="primary"
+                    disabled
+                    unavailable-reason="Chat processing is not connected."
+                  />
+                </div>
+              </div>
+              <div class="composer-bottom">
+                <div
+                  v-for="(item, index) in references"
+                  :key="
+                    item.reference.fileKey +
+                    ':' +
+                    (item.reference.version?.key || 'live')
+                  "
+                  class="attachment-chip"
+                  :data-state="item.state"
+                >
+                  <SituateButton
+                    variant="plain"
+                    class="attachment-link"
+                    type="button"
+                    :disabled="item.state === 'missing'"
+                    :title="item.name + ' — ' + item.detail"
+                    :aria-label="'Open ' + item.name + ', ' + item.detail"
+                    @click="emit('open', item.reference)"
+                  >
+                    <SituateIcon name="notes" /><span
+                      ><strong>{{ item.name }}</strong
+                      ><small>{{ item.detail }}</small></span
+                    >
+                  </SituateButton>
+                  <SituateIconButton
+                    class="remove-reference"
+                    icon="close"
+                    :label="'Remove reference to ' + item.name"
+                    @click="
+                      emit('remove', index);
+                      focus();
+                    "
+                  />
+                </div>
+                <SituateButton
+                  variant="plain"
+                  class="attach-file"
+                  type="button"
+                  @click="emit('attach')"
+                >
+                  <SituateIcon name="attach" />Attach file
+                </SituateButton>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </ChatModeSurface>
   </section>
 </template>
 <style scoped>

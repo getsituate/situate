@@ -101,17 +101,9 @@ test("chat preserves chronology, discloses calls and retains drafts on resize", 
     preview.getByRole("heading", { name: "A plan for Thursday" }),
   ).toBeVisible();
   await expect(preview.locator(".chat-kicker, .chat-context")).toHaveCount(0);
+  await expect(preview.locator(".chat-pane-header")).toHaveCount(0);
   await expect(
-    preview.getByRole("button", {
-      name: "Split pane — A plan for Thursday",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
-    preview.getByRole("button", {
-      name: "Close pane — A plan for Thursday",
-      exact: true,
-    }),
+    preview.getByRole("button", { name: "Chat actions", exact: true }),
   ).toBeVisible();
   await expect(
     preview.getByRole("button", { name: "Dictate text", exact: true }),

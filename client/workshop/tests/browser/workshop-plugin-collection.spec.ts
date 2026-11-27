@@ -140,9 +140,7 @@ test("keyboard settings, instructions and adaptation target the selected tool", 
     .getByRole("button", { name: "Adapt plugin", exact: true })
     .click();
   await expect(
-    preview
-      .locator(".chat-pane-header")
-      .getByRole("heading", { name: "Calendar connection", exact: true }),
+    preview.getByRole("main", { name: "Calendar connection", exact: true }),
   ).toBeVisible();
   await expect(preview.getByLabel("Your request", { exact: true })).toHaveValue(
     /Calendar connection/,

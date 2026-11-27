@@ -174,6 +174,13 @@ async function openDevelopment(
   await page.goto("/");
   await selectConversation(page, "Build a reading list");
 }
+async function chatAction(page: Page, name: RegExp) {
+  const trigger = page.getByRole("button", {
+    name: /^(Chat actions|Chat-Aktionen)$/u,
+  });
+  await trigger.click();
+  await page.getByRole("menuitem", { name }).click();
+}
 const requests = (page: Page) =>
   page.evaluate(() =>
     (
@@ -228,8 +235,7 @@ for (const width of [1440, 1000, 700]) {
       await visual.capture("plugins.development.help");
       await page.keyboard.press("Escape");
       await expect(help).toHaveCount(0);
-      const toggle = development.locator(".development-changes-toggle");
-      await toggle.click();
+      await chatAction(page, /^(Show changes|Änderungen anzeigen)$/u);
       const changes = development.locator(".development-changes");
       await expect(changes).toBeVisible();
       await expect(changes.locator(".file-row")).toHaveCount(4);
@@ -259,13 +265,14 @@ for (const width of [1440, 1000, 700]) {
         await expect(development.locator(".development-layout")).toHaveClass(
           /changes-expanded/u,
         );
+        await page.mouse.move(1, 1);
         await visual.capture("plugins.development.diff-expanded");
         await changes.locator(".inspection-header button").click();
       }
-      await toggle.click();
+      await chatAction(page, /^(Hide changes|Änderungen ausblenden)$/u);
       await expect(changes).not.toBeVisible();
       await expect(message).toHaveValue(assignment);
-      await toggle.click();
+      await chatAction(page, /^(Show changes|Änderungen anzeigen)$/u);
       await expect(changes.locator(".diff-lines")).toContainText(source);
       await changes.locator(".detail-pane .back").click();
       await changes.getByRole("searchbox").fill("notes/");
@@ -289,7 +296,7 @@ for (const width of [1440, 1000, 700]) {
       );
       await expect(changes.locator("h1")).toHaveCount(0);
       await visual.capture("plugins.development.note-diff");
-      await toggle.click();
+      await chatAction(page, /^(Hide changes|Änderungen ausblenden)$/u);
       await selectConversation(page, "Reading notes");
       await expect(development).toHaveCount(0);
       await expect(message).toHaveValue("");
@@ -299,7 +306,7 @@ for (const width of [1440, 1000, 700]) {
         })
         .click();
       await expect(message).toHaveValue(assignment);
-      await page.locator(".development-changes-toggle").click();
+      await chatAction(page, /^(Show changes|Änderungen anzeigen)$/u);
       await expect(
         page.locator(".development-changes .diff-lines"),
       ).toContainText("- Example book");
@@ -312,6 +319,54 @@ for (const width of [1440, 1000, 700]) {
     },
   );
 }
+test("the chat menu switches modes without submitting or losing the draft and changes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openDevelopment(page);
+  const message = page.getByRole("textbox", { name: "Message", exact: true });
+  await expect(message).toHaveValue(assignment);
+  await chatAction(page, /^Show changes$/u);
+  await page
+    .locator(".development-changes .file-row")
+    .filter({ hasText: "entry.js" })
+    .click();
+  await expect(page.locator(".development-changes .diff-lines")).toContainText(
+    source,
+  );
+  await chatAction(page, /^Switch to chat$/u);
+  await expect(page.locator(".plugin-development")).toHaveCount(0);
+  await expect(message).toHaveValue(assignment);
+  await expect(
+    page.getByRole("button", { name: "Chat actions", exact: true }),
+  ).toBeFocused();
+  const scroll = page.locator(".chat-pane .transcript-scroll");
+  await expect(scroll).toHaveCSS("margin-block-start", "0px");
+  await page.setViewportSize({ width: 450, height: 850 });
+  const actions = page.getByRole("button", {
+    name: "Chat actions",
+    exact: true,
+  });
+  await expect
+    .poll(
+      async () =>
+        (await scroll.boundingBox())!.y -
+        (await actions.boundingBox())!.y -
+        (await actions.boundingBox())!.height,
+    )
+    .toBeGreaterThanOrEqual(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await chatAction(page, /^Switch to plugin development$/u);
+  await expect(page.locator(".development-mode-label")).toHaveText(
+    "Plugin development",
+  );
+  await expect(page.locator(".development-changes .diff-lines")).toContainText(
+    source,
+  );
+  await expect(message).toHaveValue(assignment);
+  expect(await requests(page)).toEqual([]);
+});
+
 test("plugin development help scrolls with the keyboard in a short window", async ({
   page,
 }) => {

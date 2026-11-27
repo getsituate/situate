@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "chat-development-mode",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "chat-development-mode",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Switch between chat and plugin development",
+          "paragraphs": [
+            "Use the menu in the chat to switch modes without starting a new conversation or losing your draft."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "chat-development-mode",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Zwischen Chat und Plugin-Entwicklung wechseln",
+          "paragraphs": [
+            "Wechsle den Modus über das Chatmenü. Deine Unterhaltung und dein Entwurf bleiben erhalten."
+          ]
+        }
+      ]
+    }
+  }
+}

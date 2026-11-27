@@ -1,3 +1,4 @@
+import { chatAction, toggleChanges } from "./chat-actions";
 import {
   expectDialogTitle,
   expectDialogBody,
@@ -310,7 +311,7 @@ test("development survives closing its view and adoption cleans its draft", asyn
       .locator(".chat-message.assistant")
       .getByText(/Your request is in progress/),
   ).toBeVisible();
-  await preview.getByRole("button", { name: "Close development view" }).click();
+  await chatAction(preview, "Close development view");
   await expect(
     preview.getByRole("heading", { name: "Plugins", exact: true }),
   ).toBeVisible();
@@ -343,7 +344,7 @@ test("development survives closing its view and adoption cleans its draft", asyn
       .locator(".chat-message.assistant")
       .getByText(/The checked code is active/),
   ).toBeVisible();
-  await preview.getByRole("button", { name: "Close development view" }).click();
+  await chatAction(preview, "Close development view");
   await preview.getByRole("button", { name: /Pending code/ }).click();
   await expect(
     preview.getByRole("heading", { name: "No pending code to remove" }),
@@ -362,13 +363,13 @@ test("interrupted development waits, phone file inspection and reset preserve bo
   await request.fill("Continue with the weekly plan.");
   await preview.setViewportSize({ width: 390, height: 700 });
   await expect(request).toHaveValue("Continue with the weekly plan.");
-  await preview.getByRole("button", { name: "Changes", exact: true }).click();
+  await toggleChanges(preview);
   const files = preview.locator(".assignment-files");
   await expect(files).toBeVisible();
   await files.locator('[data-change-id="notes"]').click();
   await expect(files.locator(".diff-lines")).toContainText("limit = 20");
   await expect(files.locator("textarea")).toHaveCount(0);
-  await preview.getByRole("button", { name: "Changes", exact: true }).click();
+  await toggleChanges(preview);
   await expect(request).toHaveValue("Continue with the weekly plan.");
   await preview.getByRole("button", { name: "Continue development" }).click();
   await expect(
@@ -391,7 +392,7 @@ test("retained development is discarded only by an explicit confirmation", async
   page,
 }) => {
   const preview = await open(page, "plugins-development");
-  await preview.getByRole("button", { name: "Close development view" }).click();
+  await chatAction(preview, "Close development view");
   await preview.getByRole("button", { name: /Pending code/ }).click();
   await preview
     .getByRole("button", { name: "Remove pending code", exact: true })

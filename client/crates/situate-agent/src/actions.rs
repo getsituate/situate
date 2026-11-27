@@ -28,6 +28,9 @@ enum Action {
         run_id: String,
     },
     RetryPersistence,
+    SetDevelopmentMode {
+        enabled: bool,
+    },
     RenameTitle {
         expected: String,
         title: String,
@@ -395,6 +398,22 @@ impl<H: Host> Owner<H> {
                     "cancellation_requested",
                     json!({"actionId":id}),
                 );
+            }
+            Action::SetDevelopmentMode { enabled } => {
+                use situate_core::conversation_store::Development;
+                if state.snapshot.task_active || state.snapshot.question_busy {
+                    return Err("pluginDevelopment.modeBusy".into());
+                }
+                if !Development::supports_conversation_id(&record.id) {
+                    return Err("pluginDevelopment.modeUnavailable".into());
+                }
+                record.development = enabled.then(|| {
+                    state.metadata.development.clone().unwrap_or(Development {
+                        version: Some(2),
+                        plugin_id: String::new(),
+                        origin_conversation_id: None,
+                    })
+                });
             }
             Action::RenameTitle { expected, title } => {
                 let title = title.trim();

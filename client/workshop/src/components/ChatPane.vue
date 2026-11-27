@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import { useId, useTemplateRef } from "vue";
+import { ref, useTemplateRef } from "vue";
 import { SituateIconButton } from "../ui";
-import ChatPaneHeader from "./ChatPaneHeader.vue";
+import ChatModeSurface from "../chat/ChatModeSurface.vue";
+import ChatTranscript from "../chat/ChatTranscript.vue";
 import bend from "../brand/bend/svg/wave-welcome.svg";
 import ChatComposer from "./ChatComposer.vue";
 
 defineProps<{ navigationId: string; navigationOpen: boolean }>();
 defineEmits<{ openNavigation: [event: MouseEvent] }>();
 
-const titleId = useId();
-const header = useTemplateRef<InstanceType<typeof ChatPaneHeader>>("header");
-defineExpose({ focusTitle: () => header.value?.focusTitle() });
+const draft = ref("");
+const surface = useTemplateRef<InstanceType<typeof ChatModeSurface>>("surface");
+defineExpose({ focusTitle: () => surface.value?.focus() });
 </script>
 
 <template>
-  <main class="chat-pane" :aria-labelledby="titleId">
-    <ChatPaneHeader ref="header" title="New chat" :title-id="titleId">
+  <main class="chat-pane" aria-label="New chat">
+    <ChatModeSurface
+      ref="surface"
+      title="New chat"
+      :draft="draft"
+      empty
+      :navigation-open="navigationOpen"
+      content-selector=".welcome"
+      @draft="draft = $event"
+    >
       <template #navigation>
         <SituateIconButton
           class="open-navigation"
@@ -27,24 +36,28 @@ defineExpose({ focusTitle: () => header.value?.focusTitle() });
           @click="$emit('openNavigation', $event)"
         />
       </template>
-      <SituateIconButton icon="split" label="Split pane" disabled />
-      <SituateIconButton icon="close" label="Close pane" disabled />
-    </ChatPaneHeader>
-    <div class="empty-chat">
-      <div class="welcome">
-        <div class="greeting">
-          <img
-            class="welcome-bend"
-            :src="bend"
-            width="128"
-            height="128"
-            alt=""
-          />
-          <h2>Good to see you.</h2>
+      <template #default="{ developmentEvents }">
+        <div class="empty-chat">
+          <div class="welcome">
+            <ChatTranscript
+              v-if="developmentEvents.length"
+              :events="developmentEvents"
+            />
+            <div v-else class="greeting">
+              <img
+                class="welcome-bend"
+                :src="bend"
+                width="128"
+                height="128"
+                alt=""
+              />
+              <h2>Good to see you.</h2>
+            </div>
+            <ChatComposer :model-value="draft" />
+          </div>
         </div>
-        <ChatComposer />
-      </div>
-    </div>
+      </template>
+    </ChatModeSurface>
   </main>
 </template>
 
@@ -100,12 +113,6 @@ h2 {
 @media not all and (min-width: 1184px) {
   .open-navigation {
     display: inline-grid;
-  }
-  :deep(.chat-icon) {
-    display: none;
-  }
-  .pane-header {
-    background: var(--situate-paper);
   }
   .welcome {
     padding-bottom: 0;

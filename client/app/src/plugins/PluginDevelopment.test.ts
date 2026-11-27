@@ -33,10 +33,11 @@ beforeEach(() => {
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      constructor(callback: typeof resize) {
-        resize = callback;
+      constructor(private callback: typeof resize) {}
+      observe(target: Element) {
+        if (target.classList.contains("plugin-development"))
+          resize = this.callback;
       }
-      observe() {}
       disconnect() {}
     },
   );
@@ -90,8 +91,17 @@ test("Changes retains filter, revision selection, focus and draft through collap
   const wrapper = development();
   const composer = wrapper.get("textarea").element;
   expect(invoke).not.toHaveBeenCalled();
-  await wrapper.get(".development-changes-toggle").trigger("click");
-  await flushPromises();
+  const actions = wrapper.get(
+    ".chat-corner-actions button[aria-haspopup='menu']",
+  );
+  async function showChanges() {
+    await actions.trigger("click");
+    const item = wrapper.get('[role="menuitem"]');
+    expect(item.text()).toBe("⟦pluginDevelopment.showChanges⟧");
+    await item.trigger("click");
+    await flushPromises();
+  }
+  await showChanges();
   expect(document.activeElement).toBe(
     wrapper.get(".inspection-header h3").element,
   );
@@ -122,14 +132,11 @@ test("Changes retains filter, revision selection, focus and draft through collap
     ],
   ]);
   await wrapper.get("aside").trigger("keydown", { key: "Escape" });
-  expect(
-    wrapper.get(".development-changes-toggle").attributes("aria-expanded"),
-  ).toBe("false");
-  expect(document.activeElement).toBe(
-    wrapper.get(".development-changes-toggle").element,
+  expect(wrapper.get(".development-layout").classes()).not.toContain(
+    "changes-open",
   );
-  await wrapper.get(".development-changes-toggle").trigger("click");
-  await flushPromises();
+  expect(document.activeElement).toBe(actions.element);
+  await showChanges();
   expect(wrapper.get(".diff-lines").text()).toContain("export const limit=20;");
   expect(invoke).toHaveBeenCalledTimes(2);
   resize([{ contentRect: { width: 390 } }]);
@@ -190,7 +197,7 @@ test("shell history loads lazily and restores a selected deleted file without to
   });
   await flushPromises();
   await vi.waitFor(() =>
-    expect(wrapper.get('[role="status"]').text()).toBe(
+    expect(wrapper.get('aside [role="status"]').text()).toBe(
       "⟦assignmentChanges.loading⟧",
     ),
   );
@@ -237,7 +244,7 @@ test("source comparison loss is unavailable rather than an empty recorded change
     },
   });
   await flushPromises();
-  expect(wrapper.get('[role="status"]').text()).toBe(
+  expect(wrapper.get('aside [role="status"]').text()).toBe(
     "⟦assignmentChanges.unavailable⟧",
   );
   expect(wrapper.text()).not.toContain("⟦assignmentChanges.empty⟧");

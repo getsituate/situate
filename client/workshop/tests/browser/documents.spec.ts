@@ -1,3 +1,4 @@
+import { chatAction } from "./chat-actions";
 import { selectScenario } from "./scenarios";
 import { expect, test, type Page } from "./test";
 import { selectOption } from "./select";
@@ -746,9 +747,7 @@ test("source development can fail and recover through the plugin chat", async ({
     .getByRole("button", { name: "Complete connection", exact: true })
     .click();
   await preview.getByRole("button", { name: /Back to assignment/ }).click();
-  await preview
-    .getByRole("button", { name: "Close development view", exact: true })
-    .click();
+  await chatAction(preview, "Close development view");
   await expect(preview.locator(".plugin-sources .plugin-row")).toHaveCount(1);
   await expect(
     preview.getByRole("heading", { name: "Archive documents", exact: true }),

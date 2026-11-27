@@ -1,3 +1,4 @@
+import { chatAction } from "./chat-actions";
 import { selectOption } from "./select";
 import { selectScenario } from "./scenarios";
 import { expect, test, type BrowserContext, type Page } from "./test";
@@ -320,9 +321,7 @@ test("file history is read-only and file chat keeps an attachment and draft", as
   ).toBeVisible();
   await preview.getByRole("tab", { name: "New chat", exact: true }).click();
   await expect(message).toHaveValue("Discuss this note");
-  await preview
-    .getByRole("button", { name: "Close pane — New chat", exact: true })
-    .click();
+  await chatAction(preview, "Close pane — New chat");
   await expect(preview.getByRole("dialog")).toBeVisible();
   await preview.keyboard.press("Escape");
   await expect(message).toHaveValue("Discuss this note");
