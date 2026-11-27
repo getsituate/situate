@@ -89,6 +89,7 @@ macro_rules! application_handler {
             crate::plugin_development::plugin_development_create,
             crate::ai_executor::plugin_executor,
             crate::ai_executor::plugin_document_chunk,
+            crate::ai_executor::plugin_document_open,
             crate::document_thumbnails::document_thumbnail,
             crate::plugin_disable::plugin_disable,
             crate::plugin_changes::plugin_changes_check,
@@ -273,6 +274,9 @@ pub fn run() {
             }
             if matches!(event, tauri::RunEvent::Exit) {
                 diagnostics::shutdown(app);
+                #[cfg(desktop)]
+                app.state::<ai_executor::Executors>()
+                    .close_document_copies();
             }
             #[cfg(feature = "native-smoke")]
             if matches!(event, tauri::RunEvent::Exit) {

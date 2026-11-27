@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "open-documents-in-default-app",
+  "locales": {
+    "en": {
+      "title": "Changes",
+      "entries": [
+        {
+          "id": "open-documents-in-default-app",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Open documents in your default app",
+          "paragraphs": [
+            "Choose Open in the Documents view to open a temporary copy of a supported file in your default app. Changes to the copy are not saved to the source."
+          ]
+        }
+      ]
+    },
+    "de": {
+      "title": "Änderungen",
+      "entries": [
+        {
+          "id": "open-documents-in-default-app",
+          "type": "new",
+          "platforms": ["macos"],
+          "title": "Dokumente in deiner Standard-App öffnen",
+          "paragraphs": [
+            "Wähle Öffnen in der Dokumentansicht, um eine temporäre Kopie einer unterstützten Datei in deiner Standard-App zu öffnen. Änderungen an der Kopie werden nicht in der Quelle gespeichert."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -179,6 +179,7 @@ interface FixtureOptions {
   pluginSources?: Record<string, PluginSource>;
   pluginExportResults?: Record<string, Record<string, unknown>>;
   documentOriginals?: Record<string, string>;
+  documentOpenError?: string;
   documentThumbnailCache?: boolean;
   holdDocumentChunks?: boolean;
   pluginSourceFiles?: Record<string, Record<string, string>>;
@@ -1801,6 +1802,14 @@ export async function workspaceFixture(
                   if (key.startsWith(`${prefix}:`))
                     sessionStorage.removeItem(key);
               }
+              return null;
+            }
+            if (command === "plugin_document_open") {
+              await documentGates.get("open")?.ready;
+              const read = documentReads.get(String(args.id));
+              if (!read?.base64 || read.scope !== args.scope)
+                throw "native.plugins.unavailable";
+              if (options.documentOpenError) throw options.documentOpenError;
               return null;
             }
             if (command === "plugin_document_chunk") {

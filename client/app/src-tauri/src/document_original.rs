@@ -135,6 +135,202 @@ impl Original {
     }
 }
 
+#[cfg(desktop)]
+pub(crate) use external::Copies;
+
+#[cfg(desktop)]
+mod external {
+    use super::*;
+    use std::{
+        io,
+        time::{Duration, Instant},
+    };
+    use tempfile::TempDir;
+
+    const MAX_COPIES: usize = 16;
+    const LIFETIME: Duration = Duration::from_secs(60 * 60);
+    const OPEN_FAILED: &str = "native.files.external.openFailed";
+
+    #[derive(Default)]
+    pub(crate) struct Copies(Mutex<Vec<(Instant, TempDir)>>);
+
+    impl Copies {
+        pub(crate) fn open(
+            &self,
+            original: &Original,
+            mime_type: &str,
+            authorized: impl FnOnce() -> Result<(), String>,
+            launch: impl FnOnce(&Path) -> io::Result<()>,
+        ) -> Result<Instant, String> {
+            let suffix = suffix(mime_type).ok_or("documents.openUnsupported")?;
+            let mut copies = self.0.lock().map_err(|_| OPEN_FAILED)?;
+            copies.retain(|(expires, _)| *expires > Instant::now());
+            if copies.len() >= MAX_COPIES {
+                return Err("documents.openCopiesFull".into());
+            }
+            let mut builder = tempfile::Builder::new();
+            builder.prefix("situate-document-");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                builder.permissions(std::fs::Permissions::from_mode(0o700));
+            }
+            let directory = builder.tempdir().map_err(|_| OPEN_FAILED)?;
+            let path = directory.path().join(format!("Document.{suffix}"));
+            copy(original, &path).map_err(|_| OPEN_FAILED)?;
+            authorized()?;
+            launch(&path).map_err(|_| OPEN_FAILED)?;
+            let expires = Instant::now() + LIFETIME;
+            // A file association can acknowledge the request before the app reads the file.
+            copies.push((expires, directory));
+            Ok(expires)
+        }
+
+        pub(crate) fn expire(&self) {
+            if let Ok(mut copies) = self.0.lock() {
+                copies.retain(|(expires, _)| *expires > Instant::now());
+            }
+        }
+
+        pub(crate) fn clear(&self) {
+            if let Ok(mut copies) = self.0.lock() {
+                copies.clear();
+            }
+        }
+    }
+
+    fn suffix(mime_type: &str) -> Option<&'static str> {
+        Some(match mime_type {
+            "application/pdf" => "pdf",
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/gif" => "gif",
+            "image/tiff" => "tiff",
+            "image/webp" => "webp",
+            "image/heic" => "heic",
+            "text/plain" => "txt",
+            "text/markdown" => "md",
+            "text/csv" => "csv",
+            "application/rtf" | "text/rtf" => "rtf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "pptx",
+            "application/vnd.oasis.opendocument.text" => "odt",
+            "application/vnd.oasis.opendocument.spreadsheet" => "ods",
+            "application/vnd.oasis.opendocument.presentation" => "odp",
+            _ => return None,
+        })
+    }
+
+    fn copy(original: &Original, path: &Path) -> io::Result<()> {
+        let mut input = original
+            .file
+            .lock()
+            .map_err(|_| io::Error::other(UNAVAILABLE))?;
+        input.rewind()?;
+        let mut prefix = [0; 4];
+        let prefix = &mut prefix[..original.size.min(4) as usize];
+        input.read_exact(prefix)?;
+        if crate::external_links::executable_signature(prefix) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "not a document"));
+        }
+        input.rewind()?;
+        let mut output = OpenOptions::new().write(true).create_new(true).open(path)?;
+        if io::copy(&mut (&mut *input).take(original.size), &mut output)? != original.size {
+            return Err(io::ErrorKind::UnexpectedEof.into());
+        }
+        output.flush()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn original(bytes: &[u8]) -> Original {
+            let mut writer = OriginalWriter::new(MAX_BYTES).unwrap();
+            writer.append(bytes).unwrap();
+            writer.finish().unwrap()
+        }
+
+        #[test]
+        fn hands_off_the_exact_copy_with_a_document_extension_and_retains_it() {
+            let copies = Copies::default();
+            let bytes = b"PK\x03\x04spreadsheet";
+            let mut path = None;
+            copies
+                .open(
+                    &original(bytes),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    || Ok(()),
+                    |target| {
+                        assert_eq!(target.extension().unwrap(), "xlsx");
+                        assert_eq!(std::fs::read(target).unwrap(), bytes);
+                        path = Some(target.to_owned());
+                        Ok(())
+                    },
+                )
+                .unwrap();
+            let path = path.unwrap();
+            assert!(path.is_file());
+            copies.clear();
+            assert!(!path.exists());
+        }
+
+        #[test]
+        fn does_not_launch_unapproved_types_executables_or_revoked_reads() {
+            let copies = Copies::default();
+            let no_launch = |_: &Path| -> io::Result<()> { panic!("unexpected handoff") };
+            assert_eq!(
+                copies.open(
+                    &original(b"data"),
+                    "application/octet-stream",
+                    || Ok(()),
+                    no_launch
+                ),
+                Err("documents.openUnsupported".into())
+            );
+            assert_eq!(
+                copies.open(
+                    &original(b"MZdata"),
+                    "application/pdf",
+                    || Ok(()),
+                    no_launch
+                ),
+                Err(OPEN_FAILED.into())
+            );
+            assert_eq!(
+                copies.open(
+                    &original(b"%PDF-"),
+                    "application/pdf",
+                    || Err(CANCELLED.into()),
+                    no_launch
+                ),
+                Err(CANCELLED.into())
+            );
+            assert!(copies.0.lock().unwrap().is_empty());
+        }
+
+        #[test]
+        fn discards_the_copy_when_the_default_app_cannot_be_started() {
+            let copies = Copies::default();
+            let mut path = None;
+            assert_eq!(
+                copies.open(
+                    &original(b"%PDF-"),
+                    "application/pdf",
+                    || Ok(()),
+                    |target| {
+                        path = Some(target.to_owned());
+                        Err(io::Error::other("no default handler"))
+                    }
+                ),
+                Err(OPEN_FAILED.into())
+            );
+            assert!(!path.unwrap().exists());
+        }
+    }
+}
+
 fn local_error(error: std::io::Error) -> String {
     match error.kind() {
         std::io::ErrorKind::NotFound => "not-found",

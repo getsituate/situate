@@ -244,6 +244,7 @@ test("a disabled document source leaves the Library in the no-sources layout @vi
 test("opens a multipage PDF and an image from two sources in the same Library @visual-desktop", async ({
   page,
   visual,
+  visualEnabled,
 }) => {
   await page.setViewportSize({ width: 1560, height: 900 });
   const folder = source(
@@ -419,6 +420,75 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
   await visual.capture("documents.library.pdf-page");
   await preview.getByRole("button", { name: "Zoom in" }).click();
   await expect(preview.getByText("120%")).toBeVisible();
+  const openExternal = preview.getByRole("button", {
+    name: "Open in default app",
+  });
+  const pendingHandoff = preview.getByRole("button", {
+    name: "Opening…",
+    exact: true,
+  });
+  const sent = preview.getByText("Sent a copy to the default app.");
+  if (!visualEnabled) await page.clock.install();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+
+  await holdDocument("open", true);
+  await openExternal.focus();
+  await openExternal.press("Enter");
+  await expect(openExternal).toBeDisabled();
+  await expect(openExternal).toHaveText("Open");
+  await page.clock.runFor(100);
+  await expect(pendingHandoff).toHaveCount(0);
+  await holdDocument("open", false);
+  await expect(sent).toBeAttached();
+  await page.clock.runFor(200);
+  await expect(pendingHandoff).toHaveCount(0);
+
+  await holdDocument("open", true);
+  await openExternal.press("Enter");
+  await expect(openExternal).toBeDisabled();
+  await page.clock.runFor(199);
+  await expect(openExternal).toHaveText("Open");
+  await page.clock.runFor(1);
+  await expect(pendingHandoff).toBeDisabled();
+  await expect(preview.getByText("120%")).toBeVisible();
+  await expect(
+    preview.getByText("Amount: 24.50", { exact: true }),
+  ).toBeAttached();
+  await holdDocument("open", false);
+  await expect(sent).toBeAttached();
+  await page.clock.resume();
+  const handoff = await page.evaluate(() => {
+    const calls = Reflect.get(window, "__ipcCalls") as {
+      command: string;
+      args: {
+        scope?: string;
+        id?: string;
+        request?: { readId?: string; args?: unknown };
+      };
+    }[];
+    return calls
+      .filter(({ command }) => command === "plugin_document_open")
+      .map(
+        ({ args }) =>
+          calls.find(
+            ({ command, args: read }) =>
+              command === "plugin_executor" &&
+              read.scope === args.scope &&
+              read.request?.readId === args.id &&
+              read.request?.args,
+          )?.args.request?.args,
+      );
+  });
+  const expectedHandoff = {
+    ref: {
+      id: "42",
+      identity: "stable",
+      revision: "r1",
+      source: { pluginId: "test-folder", instanceId: "default" },
+    },
+  };
+  expect(handoff).toEqual([expectedHandoff, expectedHandoff]);
+  await expect(openExternal).toBeFocused();
   await preview.getByRole("button", { name: "Close preview" }).click();
   await expect(receipt).toBeFocused();
   await expect(search).toHaveValue("Receipt");
@@ -490,6 +560,46 @@ test("opens a multipage PDF and an image from two sources in the same Library @v
       ),
     )
     .toBe(4);
+});
+
+test("opens files without a preview and reports a missing default app", async ({
+  page,
+}) => {
+  const table = source(
+    "test-folder",
+    "Folder",
+    "Expense table",
+    "text/csv",
+    Buffer.from("Item,Amount\nPaper,12\n").toString("base64"),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await workspaceFixture(page, shellState, {
+    layout: documentsLayout(),
+    installedPlugins: [table.installed],
+    pluginExportResults: { [table.installed.id]: table.values },
+    documentOriginals: table.original,
+    documentOpenError: "native.files.external.openFailed",
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Expense table Folder" }).click();
+  const preview = page.getByRole("region", { name: "Document preview" });
+  await expect(
+    preview.getByText("A preview is not available for this file type."),
+  ).toBeVisible();
+  const openExternal = preview.getByRole("button", {
+    name: "Open in default app",
+  });
+  await expect(openExternal).toBeInViewport({ ratio: 1 });
+  await openExternal.focus();
+  await openExternal.press("Enter");
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByText(/Couldn’t open the document in the default app/),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(openExternal).toBeFocused();
+  await expect(openExternal).toBeEnabled();
 });
 
 test("reuses revisioned thumbnails after reload and clears them when removal is confirmed", async ({
@@ -701,7 +811,11 @@ test("a failed source does not hide results or details from other sources", asyn
   );
   await library.getByRole("button", { name: "Receipt Fixture folder" }).click();
   const preview = library.getByRole("region", { name: "Document preview" });
-  await expect(preview.getByRole("status")).toBeVisible();
+  await expect(
+    preview
+      .getByRole("status")
+      .filter({ hasText: "A preview is not available" }),
+  ).toBeVisible();
   await expect(preview.locator("dd")).toHaveText(["text/plain", "Garden club"]);
   await library
     .getByRole("button", { name: "Some results may be missing" })

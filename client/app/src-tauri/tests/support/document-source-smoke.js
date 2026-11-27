@@ -259,6 +259,7 @@ const previewId = "document-source-preview";
 const previewExport = "documentLibraryReadOriginal";
 const download = `${base}/api/documents/1/download/`;
 const localPreview = `${fixture.documentSourceRoot}/preview.pdf`;
+const localText = `${fixture.documentSourceRoot}/second.txt`;
 await sourceRequest({ operation: "create", pluginId: previewId });
 await sourceWrite(
   assignment,
@@ -290,22 +291,23 @@ await sourceWrite(
   const source = {pluginId,instanceId:'preview-instance'};
   const scope = {id:'preview-fixture',included:['Synthetic originals'],excluded:[],constraints:[]};
   const docs = ['local','http'].map(id => ({ref:{source,id,identity:'stable'},title:id+'.pdf',mimeType:'application/pdf'}));
+  docs.push({ref:{source,id:'text',identity:'stable'},title:'second.txt',mimeType:'text/plain'});
   const page = (operation,items) => ({version:2,source,scopeId:scope.id,operation,status:'ok',truncated:false,items});
   return {exports:{
-    documentLibraryDescribe: () => ({version:2,source,scope,label:'Preview fixtures',searchCoverage:['filename'],limits:{maxItems:2}}),
+    documentLibraryDescribe: () => ({version:2,source,scope,label:'Preview fixtures',searchCoverage:['filename'],limits:{maxItems:3}}),
     documentLibraryList: () => page('list',docs),
     documentLibrarySearch: ({query}) => page('search',docs.filter(doc => doc.title.includes(query))),
     configure: ({revoke},ctx) => revoke ? ctx.credentials.remove('token') : ctx.credentials.set('token','source-fixture-token'),
     ${previewExport}: async ({ref},ctx) => {
       const base = {version:2,source,scopeId:'preview-fixture',operation:'readOriginal'};
-      const document = {ref,title:'Synthetic original',mimeType:'application/pdf'};
+      const document = {ref,title:'Synthetic original',mimeType:ref.id === 'text' ? 'text/plain' : 'application/pdf'};
       if (ref.id === 'forged') return {...base,status:'ok',document,original:{id:ref.id,size:1}};
-      if (ref.source.pluginId !== pluginId || ref.source.instanceId !== source.instanceId || !['local','http'].includes(ref.id)) {
+      if (ref.source.pluginId !== pluginId || ref.source.instanceId !== source.instanceId || !['local','http','text'].includes(ref.id)) {
         return {...base,status:'error',error:{code:'permission'}};
       }
-      const reply = ref.id === 'local'
-        ? await ctx.documents.fromFile(${JSON.stringify(localPreview)})
-        : await ctx.documents.fromHttp({url:${JSON.stringify(download)},headers:{Authorization:'Token '+await ctx.credentials.get('token')}});
+      const reply = ref.id === 'http'
+        ? await ctx.documents.fromHttp({url:${JSON.stringify(download)},headers:{Authorization:'Token '+await ctx.credentials.get('token')}})
+        : await ctx.documents.fromFile(ref.id === 'text' ? ${JSON.stringify(localText)} : ${JSON.stringify(localPreview)});
       return reply.original
         ? {...base,status:'ok',document,original:reply.original}
         : {...base,status:'error',error:{code:reply.error ?? 'unavailable'}};
@@ -410,4 +412,23 @@ await thumbnail("reconcile");
 await thumbnail("store", { ...thumbnailKey, epoch: cacheMiss.epoch, jpeg });
 require((await thumbnail("lookup", thumbnailKey)).jpeg ===
   null, "Credential removal left a cached thumbnail");
+const openOriginal = (id) => invoke("plugin_document_open", { scope, id });
+const thumbnailRead = await executor({
+  operation: "reserveDocumentRead",
+  thumbnail: true,
+});
+await run(previewExport, { ref: previewRef("text") }, thumbnailRead);
+require(await openOriginal(thumbnailRead).then(
+  () => false,
+  () => true,
+), "A thumbnail handle could open a document");
+await executor({ operation: "cancelDocumentRead", readId: thumbnailRead });
+const openRead = await executor({ operation: "reserveDocumentRead" });
+await run(previewExport, { ref: previewRef("text") }, openRead);
+await openOriginal(openRead);
+await executor({ operation: "cancelDocumentRead", readId: openRead });
+require(await openOriginal(openRead).then(
+  () => false,
+  () => true,
+), "A released handle could open a document");
 await invoke("smoke_progress", { stage: "document-sources-offline-qualified" });
