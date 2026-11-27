@@ -357,6 +357,14 @@ async fn run(app: tauri::AppHandle, scope: String, job: Arc<Disable>) {
                 let root = crate::files::local_root(&app, location)?.ok_or(UNAVAILABLE)?;
                 worker.commit(|| {
                     worker.write_disabled(&root)?;
+                    for plugin in &worker.affected {
+                        crate::document_thumbnails::forget_source(
+                            &app,
+                            &worker.window,
+                            &scope,
+                            plugin,
+                        );
+                    }
                     crate::plugin_recovery::reconcile(&app).map_err(|_| UNKNOWN.to_owned())
                 })
             },

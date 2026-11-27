@@ -18,6 +18,7 @@ mod device_locale;
 mod diagnostics;
 mod dictation;
 mod document_original;
+mod document_thumbnails;
 mod experimental;
 mod external_links;
 mod file_tool;
@@ -87,6 +88,7 @@ macro_rules! application_handler {
             crate::plugin_development::plugin_development_create,
             crate::ai_executor::plugin_executor,
             crate::ai_executor::plugin_document_chunk,
+            crate::document_thumbnails::document_thumbnail,
             crate::plugin_disable::plugin_disable,
             crate::plugin_changes::plugin_changes_check,
             crate::change_history::change_revision,
@@ -197,6 +199,7 @@ pub fn run() {
         .manage(ai::Ai::default())
         .manage(ai_conversations::Conversations::default())
         .manage(ai_executor::Executors::default())
+        .manage(document_thumbnails::Thumbnails::default())
         .manage(dictation::Dictation::default())
         .manage(diagnostics::Diagnostics::default())
         .manage(model_failure_capture::ModelFailureCapture::default())
@@ -236,6 +239,7 @@ pub fn run() {
         .setup(|app| {
             analytics::setup(app.handle());
             diagnostics::setup(app.handle());
+            document_thumbnails::setup(app.handle());
             dictation::setup(app.handle());
             ai::setup_model_metadata(app.handle());
             workspaces::setup(app.handle())?;

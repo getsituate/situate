@@ -814,15 +814,30 @@ fn dispatch(
             }
             let path = file_path(&path)?;
             if let Some(area) = area.storage() {
-                return serde_json::to_value(storage::write(
+                let saved = storage::write(
                     root,
                     &host.plugin,
                     area,
                     &path,
                     &text,
                     expected_revision.as_deref(),
-                )?)
-                .map_err(|_| ERROR.into());
+                )?;
+                use situate_core::content::SaveOutcome;
+                if matches!(area, storage::Area::Config)
+                    && host.test_id.is_none()
+                    && matches!(&saved, SaveOutcome::Saved { version, .. }
+                        | SaveOutcome::SavedDraftCleanupFailed { version, .. }
+                        | SaveOutcome::SavedHistoryFailed { version, .. }
+                        if Some(version.revision.as_str()) != expected_revision.as_deref())
+                {
+                    crate::document_thumbnails::forget_source(
+                        app,
+                        &host.window,
+                        &host.scope,
+                        &host.plugin,
+                    );
+                }
+                return serde_json::to_value(saved).map_err(|_| ERROR.into());
             }
             let request=serde_json::from_value(json!({"operation":"write","path":path,"text":text,"expectedRevision":expected_revision})).map_err(|_| ERROR)?;
             crate::files::agent_request(app, (location, files), request, Some(token.clone()))
@@ -881,7 +896,10 @@ fn dispatch(
                 return Ok(json!({"error":"unsupported"}));
             }
             Ok(
-                match slot.stage(|| Original::local(Path::new(&path), token), token) {
+                match slot.stage(
+                    || Original::local(Path::new(&path), token, slot.limit),
+                    token,
+                ) {
                     Ok(original) => json!({"original":original}),
                     Err(error) => json!({"error":document_original::outcome(&error)}),
                 },
@@ -897,14 +915,14 @@ fn dispatch(
                 if response.status != 200 {
                     return Ok(json!({"status":response.status}));
                 }
-                let mut writer = OriginalWriter::new()?;
+                let mut writer = OriginalWriter::new(slot.limit)?;
                 let bytes = STANDARD.decode(&response.body).map_err(|_| ERROR)?;
                 writer
                     .append(&bytes)
                     .and_then(|()| writer.finish())
                     .map(|original| (200, Some(original)))
             } else {
-                tauri::async_runtime::block_on(http_original(url, headers, token))
+                tauri::async_runtime::block_on(http_original(url, headers, token, slot.limit))
             };
             Ok(match download {
                 Ok((status, Some(original))) => match slot.stage(|| Ok(original), token) {
@@ -934,14 +952,24 @@ fn dispatch(
                     &base,
                 )
             } else {
-                credentials(
+                let revoked = matches!(request, Request::CredentialRemove { .. });
+                let result = credentials(
                     root,
                     &host.scope,
                     &host.plugin,
                     request,
                     &PlatformKeys(app),
                     &base,
-                )
+                )?;
+                if revoked {
+                    crate::document_thumbnails::forget_source(
+                        app,
+                        &host.window,
+                        &host.scope,
+                        &host.plugin,
+                    );
+                }
+                Ok(result)
             }
         }
     }
@@ -1261,6 +1289,7 @@ async fn http_original(
     url: String,
     headers: BTreeMap<String, String>,
     token: &CancellationToken,
+    limit: u64,
 ) -> Result<(u16, Option<Original>), String> {
     let operation = async {
         let response = send_http(url, None, headers, None).await?;
@@ -1268,13 +1297,10 @@ async fn http_original(
         if status != 200 {
             return Ok((status, None));
         }
-        if response
-            .content_length()
-            .is_some_and(|len| len > document_original::MAX_BYTES)
-        {
+        if response.content_length().is_some_and(|len| len > limit) {
             return Err("native.plugins.tooLarge".into());
         }
-        let mut output = OriginalWriter::new()?;
+        let mut output = OriginalWriter::new(limit)?;
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
             output.append(&chunk.map_err(|_| ERROR)?)?;

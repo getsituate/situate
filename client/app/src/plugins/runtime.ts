@@ -1318,6 +1318,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
     name: string,
     args: unknown,
     signal?: AbortSignal,
+    thumbnail = false,
   ) {
     signal?.throwIfAborted();
     if (name === LIBRARY_EXPORTS.readOriginal && !signal)
@@ -1349,7 +1350,10 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
       if (signal && name === LIBRARY_EXPORTS.readOriginal) {
         readId = await invoke<string>("plugin_executor", {
           scope: options.scope,
-          request: { operation: "reserveDocumentRead" },
+          request: {
+            operation: "reserveDocumentRead",
+            ...(thumbnail && { thumbnail }),
+          },
         });
         if (signal.aborted || !available())
           throw new Error("native.plugins.unavailable");
@@ -1392,6 +1396,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions) {
   });
   void refresh();
   return {
+    scope: options.scope,
     state: readonly(state),
     get themes(): readonly WorkspaceTheme[] {
       return recoveryMode() ? [] : [...themes.values()].flat();

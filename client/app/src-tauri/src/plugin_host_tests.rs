@@ -720,7 +720,7 @@ fn document_download_preserves_authenticated_bytes_and_rejects_oversized_bodies(
             let mut data = vec![42; document_original::CHUNK_BYTES];
             data.extend_from_slice(&[0, 255, 1, 2]);
             let response_size = if oversized {
-                document_original::MAX_BYTES + 1
+                document_original::THUMBNAIL_READ_BYTES + 1
             } else {
                 data.len() as u64
             };
@@ -753,6 +753,11 @@ fn document_download_preserves_authenticated_bytes_and_rejects_oversized_bodies(
                     format!("http://{addr}/document"),
                     BTreeMap::from([("Authorization".into(), "Token synthetic".into())]),
                     &token,
+                    if oversized {
+                        document_original::THUMBNAIL_READ_BYTES
+                    } else {
+                        document_original::MAX_BYTES
+                    },
                 )
             );
             done.unwrap();
